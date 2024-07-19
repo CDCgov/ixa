@@ -1,6 +1,6 @@
-# ixars
+# ixa
 
-IXARS (Interactive eXecution of Agent-based Rust Simulations) is a framework for building modular agent-based models in Rust.
+Ixa (Interactive eXecution of ABMs) is a framework for building modular agent-based models in Rust.
 
 It's named after the [Ixa crab](https://www.crabdatabase.info/en/crabs/brachyura/eubrachyura/heterotremata/leucosioidea/leucosiidae/ixa/ixa-cylindrus-5874), a genus of Indo-Pacific pebble crabs from the family Leucosiidae.
 
