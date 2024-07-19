@@ -8,3 +8,4 @@ license = "Apache-2.0"
 homepage = "https://github.com/CDCgov/ixa"
 
 [dependencies]
+derivative = "2.2.0"
