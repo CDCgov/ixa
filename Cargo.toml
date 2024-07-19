@@ -2,5 +2,9 @@
 name = "ixa"
 version = "0.0.1"
 edition = "2021"
+description = "A framework for building agent-based models"
+repository = "https://github.com/CDCgov/ixa"
+license = "Apache-2.0"
+homepage = "https://github.com/CDCgov/ixa"
 
 [dependencies]
