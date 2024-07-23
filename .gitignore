@@ -15,3 +15,7 @@ Cargo.lock
 
 # Mac development
 .DS_Store
+
+# Emacs
+*~
+\#*
