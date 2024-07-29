@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      /** Based on https://codepen.io/andreaminato/pen/MXgJKw **/
+      body {
+        margin: 0;
+      }
+
+      #app {
+        position: relative;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .title {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 20vw;
+        text-shadow: 0 0 7px #fff, 0 0 10px #fff, 0 0 21px #fff;
+      }
+
+      .container {
+        top: 0;
+        background: #fff;
+        right: 0;
+        bottom: 0;
+        position: absolute;
+        left: 0;
+        overflow: hidden;
+      }
+
+      .loader {
+        text-align: center;
+        display: flex;
+        justify-content: space-around;
+        flex-wrap: wrap;
+      }
+
+      .loader span {
+        width: 128px;
+        height: 128px;
+        background: url("ixa_logo.svg");
+        background-size: cover;
+        opacity: 0;
+        animation: loader 30s infinite linear;
+      }
+
+      .loader span:nth-child(2n) {
+        animation-name: loadercw;
+      }
+
+      .loader span:nth-child(5n + 5) {
+        animation-delay: 1.3s;
+      }
+
+      .loader span:nth-child(3n + 2) {
+        animation-delay: 1.5s;
+      }
+
+      .loader span:nth-child(2n + 5) {
+        animation-delay: 1.7s;
+      }
+
+      .loader span:nth-child(3n + 10) {
+        animation-delay: 2.7s;
+      }
+
+      .loader span:nth-child(7n + 2) {
+        animation-delay: 3.5s;
+      }
+
+      .loader span:nth-child(4n + 5) {
+        animation-delay: 5.5s;
+      }
+
+      .loader span:nth-child(3n + 7) {
+        animation-delay: 8s;
+      }
+
+      @keyframes loader {
+        0% {
+          width: 128px;
+          height: 128px;
+          opacity: 0;
+          transform: translate(0, 0vh) rotateZ(0deg);
+        }
+        25% {
+          width: 128px;
+          height: 128px;
+          opacity: 1;
+          transform: translate(0, 25vh) rotateZ(90deg);
+        }
+        75% {
+          width: 128px;
+          height: 128px;
+          opacity: 1;
+          transform: translate(5vw, 75vh) rotateZ(270deg);
+        }
+        100% {
+          width: 128px;
+          height: 128px;
+          opacity: 0;
+          transform: translate(10vw, 100vh) rotateZ(360deg);
+        }
+      }
+      @keyframes loadercw {
+        0% {
+          width: 128px;
+          height: 128px;
+          opacity: 0;
+          transform: translate(0, 0vh) rotateZ(0deg);
+        }
+        25% {
+          width: 128px;
+          height: 128px;
+          opacity: 1;
+          transform: translate(0, 25vh) rotateZ(-90deg);
+        }
+        75% {
+          width: 128px;
+          height: 128px;
+          opacity: 1;
+          transform: translate(5vw, 75vh) rotateZ(-270deg);
+        }
+        100% {
+          width: 128px;
+          height: 128px;
+          opacity: 0;
+          transform: translate(10vw, 100vh) rotateZ(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="container">
+        <div class="loader">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+      <div class="title">
+        <h1>IXA</h1>
+      </div>
+    </div>
+  </body>
+</html>
