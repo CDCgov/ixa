@@ -176,29 +176,18 @@ impl Context {
     pub fn execute(&mut self) {
         // Start plan loop
         loop {
-            let mut executed = false;
-
-            // First execute callbacks.
-            loop {
-                let callback = self.callback_queue.pop_front();
-                match callback {
-                    Some(callback) => {
-                        executed = true;
-                        callback(self)
-                    },
-                    None => break,
-                }
+            // If there is a callback, run it.
+            if let Some(callback) = self.callback_queue.pop_front() {
+                callback(self);
+                continue;
             }
 
-            // Now execute the first timed plan.
+            // There aren't any callbacks, so look at the first timed plan.
             if let Some(timed_plan) = self.plan_queue.get_next_timed_plan() {
-                executed = true;
                 self.current_time = timed_plan.time;
                 (timed_plan.callback)(self);
-            }
-
-            // If nothing happened, then we are done.
-            if !executed {
+            } else {
+                // OK, there aren't any timed plans, so we're done.
                 break;
             }
         }
