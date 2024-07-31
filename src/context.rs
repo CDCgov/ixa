@@ -3,27 +3,27 @@ use std::{
     collections::{HashMap, VecDeque},
 };
 
-pub trait Plugin: Any {
+pub trait DataPlugin: Any {
     type DataContainer;
 
-    fn get_data_container() -> Self::DataContainer;
+    fn create_data_container() -> Self::DataContainer;
 }
 
 #[macro_export]
-macro_rules! define_plugin {
+macro_rules! define_data_plugin {
     ($plugin:ident, $data_container:ty, $default: expr) => {
         struct $plugin {}
 
-        impl $crate::context::Plugin for $plugin {
+        impl $crate::context::DataPlugin for $plugin {
             type DataContainer = $data_container;
 
-            fn get_data_container() -> Self::DataContainer {
+            fn create_data_container() -> Self::DataContainer {
                 $default
             }
         }
     };
 }
-pub use define_plugin;
+pub use define_data_plugin;
 
 use crate::plan::{PlanId, PlanQueue};
 
@@ -31,7 +31,7 @@ type Callback = dyn FnOnce(&mut Context);
 pub struct Context {
     plan_queue: PlanQueue,
     callback_queue: VecDeque<Box<Callback>>,
-    plugin_data: HashMap<TypeId, Box<dyn Any>>,
+    data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
 
@@ -40,7 +40,7 @@ impl Context {
         Context {
             plan_queue: PlanQueue::new(),
             callback_queue: VecDeque::new(),
-            plugin_data: HashMap::new(),
+            data_plugins: HashMap::new(),
             current_time: 0.0,
         }
     }
@@ -58,29 +58,29 @@ impl Context {
         self.callback_queue.push_back(Box::new(callback));
     }
 
-    fn add_plugin<T: Plugin>(&mut self) {
-        self.plugin_data
-            .insert(TypeId::of::<T>(), Box::new(T::get_data_container()));
+    fn add_plugin<T: DataPlugin>(&mut self) {
+        self.data_plugins
+            .insert(TypeId::of::<T>(), Box::new(T::create_data_container()));
     }
 
-    pub fn get_data_container_mut<T: Plugin>(&mut self) -> &mut T::DataContainer {
+    pub fn get_data_container_mut<T: DataPlugin>(&mut self) -> &mut T::DataContainer {
         let type_id = &TypeId::of::<T>();
-        if !self.plugin_data.contains_key(type_id) {
+        if !self.data_plugins.contains_key(type_id) {
             self.add_plugin::<T>();
         }
-        self.plugin_data
+        self.data_plugins
             .get_mut(type_id)
             .unwrap()
             .downcast_mut::<T::DataContainer>()
             .unwrap()
     }
 
-    pub fn get_data_container<T: Plugin>(&self) -> Option<&T::DataContainer> {
+    pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
         let type_id = &TypeId::of::<T>();
-        if !self.plugin_data.contains_key(type_id) {
+        if !self.data_plugins.contains_key(type_id) {
             return None;
         }
-        self.plugin_data
+        self.data_plugins
             .get(type_id)
             .unwrap()
             .downcast_ref::<T::DataContainer>()
@@ -121,7 +121,7 @@ impl Default for Context {
 mod tests {
     use super::*;
 
-    define_plugin!(ComponentA, u32, 0);
+    define_data_plugin!(ComponentA, u32, 0);
 
     impl ComponentA {
         fn increment_counter(context: &mut Context) {
