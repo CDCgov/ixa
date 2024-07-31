@@ -13,3 +13,4 @@ repos:
     hooks:
     -   id: fmt
     -   id: clippy
+        args: ["--", "-D", "warnings", "-W", "clippy::pedantic"]
