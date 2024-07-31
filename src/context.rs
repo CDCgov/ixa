@@ -29,7 +29,7 @@ use crate::plan::{PlanId, PlanQueue};
 
 type Callback = dyn FnOnce(&mut Context);
 pub struct Context {
-    plan_queue: PlanQueue,
+    plan_queue: PlanQueue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
@@ -47,7 +47,7 @@ impl Context {
 
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
         // TODO: Handle invalid times (past, NAN, etc)
-        self.plan_queue.add_plan(time, callback)
+        self.plan_queue.add_plan(time, Box::new(callback))
     }
 
     pub fn cancel_plan(&mut self, id: PlanId) {
@@ -99,12 +99,12 @@ impl Context {
                 continue;
             }
 
-            // There aren't any callbacks, so look at the first timed plan.
-            if let Some(timed_plan) = self.plan_queue.get_next_timed_plan() {
-                self.current_time = timed_plan.time;
-                (timed_plan.callback)(self);
+            // There aren't any callbacks, so look at the first plan.
+            if let Some(plan) = self.plan_queue.get_next_plan() {
+                self.current_time = plan.time;
+                (plan.data)(self);
             } else {
-                // OK, there aren't any timed plans, so we're done.
+                // OK, there aren't any plans, so we're done.
                 break;
             }
         }
