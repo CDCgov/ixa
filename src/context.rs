@@ -46,7 +46,9 @@ impl Context {
     }
 
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
-        // TODO: Handle invalid times (past, NAN, etc)
+        if time.is_nan() || time.is_infinite() || time < self.current_time {
+            panic!("Invalid time value");
+        }
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
@@ -121,32 +123,155 @@ impl Default for Context {
 mod tests {
     use super::*;
 
-    define_data_plugin!(ComponentA, u32, 0);
+    define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
-    impl ComponentA {
-        fn increment_counter(context: &mut Context) {
-            *(context.get_data_container_mut::<ComponentA>()) += 1;
-        }
-
-        fn init(context: &mut Context) {
-            context.add_plan(1.0, Self::increment_counter);
-        }
+    fn add_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
+        context.add_plan(time, move |context| {
+            context.get_data_container_mut::<ComponentA>().push(value);
+        })
     }
 
     #[test]
-    fn test_component_and_planning() {
+    #[should_panic]
+    fn negative_plan_time() {
         let mut context = Context::new();
-        ComponentA::init(&mut context);
-        assert_eq!(context.get_current_time(), 0.0);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), 0);
+        add_plan(&mut context, -1.0, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn infinite_plan_time() {
+        let mut context = Context::new();
+        add_plan(&mut context, f64::INFINITY, 0);
+    }
+    
+    #[test]
+    #[should_panic]
+    fn nan_plan_time() {
+        let mut context = Context::new();
+        add_plan(&mut context, f64::NAN, 0);
+    }
+    
+
+    #[test]
+    fn empty_context() {
+        let mut context = Context::new();
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);        
+    }
+
+    #[test]    
+    fn timed_plan_only() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), 1);
-        let plan_to_cancel = context.add_plan(3.0, ComponentA::increment_counter);
-        context.add_plan(2.0, ComponentA::increment_counter);
-        context.cancel_plan(plan_to_cancel);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);        
+    }
+
+    #[test]
+    fn callback_only() {
+        let mut context = Context::new();
+        context.queue_callback(|context| {
+            context.get_data_container_mut::<ComponentA>().push(1);            
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);        
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
+    }
+
+    #[test]
+    fn callback_before_timed_plan() {
+        let mut context = Context::new();
+        context.queue_callback(|context| {
+            context.get_data_container_mut::<ComponentA>().push(1);            
+        });
+        add_plan(&mut context, 1.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);                
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2]);        
+    }
+
+    #[test]
+    fn callback_adds_timed_plan() {
+        let mut context = Context::new();
+        context.queue_callback(|context| {
+            context.get_data_container_mut::<ComponentA>().push(1);
+            add_plan(context, 1.0, 2);
+            context.get_data_container_mut::<ComponentA>().push(3);            
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);                
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 3, 2]);        
+    }
+
+    #[test]
+    fn callback_adds_callback_and_timed_plan() {
+        let mut context = Context::new();
+        context.queue_callback(|context| {
+            context.get_data_container_mut::<ComponentA>().push(1);
+            add_plan(context, 1.0, 2);
+            context.queue_callback(|context| {
+                context.get_data_container_mut::<ComponentA>().push(4);
+            });
+            context.get_data_container_mut::<ComponentA>().push(3);            
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 3, 4, 2]);        
+    }
+
+    #[test]
+    fn timed_plan_adds_callback_and_timed_plan() {
+        let mut context = Context::new();
+        context.add_plan(1.0, |context| {
+            context.get_data_container_mut::<ComponentA>().push(1);
+            // We add the plan first, but the callback will fire first.
+            add_plan(context, 2.0, 3);                
+            context.queue_callback(|context| {
+                context.get_data_container_mut::<ComponentA>().push(2);
+            });
+        });
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), 2);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2, 3]);        
+    }
+
+    #[test]
+    fn cancel_plan() {
+        let mut context = Context::new();
+        let to_cancel = add_plan(&mut context, 2.0, 1);
+        context.add_plan(1.0, move |context| {
+            context.cancel_plan(to_cancel);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![]);                
+    }
+
+    #[test]
+    fn add_plan_with_current_time() {
+        let mut context = Context::new();
+        context.add_plan(1.0, move |context| {
+            context.get_data_container_mut::<ComponentA>().push(1);
+            add_plan(context, 1.0, 2);
+            context.queue_callback(|context| {
+                context.get_data_container_mut::<ComponentA>().push(3);
+            });
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 3, 2]);                
+    }        
+
+    #[test]
+    fn plans_at_same_time_fire_in_order() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        add_plan(&mut context, 1.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2]);                
+        
     }
 }
