@@ -80,7 +80,7 @@ impl Context {
             .downcast_mut::<T::DataContainer>()
             .unwrap()
     }
-    
+
     /// # Panics
     #[must_use]
     pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
