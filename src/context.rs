@@ -62,36 +62,23 @@ impl Context {
         self.callback_queue.push_back(Box::new(callback));
     }
 
-    fn add_plugin<T: DataPlugin>(&mut self) {
-        self.data_plugins
-            .insert(TypeId::of::<T>(), Box::new(T::create_data_container()));
-    }
-
-    /// # Panics
     #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn get_data_container_mut<T: DataPlugin>(&mut self) -> &mut T::DataContainer {
-        let type_id = &TypeId::of::<T>();
-        if !self.data_plugins.contains_key(type_id) {
-            self.add_plugin::<T>();
-        }
         self.data_plugins
-            .get_mut(type_id)
-            .unwrap()
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Box::new(T::create_data_container()))
             .downcast_mut::<T::DataContainer>()
-            .unwrap()
+            .unwrap() // Will never panic as data container has the matching type
     }
 
-    /// # Panics
     #[must_use]
     pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
-        let type_id = &TypeId::of::<T>();
-        if !self.data_plugins.contains_key(type_id) {
-            return None;
+        if let Some(data) = self.data_plugins.get(&TypeId::of::<T>()) {
+            data.downcast_ref::<T::DataContainer>()
+        } else {
+            None
         }
-        self.data_plugins
-            .get(type_id)
-            .unwrap()
-            .downcast_ref::<T::DataContainer>()
     }
 
     #[must_use]
