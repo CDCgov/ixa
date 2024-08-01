@@ -25,34 +25,36 @@ macro_rules! define_data_plugin {
 }
 pub use define_data_plugin;
 
-use crate::plan::{PlanId, PlanQueue};
+use crate::plan::{Id, Queue};
 
 type Callback = dyn FnOnce(&mut Context);
 pub struct Context {
-    plan_queue: PlanQueue<Box<Callback>>,
+    plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
 
 impl Context {
+    #[must_use]
     pub fn new() -> Context {
         Context {
-            plan_queue: PlanQueue::new(),
+            plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
         }
     }
 
-    pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
-        if time.is_nan() || time.is_infinite() || time < self.current_time {
-            panic!("Invalid time value");
-        }
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
+        assert!(!time.is_nan() && !time.is_infinite() && time >= self.current_time);
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
-    pub fn cancel_plan(&mut self, id: PlanId) {
+    pub fn cancel_plan(&mut self, id: &Id) {
         self.plan_queue.cancel_plan(id);
     }
 
@@ -65,6 +67,8 @@ impl Context {
             .insert(TypeId::of::<T>(), Box::new(T::create_data_container()));
     }
 
+    /// # Panics
+    #[must_use]
     pub fn get_data_container_mut<T: DataPlugin>(&mut self) -> &mut T::DataContainer {
         let type_id = &TypeId::of::<T>();
         if !self.data_plugins.contains_key(type_id) {
@@ -77,6 +81,8 @@ impl Context {
             .unwrap()
     }
 
+    /// # Panics
+    #[must_use]
     pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
         let type_id = &TypeId::of::<T>();
         if !self.data_plugins.contains_key(type_id) {
@@ -88,6 +94,7 @@ impl Context {
             .downcast_ref::<T::DataContainer>()
     }
 
+    #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
     }
@@ -125,7 +132,7 @@ mod tests {
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
-    fn add_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
+    fn add_plan(context: &mut Context, time: f64, value: u32) -> Id {
         context.add_plan(time, move |context| {
             context.get_data_container_mut::<ComponentA>().push(value);
         })
@@ -250,7 +257,7 @@ mod tests {
         let mut context = Context::new();
         let to_cancel = add_plan(&mut context, 2.0, 1);
         context.add_plan(1.0, move |context| {
-            context.cancel_plan(to_cancel);
+            context.cancel_plan(&to_cancel);
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
