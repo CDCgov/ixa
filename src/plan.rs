@@ -52,6 +52,7 @@ impl<T> Default for PlanQueue<T> {
 }
 
 impl<T> PlanQueue<T> {
+    #[must_use]
     pub fn new() -> PlanQueue<T> {
         PlanQueue {
             queue: BinaryHeap::new(),
@@ -69,6 +70,10 @@ impl<T> PlanQueue<T> {
         PlanId { id }
     }
 
+    /// # Panics
+    ///
+    /// This function panics if you cancel a plan which has already
+    /// been cancelled or executed.
     pub fn cancel_plan(&mut self, id: PlanId) {
         self.data_map.remove(&id.id).expect("Plan does not exist");
     }

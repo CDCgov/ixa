@@ -36,6 +36,7 @@ pub struct Context {
 }
 
 impl Context {
+    #[must_use]
     pub fn new() -> Context {
         Context {
             plan_queue: PlanQueue::new(),
@@ -45,10 +46,11 @@ impl Context {
         }
     }
 
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
-        if time.is_nan() || time.is_infinite() || time < self.current_time {
-            panic!("Invalid time value");
-        }
+        assert!(!time.is_nan() && !time.is_infinite() && time >= self.current_time);
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
@@ -65,6 +67,8 @@ impl Context {
             .insert(TypeId::of::<T>(), Box::new(T::create_data_container()));
     }
 
+    /// # Panics
+    #[must_use]
     pub fn get_data_container_mut<T: DataPlugin>(&mut self) -> &mut T::DataContainer {
         let type_id = &TypeId::of::<T>();
         if !self.data_plugins.contains_key(type_id) {
@@ -76,7 +80,9 @@ impl Context {
             .downcast_mut::<T::DataContainer>()
             .unwrap()
     }
-
+    
+    /// # Panics
+    #[must_use]
     pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
         let type_id = &TypeId::of::<T>();
         if !self.data_plugins.contains_key(type_id) {
@@ -88,6 +94,7 @@ impl Context {
             .downcast_ref::<T::DataContainer>()
     }
 
+    #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
     }
