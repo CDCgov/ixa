@@ -31,7 +31,7 @@ pub struct Queue<T> {
 }
 
 impl<T> Queue<T> {
-    /// Creates a new empty `Queue<T>`
+    /// Create a new empty `Queue<T>`
     #[must_use]
     pub fn new() -> Queue<T> {
         Queue {
@@ -113,6 +113,7 @@ impl PartialOrd for Entry {
     }
 }
 
+/// Entry objects are ordered in increasing order by time and then plan id
 impl Ord for Entry {
     fn cmp(&self, other: &Self) -> Ordering {
         let time_ordering = self.time.partial_cmp(&other.time).unwrap().reverse();

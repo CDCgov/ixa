@@ -1,33 +1,35 @@
+//! A manager for the state of a discrete-event simulation
+//!
+//! Defines a `Context` that is intended to provide the foundational mechanism
+//! for storing and manipulating the state of a given simulation.
 use std::{
     any::{Any, TypeId},
     collections::{HashMap, VecDeque},
 };
 
-pub trait DataPlugin: Any {
-    type DataContainer;
-
-    fn create_data_container() -> Self::DataContainer;
-}
-
-#[macro_export]
-macro_rules! define_data_plugin {
-    ($plugin:ident, $data_container:ty, $default: expr) => {
-        struct $plugin {}
-
-        impl $crate::context::DataPlugin for $plugin {
-            type DataContainer = $data_container;
-
-            fn create_data_container() -> Self::DataContainer {
-                $default
-            }
-        }
-    };
-}
-pub use define_data_plugin;
-
 use crate::plan::{Id, Queue};
 
-type Callback = dyn FnOnce(&mut Context);
+/// A manager for the state of a discrete-event simulation
+///
+/// Provides core simulation services including
+/// * Maintaining a notion of time
+/// * Scheduling events to occur at some point in the future and executing them
+///   at that time
+/// * Holding data that can be accessed by simulation modules
+///
+/// Simulations are constructed out of a series of interacting modules that
+/// take turns manipulating the Context through a mutable reference. Modules
+/// store data in the simulation using the `DataPlugin` trait that allows them
+/// to retrieve data by type.
+///
+/// The future event list of the simulation is a queue of `Callback` objects -
+/// called `plans` - that will assume control of the Context at a future point
+/// in time and execute the logic in the associated `FnOnce(&mut Context)`
+/// closure. Modules can add plans to this queue through the `Context`.
+///
+/// The simulation also has an immediate callback queue to allow for the
+/// accumulation of side effects of mutations by the current controlling module.
+///
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
@@ -36,6 +38,7 @@ pub struct Context {
 }
 
 impl Context {
+    /// Create a new empty `Context`
     #[must_use]
     pub fn new() -> Context {
         Context {
@@ -46,6 +49,10 @@ impl Context {
         }
     }
 
+    /// Add a plan to the future event list at the specified time
+    ///
+    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// if needed.
     /// # Panics
     ///
     /// Panics if time is in the past, infinite, or NaN.
@@ -54,14 +61,29 @@ impl Context {
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
+    /// Cancel a plan that has been added to the queue
+    ///
+    /// # Panics
+    ///
+    /// This function panics if you cancel a plan which has already been
+    /// cancelled or executed.
     pub fn cancel_plan(&mut self, id: &Id) {
         self.plan_queue.cancel_plan(id);
     }
 
+    /// Add a `Callback` to the queue to be executed before the next plan
     pub fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static) {
         self.callback_queue.push_back(Box::new(callback));
     }
 
+    /// Retrieve a mutable reference to the data container associated with a
+    /// `DataPlugin`
+    ///
+    /// If the data container has not been already added to the `Context` then
+    /// this function will use the `DataPlugin::create_data_container` method
+    /// to construct a new data container and store it in the `Context`.
+    ///
+    /// Returns a mutable reference to the data container
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn get_data_container_mut<T: DataPlugin>(&mut self) -> &mut T::DataContainer {
@@ -72,6 +94,10 @@ impl Context {
             .unwrap() // Will never panic as data container has the matching type
     }
 
+    /// Retrieve a reference to the data container associated with a
+    /// `DataPlugin`
+    ///
+    /// Returns a reference to the data container if it exists or else `None`
     #[must_use]
     pub fn get_data_container<T: DataPlugin>(&self) -> Option<&T::DataContainer> {
         if let Some(data) = self.data_plugins.get(&TypeId::of::<T>()) {
@@ -81,11 +107,15 @@ impl Context {
         }
     }
 
+    /// Get the current time in the simulation
+    ///
+    /// Returns the current time
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
     }
 
+    /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         // Start plan loop
         loop {
@@ -112,6 +142,31 @@ impl Default for Context {
         Self::new()
     }
 }
+
+type Callback = dyn FnOnce(&mut Context);
+
+/// A trait for objects that can provide data containers to be held by `Context`
+pub trait DataPlugin: Any {
+    type DataContainer;
+
+    fn create_data_container() -> Self::DataContainer;
+}
+
+#[macro_export]
+macro_rules! define_data_plugin {
+    ($plugin:ident, $data_container:ty, $default: expr) => {
+        struct $plugin {}
+
+        impl $crate::context::DataPlugin for $plugin {
+            type DataContainer = $data_container;
+
+            fn create_data_container() -> Self::DataContainer {
+                $default
+            }
+        }
+    };
+}
+pub use define_data_plugin;
 
 #[cfg(test)]
 mod tests {
