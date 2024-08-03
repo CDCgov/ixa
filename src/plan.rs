@@ -15,10 +15,10 @@ use std::{
 
 /// A priority queue that stores arbitrary data sorted by time
 ///
-/// Items of type T are stored in order by `f64` time and called `Plan<T>`.
+/// Items of type `T` are stored in order by `f64` time and called `Plan<T>`.
 /// When plans are created they are sequentially assigned an `Id` that is a
 /// wrapped `u64`. If two plans are scheduled for the same time the plan that is
-/// scheduled first (i.e. that has the lowest id) is placed earlier.
+/// scheduled first (i.e., that has the lowest id) is placed earlier.
 ///
 /// The pair of time and plan id are stored in a binary heap of `Entry` objects.
 /// The data payload of the event is stored in a hash map by plan id.
@@ -196,6 +196,29 @@ mod tests {
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 3.0);
+        assert_eq!(next_plan.data, 3);
+
+        assert!(plan_queue.get_next_plan().is_none());
+    }
+
+    #[test]
+    fn add_and_get_plans() {
+        let mut plan_queue = Queue::new();
+        plan_queue.add_plan(1.0, 1);
+        plan_queue.add_plan(2.0, 2);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 1.0);
+        assert_eq!(next_plan.data, 1);
+
+        plan_queue.add_plan(3.0, 3);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 2.0);
+        assert_eq!(next_plan.data, 2);
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 3.0);

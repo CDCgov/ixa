@@ -9,6 +9,9 @@ use std::{
 
 use crate::plan::{Id, Queue};
 
+/// The common callback used by multiple `Context` methods for future events
+type Callback = dyn FnOnce(&mut Context);
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -27,8 +30,10 @@ use crate::plan::{Id, Queue};
 /// in time and execute the logic in the associated `FnOnce(&mut Context)`
 /// closure. Modules can add plans to this queue through the `Context`.
 ///
-/// The simulation also has an immediate callback queue to allow for the
-/// accumulation of side effects of mutations by the current controlling module.
+/// The simulation also has a separate callback mechanism. Callbacks
+/// fire before the next timed event (even if it is scheduled for the
+/// current time. This allows modules to schedule actions for immediate
+/// execution but outside of the current iteration of the event loop.
 ///
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
@@ -143,8 +148,6 @@ impl Default for Context {
     }
 }
 
-type Callback = dyn FnOnce(&mut Context);
-
 /// A trait for objects that can provide data containers to be held by `Context`
 pub trait DataPlugin: Any {
     type DataContainer;
@@ -174,6 +177,29 @@ mod tests {
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
+    #[test]
+    fn empty_context() {
+        let mut context = Context::new();
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+    }
+
+    #[test]
+    fn get_data_container() {
+        let mut context = Context::new();
+        context.get_data_container_mut::<ComponentA>().push(1);
+        assert_eq!(
+            *context.get_data_container::<ComponentA>().unwrap(),
+            vec![1],
+        );
+    }
+
+    #[test]
+    fn get_uninitialized_data_container() {
+        let context = Context::new();
+        assert!(context.get_data_container::<ComponentA>().is_none());
+    }
+
     fn add_plan(context: &mut Context, time: f64, value: u32) -> Id {
         context.add_plan(time, move |context| {
             context.get_data_container_mut::<ComponentA>().push(value);
@@ -199,13 +225,6 @@ mod tests {
     fn nan_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::NAN, 0);
-    }
-
-    #[test]
-    fn empty_context() {
-        let mut context = Context::new();
-        context.execute();
-        assert_eq!(context.get_current_time(), 0.0);
     }
 
     #[test]
