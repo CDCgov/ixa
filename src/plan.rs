@@ -214,15 +214,15 @@ mod tests {
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
-        plan_queue.add_plan(3.0, 3);
+        plan_queue.add_plan(1.5, 3);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 1.5);
+        assert_eq!(next_plan.data, 3);
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 2.0);
         assert_eq!(next_plan.data, 2);
-
-        let next_plan = plan_queue.get_next_plan().unwrap();
-        assert_eq!(next_plan.time, 3.0);
-        assert_eq!(next_plan.data, 3);
 
         assert!(plan_queue.get_next_plan().is_none());
     }
