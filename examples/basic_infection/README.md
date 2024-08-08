@@ -12,7 +12,7 @@ The purpose of this example is to model the infection process in a homogeneous p
   - infected period: time that an individual spends from infection to recovery
 
 ## Process overview 
-```{mermaid}
+```mermaid
 flowchart LR
-A(Susceptible) -> B(Infected) -> C(Recovered)
+A(Susceptible) --> B(Infected) --> C(Recovered)
 ```
