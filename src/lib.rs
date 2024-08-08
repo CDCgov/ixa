@@ -28,3 +28,4 @@
 //!   person trying to infect susceptible people in the population.
 pub mod context;
 pub mod plan;
+pub mod random;
