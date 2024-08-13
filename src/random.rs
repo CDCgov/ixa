@@ -74,20 +74,23 @@ impl RandomContext for Context {
         let data_container = self
             .get_data_container::<RngPlugin>()
             .expect("You must initialize the random number generator with a base seed");
-        let random_holders = data_container.rng_holders.try_borrow_mut().unwrap();
 
-        let random_holder = RefMut::map(random_holders, |random_holders| {
-            random_holders.entry(TypeId::of::<R>()).or_insert_with(|| {
-                let base_seed = data_container.base_seed;
-                let seed_offset = fxhash::hash64(R::get_name());
-                RngHolder {
-                    rng: Box::new(R::RngType::seed_from_u64(base_seed + seed_offset)),
-                }
-            })
-        });
+        let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
 
-        RefMut::map(random_holder, |random_holder| {
-            random_holder.rng.downcast_mut::<R::RngType>().unwrap()
+        RefMut::map(rng_holders, |holders| {
+            holders
+                .entry(TypeId::of::<R>())
+                // Create a new rng holder if it doesn't exist yet
+                .or_insert_with(|| {
+                    let base_seed = data_container.base_seed;
+                    let seed_offset = fxhash::hash64(R::get_name());
+                    RngHolder {
+                        rng: Box::new(R::RngType::seed_from_u64(base_seed + seed_offset)),
+                    }
+                })
+                .rng
+                .downcast_mut::<R::RngType>()
+                .unwrap()
         })
     }
 }
