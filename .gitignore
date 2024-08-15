@@ -19,3 +19,6 @@ Cargo.lock
 # Emacs
 *~
 \#*
+
+# html
+examples/**/*.html
