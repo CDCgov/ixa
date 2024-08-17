@@ -1,5 +1,6 @@
 use crate::context::Context;
-use rand::SeedableRng;
+use rand::prelude::Distribution;
+use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -53,6 +54,10 @@ pub trait RandomContext {
     fn set_base_random_seed(&mut self, base_seed: u64);
 
     fn sample<R: RngId, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T;
+
+    fn sample_distr<R: RngId, T>(&self, distribution: impl Distribution<T>) -> T
+    where
+        R::RngType: Rng;
 }
 
 impl RandomContext for Context {
@@ -72,30 +77,45 @@ impl RandomContext for Context {
     /// before, one will be created with the base seed you defined in `set_base_random_seed`.
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T {
-        let data_container = self
-            .get_data_container::<RngPlugin>()
-            .expect("You must initialize the random number generator with a base seed");
-
-        let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
-
-        let mut rng = RefMut::map(rng_holders, |holders| {
-            holders
-                .entry(TypeId::of::<R>())
-                // Create a new rng holder if it doesn't exist yet
-                .or_insert_with(|| {
-                    let base_seed = data_container.base_seed;
-                    let seed_offset = fxhash::hash64(R::get_name());
-                    RngHolder {
-                        rng: Box::new(R::RngType::seed_from_u64(base_seed + seed_offset)),
-                    }
-                })
-                .rng
-                .downcast_mut::<R::RngType>()
-                .unwrap()
-        });
-
+        let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
     }
+
+    /// Gets a random sample from the specified distribution using random number generator
+    /// associated with the given `RngId`. If the Rng has not been used before, one will be
+    /// created with the base seed you defined in `set_base_random_seed`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    fn sample_distr<R: RngId, T>(&self, distribution: impl Distribution<T>) -> T
+    where
+        R::RngType: Rng,
+    {
+        let mut rng = get_rng::<R>(self);
+        distribution.sample::<R::RngType>(&mut rng)
+    }
+}
+
+fn get_rng<R: RngId>(context: &Context) -> RefMut<R::RngType> {
+    let data_container = context
+        .get_data_container::<RngPlugin>()
+        .expect("You must initialize the random number generator with a base seed");
+
+    let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
+
+    RefMut::map(rng_holders, |holders| {
+        holders
+            .entry(TypeId::of::<R>())
+            // Create a new rng holder if it doesn't exist yet
+            .or_insert_with(|| {
+                let base_seed = data_container.base_seed;
+                let seed_offset = fxhash::hash64(R::get_name());
+                RngHolder {
+                    rng: Box::new(R::RngType::seed_from_u64(base_seed + seed_offset)),
+                }
+            })
+            .rng
+            .downcast_mut::<R::RngType>()
+            .unwrap()
+    })
 }
 
 #[cfg(test)]
@@ -175,6 +195,26 @@ mod test {
         let mut zero_counter = 0;
         for _ in 0..n_samples {
             let sample = context.sample::<FooRng, usize>(|rng| parameters.sample(rng));
+            if sample == 0 {
+                zero_counter += 1;
+            }
+        }
+        assert!((zero_counter - 1000 as i32).abs() < 30);
+    }
+
+    #[test]
+    fn sample_distribution() {
+        let mut context = Context::new();
+        context.set_base_random_seed(42);
+        // Initialize weighted sampler
+        *context.get_data_container_mut::<SamplerData>() =
+            WeightedIndex::new(vec![1.0, 2.0]).unwrap();
+
+        let parameters = context.get_data_container::<SamplerData>().unwrap();
+        let n_samples = 3000;
+        let mut zero_counter = 0;
+        for _ in 0..n_samples {
+            let sample = context.sample_distr::<FooRng, usize>(parameters);
             if sample == 0 {
                 zero_counter += 1;
             }
