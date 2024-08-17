@@ -104,6 +104,7 @@ mod test {
     use crate::context::Context;
     use crate::random::ContextRandomExt;
     use rand::RngCore;
+    use rand_distr::{Distribution, Exp};
 
     define_rng!(FooRng);
     define_rng!(BarRng);
@@ -150,6 +151,15 @@ mod test {
 
         let mut bar_rng = context.get_rng::<BarRng>();
         bar_rng.next_u64();
+    }
+
+    #[test]
+    fn usage_with_distribution() {
+        let mut context = Context::new();
+        context.init_random(42);
+        let mut rng = context.get_rng::<FooRng>();
+        let dist = Exp::new(1.0).unwrap();
+        assert_ne!(dist.sample(&mut *rng), dist.sample(&mut *rng));
     }
 
     #[test]

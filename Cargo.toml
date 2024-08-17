@@ -10,3 +10,6 @@ homepage = "https://github.com/CDCgov/ixa"
 [dependencies]
 fxhash = "0.2.1"
 rand = "0.8.5"
+
+[dev-dependencies]
+rand_distr = "0.4.3"
