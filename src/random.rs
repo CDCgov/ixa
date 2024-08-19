@@ -23,7 +23,7 @@ macro_rules! define_rng {
 }
 pub use define_rng;
 
-pub trait RngId: Any {
+pub trait RngId {
     type RngType: SeedableRng;
     fn get_name() -> &'static str;
 }
@@ -57,7 +57,7 @@ crate::context::define_data_plugin!(
 pub trait ContextRandomExt {
     fn init_random(&mut self, base_seed: u64);
 
-    fn get_rng<R: RngId>(&self) -> RefMut<R::RngType>;
+    fn get_rng<R: RngId + 'static>(&self) -> RefMut<R::RngType>;
 }
 
 impl ContextRandomExt for Context {
