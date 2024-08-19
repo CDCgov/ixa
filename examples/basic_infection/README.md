@@ -24,12 +24,16 @@ The simulation is set and run by a main simulation routine. The main routine loa
 - Main
 ```
 load context
-load parameters module // includes force of infection, population size, and infection period.
-load population_manager module // it requires parameters module to read population size
-load transmission_manager module
-load infection_manager module
+context.add_module(parameters); // includes force of infection, population size, and infection period.
+context.add_module(population_manager); // it requires parameters module to read population size
+context.add_module(transmission_manager);
+context.add_module(infection_manager);
+context.add_module(person_property_report);
 
-context.execute()
+//do all the steps necessary to set up the report item handler
+setup_report!(context, person_property_report, "incidence_report.csv");
+
+context.execute();
 
 ```
 
@@ -65,7 +69,7 @@ dependencies: context, parameters, random number generator, person infection sta
 
 //methods
 
-attempt_infection(context) {
+fn attempt_infection(context) {
     transmission_rng = rng.get_rng(id = transmission);
     population = context.get_population();
     person_to_infect = transmission_rng.sample_int(from = 0, to = population);
@@ -92,7 +96,7 @@ init(context) {
 dependencies: random number generator, person infection status, person, context, parameters;
 
 //methods
-handle_infection_status_change(context, person_id, old_infection_status) {
+fn handle_infection_status_change(context, person_id, old_infection_status) {
     if (context.get_infection_status(person_id) == Infected) {
         infection_rng = context.get_rng(id = infection);
         infection_period = parameters.get_parameter(infection_period)
@@ -115,6 +119,33 @@ init(context) {
 flowchart LR
 S(Susceptible) --FoI--> I(Infected) --inf. period--> R(Recovered)
 ```
+
+## Reports
+This model includes two types of report focused on tracking the state of the infection status defined as a person property: 1) instantaneous report on changes in person properties, and 2) current state of person properties reported periodically.
+
+### Report for changes in person properties
+This report requires a data structure to store instantaneous changes in person properties that will be printed to a file.
+```
+//data
+report_data = struct(t:u64, person_property_type:Type(InfectionStatus), person_property_value:InfectionStatus, person_id:u64);
+```
+
+At initialization, the report module reads the file name from the parameters module and creates a new file.  Finally, the report module subscribes to observe changes in person properties, which passes a callback function `handle_person_property_change` that requires `context, person_id, old_infection_status`.
+```
+init(context) {
+    context.observe_infection_status_event(handle_person_property_change(context, person_id, old_infection_status));
+}
+```
+
+The method `handle_person_property_change` writes a new line to the report file with the change in the person property of infection status.
+```
+fn handle_person_property_change(context, person_id, infection_status){
+    report_data = (t = context.get_time(), person_property_type = Type(infection_status), person_property_value = context.get_infection_status(person_id), person_id = person_id);
+    context.print_report_data(report_data, report_file); // Method to print to csv, tsv to be implemented in the context.
+}
+```
+
+### Periodic report
 
 ## Modules description
  - *parameters module*: this module manages data for parameter values for population size, force of infection, and infection period. At initialization, all parameter variables are set to a specific value.
