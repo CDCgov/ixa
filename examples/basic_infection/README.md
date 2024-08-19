@@ -96,7 +96,7 @@ init(context) {
 dependencies: random number generator, person infection status, person, context, parameters;
 
 //methods
-fn handle_infection_status_change(context, person_id, old_infection_status) {
+fn handle_infection_status_change(context, person_id, previous_infection_status) {
     if (context.get_infection_status(person_id) == Infected) {
         infection_rng = context.get_rng(id = infection);
         infection_period = parameters.get_parameter(infection_period)
@@ -110,7 +110,7 @@ init(context) {
     context.add_rng(id = infection);
 
     // This function in context should send, time, person_id, and infection status change.
-    context.observe_infection_status_event(handle_infection_status_change);
+    context.observe_person_property_event(handle_infection_status_change);
 }
 ```
 - Infection status transitions
@@ -123,17 +123,17 @@ S(Susceptible) --FoI--> I(Infected) --inf. period--> R(Recovered)
 ## Reports
 This model includes two types of report focused on tracking the state of the infection status defined as a person property: 1) instantaneous report on changes in person properties, and 2) current state of person properties reported periodically.
 
-### Report for changes in person properties
-This report requires a data structure to store instantaneous changes in person properties that will be printed to a file.
+### Report for changes in person properties (Infection Status)
+This report requires a data structure to store instantaneous changes in person properties that will be printed to a file. For this model, only changes to Infected or Recover are reported.
 ```
 //data
 report_data = struct(t:u64, person_property_type:Type(InfectionStatus), person_property_value:InfectionStatus, person_id:u64);
 ```
 
-At initialization, the report module reads the file name from the parameters module and creates a new file.  Finally, the report module subscribes to observe changes in person properties, which passes a callback function `handle_person_property_change` that requires `context, person_id, old_infection_status`.
+At initialization, the report module reads the file name from the parameters module and creates a new file.  Finally, the report module subscribes to observe changes in person properties, which passes a callback function `handle_person_property_change` that requires `context, person_id, previous_infection_status`.
 ```
 init(context) {
-    context.observe_infection_status_event(handle_person_property_change(context, person_id, old_infection_status));
+    context.observe_person_property_event(handle_person_property_change(context, person_id, previous_infection_status));
 }
 ```
 
@@ -141,11 +141,66 @@ The method `handle_person_property_change` writes a new line to the report file 
 ```
 fn handle_person_property_change(context, person_id, infection_status){
     report_data = (t = context.get_time(), person_property_type = Type(infection_status), person_property_value = context.get_infection_status(person_id), person_id = person_id);
-    context.print_report_data(report_data, report_file); // Method to print to csv, tsv to be implemented in the context.
+    context.print_report_data(report_data); // Method to print to csv, tsv to be implemented in the
 }
 ```
 
-### Periodic report
+### Periodic report for current value in person properties (Infection Status)
+To report the current state of each Infection Status (Susceptible, Infected, or Recovered), this report needs an additional data structure that keeps a count of individuals on each state and is updated every time an event is released due to changes in infection status.
+```
+person_property_counter = struct {
+    map: hashmap<PropertyType, hashmap<property_value, int>>;
+    // e.g., this map could represent 100 susceptible people
+    // <InfectionStatus, <Susceptible, 100>>
+}
+context.add_data_container(person_property_counter)
+```
+At initialization, the property counter is initialized with the current state of all the population. The report also observes changes in person properties which are handled by a function that updates counts in the property counter. The first report day is scheduled for t = 0.
+```
+init(context){
+    population = parameters.get_parameter(population);
+    for i in 0..population {
+        for person_property in context.get_person_property_types().to_list() {
+            for person_property_value in (person_property.to_list()) {
+                person_property_counter.increment(person_property,person_property_value);
+            }
+        }
+    }
+    context.observe_person_property_event(update_property_counter);
+    context.add_plan(report_periodic_item, time = 0);
+}
+```
+Methods are implemented for person property counter to increment and decrement the counters. For the periodic report, one method will release the periodic items to a report based on the period defined in parameters. Changes in the person properties are observed and the callback function `update_property_counter` updates the counts for each property.
+```
+fn update_property_counter(context, person_id,
+                           person_property_type,
+                           previous_person_property_value) {
+    person_property_counter.increment(context.get_person_property(person_property_type, person_id));
+    person_property_counter.decrement(person_property_type, previous_person_property_value);
+}
+
+fn report_periodic_item(context) {
+    // Report all items in the counter
+    for person_property in context.get_person_property_types().to_list() {
+            for person_property_value in (person_property.to_list()) {
+                report_item = {
+                t = context.get_time(),
+                person_property_type = person_property,
+                person_property_value = person_property_value,
+                person_property_counter = person_property_counter.get_counter(person_property, person_property_value),
+                }
+                context.print_report_data(report_item);
+            }
+        }
+    }
+
+    // Schedule next report day
+    next_report_time = context.get_time() + paramters.get_parameter(reporting_period);
+    if next_report_time < parameters.get_parameter(max_days) {
+        context.add_plan(report_periodic_item, next_report_time);
+    }
+}
+```
 
 ## Modules description
  - *parameters module*: this module manages data for parameter values for population size, force of infection, and infection period. At initialization, all parameter variables are set to a specific value.
