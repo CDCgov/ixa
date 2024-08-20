@@ -22,9 +22,11 @@ macro_rules! define_rng {
         }
 
         // This ensures that you can't define two RngIds with the same name
-        #[doc(hidden)]
-        #[no_mangle]
-        pub static $random_id: () = ();
+        paste::paste! {
+            #[doc(hidden)]
+            #[no_mangle]
+            pub static [<rng_name_duplication_guard_ $random_id>]: () = ();
+        }
     };
 }
 pub use define_rng;
