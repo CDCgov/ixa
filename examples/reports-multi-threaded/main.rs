@@ -12,9 +12,7 @@ fn main() {
 
             #[cfg(feature = "reports")]
             context.add_report::<Incidence>("Incidence");
-            #[cfg(feature = "reports")]
-            context.add_report::<Death>("Death");
-
+            
             println!("Scenario: {}", scenario);
 
             let people = vec!["1", "2", "3"];
@@ -30,22 +28,6 @@ fn main() {
                         });
                         println!(
                             "Person {} was infected at time {}",
-                            person,
-                            context.get_current_time()
-                        );
-                    }
-                });
-
-                context.add_plan(2.0, {
-                    let person = person.clone();
-                    move |context| {
-                        #[cfg(feature = "reports")]
-                        context.send_report(Death {
-                            person_id: person.clone(),
-                            t: context.get_current_time(),
-                        });
-                        println!(
-                            "Person {} died at time {}",
                             person,
                             context.get_current_time()
                         );
