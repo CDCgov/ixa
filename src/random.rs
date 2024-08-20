@@ -19,6 +19,11 @@ macro_rules! define_rng {
                 stringify!($random_id)
             }
         }
+
+        // This ensures that you can't define two RngIds with the same name
+        #[doc(hidden)]
+        #[no_mangle]
+        pub static $random_id: () = ();
     };
 }
 pub use define_rng;
