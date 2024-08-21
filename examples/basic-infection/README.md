@@ -6,7 +6,7 @@ characteristics, and infections are caused by something like a food-borne diseas
 
 ## Simulation overview
 
-![Diagram of infection](image.png)
+![Diagram of infection](infection-diagram.png)
 
 The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on the constant force of infection. The simulation ends after no more infection events are scheduled.
 
