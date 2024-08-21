@@ -309,7 +309,7 @@ fn report_periodic_item(t, context) {
 
     // Schedule next report
     next_report_time = context::get_time() + parameters::get_parameter(reporting_period);
-    if next_report_time < parameters::get_parameter(max_periods) {
+    if next_report_time < parameters::get_parameter(max_time) {
         context::on_period_end(report_periodic_item, report_periodic_item);
     }
 }
