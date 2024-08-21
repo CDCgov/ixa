@@ -4,7 +4,6 @@ assuming a constant force of infection. In other words, all individuals have the
 characteristics, and infections are caused by something like a food-borne disease
  and not from interactions between individuals.
 
-
 ## Simulation overview
 
 ![Diagram of infection](image.png)
