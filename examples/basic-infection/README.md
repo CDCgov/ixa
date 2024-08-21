@@ -7,6 +7,7 @@ characteristics, and infections are caused by something like a food-borne diseas
 ## Simulation overview
 
 ![Diagram of infection](infection-diagram.png)
+![alt text](image.png)
 
 The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on the constant force of infection. The simulation ends after no more infection events are scheduled.
 
@@ -254,7 +255,7 @@ hospitalized.
 
 To efficiently keep track of the current state of each infection status,
 we will create an additional data structure to keep a count of individuals in
-each state and is update it every time a change event is released.
+each state and is updated every time a change event is released.
 
 ```rust
 // Internally, HashMap<InfectionStatus, usize>
@@ -296,20 +297,20 @@ When all plans have executed for a given time t, `ixa` calls the on_period_end
 callback to write the report row and schedule the next periodic report:
 
 ```rust
-fn report_periodic_item(day, context) {
+fn report_periodic_item(t, context) {
     // Add a row for each status
     for infection_status in counter::iter() {
         context.add_report(Period(
-            day,
+            t,
             infection_status,
             count: counter::get_count(infection_status)
         ));
     }
 
-    // Schedule next report day
+    // Schedule next report
     next_report_time = context::get_time() + parameters::get_parameter(reporting_period);
-    if next_report_time < parameters::get_parameter(max_days) {
-        context::plans_did_execute(report_periodic_item, report_periodic_item);
+    if next_report_time < parameters::get_parameter(max_periods) {
+        context::on_period_end(report_periodic_item, report_periodic_item);
     }
 }
 ```
