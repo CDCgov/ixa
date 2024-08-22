@@ -5,6 +5,10 @@ characteristics, and infections are caused by something like a food-borne diseas
  and not from interactions between individuals.
 
 ## Simulation overview
+
+![Diagram of infection](infection-diagram.png)
+![alt text](image.png)
+
 The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on the constant force of infection. The simulation ends after no more infection events are scheduled.
 
 Infected individuals schedule their recovery at time `t + infected period`. The infection status of recovered individuals remains as recovered for the rest of the simulation.
@@ -19,7 +23,7 @@ As in other `ixa` models, the simulation is managed by a central `Context` objec
 which loads parameters, initializes user-defined modules, and starts a callback
 execution loop:
 
-```
+```rust
 struct Parameters {
     random_seed: u64,
     population_size: usize,
@@ -28,16 +32,16 @@ struct Parameters {
 }
 
 let context = Context::new();
-context.load_parameters<Parameters>("config.toml")
+context::load_parameters<Parameters>("config.toml")
 
 // Initialize modules
-context.add_module(population_manager);
-context.add_module(transmission_manager);
-context.add_module(infection_manager);
-context.add_module(person_property_report);
+context::add_module(population_manager);
+context::add_module(transmission_manager);
+context::add_module(infection_manager);
+context::add_module(person_property_report);
 
 // Run the simulation
-context.execute();
+context::execute();
 ```
 
 Individuals transition through a typical SIR pattern they where
@@ -183,82 +187,130 @@ infection status:
 2. The current state of person properties reported periodically.
 
 #### Instantaneous Reports
-This report requires a data structure to store instantaneous changes in person properties that will be printed to a file. For this model, only changes to
-Infected or Recovered are reported.
+For this report, we want to record a timestamp when a person is infected
+and when they recover. The output of the report will look something like this:
 
 ```
-//data
-report_data = struct(t:u64, person_property_type:Type(InfectionStatus), person_property_value:InfectionStatus, person_id:u64);
+person_id,infection_status,t
+0,Infected,0
+1,Infected,1.2
+0,Recovered,7.2
+1,Infected,8.5
+...
 ```
+At initialization, a `Report` module registers a type for `Incidence`
+and subscribes change events on the `infection_status` of a person
 
-At initialization, the report module reads the file name from the parameters module and creates a new file.  Finally, the report module subscribes to observe changes in person properties, which passes a callback function `handle_person_property_change` that requires `context, person_id, previous_infection_status`.
-```
-init(context) {
-    context.observe_person_property_event(handle_person_property_change(context, person_id, previous_infection_status));
+```rust
+struct IncidenceReport {
+    person_id: u64,
+    infection_status: InfectionStatus,
+    t: u64
+}
+
+fn init(context) {
+    context.add_report::<IncidenceReport>("incidence");
+    context.observe_person_property_event::<InfectionStatus>(handle_infection_status_change);
 }
 ```
 
-The method `handle_person_property_change` writes a new line to the report file with the change in the person property of infection status.
-```
-fn handle_person_property_change(context, person_id, infection_status){
-    report_data = (t = context.get_time(), person_property_type = Type(infection_status), person_property_value = context.get_infection_status(person_id), person_id = person_id);
-    context.print_report_data(report_data); // Method to print to csv, tsv to be implemented in the
+The method `handle_infection_status_change` writes a new line to the report file, recording the status and the current time:
+
+```rust
+fn handle_infection_status_change(context, person_id, prev, current) {
+    context.add_report(Incidence(
+        person_id,
+        infection_status: current,
+        t: context.get_current_time()
+    ));
 }
 ```
+
+One consideration here is that if the callback references context, it should
+provide the state of the context exactly at the time the event was released.
 
 #### Periodic Reports
-To report the current state of each Infection Status (Susceptible, Infected, or Recovered), this report needs an additional data structure that keeps a count of individuals on each state and is updated every time an event is released due to changes in infection status.
+The second type of report records something about the current state of the
+simulation at the end of a period, such as after every day.
+
+For this example, we record a count of the number of individuals with each
+infection status (S,I,R) at the end of every day:
+
 ```
-person_property_counter = struct {
-    map: hashmap<PropertyType, hashmap<property_value, int>>;
-    // e.g., this map could represent 100 susceptible people
-    // <InfectionStatus, <Susceptible, 100>>
-}
-context.add_data_container(person_property_counter)
+day,infection_status,count
+0,Suceptible,92
+0,Infected,8
+0,Recovered,0
+1,Suceptible,89,
+1,Infected,12
+1,Recovered,0
+...
 ```
-At initialization, the property counter is initialized with the current state of all the population. The report also observes changes in person properties which are handled by a function that updates counts in the property counter. The first report day is scheduled for t = 0.
+
+In this case, we could actually compute each daily summary in
+post-processing from the instantaneous reports instead of generating a second
+set of periodic reports. However, we want a summary of properties
+which are not otherwise recorded, such as perhaps whether an individual is
+hospitalized.
+
+To efficiently keep track of the current state of each infection status,
+we will create an additional data structure to keep a count of individuals in
+each state and is updated every time a change event is released.
+
+```rust
+// Internally, HashMap<InfectionStatus, usize>
+let counter = PersonPropertyCounter<InfectionStatus>::new();
+context.add_data_container(counter);
 ```
-init(context){
-    population = parameters.get_parameter(population);
+
+On initialization, the Report manager computes an initial count for each status.
+In `update_property_counter` the event handler, the counter increments/decrements
+the appropriate status. It also registers a hook that execute after all plans
+for a time t have executed, i.e., `on_period_end`
+
+```rust
+fn init(context){
+    // Calculate the initial state
+    population = parameters::get_parameter(population);
     for i in 0..population {
-        for person_property in context.get_person_property_types().to_list() {
-            for person_property_value in (person_property.to_list()) {
-                person_property_counter.increment(person_property,person_property_value);
-            }
-        }
+        counter::increment(
+            counter.get_person_property_value(i)
+        );
     }
-    context.observe_person_property_event(update_property_counter);
-    context.add_plan(report_periodic_item, time = 0);
+    context::observe_person_property_event(update_property_counter);
+    context::on_period_end(0, report_periodic_item);
 }
 ```
-Methods are implemented for person property counter to increment and decrement the counters. For the periodic report, one method will release the periodic items to a report based on the period defined in parameters. Changes in the person properties are observed and the callback function `update_property_counter` updates the counts for each property.
-```
-fn update_property_counter(context, person_id,
-                           person_property_type,
-                           previous_person_property_value) {
-    person_property_counter.increment(context.get_person_property(person_property_type, person_id));
-    person_property_counter.decrement(person_property_type, previous_person_property_value);
-}
+Methods are implemented for person property counter to increment and decrement
+the counters. Changes in the person properties are
+observed and the callback function `update_property_counter` updates the
+counts for each property:
 
-fn report_periodic_item(context) {
-    // Report all items in the counter
-    for person_property in context.get_person_property_types().to_list() {
-            for person_property_value in (person_property.to_list()) {
-                report_item = {
-                t = context.get_time(),
-                person_property_type = person_property,
-                person_property_value = person_property_value,
-                person_property_counter = person_property_counter.get_counter(person_property, person_property_value),
-                }
-                context.print_report_data(report_item);
-            }
-        }
+```rust
+fn handle_infection_status_change(context, person_id, prev, current) {
+    counter::increment(current);
+    counter::decrement(prev);
+}
+```
+
+When all plans have executed for a given time t, `ixa` calls the on_period_end
+callback to write the report row and schedule the next periodic report:
+
+```rust
+fn report_periodic_item(t, context) {
+    // Add a row for each status
+    for infection_status in counter::iter() {
+        context.add_report(Period(
+            t,
+            infection_status,
+            count: counter::get_count(infection_status)
+        ));
     }
 
-    // Schedule next report day
-    next_report_time = context.get_time() + paramters.get_parameter(reporting_period);
-    if next_report_time < parameters.get_parameter(max_days) {
-        context.add_plan(report_periodic_item, next_report_time);
+    // Schedule next report
+    next_report_time = context::get_time() + parameters::get_parameter(reporting_period);
+    if next_report_time < parameters::get_parameter(max_time) {
+        context::on_period_end(report_periodic_item, report_periodic_item);
     }
 }
 ```
