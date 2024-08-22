@@ -1,6 +1,12 @@
 use ixa::context::Context;
 use std::thread;
 
+struct Incidence {
+    scenario: String,
+    person_id: String,
+    t: f64,
+}
+
 fn main() {
     let scenarios = vec!["Illinois", "Wisconsin", "Arizona", "California"];
     let mut handles = vec![];
