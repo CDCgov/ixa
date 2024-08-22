@@ -12,7 +12,7 @@ fn main() {
 
             #[cfg(feature = "reports")]
             context.add_report::<Incidence>("Incidence");
-            
+
             println!("Scenario: {}", scenario);
 
             let people = vec!["1", "2", "3"];
@@ -27,7 +27,7 @@ fn main() {
                             t: context.get_current_time(),
                         });
                         println!(
-                            "Person {} was infected at time {}",
+                            "Person {} was infected at time {}.",
                             person,
                             context.get_current_time()
                         );
