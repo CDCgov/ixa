@@ -18,16 +18,18 @@ fn main() {
             let people = vec!["1", "2", "3"];
             for person in people {
                 let person = person.to_string();
+                let scenario = scenario.clone();
                 context.add_plan(1.0, {
-                    let person = person.clone();
                     move |context| {
                         #[cfg(feature = "reports")]
                         context.send_report(Incidence {
+                            scenario: scenario,
                             person_id: person.clone(),
                             t: context.get_current_time(),
                         });
                         println!(
-                            "Person {} was infected at time {}.",
+                            "Scenario: {}, Person {} was infected at time {}.",
+                            scenario,
                             person,
                             context.get_current_time()
                         );
