@@ -5,12 +5,16 @@
 use std::{
     any::{Any, TypeId},
     collections::{HashMap, VecDeque},
+    rc::Rc,
 };
 
 use crate::plan::{Id, Queue};
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
+
+/// A handler for an event type `E`
+type EventHandler<E> = dyn Fn(&mut Context, E);
 
 /// A manager for the state of a discrete-event simulation
 ///
@@ -38,6 +42,7 @@ type Callback = dyn FnOnce(&mut Context);
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
+    event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
@@ -49,9 +54,55 @@ impl Context {
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
+            event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
         }
+    }
+
+    fn add_handlers<E: Copy + 'static>(
+        event_handlers: &mut HashMap<TypeId, Box<dyn Any>>,
+        callback: impl Fn(&mut Context, E) + 'static,
+    ) {
+        let callback_vec = event_handlers
+            .entry(TypeId::of::<E>())
+            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
+        let callback_vec: &mut Vec<Rc<EventHandler<E>>> = callback_vec.downcast_mut().unwrap();
+        callback_vec.push(Rc::new(callback));
+    }
+
+    pub fn subscribe_to_event<E: Copy + 'static>(
+        &mut self,
+        callback: impl Fn(&mut Context, E) + 'static,
+    ) {
+        Self::add_handlers(&mut self.event_handlers, callback);
+    }
+
+    pub fn release_event<E: Copy + 'static>(&mut self, event: E) {
+        // Queue standard handlers
+
+        for callback in Self::collect_callbacks(&self.event_handlers, event) {
+            self.queue_callback(callback);
+        }
+    }
+
+    fn collect_callbacks<E: Copy + 'static>(
+        event_handlers: &HashMap<TypeId, Box<dyn Any>>,
+        event: E,
+    ) -> Vec<Box<Callback>> {
+        let mut callbacks_to_return = Vec::<Box<Callback>>::new();
+        let callback_vec = event_handlers.get(&TypeId::of::<E>());
+        if let Some(callback_vec) = callback_vec {
+            let callback_vec: &Vec<Rc<EventHandler<E>>> = callback_vec.downcast_ref().unwrap();
+            if !callback_vec.is_empty() {
+                for callback in callback_vec {
+                    let internal_callback = Rc::clone(callback);
+                    callbacks_to_return
+                        .push(Box::new(move |context| internal_callback(context, event)));
+                }
+            }
+        }
+        callbacks_to_return
     }
 
     /// Add a plan to the future event list at the specified time
@@ -173,6 +224,8 @@ pub use define_data_plugin;
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
@@ -351,5 +404,29 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2]);
+    }
+
+    #[derive(Copy, Clone)]
+    struct Event {
+        pub data: usize,
+    }
+
+    #[test]
+    fn test_events() {
+        let mut context = Context::new();
+
+        let obs_data = Rc::new(RefCell::new(0));
+        let immediate_obs_data = Rc::new(RefCell::new(0));
+
+        let obs_data_clone = Rc::clone(&obs_data);
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        context.release_event(Event { data: 1 });
+        assert_eq!(*immediate_obs_data.borrow(), 0);
+
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 1);
     }
 }
