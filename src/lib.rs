@@ -29,3 +29,4 @@
 pub mod context;
 pub mod plan;
 pub mod random;
+pub mod report;
