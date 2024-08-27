@@ -120,6 +120,10 @@ pub trait ContextRandomExt {
         R::RngType: Rng,
         S: SampleRange<T>,
         T: SampleUniform;
+
+    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
+    where
+        R::RngType: Rng;
 }
 
 impl ContextRandomExt for Context {
@@ -162,6 +166,13 @@ impl ContextRandomExt for Context {
         T: SampleUniform,
     {
         self.sample(rng_id, |rng| rng.gen_range(range))
+    }
+
+    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
+    where
+        R::RngType: Rng,
+    {
+        self.sample(rng_id, |rng| rng.gen_bool(p))
     }
 }
 
@@ -277,5 +288,13 @@ mod test {
         context.init_random(42);
         let result = context.sample_range(FooRng, 0..10);
         assert!(result >= 0 && result < 10);
+    }
+
+    #[test]
+    fn sample_bool() {
+        let mut context = Context::new();
+        context.init_random(42);
+        let result = context.sample_bool(FooRng, 0.5);
+        assert!(result == true || result == false);
     }
 }
