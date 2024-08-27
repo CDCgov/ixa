@@ -406,11 +406,11 @@ mod tests {
         pub data: usize,
     }
 
-    #[derive(Copy, Clone)]    
+    #[derive(Copy, Clone)]
     struct Event2 {
         pub data: usize,
     }
-    
+
     #[test]
     fn simple_event() {
         let mut context = Context::new();
@@ -420,7 +420,7 @@ mod tests {
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
-        
+
         context.emit_event(Event { data: 1 });
         context.execute();
         assert_eq!(*obs_data.borrow(), 1);
@@ -435,15 +435,15 @@ mod tests {
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data_clone.borrow_mut() += event.data;
         });
-        
+
         context.emit_event(Event { data: 1 });
-        context.emit_event(Event { data: 2 });        
+        context.emit_event(Event { data: 2 });
         context.execute();
 
         // Both of these should have been received.
         assert_eq!(*obs_data.borrow(), 3);
     }
-    
+
     #[test]
     fn multiple_event_handlers() {
         let mut context = Context::new();
@@ -451,7 +451,7 @@ mod tests {
         let obs_data1_clone = Rc::clone(&obs_data1);
         let obs_data2 = Rc::new(RefCell::new(0));
         let obs_data2_clone = Rc::clone(&obs_data2);
-        
+
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data1_clone.borrow_mut() = event.data;
         });
@@ -461,7 +461,7 @@ mod tests {
         context.emit_event(Event { data: 1 });
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
-        assert_eq!(*obs_data2.borrow(), 1);        
+        assert_eq!(*obs_data2.borrow(), 1);
     }
 
     #[test]
@@ -471,7 +471,7 @@ mod tests {
         let obs_data1_clone = Rc::clone(&obs_data1);
         let obs_data2 = Rc::new(RefCell::new(0));
         let obs_data2_clone = Rc::clone(&obs_data2);
-        
+
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data1_clone.borrow_mut() = event.data;
         });
@@ -482,7 +482,7 @@ mod tests {
         context.emit_event(Event2 { data: 2 });
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
-        assert_eq!(*obs_data2.borrow(), 2);        
+        assert_eq!(*obs_data2.borrow(), 2);
     }
 
     #[test]
@@ -495,9 +495,8 @@ mod tests {
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
-        
+
         context.execute();
         assert_eq!(*obs_data.borrow(), 0);
     }
-    
 }
