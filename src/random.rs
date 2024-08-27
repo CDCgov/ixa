@@ -294,7 +294,6 @@ mod test {
     fn sample_bool() {
         let mut context = Context::new();
         context.init_random(42);
-        let result = context.sample_bool(FooRng, 0.5);
-        assert!(result == true || result == false);
+        let _r: bool = context.sample_bool(FooRng, 0.5);
     }
 }
