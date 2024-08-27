@@ -99,7 +99,7 @@ pub trait ContextRandomExt {
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId + 'static, T>(
         &self,
-        _rang_type: R,
+        _rng_type: R,
         sampler: impl FnOnce(&mut R::RngType) -> T,
     ) -> T;
 
