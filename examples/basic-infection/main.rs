@@ -1,16 +1,21 @@
 use ixa::context::Context;
 mod people;
+mod transmission_manager;
 use crate::people::PeopleContext;
+use crate::transmission_manager::TransmissionManager;
 
 static POPULATION: u64 = 100;
+static SEED:u64 = 123;
 
 fn main() {
     let mut context = Context::new();
 
     for person_id in 0..POPULATION {
-        context.create_new_person(person_id);
+        context.create_person();
     }
-    //context.add_plan(0.5, |context| {
-    //        context.create_new_person(1)});
+    context.init_random(SEED);
+    
+    context.initialize_transmission();
+    
     context.execute();
 }
