@@ -39,10 +39,14 @@ type EventHandler<E> = dyn Fn(&mut Context, E);
 /// current time. This allows modules to schedule actions for immediate
 /// execution but outside of the current iteration of the event loop.
 ///
+/// Modules can also emit 'events' that other modules can subscribe to handle by
+/// event type. This allows modules to broadcast that specific things have
+/// occurred and have other modules take turns reacting to these occurrences.
+///
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
-    event_handlers: Option<HashMap<TypeId, Box<dyn Any>>>,
+    event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
@@ -54,7 +58,7 @@ impl Context {
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
-            event_handlers: Some(HashMap::new()),
+            event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
         }
@@ -69,15 +73,12 @@ impl Context {
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
     ) {
-        // Temporarily swap event handlers out of Context (this will never panic)
-        let mut event_handlers = self.event_handlers.take().unwrap();
-        let handler_vec = event_handlers
+        let handler_vec = self
+            .event_handlers
             .entry(TypeId::of::<E>())
             .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
         let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
         handler_vec.push(Rc::new(handler));
-        // Replace handlers
-        self.event_handlers = Some(event_handlers);
     }
 
     /// Emit and event of type E to be handled by registered receivers
@@ -86,18 +87,19 @@ impl Context {
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
     pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
-        // Temporarily swap event handlers out of Context (this will never panic)
-        let event_handlers = self.event_handlers.take().unwrap();
+        // Destructure to obtain event handlers and plan queue
+        let Context {
+            event_handlers,
+            callback_queue,
+            ..
+        } = self;
         if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
             let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
-
             for handler in handler_vec {
                 let handler_clone = Rc::clone(handler);
-                self.queue_callback(move |context| handler_clone(context, event));
+                callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
             }
         }
-        // Replace handlers
-        self.event_handlers = Some(event_handlers);
     }
 
     /// Add a plan to the future event list at the specified time
