@@ -5,12 +5,16 @@
 use std::{
     any::{Any, TypeId},
     collections::{HashMap, VecDeque},
+    rc::Rc,
 };
 
 use crate::plan::{Id, Queue};
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
+
+/// A handler for an event type `E`
+type EventHandler<E> = dyn Fn(&mut Context, E);
 
 /// A manager for the state of a discrete-event simulation
 ///
@@ -35,9 +39,14 @@ type Callback = dyn FnOnce(&mut Context);
 /// current time. This allows modules to schedule actions for immediate
 /// execution but outside of the current iteration of the event loop.
 ///
+/// Modules can also emit 'events' that other modules can subscribe to handle by
+/// event type. This allows modules to broadcast that specific things have
+/// occurred and have other modules take turns reacting to these occurrences.
+///
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
+    event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
@@ -49,8 +58,47 @@ impl Context {
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
+            event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
+        }
+    }
+
+    /// Register to handle emission of events of type E
+    ///
+    /// Handlers will be called upon event emission in order of subscription as
+    /// queued `Callback`s with the appropriate event.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn subscribe_to_event<E: Copy + 'static>(
+        &mut self,
+        handler: impl Fn(&mut Context, E) + 'static,
+    ) {
+        let handler_vec = self
+            .event_handlers
+            .entry(TypeId::of::<E>())
+            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
+        let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
+        handler_vec.push(Rc::new(handler));
+    }
+
+    /// Emit and event of type E to be handled by registered receivers
+    ///
+    /// Receivers will handle events in the order that they have subscribed and
+    /// are queued as callbacks
+    #[allow(clippy::missing_panics_doc)]
+    pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
+        // Destructure to obtain event handlers and plan queue
+        let Context {
+            event_handlers,
+            callback_queue,
+            ..
+        } = self;
+        if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
+            let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
+            for handler in handler_vec {
+                let handler_clone = Rc::clone(handler);
+                callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
+            }
         }
     }
 
@@ -173,6 +221,8 @@ pub use define_data_plugin;
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
@@ -351,5 +401,104 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2]);
+    }
+
+    #[derive(Copy, Clone)]
+    struct Event {
+        pub data: usize,
+    }
+
+    #[derive(Copy, Clone)]
+    struct Event2 {
+        pub data: usize,
+    }
+
+    #[test]
+    fn simple_event() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        context.emit_event(Event { data: 1 });
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 1);
+    }
+
+    #[test]
+    fn multiple_events() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() += event.data;
+        });
+
+        context.emit_event(Event { data: 1 });
+        context.emit_event(Event { data: 2 });
+        context.execute();
+
+        // Both of these should have been received.
+        assert_eq!(*obs_data.borrow(), 3);
+    }
+
+    #[test]
+    fn multiple_event_handlers() {
+        let mut context = Context::new();
+        let obs_data1 = Rc::new(RefCell::new(0));
+        let obs_data1_clone = Rc::clone(&obs_data1);
+        let obs_data2 = Rc::new(RefCell::new(0));
+        let obs_data2_clone = Rc::clone(&obs_data2);
+
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data1_clone.borrow_mut() = event.data;
+        });
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data2_clone.borrow_mut() = event.data;
+        });
+        context.emit_event(Event { data: 1 });
+        context.execute();
+        assert_eq!(*obs_data1.borrow(), 1);
+        assert_eq!(*obs_data2.borrow(), 1);
+    }
+
+    #[test]
+    fn multiple_event_types() {
+        let mut context = Context::new();
+        let obs_data1 = Rc::new(RefCell::new(0));
+        let obs_data1_clone = Rc::clone(&obs_data1);
+        let obs_data2 = Rc::new(RefCell::new(0));
+        let obs_data2_clone = Rc::clone(&obs_data2);
+
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data1_clone.borrow_mut() = event.data;
+        });
+        context.subscribe_to_event::<Event2>(move |_, event| {
+            *obs_data2_clone.borrow_mut() = event.data;
+        });
+        context.emit_event(Event { data: 1 });
+        context.emit_event(Event2 { data: 2 });
+        context.execute();
+        assert_eq!(*obs_data1.borrow(), 1);
+        assert_eq!(*obs_data2.borrow(), 2);
+    }
+
+    #[test]
+    fn subscribe_after_event() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        context.emit_event(Event { data: 1 });
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 0);
     }
 }
