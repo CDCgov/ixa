@@ -407,21 +407,38 @@ mod tests {
     }
 
     #[test]
-    fn test_events() {
+    fn simple_event() {
         let mut context = Context::new();
-
         let obs_data = Rc::new(RefCell::new(0));
-        let immediate_obs_data = Rc::new(RefCell::new(0));
-
         let obs_data_clone = Rc::clone(&obs_data);
+
         context.subscribe_to_event::<Event>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
-
+        
         context.emit_event(Event { data: 1 });
-        assert_eq!(*immediate_obs_data.borrow(), 0);
-
         context.execute();
         assert_eq!(*obs_data.borrow(), 1);
+
+    }
+
+    #[test]
+    fn multiple_event_handlers() {
+        let mut context = Context::new();
+        let obs_data1 = Rc::new(RefCell::new(0));
+        let obs_data1_clone = Rc::clone(&obs_data1);
+        let obs_data2 = Rc::new(RefCell::new(0));
+        let obs_data2_clone = Rc::clone(&obs_data2);
+        
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data1_clone.borrow_mut() = event.data;
+        });
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data2_clone.borrow_mut() = event.data;
+        });
+        context.emit_event(Event { data: 1 });
+        context.execute();
+        assert_eq!(*obs_data1.borrow(), 1);
+        assert_eq!(*obs_data2.borrow(), 1);        
     }
 }
