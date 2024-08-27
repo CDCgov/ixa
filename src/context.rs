@@ -42,7 +42,7 @@ type EventHandler<E> = dyn Fn(&mut Context, E);
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
-    event_handlers: HashMap<TypeId, Box<dyn Any>>,
+    event_handlers: Option<HashMap<TypeId, Box<dyn Any>>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
@@ -54,55 +54,50 @@ impl Context {
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
-            event_handlers: HashMap::new(),
+            event_handlers: Some(HashMap::new()),
             data_plugins: HashMap::new(),
             current_time: 0.0,
         }
     }
 
-    fn add_handlers<E: Copy + 'static>(
-        event_handlers: &mut HashMap<TypeId, Box<dyn Any>>,
-        callback: impl Fn(&mut Context, E) + 'static,
-    ) {
-        let callback_vec = event_handlers
-            .entry(TypeId::of::<E>())
-            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
-        let callback_vec: &mut Vec<Rc<EventHandler<E>>> = callback_vec.downcast_mut().unwrap();
-        callback_vec.push(Rc::new(callback));
-    }
-
+    /// Register to handle emission of events of type E
+    ///
+    /// Handlers will be called upon event emission in order of subscription as
+    /// queued `Callback`s with the appropriate event.
+    #[allow(clippy::missing_panics_doc)]
     pub fn subscribe_to_event<E: Copy + 'static>(
         &mut self,
-        callback: impl Fn(&mut Context, E) + 'static,
+        handler: impl Fn(&mut Context, E) + 'static,
     ) {
-        Self::add_handlers(&mut self.event_handlers, callback);
+        // Temporarily swap event handlers out of Context (this will never panic)
+        let mut event_handlers = self.event_handlers.take().unwrap();
+        let handler_vec = event_handlers
+            .entry(TypeId::of::<E>())
+            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
+        let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
+        handler_vec.push(Rc::new(handler));
+        // Replace handlers
+        self.event_handlers = Some(event_handlers);
     }
 
-    pub fn release_event<E: Copy + 'static>(&mut self, event: E) {
-        // Queue standard handlers
+    /// Emit and event of type E to be handled by registered receivers
+    ///
+    /// Receivers will handle events in the order that they have subscribed and
+    /// are queued as callbacks
+    #[allow(clippy::missing_panics_doc)]
+    pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
+        // Temporarily swap event handlers out of Context (this will never panic)
+        let event_handlers = self.event_handlers.take().unwrap();
+        if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
+            let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
 
-        for callback in Self::collect_callbacks(&self.event_handlers, event) {
-            self.queue_callback(callback);
-        }
-    }
-
-    fn collect_callbacks<E: Copy + 'static>(
-        event_handlers: &HashMap<TypeId, Box<dyn Any>>,
-        event: E,
-    ) -> Vec<Box<Callback>> {
-        let mut callbacks_to_return = Vec::<Box<Callback>>::new();
-        let callback_vec = event_handlers.get(&TypeId::of::<E>());
-        if let Some(callback_vec) = callback_vec {
-            let callback_vec: &Vec<Rc<EventHandler<E>>> = callback_vec.downcast_ref().unwrap();
-            if !callback_vec.is_empty() {
-                for callback in callback_vec {
-                    let internal_callback = Rc::clone(callback);
-                    callbacks_to_return
-                        .push(Box::new(move |context| internal_callback(context, event)));
-                }
+            for handler in handler_vec {
+                let handler_clone = Rc::clone(handler);
+                self.queue_callback(move |context| handler_clone(context, event));
             }
         }
-        callbacks_to_return
+        // Replace handlers
+        self.event_handlers = Some(event_handlers);
     }
 
     /// Add a plan to the future event list at the specified time
@@ -423,7 +418,7 @@ mod tests {
             *obs_data_clone.borrow_mut() = event.data;
         });
 
-        context.release_event(Event { data: 1 });
+        context.emit_event(Event { data: 1 });
         assert_eq!(*immediate_obs_data.borrow(), 0);
 
         context.execute();
