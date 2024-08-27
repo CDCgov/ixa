@@ -12,7 +12,7 @@ use std::collections::HashMap;
 #[macro_export]
 macro_rules! define_rng {
     ($random_id:ident) => {
-        struct $random_id {}
+        struct $random_id;
 
         impl $crate::random::RngId for $random_id {
             // TODO(ryl8@cdc.gov): This is hardcoded to StdRng; we should replace this
@@ -107,7 +107,7 @@ pub trait ContextRandomExt {
     where
         R::RngType: Rng;
 
-    fn sample_range<R: RngId + 'static, S, T>(&self, range: S) -> T
+    fn sample_range<R: RngId + 'static, S, T>(&self, rng_type: R, range: S) -> T
     where
         R::RngType: Rng,
         S: SampleRange<T>,
@@ -139,7 +139,7 @@ impl ContextRandomExt for Context {
         distribution.sample::<R::RngType>(&mut rng)
     }
 
-    fn sample_range<R: RngId + 'static, S, T>(&self, range: S) -> T
+    fn sample_range<R: RngId + 'static, S, T>(&self, _rng_id: R, range: S) -> T
     where
         R::RngType: Rng,
         S: SampleRange<T>,
@@ -259,7 +259,7 @@ mod test {
     fn sample_range() {
         let mut context = Context::new();
         context.init_random(42);
-
-        context.sample_range::<FooRng, std::ops::Range<usize>, usize>(0..10);
+        let result = context.sample_range(FooRng, 0..10);
+        assert!(result >= 0 && result < 10);
     }
 }
