@@ -49,6 +49,7 @@ pub struct Context {
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
+    shutdown_requested: bool,
 }
 
 impl Context {
@@ -61,6 +62,7 @@ impl Context {
             event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
+            shutdown_requested: false,
         }
     }
 
@@ -160,6 +162,12 @@ impl Context {
         }
     }
 
+    /// Shutdown the simulation cleanly, abandoning all events after whatever
+    /// is currently executing.
+    pub fn shutdown(&mut self) {
+        self.shutdown_requested = true;
+    }
+
     /// Get the current time in the simulation
     ///
     /// Returns the current time
@@ -172,6 +180,10 @@ impl Context {
     pub fn execute(&mut self) {
         // Start plan loop
         loop {
+            if self.shutdown_requested {
+                break;
+            }
+
             // If there is a callback, run it.
             if let Some(callback) = self.callback_queue.pop_front() {
                 callback(self);
@@ -498,6 +510,48 @@ mod tests {
             *obs_data_clone.borrow_mut() = event.data;
         });
 
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 0);
+    }
+
+    #[test]
+    fn shutdown_cancels_plans() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        context.add_plan(1.5, |context| context.shutdown());
+        add_plan(&mut context, 2.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.5);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
+    }
+
+    #[test]
+    fn shutdown_cancels_callbacks() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        context.add_plan(1.5, |context| {
+            // Note that we add the callback *before* we call shutdown
+            // but shutdown cancels everything.
+            context.queue_callback(|context| {
+                context.get_data_container_mut::<ComponentA>().push(3);
+            });
+            context.shutdown()
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.5);
+        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
+    }
+
+    #[test]
+    fn shutdown_cancels_events() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+        context.emit_event(Event { data: 1 });
+        context.shutdown();
         context.execute();
         assert_eq!(*obs_data.borrow(), 0);
     }
