@@ -206,7 +206,7 @@ mod test {
     }
 
     #[test]
-    fn multiple_references_with_drop() {
+    fn multiple_rng_types() {
         let mut context = Context::new();
         context.init_random(42);
 
