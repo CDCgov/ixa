@@ -97,13 +97,21 @@ pub trait ContextRandomExt {
     /// `RngId` by applying the specified sampler function. If the Rng has not been used
     /// before, one will be created with the base seed you defined in `set_base_random_seed`.
     /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample<R: RngId + 'static, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T;
+    fn sample<R: RngId + 'static, T>(
+        &self,
+        _rang_type: R,
+        sampler: impl FnOnce(&mut R::RngType) -> T,
+    ) -> T;
 
     /// Gets a random sample from the specified distribution using a random number generator
     /// associated with the given `RngId`. If the Rng has not been used before, one will be
     /// created with the base seed you defined in `set_base_random_seed`.
     /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample_distr<R: RngId + 'static, T>(&self, distribution: impl Distribution<T>) -> T
+    fn sample_distr<R: RngId + 'static, T>(
+        &self,
+        _rng_type: R,
+        distribution: impl Distribution<T>,
+    ) -> T
     where
         R::RngType: Rng;
 
@@ -126,12 +134,20 @@ impl ContextRandomExt for Context {
         rng_map.clear();
     }
 
-    fn sample<R: RngId + 'static, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T {
+    fn sample<R: RngId + 'static, T>(
+        &self,
+        _rng_id: R,
+        sampler: impl FnOnce(&mut R::RngType) -> T,
+    ) -> T {
         let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
     }
 
-    fn sample_distr<R: RngId + 'static, T>(&self, distribution: impl Distribution<T>) -> T
+    fn sample_distr<R: RngId + 'static, T>(
+        &self,
+        _rng_id: R,
+        distribution: impl Distribution<T>,
+    ) -> T
     where
         R::RngType: Rng,
     {
@@ -139,13 +155,13 @@ impl ContextRandomExt for Context {
         distribution.sample::<R::RngType>(&mut rng)
     }
 
-    fn sample_range<R: RngId + 'static, S, T>(&self, _rng_id: R, range: S) -> T
+    fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
         R::RngType: Rng,
         S: SampleRange<T>,
         T: SampleUniform,
     {
-        self.sample::<R, T>(|rng| rng.gen_range(range))
+        self.sample(rng_id, |rng| rng.gen_range(range))
     }
 }
 
@@ -166,8 +182,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample::<FooRng, u64>(|rng| rng.next_u64()),
-            context.sample::<FooRng, u64>(|rng| rng.next_u64())
+            context.sample(FooRng, |rng| rng.next_u64()),
+            context.sample(FooRng, |rng| rng.next_u64())
         );
     }
 
@@ -175,7 +191,7 @@ mod test {
     #[should_panic(expected = "You must initialize the random number generator with a base seed")]
     fn panic_if_not_initialized() {
         let context = Context::new();
-        context.sample::<FooRng, u64>(|rng| rng.next_u64());
+        context.sample(FooRng, |rng| rng.next_u64());
     }
 
     #[test]
@@ -184,8 +200,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample::<FooRng, u64>(|rng| rng.next_u64()),
-            context.sample::<BarRng, u64>(|rng| rng.next_u64())
+            context.sample(FooRng, |rng| rng.next_u64()),
+            context.sample(BarRng, |rng| rng.next_u64())
         );
     }
 
@@ -194,18 +210,18 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
 
-        let run_0 = context.sample::<FooRng, u64>(|rng| rng.next_u64());
-        let run_1 = context.sample::<FooRng, u64>(|rng| rng.next_u64());
+        let run_0 = context.sample(FooRng, |rng| rng.next_u64());
+        let run_1 = context.sample(FooRng, |rng| rng.next_u64());
 
         // Reset with same seed, ensure we get the same values
         context.init_random(42);
-        assert_eq!(run_0, context.sample::<FooRng, u64>(|rng| rng.next_u64()));
-        assert_eq!(run_1, context.sample::<FooRng, u64>(|rng| rng.next_u64()));
+        assert_eq!(run_0, context.sample(FooRng, |rng| rng.next_u64()));
+        assert_eq!(run_1, context.sample(FooRng, |rng| rng.next_u64()));
 
         // Reset with different seed, ensure we get different values
         context.init_random(88);
-        assert_ne!(run_0, context.sample::<FooRng, u64>(|rng| rng.next_u64()));
-        assert_ne!(run_1, context.sample::<FooRng, u64>(|rng| rng.next_u64()));
+        assert_ne!(run_0, context.sample(FooRng, |rng| rng.next_u64()));
+        assert_ne!(run_1, context.sample(FooRng, |rng| rng.next_u64()));
     }
 
     define_data_plugin!(
@@ -226,7 +242,7 @@ mod test {
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
-            let sample = context.sample::<FooRng, usize>(|rng| parameters.sample(rng));
+            let sample = context.sample(FooRng, |rng| parameters.sample(rng));
             if sample == 0 {
                 zero_counter += 1;
             }
@@ -247,7 +263,7 @@ mod test {
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
-            let sample = context.sample_distr::<FooRng, usize>(parameters);
+            let sample = context.sample_distr(FooRng, parameters);
             if sample == 0 {
                 zero_counter += 1;
             }
