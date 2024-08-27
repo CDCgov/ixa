@@ -1,4 +1,6 @@
 use crate::context::Context;
+use rand::distributions::uniform::SampleRange;
+use rand::distributions::uniform::SampleUniform;
 use rand::prelude::Distribution;
 use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
@@ -91,11 +93,25 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
 pub trait ContextRandomExt {
     fn init_random(&mut self, base_seed: u64);
 
+    /// Gets a random sample from the random number generator associated with the given
+    /// `RngId` by applying the specified sampler function. If the Rng has not been used
+    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId + 'static, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T;
 
+    /// Gets a random sample from the specified distribution using a random number generator
+    /// associated with the given `RngId`. If the Rng has not been used before, one will be
+    /// created with the base seed you defined in `set_base_random_seed`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_distr<R: RngId + 'static, T>(&self, distribution: impl Distribution<T>) -> T
     where
         R::RngType: Rng;
+
+    fn sample_range<R: RngId + 'static, S, T>(&self, range: S) -> T
+    where
+        R::RngType: Rng,
+        S: SampleRange<T>,
+        T: SampleUniform;
 }
 
 impl ContextRandomExt for Context {
@@ -110,25 +126,26 @@ impl ContextRandomExt for Context {
         rng_map.clear();
     }
 
-    /// Gets a random sample from the random number generator associated with the given
-    /// `RngId` by applying the specified sampler function. If the Rng has not been used
-    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId + 'static, T>(&self, sampler: impl FnOnce(&mut R::RngType) -> T) -> T {
         let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
     }
 
-    /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given `RngId`. If the Rng has not been used before, one will be
-    /// created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_distr<R: RngId + 'static, T>(&self, distribution: impl Distribution<T>) -> T
     where
         R::RngType: Rng,
     {
         let mut rng = get_rng::<R>(self);
         distribution.sample::<R::RngType>(&mut rng)
+    }
+
+    fn sample_range<R: RngId + 'static, S, T>(&self, range: S) -> T
+    where
+        R::RngType: Rng,
+        S: SampleRange<T>,
+        T: SampleUniform,
+    {
+        self.sample::<R, T>(|rng| rng.gen_range(range))
     }
 }
 
@@ -236,5 +253,13 @@ mod test {
             }
         }
         assert!((zero_counter - 1000 as i32).abs() < 30);
+    }
+
+    #[test]
+    fn sample_range() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        context.sample_range::<FooRng, std::ops::Range<usize>, usize>(0..10);
     }
 }
