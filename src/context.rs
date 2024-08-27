@@ -30,19 +30,18 @@ type EventHandler<E> = dyn Fn(&mut Context, E);
 /// to retrieve data by type.
 ///
 /// The future event list of the simulation is a queue of `Callback` objects -
-/// called `plans` - that will assume control of the Context at a future point
+/// called 'plans' - that will assume control of the Context at a future point
 /// in time and execute the logic in the associated `FnOnce(&mut Context)`
 /// closure. Modules can add plans to this queue through the `Context`.
 ///
-/// The simulation also has a separate callback mechanism. Callbacks
-/// fire before the next timed event (even if it is scheduled for the
-/// current time. This allows modules to schedule actions for immediate
-/// execution but outside of the current iteration of the event loop.
+/// Modules can also emit 'events' that other modules can subscribe to handle by
+/// event type. This allows modules to broadcast that specific things have
+/// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
-    event_handlers: Option<HashMap<TypeId, Box<dyn Any>>>,
+    event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
 }
@@ -54,7 +53,7 @@ impl Context {
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
-            event_handlers: Some(HashMap::new()),
+            event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
         }
@@ -63,21 +62,18 @@ impl Context {
     /// Register to handle emission of events of type E
     ///
     /// Handlers will be called upon event emission in order of subscription as
-    /// queued `Callback`s with the appropriate event.
+    /// queued callbacks with the appropriate event.
     #[allow(clippy::missing_panics_doc)]
     pub fn subscribe_to_event<E: Copy + 'static>(
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
     ) {
-        // Temporarily swap event handlers out of Context (this will never panic)
-        let mut event_handlers = self.event_handlers.take().unwrap();
-        let handler_vec = event_handlers
+        let handler_vec = self
+            .event_handlers
             .entry(TypeId::of::<E>())
             .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
         let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
         handler_vec.push(Rc::new(handler));
-        // Replace handlers
-        self.event_handlers = Some(event_handlers);
     }
 
     /// Emit and event of type E to be handled by registered receivers
@@ -86,18 +82,19 @@ impl Context {
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
     pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
-        // Temporarily swap event handlers out of Context (this will never panic)
-        let event_handlers = self.event_handlers.take().unwrap();
+        // Destructure to obtain event handlers and plan queue
+        let Context {
+            event_handlers,
+            callback_queue,
+            ..
+        } = self;
         if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
             let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
-
             for handler in handler_vec {
                 let handler_clone = Rc::clone(handler);
-                self.queue_callback(move |context| handler_clone(context, event));
+                callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
             }
         }
-        // Replace handlers
-        self.event_handlers = Some(event_handlers);
     }
 
     /// Add a plan to the future event list at the specified time
@@ -120,11 +117,6 @@ impl Context {
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, id: &Id) {
         self.plan_queue.cancel_plan(id);
-    }
-
-    /// Add a `Callback` to the queue to be executed before the next plan
-    pub fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static) {
-        self.callback_queue.push_back(Box::new(callback));
     }
 
     /// Retrieve a mutable reference to the data container associated with a
@@ -285,83 +277,6 @@ mod tests {
     }
 
     #[test]
-    fn callback_only() {
-        let mut context = Context::new();
-        context.queue_callback(|context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-        });
-        context.execute();
-        assert_eq!(context.get_current_time(), 0.0);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
-    }
-
-    #[test]
-    fn callback_before_timed_plan() {
-        let mut context = Context::new();
-        context.queue_callback(|context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-        });
-        add_plan(&mut context, 1.0, 2);
-        context.execute();
-        assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1, 2]);
-    }
-
-    #[test]
-    fn callback_adds_timed_plan() {
-        let mut context = Context::new();
-        context.queue_callback(|context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-            add_plan(context, 1.0, 2);
-            context.get_data_container_mut::<ComponentA>().push(3);
-        });
-        context.execute();
-        assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(
-            *context.get_data_container_mut::<ComponentA>(),
-            vec![1, 3, 2]
-        );
-    }
-
-    #[test]
-    fn callback_adds_callback_and_timed_plan() {
-        let mut context = Context::new();
-        context.queue_callback(|context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-            add_plan(context, 1.0, 2);
-            context.queue_callback(|context| {
-                context.get_data_container_mut::<ComponentA>().push(4);
-            });
-            context.get_data_container_mut::<ComponentA>().push(3);
-        });
-        context.execute();
-        assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(
-            *context.get_data_container_mut::<ComponentA>(),
-            vec![1, 3, 4, 2]
-        );
-    }
-
-    #[test]
-    fn timed_plan_adds_callback_and_timed_plan() {
-        let mut context = Context::new();
-        context.add_plan(1.0, |context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-            // We add the plan first, but the callback will fire first.
-            add_plan(context, 2.0, 3);
-            context.queue_callback(|context| {
-                context.get_data_container_mut::<ComponentA>().push(2);
-            });
-        });
-        context.execute();
-        assert_eq!(context.get_current_time(), 2.0);
-        assert_eq!(
-            *context.get_data_container_mut::<ComponentA>(),
-            vec![1, 2, 3]
-        );
-    }
-
-    #[test]
     fn cancel_plan() {
         let mut context = Context::new();
         let to_cancel = add_plan(&mut context, 2.0, 1);
@@ -371,24 +286,6 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![]);
-    }
-
-    #[test]
-    fn add_plan_with_current_time() {
-        let mut context = Context::new();
-        context.add_plan(1.0, move |context| {
-            context.get_data_container_mut::<ComponentA>().push(1);
-            add_plan(context, 1.0, 2);
-            context.queue_callback(|context| {
-                context.get_data_container_mut::<ComponentA>().push(3);
-            });
-        });
-        context.execute();
-        assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(
-            *context.get_data_container_mut::<ComponentA>(),
-            vec![1, 3, 2]
-        );
     }
 
     #[test]
