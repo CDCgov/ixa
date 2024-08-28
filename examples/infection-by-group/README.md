@@ -11,9 +11,9 @@ This model differs from the last example in three key ways:
 Each region has their own initial force of infection. Based on that force of infection, infection attempts are scheduled in each region, starting at time 0. Infection attempts are scheduled to occur at an exponentially distributed time based on the force of infection scaled by the number of people who are currently sick in the region. The simulation ends after there are no more infection events.
 
 ```mermaid
-graph TD
-evil lettuce--foi(n infected)-->infected;
-evil lettuce--next attempt at t + exp(1 / (foi * n infected))-->evil lettuce
+flowchart TD
+A[evil lettuce]--foi(n infected)-->infected;
+A[evil lettuce]--next attempt at t + exp(1 / (foi * n infected))-->A[evil lettuce]
 infected--t + exp(1 / inf. period)-->recovered;
 ```
 
@@ -33,7 +33,7 @@ However, because movement happens independently of infection, the force of infec
 
 ```mermaid
 flowchart LR
-movement--new person introduction-->transmission-->checks if infection plan needs to be changed
+movement--new person introduction-->transmission-->C[checks if infection plan needs to be changed]
 ```
 
 Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that the region `A` fits into a larger region of, say, North America. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
