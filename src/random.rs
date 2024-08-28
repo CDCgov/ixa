@@ -68,7 +68,7 @@ crate::context::define_data_plugin!(
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
 fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
     let data_container = context
-        .get_data_container::<RngPlugin>()
+        .get_data_container(RngPlugin)
         .expect("You must initialize the random number generator with a base seed");
 
     let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
@@ -130,7 +130,7 @@ impl ContextRandomExt for Context {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
     fn init_random(&mut self, base_seed: u64) {
-        let data_container = self.get_data_container_mut::<RngPlugin>();
+        let data_container = self.get_data_container_mut(RngPlugin);
         data_container.base_seed = base_seed;
 
         // Clear any existing Rngs to ensure they get re-seeded when `get_rng` is called
@@ -246,10 +246,9 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
         // Initialize weighted sampler
-        *context.get_data_container_mut::<SamplerData>() =
-            WeightedIndex::new(vec![1.0, 2.0]).unwrap();
+        *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container::<SamplerData>().unwrap();
+        let parameters = context.get_data_container(SamplerData).unwrap();
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
@@ -267,10 +266,9 @@ mod test {
         context.init_random(42);
 
         // Initialize weighted sampler
-        *context.get_data_container_mut::<SamplerData>() =
-            WeightedIndex::new(vec![1.0, 2.0]).unwrap();
+        *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container::<SamplerData>().unwrap();
+        let parameters = context.get_data_container(SamplerData).unwrap();
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
