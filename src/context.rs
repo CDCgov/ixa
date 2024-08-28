@@ -515,7 +515,7 @@ mod tests {
     fn shutdown_cancels_plans() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        context.add_plan(1.5, |context| context.shutdown());
+        context.add_plan(1.5, Context::shutdown);
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
@@ -532,7 +532,7 @@ mod tests {
             context.queue_callback(|context| {
                 context.get_data_container_mut(ComponentA).push(3);
             });
-            context.shutdown()
+            context.shutdown();
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
