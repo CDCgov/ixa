@@ -112,7 +112,10 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
-        assert!(!time.is_nan() && !time.is_infinite() && time >= self.current_time);
+        assert!(
+            !time.is_nan() && !time.is_infinite() && time >= self.current_time,
+            "Time is invalid"
+        );
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
@@ -237,6 +240,7 @@ macro_rules! define_data_plugin {
 pub use define_data_plugin;
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use std::cell::RefCell;
 
@@ -271,21 +275,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn negative_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, -1.0, 0);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn infinite_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::INFINITY, 0);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn nan_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::NAN, 0);

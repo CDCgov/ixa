@@ -193,8 +193,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample(FooRng, |rng| rng.next_u64()),
-            context.sample(FooRng, |rng| rng.next_u64())
+            context.sample(FooRng, RngCore::next_u64),
+            context.sample(FooRng, RngCore::next_u64)
         );
     }
 
@@ -202,7 +202,7 @@ mod test {
     #[should_panic(expected = "You must initialize the random number generator with a base seed")]
     fn panic_if_not_initialized() {
         let context = Context::new();
-        context.sample(FooRng, |rng| rng.next_u64());
+        context.sample(FooRng, RngCore::next_u64);
     }
 
     #[test]
@@ -211,8 +211,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample(FooRng, |rng| rng.next_u64()),
-            context.sample(BarRng, |rng| rng.next_u64())
+            context.sample(FooRng, RngCore::next_u64),
+            context.sample(BarRng, RngCore::next_u64)
         );
     }
 
@@ -221,18 +221,18 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
 
-        let run_0 = context.sample(FooRng, |rng| rng.next_u64());
-        let run_1 = context.sample(FooRng, |rng| rng.next_u64());
+        let run_0 = context.sample(FooRng, RngCore::next_u64);
+        let run_1 = context.sample(FooRng, RngCore::next_u64);
 
         // Reset with same seed, ensure we get the same values
         context.init_random(42);
-        assert_eq!(run_0, context.sample(FooRng, |rng| rng.next_u64()));
-        assert_eq!(run_1, context.sample(FooRng, |rng| rng.next_u64()));
+        assert_eq!(run_0, context.sample(FooRng, RngCore::next_u64));
+        assert_eq!(run_1, context.sample(FooRng, RngCore::next_u64));
 
         // Reset with different seed, ensure we get different values
         context.init_random(88);
-        assert_ne!(run_0, context.sample(FooRng, |rng| rng.next_u64()));
-        assert_ne!(run_1, context.sample(FooRng, |rng| rng.next_u64()));
+        assert_ne!(run_0, context.sample(FooRng, RngCore::next_u64));
+        assert_ne!(run_1, context.sample(FooRng, RngCore::next_u64));
     }
 
     define_data_plugin!(
@@ -257,7 +257,7 @@ mod test {
                 zero_counter += 1;
             }
         }
-        assert!((zero_counter - 1000 as i32).abs() < 30);
+        assert!((zero_counter - 1000_i32).abs() < 30);
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod test {
                 zero_counter += 1;
             }
         }
-        assert!((zero_counter - 1000 as i32).abs() < 30);
+        assert!((zero_counter - 1000_i32).abs() < 30);
     }
 
     #[test]
@@ -285,7 +285,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
         let result = context.sample_range(FooRng, 0..10);
-        assert!(result >= 0 && result < 10);
+        assert!((0..10).contains(&result));
     }
 
     #[test]

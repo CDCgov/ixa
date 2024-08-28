@@ -1,5 +1,6 @@
 use ixa::context::Context;
 
+#[allow(unexpected_cfgs)]
 fn main() {
     let mut context = Context::new();
 
