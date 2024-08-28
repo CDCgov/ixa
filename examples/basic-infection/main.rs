@@ -8,7 +8,7 @@ mod transmission_manager;
 
 use crate::incidence_report::IncidenceReport;
 use crate::infection_manager::InfectionManager;
-use crate::people::PeopleContext;
+use crate::people::ContextPeopleExt;
 use crate::transmission_manager::TransmissionManager;
 
 static POPULATION: u64 = 10;

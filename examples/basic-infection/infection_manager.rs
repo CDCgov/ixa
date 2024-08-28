@@ -5,9 +5,9 @@ use ixa::random::ContextRandomExt;
 
 use rand_distr::Exp;
 
+use crate::people::ContextPeopleExt;
 use crate::people::InfectionStatus;
 use crate::people::InfectionStatusEvent;
-use crate::people::PeopleContext;
 
 use crate::INFECTION_DURATION;
 

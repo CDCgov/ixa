@@ -11,12 +11,12 @@ pub enum InfectionStatus {
 
 #[derive(Copy, Clone)]
 pub struct InfectionStatusEvent {
-    pub prev_status: InfectionStatus,
+    pub _prev_status: InfectionStatus,
     pub updated_status: InfectionStatus,
     pub person_id: usize,
 }
 
-pub trait PeopleContext {
+pub trait ContextPeopleExt {
     fn create_person(&mut self);
     fn get_person_status(&mut self, person_id: usize) -> InfectionStatus;
     fn set_person_status(&mut self, person_id: usize, infection_status: InfectionStatus);
@@ -35,7 +35,7 @@ define_data_plugin!(
     }
 );
 
-impl PeopleContext for Context {
+impl ContextPeopleExt for Context {
     fn create_person(&mut self) {
         let people_data_container = self.get_data_container_mut(PeoplePlugin);
         let person_id = people_data_container.people_map.len();
@@ -64,8 +64,8 @@ impl PeopleContext for Context {
         *inf_status = infection_status;
 
         self.emit_event(InfectionStatusEvent {
-            prev_status: previous_status,
-            person_id: person_id,
+            _prev_status: previous_status,
+            person_id,
             updated_status: infection_status,
         });
     }

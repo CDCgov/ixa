@@ -2,8 +2,8 @@ use ixa::context::Context;
 use ixa::define_rng;
 use ixa::random::ContextRandomExt;
 
+use crate::people::ContextPeopleExt;
 use crate::people::InfectionStatus;
-use crate::people::PeopleContext;
 use rand_distr::Exp;
 
 use crate::FOI;
