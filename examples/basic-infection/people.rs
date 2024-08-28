@@ -38,7 +38,7 @@ define_data_plugin!(
 // Add person
 fn add_person(context: &mut Context) -> usize {
     // get data container
-    let people_data_container = context.get_data_container_mut::<PeoplePlugin>();
+    let people_data_container = context.get_data_container_mut(PeoplePlugin);
     let person_id = people_data_container.people_map.len();
     people_data_container
         .people_map
@@ -48,7 +48,7 @@ fn add_person(context: &mut Context) -> usize {
 
 // Get a person
 fn get_person_status(context: &mut Context, person_id: usize) -> InfectionStatus {
-    let people_data_container = context.get_data_container_mut::<PeoplePlugin>();
+    let people_data_container = context.get_data_container_mut(PeoplePlugin);
     return *people_data_container
         .people_map
         .get(&person_id)
@@ -58,7 +58,7 @@ fn get_person_status(context: &mut Context, person_id: usize) -> InfectionStatus
 // Modify person's status by Id
 
 fn set_person_status(context: &mut Context, person_id: usize, infection_status: InfectionStatus) {
-    let people_data_container = context.get_data_container_mut::<PeoplePlugin>();
+    let people_data_container = context.get_data_container_mut(PeoplePlugin);
     let inf_status = people_data_container
         .people_map
         .get_mut(&person_id)
@@ -68,7 +68,7 @@ fn set_person_status(context: &mut Context, person_id: usize, infection_status: 
 }
 
 fn get_population(context: &mut Context) -> usize {
-    let people_data_container = context.get_data_container_mut::<PeoplePlugin>();
+    let people_data_container = context.get_data_container_mut(PeoplePlugin);
 
     let population: usize = people_data_container.people_map.len();
     return population;
