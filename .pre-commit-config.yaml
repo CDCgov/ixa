@@ -13,4 +13,5 @@ repos:
     hooks:
     -   id: fmt
     -   id: clippy
+        # Use 'all-targets' to run on all code, including tests and examples
         args: ["--all-targets", "--", "-D", "warnings", "-W", "clippy::pedantic"]
