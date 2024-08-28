@@ -13,10 +13,6 @@ use crate::INFECTION_DURATION;
 
 define_rng!(InfectionRng);
 
-pub trait InfectionManager {
-    fn initialize_infection_manager(&mut self);
-}
-
 fn schedule_recovery(context: &mut Context, person_id: usize) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
@@ -31,17 +27,14 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
     }
 }
 
-impl InfectionManager for Context {
-    fn initialize_infection_manager(&mut self) {
-        self.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
-            handle_infection_status_change(context, event);
-        });
-    }
+pub fn init(context: &mut Context) {
+    context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
+        handle_infection_status_change(context, event);
+    });
 }
 
 #[cfg(test)]
 mod test {
-    use crate::infection_manager::InfectionManager;
     use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusEvent;
@@ -61,9 +54,10 @@ mod test {
     #[test]
     fn test_handle_infection_change() {
         use super::handle_infection_status_change;
+        use super::init;
         let mut context = Context::new();
         context.init_random(42);
-        context.initialize_infection_manager();
+        init(&mut context);
 
         context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
             handle_recovery_event(context, event);

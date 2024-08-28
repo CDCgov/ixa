@@ -6,10 +6,7 @@ mod infection_manager;
 mod people;
 mod transmission_manager;
 
-use crate::incidence_report::IncidenceReport;
-use crate::infection_manager::InfectionManager;
 use crate::people::ContextPeopleExt;
-use crate::transmission_manager::TransmissionManager;
 
 static POPULATION: u64 = 10;
 static SEED: u64 = 123;
@@ -26,8 +23,8 @@ fn main() {
 
     context.init_random(SEED);
 
-    context.initialize_transmission();
-    context.initialize_infection_manager();
-    context.initialize_incidence_report();
+    transmission_manager::init(&mut context);
+    infection_manager::init(&mut context);
+    incidence_report::init(&mut context);
     context.execute();
 }

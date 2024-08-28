@@ -11,10 +11,6 @@ use crate::MAX_TIME;
 
 define_rng!(TransmissionRng);
 
-pub trait TransmissionManager {
-    fn initialize_transmission(&mut self);
-}
-
 fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_population();
     let person_to_infect: usize = context.sample_range(TransmissionRng, 0..population_size);
@@ -36,12 +32,10 @@ fn attempt_infection(context: &mut Context) {
     }
 }
 
-impl TransmissionManager for Context {
-    fn initialize_transmission(&mut self) {
-        self.add_plan(0.0, |context| {
-            attempt_infection(context);
-        });
-    }
+pub fn init(context: &mut Context) {
+    context.add_plan(0.0, |context| {
+        attempt_infection(context);
+    });
 }
 
 #[cfg(test)]
@@ -49,7 +43,6 @@ mod test {
     use super::*;
     use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
-    use crate::transmission_manager::TransmissionManager;
     use crate::SEED;
     use ixa::context::Context;
     use rand_distr::Exp;
