@@ -1,36 +1,56 @@
 use ixa::context::Context;
+use ixa::define_rng;
 use ixa::random::ContextRandomExt;
 
+use rand_distr::Exp;
+
+use crate::infection_manager::InfectionManager;
+use crate::people::InfectionStatus;
 use crate::people::PeopleContext;
 
-static FOI: f64 = 0.01;
+use crate::FOI;
+use crate::MAX_TIME;
+
+define_rng!(TransmissionRng);
 
 pub trait TransmissionManager {
     fn initialize_transmission(&mut self);
 }
 
+fn attempt_infection(context: &mut Context) {
+    let population_size: usize = context.get_population();
+    let person_to_infect: usize = context.sample_range(TransmissionRng, 0..population_size);
 
-fn attempt_infection<>(context: &mut Context) {
-    population = context.get_population();
-    person_to_infect = 1;
+    let person_status: InfectionStatus = context.get_person_status(person_to_infect);
 
-    /*if (context.get_infection_status(person_to_infect) == Susceptible) {
-        context.set_infection_status(person_to_infect, Infected);
+    if matches!(person_status, InfectionStatus::S) {
+        context.set_person_status(person_to_infect, InfectionStatus::I);
+        context.schedule_recovery(person_to_infect);
+        println!(
+            "{:?}, {:?}, I",
+            context.get_current_time(),
+            person_to_infect
+        );
     }
-    context.sample_distr<TransmissionRng, f64>(ExpDist)
 
-    foi = parameters.get_parameter(foi);
-    time_next_infection = transmission_rng.draw_exponential(1/foi);
-    context.add_plan(attempt_infection(context), time = context.get_time() + time_next_infection);
-     */
+    let next_attempt_time =
+        context.get_current_time() + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap());
+
+    if next_attempt_time <= MAX_TIME {
+        context.add_plan(next_attempt_time, move |context| {
+            attempt_infection(context);
+        });
+    }
 }
 
+fn initial_infection(context: &mut Context) {
+    context.add_plan(0.0, move |context| {
+        attempt_infection(context);
+    });
+}
 
 impl TransmissionManager for Context {
     fn initialize_transmission(&mut self) {
-        define_rng!(TransmissionRng);
-        self.add_plan(0, |self| {
-            attempt_infection(self)
-        });
+        initial_infection(self);
     }
 }
