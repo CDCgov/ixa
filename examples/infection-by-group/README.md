@@ -10,11 +10,33 @@ This model differs from the last example in three key ways:
 
 Each region has their own initial force of infection. Based on that force of infection, infection attempts are scheduled in each region, starting at time 0. Infection attempts are scheduled to occur at an exponentially distributed time based on the force of infection scaled by the number of people who are currently sick in the region. The simulation ends after there are no more infection events.
 
+```mermaid
+graph TD
+evil lettuce--foi(n infected)-->infected;
+evil lettuce--next attempt at t + exp(1 / (foi * n infected))-->evil lettuce
+infected--t + exp(1 / inf. period)-->recovered;
+```
+
 Infected individuals recover at a time `t + infected period` where the infected period is an exponentially-distributed random variable based on the recovery rate. Upon recovery, infected individuals stay as recovered for the rest of the simulation. They can still move between regions.
 
-Simultaneously, movement between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The movement rate between regions does not need to be congruent -- so movement from `A` to `B` does not necessarily equal movement from `B` to `A`. At each movement time, a random person -- regardless of their infection status -- is selected to move. Their recovery time and infection status does not change. To determine the next movement time, there needs to be a bit of math: this a system of equations of two times the number of regions, and each region pair has a different movement rate. The Gillespie method is used to efficiently determine the between which pair of regions movement occurs and when it occurs.
+Simultaneously, movement between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The movement rate between regions does not need to be congruent -- so movement from `A` to `B` does not necessarily equal movement from `B` to `A`. (People may want to go from `A` to `B` more readily than people go from `B` to `A`) At each movement time, a random person -- regardless of their infection status -- is selected to move. Their recovery time and infection status does not change.
 
-Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that people in, say, British Columbia fit into the larger region of Western Canada. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
+```mermaid
+flowchart LR
+A--k_1-->B
+B--k_2-->A
+```
+
+To determine the next movement time, there needs to be a bit of math: this a system of equations of two times the number of regions, and each region pair has a different movement rate. The Gillespie method is used to efficiently determine the between which pair of regions movement occurs and when it occurs.
+
+However, because movement happens independently of infection, the force of infection may change when a new person is added to the region, even if that does not coincide with a new infection being scheduled, which is when the next automated querying of the number of infectious people occurs. Instead, the addition of a new person to the region will cause a check to see if the force of infection changes and update the next plan accordingly.
+
+```mermaid
+flowchart LR
+movement--new person introduction-->transmission-->checks if infection plan needs to be changed
+```
+
+Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that the region `A` fits into a larger region of, say, North America. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
 
 The global model parameters are as follows:
 * `population_size`: number of individuals by group (in this example, we assume that each region has the same number of people to start)
