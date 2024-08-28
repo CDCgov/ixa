@@ -47,8 +47,8 @@ impl TransmissionManager for Context {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
-    use crate::people::PeopleContext;
     use crate::transmission_manager::TransmissionManager;
     use crate::SEED;
     use ixa::context::Context;

@@ -42,9 +42,9 @@ impl InfectionManager for Context {
 #[cfg(test)]
 mod test {
     use crate::infection_manager::InfectionManager;
+    use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusEvent;
-    use crate::people::PeopleContext;
     use ixa::context::Context;
     use ixa::define_data_plugin;
     use ixa::define_rng;
