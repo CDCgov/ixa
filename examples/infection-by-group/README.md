@@ -1,5 +1,5 @@
 # Infection model: constant force of infection
-This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the previous example, there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their evil lettuce. People may move between provinces, which also impacts the force of infection.
+This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their evil lettuce. People may move between provinces, which also impacts the force of infection.
 
 This model differs from the last example in three key ways:
 1) The people are divided among regions, and the initial force of infection varies by region.
@@ -12,7 +12,7 @@ Each region has their own initial force of infection. Based on that force of inf
 
 Infected individuals recover at a time `t + infected period` where the infected period is an exponentially-distributed random variable based on the recovery rate. Upon recovery, infected individuals stay as recovered for the rest of the simulation. They can still move between regions.
 
-Simultaneously, contact between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The contact rate between regions does not need to be congruent -- so contact from `A` to `B` does not necessarily equal contact from `B` to `A`. At each contact point, a random person -- regardless of their infection status -- is selected to move. Their recovery time and infection status does not change. To determine the next contact, there needs to be a bit of math: this a system of equations of two times the number of regions, and each contact pair has a different contact rate. The Gillespie method is used to efficiently determine the between which pair of regions contact occurs and when it occurs.
+Simultaneously, movement between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The movement rate between regions does not need to be congruent -- so movement from `A` to `B` does not necessarily equal movement from `B` to `A`. At each movement time, a random person -- regardless of their infection status -- is selected to move. Their recovery time and infection status does not change. To determine the next movement time, there needs to be a bit of math: this a system of equations of two times the number of regions, and each region pair has a different movement rate. The Gillespie method is used to efficiently determine the between which pair of regions movement occurs and when it occurs.
 
 Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that people in, say, British Columbia fit into the larger region of Western Canada. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
 
@@ -21,7 +21,7 @@ The global model parameters are as follows:
 * `k`: number of stratified population groups/regions
 * `foi`: initial force of infection in eah stratified group, vector of size `k`
 * `infection_period`: time that an individual spends from infection to recovery
-* `contact`: pair-wise contact rates, square matrix of length `k`
+* `movement`: pair-wise movement rates, square matrix of length `k`
 
 ## Architecture
 As in other `ixa` models, the simulation is managed by a central `Context` object which loads parameters, initializes user-defined modules, and starts a callback execution loop:
@@ -33,24 +33,28 @@ struct Parameters {
     k: usize,
     foi: Vec<f64>,
     infection_period: u64,
-    contact: Vec<Vec<f64>>
+    movement: Vec<Vec<f64>>
 }
 
 let context = Context::new();
 context::load_parameters<Parameters>("config.toml")
 
 // Initialize modules
-context::add_module(population_manager);
-context::add_module(transmission_manager);
-context::add_module(infection_manager);
-context::add_module(movement_manager);
-context::add_module(person_property_report);
+mod people
+mod transmission
+mod infection
+mod movement
+
+people.init();
+transmission.init();
+infection.init();
+movement.init();
 
 // Run the simulation
 context::execute();
 ```
 
-Individuals transition through a typical SIR pattern they where start off as susceptible (S), are randomly selected to become infected (I), and eventually recover (R).
+Individuals transition through a typical SIR pattern where they start off as susceptible (S), are randomly selected to become infected (I), and eventually recover (R).
 
 ```mermaid
 flowchart LR
@@ -59,7 +63,7 @@ S(Susceptible) --FoI(num. infected people in region)--> I(Infected) --inf. perio
 
 The basic structure of the model is as follows:
 
-* A `Population Loader`, which initializes a population in `k` regions, attaches an infection status property to each individual, and assigns each individual to a region.
+* A `Population Loader`, which initializes a population in `k` regions, attachs an infection status property to each individual, and places each individual in a region.
 * A `Transmission Manager`, which determines the number of infectious people in the region, calculates the force of infection in that region accordingly, schedules infectious attempts based on that force of infection where it picks an individual in the region, updates the infectious status of that person if successful, and schedules the next attempt.
 * An `Infection Manager`, which listens for infections and schedules recoveries.
 * A `Report Writer` module, which listens for infections and recoveries and writes output to csv files, containing region-stratified disease patterns.
