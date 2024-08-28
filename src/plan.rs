@@ -137,6 +137,7 @@ pub struct Plan<T> {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::Queue;
 
@@ -228,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Plan does not exist")]
     fn cancel_invalid_plan() {
         let mut plan_queue = Queue::<()>::new();
         let plan_to_cancel = plan_queue.add_plan(1.0, ());

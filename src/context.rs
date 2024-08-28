@@ -112,7 +112,10 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
-        assert!(!time.is_nan() && !time.is_infinite() && time >= self.current_time);
+        assert!(
+            !time.is_nan() && !time.is_infinite() && time >= self.current_time,
+            "Time is invalid"
+        );
         self.plan_queue.add_plan(time, Box::new(callback))
     }
 
@@ -237,6 +240,7 @@ macro_rules! define_data_plugin {
 pub use define_data_plugin;
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use std::cell::RefCell;
 
@@ -271,21 +275,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn negative_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, -1.0, 0);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn infinite_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::INFINITY, 0);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Time is invalid")]
     fn nan_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::NAN, 0);
@@ -511,7 +515,7 @@ mod tests {
     fn shutdown_cancels_plans() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        context.add_plan(1.5, |context| context.shutdown());
+        context.add_plan(1.5, Context::shutdown);
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
@@ -528,7 +532,7 @@ mod tests {
             context.queue_callback(|context| {
                 context.get_data_container_mut(ComponentA).push(3);
             });
-            context.shutdown()
+            context.shutdown();
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);

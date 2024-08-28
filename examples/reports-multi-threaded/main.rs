@@ -1,12 +1,14 @@
 use ixa::context::Context;
 use std::thread;
 
+#[allow(dead_code)]
 struct Incidence {
     scenario: String,
     person_id: String,
     t: f64,
 }
 
+#[allow(unexpected_cfgs)]
 fn main() {
     let scenarios = vec!["Illinois", "Wisconsin", "Arizona", "California"];
     let mut handles = vec![];
@@ -19,7 +21,7 @@ fn main() {
             #[cfg(feature = "reports")]
             context.add_report::<Incidence>("Incidence");
 
-            println!("Scenario: {}", scenario);
+            println!("Scenario: {scenario}");
 
             let people = vec!["1", "2", "3"];
             for person in people {
