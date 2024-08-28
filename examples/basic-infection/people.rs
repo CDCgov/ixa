@@ -50,11 +50,11 @@ impl PeopleContext for Context {
             .people_map
             .get(&person_id)
             .expect("Person does not exist");
-        return person_status;
+        person_status
     }
 
     fn set_person_status(&mut self, person_id: usize, infection_status: InfectionStatus) {
-        let prev_status: InfectionStatus = self.get_person_status(person_id);
+        let previous_status: InfectionStatus = self.get_person_status(person_id);
         let people_data_container = self.get_data_container_mut(PeoplePlugin);
         let inf_status = people_data_container
             .people_map
@@ -64,7 +64,7 @@ impl PeopleContext for Context {
         *inf_status = infection_status;
 
         self.emit_event(InfectionStatusEvent {
-            prev_status: prev_status,
+            prev_status: previous_status,
             person_id: person_id,
             updated_status: infection_status,
         });
@@ -73,7 +73,7 @@ impl PeopleContext for Context {
     fn get_population(&mut self) -> usize {
         let people_data_container = self.get_data_container_mut(PeoplePlugin);
         let population: usize = people_data_container.people_map.len();
-        return population;
+        population
     }
 }
 
@@ -94,5 +94,20 @@ mod test {
 
         context.set_person_status(person_id, InfectionStatus::I);
         assert_eq!(context.get_person_status(person_id), InfectionStatus::I);
+    }
+
+    #[test]
+    fn test_infection_status_event() {
+        let mut context = Context::new();
+        context.create_person();
+        let person_id = 0;
+
+        context.subscribe_to_event::<InfectionStatusEvent>(move |_, event| {
+            let test_infection_status = event.updated_status;
+            assert_eq!(test_infection_status, InfectionStatus::I);
+        });
+
+        context.set_person_status(person_id, InfectionStatus::I);
+        context.execute();
     }
 }

@@ -42,3 +42,25 @@ impl InfectionManager for Context {
         });
     }
 }
+
+/*
+#[cfg(test)]
+mod test {
+    use ixa::context::Context;
+
+    #[test]
+    fn test_handle_infection_change() {
+        use super::handle_infection_status_change;
+        let mut context = Context::new();
+        context.create_person();
+
+        let person_id = 0;
+        let person_status: InfectionStatus = context.get_person_status(person_id);
+        assert_eq!(person_status, InfectionStatus::S);
+
+        context.set_person_status(person_id, InfectionStatus::I);
+        assert_eq!(context.get_person_status(person_id), InfectionStatus::I);
+    }
+
+}
+*/

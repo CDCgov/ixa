@@ -43,3 +43,25 @@ impl TransmissionManager for Context {
         });
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::people::InfectionStatus;
+    use crate::people::PeopleContext;
+    use crate::transmission_manager::TransmissionManager;
+    use crate::SEED;
+    use ixa::context::Context;
+    use rand_distr::Exp;
+
+    #[test]
+    fn test_attempt_infection() {
+        let mut context = Context::new();
+        context.init_random(SEED);
+        context.create_person();
+        attempt_infection(&mut context);
+        let person_status = context.get_person_status(0);
+        assert_eq!(person_status, InfectionStatus::I);
+        context.execute();
+    }
+}
