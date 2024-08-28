@@ -9,6 +9,13 @@ pub enum InfectionStatus {
     R,
 }
 
+#[derive(Copy, Clone)]
+pub struct InfectionStatusEvent {
+    pub prev_status: InfectionStatus,
+    pub updated_status: InfectionStatus,
+    pub person_id: usize,
+}
+
 pub trait PeopleContext {
     fn create_person(&mut self);
     fn get_person_status(&mut self, person_id: usize) -> InfectionStatus;
@@ -78,7 +85,13 @@ impl PeopleContext for Context {
     }
 
     fn set_person_status(&mut self, person_id: usize, infection_status: InfectionStatus) {
+        let prev_status: InfectionStatus = get_person_status(self, person_id);
         set_person_status(self, person_id, infection_status);
+        self.emit_event(InfectionStatusEvent {
+            prev_status: prev_status,
+            person_id: person_id,
+            updated_status: infection_status,
+        });
     }
 
     fn get_population(&mut self) -> usize {

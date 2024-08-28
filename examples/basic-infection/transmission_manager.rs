@@ -25,7 +25,7 @@ fn attempt_infection(context: &mut Context) {
 
     if matches!(person_status, InfectionStatus::S) {
         context.set_person_status(person_to_infect, InfectionStatus::I);
-        context.schedule_recovery(person_to_infect);
+        //context.schedule_recovery(person_to_infect);
         println!(
             "{:?}, {:?}, I",
             context.get_current_time(),
