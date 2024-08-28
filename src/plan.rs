@@ -1,9 +1,10 @@
 //! A priority queue that stores arbitrary data sorted by time
 //!
-//! Defines a `Queue<T>` that is intended to store a queue of items of type T,
-//! sorted by `f64` time, called 'plans'. This queue has methods for adding
-//! plans, cancelling plans, and retrieving the earliest plan in the queue.
-//! Adding a plan is *O*(log(*n*)) while cancellation and retrieval are *O*(1).
+//! Defines a `Queue<T, Q>` that is intended to store a queue of items of type
+//! T - sorted by `f64` time and definable priority `Q` - called 'plans'.
+//! This queue has methods for adding plans, cancelling plans, and retrieving
+//! the earliest plan in the queue. Adding a plan is *O*(log(*n*)) while
+//! cancellation and retrieval are *O*(1).
 //!
 //! This queue is used by `Context` to store future events where some callback
 //! closure `FnOnce(&mut Context)` will be executed at a given point in time.
@@ -16,12 +17,15 @@ use std::{
 /// A priority queue that stores arbitrary data sorted by time
 ///
 /// Items of type `T` are stored in order by `f64` time and called `Plan<T>`.
+/// Plans can have priorities given by some specified orderable type `Q`.
 /// When plans are created they are sequentially assigned an `Id` that is a
-/// wrapped `u64`. If two plans are scheduled for the same time the plan that is
-/// scheduled first (i.e., that has the lowest id) is placed earlier.
+/// wrapped `u64`. If two plans are scheduled for the same time then the plan
+/// with the lowest priority is placed earlier. If two plans have the same time
+/// and priority then the plan that is scheduled first (i.e., that has the
+/// lowest id) is placed earlier.
 ///
-/// The pair of time and plan id are stored in a binary heap of `Entry` objects.
-/// The data payload of the event is stored in a hash map by plan id.
+/// The time, plan id, and priority are stored in a binary heap of `Entry<P>`
+/// objects. The data payload of the event is stored in a hash map by plan id.
 /// Plan cancellation occurs by removing the corresponding entry from the data
 /// hash map.
 pub struct Queue<T, P: Eq + PartialEq + Ord> {
@@ -96,9 +100,10 @@ impl<T, P: Eq + PartialEq + Ord> Default for Queue<T, P> {
     }
 }
 
-/// A time and id pair used to order plans in the `Queue<T>`
+/// A time, id, and priority object used to order plans in the `Queue<T>`
 ///
-/// `Entry` objects are sorted in increasing order of time and then plan id
+/// `Entry` objects are sorted in increasing order of time, priority and then
+/// plan id
 #[derive(PartialEq, Debug)]
 struct Entry<P: Eq + PartialEq + Ord> {
     time: f64,
@@ -114,7 +119,8 @@ impl<P: Eq + PartialEq + Ord> PartialOrd for Entry<P> {
     }
 }
 
-/// Entry objects are ordered in increasing order by time and then plan id
+/// Entry objects are ordered in increasing order by time, priority, and then
+/// plan id
 impl<P: Eq + PartialEq + Ord> Ord for Entry<P> {
     fn cmp(&self, other: &Self) -> Ordering {
         let time_ordering = self.time.partial_cmp(&other.time).unwrap().reverse();
@@ -181,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn add_plans_at_same_time() {
+    fn add_plans_at_same_time_with_same_priority() {
         let mut plan_queue = Queue::new();
         plan_queue.add_plan(1.0, 1, ());
         plan_queue.add_plan(1.0, 2, ());
@@ -193,6 +199,23 @@ mod tests {
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 2);
+
+        assert!(plan_queue.get_next_plan().is_none());
+    }
+
+    #[test]
+    fn add_plans_at_same_time_with_different_priority() {
+        let mut plan_queue = Queue::new();
+        plan_queue.add_plan(1.0, 1, 1);
+        plan_queue.add_plan(1.0, 2, 0);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 1.0);
+        assert_eq!(next_plan.data, 2);
+
+        let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.time, 1.0);
+        assert_eq!(next_plan.data, 1);
 
         assert!(plan_queue.get_next_plan().is_none());
     }
