@@ -2,11 +2,9 @@ use ixa::context::Context;
 use ixa::define_rng;
 use ixa::random::ContextRandomExt;
 
-use rand_distr::Exp;
-
-use crate::infection_manager::InfectionManager;
 use crate::people::InfectionStatus;
 use crate::people::PeopleContext;
+use rand_distr::Exp;
 
 use crate::FOI;
 use crate::MAX_TIME;
@@ -26,11 +24,6 @@ fn attempt_infection(context: &mut Context) {
     if matches!(person_status, InfectionStatus::S) {
         context.set_person_status(person_to_infect, InfectionStatus::I);
         //context.schedule_recovery(person_to_infect);
-        println!(
-            "{:?}, {:?}, I",
-            context.get_current_time(),
-            person_to_infect
-        );
     }
 
     let next_attempt_time =
@@ -43,14 +36,10 @@ fn attempt_infection(context: &mut Context) {
     }
 }
 
-fn initial_infection(context: &mut Context) {
-    context.add_plan(0.0, move |context| {
-        attempt_infection(context);
-    });
-}
-
 impl TransmissionManager for Context {
     fn initialize_transmission(&mut self) {
-        initial_infection(self);
+        self.add_plan(0.0, |context| {
+            attempt_infection(context);
+        });
     }
 }

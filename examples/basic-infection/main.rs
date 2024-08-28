@@ -1,10 +1,12 @@
 use ixa::context::Context;
 use ixa::random::ContextRandomExt;
 
+mod incidence_report;
 mod infection_manager;
 mod people;
 mod transmission_manager;
 
+use crate::incidence_report::IncidenceReport;
 use crate::infection_manager::InfectionManager;
 use crate::people::PeopleContext;
 use crate::transmission_manager::TransmissionManager;
@@ -26,5 +28,6 @@ fn main() {
 
     context.initialize_transmission();
     context.initialize_infection_manager();
+    context.initialize_incidence_report();
     context.execute();
 }

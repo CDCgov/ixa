@@ -35,58 +35,34 @@ define_data_plugin!(
     }
 );
 
-// Add person
-fn add_person(context: &mut Context) -> usize {
-    // get data container
-    let people_data_container = context.get_data_container_mut(PeoplePlugin);
-    let person_id = people_data_container.people_map.len();
-    people_data_container
-        .people_map
-        .insert(person_id, InfectionStatus::S);
-    return person_id;
-}
-
-// Get a person
-fn get_person_status(context: &mut Context, person_id: usize) -> InfectionStatus {
-    let people_data_container = context.get_data_container_mut(PeoplePlugin);
-    return *people_data_container
-        .people_map
-        .get(&person_id)
-        .expect("Person does not exist");
-}
-
-// Modify person's status by Id
-
-fn set_person_status(context: &mut Context, person_id: usize, infection_status: InfectionStatus) {
-    let people_data_container = context.get_data_container_mut(PeoplePlugin);
-    let inf_status = people_data_container
-        .people_map
-        .get_mut(&person_id)
-        .unwrap();
-
-    *inf_status = infection_status;
-}
-
-fn get_population(context: &mut Context) -> usize {
-    let people_data_container = context.get_data_container_mut(PeoplePlugin);
-
-    let population: usize = people_data_container.people_map.len();
-    return population;
-}
-
 impl PeopleContext for Context {
     fn create_person(&mut self) {
-        add_person(self);
+        let people_data_container = self.get_data_container_mut(PeoplePlugin);
+        let person_id = people_data_container.people_map.len();
+        people_data_container
+            .people_map
+            .insert(person_id, InfectionStatus::S);
     }
 
     fn get_person_status(&mut self, person_id: usize) -> InfectionStatus {
-        let person_status: InfectionStatus = get_person_status(self, person_id);
+        let people_data_container = self.get_data_container_mut(PeoplePlugin);
+        let person_status: InfectionStatus = *people_data_container
+            .people_map
+            .get(&person_id)
+            .expect("Person does not exist");
         return person_status;
     }
 
     fn set_person_status(&mut self, person_id: usize, infection_status: InfectionStatus) {
-        let prev_status: InfectionStatus = get_person_status(self, person_id);
-        set_person_status(self, person_id, infection_status);
+        let prev_status: InfectionStatus = self.get_person_status(person_id);
+        let people_data_container = self.get_data_container_mut(PeoplePlugin);
+        let inf_status = people_data_container
+            .people_map
+            .get_mut(&person_id)
+            .unwrap();
+
+        *inf_status = infection_status;
+
         self.emit_event(InfectionStatusEvent {
             prev_status: prev_status,
             person_id: person_id,
@@ -95,7 +71,8 @@ impl PeopleContext for Context {
     }
 
     fn get_population(&mut self) -> usize {
-        let population = get_population(self);
+        let people_data_container = self.get_data_container_mut(PeoplePlugin);
+        let population: usize = people_data_container.people_map.len();
         return population;
     }
 }
