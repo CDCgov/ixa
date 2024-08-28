@@ -1,5 +1,5 @@
 # Infection model: constant force of infection
-This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their evil lettuce. People may move between provinces, which also impacts the force of infection.
+This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their deviled eggs. People may move between provinces, which also impacts the force of infection.
 
 This model differs from the last example in three key ways:
 1) The people are divided among regions, and the initial force of infection varies by region.
@@ -12,8 +12,8 @@ Each region has their own initial force of infection. Based on that force of inf
 
 ```mermaid
 flowchart TD
-A[evil lettuce]--foi(n infected)-->infected;
-A[evil lettuce]--next attempt at t + exp(1 / (foi * n infected))-->A[evil lettuce]
+A[deviled eggs]--foi(n infected)-->infected;
+A[deviled eggs]--next attempt/multiplication and congregating\nat t + exp(1 / (foi * n infected))-->A[deviled eggs]
 infected--t + exp(1 / inf. period)-->recovered;
 ```
 
@@ -33,7 +33,7 @@ However, because movement happens independently of infection, the force of infec
 
 ```mermaid
 flowchart LR
-movement--new person introduction-->transmission-->C[checks if infection plan needs to be changed]
+movement--new person introduction-->transmission-->C[[checks if infection plan needs to be changed]]
 ```
 
 Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that the region `A` fits into a larger region of, say, North America. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
