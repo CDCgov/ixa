@@ -515,7 +515,7 @@ mod tests {
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
+        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
     }
 
     #[test]
@@ -526,13 +526,13 @@ mod tests {
             // Note that we add the callback *before* we call shutdown
             // but shutdown cancels everything.
             context.queue_callback(|context| {
-                context.get_data_container_mut::<ComponentA>().push(3);
+                context.get_data_container_mut(ComponentA).push(3);
             });
             context.shutdown()
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_container_mut::<ComponentA>(), vec![1]);
+        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
     }
 
     #[test]
