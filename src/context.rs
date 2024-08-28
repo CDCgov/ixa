@@ -21,6 +21,20 @@ pub trait IxaEvent {
     fn on_subscribe(_context: &mut Context) {}
 }
 
+/// An enum to indicate the priority for plans at a given time.
+///
+/// Most plans will have `Normal` priority. Plans with priority `First` are
+/// handled before all `Normal` plans, and those with priority `Last` are
+/// handled after all `Normal` plans. In all cases ties between plans at the
+/// same time and with the same priority are handled in the order of scheduling.
+///
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
+pub enum PlanPriority {
+    First,
+    Normal,
+    Last,
+}
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -49,7 +63,7 @@ pub trait IxaEvent {
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>>,
+    plan_queue: Queue<Box<Callback>, PlanPriority>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
@@ -118,11 +132,28 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
+        self.add_plan_with_priority(time, callback, PlanPriority::Normal)
+    }
+
+    /// Add a plan to the future event list at the specified time and with the
+    /// specified priority
+    ///
+    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan_with_priority(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        priority: PlanPriority,
+    ) -> Id {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
             "Time is invalid"
         );
-        self.plan_queue.add_plan(time, Box::new(callback))
+        self.plan_queue.add_plan(time, Box::new(callback), priority)
     }
 
     /// Cancel a plan that has been added to the queue
