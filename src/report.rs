@@ -89,7 +89,7 @@ impl Context {
     // report type. The three main components are `prefix`, `directory`, and
     // `short_name`.
     fn generate_filename(&mut self, short_name: &str) -> PathBuf {
-        let data_container = self.get_data_container_mut::<ReportPlugin>();
+        let data_container = self.get_data_container_mut(ReportPlugin);
         let prefix = data_container.config.file_prefix.clone();
         let directory = data_container.config.directory.clone();
         let short_name = short_name.to_string();
@@ -111,7 +111,7 @@ impl ContextReportExt for Context {
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) {
         let path = self.generate_filename(short_name);
 
-        let data_container = self.get_data_container_mut::<ReportPlugin>();
+        let data_container = self.get_data_container_mut(ReportPlugin);
 
         let file = File::create(path).expect("Couldn't create file");
         let writer = Writer::from_writer(file);
@@ -125,7 +125,7 @@ impl ContextReportExt for Context {
     fn send_report<T: Report>(&self, report: T) {
         // No data container will exist if no reports have been added
         let data_container = self
-            .get_data_container::<ReportPlugin>()
+            .get_data_container(ReportPlugin)
             .expect("No writer found for the report type");
         let mut writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
         let writer = writer_cell
@@ -138,7 +138,7 @@ impl ContextReportExt for Context {
     /// This is the builder for the report options. It must be called on context
     /// The options can be assigned to the config that is returned from this function
     fn report_options(&mut self) -> &mut ConfigReportOptions {
-        let data_container = self.get_data_container_mut::<ReportPlugin>();
+        let data_container = self.get_data_container_mut(ReportPlugin);
         &mut data_container.config
     }
 }
@@ -282,19 +282,19 @@ mod test {
         let mut reader = csv::Reader::from_path(file_path).expect("Failed to open CSV file");
         let mut records = reader.deserialize::<SampleReport>();
 
-        let record1: SampleReport = records
+        let item1: SampleReport = records
             .next()
             .expect("No record found")
             .expect("Failed to deserialize record");
-        assert_eq!(record1.id, 1);
-        assert_eq!(record1.value, "Value 1");
+        assert_eq!(item1.id, 1);
+        assert_eq!(item1.value, "Value 1");
 
-        let record2: SampleReport = records
+        let item2: SampleReport = records
             .next()
             .expect("No second record found")
             .expect("Failed to deserialize record");
-        assert_eq!(record2.id, 2);
-        assert_eq!(record2.value, "Value 2");
+        assert_eq!(item2.id, 2);
+        assert_eq!(item2.value, "Value 2");
     }
 
     #[test]
@@ -316,8 +316,8 @@ mod test {
 
                 for j in 0..num_reports_per_thread {
                     let report = SampleReport {
-                        id: (i * num_reports_per_thread + j) as u32,
-                        value: format!("Thread {} Report {}", i, j),
+                        id: u32::try_from(i * num_reports_per_thread + j).unwrap(),
+                        value: format!("Thread {i} Report {j}"),
                     };
                     context.send_report(report);
                 }
@@ -331,7 +331,7 @@ mod test {
         }
 
         for i in 0..num_threads {
-            let file_name = format!("{}sample_report.csv", i);
+            let file_name = format!("{i}sample_report.csv");
             let file_path = base_path.join(file_name);
             assert!(file_path.exists(), "CSV file should exist");
 
@@ -340,12 +340,16 @@ mod test {
 
             for (j, record) in records.enumerate() {
                 let record: SampleReport = record.expect("Failed to deserialize record");
-                assert_eq!(record.id, (i * num_reports_per_thread + j) as u32);
+                assert_eq!(
+                    record.id,
+                    (i * num_reports_per_thread + j).try_into().unwrap()
+                );
             }
         }
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    #[allow(clippy::struct_field_names)]
     struct TestTypes {
         boolean_field: bool,
         comma_field: String,

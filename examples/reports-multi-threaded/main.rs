@@ -4,11 +4,8 @@ use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
 use std::thread;
 
-<<<<<<< HEAD
 #[allow(dead_code)]
-=======
 #[derive(Serialize, Deserialize, Clone)]
->>>>>>> fc28b63 (adding unit tests)
 struct Incidence {
     scenario: String,
     person_id: String,
@@ -27,9 +24,7 @@ fn main() {
         let handle = thread::spawn(move || {
             let mut context = Context::new();
 
-            context
-                .report_options()
-                .file_prefix(format!("{}_", scenario.to_string()));
+            context.report_options().file_prefix(format!("{scenario}_"));
             context.add_report::<Incidence>("incidence");
 
             println!("Scenario: {scenario}");
