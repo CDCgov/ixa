@@ -13,10 +13,9 @@ fn main() {
     context.init_random(SEED);
 
     let random_person = context.sample_range(MyRng, 0..POPULATION);
-    let person_id = random_person.to_string();
+    let person_id = random_person;
 
     context.add_plan(1.0, {
-        let person_id = person_id.clone();
         move |context| {
             println!(
                 "Person {} was infected at time {}",
@@ -28,7 +27,6 @@ fn main() {
 
     let recovery_time: f64 = context.sample_distr(MyRng, Uniform::new(2.0, 10.0));
     context.add_plan(1.0, {
-        let person_id = person_id.clone();
         move |_context| {
             println!("Person {person_id} recovered at time {recovery_time}");
         }
