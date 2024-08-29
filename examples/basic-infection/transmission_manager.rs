@@ -8,6 +8,7 @@ use rand_distr::Exp;
 
 use crate::FOI;
 use crate::MAX_TIME;
+use crate::POPULATION;
 
 define_rng!(TransmissionRng);
 
@@ -22,8 +23,9 @@ fn attempt_infection(context: &mut Context) {
         //context.schedule_recovery(person_to_infect);
     }
 
-    let next_attempt_time =
-        context.get_current_time() + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap());
+    #[allow(clippy::cast_precision_loss)]
+    let next_attempt_time = context.get_current_time()
+        + context.sample_distr(TransmissionRng, Exp::new(1.0 * FOI).unwrap()) / POPULATION as f64;
 
     if next_attempt_time <= MAX_TIME {
         context.add_plan(next_attempt_time, move |context| {
