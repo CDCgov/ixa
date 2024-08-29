@@ -120,7 +120,7 @@ context.define_person_property(
 );
 ```
 
-When initialized, each person is assigned a default infection state (`Susceptible`). Each person is also assigned to a region, so there are `population_size` people in each of the `k` regions. This assignment process 
+When initialized, each person is assigned a default infection state (`Susceptible`). Each person is also assigned to a region, so there are `population_size` people in each of the `k` regions. This assignment process
 
 Once the population has been created, all modules have been initialized, and event listeners have been registered (more on this below), the simulation is ready to begin the execution loop.
 
