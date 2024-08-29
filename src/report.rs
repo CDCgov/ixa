@@ -106,7 +106,7 @@ pub trait ContextReportExt {
 
 impl ContextReportExt for Context {
     /// Call `add_report` with each report type, passing the name of the report type.
-    /// The report type name is used for file naming to distinguish what data each
+    /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) {
         let path = self.generate_filename(short_name);
