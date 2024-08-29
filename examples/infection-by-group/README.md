@@ -2,18 +2,18 @@
 This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their deviled eggs. People may move between provinces, which also impacts the force of infection.
 
 This model differs from the last example in three key ways:
-1) The people are divided among regions, and the initial force of infection varies by region.
-2) The force of infection changes over time based on the number of infected people.
+1) The people are divided among regions, and the force of infection varies by region.
+2) The force of infection changes over time based on seasonality.
 3) People may move to a different region throughout the simulation, which impacts their risk of sickness and the risk posed to other people in that region.
 
 ## Simulation overview
 
-Each region has their own initial force of infection. Based on that force of infection, infection attempts are scheduled in each region, starting at time 0. Infection attempts are scheduled to occur at an exponentially distributed time based on the force of infection scaled by the number of people who are currently sick in the region. The simulation ends after there are no more infection events.
+Each region has their own force of infection. Based on that force of infection, infection attempts are scheduled in each region, starting at time 0. Infection attempts are scheduled to occur at an exponentially distributed time based on the force of infection scaled by the number of people who are currently sick in the region. The simulation ends after there are no more infection events.
 
 ```mermaid
 flowchart TD
-A[deviled eggs]--foi(n infected)-->infected;
-A[deviled eggs]--next attempt/multiplication and congregating\nat t + exp(1 / (foi * n infected))-->A[deviled eggs]
+A[deviled eggs]--foi(t)-->infected;
+A[deviled eggs]--next attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi(t)))-->A[deviled eggs]
 infected--t + exp(1 / inf. period)-->recovered;
 ```
 
@@ -25,15 +25,6 @@ Simultaneously, movement between regions is scheduled at a given rate, starting 
 flowchart LR
 A--k_1-->B
 B--k_2-->A
-```
-
-To determine the next movement time, there needs to be a bit of math: this a system of equations of two times the number of regions, and each region pair has a different movement rate. The Gillespie method is used to efficiently determine the between which pair of regions movement occurs and when it occurs.
-
-However, because movement happens independently of infection, the force of infection may change when a new person is added to the region, even if that does not coincide with a new infection being scheduled, which is when the next automated querying of the number of infectious people occurs. Instead, the addition of a new person to the region will cause a check to see if the force of infection changes and update the next plan accordingly.
-
-```mermaid
-flowchart LR
-movement--new person introduction-->transmission-->C[[checks if infection plan needs to be changed]]
 ```
 
 Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that the region `A` fits into a larger region of, say, North America. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
@@ -73,21 +64,22 @@ infection.init();
 movement.init();
 
 // Run the simulation
-context::execute();
+context.execute();
 ```
 
-Individuals transition through a typical SIR pattern where they start off as susceptible (S), are randomly selected to become infected (I), and eventually recover (R).
+Individuals transition through a typical SIR pattern where they start off as susceptible (S), are randomly selected to become infected (I), and eventually recover (R). Although there is no person-to-person transmission, the force of infection changes with the number of infected people in the particular region.
 
 ```mermaid
 flowchart LR
-S(Susceptible) --FoI(num. infected people in region)--> I(Infected) --inf. period--> R(Recovered)
+S(Susceptible) --FoI(t)--> I(Infected) --inf. period--> R(Recovered)
 ```
 
 The basic structure of the model is as follows:
 
-* A `Population Loader`, which initializes a population in `k` regions, attachs an infection status property to each individual, and places each individual in a region.
-* A `Transmission Manager`, which determines the number of infectious people in the region, calculates the force of infection in that region accordingly, schedules infectious attempts based on that force of infection where it picks an individual in the region, updates the infectious status of that person if successful, and schedules the next attempt.
-* An `Infection Manager`, which listens for infections and schedules recoveries.
+* A `Population Loader`, which places `population_size` people each into every one of `k` regions and attaches an infection status of susceptible to every individual.
+* A `Transmission Manager`, which schedules the time for the next infectious attempt. Because the force of infection is not constant, it is slightly more complicated to schedule infectious attempts that are consistent with this changing force of infection. In this particular example, we employ rejection sampling as a way to sample time-varying infectiousness.
+* An `Infection Manager`, which listens for infections and schedules recoveries. This is no different from the previous example.
+* A `Movement Manager` which enables people to move across regions based on specified rates.
 * A `Report Writer` module, which listens for infections and recoveries and writes output to csv files, containing region-stratified disease patterns.
 
 Note that this will require some kind of parameter loading utility from `ixa` which reads from a config file / command line arguments, and exposes values to modules as global properties.
@@ -95,19 +87,31 @@ Note that this will require some kind of parameter loading utility from `ixa` wh
 ### People and person properties
 When the `Population Loader` module initializes, a number of persons are created and given a unique person id (from `0` to `population_size`). This functionality is provided by an `add_person` method from `ixa`, which adds them to a `People` data container.
 
-In order to record the infection status of a person, we use another `ixa` utility for defining "person properties". Internally, this associates each person in the `People` data container with an enum value and and provides an API for modules to read it, change it, or subscribe to events when the property is changed somewhere else in the system.
+In order to record the infection status of a person, we use another `ixa` utility for defining "person properties". Internally, this associates each person in the `People` data container with an enum value and provides an API for modules to read it, change it, or subscribe to events when the property is changed somewhere else in the system.
 
-We must also assign people to a region.
+To assign people to a region (each person is assigned to one and only one region), we use another `ixa` utility for defining groups, of which region is one particular case where the assignment of person to group is unique, and each person can only be in one group. Internally, this associates each person in the `People` data container with one enum value of the regions available in the model and provides an API for modules to read, change, or subscribe to events when an individual's region is changed somewhere else in the system.
 
 ```
+use ixa::GroupMappings
+regions = enum(A, B);
+
 infection_status = enum(
     Susceptible,
     Infected,
     Recovered
 );
 
-for (person_id in 0..parameters.get_parameter(population_size)) {
-    context.create_person(person_id = person_id)
+context.define_group(regions, GroupMappings::one_to_one);
+
+for (region in regions) {
+    for (person_id in 0..parameters.get_parameter(population_size)) {
+        person = context.create_person(person_id = person_id);
+        // recall that we are viewing regions just as a special case of groups
+        // so we want the interface to have capability to assign a person to
+        // some but not all group types
+        person.assign_to_groups((region));
+        person.finalize();
+    }
 }
 
 context.define_person_property(
@@ -116,25 +120,30 @@ context.define_person_property(
 );
 ```
 
-When initialized, each person is assigned an default state (`Susceptible`).
+When initialized, each person is assigned a default infection state (`Susceptible`). Each person is also assigned to a region, so there are `population_size` people in each of the `k` regions. This assignment process 
 
 Once the population has been created, all modules have been initialized, and event listeners have been registered (more on this below), the simulation is ready to begin the execution loop.
 
 ### Scheduling infections and recoveries
-In this model, the `Transmission Manager` module begins the simulation by adding a infection attempt `plan`, which is just a callback scheduled to execute at `current_time = 0`. The callback randomly selects a person and transitions them to infected if they are susceptible; if they are not susceptible, it will skip over them. Finally, a new infection attempt is scheduled for a time drawn from an exponential distribution with mean value of `1/infection_rate`.
+In this model, the `Transmission Manager` module begins the simulation by adding an infection attempt `plan`, which is just an event scheduled to execute at `current_time = 0`. At the time of execution, the plan randomly selects a person and transitions them to infected if they are susceptible; if they are not susceptible, it will skip over them. Because the force of infection changes with time, a new infection attempt cannot just be drawn from an exponential with rate `foi`. In this conceptual example, we use rejection sampling to show how time-varying infectiousness may be modeled: instead, times are drawn from an exponential with rate equal to the _maximum_ value of the force of infection. However, only `foi(t) / max(foi(t))` fraction of plans are allowed to proceed to actual infection attempts.
 
 ```
 fn attempt_infection(context) {
+    foi = context.calculate_foi(context.get_time());
     transmission_rng = rng.get_rng(id = transmission);
-    population = context.get_population();
-    person_to_infect = transmission_rng.sample_int(from = 0, to = population);
+    if (context.sample(transmission_rng, RngCore::next_u64) < foi[t] / max(foi[t])) {
+        context.get_population();
+        person_index_to_infect = transmission_rng.sample_int(from = 0, to = population_size);
+        person_region = transmission_rng.sample(regions);
 
-    if (context.get_infection_status(person_to_infect) == Susceptible) {
-        context.set_infection_status(person_to_infect, Infected);
+        person_to_infect = context.get_people_in_group(person_region)[person_index_to_infect];
+
+        if (context.get_infection_status(person_to_infect) == infection_status::Susceptible) {
+            context.set_infection_status(person_to_infect, infection_status::Infected);
+        }
     }
-
     foi = parameters.get_parameter(foi);
-    time_next_infection = transmission_rng.draw_exponential(1/foi);
+    time_next_infection = transmission_rng.draw_exponential(1/max(foi[t]));
     context.add_plan(attempt_infection(context), time = context.get_time() + time_next_infection);
 }
 
@@ -147,25 +156,15 @@ init(context) {
 
 Note that this makes use of the following `ixa` functionality:
 
-* The getters/setters provided by `person_properties`, as described in the previous
-  section
+* The getters/setters provided by `person_properties`, as described in the previous section
 * An `add_plan` method to register infection attempt callbacks
 * A `random` module to sample the population and generate the next infection time
 
-Updating the `infection_status` of a person should broadcast a mutation
-event through the system, which might be structured something like the following:
+Updating the `infection_status` of a person should broadcast a mutation event through the system, which might be structured something like the following:
 
-![Event diagram](events.png)
+For any person property that is registered, `ixa` stores a list of callbacks registered by other modules. When a mutation is made to that person property, the event manager releases an event with relevant related data (the id of the person, the old and/or new property) to all matching registered callbacks.
 
-For any person property that is registered, `ixa` stores a list of callbacks
-registered by other modules. When a mutation is made to that person property,
-the event manager releases an event with relevant related data
-(the id of the person, the old and/or new property) to all matching registered
-callbacks.
-
-In this model, when the `disease_status` is updated to `Infected`, a handler
-registered by the `Infection Manager` will be triggered, which is responsible
-for scheduling recovery plans:
+In this model, when the `disease_status` is updated to `Infected`, a handler registered by the `Infection Manager` will be triggered, which is responsible for scheduling recovery plans:
 
 ```
 fn handler(context, person_id, previous_infection_status) {
@@ -184,37 +183,59 @@ init(context) {
 }
 ```
 
-Recovery of an infected individuals are scheduled for a time `t + infection_period`
-where `infection_period` comes from an exponential distribution. This is provided
-by an `rng` instance independent from the one in the `Transmission Manager`.
+Recovery of an infected individuals are scheduled for a time `t + infection_period` where `infection_period` comes from an exponential distribution. This is provided by an `rng` instance independent from the one in the `Transmission Manager`.
 
-### Reports
+### Movement between regions
 
-This model includes two types of reports focused on tracking the state of the
-infection status:
+Individuals move between regions at specified rates.
+
+```
+
+fn move_region(context, new_region, rate) {
+    context.assign_to_groups((new_region))
+    context.add_plan(move_region(context, new_region, rate),
+                context.get_time() + movement.sample_distr(Exp(1 / rate)));
+}
+
+init(context) {
+    context.add_rng(movement);
+    for (old_region in regions) {
+        for (new_region in regions) {
+            if (old_region != new_region) {
+                rate = parameters.get_parameter(movement_rate)[old_region][new_region]'
+                context.add_plan(move_region(context, new_region, rate),
+                    context.get_time() + movement.sample_distr(Exp(1 / rate)));
+            }
+        }
+    }
+}
+```
+
+## Reports
+
+This model includes two types of reports focused on tracking the state of the infection status:
 
 1. Instantaneous report on changes in person properties, and
 2. The current state of person properties reported periodically.
 
-#### Instantaneous Reports
-For this report, we want to record a timestamp when a person is infected
-and when they recover. The output of the report will look something like this:
+### Instantaneous Reports
+For this report, we want to record a timestamp when a person is infected and when they recover. The output of the report will look something like this:
 
 ```
-person_id,infection_status,t
-0,Infected,0
-1,Infected,1.2
-0,Recovered,7.2
-1,Infected,8.5
+person_id,region,infection_status,t
+0,A,Infected,0
+1,B,Infected,1.2
+0,A,Recovered,7.2
+1,B,Infected,8.5
 ...
 ```
-At initialization, a `Report` module registers a type for `Incidence`
-and subscribes change events on the `infection_status` of a person
+At initialization, a `Report` module registers a type for `Incidence` and subscribes change events on the `infection_status` of a person
 
 ```rust
 struct IncidenceReport {
     person_id: u64,
     infection_status: InfectionStatus,
+    region: Regions,
     t: u64
 }
 
@@ -230,42 +251,37 @@ The method `handle_infection_status_change` writes a new line to the report file
 fn handle_infection_status_change(context, person_id, prev, current) {
     context.add_report(Incidence(
         person_id,
+        region: context.get_person_group_assignment(regions, person_id),
         infection_status: current,
         t: context.get_current_time()
     ));
 }
 ```
 
-One consideration here is that if the callback references context, it should
-provide the state of the context exactly at the time the event was released.
+One consideration here is that if the callback references context, it should provide the state of the context exactly at the time the event was released.
 
-#### Periodic Reports
-The second type of report records something about the current state of the
-simulation at the end of a period, such as after every day.
+### Periodic Reports
+The second type of report records something about the current state of the simulation at the end of a period, such as after every day.
 
-For this example, we record a count of the number of individuals with each
-infection status (S,I,R) at the end of every day:
+For this example, we record a count of the number of individuals with each infection status (S,I,R) at the end of every day:
 
 ```
-day,infection_status,count
-0,Suceptible,92
-0,Infected,8
-0,Recovered,0
-1,Suceptible,89,
-1,Infected,12
-1,Recovered,0
+day,infection_status,region,count
+0,Suceptible,A,47
+0,Susceptible,B,45
+0,Infected,A,3
+0,Infected,B,5
+0,Recovered,A,0
+0,Recovered,B,0
+1,Suceptible,A,44
+1,Susceptible,B,45
 ...
 ```
 
-In this case, we could actually compute each daily summary in
-post-processing from the instantaneous reports instead of generating a second
-set of periodic reports. However, we want a summary of properties
-which are not otherwise recorded, such as perhaps whether an individual is
-hospitalized.
+In this case, we could actually compute each daily summary in post-processing from the instantaneous reports instead of generating a second
+set of periodic reports. However, we want a a generic way of grouping people to calculate the number of infected/susceptibles by status, and we may also want to record other person properties like hospitalizations which are not infection statuses.
 
-To efficiently keep track of the current state of each infection status,
-we will create an additional data structure to keep a count of individuals in
-each state and is updated every time a change event is released.
+To efficiently keep track of the current state of each infection status, we will create an additional data structure to keep a count of individuals in each state and is updated every time a change event is released.
 
 ```rust
 // Internally, HashMap<InfectionStatus, usize>
@@ -281,7 +297,7 @@ for a time t have executed, i.e., `on_period_end`
 ```rust
 fn init(context){
     // Calculate the initial state
-    population = parameters::get_parameter(population);
+    population = parameters::get_parameter(population_size);
     for i in 0..population {
         counter::increment(
             counter.get_person_property_value(i)
@@ -291,10 +307,7 @@ fn init(context){
     context::on_period_end(0, report_periodic_item);
 }
 ```
-Methods are implemented for person property counter to increment and decrement
-the counters. Changes in the person properties are
-observed and the callback function `update_property_counter` updates the
-counts for each property:
+Methods are implemented for person property counter to increment and decrement the counters. Changes in the person properties are observed and the callback function `update_property_counter` updates the counts for each property:
 
 ```rust
 fn handle_infection_status_change(context, person_id, prev, current) {
@@ -303,8 +316,7 @@ fn handle_infection_status_change(context, person_id, prev, current) {
 }
 ```
 
-When all plans have executed for a given time t, `ixa` calls the on_period_end
-callback to write the report row and schedule the next periodic report:
+When all plans have executed for a given time t, `ixa` calls the on_period_end callback to write the report row and schedule the next periodic report:
 
 ```rust
 fn report_periodic_item(t, context) {
@@ -329,15 +341,11 @@ fn report_periodic_item(t, context) {
 
 The following are a summary of assumed dependencies from `ixa`:
 
-* `parameters` component: Loads parameters from a file or command line args,
-   loads them into global properties (below)
-* `global_properties` component: Defines properties which can be accessible
-   to any module
-* `person` component: Creates a `People` data container which unique ID for each person,
-   provides an `add_person()` method
-* `person_properties` component: connects each person ID defined by the `person`
-   component with a specific property (e.g., `infection_status`), provides add/change/subscribe API
+* `parameters` component: Loads parameters from a file or command line args, loads them into global properties (below)
+* `global_properties` component: Defines properties which can be accessible to any module
+* `person` component: Creates a `People` data container which unique ID for each person, provides an `add_person()` method
+* `person_properties` component: connects each person ID defined by the `person` component with a specific property (e.g., `infection_status`), provides add/change/subscribe API
+* `groups` component: assigns each person to a region which defines their force of infection and holds each person's region even as they move across regions.
 * `reports` component: Handles file writing, provides api for writing typed rows
-* `random_number_generator` component: Provides seedable rng api to sample over
-   a distribution, list of person ids
+* `random_number_generator` component: Provides seedable rng api to sample over a distribution, list of person ids
 * `event_manager` component: provides a global send/subscribe interface
