@@ -1,8 +1,8 @@
 library(tidyverse)
 
-population = 100000
+population = 1000
 foi = 0.1
-output_df <- read_csv("basic_output.csv") |>
+output_df <- read_csv("incidence.csv") |>
     filter(infection_status == "I") |>
     group_by(time) |>
     mutate(inf = n()) |>

@@ -2,7 +2,9 @@ use ixa::context::Context;
 use ixa::define_data_plugin;
 use std::collections::HashMap;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum InfectionStatus {
     S,
     I,
