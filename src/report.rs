@@ -119,9 +119,7 @@ impl ContextReportExt for Context {
         file_writer.insert(TypeId::of::<T>(), writer);
     }
 
-    /// Anytime something happens (ie. a person gets infected) in the model that
-    /// you want to record, you can use `send_report` to write a new row to a report.
-    /// Note that you will need to call the method with the appropriate report type
+    /// Write a new row to the appropriate report file
     fn send_report<T: Report>(&self, report: T) {
         // No data container will exist if no reports have been added
         let data_container = self
