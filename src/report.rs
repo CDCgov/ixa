@@ -146,9 +146,7 @@ impl ContextReportExt for Context {
 #[cfg(test)]
 mod test {
     use super::*;
-    use csv::Writer;
     use serde_derive::{Deserialize, Serialize};
-    use std::error::Error;
     use std::thread;
     use tempfile::tempdir;
 
@@ -266,11 +264,11 @@ mod test {
         context.add_report::<SampleReport>("sample_report");
         let report1 = SampleReport {
             id: 1,
-            value: "Value 1".to_string(),
+            value: "Value,1".to_string(),
         };
         let report2 = SampleReport {
             id: 2,
-            value: "Value 2".to_string(),
+            value: "Value\n2".to_string(),
         };
 
         context.send_report(report1);
@@ -287,14 +285,14 @@ mod test {
             .expect("No record found")
             .expect("Failed to deserialize record");
         assert_eq!(item1.id, 1);
-        assert_eq!(item1.value, "Value 1");
+        assert_eq!(item1.value, "Value,1");
 
         let item2: SampleReport = records
             .next()
             .expect("No second record found")
             .expect("Failed to deserialize record");
         assert_eq!(item2.id, 2);
-        assert_eq!(item2.value, "Value 2");
+        assert_eq!(item2.value, "Value\n2");
     }
 
     #[test]
@@ -346,52 +344,5 @@ mod test {
                 );
             }
         }
-    }
-
-    #[derive(Serialize, Deserialize, Debug, PartialEq)]
-    #[allow(clippy::struct_field_names)]
-    struct TestTypes {
-        boolean_field: bool,
-        comma_field: String,
-        newline_field: String,
-    }
-    #[test]
-    fn test_csv_edge_cases() -> Result<(), Box<dyn Error>> {
-        let data = vec![
-            TestTypes {
-                boolean_field: true,
-                comma_field: "test,with,commas".to_string(),
-                newline_field: "test\nwith\nnewlines".to_string(),
-            },
-            TestTypes {
-                boolean_field: false,
-                comma_field: "second,test,with,commas".to_string(),
-                newline_field: "second\ntest\nwith\nnewlines".to_string(),
-            },
-        ];
-
-        let file_path = "edge_case_test.csv";
-        let file = File::create(file_path)?;
-        let mut writer = Writer::from_writer(file);
-
-        for record in &data {
-            writer.serialize(record)?;
-        }
-
-        writer.flush()?;
-
-        let mut reader = csv::Reader::from_path(file_path)?;
-        let mut deserialized_data = Vec::new();
-
-        for result in reader.deserialize() {
-            let record: TestTypes = result?;
-            deserialized_data.push(record);
-        }
-
-        assert_eq!(data, deserialized_data);
-
-        std::fs::remove_file(file_path)?;
-
-        Ok(())
     }
 }
