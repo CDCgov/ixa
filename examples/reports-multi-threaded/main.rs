@@ -1,12 +1,18 @@
 use ixa::context::Context;
+use ixa::report::ContextReportExt;
+use ixa::{create_report_trait, report::Report};
+use serde::{Deserialize, Serialize};
 use std::thread;
 
 #[allow(dead_code)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Incidence {
     scenario: String,
     person_id: String,
     t: f64,
 }
+
+create_report_trait!(Incidence);
 
 #[allow(unexpected_cfgs)]
 fn main() {
@@ -18,8 +24,8 @@ fn main() {
         let handle = thread::spawn(move || {
             let mut context = Context::new();
 
-            #[cfg(feature = "reports")]
-            context.add_report::<Incidence>("Incidence");
+            context.report_options().file_prefix(format!("{scenario}_"));
+            context.add_report::<Incidence>("incidence");
 
             println!("Scenario: {scenario}");
 
@@ -29,9 +35,8 @@ fn main() {
                 let scenario = scenario.clone();
                 context.add_plan(1.0, {
                     move |context| {
-                        #[cfg(feature = "reports")]
                         context.send_report(Incidence {
-                            scenario: scenario,
+                            scenario: scenario.to_string(),
                             person_id: person.clone(),
                             t: context.get_current_time(),
                         });
