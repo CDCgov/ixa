@@ -135,8 +135,7 @@ impl ContextReportExt for Context {
         writer.flush().expect("Failed to flush writer");
     }
 
-    /// This is the builder for the report options. It must be called on context
-    /// The options can be assigned to the config that is returned from this function
+    /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
     fn report_options(&mut self) -> &mut ConfigReportOptions {
         let data_container = self.get_data_container_mut(ReportPlugin);
         &mut data_container.config
