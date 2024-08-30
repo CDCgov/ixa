@@ -1,25 +1,29 @@
 # Infection model: constant force of infection
-This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as the provinces of Canada. The initial force of infection varies by province. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission, but the force of infection varies with the current prevalence, as if sick people are bringing with them their deviled eggs. People may move between provinces, which also impacts the force of infection.
+This example demonstrates infections in a stratified population where the force of infection varies by person "group". This is meant to model people that are split by some defining characteristic -- let us conceptualize that as regions A and B. In line with the ![previous example](../basic-infection/README.md), there is no person-to-person transmission. However, in addition to varying by region, the force of infection also varies by season, as if in region A (say, North America), people are more likely to eat deviled eggs from December to January (winter) whereas in region B (South America), they are more likely to eat deviled eggs from June to July (their winter). People may move between regions, which impacts their experienced force of infection. Although moving regions does not impact an individual's infection status immediately, to make this example of regions really need to function like a group and not just a fancy person property, I introduce that an individual's _recovery_ rate scales inversely with the number of infected people currently in the region, as if having more sick people in a region means that an individual cannot obtain the care they require to be cured of their deviled egg syndrome.
 
 This model differs from the last example in three key ways:
 1) The people are divided among regions, and the force of infection varies by region.
 2) The force of infection changes over time based on seasonality.
-3) People may move to a different region throughout the simulation, which impacts their risk of sickness and the risk posed to other people in that region.
+3) People may move to a different region throughout the simulation, which impacts their risk of sickness and the duration of recovery posed to other people in that region.
+
+This example introduces the idea of a `group`, which is an abstract concept that enables assigning people to broader categories. I argue that regions are a type of group, a special case that must satisfy some additional constraints than the generic `group`. This detailing of `groups` and how regions is a special case of a group is described more extensively in ![groups.md](groups.md).
 
 ## Simulation overview
 
-Each region has their own force of infection. Based on that force of infection, infection attempts are scheduled in each region, starting at time 0. Infection attempts are scheduled to occur at an exponentially distributed time based on the force of infection scaled by the number of people who are currently sick in the region. The simulation ends after there are no more infection events.
+This simulation consists of three key pieces of logic:
+1) scheduling infection attempts based on a region-specific and time-varying force of infection.
+2) scheduling people to move between regions at specified rates.
+3) scheduling individual person recovery/progress through the infection course based on the number of sick people in the region.
 
-```mermaid
-flowchart TD
-A[deviled eggs]--foi(t)-->infected;
-A[deviled eggs]--next attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi(t)))-->A[deviled eggs]
-infected--t + exp(1 / inf. period)-->recovered;
-```
+Each of these pieces of logic is different from the last example -- in fact, logics #1 and #2 are completely new -- and introduce some new required `ixa` functionality. In particular, a region-specific force of infection requires needing to (a) assign people to regions (enforcing that people are part of one and only one region) and (b) querying a person's region to determine their force of infection. The additional complexity of wanting to make recovery rates dependent on the number of people who are infected in the particular region requires (c) returning all people in person's region.
 
-Infected individuals recover at a time `t + infected period` where the infected period is an exponentially-distributed random variable based on the recovery rate. Upon recovery, infected individuals stay as recovered for the rest of the simulation. They can still move between regions.
+Secondly, implementing time-varying infectiousness in a continuous time simulator is not trivial. This example explains how to do so using rejection sampling, though there does exist another option, and explains the pitfalls of rejection sampling. Modeling time-varying infectiousness does not require any new functionality from `ixa`.
 
-Simultaneously, movement between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The movement rate between regions does not need to be congruent -- so movement from `A` to `B` does not necessarily equal movement from `B` to `A`. (People may want to go from `A` to `B` more readily than people go from `B` to `A`) At each movement time, a random person -- regardless of their infection status -- is selected to move. Their recovery time and infection status does not change.
+Finally, this model introduces movement between groups, but that does not actually require any "new" functionality from `ixa` (besides what has been described above in terms of needing to assign people to groups). This is just code that schedules people to have their region changed (or re-assigned) at times based off the specified movement rates.
+
+The simulation ends after there are no more infection events. However, there will be still schedules of people moving between regions, events which are ignored when determining when to call `context.halt()`.
+
+Movement between regions is scheduled at a given rate, starting at time 0, so that people can move across regions. The movement rate between regions does not need to be congruent -- so movement from `A` to `B` does not necessarily equal movement from `B` to `A`. (People may want to go from `A` to `B` more readily than people go from `B` to `A`) At each movement time, a random person -- regardless of their infection status -- is selected to move. Their infection status does not change, though their recovery time is impacted by their region's number of infected people.
 
 ```mermaid
 flowchart LR
@@ -27,16 +31,25 @@ A--k_1-->B
 B--k_2-->A
 ```
 
-Note that this example considers regions where each individual must be part of one and only one region. Regions can also have a hierarchy, so that the region `A` fits into a larger region of, say, North America. However, we view regions as a special case of the generic "group" where there are some stratifying characteristics, and people can fit into zero, one, or many of the classes of a group (like an individual being part of the group of people that visit the supermarket, the library, and/or the DMV).
-
 The global model parameters are as follows:
 * `population_size`: number of individuals by group (in this example, we assume that each region has the same number of people to start)
-* `k`: number of stratified population groups/regions
-* `foi`: initial force of infection in eah stratified group, vector of size `k`
-* `infection_period`: time that an individual spends from infection to recovery
-* `movement`: pair-wise movement rates, square matrix of length `k`
+* `k`: number of population groups/regions
+* `foi_sin_shift`: for ease in this example, imagine that the force of infection is sin(foi_sin_shift * t) + 1; this parameter specifies that phase shift for each region, so is a vector of length `k`
+* `infection_period`: base time that an individual spends from infection to recovery, gets scaled by number of infecteds in region
+* `movement`: pair-wise movement rates, square matrix of length `k` coded as a vector of lenfth `k` where each element is a vector of length `k`
 
 ## Architecture
+
+The basic structure of the model is as follows:
+
+* A `Population Loader`, which places `population_size` people each into every one of `k` regions and attaches an infection status of susceptible to every individual.
+* A `Transmission Manager`, which schedules the time for the next infectious attempt. Because the force of infection is not constant, it is slightly more complicated to schedule infectious attempts that are consistent with this changing force of infection. In this particular example, we employ rejection sampling as a way to sample time-varying infectiousness.
+* An `Infection Manager`, which listens for infections and schedules recoveries. This is no different from the previous example.
+* A `Movement Manager` which enables people to move across regions based on specified rates.
+* A `Report Writer` module, which listens for infections and recoveries and writes output to csv files, containing region-stratified disease patterns.
+
+Note that this will require some kind of parameter loading utility from `ixa` which reads from a config file / command line arguments, and exposes values to modules as global properties.
+
 As in other `ixa` models, the simulation is managed by a central `Context` object which loads parameters, initializes user-defined modules, and starts a callback execution loop:
 
 ```rust
@@ -56,12 +69,12 @@ context::load_parameters<Parameters>("config.toml")
 mod people
 mod transmission
 mod infection
-mod movement
+mod regions
 
 people.init();
 transmission.init();
 infection.init();
-movement.init();
+regions.init();
 
 // Run the simulation
 context.execute();
@@ -73,16 +86,6 @@ Individuals transition through a typical SIR pattern where they start off as sus
 flowchart LR
 S(Susceptible) --FoI(t)--> I(Infected) --inf. period--> R(Recovered)
 ```
-
-The basic structure of the model is as follows:
-
-* A `Population Loader`, which places `population_size` people each into every one of `k` regions and attaches an infection status of susceptible to every individual.
-* A `Transmission Manager`, which schedules the time for the next infectious attempt. Because the force of infection is not constant, it is slightly more complicated to schedule infectious attempts that are consistent with this changing force of infection. In this particular example, we employ rejection sampling as a way to sample time-varying infectiousness.
-* An `Infection Manager`, which listens for infections and schedules recoveries. This is no different from the previous example.
-* A `Movement Manager` which enables people to move across regions based on specified rates.
-* A `Report Writer` module, which listens for infections and recoveries and writes output to csv files, containing region-stratified disease patterns.
-
-Note that this will require some kind of parameter loading utility from `ixa` which reads from a config file / command line arguments, and exposes values to modules as global properties.
 
 ### People and person properties
 When the `Population Loader` module initializes, a number of persons are created and given a unique person id (from `0` to `population_size`). This functionality is provided by an `add_person` method from `ixa`, which adds them to a `People` data container.
