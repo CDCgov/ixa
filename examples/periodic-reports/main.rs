@@ -1,10 +1,9 @@
 use ixa::context::Context;
+use ixa::define_data_plugin;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Incidence {
@@ -31,9 +30,14 @@ impl SimulationState {
     }
 }
 
+define_data_plugin!(
+    SimulationStatePlugin,
+    SimulationState,
+    SimulationState::new()
+);
+
 fn main() {
     let mut context = Context::new();
-    let sim_state = Rc::new(RefCell::new(SimulationState::new()));
 
     context
         .report_options()
@@ -41,15 +45,9 @@ fn main() {
         .directory(PathBuf::from("./"));
     context.add_report::<Incidence>("incidence");
 
-    schedule_infection_events(&mut context, 0.5, 1, MAX_DAYS, Rc::clone(&sim_state));
+    schedule_infection_events(&mut context, 0.5, 1, MAX_DAYS);
 
-    schedule_daily_reports(
-        &mut context,
-        DAILY_REPORT_INTERVAL,
-        1,
-        MAX_DAYS,
-        Rc::clone(&sim_state),
-    );
+    schedule_daily_reports(&mut context, DAILY_REPORT_INTERVAL, 1, MAX_DAYS);
 
     context.execute();
 }
@@ -59,62 +57,34 @@ fn schedule_infection_events(
     interval: f64,
     current_day: u32,
     max_days: u32,
-    sim_state: Rc<RefCell<SimulationState>>,
 ) {
     if current_day >= max_days {
         return;
     }
-
     context.add_plan(interval, move |context| {
-        sim_state.borrow_mut().infect_some_people();
+        let sim_state = context.get_data_container_mut(SimulationStatePlugin);
+        sim_state.infect_some_people();
         println!(
             "Daily report generated for day {}, Total infected so far: {}",
-            current_day,
-            sim_state.borrow().total_infected,
+            current_day, sim_state.total_infected,
         );
 
-        schedule_infection_events(
-            context,
-            interval,
-            current_day + 1,
-            max_days,
-            Rc::clone(&sim_state),
-        );
+        schedule_infection_events(context, interval, current_day + 1, max_days);
     });
 }
 
-fn schedule_daily_reports(
-    context: &mut Context,
-    interval: f64,
-    current_day: u32,
-    max_days: u32,
-    sim_state: Rc<RefCell<SimulationState>>,
-) {
+fn schedule_daily_reports(context: &mut Context, interval: f64, current_day: u32, max_days: u32) {
     if current_day >= max_days {
         return;
     }
 
     context.add_plan(interval, move |context| {
-        generate_daily_report(context, current_day, &Rc::clone(&sim_state));
-
+        let sim_state = context.get_data_container(SimulationStatePlugin).unwrap();
+        context.send_report(Incidence {
+            day: current_day,
+            infections: sim_state.total_infected,
+        });
         // Schedule next day's report
-        schedule_daily_reports(
-            context,
-            interval,
-            current_day + 1,
-            max_days,
-            Rc::clone(&sim_state),
-        );
-    });
-}
-
-fn generate_daily_report(
-    context: &mut Context,
-    day: u32,
-    sim_state: &Rc<RefCell<SimulationState>>,
-) {
-    context.send_report(Incidence {
-        day,
-        infections: sim_state.borrow().total_infected,
+        schedule_daily_reports(context, interval, current_day + 1, max_days);
     });
 }
