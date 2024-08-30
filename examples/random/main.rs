@@ -3,7 +3,6 @@ use ixa::define_rng;
 use ixa::random::ContextRandomExt;
 use rand::distributions::Uniform;
 use rand::Rng;
-use rand::{distributions::WeightedIndex, prelude::Distribution};
 
 static SEED: u64 = 123;
 static POPULATION: u64 = 10;
@@ -29,10 +28,8 @@ fn main() {
     let recovery_time = if context.sample_bool(MyRng, 0.5) {
         context.sample_distr(MyRng, Uniform::new(2.0, 10.0))
     } else {
-        let dist = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
-        let i = context.sample(MyRng, |rng| dist.sample(rng));
-        //println!("{i}");
-        //context.sample(MyRng, |rng| rng.next_f64())
+        //let dist = WeightedIndex::new(vec![1.0, 5.0]).unwrap();
+        context.sample(MyRng, |rng| rng.gen_range(10.0..20.0))
     };
 
     context.add_plan(recovery_time, {
