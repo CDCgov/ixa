@@ -84,15 +84,15 @@ Individuals transition through a typical SIR pattern where they start off as sus
 
 ```mermaid
 graph LR
-A[deviled eggs in A]--foi_A(t)-->B[[infected in A]];
-B[[infected in A]]--movement to different region-->E[[infected in B]]
-A[deviled eggs in A]--next infection attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi_A(t)))-->A[deviled eggs in A]
-B[[infected in A]]--t + exp(I_A / inf. period)-->C[[recovered]];
+deviled_eggs_in_A[deviled eggs in A]--foi_A(t)-->person_infected_A[[infected in A]];
+person_infected_A[[infected in A]]--movement to different region-->person_infected_B[[infected in B]]
+deviled_eggs_in_A[deviled eggs in A]--next infection attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi_A(t)))-->deviled_eggs_in_A[deviled eggs in A]
+person_infected_A[[infected in A]]--t + exp(I_A / inf. period)-->person_recovered_1[[recovered]];
 
-D[deviled eggs in B]--foi_B(t)-->E[[infected in B]];
-E[[infected in B]]--movement to different region-->B[[infected in A]]
-D[deviled eggs in B]--next infection attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi_B(t)))-->D[deviled eggs in B]
-E[[infected in B]]--t + exp(I_B / inf. period)-->F[[recovered]];
+deviled_eggs_in_B[deviled eggs in B]--foi_B(t)-->person_infected_B[[infected in B]];
+person_infected_B[[infected in B]]--movement to different region-->person_infected_A[[infected in A]]
+deviled_eggs_in_B[deviled eggs in B]--next infection attempt based on deviled eggs' seasonality\nat t + exp(1 / (foi_B(t)))-->deviled_eggs_in_B[deviled eggs in B]
+person_infected_B[[infected in B]]--t + exp(I_B / inf. period)-->person_recovered_2[[recovered]];
 ```
 
 ### People and person properties

@@ -30,9 +30,134 @@ From a modeling perspective, groups enable an abstraction beyond explicitly need
 The use cases motivate key properties of `groups`:
 
 - A unique group identifier, such as `Region`, `Classroom`, `CommunityPlace`. These identifiers are the _type_ of group, not the groups themselves. So, the `Region` group type may have groups `California`, `New York`, `DC`, etc.
+
+```mermaid
+flowchart LR
+
+region[["group type: region"]] --> California;
+region[["group type: region"]] --> NY[New York];
+region[["group type: region"]] --> DC[District of Columbia];
+```
+
 - A membership rule that describes the type of membership people can have in a group: a person must be in and only one group, a person can be in zero to many groups, a person must be in one group but can be in more.
-- Groups can have information attached to them, like the available resources.
+
+```mermaid
+---
+title: One-to-one at time t_1
+---
+flowchart TD
+
+NY[[New York]]-->pA((person A))
+NY[[New York]]-->pB((person B))
+NY[[New York]]-->pC((person C))
+
+CA[[California]]-->pD((person D))
+CA[[California]]-->pE((person E))
+CA[[California]]-->pF((person F))
+
+```
+
+A person can only change groups when the mapping is one-to-one:
+
+```mermaid
+---
+title: One-to-one at time t_1
+---
+flowchart TD
+
+NY[[New York]]-->pA((person A))
+NY[[New York]]-->pB((person B))
+NY[[New York]]-->pD((person D))
+
+CA[[California]]-->pC((person C))
+CA[[California]]-->pE((person E))
+CA[[California]]-->pF((person F))
+
+```
+
+```mermaid
+---
+title: One-to-many at time t_1
+---
+flowchart TD
+
+CS[[CS Class]]-->pA((person A))
+CS[[CS Class]]-->pB((person B))
+CS[[CS Class]]-->pC((person C))
+
+bio[[Biology]]-->pC((person C))
+bio[[Biology]]-->pD((person D))
+bio[[Biology]]-->pE((person E))
+bio[[Biology]]-->pF((person F))
+
+```
+
+A person can add or change groups when the mapping is one-to-many:
+
+```mermaid
+---
+title: One-to-many at time t_2
+---
+flowchart TD
+
+CS[[CS Class]]-->pA((person A))
+CS[[CS Class]]-->pB((person B))
+CS[[CS Class]]-->pC((person C))
+
+CS[[CS Class]]-->pD((person D))
+bio[[Biology]]-->pD((person D))
+bio[[Biology]]-->pE((person E))
+bio[[Biology]]-->pF((person F))
+```
+
+```mermaid
+---
+title: Zero-to-many at time t_1
+---
+flowchart TD
+
+pA((person A))
+library[[Library]]-->pB((person B))
+library[[Library]]-->pC((person C))
+supermkt[[Supermarket]]-->pC((person C))
+```
+
+A person can add, remove, or change groups when the mapping is zero-to-many:
+
+```mermaid
+---
+title: Zero-to-many at time t_2
+---
+flowchart TD
+
+pC((person C))
+library[[Library]]-->pA((person A))
+supermkt[[Supermarket]]-->pA((person A))
+supermkt[[Supermarket]]-->pB((person B))
+```
+
+Note that in all cases it is possible to have empty groups; it is just that people may have rules about being required to fit into a group.
+
 - Groups can have parent groups and fit into a broader group hierarchy that describes relationships between groups.
+
+```mermaid
+flowchart TD
+
+state[[group type: state]]-->county[[group type: county]]-->town[[group type: town]]-->P((people))
+
+NY[New York]-->westchester[Westchester County]
+NY[New York]-->kings[Kings County]
+westchester[Westchester County]-->chappaqua[Chappaqua]
+westchester[Westchester County]-->yktn[Yorktown Heights]
+kings[Kings County]-->fbsh[Flatbush]
+kings[Kings County]-->jcksn[Jackson Heights]
+jcksn[Jackson Heights]-->ppl_jcksn((people))
+fbsh[Flatbush]-->ppl_fbsh((people))
+yktn[Yorktown Heights]-->ppl_yktn((people))
+chappaqua[Chappaqua]-->ppl_chappaqua((people))
+```
+
+- Groups can have information attached to them, like the available resources. All groups within a particular group type must have the same
 
 Model authors should be able to do the following with people and groups:
 * Define a group type, its constituent groups (which must all be defined at the beginning of the simulation), and the group's membership mapping (required).
@@ -58,7 +183,7 @@ Each person has an association with a group via assignment:
 
 ```rust
 enum Regions {
-  Califonria,
+  California,
   NewYork,
   //...
 }
@@ -69,7 +194,6 @@ define_group!(
 
 person.assign_to_group(RegionId, Regions.California);
 ```
-
 
 ### Group members as queries of person properties
 
