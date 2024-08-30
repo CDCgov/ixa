@@ -28,7 +28,6 @@ fn main() {
     let recovery_time = if context.sample_bool(MyRng, 0.5) {
         context.sample_distr(MyRng, Uniform::new(2.0, 10.0))
     } else {
-        //let dist = WeightedIndex::new(vec![1.0, 5.0]).unwrap();
         context.sample(MyRng, |rng| rng.gen_range(10.0..20.0))
     };
 
