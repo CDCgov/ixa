@@ -14,7 +14,7 @@ struct Incidence {
 create_report_trait!(Incidence);
 
 static MAX_DAYS: u32 = 14;
-static DAILY_REPORT_INTERVAL: f64 = 1.0; // 1.0 = one day in simulation time
+static PLAN_TIME: f64 = 1.0; // 1.0 = one day in simulation time
 
 struct SimulationState {
     total_infected: usize,
@@ -47,7 +47,7 @@ fn main() {
 
     schedule_infection_events(&mut context, 0.5, 1, MAX_DAYS);
 
-    schedule_daily_reports(&mut context, DAILY_REPORT_INTERVAL, 1, MAX_DAYS);
+    schedule_daily_reports(&mut context, PLAN_TIME, 1, MAX_DAYS);
 
     context.execute();
 }
@@ -61,7 +61,7 @@ fn schedule_infection_events(
     if current_day >= max_days {
         return;
     }
-    context.add_plan(interval, move |context| {
+    context.add_plan(f64::from(current_day) + interval, move |context| {
         let sim_state = context.get_data_container_mut(SimulationStatePlugin);
         sim_state.infect_some_people();
         println!(
@@ -78,7 +78,7 @@ fn schedule_daily_reports(context: &mut Context, interval: f64, current_day: u32
         return;
     }
 
-    context.add_plan(interval, move |context| {
+    context.add_plan(f64::from(current_day) + interval, move |context| {
         let sim_state = context.get_data_container(SimulationStatePlugin).unwrap();
         context.send_report(Incidence {
             day: current_day,
