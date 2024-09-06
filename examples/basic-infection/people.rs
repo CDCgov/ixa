@@ -13,16 +13,17 @@ pub enum InfectionStatus {
 
 #[derive(Copy, Clone)]
 pub struct InfectionStatusEvent {
-    pub _prev_status: InfectionStatus,
+    #[allow(dead_code)]
+    pub prev_status: InfectionStatus,
     pub updated_status: InfectionStatus,
     pub person_id: usize,
 }
 
 pub trait ContextPeopleExt {
     fn create_person(&mut self);
-    fn get_person_status(&mut self, person_id: usize) -> InfectionStatus;
+    fn get_person_status(&self, person_id: usize) -> InfectionStatus;
     fn set_person_status(&mut self, person_id: usize, infection_status: InfectionStatus);
-    fn get_population(&mut self) -> usize;
+    fn get_population(&self) -> usize;
 }
 
 struct PeopleData {
@@ -46,9 +47,10 @@ impl ContextPeopleExt for Context {
             .insert(person_id, InfectionStatus::S);
     }
 
-    fn get_person_status(&mut self, person_id: usize) -> InfectionStatus {
-        let people_data_container = self.get_data_container_mut(PeoplePlugin);
+    fn get_person_status(&self, person_id: usize) -> InfectionStatus {
+        let people_data_container = self.get_data_container(PeoplePlugin);
         let person_status: InfectionStatus = *people_data_container
+            .unwrap()
             .people_map
             .get(&person_id)
             .expect("Person does not exist");
@@ -66,15 +68,15 @@ impl ContextPeopleExt for Context {
         *inf_status = infection_status;
 
         self.emit_event(InfectionStatusEvent {
-            _prev_status: previous_status,
+            prev_status: previous_status,
             person_id,
             updated_status: infection_status,
         });
     }
 
-    fn get_population(&mut self) -> usize {
-        let people_data_container = self.get_data_container_mut(PeoplePlugin);
-        let population: usize = people_data_container.people_map.len();
+    fn get_population(&self) -> usize {
+        let people_data_container = self.get_data_container(PeoplePlugin);
+        let population: usize = people_data_container.unwrap().people_map.len();
         population
     }
 }
@@ -106,10 +108,23 @@ mod test {
 
         context.subscribe_to_event::<InfectionStatusEvent>(move |_, event| {
             let test_infection_status = event.updated_status;
+            let test_prev_infection_status = event.prev_status;
             assert_eq!(test_infection_status, InfectionStatus::I);
+            assert_eq!(test_prev_infection_status, InfectionStatus::S);
         });
 
         context.set_person_status(person_id, InfectionStatus::I);
         context.execute();
+    }
+
+    #[test]
+    fn test_get_population() {
+        let mut context = Context::new();
+        let pop_size = 10;
+        for _ in 0..pop_size {
+            context.create_person();
+        }
+        let pop_size_context = context.get_population();
+        assert_eq!(pop_size_context, pop_size);
     }
 }

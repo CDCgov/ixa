@@ -8,7 +8,6 @@ use rand_distr::Exp;
 
 use crate::FOI;
 use crate::MAX_TIME;
-use crate::POPULATION;
 
 define_rng!(TransmissionRng);
 
@@ -25,7 +24,7 @@ fn attempt_infection(context: &mut Context) {
 
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(1.0 * FOI).unwrap()) / POPULATION as f64;
+        + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap()) / population_size as f64;
 
     if next_attempt_time <= MAX_TIME {
         context.add_plan(next_attempt_time, move |context| {

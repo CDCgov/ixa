@@ -17,11 +17,11 @@ static INFECTION_DURATION: f64 = 5.0;
 fn main() {
     let mut context = Context::new();
 
+    context.init_random(SEED);
+
     for _ in 0..POPULATION {
         context.create_person();
     }
-
-    context.init_random(SEED);
 
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
