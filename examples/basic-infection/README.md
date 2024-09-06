@@ -83,7 +83,7 @@ to read it, change it, or subscribe to events
 when the property is changed somewhere else in the system.
 
 ```rust
-infection_status = enum(
+InfectionStatus = enum(
     Susceptible,
     Infected,
     Recovered
