@@ -18,7 +18,7 @@ define_data_plugin!(PeoplePlugin, PeopleData, PeopleData { population: 0 });
 
 #[derive(Clone, Copy)]
 #[allow(clippy::manual_non_exhaustive)]
-pub struct PersonCreationEvent {
+pub struct PersonAdditionEvent {
     pub person_id: PersonId,
     // Prevent instantiation outside of this module
     _private: (),
@@ -61,7 +61,7 @@ impl<'a> PersonBuilder<'a> {
     pub fn execute(self) -> PersonId {
         let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
         people_data_container.population += 1;
-        self.context.emit_event(PersonCreationEvent {
+        self.context.emit_event(PersonAdditionEvent {
             person_id: self.person_id,
             _private: (),
         });
@@ -230,12 +230,17 @@ impl<'a> PersonPropertiesBuilderExt<'a> for PersonBuilder<'a> {
 #[cfg(test)]
 mod test {
 
+    use std::{cell::RefCell, rc::Rc};
+
     use crate::{
         context::Context,
         people::{PersonPropertiesContextExt, PersonProperty},
     };
 
-    use super::{ContextPeopleExt, PersonPropertiesBuilderExt};
+    use super::{
+        ContextPeopleExt, PersonAdditionEvent, PersonPropertiesBuilderExt,
+        PersonPropertyChangeEvent,
+    };
 
     define_person_property!(Age, u8, 0);
 
@@ -246,6 +251,22 @@ mod test {
     }
 
     define_person_property!(Sex, SexType, SexType::Female);
+
+    #[test]
+    fn observe_person_addition() {
+        let mut context = Context::new();
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(move |_context, event: PersonAdditionEvent| {
+            *flag_clone.borrow_mut() = true;
+            assert_eq!(event.person_id.id, 0);
+        });
+
+        let _ = context.add_person().execute();
+        context.execute();
+        assert!(*flag.borrow());
+    }
 
     #[test]
     fn add_person_default_properties() {
@@ -277,5 +298,24 @@ mod test {
 
         context.set_person_property(person_id, Sex, SexType::Female);
         assert_eq!(context.get_person_property(person_id, Sex), SexType::Female);
+    }
+
+    #[test]
+    fn observe_person_property_change() {
+        let mut context = Context::new();
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(move |_context, event: PersonPropertyChangeEvent<Age>| {
+            *flag_clone.borrow_mut() = true;
+            assert_eq!(event.person_id.id, 0);
+            assert_eq!(event.old_value, 0);
+            assert_eq!(event.new_value, 1);
+        });
+
+        let person_id = context.add_person().execute();
+        context.set_person_property(person_id, Age, 1);
+        context.execute();
+        assert!(*flag.borrow());
     }
 }
