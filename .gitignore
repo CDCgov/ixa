@@ -22,3 +22,4 @@ Cargo.lock
 
 # html
 examples/**/*.html
+examples/**/*.csv

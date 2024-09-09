@@ -124,7 +124,7 @@ fn attempt_infection(context) {
     }
 
     foi = parameters.get_parameter(foi);
-    time_next_infection = transmission_rng.draw_exponential(1/foi);
+    time_next_infection = transmission_rng.draw_exponential(foi) / population;
     context.add_plan(attempt_infection(context), time = context.get_time() + time_next_infection);
 }
 
