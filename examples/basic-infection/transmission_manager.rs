@@ -21,7 +21,7 @@ fn attempt_infection(context: &mut Context) {
         context.set_person_status(person_to_infect, InfectionStatus::I);
         //context.schedule_recovery(person_to_infect);
     }
-
+    //Here, we use a per-person force of infection (FOI) derived from the population-level force of infection to represent a constant risk of disease for individuals in the population.
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
         + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap()) / population_size as f64;
