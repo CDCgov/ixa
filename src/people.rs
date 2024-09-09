@@ -25,47 +25,48 @@ pub struct PersonAdditionEvent {
 }
 
 pub trait ContextPeopleExt {
-    fn add_person(&mut self) -> PersonBuilder;
+    fn add_person(&mut self, data: PersonData) -> PersonId;
 }
 
 impl ContextPeopleExt for Context {
-    fn add_person(&mut self) -> PersonBuilder {
-        PersonBuilder::new(self)
-    }
-}
-
-pub struct PersonBuilder<'a> {
-    context: &'a mut Context,
-    person_id: PersonId,
-}
-
-impl<'a> PersonBuilder<'a> {
-    pub fn new(context: &'a mut Context) -> PersonBuilder<'a> {
-        let people_data_container = context.get_data_container_mut(PeoplePlugin);
+    fn add_person(&mut self, data: PersonData) -> PersonId {
+        let people_data_container = self.get_data_container_mut(PeoplePlugin);
         let person_id = PersonId {
             id: people_data_container.population,
         };
-        PersonBuilder { context, person_id }
-    }
-
-    pub fn get_context(&mut self) -> &mut Context {
-        self.context
-    }
-
-    #[must_use]
-    pub fn get_person_id(&self) -> PersonId {
-        self.person_id
-    }
-
-    #[must_use]
-    pub fn execute(self) -> PersonId {
-        let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
         people_data_container.population += 1;
-        self.context.emit_event(PersonAdditionEvent {
-            person_id: self.person_id,
+        for callback in data.callbacks {
+            callback(self, person_id);
+        }
+        self.emit_event(PersonAdditionEvent {
+            person_id,
             _private: (),
         });
-        self.person_id
+        person_id
+    }
+}
+
+pub type PersonAdditionCallback = dyn FnOnce(&mut Context, PersonId);
+pub struct PersonData {
+    callbacks: Vec<Box<PersonAdditionCallback>>,
+}
+
+impl PersonData {
+    #[must_use]
+    pub fn new() -> PersonData {
+        PersonData {
+            callbacks: Vec::default(),
+        }
+    }
+
+    pub fn add_callback(&mut self, callback: impl FnOnce(&mut Context, PersonId) + 'static) {
+        self.callbacks.push(Box::new(callback));
+    }
+}
+
+impl Default for PersonData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -204,26 +205,16 @@ impl PersonPropertiesContextExt for Context {
     }
 }
 
-pub trait PersonPropertiesBuilderExt<'a> {
-    fn set_person_property<T: PersonProperty + 'static>(
-        self,
-        _property: T,
-        value: T::Value,
-    ) -> PersonBuilder<'a>;
+pub trait PersonPropertiesDataExt {
+    fn set_person_property<T: PersonProperty + 'static>(&mut self, _property: T, value: T::Value);
 }
 
-impl<'a> PersonPropertiesBuilderExt<'a> for PersonBuilder<'a> {
-    fn set_person_property<T: PersonProperty + 'static>(
-        mut self,
-        property: T,
-        value: T::Value,
-    ) -> PersonBuilder<'a> {
-        let person_id = self.get_person_id();
-        let data_container = self
-            .get_context()
-            .get_data_container_mut(PersonPropertiesPlugin);
-        data_container.set_person_property(person_id, property, value);
-        self
+impl PersonPropertiesDataExt for PersonData {
+    fn set_person_property<T: PersonProperty + 'static>(&mut self, property: T, value: T::Value) {
+        self.add_callback(move |context, person_id| {
+            let data_container = context.get_data_container_mut(PersonPropertiesPlugin);
+            data_container.set_person_property(person_id, property, value);
+        });
     }
 }
 
@@ -234,13 +225,10 @@ mod test {
 
     use crate::{
         context::Context,
-        people::{PersonPropertiesContextExt, PersonProperty},
+        people::{PersonData, PersonPropertiesContextExt, PersonPropertiesDataExt, PersonProperty},
     };
 
-    use super::{
-        ContextPeopleExt, PersonAdditionEvent, PersonPropertiesBuilderExt,
-        PersonPropertyChangeEvent,
-    };
+    use super::{ContextPeopleExt, PersonAdditionEvent, PersonPropertyChangeEvent};
 
     define_person_property!(Age, u8, 0);
 
@@ -263,7 +251,7 @@ mod test {
             assert_eq!(event.person_id.id, 0);
         });
 
-        let _ = context.add_person().execute();
+        let _ = context.add_person(PersonData::new());
         context.execute();
         assert!(*flag.borrow());
     }
@@ -271,7 +259,7 @@ mod test {
     #[test]
     fn add_person_default_properties() {
         let mut context = Context::new();
-        let person_id = context.add_person().execute();
+        let person_id = context.add_person(PersonData::new());
         assert_eq!(
             context.get_person_property(person_id, Age),
             Age::get_default()
@@ -285,11 +273,10 @@ mod test {
     #[test]
     fn add_person_set_properties() {
         let mut context = Context::new();
-        let person_id = context
-            .add_person()
-            .set_person_property(Age, 10)
-            .set_person_property(Sex, SexType::Male)
-            .execute();
+        let mut person_data = PersonData::new();
+        person_data.set_person_property(Age, 10);
+        person_data.set_person_property(Sex, SexType::Male);
+        let person_id = context.add_person(person_data);
         assert_eq!(context.get_person_property(person_id, Age), 10);
         assert_eq!(context.get_person_property(person_id, Sex), SexType::Male);
 
@@ -313,7 +300,7 @@ mod test {
             assert_eq!(event.new_value, 1);
         });
 
-        let person_id = context.add_person().execute();
+        let person_id = context.add_person(PersonData::new());
         context.set_person_property(person_id, Age, 1);
         context.execute();
         assert!(*flag.borrow());
