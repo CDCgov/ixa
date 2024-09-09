@@ -9,9 +9,9 @@ characteristics, and infections are caused by something like a food-borne diseas
 ![Diagram of infection](infection-diagram.png)
 ![alt text](image.png)
 
-The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on the constant force of infection. The simulation ends after no more infection events are scheduled.
+The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on a constant force of infection. The simulation ends after no more infection events are scheduled.
 
-Infected individuals schedule their recovery at time `t + infected period`. The infection status of recovered individuals remains as recovered for the rest of the simulation.
+Infected individuals schedule their recovery at time `t + infection_period`. The infection status of recovered individuals remains as recovered for the rest of the simulation.
 
 The global model parameters are as follows:
 * `population_size`: number of individuals to include in the simulation
@@ -44,36 +44,36 @@ context::add_module(person_property_report);
 context::execute();
 ```
 
-Individuals transition through a typical SIR pattern they where
+Individuals transition through a typical SIR pattern where they
 start off as susceptible (S), are randomly selected to become infected
 (I), and eventually recover (R).
 
 ```mermaid
 flowchart LR
-S(Susceptible) --FoI--> I(Infected) --inf. period--> R(Recovered)
+S(Susceptible) --foi--> I(Infected) --infection_period--> R(Recovered)
 ```
 
 The transition is unidirectional; once recovered, individuals cannot become
-suceptible again. The simulation ends when no more infection attempts or
+susceptible again. The simulation ends when no more infection attempts or
 recoveries are scheduled.
 
 The basic structure of the model is as follows:
 
-* A `Population Loader`, which initializes a population and attaches an infection
+* A `Population Loader` that initializes a population and attaches an infection
   status property to each individual
-* A `Transmission Manager`, which attempts infections, updates the infections status when successful, and schedules the next attempt
-* An `Infection Manager`, which listens for infections and schedules recoveries.
-* A `Report Writer` module, which listens for infections and recoveries and writes output to csv
+* A `Transmission Manager` that attempts infections, updates the infections status when successful, and schedules the next attempt
+* An `Infection Manager` that listens for infections and schedules recoveries
+* A `Report Writer` module that listens for infections and recoveries and writes output to csv
  files.
 
- Note that this will require some kind of parameter loading utility
-from `ixa` which reads from a config file / command line arguments,
+ Note this will require some kind of parameter loading utility
+from `ixa` that reads from a config file or command line arguments,
 and exposes values to modules as global properties.
 
 ### People and person properties
 When the `Population Loader` module initializes, a number of
 persons are created and given a unique person id (from `0` to `population_size`).
-This functionality is provided by an `add_person` method from `ixa`, which adds
+This functionality is provided by an `create_person` method from `ixa`, which adds
 them to a `People` data container.
 
 In order to record the infection status of a person, we use another `ixa` utility
@@ -82,8 +82,8 @@ the `People` data container with an enum value and and provides an API for modul
 to read it, change it, or subscribe to events
 when the property is changed somewhere else in the system.
 
-```
-infection_status = enum(
+```rust
+InfectionStatus = enum(
     Susceptible,
     Infected,
     Recovered
@@ -99,21 +99,21 @@ context.define_person_property(
 );
 ```
 
-When initialized, each person is assigned an default state (`Susceptible`).
+When initialized, each person is assigned a default state (`Susceptible`).
 
 Once the population has been created, all modules have been initialized, and event listeners have been registered (more on this below), the simulation is ready
 to begin the execution loop.
 
 ### Scheduling infections and recoveries
-In this model, the `Transmission Manager` module begins the simulation by adding a
+In this model, the `Transmission Manager` module begins the simulation by adding an
 infection attempt `plan`, which is just a callback scheduled to execute at
 `current_time = 0`. The callback randomly selects a person and transitions
 them to infected if they are susceptible; if they are not susceptible,
 it will skip over them. Finally, a new infection attempt is scheduled for
  a time drawn from an exponential distribution with mean value of
- `1/infection_rate`.
+ `1/foi`.
 
-```
+```rust
 fn attempt_infection(context) {
     transmission_rng = rng.get_rng(id = transmission);
     population = context.get_population();
@@ -148,16 +148,16 @@ event through the system, which might be structured something like the following
 ![Event diagram](events.png)
 
 For any person property that is registered, `ixa` stores a list of callbacks
-registered by other modules. When a mutation is made to that person property,
+registered by other modules. When that person property is mutated,
 the event manager releases an event with relevant related data
-(the id of the person, the old and/or new property) to all matching registered
+(the id of the person, the old and/or new property) to all matching
 callbacks.
 
 In this model, when the `disease_status` is updated to `Infected`, a handler
 registered by the `Infection Manager` will be triggered, which is responsible
 for scheduling recovery plans:
 
-```
+```rust
 fn handler(context, person_id, previous_infection_status) {
     if (context.get_infection_status(person_id) == Infected) {
         infection_rng = context.get_rng(id = infection);
@@ -175,8 +175,7 @@ init(context) {
 ```
 
 Recovery of an infected individuals are scheduled for a time `t + infection_period`
-where `infection_period` comes from an exponential distribution. This is provided
-by an `rng` instance independent from the one in the `Transmission Manager`.
+where `infection_period` comes from an exponential distribution. A `rng` instance provides one independent from the one in the `Transmission Manager`.
 
 ### Reports
 
@@ -214,7 +213,7 @@ fn init(context) {
 }
 ```
 
-The method `handle_infection_status_change` writes a new line to the report file, recording the status and the current time:
+The method `handle_infection_status_change` writes a new line to the report file, the status, and the current time:
 
 ```rust
 fn handle_infection_status_change(context, person_id, prev, current) {
@@ -281,7 +280,7 @@ fn init(context){
     context::on_period_end(0, report_periodic_item);
 }
 ```
-Methods are implemented for person property counter to increment and decrement
+Methods are implemented for the person property counter to increment and decrement
 the counters. Changes in the person properties are
 observed and the callback function `update_property_counter` updates the
 counts for each property:
