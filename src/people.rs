@@ -3,6 +3,8 @@ use std::{
     collections::HashMap,
 };
 
+use crate::{context::Context, define_data_plugin};
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct PersonId {
     id: usize,
@@ -13,6 +15,14 @@ struct PeopleData {
 }
 
 define_data_plugin!(PeoplePlugin, PeopleData, PeopleData { population: 0 });
+
+#[derive(Clone, Copy)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PersonCreationEvent {
+    pub person_id: PersonId,
+    // Prevent instantiation outside of this module
+    _private: (),
+}
 
 pub trait ContextPeopleExt {
     fn add_person(&mut self) -> PersonBuilder;
@@ -51,11 +61,15 @@ impl<'a> PersonBuilder<'a> {
     pub fn execute(self) -> PersonId {
         let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
         people_data_container.population += 1;
+        self.context.emit_event(PersonCreationEvent {
+            person_id: self.person_id,
+            _private: (),
+        });
         self.person_id
     }
 }
 
-pub trait PersonProperty {
+pub trait PersonProperty: Copy {
     type Value: Copy;
     fn get_default() -> Self::Value;
 }
@@ -63,6 +77,7 @@ pub trait PersonProperty {
 #[macro_export]
 macro_rules! define_person_property {
     ($person_property:ident, $value:ty, $default: expr) => {
+        #[derive(Copy, Clone)]
         pub struct $person_property;
 
         impl $crate::people::PersonProperty for $person_property {
@@ -76,30 +91,15 @@ macro_rules! define_person_property {
 }
 pub use define_person_property;
 
-use crate::{context::Context, define_data_plugin};
-
-// Wish this was still possible:
-// #[macro_export]
-// macro_rules! define_person_property_from_enum {
-//     ($person_property:ty, $default: expr) => {
-//         impl $crate::people::PersonProperty for $person_property {
-//             type Value = $person_property;
-
-//             fn get_default() -> Self::Value {
-//                 $default
-//             }
-//         }
-
-//         impl Copy for $person_property {}
-
-//         impl Clone for $person_property {
-//             fn clone(&self) -> Self {
-//                 *self
-//             }
-//         }
-//     };
-// }
-// pub use define_person_property_from_enum;
+#[derive(Copy, Clone)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PersonPropertyChangeEvent<T: PersonProperty> {
+    pub person_id: PersonId,
+    pub new_value: T::Value,
+    pub old_value: T::Value,
+    // Prevent instantiation outside of this module
+    _private: (),
+}
 
 struct PersonPropertiesDataContainer {
     values_map: HashMap<TypeId, Box<dyn Any>>,
@@ -109,8 +109,8 @@ impl PersonPropertiesDataContainer {
     #[allow(clippy::needless_pass_by_value)]
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
-        _property: T,
         person_id: PersonId,
+        _property: T,
     ) -> T::Value {
         match self.values_map.get(&TypeId::of::<T>()) {
             Some(boxed_vec) => {
@@ -177,7 +177,7 @@ impl PersonPropertiesContextExt for Context {
     ) -> T::Value {
         match self.get_data_container(PersonPropertiesPlugin) {
             None => T::get_default(),
-            Some(data_container) => data_container.get_person_property(property, person_id),
+            Some(data_container) => data_container.get_person_property(person_id, property),
         }
     }
 
@@ -189,9 +189,18 @@ impl PersonPropertiesContextExt for Context {
     ) {
         let data_container = self.get_data_container_mut(PersonPropertiesPlugin);
 
-        // TODO: emit events upon property changes
+        // Build event signaling person property has changed
+        let current_value = data_container.get_person_property(person_id, property);
+        let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
+            person_id,
+            new_value: value,
+            old_value: current_value,
+            _private: (),
+        };
 
         data_container.set_person_property(person_id, property, value);
+
+        self.emit_event(change_event);
     }
 }
 
@@ -231,13 +240,12 @@ mod test {
     define_person_property!(Age, u8, 0);
 
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-    pub enum Sex {
+    pub enum SexType {
         Male,
         Female,
     }
-    // Wish we could use this kind of macro
-    // define_person_property_from_enum!(Sex, Sex::Female);
-    define_person_property!(PersonSex, Sex, Sex::Female);
+
+    define_person_property!(Sex, SexType, SexType::Female);
 
     #[test]
     fn add_person_default_properties() {
@@ -248,10 +256,8 @@ mod test {
             Age::get_default()
         );
         assert_eq!(
-            // Wish this worked:
-            // context.get_person_property(Gender, person_id),
-            context.get_person_property(person_id, PersonSex),
-            PersonSex::get_default()
+            context.get_person_property(person_id, Sex),
+            Sex::get_default()
         );
     }
 
@@ -261,18 +267,15 @@ mod test {
         let person_id = context
             .add_person()
             .set_person_property(Age, 10)
-            .set_person_property(PersonSex, Sex::Male)
+            .set_person_property(Sex, SexType::Male)
             .execute();
         assert_eq!(context.get_person_property(person_id, Age), 10);
-        assert_eq!(context.get_person_property(person_id, PersonSex), Sex::Male);
+        assert_eq!(context.get_person_property(person_id, Sex), SexType::Male);
 
         context.set_person_property(person_id, Age, 11);
         assert_eq!(context.get_person_property(person_id, Age), 11);
 
-        context.set_person_property(person_id, PersonSex, Sex::Female);
-        assert_eq!(
-            context.get_person_property(person_id, PersonSex),
-            Sex::Female
-        );
+        context.set_person_property(person_id, Sex, SexType::Female);
+        assert_eq!(context.get_person_property(person_id, Sex), SexType::Female);
     }
 }
