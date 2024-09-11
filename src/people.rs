@@ -1,74 +1,31 @@
+use crate::{context::Context, define_data_plugin};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
 };
 
-use crate::{context::Context, define_data_plugin};
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub struct PersonId {
-    id: usize,
-}
-
+// PeopleData represents each unique person in the simulation with an id ranging
+// from 0 to population - 1. Other data are associated with a person via their
+// their id.
 struct PeopleData {
     population: usize,
 }
 
 define_data_plugin!(PeoplePlugin, PeopleData, PeopleData { population: 0 });
 
-#[derive(Clone, Copy)]
-#[allow(clippy::manual_non_exhaustive)]
-pub struct PersonAdditionEvent {
-    pub person_id: PersonId,
-    // Prevent instantiation outside of this module
-    _private: (),
+// Represents a unique person - the id refers to that person's index in the range
+// 0 to population - 1 in the PeopleData container.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct PersonId {
+    pub id: usize,
 }
 
-pub trait ContextPeopleExt {
-    fn add_person(&mut self) -> PersonBuilder;
-}
-
-impl ContextPeopleExt for Context {
-    fn add_person(&mut self) -> PersonBuilder {
-        PersonBuilder::new(self)
-    }
-}
-
-pub struct PersonBuilder<'a> {
-    context: &'a mut Context,
-    person_id: PersonId,
-}
-
-impl<'a> PersonBuilder<'a> {
-    pub fn new(context: &'a mut Context) -> PersonBuilder<'a> {
-        let people_data_container = context.get_data_container_mut(PeoplePlugin);
-        let person_id = PersonId {
-            id: people_data_container.population,
-        };
-        PersonBuilder { context, person_id }
-    }
-
-    pub fn get_context(&mut self) -> &mut Context {
-        self.context
-    }
-
-    #[must_use]
-    pub fn get_person_id(&self) -> PersonId {
-        self.person_id
-    }
-
-    #[must_use]
-    pub fn execute(self) -> PersonId {
-        let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
-        people_data_container.population += 1;
-        self.context.emit_event(PersonAdditionEvent {
-            person_id: self.person_id,
-            _private: (),
-        });
-        self.person_id
-    }
-}
-
+// Individual characteristics or states related to a person, such as age or
+// disease status, are represented as "person properties". These properties
+// * are represented by a struct type that implements the PersonProperty trait,
+// * specify a Value type to represent the data associated with the property,
+// * specify a default value
+// They should be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
     fn get_default() -> Self::Value;
@@ -91,21 +48,14 @@ macro_rules! define_person_property {
 }
 pub use define_person_property;
 
-#[derive(Copy, Clone)]
-#[allow(clippy::manual_non_exhaustive)]
-pub struct PersonPropertyChangeEvent<T: PersonProperty> {
-    pub person_id: PersonId,
-    pub new_value: T::Value,
-    pub old_value: T::Value,
-    // Prevent instantiation outside of this module
-    _private: (),
-}
-
+/// Person property values are stored in a `HashMap` by `TypeId` of the property,
+/// with each value stored in a Vec indexed by the person's id.
 struct PersonPropertiesDataContainer {
     values_map: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl PersonPropertiesDataContainer {
+    /// Given a `PersonId`, returns the value of a person property of type `T`
     #[allow(clippy::needless_pass_by_value)]
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
@@ -126,6 +76,7 @@ impl PersonPropertiesDataContainer {
         }
     }
 
+    /// Given a `PersonId`, sets the value of a person property of type `T`
     #[allow(clippy::needless_pass_by_value)]
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
@@ -154,13 +105,94 @@ define_data_plugin!(
     }
 );
 
-pub trait PersonPropertiesContextExt {
+// Emitted when a new person is created
+// These should not be emitted outside this module
+#[derive(Clone, Copy)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PersonCreatedEvent {
+    pub person_id: PersonId,
+}
+
+// Emitted when a person property is updated
+// These should not be emitted outside this module
+#[derive(Copy, Clone)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PersonPropertyChangeEvent<T: PersonProperty> {
+    pub person_id: PersonId,
+    pub current: T::Value,
+    pub previous: T::Value,
+}
+
+pub struct PersonBuilder<'a> {
+    /// Reference to the simulation context
+    context: &'a mut Context,
+    /// Id of the person being built
+    person_id: PersonId,
+}
+
+impl<'a> PersonBuilder<'a> {
+    pub fn new(context: &'a mut Context) -> PersonBuilder<'a> {
+        let people_data_container = context.get_data_container_mut(PeoplePlugin);
+        let person_id = PersonId {
+            id: people_data_container.population,
+        };
+        PersonBuilder { context, person_id }
+    }
+
+    /// Returns a reference to `Context` which might be needed to build the person
+    pub fn get_context(&mut self) -> &mut Context {
+        self.context
+    }
+
+    /// Returns the identifier struct for the person
+    #[must_use]
+    pub fn get_person_id(&self) -> PersonId {
+        self.person_id
+    }
+
+    /// Sets the value a person property of type `T`
+    ///
+    /// Returns `self` to allow for chaining
+    #[must_use]
+    pub fn set_person_property<T: PersonProperty + 'static>(
+        mut self,
+        property: T,
+        value: T::Value,
+    ) -> PersonBuilder<'a> {
+        let person_id = self.get_person_id();
+        let data_container = self
+            .get_context()
+            .get_data_container_mut(PersonPropertiesPlugin);
+        data_container.set_person_property(person_id, property, value);
+        self
+    }
+
+    /// Inserts the finalized person into the data container after person properties
+    /// have been set.
+    #[must_use]
+    pub fn insert(self) -> PersonId {
+        let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
+        people_data_container.population += 1;
+        self.context.emit_event(PersonCreatedEvent {
+            person_id: self.person_id,
+        });
+        self.person_id
+    }
+}
+
+pub trait ContextPeopleExt {
+    /// Creates a person by instantiating a `PersonBuilder`, which can be used to
+    /// set properties before inserting it into the data container.
+    fn create_person(&mut self) -> PersonBuilder;
+
+    /// Given a Persionid, returns the value of a defined person property
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
         person_id: PersonId,
         _property: T,
     ) -> T::Value;
 
+    // Given a `PersonId`, sets the value of a defined person property
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -169,7 +201,11 @@ pub trait PersonPropertiesContextExt {
     );
 }
 
-impl PersonPropertiesContextExt for Context {
+impl ContextPeopleExt for Context {
+    fn create_person(&mut self) -> PersonBuilder {
+        PersonBuilder::new(self)
+    }
+
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
         person_id: PersonId,
@@ -189,13 +225,11 @@ impl PersonPropertiesContextExt for Context {
     ) {
         let data_container = self.get_data_container_mut(PersonPropertiesPlugin);
 
-        // Build event signaling person property has changed
         let current_value = data_container.get_person_property(person_id, property);
         let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
             person_id,
-            new_value: value,
-            old_value: current_value,
-            _private: (),
+            current: value,
+            previous: current_value,
         };
 
         data_container.set_person_property(person_id, property, value);
@@ -204,43 +238,14 @@ impl PersonPropertiesContextExt for Context {
     }
 }
 
-pub trait PersonPropertiesBuilderExt<'a> {
-    fn set_person_property<T: PersonProperty + 'static>(
-        self,
-        _property: T,
-        value: T::Value,
-    ) -> PersonBuilder<'a>;
-}
-
-impl<'a> PersonPropertiesBuilderExt<'a> for PersonBuilder<'a> {
-    fn set_person_property<T: PersonProperty + 'static>(
-        mut self,
-        property: T,
-        value: T::Value,
-    ) -> PersonBuilder<'a> {
-        let person_id = self.get_person_id();
-        let data_container = self
-            .get_context()
-            .get_data_container_mut(PersonPropertiesPlugin);
-        data_container.set_person_property(person_id, property, value);
-        self
-    }
-}
-
 #[cfg(test)]
 mod test {
 
     use std::{cell::RefCell, rc::Rc};
 
-    use crate::{
-        context::Context,
-        people::{PersonPropertiesContextExt, PersonProperty},
-    };
+    use crate::context::Context;
 
-    use super::{
-        ContextPeopleExt, PersonAdditionEvent, PersonPropertiesBuilderExt,
-        PersonPropertyChangeEvent,
-    };
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent};
 
     define_person_property!(Age, u8, 0);
 
@@ -258,12 +263,12 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(move |_context, event: PersonAdditionEvent| {
+        context.subscribe_to_event(move |_context, event: PersonCreatedEvent| {
             *flag_clone.borrow_mut() = true;
             assert_eq!(event.person_id.id, 0);
         });
 
-        let _ = context.add_person().execute();
+        let _ = context.create_person().insert();
         context.execute();
         assert!(*flag.borrow());
     }
@@ -271,7 +276,7 @@ mod test {
     #[test]
     fn add_person_default_properties() {
         let mut context = Context::new();
-        let person_id = context.add_person().execute();
+        let person_id = context.create_person().insert();
         assert_eq!(
             context.get_person_property(person_id, Age),
             Age::get_default()
@@ -286,10 +291,10 @@ mod test {
     fn add_person_set_properties() {
         let mut context = Context::new();
         let person_id = context
-            .add_person()
+            .create_person()
             .set_person_property(Age, 10)
             .set_person_property(Sex, SexType::Male)
-            .execute();
+            .insert();
         assert_eq!(context.get_person_property(person_id, Age), 10);
         assert_eq!(context.get_person_property(person_id, Sex), SexType::Male);
 
@@ -309,11 +314,11 @@ mod test {
         context.subscribe_to_event(move |_context, event: PersonPropertyChangeEvent<Age>| {
             *flag_clone.borrow_mut() = true;
             assert_eq!(event.person_id.id, 0);
-            assert_eq!(event.old_value, 0);
-            assert_eq!(event.new_value, 1);
+            assert_eq!(event.previous, 0);
+            assert_eq!(event.current, 1);
         });
 
-        let person_id = context.add_person().execute();
+        let person_id = context.create_person().insert();
         context.set_person_property(person_id, Age, 1);
         context.execute();
         assert!(*flag.borrow());
