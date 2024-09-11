@@ -123,7 +123,10 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
+pub type PersonBuilderCallback = dyn FnOnce(&mut Context, PersonId);
 pub struct PersonBuilder<'a> {
+    /// Internal
+    callbacks: Vec<Box<PersonBuilderCallback>>,
     /// Reference to the simulation context
     context: &'a mut Context,
     /// Id of the person being built
@@ -136,7 +139,11 @@ impl<'a> PersonBuilder<'a> {
         let person_id = PersonId {
             id: people_data_container.population,
         };
-        PersonBuilder { context, person_id }
+        PersonBuilder {
+            context,
+            person_id,
+            callbacks: Vec::new(),
+        }
     }
 
     /// Returns a reference to `Context` which might be needed to build the person
@@ -150,6 +157,10 @@ impl<'a> PersonBuilder<'a> {
         self.person_id
     }
 
+    fn add_callback(&mut self, callback: impl FnOnce(&mut Context, PersonId) + 'static) {
+        self.callbacks.push(Box::new(callback));
+    }
+
     /// Sets the value a person property of type `T`
     ///
     /// Returns `self` to allow for chaining
@@ -159,11 +170,9 @@ impl<'a> PersonBuilder<'a> {
         property: T,
         value: T::Value,
     ) -> PersonBuilder<'a> {
-        let person_id = self.get_person_id();
-        let data_container = self
-            .get_context()
-            .get_data_container_mut(PersonPropertiesPlugin);
-        data_container.set_person_property(person_id, property, value);
+        self.add_callback(move |context, person_id| {
+            context.set_person_property(person_id, property, value);
+        });
         self
     }
 
@@ -173,6 +182,10 @@ impl<'a> PersonBuilder<'a> {
     pub fn insert(self) -> PersonId {
         let people_data_container = self.context.get_data_container_mut(PeoplePlugin);
         people_data_container.population += 1;
+        let person_id = self.get_person_id();
+        for callback in self.callbacks {
+            callback(self.context, person_id);
+        }
         self.context.emit_event(PersonCreatedEvent {
             person_id: self.person_id,
         });
