@@ -15,8 +15,8 @@ struct PeopleRecord {
     risk_category: RiskCategory,
 }
 
-define_person_property!(Age, u8, 0);
-define_person_property!(RiskCategoryType, RiskCategory, RiskCategory::Low);
+define_person_property!(Age, u8);
+define_person_property!(RiskCategoryType, RiskCategory);
 
 pub fn init(context: &mut Context) {
     // Load csv and deserialize records
@@ -24,10 +24,15 @@ pub fn init(context: &mut Context) {
 
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
-        let _person = context
-            .create_person()
-            .set_person_property(Age, record.age)
-            .set_person_property(RiskCategoryType, record.risk_category)
-            .insert();
+
+        context.before_person_added(move |context, person_id| {
+            context.set_person_property(person_id, Age, record.age);
+            context.set_person_property(person_id, RiskCategoryType, record.risk_category);
+        });
+
+        let _person = context.add_person();
+        // Setting person properties at this point actually happens *after*
+        // any initialization callbacks, but before regular event callbacks.
+        // Kind of weird I guess
     }
 }
