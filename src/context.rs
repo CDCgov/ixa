@@ -47,6 +47,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
+    immediate_event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
     current_time: f64,
     shutdown_requested: bool,
@@ -60,6 +61,7 @@ impl Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
+            immediate_event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
             current_time: 0.0,
             shutdown_requested: false,
@@ -83,24 +85,54 @@ impl Context {
         handler_vec.push(Rc::new(handler));
     }
 
+    /// Register to handle emission of events of type E immediately
+    ///
+    /// Handlers will be called immediately after emission in order of submission
+    #[allow(clippy::missing_panics_doc)]
+    pub fn subscribe_immediately_to_event<E: Copy + 'static>(
+        &mut self,
+        callback: impl Fn(&mut Context, E) + 'static,
+    ) {
+        let handler_vec = self
+            .immediate_event_handlers
+            .entry(TypeId::of::<E>())
+            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
+        let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
+        handler_vec.push(Rc::new(callback));
+    }
+
+    fn collect_callbacks<E: Copy + 'static>(
+        event_handlers: &HashMap<TypeId, Box<dyn Any>>,
+        event: E,
+    ) -> Vec<Box<Callback>> {
+        let mut callbacks_to_return = Vec::<Box<Callback>>::new();
+        let callback_vec = event_handlers.get(&TypeId::of::<E>());
+        if let Some(callback_vec) = callback_vec {
+            let callback_vec: &Vec<Rc<EventHandler<E>>> = callback_vec.downcast_ref().unwrap();
+            if !callback_vec.is_empty() {
+                for callback in callback_vec {
+                    let internal_callback = Rc::clone(callback);
+                    callbacks_to_return
+                        .push(Box::new(move |context| internal_callback(context, event)));
+                }
+            }
+        }
+        callbacks_to_return
+    }
+
     /// Emit and event of type E to be handled by registered receivers
     ///
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
     pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
-        // Destructure to obtain event handlers and plan queue
-        let Context {
-            event_handlers,
-            callback_queue,
-            ..
-        } = self;
-        if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
-            let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
-            for handler in handler_vec {
-                let handler_clone = Rc::clone(handler);
-                callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
-            }
+        // Queue standard handlers
+        for callback in Self::collect_callbacks(&self.event_handlers, event) {
+            self.queue_callback(callback);
+        }
+        // Process immediate handlers
+        for callback in Self::collect_callbacks(&self.immediate_event_handlers, event) {
+            callback(self);
         }
     }
 
