@@ -16,7 +16,7 @@ fn attempt_infection(context: &mut Context) {
     let person_to_infect: usize = context.sample_range(TransmissionRng, 0..population_size);
 
     let person_status: InfectionStatus = context.get_person_status(person_to_infect);
-    let parameters = context.get_global_property_value(Parameters);
+    let parameters = context.get_global_property_value(Parameters).clone();
     
     if matches!(person_status, InfectionStatus::S) {
         context.set_person_status(person_to_infect, InfectionStatus::I);
