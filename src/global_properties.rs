@@ -15,8 +15,8 @@ macro_rules! define_global_property {
     };
 }
 
-pub trait GlobalProperty: Copy {
-    type Value: Copy;
+pub trait GlobalProperty: Any {
+    type Value: Any;
 }
 
 pub use define_global_property;
@@ -35,7 +35,7 @@ define_data_plugin!(
 
 pub trait ContextGlobalPropertiesExt {
     fn set_global_property_value<T: GlobalProperty + 'static>(&mut self, property: T, value: T::Value);
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, property: T) -> T::Value;
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self, property: T) -> &T::Value;
 }
 
 impl GlobalPropertiesDataContainer {
@@ -46,13 +46,12 @@ impl GlobalPropertiesDataContainer {
             .or_insert_with(|| Box::new(value));
     }
 
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> T::Value {
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value {
         let data_container = self
             .global_property_container
             .get(&TypeId::of::<T>())
             .expect("Global property not initialized");
-
-        *data_container.downcast_ref::<T::Value>().unwrap()
+        data_container.downcast_ref::<T::Value>().unwrap()
     }
 }
 
@@ -65,7 +64,7 @@ impl ContextGlobalPropertiesExt for Context {
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         property: T,
-    ) -> T::Value {
+    ) -> &T::Value {
         let data_container = self.get_data_container(GlobalPropertiesPlugin).unwrap();
         data_container.get_global_property_value(property)
     }

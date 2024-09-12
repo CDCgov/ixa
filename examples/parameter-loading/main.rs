@@ -4,7 +4,6 @@ use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 use serde::{Deserialize, Serialize};
 
 use ixa::random::ContextRandomExt;
-
 mod incidence_report;
 mod infection_manager;
 mod people;
@@ -13,13 +12,15 @@ mod transmission_manager;
 use crate::people::ContextPeopleExt;
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
     population: usize,
     max_time: f64,
     seed: u64,
     foi: f64,
     infection_duration:f64,
+    output_dir: String,
+    output_file: String,
 }
 
 define_rng!(TestRng);
@@ -33,11 +34,13 @@ fn main() {
         seed: 123,
         foi: 0.1,
         infection_duration: 5.0,
+        output_dir: "examples/parameter-loading".to_string(),
+        output_file: "incidence".to_string(),
     };
     context.set_global_property_value(Parameters, parameters_values);
 
     
-    let parameters = context.get_global_property_value(Parameters);
+    let parameters = context.get_global_property_value(Parameters).clone();
     context.init_random(parameters.seed);
     
     for _ in 0..parameters.population {
