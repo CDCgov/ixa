@@ -35,6 +35,7 @@ define_data_plugin!(
 
 pub trait ContextGlobalPropertiesExt {
     fn set_global_property_value<T: GlobalProperty>(&mut self, property: T, value: T::Value);
+    fn get_global_property_value<T: GlobalProperty>(&self, property: T) -> T::Value;
 }
 
 impl GlobalPropertiesDataContainer {
@@ -45,11 +46,30 @@ impl GlobalPropertiesDataContainer {
             .or_insert_with(|| Box::new(value));
         println!("value setup");
     }
+
+    fn get_global_property_value<T: GlobalProperty>(&self, _property: T) -> T::Value {
+        match self.global_property_container.get(&TypeId::of::<T>()) {
+            Some(boxed_map) => {
+                return *boxed_map.downcast::<T::Value>().unwrap();
+            }
+            None => None,
+        }
+    }
 }
 
 impl ContextGlobalPropertiesExt for Context {
     fn set_global_property_value<T: GlobalProperty>(&mut self, property: T, value: T::Value) {
         let data_container = self.get_data_container_mut(GlobalPropertiesPlugin);
         data_container.set_global_property_value(property, value)
+    }
+
+    fn get_global_property_value<T: GlobalProperty + 'static>(
+        &self,
+        property: T,
+    ) -> T::Value {
+        match self.get_data_container(GlobalPropertiesPlugin) {
+            None => None,
+            Some(data_container) => data_container.get_global_property_value(property),
+        }
     }
 }
