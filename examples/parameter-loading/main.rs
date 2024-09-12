@@ -1,9 +1,18 @@
 use ixa::define_global_property;
+use::ixa::define_rng;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
-//use ixa::global_properties::GlobalPropertiesContext;
 use serde::{Deserialize, Serialize};
 
-// First, let's assume we already read the parameters in the Parameters struct
+use ixa::random::ContextRandomExt;
+
+mod incidence_report;
+mod infection_manager;
+mod people;
+mod transmission_manager;
+
+use crate::people::ContextPeopleExt;
+
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ParametersValues {
     population: usize,
@@ -13,26 +22,36 @@ pub struct ParametersValues {
     infection_duration:f64,
 }
 
+define_rng!(TestRng);
+define_global_property!(Parameters, ParametersValues);
+
 fn main() {
     let mut context = Context::new();
-    let parameters = ParametersValues {
+    let parameters_values = ParametersValues {
         population: 10,        
         max_time: 20.0,
         seed: 123,
         foi: 0.1,
         infection_duration: 5.0,
     };
+    context.set_global_property_value(Parameters, parameters_values);
 
-    define_global_property!(Parameters, ParametersValues);
     
-    context.set_global_property_value(Parameters, parameters);
-
     let parameters = context.get_global_property_value(Parameters);
+    context.init_random(parameters.seed);
     
+    for _ in 0..parameters.population {
+        context.create_person();
+    }
+
+    transmission_manager::init(&mut context);
+    infection_manager::init(&mut context);
+    incidence_report::init(&mut context);
+
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
-    print!("{:?}", parameters);
+    println!("{:?}", parameters);
     context.execute();
 }
 
