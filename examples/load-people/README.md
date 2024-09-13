@@ -1,4 +1,4 @@
-# load-people
+# Example: People and Person Properties
 
 This example demonstrates the following features related to adding people and their
 related properties to a simulation:
