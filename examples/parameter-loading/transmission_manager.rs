@@ -53,7 +53,6 @@ mod test {
     use crate::people::InfectionStatus;
 
     use ixa::context::Context;
-    use rand_distr::Exp;
 
     #[test]
     fn test_attempt_infection() {

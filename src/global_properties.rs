@@ -1,5 +1,4 @@
 use crate::context::Context;
-use crate::define_data_plugin;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
@@ -25,7 +24,7 @@ struct GlobalPropertiesDataContainer {
     global_property_container: HashMap<TypeId, Box<dyn Any>>,
 }
 
-define_data_plugin!(
+crate::context::define_data_plugin!(
     GlobalPropertiesPlugin,
     GlobalPropertiesDataContainer,
     GlobalPropertiesDataContainer {
