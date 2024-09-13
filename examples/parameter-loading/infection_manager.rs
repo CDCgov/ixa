@@ -42,11 +42,23 @@ mod test {
     use crate::people::InfectionStatusEvent;
     use ixa::context::Context;
     use ixa::define_data_plugin;
-    use ixa::define_rng;
+    use ixa::global_properties::ContextGlobalPropertiesExt;
     use ixa::random::ContextRandomExt;
-
+    use ixa::define_global_property;
+    use serde::{Deserialize, Serialize};
+    use super::*;
     define_data_plugin!(RecoveryPlugin, usize, 0);
-
+    
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct ParametersValues {
+        pub population: usize,
+        pub max_time: f64,
+        pub seed: u64,
+        pub foi: f64,
+        pub infection_duration: f64,
+    }
+    define_global_property!(Parameters, ParametersValues);
+    
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
         if matches!(event.updated_status, InfectionStatus::R) {
             *context.get_data_container_mut(RecoveryPlugin) += 1;
@@ -55,16 +67,24 @@ mod test {
 
     #[test]
     fn test_handle_infection_change() {
-        use super::handle_infection_status_change;
-        use super::init;
-        let mut context = Context::new();
+        let parameters_values = ParametersValues {
+            population: 10,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            infection_duration: 5.0,
+        };
+        
+        let mut context = Context::new();        
+        context.set_global_property_value(Parameters, parameters_values);
+        
         context.init_random(42);
-        init(&mut context);
-
+        init(&mut context);        
+        
         context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
             handle_recovery_event(context, event);
         });
-
+        
         let population_size = 10;
         for id in 0..population_size {
             context.create_person();
