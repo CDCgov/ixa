@@ -36,16 +36,37 @@ pub struct PersonId {
 // They should be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
+    fn initialize(context: &mut Context, person_id: PersonId) -> Option<Self::Value>;
 }
 
 #[macro_export]
 macro_rules! define_person_property {
+    ($person_property:ident, $value:ty, $default: expr) => {
+        #[derive(Copy, Clone)]
+        pub struct $person_property;
+
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = $value;
+            fn initialize(
+                _context: &mut $crate::context::Context,
+                _person_id: $crate::people::PersonId,
+            ) -> Option<Self::Value> {
+                Some($default)
+            }
+        }
+    };
     ($person_property:ident, $value:ty) => {
         #[derive(Copy, Clone)]
         pub struct $person_property;
 
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
+            fn initialize(
+                _context: &mut $crate::context::Context,
+                _person_id: $crate::people::PersonId,
+            ) -> Option<Self::Value> {
+                None
+            }
         }
     };
 }
@@ -78,6 +99,35 @@ impl PeopleData {
                     .get(person_id.id)
                     .and_then(|value| value.as_ref().copied())
             })
+    }
+
+    fn get_person_property_with_default<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+    ) -> Option<T::Value> {
+        let index = person_id.id;
+
+        let properties = self
+            .properties_map
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
+
+        // Downcast to
+        let values: &mut Vec<Option<T::Value>> = properties
+            .downcast_mut()
+            .expect("Type mismatch in properties_map");
+
+        // Resize the vector if necessary
+        if index >= values.len() {
+            values.resize(index + 1, None);
+        }
+
+        // Either return the existing value or initialize a new one.
+        if values[index].is_none() {
+            values[index] = T::initialize(&mut Context::new(), person_id);
+        }
+        values[index]
     }
 
     /// Sets the value of a property for a person
@@ -130,6 +180,12 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
+    fn get_person_property_with_default<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+    ) -> T::Value;
+
     /// Given a `PersonId`, sets the value of a defined person property
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
@@ -167,6 +223,16 @@ impl ContextPeopleExt for Context {
         self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized")
             .get_person_property(person_id, property)
+            .unwrap_or_else(|| panic!("Property {} not initialized", std::any::type_name::<T>()))
+    }
+
+    fn get_person_property_with_default<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    ) -> T::Value {
+        self.get_data_container_mut(PeoplePlugin)
+            .get_person_property_with_default(person_id, property)
             .unwrap_or_else(|| panic!("Property {} not initialized", std::any::type_name::<T>()))
     }
 
@@ -228,6 +294,7 @@ mod test {
         Low,
     }
     define_person_property!(RiskCategoryType, RiskCategory);
+    define_person_property!(IsRunner, bool, false);
 
     #[test]
     fn observe_person_addition() {
@@ -318,6 +385,14 @@ mod test {
         context.set_person_property_default_value(Age, 42);
         let person_id = context.add_person();
         assert_eq!(context.get_person_property(person_id, Age), 42);
+    }
+
+    #[test]
+    fn add_person_initializers() {
+        let mut context = Context::new();
+
+        let person_id = context.add_person();
+        assert!(!context.get_person_property_with_default(person_id, IsRunner));
     }
 
     #[test]
