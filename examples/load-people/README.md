@@ -120,8 +120,3 @@ that when properties are first set, they will *not* emit any change events;
 
 If you want to observe the initial value of a property, you should subscribe to
 the `PersonCreatedEvent` and access the property with `context.get_person_property`.
-
-### Handling uninitialized/initialized properties
-
-If you want to have a property that starts in some kind of "uninitialized" state
-and handle when it becomes initialized, we recommend that you
