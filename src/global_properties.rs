@@ -7,7 +7,7 @@ use std::collections::HashMap;
 macro_rules! define_global_property {
     ($global_property:ident, $value:ty) => {
         #[derive(Copy, Clone)]
-        struct $global_property;
+        pub struct $global_property;
 
         impl $crate::global_properties::GlobalProperty for $global_property {
             type Value = $value;
