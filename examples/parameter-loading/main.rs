@@ -1,6 +1,7 @@
 use ixa::define_global_property;
 use::ixa::define_rng;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+
 use serde::{Deserialize, Serialize};
 
 use ixa::random::ContextRandomExt;
@@ -8,9 +9,9 @@ mod incidence_report;
 mod infection_manager;
 mod people;
 mod transmission_manager;
+mod parameters_loader;
 
 use crate::people::ContextPeopleExt;
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
@@ -23,22 +24,12 @@ pub struct ParametersValues {
     output_file: String,
 }
 
-define_rng!(TestRng);
 define_global_property!(Parameters, ParametersValues);
+
 
 fn main() {
     let mut context = Context::new();
-    let parameters_values = ParametersValues {
-        population: 10,        
-        max_time: 20.0,
-        seed: 123,
-        foi: 0.1,
-        infection_duration: 5.0,
-        output_dir: "examples/parameter-loading".to_string(),
-        output_file: "incidence".to_string(),
-    };
-    context.set_global_property_value(Parameters, parameters_values);
-
+    parameters_loader::init(&mut context, "input.yaml");
     
     let parameters = context.get_global_property_value(Parameters).clone();
     context.init_random(parameters.seed);
