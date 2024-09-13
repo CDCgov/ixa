@@ -52,11 +52,23 @@ mod test {
     use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
 
+    use crate::parameters_loader::ParametersValues;
     use ixa::context::Context;
 
     #[test]
     fn test_attempt_infection() {
+        let p_values = ParametersValues {
+            population: 10,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
+        };
+
         let mut context = Context::new();
+        context.set_global_property_value(Parameters, p_values);
         context.init_random(123);
         context.create_person();
         attempt_infection(&mut context);

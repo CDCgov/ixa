@@ -37,6 +37,7 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::people::ContextPeopleExt;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusEvent;
@@ -44,21 +45,10 @@ mod test {
     use ixa::define_data_plugin;
     use ixa::global_properties::ContextGlobalPropertiesExt;
     use ixa::random::ContextRandomExt;
-    use ixa::define_global_property;
-    use serde::{Deserialize, Serialize};
-    use super::*;
     define_data_plugin!(RecoveryPlugin, usize, 0);
-    
-    #[derive(Serialize, Deserialize, Debug, Clone)]
-    pub struct ParametersValues {
-        pub population: usize,
-        pub max_time: f64,
-        pub seed: u64,
-        pub foi: f64,
-        pub infection_duration: f64,
-    }
-    define_global_property!(Parameters, ParametersValues);
-    
+
+    use crate::parameters_loader::ParametersValues;
+
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
         if matches!(event.updated_status, InfectionStatus::R) {
             *context.get_data_container_mut(RecoveryPlugin) += 1;
@@ -67,24 +57,25 @@ mod test {
 
     #[test]
     fn test_handle_infection_change() {
-        let parameters_values = ParametersValues {
+        let p_values = ParametersValues {
             population: 10,
             max_time: 10.0,
             seed: 42,
             foi: 0.15,
             infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
         };
-        
-        let mut context = Context::new();        
-        context.set_global_property_value(Parameters, parameters_values);
-        
+
+        let mut context = Context::new();
+        context.set_global_property_value(Parameters, p_values);
         context.init_random(42);
-        init(&mut context);        
-        
+        init(&mut context);
+
         context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
             handle_recovery_event(context, event);
         });
-        
+
         let population_size = 10;
         for id in 0..population_size {
             context.create_person();
