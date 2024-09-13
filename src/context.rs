@@ -561,6 +561,7 @@ mod tests {
         });
 
         context.emit_event(Event { data: 1 });
+        assert_eq!(*obs_data.borrow(), 0);
         assert_eq!(*immediate_obs_data.borrow(), 1);
 
         context.execute();

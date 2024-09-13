@@ -130,7 +130,7 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
-    // Given a `PersonId`, sets the value of a defined person property
+    /// Given a `PersonId`, sets the value of a defined person property
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -138,17 +138,17 @@ pub trait ContextPeopleExt {
         value: T::Value,
     );
 
+    /// Registers a callback to be executed when a person is added, before
+    /// regular handlers for `PersonCreated`
+    fn before_person_added(&mut self, callback: impl Fn(&mut Context, PersonId) + 'static);
+
+    // Registers a callback to set a default value for a person property when
+    // a person is added, before
     fn set_person_property_default_value<T: PersonProperty + 'static>(
         &mut self,
         property: T,
         value: T::Value,
-    ) {
-        self.before_person_added(move |context, person_id| {
-            context.set_person_property(person_id, property, value);
-        });
-    }
-
-    fn before_person_added(&mut self, callback: impl Fn(&mut Context, PersonId) + 'static);
+    );
 }
 
 impl ContextPeopleExt for Context {
@@ -165,9 +165,9 @@ impl ContextPeopleExt for Context {
         property: T,
     ) -> T::Value {
         self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlguin is not initialized")
+            .expect("PeoplePlugin is not initialized")
             .get_person_property(person_id, property)
-            .expect("Property not initialized")
+            .unwrap_or_else(|| panic!("Property {} not initialized", std::any::type_name::<T>()))
     }
 
     fn set_person_property<T: PersonProperty + 'static>(
@@ -190,8 +190,7 @@ impl ContextPeopleExt for Context {
                 data_container.set_person_property(person_id, property, value);
                 self.emit_event(change_event);
             }
-            // The person property is not yet initialized, so we don't emit
-            // any events.
+            // The person property is not yet initialized, so we don't emit any events.
             None => {
                 data_container.set_person_property(person_id, property, value);
             }
@@ -202,6 +201,16 @@ impl ContextPeopleExt for Context {
         self.subscribe_immediately_to_event(move |context, event: PersonCreatedEvent| {
             let person_id = event.person_id;
             callback(context, person_id);
+        });
+    }
+
+    fn set_person_property_default_value<T: PersonProperty + 'static>(
+        &mut self,
+        property: T,
+        value: T::Value,
+    ) {
+        self.before_person_added(move |context, person_id| {
+            context.set_person_property(person_id, property, value);
         });
     }
 }
@@ -244,8 +253,9 @@ mod test {
         assert_eq!(context.get_person_property(person, Age), 42);
     }
 
+    #[allow(clippy::should_panic_without_expect)]
     #[test]
-    #[should_panic = "Property not initialized"]
+    #[should_panic]
     fn get_uninitialized_property() {
         let mut context = Context::new();
         let person = context.add_person();
