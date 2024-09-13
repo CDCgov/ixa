@@ -1,6 +1,7 @@
 use crate::{context::Context, define_data_plugin};
 use std::{
     any::{Any, TypeId},
+    cell::RefCell,
     collections::HashMap,
 };
 
@@ -9,7 +10,7 @@ use std::{
 // via their id.
 struct PeopleData {
     population: usize,
-    properties_map: HashMap<TypeId, Box<dyn Any>>,
+    properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
 }
 
 define_data_plugin!(
@@ -17,7 +18,7 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         population: 0,
-        properties_map: HashMap::new()
+        properties_map: RefCell::new(HashMap::new())
     }
 );
 
@@ -36,7 +37,7 @@ pub struct PersonId {
 // They should be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
-    fn initialize(context: &mut Context, person_id: PersonId) -> Option<Self::Value>;
+    fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value>;
 }
 
 #[macro_export]
@@ -48,7 +49,7 @@ macro_rules! define_person_property {
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
             fn initialize(
-                _context: &mut $crate::context::Context,
+                _context: &$crate::context::Context,
                 _person_id: $crate::people::PersonId,
             ) -> Option<Self::Value> {
                 Some($default)
@@ -62,7 +63,7 @@ macro_rules! define_person_property {
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
             fn initialize(
-                _context: &mut $crate::context::Context,
+                _context: &$crate::context::Context,
                 _person_id: $crate::people::PersonId,
             ) -> Option<Self::Value> {
                 None
@@ -91,6 +92,7 @@ impl PeopleData {
         _property: T,
     ) -> Option<T::Value> {
         self.properties_map
+            .borrow_mut()
             .get(&TypeId::of::<T>())
             .and_then(|boxed_vec| {
                 boxed_vec
@@ -99,35 +101,6 @@ impl PeopleData {
                     .get(person_id.id)
                     .and_then(|value| value.as_ref().copied())
             })
-    }
-
-    fn get_person_property_with_default<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        _property: T,
-    ) -> Option<T::Value> {
-        let index = person_id.id;
-
-        let properties = self
-            .properties_map
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
-
-        // Downcast to
-        let values: &mut Vec<Option<T::Value>> = properties
-            .downcast_mut()
-            .expect("Type mismatch in properties_map");
-
-        // Resize the vector if necessary
-        if index >= values.len() {
-            values.resize(index + 1, None);
-        }
-
-        // Either return the existing value or initialize a new one.
-        if values[index].is_none() {
-            values[index] = T::initialize(&mut Context::new(), person_id);
-        }
-        values[index]
     }
 
     /// Sets the value of a property for a person
@@ -139,8 +112,9 @@ impl PeopleData {
         value: T::Value,
     ) {
         let index = person_id.id;
-        let vec = self
-            .properties_map
+        let mut properties_map = self.properties_map.borrow_mut();
+
+        let vec = properties_map
             .entry(TypeId::of::<T>())
             .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
         let vec: &mut Vec<Option<T::Value>> = vec.downcast_mut().unwrap();
@@ -181,7 +155,7 @@ pub trait ContextPeopleExt {
     ) -> T::Value;
 
     fn get_person_property_with_default<T: PersonProperty + 'static>(
-        &mut self,
+        &self,
         person_id: PersonId,
         _property: T,
     ) -> T::Value;
@@ -210,7 +184,6 @@ pub trait ContextPeopleExt {
 impl ContextPeopleExt for Context {
     fn add_person(&mut self) -> PersonId {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
-
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
     }
@@ -227,13 +200,50 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_property_with_default<T: PersonProperty + 'static>(
-        &mut self,
+        &self,
         person_id: PersonId,
-        property: T,
+        _property: T,
     ) -> T::Value {
-        self.get_data_container_mut(PeoplePlugin)
-            .get_person_property_with_default(person_id, property)
-            .unwrap_or_else(|| panic!("Property {} not initialized", std::any::type_name::<T>()))
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        let index = person_id.id;
+
+        {
+            // Borrow the properties map and get the vec of values out
+            let mut properties_map = data_container.properties_map.borrow_mut();
+
+            let properties = properties_map
+                .entry(TypeId::of::<T>())
+                .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
+            let values: &mut Vec<Option<T::Value>> = properties
+                .downcast_mut()
+                .expect("Type mismatch in properties_map");
+
+            // Resize the vector if necessary
+            if index >= values.len() {
+                values.resize(index + 1, None);
+            }
+
+            if values[index].is_some() {
+                return values[index].unwrap();
+            }
+        }
+
+        // The property was no initiazed yet, so call the initializer
+        let initialized_value = T::initialize(self, person_id);
+
+        // We need to reborrow properties map etc.
+        let mut properties_map = data_container.properties_map.borrow_mut();
+        let properties = properties_map
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
+        let values: &mut Vec<Option<T::Value>> = properties
+            .downcast_mut()
+            .expect("Type mismatch in properties_map");
+
+        // Insert initialized value and return it
+        values[index] = initialized_value;
+        values[index].expect("Property not initialized")
     }
 
     fn set_person_property<T: PersonProperty + 'static>(
@@ -283,7 +293,7 @@ impl ContextPeopleExt for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent};
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent};
     use crate::context::Context;
     use std::{cell::RefCell, rc::Rc};
 
@@ -294,7 +304,6 @@ mod test {
         Low,
     }
     define_person_property!(RiskCategoryType, RiskCategory);
-    define_person_property!(IsRunner, bool, false);
 
     #[test]
     fn observe_person_addition() {
@@ -389,9 +398,29 @@ mod test {
 
     #[test]
     fn add_person_initializers() {
-        let mut context = Context::new();
+        define_person_property!(IsRunner, bool, false);
 
+        #[derive(Copy, Clone)]
+        struct Races;
+        impl PersonProperty for Races {
+            type Value = u8;
+            fn initialize(context: &Context, person_id: super::PersonId) -> Option<Self::Value> {
+                let is_runner = context.get_person_property_with_default(person_id, IsRunner);
+                if is_runner {
+                    Some(4)
+                } else {
+                    Some(0)
+                }
+            }
+        }
+
+        let mut context = Context::new();
         let person_id = context.add_person();
+
+        assert_eq!(
+            context.get_person_property_with_default(person_id, Races),
+            0
+        );
         assert!(!context.get_person_property_with_default(person_id, IsRunner));
     }
 
