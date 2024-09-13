@@ -52,13 +52,17 @@ macro_rules! define_person_property {
 pub use define_person_property;
 
 impl PeopleData {
+    /// Adds a person and returns a `PersonId` that can be used to reference them.
     fn add_person(&mut self) -> PersonId {
         let id = self.population;
         self.population += 1;
         PersonId { id }
     }
 
-    /// Given a `PersonId`, returns the value of a person property of type `T`
+    /// Retrieves a specific property of a person by their `PersonId`.
+    ///
+    /// Returns `Option<T::Value>`: `Some(value)` if the property exists for the given person,
+    /// or `None` if it doesn't.
     #[allow(clippy::needless_pass_by_value)]
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
@@ -68,16 +72,15 @@ impl PeopleData {
         self.properties_map
             .get(&TypeId::of::<T>())
             .and_then(|boxed_vec| {
-                let vec = boxed_vec
+                boxed_vec
                     .downcast_ref::<Vec<Option<T::Value>>>()
-                    .expect("Type mismatch in properties_map");
-
-                vec.get(person_id.id)
+                    .expect("Type mismatch in properties_map")
+                    .get(person_id.id)
                     .and_then(|value| value.as_ref().copied())
             })
     }
 
-    /// Given a `PersonId`, sets the value of a person property of type `T`
+    /// Sets the value of a property for a person
     #[allow(clippy::needless_pass_by_value)]
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
@@ -247,6 +250,39 @@ mod test {
         let mut context = Context::new();
         let person = context.add_person();
         context.get_person_property(person, Age);
+    }
+
+    #[test]
+    fn set_property_resize() {
+        let mut context = Context::new();
+
+        // Create a bunch of people and don't initialize Age
+        let first_person = context.add_person();
+        for _ in 1..9 {
+            let _person = context.add_person();
+        }
+        let tenth_person = context.add_person();
+
+        // This will fill up the earlier people in the Age vec with None values
+        context.set_person_property(tenth_person, Age, 42);
+
+        // Now we set up a listener for change events
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(move |_context, _event: PersonPropertyChangeEvent<Age>| {
+            *flag_clone.borrow_mut() = true;
+        });
+
+        // This is the first time we're setting the Age property for the first person,
+        // so it shouldn't emit a change event.
+        context.set_person_property(first_person, Age, 42);
+        context.execute();
+        assert!(!*flag.borrow());
+
+        // Now the change event should fire
+        context.set_person_property(first_person, Age, 43);
+        context.execute();
+        assert!(*flag.borrow());
     }
 
     #[test]

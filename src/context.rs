@@ -544,6 +544,30 @@ mod tests {
     }
 
     #[test]
+    fn test_immediate_events() {
+        let mut context = Context::new();
+
+        let obs_data = Rc::new(RefCell::new(0));
+        let immediate_obs_data = Rc::new(RefCell::new(0));
+
+        let obs_data_clone = Rc::clone(&obs_data);
+        context.subscribe_to_event::<Event>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        let immediate_obs_data_clone = Rc::clone(&immediate_obs_data);
+        context.subscribe_immediately_to_event::<Event>(move |_, event| {
+            *immediate_obs_data_clone.borrow_mut() = event.data;
+        });
+
+        context.emit_event(Event { data: 1 });
+        assert_eq!(*immediate_obs_data.borrow(), 1);
+
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 1);
+    }
+
+    #[test]
     fn shutdown_cancels_plans() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
