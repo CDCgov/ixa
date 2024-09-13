@@ -34,19 +34,27 @@ define_data_plugin!(
 );
 
 pub trait ContextGlobalPropertiesExt {
-    fn set_global_property_value<T: GlobalProperty + 'static>(&mut self, property: T, value: T::Value);
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, property: T) -> &T::Value;
+    fn set_global_property_value<T: GlobalProperty + 'static>(
+        &mut self,
+        property: T,
+        value: T::Value,
+    );
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
 }
 
 impl GlobalPropertiesDataContainer {
-    fn set_global_property_value<T: GlobalProperty + 'static>(&mut self, _property: T, value: T::Value) {
+    fn set_global_property_value<T: GlobalProperty + 'static>(
+        &mut self,
+        _property: &T,
+        value: T::Value,
+    ) {
         let _data_container = self
             .global_property_container
             .entry(TypeId::of::<T>())
             .or_insert_with(|| Box::new(value));
     }
 
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value {
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self) -> &T::Value {
         let data_container = self
             .global_property_container
             .get(&TypeId::of::<T>())
@@ -56,16 +64,18 @@ impl GlobalPropertiesDataContainer {
 }
 
 impl ContextGlobalPropertiesExt for Context {
-    fn set_global_property_value<T: GlobalProperty + 'static>(&mut self, property: T, value: T::Value) {
+    fn set_global_property_value<T: GlobalProperty + 'static>(
+        &mut self,
+        property: T,
+        value: T::Value,
+    ) {
         let data_container = self.get_data_container_mut(GlobalPropertiesPlugin);
-        data_container.set_global_property_value(property, value)
+        data_container.set_global_property_value(&property, value);
     }
 
-    fn get_global_property_value<T: GlobalProperty + 'static>(
-        &self,
-        property: T,
-    ) -> &T::Value {
+    #[allow(unused_variables)]
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value {
         let data_container = self.get_data_container(GlobalPropertiesPlugin).unwrap();
-        data_container.get_global_property_value(property)
+        data_container.get_global_property_value::<T>()
     }
 }

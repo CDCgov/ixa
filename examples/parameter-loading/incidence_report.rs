@@ -1,8 +1,8 @@
 use ixa::context::Context;
+use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
-use ixa::global_properties::ContextGlobalPropertiesExt;
 
 use crate::people::InfectionStatus;
 use crate::people::InfectionStatusEvent;
