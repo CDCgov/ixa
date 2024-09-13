@@ -6,9 +6,8 @@ related properties:
 * Adding people to a simulation
 * Defining person properties and initializing them
 * Loading a population of people and their properties from a csv file
-* Assigning person properties from a external module, including assigning initial/default values
-* Adding additional functionality (such as scheduling plans or logging) when a
-  person is created or their properties are updated.
+* Assigning person properties from an external module, including assigning initial (default) values
+* Handling person creation and change events
 
 ### People
 
