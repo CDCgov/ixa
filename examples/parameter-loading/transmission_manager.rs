@@ -1,13 +1,12 @@
 use ixa::context::Context;
 use ixa::define_rng;
-use ixa::random::ContextRandomExt;
 use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::random::ContextRandomExt;
 
 use crate::people::ContextPeopleExt;
 use crate::people::InfectionStatus;
-use rand_distr::Exp;
 use crate::Parameters;
-
+use rand_distr::Exp;
 
 define_rng!(TransmissionRng);
 
@@ -17,7 +16,7 @@ fn attempt_infection(context: &mut Context) {
 
     let person_status: InfectionStatus = context.get_person_status(person_to_infect);
     let parameters = context.get_global_property_value(Parameters).clone();
-    
+
     if matches!(person_status, InfectionStatus::S) {
         context.set_person_status(person_to_infect, InfectionStatus::I);
     }
@@ -31,7 +30,8 @@ fn attempt_infection(context: &mut Context) {
 
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(parameters.foi).unwrap()) / population_size as f64;
+        + context.sample_distr(TransmissionRng, Exp::new(parameters.foi).unwrap())
+            / population_size as f64;
 
     if next_attempt_time <= parameters.max_time {
         context.add_plan(next_attempt_time, move |context| {
