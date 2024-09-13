@@ -11,7 +11,7 @@ related properties:
 
 ### People
 
-At a high level, each person in an ixa simulation is represented by `u8` in the
+At a high level, each person in an ixa simulation is represented by an integer in the
 range of `0` to `population - 1`, where `population` is the total number of people.
 
 When you are referring to a person in order to do things with them, you will use a `PersonId`
