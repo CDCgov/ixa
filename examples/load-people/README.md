@@ -1,9 +1,9 @@
 # Example: People and Person Properties
 
-This example demonstrates the following features related to adding people and their
-related properties to a simulation:
+This example demonstrates the following features related to people and their
+related properties:
 
-* Adding people
+* Adding people to a simulation
 * Defining person properties and initializing them
 * Loading a population of people and their properties from a csv file
 * Assigning person properties from a external module, including assigning initial/default values
