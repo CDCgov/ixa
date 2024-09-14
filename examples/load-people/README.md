@@ -56,10 +56,14 @@ given person, the simulation will panic.
 
 ### Initializing person properties
 
-If you wish, you can declare an initializer for for a person property, which will
-lazily assign a value the first time `get_person_property` is called.
+In ixa, every property must be initialized before it is accessed. There are
+several ways to do this, described below. Note that when intitial values are
+assigned in any of these ways, they do *not* trigger a `PersonPropertyChangeEvent`.
 
-For simple default values, you can use the define_person_property macro:
+#### Simple default values
+
+If you want all people to be initialized with the same default value, you can
+simply pass in the value to the the `define_person_property!` macro:
 
 ```rust
 #[derive(Copy)]
@@ -67,10 +71,13 @@ pub enum DiseaseStatus { S, I, R }
 define_person_property!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 ```
 
+#### Custom initializer
+
 If you need custom logic or you have dependencies on other properties to compute
 initial values, you can implement a custom initializer on your property struct.
 The initializer takes a reference to context and a person identifier, and should
-return an option.
+return an `Option`. For example, this initializer computes how many vaccine doses
+someone should be assigned based on their age:
 
 ```rust
 pub struct VaccineDoses;
@@ -81,29 +88,6 @@ impl PersonProperty for VaccineDoses {
         if (age > 10) { Some(1) } else { Some(0) }
     }
 }
-```
-
-### Loading people from files
-
-The `population_loader` module demonstrates a common pattern of loading/parsing people from a csv file,
-where each row represents a person and has some basic properties (an age and risk status), an
-adds them to the simulation.
-
-In order to assign a base set of properties (in this case, from the csv file),
-we use the `context.before_person_added` method:
-
-```rust
-
-let person = context.add_person();
-context.set_person_property(person_id, Age, record.age);
-context.set_person_property(person_id, RiskCategoryType, record.risk_category);
-```
-
-As long as you assign properties in the same function context as where add_person
-is created, they will be assigned before any other regular `PersonCreated` events
-handlers are called.
-
-### Loading data from other modules
 
 Sometimes properties may need to be initialized with data contributed from another
 module. If that's the case, you should expose a method as a trait extension on context
@@ -126,16 +110,24 @@ impl VaccineContextExt for Context {
 }
 ```
 
-If your property doesn't have dependencies on other properties, you could
-also do this in the population loader:
+#### Manual assignment
+
+You can also initialize values manually with `set_person_property`, which will
+override any default initializers on the type. However, you must be careful to
+ensure that this happens before the property is accessed (or the simulation will panic).
+
+One common use case for manual assignment is when you need to load people from a csv file.
+In that case, you can read the properties and assign them a population loader:
 
 ```rust
 let person = context.add_person();
-let age = context.get_person_property(Age);
-let (vaccine_type, doses) = context.get_random_vaccine(age);
-context.set_person_property(person, VaccineType, vaccine_type);
-context.set_person_property(person, VaccineDoses, doses);
+context.set_person_property(person_id, Age, record.age);
+context.set_person_property(person_id, RiskCategoryType, record.risk_category);
 ```
+
+As long as you assign properties in the same function context as where add_person
+is created, they will be assigned before any other regular `PersonCreated` events
+handlers are called.
 
 ### Observing person property changes
 
