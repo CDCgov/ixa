@@ -25,14 +25,8 @@ pub fn init(context: &mut Context) {
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
 
-        context.before_person_added(move |context, person_id| {
-            context.set_person_property(person_id, Age, record.age);
-            context.set_person_property(person_id, RiskCategoryType, record.risk_category);
-        });
-
-        let _person = context.add_person();
-        // Setting person properties at this point actually happens *after*
-        // any initialization callbacks, but before regular event callbacks.
-        // Kind of weird I guess
+        let person = context.add_person();
+        context.set_person_property(person, Age, record.age);
+        context.set_person_property(person, RiskCategoryType, record.risk_category);
     }
 }

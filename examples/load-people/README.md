@@ -28,17 +28,13 @@ the population range):
 Person properties are a pair of an identifier type and a value type, which represent
 some characteristic or state about a person.
 
-For example, this model implements Age, RiskStatus, and DiseaseStatus using
+For example, this model implements Age and RiskStatus using
 `the define_person_property!` macro:
 
 ```rust
 #[derive(Copy)]
 pub enum RiskCategory { High, Low }
 
-#[derive(Copy)]
-pub enum DiseaseStatus { S, I, R }
-
-define_person_property!(DiseaseStatusType, DiseaseStatus);
 define_person_property!(Age, u8);
 define_person_property!(RiskCategoryType, RiskCategory);
 ```
@@ -58,7 +54,36 @@ assert!(context.get_person_property(person, Age), 69);
 Note that if you try to access a person property that is not initialized on the
 given person, the simulation will panic.
 
-### Loading people
+### Initializing person properties
+
+If you wish, you can declare an initializer for for a person property, which will
+lazily assign a value the first time `get_person_property` is called.
+
+For simple default values, you can use the define_person_property macro:
+
+```rust
+#[derive(Copy)]
+pub enum DiseaseStatus { S, I, R }
+define_person_property!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
+```
+
+If you need custom logic or you have dependencies on other properties to compute
+initial values, you can implement a custom initializer on your property struct.
+The initializer takes a reference to context and a person identifier, and should
+return an option.
+
+```rust
+struct Races;
+impl PersonProperty for Races {
+    type Value = u8;
+    fn initialize(context: &Context, person: PersonId) -> Option<Self::Value> {
+        let is_runner = context.get_person_property(person, IsRunner);
+        if is_runner { Some(4) } else { Some(0) }
+    }
+}
+```
+
+### Loading people from files
 
 The `population_loader` module demonstrates a common pattern of loading/parsing people from a csv file,
 where each row represents a person and has some basic properties (an age and risk status), an
@@ -68,36 +93,48 @@ In order to assign a base set of properties (in this case, from the csv file),
 we use the `context.before_person_added` method:
 
 ```rust
-context.before_person_added(move |context, person_id| {
-    context.set_person_property(person_id, Age, record.age);
-    context.set_person_property(person_id, RiskCategoryType, record.risk_category);
-});
 
-let _person = context.add_person();
+let person = context.add_person();
+context.set_person_property(person_id, Age, record.age);
+context.set_person_property(person_id, RiskCategoryType, record.risk_category);
 ```
 
-Internally, this uses the immediate events system provided by ixa to ensure
-callbacks are called *immediately* after the person is added, and before any
-regular `PersonCreated` events handlers are called.
+As long as you assign properties in the same function context as where add_person
+is created, they will be assigned before any other regular `PersonCreated` events
+handlers are called.
 
-### Assigning additional properties from other modules
+### Loading data from other modules
 
-Other modules outside the population loader can also call `context.before_person_added`
-to initialize their own properties. In this example, the `sir` module uses a helper method
-(which internally calls `before_person_added`) to assign an initial `DiseaseStatus` state:
+Sometimes properties may need to be initialized with data contributed from another
+module. If that's the case, you should expose a method as a trait extension on context
+and make it available to the initializer:
 
 ```rust
-context.set_person_property_default_value(DiseaseStatusType, DiseaseStatus::S);
+struct VaccineType;
+impl PersonProperty for VaccineType {
+    type Value = u8;
+    fn initialize(context: &Context, person: PersonId) -> Option<Self::Value> {
+        let vaccine = context.get_random_vaccine();
+        Some(vaccine)
+    }
+}
+
+impl VaccineContextExt for Context {
+    fn get_random_vaccine() {
+        //....
+    }
+}
 ```
 
-It is important to ensure that modules which set up person properties are initialized
-*before* the population_loader:
+If your property doesn't have dependencies on other properties, you could
+also do this in the population loader:
 
 ```rust
-  // First set up initialization for DiseaseStatus
-  sir::init(&mut context);
-  // Now add the people
-  population_loader::init(&mut context)
+let person = context.add_person();
+let age = context.get_person_property(Age);
+let (vaccine_type, doses) = context.get_random_vaccine(age);
+context.set_person_property(person, VaccineType, vaccine_type);
+context.set_person_property(person, VaccineDoses, doses);
 ```
 
 ### Observing person property changes
