@@ -56,9 +56,13 @@ given person, the simulation will panic.
 
 ### Initializing person properties
 
-In ixa, every property must be initialized before it is accessed. There are
-several ways to do this, described below. Note that when intitial values are
-assigned in any of these ways, they do *not* trigger a `PersonPropertyChangeEvent`.
+In ixa, every property must be initialized before it is accessed. The preferred
+way to do this is to define an `initializer` which is lazily evaluated,
+but you can also assign initial values manually – several patterns
+are described below, and demonstrated in the example model.
+
+Note that when intitial values are assigned they do *not* trigger a
+`PersonPropertyChangeEvent`.
 
 #### Simple default values
 
