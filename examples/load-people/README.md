@@ -73,12 +73,12 @@ The initializer takes a reference to context and a person identifier, and should
 return an option.
 
 ```rust
-struct Races;
-impl PersonProperty for Races {
+pub struct VaccineDoses;
+impl PersonProperty for VaccineDoses {
     type Value = u8;
-    fn initialize(context: &Context, person: PersonId) -> Option<Self::Value> {
-        let is_runner = context.get_person_property(person, IsRunner);
-        if is_runner { Some(4) } else { Some(0) }
+    fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value> {
+        let age = context.get_person_property(person_id, Age);
+        if (age > 10) { Some(1) } else { Some(0) }
     }
 }
 ```
