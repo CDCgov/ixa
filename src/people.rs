@@ -157,10 +157,6 @@ pub trait ContextPeopleExt {
         _property: T,
         value: T::Value,
     );
-
-    /// Registers a callback to be executed when a person is added, before
-    /// regular handlers for `PersonCreated`
-    fn before_person_added(&mut self, callback: impl Fn(&mut Context, PersonId) + 'static);
 }
 
 impl ContextPeopleExt for Context {
@@ -216,13 +212,6 @@ impl ContextPeopleExt for Context {
                 data_container.set_person_property(person_id, property, value);
             }
         }
-    }
-
-    fn before_person_added(&mut self, callback: impl Fn(&mut Context, PersonId) + 'static) {
-        self.subscribe_immediately_to_event(move |context, event: PersonCreatedEvent| {
-            let person_id = event.person_id;
-            callback(context, person_id);
-        });
     }
 }
 
@@ -322,14 +311,12 @@ mod test {
     }
 
     #[test]
-    fn add_person_set_creation_stage() {
+    fn add_person() {
         let mut context = Context::new();
 
-        context.before_person_added(move |context, person_id| {
-            context.set_person_property(person_id, Age, 42);
-            context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
-        });
         let person_id = context.add_person();
+        context.set_person_property(person_id, Age, 42);
+        context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -357,12 +344,10 @@ mod test {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        // This should not emit a change event
-        context.before_person_added(move |context, person_id| {
-            context.set_person_property(person_id, Age, 42);
-        });
 
         let person = context.add_person();
+        // This should not emit a change event
+        context.set_person_property(person, Age, 42);
         let _is_runner = context.get_person_property(person, IsRunner);
         let _is_runner = context.get_person_property(person, Races);
         context.execute();
