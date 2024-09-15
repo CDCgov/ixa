@@ -1,8 +1,12 @@
-use crate::{context::Context, define_data_plugin};
+use crate::{
+    context::Context, define_data_plugin, indexset_person_container::IndexSetPersonContainer,
+};
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
+    hash::Hash,
+    hash::Hasher,
 };
 
 // PeopleData represents each unique person in the simulation with an id ranging
@@ -11,6 +15,7 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    index_data_map: HashMap<Vec<TypeId>, IndexData>,
 }
 
 define_data_plugin!(
@@ -18,7 +23,8 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
-        properties_map: RefCell::new(HashMap::new())
+        properties_map: RefCell::new(HashMap::new()),
+        index_data_map: HashMap::new(),
     }
 );
 
@@ -143,6 +149,180 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
+// Object safe hash trait
+trait DynHash {
+    fn dyn_hash(&self, state: &mut dyn Hasher);
+}
+
+impl<T: Hash + ?Sized> DynHash for T {
+    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+        self.hash(&mut state);
+    }
+}
+
+// Object safe equality trait
+trait DynEq {
+    fn dyn_eq(&self, other: &dyn Any) -> bool;
+}
+
+impl<T: Eq + Any> DynEq for T {
+    fn dyn_eq(&self, other: &dyn Any) -> bool {
+        if let Some(other) = other.downcast_ref::<Self>() {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+// Object safe trait for Any + Hash + Eq
+trait AnyHashEq: Any + DynHash + DynEq {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl Hash for dyn AnyHashEq {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.dyn_hash(state);
+    }
+}
+
+impl PartialEq for dyn AnyHashEq {
+    fn eq(&self, other: &Self) -> bool {
+        self.dyn_eq(other.as_any())
+    }
+}
+
+impl Eq for dyn AnyHashEq {}
+
+impl<T> AnyHashEq for T
+where
+    T: Any + Hash + Eq,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+type PropertySetter = dyn Fn(&mut Vec<Box<dyn AnyHashEq>>, &Context, PersonId);
+//type MutationCallbackSetter = fn(&mut Context, Vec<TypeId>);
+type Predicate = dyn Fn(PersonId, &Context) -> bool;
+
+pub struct Query {
+    properties: Vec<TypeId>,
+    property_values: Vec<Box<dyn AnyHashEq>>,
+    predicates: Vec<Box<Predicate>>,
+}
+
+impl Default for Query {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Query {
+    #[must_use]
+    pub fn new() -> Query {
+        Query {
+            properties: Vec::new(),
+            property_values: Vec::new(),
+            predicates: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_person_property<T: PersonProperty + 'static>(
+        mut self,
+        property: T,
+        value: T::Value,
+    ) -> Query
+    where
+        T::Value: Hash + Eq,
+    {
+        let type_id = TypeId::of::<T>();
+        match self.properties.binary_search(&type_id) {
+            Ok(index) => self.property_values[index] = Box::new(value),
+            Err(index) => {
+                self.properties.insert(index, type_id);
+                self.property_values.insert(index, Box::new(value));
+                self.predicates.insert(
+                    index,
+                    Box::new(move |person_id, context| {
+                        context.get_person_property(person_id, property) == value
+                    }),
+                );
+            }
+        }
+        self
+    }
+}
+
+struct IndexData {
+    property_setters: Vec<Box<PropertySetter>>,
+    index_cells: HashMap<Vec<Box<dyn AnyHashEq>>, IndexSetPersonContainer>,
+}
+
+impl IndexData {
+    fn get_person_cell(&self, context: &Context, person_id: PersonId) -> Vec<Box<dyn AnyHashEq>> {
+        let mut index_cell = Vec::new();
+        for property_setter in &self.property_setters {
+            property_setter(&mut index_cell, context, person_id);
+        }
+        index_cell
+    }
+}
+pub struct Index {
+    properties: Vec<TypeId>,
+    property_setters: Vec<Box<PropertySetter>>,
+    //mutation_callback_setters: Vec<MutationCallbackSetter>,
+}
+
+impl Default for Index {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Index {
+    #[must_use]
+    pub fn new() -> Index {
+        Index {
+            properties: Vec::new(),
+            property_setters: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_person_property<T: PersonProperty + 'static>(mut self, property: T) -> Index
+    where
+        T::Value: Hash + Eq,
+    {
+        let type_id = TypeId::of::<T>();
+        match self.properties.binary_search(&type_id) {
+            Ok(_) => {}
+            Err(index) => {
+                self.properties.insert(index, type_id);
+
+                // Add setter for person property
+                self.property_setters.insert(
+                    index,
+                    Box::new(move |index_cell, context, person_id| {
+                        let value = context.get_person_property::<T>(person_id, property);
+                        index_cell.push(Box::new(value));
+                    }),
+                );
+
+                // // Add setter for mutation callbacks
+                // self.mutation_callback_setters
+                //     .insert(index, Self::set_callback::<T>);
+            }
+        }
+        self
+    }
+}
+
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
@@ -165,6 +345,15 @@ pub trait ContextPeopleExt {
         _property: T,
         value: T::Value,
     );
+
+    // Get the current number of people in the simulation
+    fn get_population(&self) -> usize;
+
+    /// Find people who match a given query of property values
+    fn query_people(&self, query: Query) -> IndexSetPersonContainer;
+
+    /// Add an index to make future queries more efficient
+    fn add_index(&mut self, index: Index);
 }
 
 impl ContextPeopleExt for Context {
@@ -225,16 +414,87 @@ impl ContextPeopleExt for Context {
             }
         }
     }
+
+    fn get_population(&self) -> usize {
+        if let Some(data_container) = self.get_data_container(PeoplePlugin) {
+            data_container.population
+        } else {
+            0
+        }
+    }
+
+    fn query_people(&self, query: Query) -> IndexSetPersonContainer {
+        let mut container = IndexSetPersonContainer::new();
+
+        // If index exists, use that to service the query
+        if let Some(index_data) = self
+            .get_data_container(PeoplePlugin)
+            .and_then(|data_container| data_container.index_data_map.get(&query.properties))
+        {
+            match index_data.index_cells.get(&query.property_values) {
+                // Cell matching the query exists
+                Some(cell) => cell.clone(),
+                // Nobody matches the query
+                None => IndexSetPersonContainer::new(),
+            }
+        } else {
+            // No index exists, so just iterate over the population
+            let population = self.get_population();
+            for id in 0..population {
+                let person_id = PersonId { id };
+                if query
+                    .predicates
+                    .iter()
+                    .all(|predicate| predicate(person_id, self))
+                {
+                    container.insert(person_id);
+                }
+            }
+
+            container
+        }
+    }
+
+    fn add_index(&mut self, index: Index) {
+        // TODO: check index does not already exist
+
+        // First build the index data
+        let mut index_data = IndexData {
+            index_cells: HashMap::new(),
+            property_setters: index.property_setters,
+        };
+
+        // Iterate over population and add them to their appropriate cell
+        let population = self.get_population();
+        for i in 0..population {
+            let person_id = PersonId { id: i };
+            let index_cell = index_data.get_person_cell(self, person_id);
+            index_data
+                .index_cells
+                .entry(index_cell)
+                .or_default()
+                .insert(person_id);
+        }
+
+        // Store the index data
+        let index_data_map = &mut self.get_data_container_mut(PeoplePlugin).index_data_map;
+        index_data_map.insert(index.properties.clone(), index_data);
+
+        // TODO:
+        // Need to set up a way to have people re-evaluated on creation and property change
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent};
+    use super::{
+        ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent, Query,
+    };
     use crate::context::Context;
     use std::{cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
-    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
     pub enum RiskCategory {
         High,
         Low,
@@ -421,5 +681,38 @@ mod test {
         context.set_person_property(person_id, RunningShoes, 42);
         context.execute();
         assert!(!*flag.borrow());
+    }
+
+    #[test]
+    fn query_without_index() {
+        let mut context = Context::new();
+        let person_zero = context.add_person();
+        context.set_person_property(person_zero, Age, 10);
+        context.set_person_property(person_zero, RiskCategoryType, RiskCategory::Low);
+
+        let person_one = context.add_person();
+        context.set_person_property(person_one, Age, 10);
+        context.set_person_property(person_one, RiskCategoryType, RiskCategory::High);
+
+        let person_two = context.add_person();
+        context.set_person_property(person_two, Age, 20);
+        context.set_person_property(person_two, RiskCategoryType, RiskCategory::Low);
+
+        let person_three = context.add_person();
+        context.set_person_property(person_three, Age, 20);
+        context.set_person_property(person_three, RiskCategoryType, RiskCategory::Low);
+
+        let age_10 = context.query_people(Query::new().with_person_property(Age, 10));
+        assert_eq!(age_10.len(), 2);
+        assert!(age_10.contains(&person_zero));
+        assert!(age_10.contains(&person_one));
+
+        let low_risk_age_10 = context.query_people(
+            Query::new()
+                .with_person_property(Age, 10)
+                .with_person_property(RiskCategoryType, RiskCategory::Low),
+        );
+        assert_eq!(low_risk_age_10.len(), 1);
+        assert!(age_10.contains(&person_zero));
     }
 }
