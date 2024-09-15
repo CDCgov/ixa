@@ -1,3 +1,4 @@
+use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::context::Context;
 use ixa::define_person_property;
 use ixa::people::ContextPeopleExt;
@@ -28,5 +29,11 @@ pub fn init(context: &mut Context) {
         let person = context.add_person();
         context.set_person_property(person, Age, record.age);
         context.set_person_property(person, RiskCategoryType, record.risk_category);
+
+        // Set vaccine type and efficacy based on risk category
+        let (vaccine_type, vaccine_efficacy) =
+            context.get_vaccine_type_and_efficacy(record.risk_category);
+        context.set_person_property(person, VaccineType, vaccine_type);
+        context.set_person_property(person, VaccineEfficacy, vaccine_efficacy);
     }
 }

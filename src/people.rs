@@ -37,7 +37,7 @@ pub struct PersonId {
 // They should be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
-    fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value>;
+    fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
 }
 
 #[macro_export]
@@ -51,8 +51,8 @@ macro_rules! define_person_property {
             fn initialize(
                 _context: &$crate::context::Context,
                 _person_id: $crate::people::PersonId,
-            ) -> Option<Self::Value> {
-                Some($default)
+            ) -> Self::Value {
+                $default
             }
         }
     };
@@ -65,8 +65,8 @@ macro_rules! define_person_property {
             fn initialize(
                 _context: &$crate::context::Context,
                 _person_id: $crate::people::PersonId,
-            ) -> Option<Self::Value> {
-                None
+            ) -> Self::Value {
+                panic!("Property not initialized");
             }
         }
     };
@@ -180,8 +180,7 @@ impl ContextPeopleExt for Context {
         }
 
         // Initialize the property
-        let initialized_value = T::initialize(self, person_id)
-            .expect("Failed to initialize the property for the given person.");
+        let initialized_value = T::initialize(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
@@ -234,12 +233,12 @@ mod test {
     struct Races;
     impl PersonProperty for Races {
         type Value = u8;
-        fn initialize(context: &Context, person_id: super::PersonId) -> Option<Self::Value> {
+        fn initialize(context: &Context, person_id: super::PersonId) -> Self::Value {
             let is_runner = context.get_person_property(person_id, IsRunner);
             if is_runner {
-                Some(4)
+                4
             } else {
-                Some(0)
+                0
             }
         }
     }

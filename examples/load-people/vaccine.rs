@@ -1,11 +1,20 @@
+use crate::population_loader::{Age, RiskCategory};
 use ixa::{
     context::Context,
-    define_rng,
+    define_person_property, define_rng,
     people::{ContextPeopleExt, PersonId, PersonProperty},
     random::ContextRandomExt,
 };
 
-use crate::population_loader::Age;
+#[allow(clippy::module_name_repetitions)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum VaccineTypeValue {
+    A,
+    B,
+}
+define_person_property!(VaccineType, VaccineTypeValue);
+define_person_property!(VaccineEfficacy, f64);
+
 define_rng!(VaccineRng);
 
 #[allow(clippy::module_name_repetitions)]
@@ -13,22 +22,29 @@ define_rng!(VaccineRng);
 pub struct VaccineDoses;
 impl PersonProperty for VaccineDoses {
     type Value = u8;
-    fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value> {
+    fn initialize(context: &Context, person_id: PersonId) -> Self::Value {
         let age = context.get_person_property(person_id, Age);
-        Some(context.get_random_vaccine_doses(age))
+        if age > 10 {
+            context.sample_range(VaccineRng, 0..5)
+        } else {
+            0
+        }
     }
 }
 
 pub trait ContextVaccineExt {
-    fn get_random_vaccine_doses(&self, age: u8) -> u8;
+    fn get_vaccine_type_and_efficacy(&self, risk: RiskCategory) -> (VaccineTypeValue, f64);
 }
 
 impl ContextVaccineExt for Context {
-    fn get_random_vaccine_doses(self: &Context, age: u8) -> u8 {
-        if age > 10 {
-            self.sample_range(VaccineRng, 0..5)
+    fn get_vaccine_type_and_efficacy(
+        self: &Context,
+        risk: RiskCategory,
+    ) -> (VaccineTypeValue, f64) {
+        if risk == RiskCategory::High {
+            (VaccineTypeValue::A, 0.9)
         } else {
-            0
+            (VaccineTypeValue::B, 0.8)
         }
     }
 }

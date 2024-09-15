@@ -80,7 +80,7 @@ define_person_property!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 If you need custom logic or you have dependencies on other properties to compute
 initial values, you can implement a custom initializer on your property struct.
 The initializer takes a reference to context and a person identifier, and should
-return an `Option`. For example, this initializer computes how many vaccine doses
+return a value. For example, this initializer computes how many vaccine doses
 someone should be assigned based on their age:
 
 ```rust
@@ -89,14 +89,14 @@ impl PersonProperty for VaccineDoses {
     type Value = u8;
     fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value> {
         let age = context.get_person_property(person_id, Age);
-        if (age > 10) { Some(1) } else { Some(0) }
+        if (age > 10) { 1 } else { 0 }
     }
 }
 ```
 
-Sometimes properties may need to be initialized with data contributed from another
-module. If that's the case, you should expose a method as a trait extension on context
-and make it available to the initializer:
+Sometimes properties may need to be initialized with data contributed from somewhere
+else. If that's the case, you should make it available via context (e.g., via trait
+extension):
 
 ```rust
 struct VaccineType;
@@ -126,8 +126,11 @@ In that case, you can read the properties and assign them a population loader:
 
 ```rust
 let person = context.add_person();
-context.set_person_property(person_id, Age, record.age);
-context.set_person_property(person_id, RiskCategoryType, record.risk_category);
+context.set_person_property(person, Age, record.age);
+context.set_person_property(person, RiskCategoryType, record.risk_category);
+let (vaccine_efficacy, vaccine_type) = contect.generate_vaccine_props(record.risk_category);
+context.set_person_property(person, VaccineEfficacy, vaccine_efficacy);
+context.set_person_property(person, VaccineType, vaccine_type);
 ```
 
 As long as you assign properties in the same function context as where add_person

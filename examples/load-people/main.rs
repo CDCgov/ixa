@@ -5,7 +5,7 @@ use ixa::{
 };
 use population_loader::Age;
 use sir::DiseaseStatusType;
-use vaccine::VaccineDoses;
+use vaccine::{VaccineDoses, VaccineEfficacy, VaccineType};
 mod population_loader;
 mod sir;
 mod vaccine;
@@ -32,9 +32,11 @@ fn main() {
         let person = event.person_id;
         let age = context.get_person_property(person, Age);
         let vaccine_doses = context.get_person_property(person, VaccineDoses);
+        let vaccine_type = context.get_person_property(person, VaccineType);
+        let vaccine_efficacy = context.get_person_property(person, VaccineEfficacy);
         println!(
-            "Person {} age: {}, {} vaccine doses",
-            person.id, age, vaccine_doses
+            "Person {} age: {}, {} vaccine doses, vaccine {:?} ({})",
+            person.id, age, vaccine_doses, vaccine_type, vaccine_efficacy
         );
     });
 
