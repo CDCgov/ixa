@@ -92,6 +92,7 @@ impl PersonProperty for VaccineDoses {
         if (age > 10) { Some(1) } else { Some(0) }
     }
 }
+```
 
 Sometimes properties may need to be initialized with data contributed from another
 module. If that's the case, you should expose a method as a trait extension on context
