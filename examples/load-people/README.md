@@ -134,7 +134,7 @@ You can see an exampel of this in `population_loader.rs`:
 let person = context.add_person();
 context.set_person_property(person, Age, record.age);
 context.set_person_property(person, RiskCategoryType, record.risk_category);
-let (vaccine_efficacy, vaccine_type) = contect.generate_vaccine_props(record.risk_category);
+let (vaccine_efficacy, vaccine_type) = context.generate_vaccine_props(record.risk_category);
 context.set_person_property(person, VaccineEfficacy, vaccine_efficacy);
 context.set_person_property(person, VaccineType, vaccine_type);
 ```
