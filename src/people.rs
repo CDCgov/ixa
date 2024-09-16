@@ -5,8 +5,7 @@ use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
-    hash::Hash,
-    hash::Hasher,
+    hash::{Hash, Hasher},
 };
 
 // PeopleData represents each unique person in the simulation with an id ranging
@@ -16,6 +15,7 @@ struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     index_data_map: HashMap<Vec<TypeId>, IndexData>,
+    index_sensitivities: HashMap<TypeId, Vec<Vec<TypeId>>>,
 }
 
 define_data_plugin!(
@@ -25,6 +25,7 @@ define_data_plugin!(
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
         index_data_map: HashMap::new(),
+        index_sensitivities: HashMap::new()
     }
 );
 
@@ -276,7 +277,6 @@ impl IndexData {
 pub struct Index {
     properties: Vec<TypeId>,
     property_setters: Vec<Box<PropertySetter>>,
-    //mutation_callback_setters: Vec<MutationCallbackSetter>,
 }
 
 impl Default for Index {
@@ -313,10 +313,6 @@ impl Index {
                         index_cell.push(Box::new(value));
                     }),
                 );
-
-                // // Add setter for mutation callbacks
-                // self.mutation_callback_setters
-                //     .insert(index, Self::set_callback::<T>);
             }
         }
         self
@@ -329,6 +325,11 @@ pub trait ContextPeopleExt {
 
     /// Creates a new person with no assigned person properties
     fn add_person(&mut self) -> PersonId;
+
+    fn add_person_with_overrides(
+        &mut self,
+        overrides: impl FnOnce(&mut Context, PersonId),
+    ) -> PersonId;
 
     /// Given a `PersonId` returns the value of a defined person property
     /// Panics if it's not set
@@ -363,7 +364,42 @@ impl ContextPeopleExt for Context {
     }
 
     fn add_person(&mut self) -> PersonId {
-        let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
+        self.add_person_with_overrides(|_context, _person_id| {})
+    }
+
+    fn add_person_with_overrides(
+        &mut self,
+        overrides: impl FnOnce(&mut Context, PersonId),
+    ) -> PersonId {
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let person_id = data_container.add_person();
+        // Execute property overrides
+        overrides(self, person_id);
+        // Add person to indexes
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let index_keys: Vec<Vec<TypeId>> = data_container
+            .index_data_map
+            .keys()
+            .map(Clone::clone)
+            .collect();
+        for key in index_keys {
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+            let cell = data_container
+                .index_data_map
+                .get(&key)
+                .unwrap()
+                .get_person_cell(self, person_id);
+
+            let data_container = self.get_data_container_mut(PeoplePlugin);
+            data_container
+                .index_data_map
+                .get_mut(&key)
+                .unwrap()
+                .index_cells
+                .entry(cell)
+                .or_default()
+                .insert(person_id);
+        }
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
     }
@@ -411,6 +447,8 @@ impl ContextPeopleExt for Context {
             // The person property is not yet initialized, so we don't emit any events.
             None => {
                 data_container.set_person_property(person_id, property, value);
+                // TODO: Note, for indexes this branch should not happen or
+                //   else how could this property have been indexed?
             }
         }
     }
@@ -424,8 +462,6 @@ impl ContextPeopleExt for Context {
     }
 
     fn query_people(&self, query: Query) -> IndexSetPersonContainer {
-        let mut container = IndexSetPersonContainer::new();
-
         // If index exists, use that to service the query
         if let Some(index_data) = self
             .get_data_container(PeoplePlugin)
@@ -439,6 +475,7 @@ impl ContextPeopleExt for Context {
             }
         } else {
             // No index exists, so just iterate over the population
+            let mut container = IndexSetPersonContainer::new();
             let population = self.get_population();
             for id in 0..population {
                 let person_id = PersonId { id };
@@ -450,7 +487,6 @@ impl ContextPeopleExt for Context {
                     container.insert(person_id);
                 }
             }
-
             container
         }
     }
@@ -477,11 +513,19 @@ impl ContextPeopleExt for Context {
         }
 
         // Store the index data
-        let index_data_map = &mut self.get_data_container_mut(PeoplePlugin).index_data_map;
-        index_data_map.insert(index.properties.clone(), index_data);
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        data_container
+            .index_data_map
+            .insert(index.properties.clone(), index_data);
 
-        // TODO:
-        // Need to set up a way to have people re-evaluated on creation and property change
+        // Store the properties that this index is sensitive to
+        index.properties.clone().iter().for_each(|type_id| {
+            data_container
+                .index_sensitivities
+                .entry(*type_id)
+                .or_default()
+                .push(index.properties.clone());
+        });
     }
 }
 
@@ -490,7 +534,7 @@ mod test {
     use super::{
         ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent, Query,
     };
-    use crate::context::Context;
+    use crate::{context::Context, people::Index};
     use std::{cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
@@ -713,6 +757,67 @@ mod test {
                 .with_person_property(RiskCategoryType, RiskCategory::Low),
         );
         assert_eq!(low_risk_age_10.len(), 1);
+        assert!(low_risk_age_10.contains(&person_zero));
+
+        let low_risk_age_20 = context.query_people(
+            Query::new()
+                .with_person_property(Age, 20)
+                .with_person_property(RiskCategoryType, RiskCategory::Low),
+        );
+        assert_eq!(low_risk_age_20.len(), 2);
+        assert!(low_risk_age_20.contains(&person_two));
+        assert!(low_risk_age_20.contains(&person_three));
+    }
+
+    #[test]
+    fn query_with_index() {
+        let mut context = Context::new();
+        context.add_index(Index::new().with_person_property(Age));
+        context.add_index(
+            Index::new()
+                .with_person_property(Age)
+                .with_person_property(RiskCategoryType),
+        );
+        let person_zero = context.add_person_with_overrides(|context, person_id| {
+            context.set_person_property(person_id, Age, 10);
+            context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        });
+
+        let person_one = context.add_person_with_overrides(|context, person_id| {
+            context.set_person_property(person_id, Age, 10);
+            context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+        });
+
+        let person_two = context.add_person_with_overrides(|context, person_id| {
+            context.set_person_property(person_id, Age, 20);
+            context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        });
+
+        let person_three = context.add_person_with_overrides(|context, person_id| {
+            context.set_person_property(person_id, Age, 20);
+            context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        });
+
+        let age_10 = context.query_people(Query::new().with_person_property(Age, 10));
+        assert_eq!(age_10.len(), 2);
         assert!(age_10.contains(&person_zero));
+        assert!(age_10.contains(&person_one));
+
+        let low_risk_age_10 = context.query_people(
+            Query::new()
+                .with_person_property(Age, 10)
+                .with_person_property(RiskCategoryType, RiskCategory::Low),
+        );
+        assert_eq!(low_risk_age_10.len(), 1);
+        assert!(low_risk_age_10.contains(&person_zero));
+
+        let low_risk_age_20 = context.query_people(
+            Query::new()
+                .with_person_property(Age, 20)
+                .with_person_property(RiskCategoryType, RiskCategory::Low),
+        );
+        assert_eq!(low_risk_age_20.len(), 2);
+        assert!(low_risk_age_20.contains(&person_two));
+        assert!(low_risk_age_20.contains(&person_three));
     }
 }
