@@ -83,6 +83,9 @@ If you need custom logic or you have dependencies on other properties to compute
 initial values, you can also define a custom initializer that takes a reference
 to context and a person identifier using `define_person_property!`.
 
+Initializers are called lazily the first time the property is accessed via
+`get_person_property` and do *not* trigger change events.
+
 For example,`vaccine.rs` defines an initializer that computes how many vaccine
 doses someone should be assigned based on their age:
 
