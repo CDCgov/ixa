@@ -43,10 +43,11 @@ pub trait PersonProperty: Copy {
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
-/// * `$default`: (Optional) A default value
+/// * `$default_or_initializer`: (Optional) A default value
 #[macro_export]
 macro_rules! define_person_property {
-    ($person_property:ident, $value:ty, $default: expr) => {
+    ($person_property:ident, $value:ty,
+        fn $initialize:ident($context:ident: &Context, $person:ident: PersonId) $ty:block) => {
         #[derive(Copy, Clone)]
         pub struct $person_property;
 
@@ -56,25 +57,32 @@ macro_rules! define_person_property {
                 _context: &$crate::context::Context,
                 _person_id: $crate::people::PersonId,
             ) -> Self::Value {
+                let $context = _context;
+                let $person = _person_id;
+                $ty
+            }
+        }
+    };
+    ($person_property:ident, $value:ty, $default: expr) => {
+        define_person_property!(
+            $person_property,
+            $value,
+            fn initialize(_context: &Context, _person_id: PersonId) {
                 $default
             }
-        }
+        );
     };
     ($person_property:ident, $value:ty) => {
-        #[derive(Copy, Clone)]
-        pub struct $person_property;
-
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = $value;
-            fn initialize(
-                _context: &$crate::context::Context,
-                _person_id: $crate::people::PersonId,
-            ) -> Self::Value {
+        define_person_property!(
+            $person_property,
+            $value,
+            fn initialize(_context: &Context, _person_id: PersonId) {
                 panic!("Property not initialized");
             }
-        }
+        );
     };
 }
+
 pub use define_person_property;
 
 impl PeopleData {
@@ -229,7 +237,7 @@ impl ContextPeopleExt for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent};
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent};
     use crate::context::Context;
     use std::{cell::RefCell, rc::Rc};
 
@@ -241,20 +249,18 @@ mod test {
     }
     define_person_property!(RiskCategoryType, RiskCategory);
     define_person_property!(IsRunner, bool, false);
-
-    #[derive(Copy, Clone)]
-    struct RunningShoes;
-    impl PersonProperty for RunningShoes {
-        type Value = u8;
-        fn initialize(context: &Context, person_id: super::PersonId) -> Self::Value {
-            let is_runner = context.get_person_property(person_id, IsRunner);
+    define_person_property!(
+        RunningShoes,
+        u8,
+        fn initialize(context: &Context, person: PersonId) {
+            let is_runner = context.get_person_property(person, IsRunner);
             if is_runner {
                 4
             } else {
                 0
             }
         }
-    }
+    );
 
     #[test]
     fn observe_person_addition() {

@@ -59,7 +59,8 @@ given person, the simulation will panic.
 In ixa, every property must be initialized before it is accessed. The preferred
 way to do this is to define an `initializer` which is lazily evaluated,
 but you can also assign initial values manually – several patterns
-are described below, and demonstrated in the example model.
+are described below, and demonstrated in the example model. You can do this
+using the `define_person_property!` macro.
 
 Note that when intitial values are assigned they do *not* trigger a
 `PersonPropertyChangeEvent`.
@@ -81,36 +82,34 @@ define_person_property!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 #### Custom initializer
 
 If you need custom logic or you have dependencies on other properties to compute
-initial values, you can implement a custom initializer on your property struct.
-The initializer takes a reference to context and a person identifier, and should
-return a value.
+initial values, you can also define a custom initializer that takes a reference
+to context and a person identifier using `define_person_property!`.
 
 For example,`vaccine.rs` defines an initializer that computes how many vaccine
 doses someone should be assigned based on their age:
 
 ```rust
-pub struct VaccineDoses;
-impl PersonProperty for VaccineDoses {
-    type Value = u8;
-    fn initialize(context: &Context, person_id: PersonId) -> Option<Self::Value> {
+define_person_property!(
+    VaccineDoses,
+    u8,
+    fn initialize(context: &Context, person_id: PersonId) {
         let age = context.get_person_property(person_id, Age);
         if (age > 10) { 1 } else { 0 }
     }
-}
+);
 ```
 
 Sometimes properties may need to be initialized with data contributed from somewhere
 else. If that's the case, you can make it available via context:
 
 ```rust
-struct VaccineType;
-impl PersonProperty for VaccineType {
-    type Value = u8;
-    fn initialize(context: &Context, person: PersonId) -> Option<Self::Value> {
-        let vaccine = context.get_random_vaccine();
-        Some(vaccine)
+define_person_property!(
+    VaccineType,
+    VaccineTypeValue,
+    fn initialize(context: &Context, person_id: PersonId) {
+        context.get_random_vaccine()
     }
-}
+);
 
 impl VaccineContextExt for Context {
     fn get_random_vaccine() {
