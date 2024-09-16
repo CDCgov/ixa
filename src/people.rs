@@ -33,13 +33,17 @@ pub struct PersonId {
 // disease status, are represented as "person properties". These properties
 // * are represented by a struct type that implements the PersonProperty trait,
 // * specify a Value type to represent the data associated with the property,
-// * specify a default value
-// They should be defined with the define_person_property! macro.
+// * specify an initializer, which returns the initial value
+// They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
     fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
 }
 
+/// Defines a person property with the following parameters:
+/// * `$person_property`: A name for the identifier type of the property
+/// * `$value`: The type of the property's value
+/// * `$default`: (Optional) A default value
 #[macro_export]
 macro_rules! define_person_property {
     ($person_property:ident, $value:ty, $default: expr) => {
@@ -75,6 +79,7 @@ pub use define_person_property;
 
 impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
+    /// This will increment the current population by 1.
     fn add_person(&mut self) -> PersonId {
         let id = self.current_population;
         self.current_population += 1;
@@ -83,7 +88,7 @@ impl PeopleData {
 
     /// Retrieves a specific property of a person by their `PersonId`.
     ///
-    /// Returns `Option<T::Value>`: `Some(value)` if the property exists for the given person,
+    /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
     /// or `None` if it doesn't.
     #[allow(clippy::needless_pass_by_value)]
     fn get_person_property_ref<T: PersonProperty + 'static>(
@@ -187,7 +192,7 @@ impl ContextPeopleExt for Context {
             return value;
         }
 
-        // Initialize the property
+        // Initialize the property. This does not fire a change event
         let initialized_value = T::initialize(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
