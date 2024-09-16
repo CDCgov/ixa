@@ -10,7 +10,7 @@ use ixa::{
 
 pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events
-    // Note that no event get fired when the property is set the first time
+    // Note that no event gets fired when the property is set the first time
     context.subscribe_to_event(
         |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
             let person = event.person_id;
