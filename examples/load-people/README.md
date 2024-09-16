@@ -60,7 +60,7 @@ but you can also assign initial values manually – several patterns
 are described below, and demonstrated in the example model. You can do this
 using the `define_person_property!` macro.
 
-Note that when intitial values are assigned they do *not* trigger a
+Note that when initial values are assigned they do *not* trigger a
 `PersonPropertyChangeEvent`.
 
 #### Simple default values
