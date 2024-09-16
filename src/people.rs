@@ -104,9 +104,9 @@ impl PeopleData {
         person: PersonId,
         _property: T,
     ) -> RefMut<Option<T::Value>> {
-        let properies_map = self.properties_map.borrow_mut();
+        let properties_map = self.properties_map.borrow_mut();
         let index = person.id;
-        RefMut::map(properies_map, |properties_map| {
+        RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
                 .entry(TypeId::of::<T>())
                 .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
