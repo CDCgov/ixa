@@ -15,7 +15,7 @@ At a high level, each person in an ixa simulation is represented by an integer i
 range of `0` to `population - 1`, where `population` is the total number of people.
 
 When you are referring to a person in order to do things with them, you will use a `PersonId`
-struct, which internally stories its automatically assigned `id` (the index in
+struct, which internally stores its automatically assigned `id` (the index in
 the population range):
 
 ```rust
