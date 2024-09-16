@@ -125,7 +125,7 @@ ensure that this happens before the property is accessed (or the simulation will
 One common use case for manual assignment is when you need to load people from a csv file.
 In that case, you can read the properties and assign them a population loader.
 
-You can see an exampel of this in `population_loader.rs`:
+You can see an example of this in `population_loader.rs`:
 
 ```rust
 let person = context.add_person();
