@@ -47,13 +47,18 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
     use crate::{
         population_loader::Age,
-        sir::DiseaseStatusType,
-        vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
+        vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
     };
-    use ixa::{context::Context, people::PersonCreatedEvent, random::ContextRandomExt};
+    use ixa::{
+        context::Context,
+        people::{PersonCreatedEvent, PersonPropertyChangeEvent},
+        random::ContextRandomExt,
+    };
 
     const EXPECTED_ROWS: usize = 5;
 
@@ -65,27 +70,28 @@ mod tests {
         assert_eq!(context.get_current_population(), EXPECTED_ROWS);
     }
 
-    fn test_init_access_properties() {
-        let mut context = Context::new();
-        context.init_random(42);
-        init(&mut context);
-        assert_eq!(context.get_current_population(), EXPECTED_ROWS);
-        let person = PersonId { id: 0 };
-        context.get_person_property(person, VaccineDoses);
-        context.get_person_property(person, VaccineEfficacy);
-        context.get_person_property(person, VaccineType);
-    }
+    #[test]
+    fn test_creation_event_access_properties() {
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
 
-    fn test_creation_event() {
         let mut context = Context::new();
         context.init_random(42);
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<VaccineEfficacy>| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
         context.subscribe_to_event(|context, event: PersonCreatedEvent| {
             let person = event.person_id;
+            // None of these should panic
             context.get_person_property(person, Age);
             context.get_person_property(person, VaccineDoses);
             context.get_person_property(person, VaccineType);
             context.get_person_property(person, VaccineEfficacy);
         });
         init(&mut context);
+        // PersonPropertyChangeEvent should not have fired
+        assert!(!*flag.borrow());
     }
 }

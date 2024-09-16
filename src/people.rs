@@ -238,8 +238,8 @@ mod test {
     define_person_property!(IsRunner, bool, false);
 
     #[derive(Copy, Clone)]
-    struct Races;
-    impl PersonProperty for Races {
+    struct RunningShoes;
+    impl PersonProperty for RunningShoes {
         type Value = u8;
         fn initialize(context: &Context, person_id: super::PersonId) -> Self::Value {
             let is_runner = context.get_person_property(person_id, IsRunner);
@@ -278,7 +278,7 @@ mod test {
     #[allow(clippy::should_panic_without_expect)]
     #[test]
     #[should_panic]
-    fn get_uninitialized_property() {
+    fn get_uninitialized_property_panics() {
         let mut context = Context::new();
         let person = context.add_person();
         context.get_person_property(person, Age);
@@ -295,7 +295,7 @@ mod test {
         }
         let tenth_person = context.add_person();
 
-        // This will fill up the earlier people in the Age vec with None values
+        // Get a person property for a person > index 0
         context.set_person_property(tenth_person, Age, 42);
 
         // Now we set up a listener for change events
@@ -346,7 +346,7 @@ mod test {
         let mut context = Context::new();
         let person_id = context.add_person();
 
-        assert_eq!(context.get_person_property(person_id, Races), 0);
+        assert_eq!(context.get_person_property(person_id, RunningShoes), 0);
         assert!(!context.get_person_property(person_id, IsRunner));
     }
 
@@ -366,7 +366,7 @@ mod test {
         // This should not emit a change event
         context.set_person_property(person, Age, 42);
         let _is_runner = context.get_person_property(person, IsRunner);
-        let _is_runner = context.get_person_property(person, Races);
+        let _is_runner = context.get_person_property(person, RunningShoes);
         context.execute();
         assert!(!*flag.borrow());
     }
@@ -406,12 +406,14 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(move |_context, _event: PersonPropertyChangeEvent<Races>| {
-            *flag_clone.borrow_mut() = true;
-        });
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<RunningShoes>| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
         let person_id = context.add_person();
         // Innitializer wasn't called, so don't fire an event
-        context.set_person_property(person_id, Races, 42);
+        context.set_person_property(person_id, RunningShoes, 42);
         context.execute();
         assert!(!*flag.borrow());
     }

@@ -24,3 +24,31 @@ pub fn init(context: &mut Context) {
         });
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ixa::context::Context;
+
+    #[test]
+    fn test_disease_status() {
+        let mut context = Context::new();
+        init(&mut context);
+
+        let person = context.add_person();
+
+        // People should start in the S state
+        assert_eq!(
+            context.get_person_property(person, DiseaseStatusType),
+            DiseaseStatus::S
+        );
+
+        context.execute();
+
+        // People should end up in the R state by the end of the simulation
+        assert_eq!(
+            context.get_person_property(person, DiseaseStatusType),
+            DiseaseStatus::R
+        );
+    }
+}
