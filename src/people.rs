@@ -319,6 +319,84 @@ impl Index {
     }
 }
 
+trait ContextPeopleInternalExt {
+    fn add_person_to_indexes(&mut self, person_id: PersonId);
+
+    fn update_indexes<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+        current_value: T::Value,
+    ) where
+        T::Value: AnyHashEq;
+}
+
+impl ContextPeopleInternalExt for Context {
+    fn add_person_to_indexes(&mut self, person_id: PersonId) {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let index_keys: Vec<Vec<TypeId>> = data_container
+            .index_data_map
+            .keys()
+            .map(Clone::clone)
+            .collect();
+        for key in index_keys {
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+            let cell = data_container
+                .index_data_map
+                .get(&key)
+                .unwrap()
+                .get_person_cell(self, person_id);
+
+            let data_container = self.get_data_container_mut(PeoplePlugin);
+            data_container
+                .index_data_map
+                .get_mut(&key)
+                .unwrap()
+                .index_cells
+                .entry(cell)
+                .or_default()
+                .insert(person_id);
+        }
+    }
+
+    fn update_indexes<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+        old_value: T::Value,
+    ) where
+        T::Value: AnyHashEq,
+    {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        if let Some(index_keys) = data_container
+            .index_sensitivities
+            .get(&TypeId::of::<T>())
+            .map(Clone::clone)
+        {
+            for index_key in index_keys {
+                let data_container = self.get_data_container(PeoplePlugin).unwrap();
+                // First find the person's new cell
+                let mut index_cell = data_container
+                    .index_data_map
+                    .get(&index_key)
+                    .unwrap()
+                    .get_person_cell(self, person_id);
+                let property_index = index_key.binary_search(&TypeId::of::<T>()).unwrap();
+
+                // Move from old to new cell
+                let data_map = &mut self.get_data_container_mut(PeoplePlugin).index_data_map;
+                let index_data = data_map.get_mut(&index_key).unwrap();
+                let index_cells = &mut index_data.index_cells;
+                let new_value =
+                    std::mem::replace(&mut index_cell[property_index], Box::new(old_value));
+                index_cells.get_mut(&index_cell).unwrap().remove(&person_id);
+                index_cell[property_index] = new_value;
+                index_cells.entry(index_cell).or_default().insert(person_id);
+            }
+        }
+    }
+}
+
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
@@ -376,30 +454,7 @@ impl ContextPeopleExt for Context {
         // Execute property overrides
         overrides(self, person_id);
         // Add person to indexes
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let index_keys: Vec<Vec<TypeId>> = data_container
-            .index_data_map
-            .keys()
-            .map(Clone::clone)
-            .collect();
-        for key in index_keys {
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-            let cell = data_container
-                .index_data_map
-                .get(&key)
-                .unwrap()
-                .get_person_cell(self, person_id);
-
-            let data_container = self.get_data_container_mut(PeoplePlugin);
-            data_container
-                .index_data_map
-                .get_mut(&key)
-                .unwrap()
-                .index_cells
-                .entry(cell)
-                .or_default()
-                .insert(person_id);
-        }
+        self.add_person_to_indexes(person_id);
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
     }
@@ -430,8 +485,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        let data_container = self.get_data_container_mut(PeoplePlugin);
         let current_value = *data_container.get_person_property_ref(person_id, property);
         match current_value {
             // The person property is already set, so we emit a change event
@@ -442,6 +496,9 @@ impl ContextPeopleExt for Context {
                     previous: current_value,
                 };
                 data_container.set_person_property(person_id, property, value);
+                // Update indexes
+                // TODO: This doesn't work as T::Value is not necessarily Hash + Eq
+                // self.update_indexes(person_id, property, current_value);
                 self.emit_event(change_event);
             }
             // The person property is not yet initialized, so we don't emit any events.
@@ -455,7 +512,7 @@ impl ContextPeopleExt for Context {
 
     fn get_population(&self) -> usize {
         if let Some(data_container) = self.get_data_container(PeoplePlugin) {
-            data_container.population
+            data_container.current_population
         } else {
             0
         }
@@ -531,10 +588,15 @@ impl ContextPeopleExt for Context {
 
 #[cfg(test)]
 mod test {
+    use rand::{rngs::StdRng, seq::index::sample, Rng, SeedableRng};
+
     use super::{
         ContextPeopleExt, PersonCreatedEvent, PersonProperty, PersonPropertyChangeEvent, Query,
     };
-    use crate::{context::Context, people::Index};
+    use crate::{
+        context::Context,
+        people::{Index, PersonId},
+    };
     use std::{cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
@@ -819,5 +881,76 @@ mod test {
         assert_eq!(low_risk_age_20.len(), 2);
         assert!(low_risk_age_20.contains(&person_two));
         assert!(low_risk_age_20.contains(&person_three));
+    }
+
+    #[test]
+    fn index_change_properties() {
+        let population = 1000;
+        let n_to_change_properties = 100;
+
+        let mut context = Context::new();
+
+        context.add_index(
+            Index::new()
+                .with_person_property(Age)
+                .with_person_property(RiskCategoryType),
+        );
+
+        for _ in 0..population {
+            context.add_person_with_overrides(|context, person_id| {
+                context.set_person_property(person_id, Age, 10);
+                context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+            });
+        }
+
+        let mut rng = StdRng::seed_from_u64(8_675_309);
+        let people_to_change = sample(&mut rng, population, n_to_change_properties);
+
+        let mut n_with_age_20 = 0;
+        for person_id in people_to_change {
+            if rng.gen_bool(0.5) {
+                context.set_person_property(PersonId { id: person_id }, Age, 20);
+                n_with_age_20 += 1;
+            } else {
+                context.set_person_property(
+                    PersonId { id: person_id },
+                    RiskCategoryType,
+                    RiskCategory::High,
+                );
+            }
+        }
+
+        assert_eq!(
+            context
+                .query_people(
+                    Query::new()
+                        .with_person_property(Age, 20)
+                        .with_person_property(RiskCategoryType, RiskCategory::Low)
+                )
+                .len(),
+            n_with_age_20
+        );
+
+        assert_eq!(
+            context
+                .query_people(
+                    Query::new()
+                        .with_person_property(Age, 10)
+                        .with_person_property(RiskCategoryType, RiskCategory::High)
+                )
+                .len(),
+            n_to_change_properties - n_with_age_20
+        );
+
+        assert_eq!(
+            context
+                .query_people(
+                    Query::new()
+                        .with_person_property(Age, 20)
+                        .with_person_property(RiskCategoryType, RiskCategory::High)
+                )
+                .len(),
+            0
+        );
     }
 }
