@@ -67,7 +67,10 @@ Note that when intitial values are assigned they do *not* trigger a
 #### Simple default values
 
 If you want all people to be initialized with the same default value, you can
-simply pass in the value to the the `define_person_property!` macro:
+simply pass in the value to the the `define_person_property!` macro.
+
+You can see an example of this in `sir.rs`, which assigns a default disease
+status:
 
 ```rust
 #[derive(Copy)]
@@ -80,8 +83,10 @@ define_person_property!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 If you need custom logic or you have dependencies on other properties to compute
 initial values, you can implement a custom initializer on your property struct.
 The initializer takes a reference to context and a person identifier, and should
-return a value. For example, this initializer computes how many vaccine doses
-someone should be assigned based on their age:
+return a value.
+
+For example,`vaccine.rs` defines an initializer that computes how many vaccine
+doses someone should be assigned based on their age:
 
 ```rust
 pub struct VaccineDoses;
@@ -95,8 +100,7 @@ impl PersonProperty for VaccineDoses {
 ```
 
 Sometimes properties may need to be initialized with data contributed from somewhere
-else. If that's the case, you should make it available via context (e.g., via trait
-extension):
+else. If that's the case, you can make it available via context:
 
 ```rust
 struct VaccineType;
@@ -122,7 +126,9 @@ override any default initializers on the type. However, you must be careful to
 ensure that this happens before the property is accessed (or the simulation will panic).
 
 One common use case for manual assignment is when you need to load people from a csv file.
-In that case, you can read the properties and assign them a population loader:
+In that case, you can read the properties and assign them a population loader.
+
+You can see an exampel of this in `population_loader.rs`:
 
 ```rust
 let person = context.add_person();
