@@ -53,7 +53,7 @@ mod tests {
         sir::DiseaseStatusType,
         vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
-    use ixa::{context::Context, random::ContextRandomExt};
+    use ixa::{context::Context, people::PersonCreatedEvent, random::ContextRandomExt};
 
     const EXPECTED_ROWS: usize = 5;
 
