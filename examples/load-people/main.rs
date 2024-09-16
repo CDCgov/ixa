@@ -1,11 +1,5 @@
-use ixa::{
-    context::Context,
-    people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent},
-    random::ContextRandomExt,
-};
-use population_loader::Age;
-use sir::DiseaseStatusType;
-use vaccine::{VaccineDoses, VaccineEfficacy, VaccineType};
+use ixa::{context::Context, random::ContextRandomExt};
+mod logger;
 mod population_loader;
 mod sir;
 mod vaccine;
@@ -15,38 +9,14 @@ fn main() {
 
     context.init_random(42);
 
-    // This subscribes to the disease status change events
-    // Note that no event get fired when the property is set the first time
-    context.subscribe_to_event(
-        |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
-            let person = event.person_id;
-            println!(
-                "Person {} changed disease status from {:?} to {:?}",
-                person.id, event.previous, event.current,
-            );
-        },
-    );
+    // Sets up some event listeners on person creation and property changes
+    logger::init(&mut context);
 
-    // Logs when a person is created
-    context.subscribe_to_event(|context, event: PersonCreatedEvent| {
-        let person = event.person_id;
-        let age = context.get_person_property(person, Age);
-        let vaccine_doses = context.get_person_property(person, VaccineDoses);
-        let vaccine_type = context.get_person_property(person, VaccineType);
-        let vaccine_efficacy = context.get_person_property(person, VaccineEfficacy);
-        println!(
-            "Person {} age: {}, {} vaccine doses, vaccine {:?} ({})",
-            person.id, age, vaccine_doses, vaccine_type, vaccine_efficacy
-        );
-    });
-
-    // This sets up the SIR person property and schedules infections/recoveries
-    // When each person is created.
+    // This sets up the DiseaseStatus person property and schedules infections/recoveries
+    // when each person is created.
     sir::init(&mut context);
 
     // Load people from csv and set up some base properties
-    // Note, this really has to come *after* anything that registers person
-    // intiialization stuff.
     population_loader::init(&mut context);
 
     context.execute();

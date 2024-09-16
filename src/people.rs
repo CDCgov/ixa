@@ -9,7 +9,7 @@ use std::{
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
 struct PeopleData {
-    population: usize,
+    current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
 }
 
@@ -17,7 +17,7 @@ define_data_plugin!(
     PeoplePlugin,
     PeopleData,
     PeopleData {
-        population: 0,
+        current_population: 0,
         properties_map: RefCell::new(HashMap::new())
     }
 );
@@ -76,8 +76,8 @@ pub use define_person_property;
 impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     fn add_person(&mut self) -> PersonId {
-        let id = self.population;
-        self.population += 1;
+        let id = self.current_population;
+        self.current_population += 1;
         PersonId { id }
     }
 
@@ -139,6 +139,9 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
 }
 
 pub trait ContextPeopleExt {
+    /// Returns the current population size
+    fn get_current_population(&self) -> usize;
+
     /// Creates a new person with no assigned person properties
     fn add_person(&mut self) -> PersonId;
 
@@ -160,6 +163,11 @@ pub trait ContextPeopleExt {
 }
 
 impl ContextPeopleExt for Context {
+    fn get_current_population(&self) -> usize {
+        self.get_data_container(PeoplePlugin)
+            .map_or(0, |data_container| data_container.current_population)
+    }
+
     fn add_person(&mut self) -> PersonId {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
         self.emit_event(PersonCreatedEvent { person_id });
@@ -307,6 +315,16 @@ mod test {
         context.set_person_property(first_person, Age, 43);
         context.execute();
         assert!(*flag.borrow());
+    }
+
+    #[test]
+    fn get_current_population() {
+        let mut context = Context::new();
+        assert_eq!(context.get_current_population(), 0);
+        for _ in 0..3 {
+            context.add_person();
+        }
+        assert_eq!(context.get_current_population(), 3);
     }
 
     #[test]

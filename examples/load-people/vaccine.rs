@@ -14,7 +14,6 @@ pub enum VaccineTypeValue {
 }
 define_person_property!(VaccineType, VaccineTypeValue);
 define_person_property!(VaccineEfficacy, f64);
-
 define_rng!(VaccineRng);
 
 #[allow(clippy::module_name_repetitions)]
@@ -33,14 +32,11 @@ impl PersonProperty for VaccineDoses {
 }
 
 pub trait ContextVaccineExt {
-    fn get_vaccine_type_and_efficacy(&self, risk: RiskCategory) -> (VaccineTypeValue, f64);
+    fn get_vaccine_props(&self, risk: RiskCategory) -> (VaccineTypeValue, f64);
 }
 
 impl ContextVaccineExt for Context {
-    fn get_vaccine_type_and_efficacy(
-        self: &Context,
-        risk: RiskCategory,
-    ) -> (VaccineTypeValue, f64) {
+    fn get_vaccine_props(self: &Context, risk: RiskCategory) -> (VaccineTypeValue, f64) {
         if risk == RiskCategory::High {
             (VaccineTypeValue::A, 0.9)
         } else {
