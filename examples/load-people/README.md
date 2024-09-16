@@ -51,8 +51,6 @@ context.set_person_property(person, Age, 69);
 assert!(context.get_person_property(person, Age), 69);
 ```
 
-Note that if you try to access a person property that is not initialized on the
-given person, the simulation will panic.
 
 ### Initializing person properties
 
