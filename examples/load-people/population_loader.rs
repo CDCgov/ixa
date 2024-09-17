@@ -52,7 +52,7 @@ mod tests {
     use super::*;
     use crate::{
         population_loader::Age,
-        vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
+        vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
     use ixa::{
         context::Context,
@@ -73,25 +73,65 @@ mod tests {
     #[test]
     fn test_creation_event_access_properties() {
         let flag = Rc::new(RefCell::new(false));
-        let flag_clone = flag.clone();
+
+        // Define expected computed values for each person
+        let expected_computed = vec![
+            (20, RiskCategory::Low, VaccineTypeValue::B, 0.8, 1),
+            (80, RiskCategory::High, VaccineTypeValue::A, 0.9, 2),
+        ];
 
         let mut context = Context::new();
         context.init_random(42);
+
+        // Subscribe to person property change event
+        let flag_clone = Rc::clone(&flag);
         context.subscribe_to_event(
             move |_context, _event: PersonPropertyChangeEvent<VaccineEfficacy>| {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        context.subscribe_to_event(|context, event: PersonCreatedEvent| {
-            let person = event.person_id;
-            // None of these should panic
-            context.get_person_property(person, Age);
-            context.get_person_property(person, VaccineDoses);
-            context.get_person_property(person, VaccineType);
-            context.get_person_property(person, VaccineEfficacy);
+
+        let counter = Rc::new(RefCell::new(0));
+        let expected_computed = Rc::new(expected_computed);
+
+        context.subscribe_to_event({
+            let counter = Rc::clone(&counter);
+            let expected_computed = Rc::clone(&expected_computed);
+
+            move |context, event: PersonCreatedEvent| {
+                let person = event.person_id;
+                let current_count = *counter.borrow();
+                let (age, risk_category, vaccine_type, efficacy, doses) =
+                    expected_computed[current_count];
+
+                assert_eq!(context.get_person_property(person, Age), age);
+                assert_eq!(
+                    context.get_person_property(person, RiskCategoryType),
+                    risk_category
+                );
+                assert_eq!(
+                    context.get_person_property(person, VaccineType),
+                    vaccine_type
+                );
+                assert_eq!(
+                    context.get_person_property(person, VaccineEfficacy),
+                    efficacy
+                );
+                assert_eq!(context.get_person_property(person, VaccineDoses), doses);
+
+                *counter.borrow_mut() += 1;
+            }
         });
-        init(&mut context);
-        // PersonPropertyChangeEvent should not have fired
+
+        // Create people from records based on expected values
+        for &(age, risk_category, _, _, _) in expected_computed.iter() {
+            create_person_from_record(&mut context, &PeopleRecord { age, risk_category });
+        }
+
+        // Execute the context
+        context.execute();
+
+        // Make sure PersonPropertyChangeEvent didn't fire
         assert!(!*flag.borrow());
     }
 }

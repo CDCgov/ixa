@@ -28,7 +28,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ixa::context::Context;
+    use ixa::{context::Context, people::PersonPropertyChangeEvent};
 
     #[test]
     fn test_disease_status() {
@@ -41,6 +41,19 @@ mod tests {
         assert_eq!(
             context.get_person_property(person, DiseaseStatusType),
             DiseaseStatus::S
+        );
+
+        // At 1.0, people should be in the I state
+        context.subscribe_to_event(
+            |context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
+                let person = event.person_id;
+                if context.get_current_time() == 1.0 {
+                    assert_eq!(
+                        context.get_person_property(person, DiseaseStatusType),
+                        DiseaseStatus::I
+                    );
+                }
+            },
         );
 
         context.execute();
