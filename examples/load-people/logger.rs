@@ -15,8 +15,8 @@ pub fn init(context: &mut Context) {
         |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
             let person = event.person_id;
             println!(
-                "Person {} changed disease status from {:?} to {:?}",
-                person.id, event.previous, event.current,
+                "{:?} changed disease status from {:?} to {:?}",
+                person, event.previous, event.current,
             );
         },
     );
@@ -25,8 +25,8 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(|context, event: PersonCreatedEvent| {
         let person = event.person_id;
         println!(
-            "Person {} age: {}, {} vaccine doses, vaccine {:?} ({})",
-            person.id,
+            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({})",
+            person,
             context.get_person_property(person, Age),
             context.get_person_property(person, VaccineDoses),
             context.get_person_property(person, VaccineType),

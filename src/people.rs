@@ -3,6 +3,7 @@ use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
+    fmt,
 };
 
 // PeopleData represents each unique person in the simulation with an id ranging
@@ -26,7 +27,13 @@ define_data_plugin!(
 // 0 to population - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct PersonId {
-    pub id: usize,
+    id: usize,
+}
+
+impl fmt::Debug for PersonId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Person {}", self.id)
+    }
 }
 
 // Individual characteristics or states related to a person, such as age or
