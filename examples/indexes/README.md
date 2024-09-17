@@ -7,7 +7,7 @@ a certain set of properties. Some examples:
 * An individual's infectivity depends on on the total number of people in
   their immediate neighborhood
 
-This requires that we can make *queries* against our population of a given set
+This requires that we can make queries against our population of a given set
 of person properties and corresponding values.
 
 ```rust
@@ -20,7 +20,7 @@ for person in query.all() {
 The naive way to implement this would be to iterate through each person in the
 population, check their properties, and return anyone who matches. However,
 in order to make this more efficient, we can take advantage of a data structure
-for looking up a set of people *by value*: that is, an index.
+for looking up a set of people by value.
 
 ## Indexes
 Indexes allow for reverse lookup of the set of person ids that match a combination
@@ -53,6 +53,23 @@ person module (i.e., called directly from `add_person` and `set_person_property`
 will will check the list of matching Buckets for each index – both
 for previous values and current values – and update membership. It's important
 for this to happen before any events are released into the system.
+
+### Ranges, comparisons
+
+The above describes a type of index which supports equality, but we may also
+want to match on something like a range of values, or some comparison: for example,
+people who are older than 65. One way to support this would be to allow for
+computed properties, for example:
+
+```rust
+define_computed_property!(OlderThan65, bool, fn get_value(context, person) {
+  let age = context.get_person_property(Age);
+  return age > 65
+});
+```
+
+There are alternatives we could consider (such as a different index data structure
+or some DSL for expressing comparisons).
 
 ### API
 
