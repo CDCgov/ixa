@@ -27,6 +27,7 @@ macro_rules! define_rng {
         paste::paste! {
             #[doc(hidden)]
             #[no_mangle]
+            #[allow(non_upper_case_globals)]
             pub static [<rng_name_duplication_guard_ $random_id>]: () = ();
         }
     };
