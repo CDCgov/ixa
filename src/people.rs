@@ -24,6 +24,8 @@ define_data_plugin!(
     }
 );
 
+type Indexer = dyn Fn(&Context, PersonId) -> u128;
+
 // Represents a unique person - the id refers to that person's index in the range
 // 0 to population - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -189,6 +191,16 @@ pub trait ContextPeopleExt {
         person_id: PersonId,
         _property: T,
     ) -> u128;
+
+    fn query_people(&self, indexer: impl Fn(&Context, PersonId) -> u128 + 'static, value: u128) -> Vec<PersonId>;
+
+}
+
+fn hash_ref<T: Hash>(val: &T) -> u128 {
+    let mut hasher = DefaultHasher::new();
+    val.hash(&mut hasher);
+    // TODO(cym4@cdc.gov): We'll want to really do 128 bits, but I'm just hacking now.
+    hasher.finish().into()
 }
 
 impl ContextPeopleExt for Context {
@@ -256,17 +268,26 @@ impl ContextPeopleExt for Context {
         property: T,
     ) -> u128 {
         let val = self.get_person_property(person_id, property);
-        
-        let mut hasher = DefaultHasher::new();
-        val.hash(&mut hasher);
-        // TODO(cym4@cdc.gov): We'll want to really do 128 bits, but I'm just hacking now.
-        hasher.finish().into()
+        hash_ref(&val)
+    }
+
+    fn query_people(&self, indexer: impl Fn(&Context, PersonId) -> u128 + 'static, value: u128) -> Vec<PersonId> { 
+        let mut response = Vec::new();
+
+        for id in 0..self.get_current_population() {
+            let person_id = PersonId{id};
+            let person_value = indexer(self, person_id);
+            if person_value == value {
+                response.push(person_id);
+            }
+        }
+        response
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent, hash_ref};
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
 
@@ -460,5 +481,24 @@ mod test {
         context.set_person_property(person_id, RunningShoes, 42);
         context.execute();
         assert!(!*flag.borrow());
+    }
+
+    define_person_property!(IsOdd, bool, |_context: &Context, person: PersonId |{
+        person.id % 2 == 1
+    });
+
+    #[test]
+    fn handrolled_indexer() {
+        let mut context = Context::new();
+        let person_id0 = context.add_person();
+        let person_id1 = context.add_person();
+        let person_id2 = context.add_person();
+        let f = true;
+        
+        let result = context.query_people(|context: &Context, person: PersonId| {
+            context.get_person_property_hash(person, IsOdd)
+        }, hash_ref(&f));
+
+        assert_eq!(result, vec![person_id1]);
     }
 }
