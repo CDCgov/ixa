@@ -293,7 +293,8 @@ macro_rules! make_indexer {
                 let val = context.get_person_property_hash(person, $t);
                 tmp.push(val);
             )*
-                // TODO(cym4@cdc.gov): Temporary
+            // TODO(cym4@cdc.gov): Temporary
+             println!(tmp);
              tmp[0]
         }
     }
