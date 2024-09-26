@@ -285,6 +285,20 @@ impl ContextPeopleExt for Context {
     }
 }
 
+macro_rules! make_indexer {
+    ( $( $t:ident ),* ) => {
+        | context: &Context, person: PersonId | {            
+            let mut tmp = Vec::new();        
+            $(
+                let val = context.get_person_property_hash(person, $t);
+                tmp.push(val);
+            )*
+                // TODO(cym4@cdc.gov): Temporary
+             tmp[0]
+        }
+    }
+}    
+
 #[cfg(test)]
 mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent, hash_ref};
@@ -493,12 +507,26 @@ mod test {
         let person_id0 = context.add_person();
         let person_id1 = context.add_person();
         let person_id2 = context.add_person();
-        let f = true;
         
         let result = context.query_people(|context: &Context, person: PersonId| {
             context.get_person_property_hash(person, IsOdd)
-        }, hash_ref(&f));
+        }, hash_ref(&true));
 
         assert_eq!(result, vec![person_id1]);
     }
+
+    #[test]
+    fn macro_indexer() {
+        let mut context = Context::new();
+        let person_id0 = context.add_person();
+        let person_id1 = context.add_person();
+        let person_id2 = context.add_person();
+        
+        let result = context.query_people(
+            make_indexer!(IsOdd), hash_ref(&true));
+
+        assert_eq!(result, vec![person_id1]);
+    }
+    
+
 }
