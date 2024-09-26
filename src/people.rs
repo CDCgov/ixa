@@ -294,8 +294,8 @@ macro_rules! make_indexer {
                 tmp.push(val);
             )*
             // TODO(cym4@cdc.gov): Temporary
-             println!(tmp);
-             tmp[0]
+                println!("{:?}", tmp);
+            hash_ref(&tmp)
         }
     }
 }    
@@ -522,9 +522,12 @@ mod test {
         let person_id0 = context.add_person();
         let person_id1 = context.add_person();
         let person_id2 = context.add_person();
-        
+
+        let all_true = vec![hash_ref(&true)];
+        println!("Compare {:?}", all_true);
         let result = context.query_people(
-            make_indexer!(IsOdd), hash_ref(&true));
+            make_indexer!(IsOdd), hash_ref(&all_true));
+
 
         assert_eq!(result, vec![person_id1]);
     }
