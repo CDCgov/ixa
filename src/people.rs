@@ -1,5 +1,6 @@
 use crate::{context::Context, define_data_plugin};
 use std::{
+    hash::{Hash, DefaultHasher, Hasher},
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
@@ -43,7 +44,7 @@ impl fmt::Debug for PersonId {
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
-    type Value: Copy;
+    type Value: Copy + Hash;
     fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
 }
 
@@ -179,6 +180,15 @@ pub trait ContextPeopleExt {
         _property: T,
         value: T::Value,
     );
+
+    /// Given a `PersonId` returns the hash of defined person property,
+    /// initializing it if it hasn't been set yet. If no initializer is
+    /// provided, and the property is not set this will panic
+    fn get_person_property_hash<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        _property: T,
+    ) -> u128;
 }
 
 impl ContextPeopleExt for Context {
@@ -239,6 +249,19 @@ impl ContextPeopleExt for Context {
             }
         }
     }
+
+    fn get_person_property_hash<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        property: T,
+    ) -> u128 {
+        let val = self.get_person_property(person_id, property);
+        
+        let mut hasher = DefaultHasher::new();
+        val.hash(&mut hasher);
+        // TODO(cym4@cdc.gov): We'll want to really do 128 bits, but I'm just hacking now.
+        hasher.finish().into()
+    }
 }
 
 #[cfg(test)]
@@ -248,7 +271,7 @@ mod test {
     use std::{cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
-    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
     pub enum RiskCategory {
         High,
         Low,

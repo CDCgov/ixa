@@ -1,4 +1,6 @@
 use crate::population_loader::{Age, RiskCategory};
+use std::hash::{Hash, Hasher};
+
 use ixa::{
     context::Context, define_person_property, define_rng, people::ContextPeopleExt,
     random::ContextRandomExt,
@@ -7,13 +9,22 @@ use ixa::{
 define_rng!(VaccineRng);
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum VaccineTypeValue {
     A,
     B,
 }
 define_person_property!(VaccineType, VaccineTypeValue);
-define_person_property!(VaccineEfficacy, f64);
+#[derive(Copy, Clone, Debug)]
+pub struct VaccineEfficacyValue(pub f64);
+
+impl Hash for VaccineEfficacyValue {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
+        // TODO(cym4@cdc.gov): Actually implement this.
+        panic!("Unimplemented")
+    }
+}
+define_person_property!(VaccineEfficacy, VaccineEfficacyValue);
 define_person_property!(VaccineDoses, u8, |context: &Context, person_id| {
     let age = context.get_person_property(person_id, Age);
     if age > 10 {

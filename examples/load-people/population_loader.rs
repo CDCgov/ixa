@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
+use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineEfficacyValue, VaccineType};
 use ixa::context::Context;
 use ixa::define_person_property;
 use ixa::people::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
 
-#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum RiskCategory {
     High,
     Low,
@@ -29,7 +29,7 @@ fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> Pe
     // Set vaccine type and efficacy based on risk category
     let (t, e) = context.get_vaccine_props(record.risk_category);
     context.set_person_property(person, VaccineType, t);
-    context.set_person_property(person, VaccineEfficacy, e);
+    context.set_person_property(person, VaccineEfficacy, VaccineEfficacyValue(e));
 
     person
 }
