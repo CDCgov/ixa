@@ -3,7 +3,7 @@ use ixa::{
     people::ContextPeopleExt,
 };
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum DiseaseStatus {
     S,
     I,

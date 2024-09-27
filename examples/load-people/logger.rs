@@ -18,7 +18,7 @@ pub fn init(context: &mut Context) {
     // Logs when a person is created
     context.subscribe_to_person_created(|context, person| {
         println!(
-            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({})",
+            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({:?})",
             person,
             context.get_person_property(person, Age),
             context.get_person_property(person, VaccineDoses),

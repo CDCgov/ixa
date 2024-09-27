@@ -1,9 +1,11 @@
 use crate::{context::Context, define_data_plugin};
 use std::{
     any::{Any, TypeId},
+    borrow::BorrowMut,
     cell::{RefCell, RefMut},
     collections::HashMap,
-    fmt,
+    fmt::{self, Debug},
+    hash::{DefaultHasher, Hash, Hasher},
 };
 
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
@@ -15,6 +17,7 @@ struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     property_dependencies: HashMap<TypeId, Vec<Box<DerivedSetter>>>,
+    indexes: RefCell<HashMap<TypeId, HashMap<u128, Vec<PersonId>>>>,
 }
 
 define_data_plugin!(
@@ -23,7 +26,8 @@ define_data_plugin!(
     PeopleData {
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
-        property_dependencies: HashMap::new()
+        property_dependencies: HashMap::new(),
+        indexes: RefCell::new(HashMap::new()),
     }
 );
 
@@ -47,7 +51,7 @@ impl fmt::Debug for PersonId {
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
-    type Value: Copy;
+    type Value: Copy + Debug + Hash;
     #[must_use]
     fn is_derived() -> bool {
         false
@@ -141,6 +145,12 @@ macro_rules! define_person_property_with_default {
 
 pub use define_person_property;
 
+fn hash_ref<T: Hash>(val: &T) -> u128 {
+    let mut hasher = DefaultHasher::new();
+    val.hash(&mut hasher);
+    hasher.finish().into()
+}
+
 impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     /// This will increment the current population by 1.
@@ -185,6 +195,7 @@ impl PeopleData {
         value: T::Value,
     ) {
         let mut property_ref = self.get_person_property_ref(person_id, property);
+        self.add_to_index(person_id, property, value);
         *property_ref = Some(value);
     }
 
@@ -197,6 +208,45 @@ impl PeopleData {
             .entry(dependency)
             .or_default()
             .push(Box::new(callback));
+    }
+
+    fn get_index_ref(&self, t: TypeId) -> RefMut<HashMap<u128, Vec<PersonId>>> {
+        let index_map = self.indexes.borrow_mut();
+        RefMut::map(index_map, |map| map.entry(t).or_default())
+    }
+
+    fn get_index_ref_by_prop<T: PersonProperty + 'static>(
+        &self,
+        _property: T,
+    ) -> RefMut<HashMap<u128, Vec<PersonId>>> {
+        self.get_index_ref(TypeId::of::<T>())
+    }
+
+    fn add_to_index<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        property: T,
+        value: T::Value,
+    ) {
+        let mut indices_ref = self.get_index_ref_by_prop(property);
+        let indices = indices_ref.borrow_mut();
+        let hash = hash_ref(&value);
+        let people = indices.entry(hash).or_default();
+        people.push(person_id);
+    }
+
+    fn remove_from_index<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        property: T,
+        value: T::Value,
+    ) {
+        let mut indices_ref = self.get_index_ref_by_prop(property);
+        let indices = indices_ref.borrow_mut();
+        let hash = hash_ref(&value);
+        indices
+            .entry(hash)
+            .and_modify(|people| people.retain(|p| *p != person_id));
     }
 }
 
@@ -242,6 +292,7 @@ impl PrivateContextPeopleExt for Context {
         match current_value {
             // The person property is already set, so we emit a change event
             Some(current_value) => {
+                data_container.remove_from_index(person_id, property, current_value);
                 let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
                     person_id,
                     current: value,
@@ -309,6 +360,7 @@ pub trait ContextPeopleExt {
         _property: T,
         handler: impl Fn(&mut Context, PersonId, T::Value, T::Value) + 'static,
     );
+    fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId>;
 }
 
 impl ContextPeopleExt for Context {
@@ -387,20 +439,57 @@ impl ContextPeopleExt for Context {
             handler(context, event.person_id, event.current, event.previous);
         });
     }
+
+    fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId> {
+        let mut result: Vec<PersonId> = Vec::new();
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+
+        for (i, (t, hash)) in property_hashes.into_iter().enumerate() {
+            let mut indices_ref = data_container.get_index_ref(t);
+            let indices = indices_ref.borrow_mut();
+            if let Some(matching_people) = indices.get(&hash) {
+                // If this is the first property, add them all
+                if i == 0 {
+                    result.clone_from(matching_people);
+                } else {
+                    result.retain(|person| matching_people.contains(person));
+                }
+            } else {
+                return Vec::new();
+            }
+        }
+        result
+    }
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[macro_export]
+macro_rules! people_query {
+    ( $ctx: expr, $( [ $k:ident = $v: expr ] ),* ) => {
+        $ctx.query_people(vec![
+            $((
+                std::any::TypeId::of::<$k>(),
+                hash_ref(&$v)
+            ),)*
+        ])
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonId};
+    use super::{ContextPeopleExt, PersonId, hash_ref};
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
+    use std::{any::TypeId};
 
     define_person_property!(Age, u8);
-    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
     pub enum RiskCategory {
         High,
         Low,
     }
+
     define_person_property!(RiskCategoryType, RiskCategory);
     define_person_property_with_default!(IsRunner, bool, false);
     define_person_property!(RunningShoes, u8, |context: &Context, person: PersonId| {
@@ -684,5 +773,62 @@ mod test {
         context.set_person_property(person, Age, 30);
         context.execute();
         assert_eq!(*flag.borrow(), 2);
+    }
+
+    #[test]
+    fn hash_ref_stable() {
+        assert_eq!(hash_ref(&42), hash_ref(&42));
+    }
+
+    #[test]
+    fn query_people_manual() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+        let person2 = context.add_person();
+        let person3 = context.add_person();
+
+        context.set_person_property(person1, Age, 42);
+        context.set_person_property(person2, Age, 40);
+        context.set_person_property(person3, Age, 41);
+
+        let hash = hash_ref(&context.get_person_property(person1, Age));
+        let people = context.query_people(vec![(TypeId::of::<Age>(), hash)]);
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_people_intersection() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+        let person2 = context.add_person();
+        let person3 = context.add_person();
+
+        context.set_person_property(person1, Age, 42);
+        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.set_person_property(person2, Age, 42);
+        context.set_person_property(person3, Age, 40);
+
+        let people = context.query_people(vec![
+            (
+                TypeId::of::<Age>(),
+                hash_ref(&context.get_person_property(person1, Age)),
+            ),
+            (
+                TypeId::of::<RiskCategoryType>(),
+                hash_ref(&context.get_person_property(person1, RiskCategoryType)),
+            ),
+        ]);
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_people_macro() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
+
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
     }
 }
