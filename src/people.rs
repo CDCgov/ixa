@@ -293,12 +293,32 @@ macro_rules! make_indexer {
                 let val = context.get_person_property_hash(person, $t);
                 tmp.push(val);
             )*
-            // TODO(cym4@cdc.gov): Temporary
-                println!("{:?}", tmp);
             hash_ref(&tmp)
         }
     }
 }    
+
+macro_rules! people_query {
+    ( $ctx: expr, $( [ $k:ident = $v: expr ] ),* ) => {
+        $ctx.query_people(
+            | context: &Context, person: PersonId | {            
+                let mut tmp = Vec::new();        
+                $(
+                    let val = context.get_person_property_hash(person, $k);
+                    tmp.push(val);
+                )*
+                    hash_ref(&tmp)
+            },
+            {
+                let mut expected = Vec::new();
+                $(
+                    let tmp = $v;
+                    expected.push(hash_ref(&tmp));
+                )*
+                    hash_ref(&expected)
+            })
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -528,6 +548,19 @@ mod test {
         let result = context.query_people(
             make_indexer!(IsOdd), hash_ref(&all_true));
 
+
+        assert_eq!(result, vec![person_id1]);
+    }
+
+    #[test]
+    fn query_macro() {
+        let mut context = Context::new();
+        let person_id0 = context.add_person();
+        let person_id1 = context.add_person();
+        let person_id2 = context.add_person();
+
+        let result = people_query!(&context,
+            [IsOdd, true]);
 
         assert_eq!(result, vec![person_id1]);
     }
