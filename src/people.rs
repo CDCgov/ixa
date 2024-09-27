@@ -3,9 +3,10 @@ use std::{
     hash::{Hash, DefaultHasher, Hasher},
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
 };
+
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -13,7 +14,56 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    indexes: RefCell<HashMap<Vec<TypeId>, HashMap<u128, Vec<PersonId>>>>,
+    indexes: RefCell<HashMap<Vec<TypeId>, Index>>,
+}
+
+// An index over People
+struct Index {
+    indexer: Box<Indexer>,
+    forward: HashMap<u128, HashSet<PersonId>>, // Maps index values to people.
+    reverse: HashMap<PersonId, u128>, // Which people are in each index value
+    stale: HashSet<PersonId>, // People whose index values need to be recomputed
+}
+
+impl Index {
+    fn new(indexer: impl Fn(&Context, PersonId) -> u128 + 'static) -> Self {
+        Index {
+            indexer: Box::new(indexer),
+            forward: HashMap::new(),
+            reverse: HashMap::new(),
+            stale: HashSet::new(),
+        }
+    }
+
+    // Get the people in a given index entry.
+    fn lookup(&self, key: u128) -> Vec<PersonId> {
+        match self.forward.get(&key) {
+            Some(people) => people.to_vec(),
+            None => Vec::new()
+        }
+    }
+
+    // Mark a person as stale.
+    fn mark_stale(&mut self, person_id: PersonId) {
+        self.stale.insert(person_id);
+    }
+
+    // Recompute the indexes for people who are stale.
+    fn recompute(&mut self, context: &Context) {
+        for person_id in &self.stale {
+            // If we already know about this person, remove
+            // them from the forward index. We might not
+            // if they are new and have never been indexed.
+            if let Some(old_key) = self.reverse.get(&person_id) {
+                self.forward.get_mut(old_key).unwrap().remove(&person_id);
+            }
+            let new_key = (self.indexer)(context, *person_id);
+            self.forward.get_mut(&new_key).unwrap().insert(*person_id);
+            self.reverse.insert(*person_id, new_key);
+        }
+
+        self.stale.clear();
+    }
 }
 
 define_data_plugin!(
@@ -291,6 +341,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn create_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static) {
+        /*
         let mut index = HashMap::new();
         
         for id in 0..self.get_current_population() {
@@ -305,16 +356,19 @@ impl ContextPeopleExt for Context {
 
         let data_container = self.get_data_container_mut(PeoplePlugin);
         data_container.indexes.borrow_mut().insert(properties, index);
+        */
     }
 
     fn query_index(&self, properties: Vec<TypeId>, val: u128) -> Vec<PersonId> {
+        /*
         let data_container = self.get_data_container(PeoplePlugin).expect("People plugin not created yet");
         let indexes = data_container.indexes.borrow(); 
         let index = indexes.get(&properties).expect("Index not created");
         match index.get(&val) {
             Some(people) => people.to_vec(),
             None => Vec::new()
-        }
+    }*/
+        Vec::new()
     }
 }
 
