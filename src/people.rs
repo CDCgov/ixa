@@ -13,7 +13,7 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    indexes: HashMap<Vec<TypeId>, HashMap<u128, Vec<PersonId>>>,
+    indexes: RefCell<HashMap<Vec<TypeId>, HashMap<u128, Vec<PersonId>>>>,
 }
 
 define_data_plugin!(
@@ -22,7 +22,7 @@ define_data_plugin!(
     PeopleData {
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
-        indexes: HashMap::new(),
+        indexes: RefCell::new(HashMap::new()),
     }
 );
 
@@ -304,12 +304,13 @@ impl ContextPeopleExt for Context {
         }
 
         let data_container = self.get_data_container_mut(PeoplePlugin);
-        data_container.indexes.insert(properties, index);
+        data_container.indexes.borrow_mut().insert(properties, index);
     }
 
     fn query_index(&self, properties: Vec<TypeId>, val: u128) -> Vec<PersonId> {
         let data_container = self.get_data_container(PeoplePlugin).expect("People plugin not created yet");
-        let index = data_container.indexes.get(&properties).expect("Index not created");
+        let indexes = data_container.indexes.borrow(); 
+        let index = indexes.get(&properties).expect("Index not created");
         match index.get(&val) {
             Some(people) => people.to_vec(),
             None => Vec::new()
