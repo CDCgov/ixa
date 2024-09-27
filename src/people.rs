@@ -549,8 +549,9 @@ impl ContextPeopleExt for Context {
     fn get_person_id(&self, person_id: usize) -> PersonId {
         if person_id >= self.get_current_population() {
             panic!("Person does not exist");
-        } else {
-            PersonId { id: person_id }
+        }
+        PersonId { id: person_id }
+    }
             
     fn register_index<T: PersonProperty + 'static>(&mut self, property: T) {
         {
@@ -590,7 +591,7 @@ impl ContextPeopleExt for Context {
         }
         result
     }
-}
+
 
 #[allow(clippy::module_name_repetitions)]
 #[macro_export]
