@@ -13,6 +13,7 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    indexes: HashMap<u128, HashMap<u128, Vec<PersonId>>>,
 }
 
 define_data_plugin!(
@@ -20,7 +21,8 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
-        properties_map: RefCell::new(HashMap::new())
+        properties_map: RefCell::new(HashMap::new()),
+        indexes: HashMap::new(),
     }
 );
 
@@ -559,8 +561,7 @@ mod test {
         let person_id1 = context.add_person();
         let person_id2 = context.add_person();
 
-        let result = people_query!(&context,
-            [IsOdd, true]);
+        let result = people_query!(&context, [IsOdd = true]);
 
         assert_eq!(result, vec![person_id1]);
     }
