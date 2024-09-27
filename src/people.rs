@@ -196,7 +196,7 @@ pub trait ContextPeopleExt {
 
     fn query_people(&self, indexer: impl Fn(&Context, PersonId) -> u128 + 'static, value: u128) -> Vec<PersonId>;
 
-    fn make_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static);
+    fn create_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static);
 }
 
 fn hash_ref<T: Hash>(val: &T) -> u128 {
@@ -287,7 +287,7 @@ impl ContextPeopleExt for Context {
         response
     }
 
-    fn make_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static) {
+    fn create_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static) {
         let mut index = HashMap::new();
         
         for id in 0..self.get_current_population() {
@@ -297,6 +297,7 @@ impl ContextPeopleExt for Context {
             let index_entry = index.entry(person_value)
                 .or_insert_with(|| Vec::<PersonId>::new());
             index_entry.push(person_id);
+            println!("Inserting person_id {:?} for index key {:?}", person_id, person_value);
         }
 
         let data_container = self.get_data_container_mut(PeoplePlugin);
@@ -336,6 +337,28 @@ macro_rules! people_query {
                 )*
                     hash_ref(&expected)
             })
+    }
+}
+
+macro_rules! create_index {
+    ( $ctx: expr, $( $t:ident ),* ) => {
+        $ctx.create_index(
+            {
+                let mut properties = Vec::new();
+                $(
+                    properties.push(std::any::TypeId::of::<$t>());
+                )*
+                    properties
+            },            
+            | context: &Context, person: PersonId | {            
+                let mut tmp = Vec::new();        
+                $(
+                    let val = context.get_person_property_hash(person, $t);
+                    tmp.push(val);
+                )*
+                    hash_ref(&tmp)
+            }
+        )
     }
 }
 
@@ -583,5 +606,17 @@ mod test {
         assert_eq!(result, vec![person_id1]);
     }
     
+    #[test]
+    fn create_index() {
+        let mut context = Context::new();
+        let person_id0 = context.add_person();
+        let person_id1 = context.add_person();
+        let person_id2 = context.add_person();
 
+        create_index!(context, IsOdd);
+        assert!(false);
+    }
+    
+
+    
 }
