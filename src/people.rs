@@ -13,7 +13,7 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    indexes: HashMap<u128, HashMap<u128, Vec<PersonId>>>,
+    indexes: HashMap<Vec<TypeId>, HashMap<u128, Vec<PersonId>>>,
 }
 
 define_data_plugin!(
@@ -196,6 +196,7 @@ pub trait ContextPeopleExt {
 
     fn query_people(&self, indexer: impl Fn(&Context, PersonId) -> u128 + 'static, value: u128) -> Vec<PersonId>;
 
+    fn make_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static);
 }
 
 fn hash_ref<T: Hash>(val: &T) -> u128 {
@@ -284,6 +285,22 @@ impl ContextPeopleExt for Context {
             }
         }
         response
+    }
+
+    fn make_index(&mut self, properties: Vec<TypeId>, indexer: impl Fn(&Context, PersonId) -> u128 + 'static) {
+        let mut index = HashMap::new();
+        
+        for id in 0..self.get_current_population() {
+            let person_id = PersonId{id};
+            let person_value = indexer(self, person_id);
+
+            let index_entry = index.entry(person_value)
+                .or_insert_with(|| Vec::<PersonId>::new());
+            index_entry.push(person_id);
+        }
+
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        data_container.indexes.insert(properties, index);
     }
 }
 
