@@ -597,6 +597,10 @@ mod test {
         person.id % 2 == 1
     });
 
+    define_person_property!(IsNonZero, bool, |_context: &Context, person: PersonId |{
+        person.id > 0
+    });
+    
     #[test]
     fn handrolled_indexer() {
         let mut context = Context::new();
@@ -661,9 +665,26 @@ mod test {
         let result = query_index!(context, [IsOdd = true]);
         assert_eq!(result, vec![person_id1]);
         println!("Result {:?}", result);
+        let result = query_index!(context, [IsOdd = false]);
+        assert_eq!(result, vec![person_id0, person_id2]);        
     }
 
+    #[test]
+    fn query_index_2props() {
+        let mut context = Context::new();
+        let person_id0 = context.add_person();
+        let person_id1 = context.add_person();
+        let person_id2 = context.add_person();
 
+        create_index!(context, IsOdd, IsNonZero);
+        let result = query_index!(context, [IsOdd = true], [IsNonZero = true]);
+        assert_eq!(result, vec![person_id1]);
+        let result = query_index!(context, [IsOdd = false], [IsNonZero = true]);
+        assert_eq!(result, vec![person_id2]);
+    }
+    
+
+    
 
     
 }
