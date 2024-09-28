@@ -1,7 +1,6 @@
 use ixa::{
-    context::Context,
-    define_person_property, define_person_property_with_default,
-    people::{ContextPeopleExt, PersonCreatedEvent},
+    context::Context, define_person_property, define_person_property_with_default,
+    people::ContextPeopleExt,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -14,8 +13,7 @@ pub enum DiseaseStatus {
 define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 
 pub fn init(context: &mut Context) {
-    context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
-        let person = event.person_id;
+    context.subscribe_to_person_created(move |context, person| {
         context.add_plan(1.0, move |context| {
             context.set_person_property(person, DiseaseStatusType, DiseaseStatus::I);
         });
