@@ -54,11 +54,7 @@ mod tests {
         population_loader::Age,
         vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
-    use ixa::{
-        context::Context,
-        people::{PersonCreatedEvent, PersonPropertyChangeEvent},
-        random::ContextRandomExt,
-    };
+    use ixa::{context::Context, random::ContextRandomExt};
 
     const EXPECTED_ROWS: usize = 5;
 
@@ -85,8 +81,9 @@ mod tests {
 
         // Subscribe to person property change event
         let flag_clone = Rc::clone(&flag);
-        context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<VaccineEfficacy>| {
+        context.subscribe_to_person_property_changed(
+            VaccineEfficacy,
+            move |_context, _person, _current, _prev| {
                 *flag_clone.borrow_mut() = true;
             },
         );
@@ -94,12 +91,11 @@ mod tests {
         let counter = Rc::new(RefCell::new(0));
         let expected_computed = Rc::new(expected_computed);
 
-        context.subscribe_to_event({
+        context.subscribe_to_person_created({
             let counter = Rc::clone(&counter);
             let expected_computed = Rc::clone(&expected_computed);
 
-            move |context, event: PersonCreatedEvent| {
-                let person = event.person_id;
+            move |context, person| {
                 let current_count = *counter.borrow();
                 let (age, risk_category, vaccine_type, efficacy, doses) =
                     expected_computed[current_count];
@@ -131,7 +127,7 @@ mod tests {
         // Execute the context
         context.execute();
 
-        // Make sure PersonPropertyChangeEvent didn't fire
+        // Make sure change event didn't didn't fire
         assert!(!*flag.borrow());
     }
 }
