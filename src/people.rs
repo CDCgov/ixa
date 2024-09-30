@@ -364,7 +364,7 @@ impl ContextPeopleExt for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
+    use super::{ContextPeopleExt, PersonId};
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
 
@@ -391,9 +391,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(move |_context, event: PersonCreatedEvent| {
+        context.subscribe_to_person_created(move |_context, person| {
             *flag_clone.borrow_mut() = true;
-            assert_eq!(event.person_id.id, 0);
+            assert_eq!(person.id, 0);
         });
 
         let _ = context.add_person();
@@ -479,8 +479,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<RiskCategoryType>| {
+        context.subscribe_to_person_property_changed(
+            RiskCategoryType,
+            move |_context, _person, _current, _prev| {
                 *flag_clone.borrow_mut() = true;
             },
         );
@@ -519,20 +520,13 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(
-            move |_context, event: PersonPropertyChangeEvent<RiskCategoryType>| {
+        context.subscribe_to_person_property_changed(
+            RiskCategoryType,
+            move |_context, person, current, previous| {
                 *flag_clone.borrow_mut() = true;
-                assert_eq!(event.person_id.id, 0, "Person id is correct");
-                assert_eq!(
-                    event.previous,
-                    RiskCategory::Low,
-                    "Previous value is correct"
-                );
-                assert_eq!(
-                    event.current,
-                    RiskCategory::High,
-                    "Current value is correct"
-                );
+                assert_eq!(person.id, 0, "Person id is correct");
+                assert_eq!(previous, RiskCategory::Low, "Previous value is correct");
+                assert_eq!(current, RiskCategory::High, "Current value is correct");
             },
         );
         let person_id = context.add_person();
@@ -548,8 +542,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<RunningShoes>| {
+        context.subscribe_to_person_property_changed(
+            RunningShoes,
+            move |_context, _person, _current, _prev| {
                 *flag_clone.borrow_mut() = true;
             },
         );
