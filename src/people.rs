@@ -91,6 +91,11 @@ macro_rules! define_person_property {
     };
 }
 
+/// Defines a derived person property with the following parameters:
+/// * `$person_property`: A name for the identifier type of the property
+/// * `$value`: The type of the property's value
+/// * `[$($dependency),+]`: A list of person properties the derived property depends on
+/// * $calculate: A closure that takes the values of each dependency and returns the derived value
 #[macro_export]
 macro_rules! define_derived_person_property {
     ($derived_property:ident, $value:ty, [$($dependency:ident),+], |$($param:ident),+| $derive_fn:expr) => {
