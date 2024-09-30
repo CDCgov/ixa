@@ -580,6 +580,23 @@ mod test {
     }
 
     #[test]
+    fn derived_property_initializes() {
+        let mut context = Context::new();
+        define_person_property!(Friendly, bool, |_context, _person_id| true);
+        define_person_property!(IsHuman, bool, |_context, _person_id| true);
+        define_derived_person_property!(
+            Likeable,
+            bool,
+            [Friendly, IsHuman],
+            |friendly, is_human| { friendly && is_human }
+        );
+
+        let person = context.add_person();
+
+        assert!(context.get_person_property(person, Likeable));
+    }
+
+    #[test]
     fn derived_property_change_event() {
         let mut context = Context::new();
         define_derived_person_property!(MastersRunner, bool, [Age, IsRunner], |age, is_runner| age
