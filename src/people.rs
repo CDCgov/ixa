@@ -195,7 +195,6 @@ impl PeopleData {
         value: T::Value,
     ) {
         let mut property_ref = self.get_person_property_ref(person_id, property);
-        self.add_to_index(person_id, property, value);
         *property_ref = Some(value);
     }
 
@@ -324,6 +323,8 @@ impl PrivateContextPeopleExt for Context {
                 data_container.set_person_property(person_id, property, value);
             }
         }
+        self.get_data_container_mut(PeoplePlugin)
+            .add_to_index(person_id, property, value);
     }
 }
 
@@ -478,10 +479,10 @@ macro_rules! people_query {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonId, hash_ref};
+    use super::{hash_ref, ContextPeopleExt, PersonId};
     use crate::{context::Context, people::PeoplePlugin};
+    use std::any::TypeId;
     use std::{cell::RefCell, rc::Rc};
-    use std::{any::TypeId};
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
