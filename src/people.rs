@@ -106,6 +106,7 @@ macro_rules! define_derived_person_property {
             type Value = $value;
 
             fn calculate(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+                #[allow(unused_parens)]
                 let ($($param),+) = (
                     $(context.get_person_property(person_id, $dependency)),+
                 );
@@ -217,6 +218,64 @@ struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
+trait PrivateContextPeopleExt {
+    fn set_person_property_internal<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+        value: T::Value,
+    );
+}
+
+impl PrivateContextPeopleExt for Context {
+    fn set_person_property_internal<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+        value: T::Value,
+    ) {
+        let data_container = self.get_data_container(PeoplePlugin).expect(
+            "PeoplePlugin is not initialized; make sure you add a person before setting properties",
+        );
+        let current_value = *data_container.get_person_property_ref(person_id, property);
+
+        match current_value {
+            // The person property is already set, so we emit a change event
+            Some(current_value) => {
+                let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
+                    person_id,
+                    current: value,
+                    previous: current_value,
+                };
+                data_container.set_person_property(person_id, property, value);
+                self.emit_event(change_event);
+
+                let data_container = self.get_data_container_mut(PeoplePlugin);
+                if let Some(callbacks) = data_container
+                    .property_dependencies
+                    .get_mut(&TypeId::of::<T>())
+                {
+                    // Temporarily move the callbacks out for ownership reasons
+                    let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
+
+                    for callback in &mut collector {
+                        callback(self, person_id);
+                    }
+
+                    // Insert the callbacks back into the map
+                    self.get_data_container_mut(PeoplePlugin)
+                        .property_dependencies
+                        .insert(TypeId::of::<T>(), collector);
+                }
+            }
+            // The person property is not yet initialized, so we don't emit any events.
+            None => {
+                data_container.set_person_property(person_id, property, value);
+            }
+        }
+    }
+}
+
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
@@ -290,45 +349,8 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        let data_container = self.get_data_container(PeoplePlugin).expect(
-            "PeoplePlugin is not initialized; make sure you add a person before setting properties",
-        );
-        let current_value = *data_container.get_person_property_ref(person_id, property);
-
-        match current_value {
-            // The person property is already set, so we emit a change event
-            Some(current_value) => {
-                let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
-                    person_id,
-                    current: value,
-                    previous: current_value,
-                };
-                data_container.set_person_property(person_id, property, value);
-                self.emit_event(change_event);
-
-                let data_container = self.get_data_container_mut(PeoplePlugin);
-                if let Some(callbacks) = data_container
-                    .property_dependencies
-                    .get_mut(&TypeId::of::<T>())
-                {
-                    // Temporarily move the callbacks out for ownership reasons
-                    let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
-
-                    for callback in &mut collector {
-                        callback(self, person_id);
-                    }
-
-                    // Insert the callbacks back into the map
-                    self.get_data_container_mut(PeoplePlugin)
-                        .property_dependencies
-                        .insert(TypeId::of::<T>(), collector);
-                }
-            }
-            // The person property is not yet initialized, so we don't emit any events.
-            None => {
-                data_container.set_person_property(person_id, property, value);
-            }
-        }
+        assert!(T::is_derived(), "Cannot set a derived property directly");
+        self.set_person_property_internal(person_id, property, value);
     }
 
     fn register_derived_property<T: PersonProperty + 'static>(&mut self, property: T) {
@@ -341,7 +363,7 @@ impl ContextPeopleExt for Context {
                 dependency,
                 move |context: &mut Context, person_id: PersonId| {
                     let new_value = T::calculate(context, person_id);
-                    context.set_person_property(person_id, property, new_value);
+                    context.set_person_property_internal(person_id, property, new_value);
                 },
             );
         }
@@ -577,6 +599,16 @@ mod test {
 
         assert!(context.get_person_property(paula, MastersRunner),);
         assert!(!context.get_person_property(colleen, MastersRunner),);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot set a derived property directly")]
+    fn setting_derived_property_explicitly_panics() {
+        let mut context = Context::new();
+        define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
+
+        let person = context.add_person();
+        context.set_person_property(person, Senior, true);
     }
 
     #[test]
