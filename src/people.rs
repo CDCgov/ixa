@@ -349,7 +349,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        assert!(T::is_derived(), "Cannot set a derived property directly");
+        assert!(!T::is_derived(), "Cannot set a derived property directly");
         self.set_person_property_internal(person_id, property, value);
     }
 
