@@ -48,10 +48,19 @@ impl fmt::Debug for PersonId {
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
-    fn is_derived() -> bool;
+    #[must_use]
+    fn is_derived() -> bool {
+        false
+    }
     fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
-    fn calculate(context: &Context, person_id: PersonId) -> Self::Value;
-    fn dependencies() -> Vec<TypeId>;
+    #[must_use]
+    fn calculate(_context: &Context, _person_id: PersonId) -> Self::Value {
+        panic!("Property not derived");
+    }
+    #[must_use]
+    fn dependencies() -> Vec<TypeId> {
+        panic!("Property not derived");
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -67,15 +76,6 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn is_derived() -> bool {
-                false
-            }
-            fn calculate(_context: &Context, _person_id: $crate::people::PersonId) -> Self::Value {
-                panic!("Property not derived");
-            }
-            fn dependencies() -> Vec<std::any::TypeId> {
-                panic!("Property not derived");
-            }
             fn initialize(
                 _context: &$crate::context::Context,
                 _person: $crate::people::PersonId,
