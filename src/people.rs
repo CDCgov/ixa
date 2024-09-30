@@ -470,7 +470,7 @@ macro_rules! people_query {
         $ctx.query_people(vec![
             $((
                 std::any::TypeId::of::<$k>(),
-                hash_ref(&$v)
+                hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
             ),)*
         ])
     }
@@ -797,6 +797,29 @@ mod test {
     }
 
     #[test]
+    fn query_people_macro() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
+
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_people_cast_value() {
+        let mut context = Context::new();
+        let person = context.add_person();
+
+        context.set_person_property(person, Age, 42);
+
+        // Age is a u8, by default integer literals are i32; the macro should cast it.
+        let people = people_query![context, [Age = 42]];
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
     fn query_people_intersection() {
         let mut context = Context::new();
         let person1 = context.add_person();
@@ -808,27 +831,7 @@ mod test {
         context.set_person_property(person2, Age, 42);
         context.set_person_property(person3, Age, 40);
 
-        let people = context.query_people(vec![
-            (
-                TypeId::of::<Age>(),
-                hash_ref(&context.get_person_property(person1, Age)),
-            ),
-            (
-                TypeId::of::<RiskCategoryType>(),
-                hash_ref(&context.get_person_property(person1, RiskCategoryType)),
-            ),
-        ]);
-        assert_eq!(people.len(), 1);
-    }
-
-    #[test]
-    fn query_people_macro() {
-        let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
-
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
     }
 }
