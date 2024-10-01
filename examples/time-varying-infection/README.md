@@ -120,5 +120,57 @@ any function numerically.
 
 ## Time-varying recovery rate
 
+Imagine that the recovery rate scales inversely with the number of infected
+people (so that the recovery time increases with the number of infected people).
+A potential biological explanation of this would be that infected people
+require some medicine, but their time to getting that medicine depends on how
+many other people are infected.
+
+This scenario has a key difference from the preceeding example: at the
+point of someone's infection, we cannot schedule their recovery because we do
+not know exactly what the number of infected people over time will be
+out into the future. (OK, just kidding. We kinda actually do because this example
+is a deterministic model, but calculating the number of infecteds while accounting
+for recovery sounds like  a pain, so please continue playing pretend with me that
+we do not know.) In other words, we can't analytically write out a priori $\textrm{for}(q)$
+(force of recovery over time time since infection, $q$). So, we have to use an
+alternative sampling technique to obtain draws from the time-varying recovery rate
+distribution.
+
+### What is rejection sampling?
+
+Rejection sampling is similarly grounded in understanding the CDF. The CDF tells
+us the probability that recovery has happened at some time since infection.
+Imagine obtaining a probability that recovery has happened at some time, $t_2$
+from the CDF, $p_2$, and using a Bernoulli distribution to assess whether
+the recovery event has happened. If you obtain a Bernoulli sample of 1, you
+know that recovery has happened by that time. Now, imagine that you had just
+sampled some value of time $q_1 < q_2$. If you had obtained a Bernoulli sample of 0
+at $q_1$, you would know that this person's recovery must have happened between the
+two times. For sufficiently small $q_2 - q_1$, it is fair to say that the recovery
+event happens at $q_2$.
+
+In other words, by assessing whether recovery has happened by making sequential
+samples from a Bernoulli distribution with probability parameter obtained
+from the CDF, one can obtain samples of the underlying distribution for which
+we have written the CDF.
+
+However, there's a big catch -- finding the value of $q_2 - q_1$ or the time
+between sequential checks from the CDF to assess whether recovery has happened.
+Imagine a trivial case where we pick a value of $q_2 - q_1 = \tau(t)$ that is infinitely
+small. We would be having events in our model at every $\tau(t)$. That would be
+painfully inefficient. So, what is the biggest $\tau(t)$ that we can have
+that would still enable our simulation to be accurate? First, note how I have written
+$\tau$ to be a function of time. This rate can change over time. In fact, it really just
+must be the maximal possible rate of change in the recovery rate for a given time.
+
+Let's develop some intuition for this:
+
+There's also another matter I've brushed over: writing down the CDF. In this case,
+that is actually quite simple. If we say that recovery rate scales inversely
+with the number of infected people, we can write the following:
+
+$\textrm{CDF}(q, t) = 1 - \exp(-q*n(t))$ where $n(t)$ is the effective
+number of infected people (effective because it may be scaled by a recovery rate).
 
 ## Alternative ways of modeling time-varying forces
