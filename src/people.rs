@@ -9,6 +9,45 @@ use std::{
 };
 
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
+type Indexer = dyn FnMut(&Context, PersonId) -> u128;
+
+struct Index {
+    lookup: HashMap<u128, Vec<PersonId>>,
+    indexer: Box<Indexer>,
+}
+
+impl Index {
+    fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
+        let mut index = Self {
+            lookup: HashMap::new(),
+            indexer: Box::new(move |context: &Context, person_id: PersonId| {
+                let value = context.get_person_property(person_id, property);
+                hash_ref(&value)
+            }),
+        };
+        index.setup(context);
+        index
+    }
+    fn add_index(&mut self, context: &Context, person_id: PersonId) {
+        println!("Adding index for {:?}", person_id);
+        let hash = (self.indexer)(context, person_id);
+        self.lookup.entry(hash).or_default().push(person_id);
+    }
+    fn remove_index(&mut self, context: &Context, person_id: PersonId) {
+        println!("Removing index for {:?}", person_id);
+        let hash = (self.indexer)(context, person_id);
+        self.lookup
+            .entry(hash)
+            .and_modify(|people| people.retain(|p| *p != person_id));
+    }
+    fn setup(&mut self, context: &Context) {
+        let current_pop = context.get_current_population();
+        for id in 0..current_pop {
+            let person_id = PersonId { id };
+            self.add_index(context, person_id);
+        }
+    }
+}
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -17,7 +56,7 @@ struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     property_dependencies: HashMap<TypeId, Vec<Box<DerivedSetter>>>,
-    indexes: RefCell<HashMap<TypeId, HashMap<u128, Vec<PersonId>>>>,
+    property_indexes: RefCell<HashMap<TypeId, Index>>,
 }
 
 define_data_plugin!(
@@ -27,7 +66,7 @@ define_data_plugin!(
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
         property_dependencies: HashMap::new(),
-        indexes: RefCell::new(HashMap::new()),
+        property_indexes: RefCell::new(HashMap::new()),
     }
 );
 
@@ -209,43 +248,21 @@ impl PeopleData {
             .push(Box::new(callback));
     }
 
-    fn get_index_ref(&self, t: TypeId) -> RefMut<HashMap<u128, Vec<PersonId>>> {
-        let index_map = self.indexes.borrow_mut();
-        RefMut::map(index_map, |map| map.entry(t).or_default())
+    fn get_index_ref(&self, t: TypeId) -> Option<RefMut<Index>> {
+        let index_map = self.property_indexes.borrow_mut();
+        if index_map.contains_key(&t) {
+            Some(RefMut::map(index_map, |map| map.get_mut(&t).unwrap()))
+        } else {
+            None
+        }
     }
 
     fn get_index_ref_by_prop<T: PersonProperty + 'static>(
         &self,
         _property: T,
-    ) -> RefMut<HashMap<u128, Vec<PersonId>>> {
-        self.get_index_ref(TypeId::of::<T>())
-    }
-
-    fn add_to_index<T: PersonProperty + 'static>(
-        &self,
-        person_id: PersonId,
-        property: T,
-        value: T::Value,
-    ) {
-        let mut indices_ref = self.get_index_ref_by_prop(property);
-        let indices = indices_ref.borrow_mut();
-        let hash = hash_ref(&value);
-        let people = indices.entry(hash).or_default();
-        people.push(person_id);
-    }
-
-    fn remove_from_index<T: PersonProperty + 'static>(
-        &self,
-        person_id: PersonId,
-        property: T,
-        value: T::Value,
-    ) {
-        let mut indices_ref = self.get_index_ref_by_prop(property);
-        let indices = indices_ref.borrow_mut();
-        let hash = hash_ref(&value);
-        indices
-            .entry(hash)
-            .and_modify(|people| people.retain(|p| *p != person_id));
+    ) -> Option<RefMut<Index>> {
+        let type_id = TypeId::of::<T>();
+        self.get_index_ref(type_id)
     }
 }
 
@@ -283,48 +300,61 @@ impl PrivateContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        let data_container = self.get_data_container(PeoplePlugin).expect(
-            "PeoplePlugin is not initialized; make sure you add a person before setting properties",
-        );
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         let current_value = *data_container.get_person_property_ref(person_id, property);
-
-        match current_value {
-            // The person property is already set, so we emit a change event
-            Some(current_value) => {
-                data_container.remove_from_index(person_id, property, current_value);
-                let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
-                    person_id,
-                    current: value,
-                    previous: current_value,
-                };
-                data_container.set_person_property(person_id, property, value);
-                self.emit_event(change_event);
-
-                let data_container = self.get_data_container_mut(PeoplePlugin);
-                if let Some(callbacks) = data_container
-                    .property_dependencies
-                    .get_mut(&TypeId::of::<T>())
-                {
-                    // Temporarily move the callbacks out for ownership reasons
-                    let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
-
-                    for callback in &mut collector {
-                        callback(self, person_id);
-                    }
-
-                    // Insert the callbacks back into the map
-                    self.get_data_container_mut(PeoplePlugin)
-                        .property_dependencies
-                        .insert(TypeId::of::<T>(), collector);
-                }
-            }
-            // The person property is not yet initialized, so we don't emit any events.
-            None => {
-                data_container.set_person_property(person_id, property, value);
+        {
+            if let Some(mut index) = data_container.get_index_ref_by_prop(property) {
+                index.remove_index(self, person_id);
             }
         }
-        self.get_data_container_mut(PeoplePlugin)
-            .add_to_index(person_id, property, value);
+        {
+            match current_value {
+                // The person property is already set, so we emit a change event
+                Some(current_value) => {
+                    println!("Changing person property for {:?}", person_id);
+                    let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
+                        person_id,
+                        current: value,
+                        previous: current_value,
+                    };
+                    data_container.set_person_property(person_id, property, value);
+                    self.emit_event(change_event);
+
+                    let data_container = self.get_data_container_mut(PeoplePlugin);
+                    if let Some(callbacks) = data_container
+                        .property_dependencies
+                        .get_mut(&TypeId::of::<T>())
+                    {
+                        // Temporarily move the callbacks out for ownership reasons
+                        let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
+
+                        println!("Running callbacks for {:?}", person_id);
+                        for callback in &mut collector {
+                            callback(self, person_id);
+                        }
+
+                        // Insert the callbacks back into the map
+                        self.get_data_container_mut(PeoplePlugin)
+                            .property_dependencies
+                            .insert(TypeId::of::<T>(), collector);
+                    }
+                }
+                // The person property is not yet initialized, so we don't emit any events.
+                None => {
+                    data_container.set_person_property(person_id, property, value);
+                }
+            }
+        }
+        {
+            if let Some(mut index) = self
+                .get_data_container(PeoplePlugin)
+                .unwrap()
+                .get_index_ref_by_prop(property)
+            {
+                index.add_index(self, person_id);
+            }
+        }
     }
 }
 
@@ -353,6 +383,8 @@ pub trait ContextPeopleExt {
     );
 
     fn register_derived_property<T: PersonProperty + 'static>(&mut self, property: T);
+
+    fn register_index<T: PersonProperty + 'static>(&mut self, property: T);
 
     fn subscribe_to_person_created(&mut self, handler: impl Fn(&mut Context, PersonId) + 'static);
 
@@ -422,6 +454,22 @@ impl ContextPeopleExt for Context {
         }
     }
 
+    fn register_index<T: PersonProperty + 'static>(&mut self, property: T) {
+        {
+            let data_container = self.get_data_container_mut(PeoplePlugin);
+            let property_indexes = data_container.property_indexes.borrow_mut();
+            if property_indexes.contains_key(&TypeId::of::<T>()) {
+                return; // Index already exists, do nothing
+            }
+        }
+
+        // If it doesn't exist, insert the new index
+        let index = Index::new(self, property);
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let mut property_indexes = data_container.property_indexes.borrow_mut();
+        property_indexes.insert(TypeId::of::<T>(), index);
+    }
+
     fn subscribe_to_person_created(&mut self, handler: impl Fn(&mut Context, PersonId) + 'static) {
         self.subscribe_to_event(move |context, event: PersonCreatedEvent| {
             handler(context, event.person_id);
@@ -447,17 +495,18 @@ impl ContextPeopleExt for Context {
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
         for (i, (t, hash)) in property_hashes.into_iter().enumerate() {
-            let mut indices_ref = data_container.get_index_ref(t);
-            let indices = indices_ref.borrow_mut();
-            if let Some(matching_people) = indices.get(&hash) {
-                // If this is the first property, add them all
-                if i == 0 {
-                    result.clone_from(matching_people);
+            let mut index_ref = data_container.get_index_ref(t);
+            if let Some(index) = index_ref.borrow_mut() {
+                if let Some(matching_people) = index.lookup.get(&hash) {
+                    // If this is the first property, add them all
+                    if i == 0 {
+                        result.clone_from(matching_people);
+                    } else {
+                        result.retain(|person| matching_people.contains(person));
+                    }
                 } else {
-                    result.retain(|person| matching_people.contains(person));
+                    return Vec::new();
                 }
-            } else {
-                return Vec::new();
             }
         }
         result
@@ -468,12 +517,22 @@ impl ContextPeopleExt for Context {
 #[macro_export]
 macro_rules! people_query {
     ( $ctx: expr, $( [ $k:ident = $v: expr ] ),* ) => {
-        $ctx.query_people(vec![
-            $((
-                std::any::TypeId::of::<$k>(),
-                hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
-            ),)*
-        ])
+        {
+            // Set up any indexes that don't exist yet
+            $(
+                if <$k as $crate::people::PersonProperty>::is_derived() {
+                    $ctx.register_derived_property($k);
+                }
+                $ctx.register_index($k);
+            )*
+            // Do the query
+            $ctx.query_people(vec![
+                $((
+                    std::any::TypeId::of::<$k>(),
+                    hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
+                ),)*
+            ])
+        }
     }
 }
 
@@ -834,5 +893,28 @@ mod test {
 
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_derived_prop() {
+        let mut context = Context::new();
+        define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
+
+        let person = context.add_person();
+        let person2 = context.add_person();
+
+        context.set_person_property(person, Age, 64);
+        context.set_person_property(person2, Age, 88);
+
+        // Age is a u8, by default integer literals are i32; the macro should cast it.
+        let not_seniors = people_query![context, [Senior = false]];
+        let seniors = people_query![context, [Senior = true]];
+        assert_eq!(seniors.len(), 1, "One senior");
+        assert_eq!(not_seniors.len(), 1, "One non-senior");
+
+        context.set_person_property(person, Age, 65);
+
+        assert_eq!(seniors.len(), 2, "Two seniors");
+        assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
 }
