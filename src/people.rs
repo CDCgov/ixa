@@ -12,6 +12,7 @@ type DerivedSetter = dyn Fn(&mut Context, PersonId);
 type Indexer = dyn FnMut(&Context, PersonId) -> u128;
 
 struct Index {
+    name: &'static str,
     lookup: HashMap<u128, Vec<PersonId>>,
     indexer: Box<Indexer>,
 }
@@ -19,6 +20,7 @@ struct Index {
 impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
         let mut index = Self {
+            name: std::any::type_name::<T>(),
             lookup: HashMap::new(),
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
@@ -29,13 +31,16 @@ impl Index {
         index
     }
     fn add_index(&mut self, context: &Context, person_id: PersonId) {
-        println!("Adding index for {:?}", person_id);
         let hash = (self.indexer)(context, person_id);
+        println!("Adding {:?} index for {:?}: {}", self.name, person_id, hash);
         self.lookup.entry(hash).or_default().push(person_id);
     }
     fn remove_index(&mut self, context: &Context, person_id: PersonId) {
-        println!("Removing index for {:?}", person_id);
         let hash = (self.indexer)(context, person_id);
+        println!(
+            "Removing {:?} index for {:?}: {}",
+            self.name, person_id, hash
+        );
         self.lookup
             .entry(hash)
             .and_modify(|people| people.retain(|p| *p != person_id));
@@ -914,6 +919,9 @@ mod test {
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
         context.set_person_property(person, Age, 65);
+
+        let not_seniors = people_query![context, [Senior = false]];
+        let seniors = people_query![context, [Senior = true]];
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
