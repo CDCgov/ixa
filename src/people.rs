@@ -895,7 +895,9 @@ mod test {
         context.set_person_property(person1, Age, 42);
         context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
         context.set_person_property(person2, Age, 42);
+        context.set_person_property(person2, RiskCategoryType, RiskCategory::Low);
         context.set_person_property(person3, Age, 40);
+        context.set_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
