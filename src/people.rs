@@ -851,6 +851,7 @@ mod test {
         context.set_person_property(person2, Age, 40);
         context.set_person_property(person3, Age, 41);
 
+        context.register_index(Age);
         let hash = hash_ref(&context.get_person_property(person1, Age));
         let people = context.query_people(vec![(TypeId::of::<Age>(), hash)]);
         assert_eq!(people.len(), 1);
