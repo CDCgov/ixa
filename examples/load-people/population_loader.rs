@@ -81,12 +81,9 @@ mod tests {
 
         // Subscribe to person property change event
         let flag_clone = Rc::clone(&flag);
-        context.subscribe_to_person_property_changed(
-            VaccineEfficacy,
-            move |_context, _person, _current, _prev| {
-                *flag_clone.borrow_mut() = true;
-            },
-        );
+        context.subscribe_to_person_property_changed(VaccineEfficacy, move |_context, _data| {
+            *flag_clone.borrow_mut() = true;
+        });
 
         let counter = Rc::new(RefCell::new(0));
         let expected_computed = Rc::new(expected_computed);

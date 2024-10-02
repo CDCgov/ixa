@@ -212,7 +212,13 @@ struct PersonCreatedEvent {
 // These are internal to this module; use subscribe_to_person_property_changed
 #[derive(Copy, Clone)]
 #[allow(clippy::manual_non_exhaustive)]
-struct PersonPropertyChangeEvent<T: PersonProperty> {
+struct PersonPropertyChangeEventInternal<T: PersonProperty> {
+    pub person_id: PersonId,
+    pub current: T::Value,
+    pub previous: T::Value,
+}
+
+pub struct PersonPropertyChangeData<T: PersonProperty> {
     pub person_id: PersonId,
     pub current: T::Value,
     pub previous: T::Value,
@@ -242,11 +248,12 @@ impl PrivateContextPeopleExt for Context {
         match current_value {
             // The person property is already set, so we emit a change event
             Some(current_value) => {
-                let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
-                    person_id,
-                    current: value,
-                    previous: current_value,
-                };
+                let change_event: PersonPropertyChangeEventInternal<T> =
+                    PersonPropertyChangeEventInternal {
+                        person_id,
+                        current: value,
+                        previous: current_value,
+                    };
                 data_container.set_person_property(person_id, property, value);
                 self.emit_event(change_event);
 
@@ -307,7 +314,7 @@ pub trait ContextPeopleExt {
     fn subscribe_to_person_property_changed<T: PersonProperty + 'static>(
         &mut self,
         _property: T,
-        handler: impl Fn(&mut Context, PersonId, T::Value, T::Value) + 'static,
+        handler: impl Fn(&mut Context, PersonPropertyChangeData<T>) + 'static,
     );
 }
 
@@ -378,14 +385,23 @@ impl ContextPeopleExt for Context {
     fn subscribe_to_person_property_changed<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        handler: impl Fn(&mut Context, PersonId, T::Value, T::Value) + 'static,
+        handler: impl Fn(&mut Context, PersonPropertyChangeData<T>) + 'static,
     ) {
         if T::is_derived() {
             self.register_derived_property(property);
         }
-        self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
-            handler(context, event.person_id, event.current, event.previous);
-        });
+        self.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEventInternal<T>| {
+                handler(
+                    context,
+                    PersonPropertyChangeData {
+                        person_id: event.person_id,
+                        current: event.current,
+                        previous: event.previous,
+                    },
+                );
+            },
+        );
     }
 }
 
@@ -506,12 +522,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_person_property_changed(
-            RiskCategoryType,
-            move |_context, _person, _current, _prev| {
-                *flag_clone.borrow_mut() = true;
-            },
-        );
+        context.subscribe_to_person_property_changed(RiskCategoryType, move |_context, _data| {
+            *flag_clone.borrow_mut() = true;
+        });
 
         let person = context.add_person();
         // This should not emit a change event
@@ -547,15 +560,16 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_person_property_changed(
-            RiskCategoryType,
-            move |_context, person, current, previous| {
-                *flag_clone.borrow_mut() = true;
-                assert_eq!(person.id, 0, "Person id is correct");
-                assert_eq!(previous, RiskCategory::Low, "Previous value is correct");
-                assert_eq!(current, RiskCategory::High, "Current value is correct");
-            },
-        );
+        context.subscribe_to_person_property_changed(RiskCategoryType, move |_context, data| {
+            *flag_clone.borrow_mut() = true;
+            assert_eq!(data.person_id.id, 0, "Person id is correct");
+            assert_eq!(
+                data.previous,
+                RiskCategory::Low,
+                "Previous value is correct"
+            );
+            assert_eq!(data.current, RiskCategory::High, "Current value is correct");
+        });
         let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
@@ -569,12 +583,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_person_property_changed(
-            RunningShoes,
-            move |_context, _person, _current, _prev| {
-                *flag_clone.borrow_mut() = true;
-            },
-        );
+        context.subscribe_to_person_property_changed(RunningShoes, move |_context, _data| {
+            *flag_clone.borrow_mut() = true;
+        });
         let person_id = context.add_person();
         // Initializer wasn't called, so don't fire an event
         context.set_person_property(person_id, RunningShoes, 42);
@@ -644,15 +655,12 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_person_property_changed(
-            MastersRunner,
-            move |_context, person_id, current, prev| {
-                assert_eq!(person_id, person);
-                assert!(!prev, "Correct previous value");
-                assert!(current, "Correct current value");
-                *flag_clone.borrow_mut() = true;
-            },
-        );
+        context.subscribe_to_person_property_changed(MastersRunner, move |_context, data| {
+            assert_eq!(data.person_id, person);
+            assert!(!data.previous, "Correct previous value");
+            assert!(data.current, "Correct current value");
+            *flag_clone.borrow_mut() = true;
+        });
         context.set_person_property(person, IsRunner, true);
         context.execute();
         assert!(*flag.borrow());
@@ -674,12 +682,9 @@ mod test {
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
-        context.subscribe_to_person_property_changed(
-            MastersRunner,
-            move |_context, _person_id, _current, _prev| {
-                *flag_clone.borrow_mut() += 1;
-            },
-        );
+        context.subscribe_to_person_property_changed(MastersRunner, move |_context, _data| {
+            *flag_clone.borrow_mut() += 1;
+        });
         context.set_person_property(person, IsRunner, true);
         context.set_person_property(person, Age, 30);
         context.execute();

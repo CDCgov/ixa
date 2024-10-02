@@ -8,12 +8,12 @@ use ixa::{context::Context, people::ContextPeopleExt};
 pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events
     // Note that no event gets fired when the property is set the first time
-    context.subscribe_to_person_property_changed(
-        DiseaseStatusType,
-        |_context, person, current, previous| {
-            println!("{person:?} changed disease status from {previous:?} to {current:?}");
-        },
-    );
+    context.subscribe_to_person_property_changed(DiseaseStatusType, |_context, data| {
+        println!(
+            "{:?} changed disease status from {:?} to {:?}",
+            data.person_id, data.previous, data.current
+        );
+    });
 
     // Logs when a person is created
     context.subscribe_to_person_created(|context, person| {

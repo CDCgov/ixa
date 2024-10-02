@@ -42,17 +42,14 @@ mod tests {
         );
 
         // At 1.0, people should be in the I state
-        context.subscribe_to_person_property_changed(
-            DiseaseStatusType,
-            |context, person, _current, _prev| {
-                if context.get_current_time() == 1.0 {
-                    assert_eq!(
-                        context.get_person_property(person, DiseaseStatusType),
-                        DiseaseStatus::I
-                    );
-                }
-            },
-        );
+        context.subscribe_to_person_property_changed(DiseaseStatusType, |context, data| {
+            if context.get_current_time() == 1.0 {
+                assert_eq!(
+                    context.get_person_property(data.person_id, DiseaseStatusType),
+                    DiseaseStatus::I
+                );
+            }
+        });
 
         context.execute();
 
