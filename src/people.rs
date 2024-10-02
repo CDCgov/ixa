@@ -1,22 +1,25 @@
-use crate::{context::Context, define_data_plugin};
+use crate::{context::Context, define_data_plugin, hash::hash_ref};
 use std::{
     any::{Any, TypeId},
     borrow::BorrowMut,
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Debug},
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::Hash,
 };
 
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
 type Indexer = dyn FnMut(&Context, PersonId) -> u128;
 
 struct Index {
+    // Primarily for debugging purposes
+    #[allow(dead_code)]
     name: &'static str,
+    // The hash of the property value maps to a list of PersonIds
     lookup: HashMap<u128, Vec<PersonId>>,
+    // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
 }
-
 impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
         let mut index = Self {
@@ -32,15 +35,10 @@ impl Index {
     }
     fn add_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        println!("Adding {:?} index for {:?}: {}", self.name, person_id, hash);
         self.lookup.entry(hash).or_default().push(person_id);
     }
     fn remove_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        println!(
-            "Removing {:?} index for {:?}: {}",
-            self.name, person_id, hash
-        );
         self.lookup
             .entry(hash)
             .and_modify(|people| people.retain(|p| *p != person_id));
@@ -189,12 +187,6 @@ macro_rules! define_person_property_with_default {
 
 pub use define_person_property;
 
-fn hash_ref<T: Hash>(val: &T) -> u128 {
-    let mut hasher = DefaultHasher::new();
-    val.hash(&mut hasher);
-    hasher.finish().into()
-}
-
 impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     /// This will increment the current population by 1.
@@ -317,7 +309,6 @@ impl PrivateContextPeopleExt for Context {
             match current_value {
                 // The person property is already set, so we emit a change event
                 Some(current_value) => {
-                    println!("Changing person property for {:?}", person_id);
                     let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
                         person_id,
                         current: value,
@@ -334,7 +325,6 @@ impl PrivateContextPeopleExt for Context {
                         // Temporarily move the callbacks out for ownership reasons
                         let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
 
-                        println!("Running callbacks for {:?}", person_id);
                         for callback in &mut collector {
                             callback(self, person_id);
                         }
@@ -544,6 +534,7 @@ macro_rules! people_query {
 #[cfg(test)]
 mod test {
     use super::{hash_ref, ContextPeopleExt, PersonId};
+    use crate::people::Index;
     use crate::{context::Context, people::PeoplePlugin};
     use std::any::TypeId;
     use std::{cell::RefCell, rc::Rc};
@@ -841,8 +832,10 @@ mod test {
     }
 
     #[test]
-    fn hash_ref_stable() {
-        assert_eq!(hash_ref(&42), hash_ref(&42));
+    fn index_name() {
+        let context = Context::new();
+        let index = Index::new(&context, Age);
+        assert!(index.name.contains("Age"));
     }
 
     #[test]
@@ -892,6 +885,8 @@ mod test {
         let person2 = context.add_person();
         let person3 = context.add_person();
 
+        // Note: because of the way indexes are initialized, all properties without initializers need to be
+        // set for all people.
         context.set_person_property(person1, Age, 42);
         context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
         context.set_person_property(person2, Age, 42);
