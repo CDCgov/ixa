@@ -601,6 +601,29 @@ mod test {
         assert!(!context.get_person_property(colleen, MastersRunner),);
     }
 
+
+    #[test]
+    fn derived_property_changes_correctly() {
+        let mut context = Context::new();
+        define_derived_person_property!(MastersRunner, bool, [Age, IsRunner], |age, is_runner| age
+            >= 40
+            && is_runner);
+
+        let paula = context.add_person();
+        context.set_person_property(paula, Age, 50);
+        context.set_person_property(paula, IsRunner, true);
+
+        let colleen = context.add_person();
+        context.set_person_property(colleen, Age, 31);
+        context.set_person_property(colleen, IsRunner, true);
+
+        assert!(context.get_person_property(paula, MastersRunner),);
+        assert!(!context.get_person_property(colleen, MastersRunner),);
+
+        context.set_person_property(colleen, Age, 50);
+        assert!(context.get_person_property(colleen, MastersRunner),);        
+    }
+        
     #[test]
     #[should_panic(expected = "Cannot set a derived property directly")]
     fn setting_derived_property_explicitly_panics() {
