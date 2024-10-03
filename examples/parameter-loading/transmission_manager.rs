@@ -2,23 +2,27 @@ use ixa::context::Context;
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::random::ContextRandomExt;
+use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent, PersonId};
 
-use crate::people::ContextPeopleExt;
-use crate::people::InfectionStatus;
+use crate::InfectionStatus;
+use crate::InfectionStatusType;
 use crate::Parameters;
 use rand_distr::Exp;
 
 define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
-    let population_size: usize = context.get_population();
-    let person_to_infect: usize = context.sample_range(TransmissionRng, 0..population_size);
-
-    let person_status: InfectionStatus = context.get_person_status(person_to_infect);
+    let population_size: usize = context.get_current_population();
+    let person_to_infect = context.get_person_id(
+        context.sample_range(TransmissionRng, 0..population_size));
+    let person_status: InfectionStatus = context.get_person_property(person_to_infect, InfectionStatusType);
     let parameters = context.get_global_property_value(Parameters).clone();
 
     if matches!(person_status, InfectionStatus::S) {
-        context.set_person_status(person_to_infect, InfectionStatus::I);
+        context.set_person_property(
+            person_to_infect,
+            InfectionStatusType,
+            InfectionStatus::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection),
@@ -49,9 +53,6 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::people::ContextPeopleExt;
-    use crate::people::InfectionStatus;
-
     use crate::parameters_loader::ParametersValues;
     use ixa::context::Context;
 
@@ -70,9 +71,10 @@ mod test {
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
         context.init_random(123);
-        context.create_person();
+        context.add_person();
         attempt_infection(&mut context);
-        let person_status = context.get_person_status(0);
+        let pid = context.get_person_id(0);
+        let person_status = context.get_person_property(pid, InfectionStatusType);
         assert_eq!(person_status, InfectionStatus::I);
         context.execute();
     }
