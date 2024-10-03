@@ -1,6 +1,9 @@
 use crate::context::Context;
+use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fs;
 
 #[macro_export]
 macro_rules! define_global_property {
@@ -39,6 +42,10 @@ pub trait ContextGlobalPropertiesExt {
         value: T::Value,
     );
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
+    fn load_parameters_from_config<T: 'static + Debug + DeserializeOwned>(
+        &mut self,
+        file_name: &str,
+    ) -> T;
 }
 
 impl GlobalPropertiesDataContainer {
@@ -76,5 +83,14 @@ impl ContextGlobalPropertiesExt for Context {
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value {
         let data_container = self.get_data_container(GlobalPropertiesPlugin).unwrap();
         data_container.get_global_property_value::<T>()
+    }
+
+    fn load_parameters_from_config<T: 'static + Debug + DeserializeOwned>(
+        &mut self,
+        file_name: &str,
+    ) -> T {
+        let config_file = fs::read_to_string(file_name).expect("file not defined");
+        let config: T = toml::from_str(&config_file).expect("could not parse file");
+        config
     }
 }
