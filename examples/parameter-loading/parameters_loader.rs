@@ -19,7 +19,6 @@ pub struct ParametersValues {
 define_global_property!(Parameters, ParametersValues);
 
 pub fn init_parameters(context: &mut Context, file_name: &str) {
-    let parameters_values = context
-        .load_parameters_from_config::<ParametersValues>(file_name);
+    let parameters_values = context.load_parameters_from_config::<ParametersValues>(file_name);
     context.set_global_property_value(Parameters, parameters_values);
 }
