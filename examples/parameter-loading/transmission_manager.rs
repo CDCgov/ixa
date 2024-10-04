@@ -2,7 +2,7 @@ use ixa::context::Context;
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::random::ContextRandomExt;
-use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent, PersonId};
+use ixa::people::{ContextPeopleExt};
 
 use crate::InfectionStatus;
 use crate::InfectionStatusType;
@@ -71,9 +71,8 @@ mod test {
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
         context.init_random(123);
-        context.add_person();
+        let pid = context.add_person();
         attempt_infection(&mut context);
-        let pid = context.get_person_id(0);
         let person_status = context.get_person_property(pid, InfectionStatusType);
         assert_eq!(person_status, InfectionStatus::I);
         context.execute();
