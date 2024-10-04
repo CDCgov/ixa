@@ -38,12 +38,10 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::define_person_property_with_default;
-    use crate::define_person_property;
     use ixa::context::Context;
     use ixa::define_data_plugin;
     use ixa::global_properties::ContextGlobalPropertiesExt;
-    use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent, PersonId};
+    use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
     use ixa::random::ContextRandomExt;
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
@@ -72,24 +70,20 @@ mod test {
             }
         });
 
+
         let population_size:usize = 10;
         for _ in 0..population_size {
             let person = context.add_person();
 
+            // This is necessary to emit an event
+            context.get_person_property(person, InfectionStatusType);
+            
             context.add_plan(1.0, move |context| {
-                println!("time {:?} - PersonID: {:?} - status: {:?}",
-                    context.get_current_time(), person,
-                    context.get_person_property(person, InfectionStatusType));
                 context.set_person_property(
                     person,
                     InfectionStatusType,
                     InfectionStatus::I);
-            });
-            context.add_plan(30.0, move |context| {
-                println!("time {:?} - PersonID: {:?} - status: {:?}",
-                    context.get_current_time(), person,
-                    context.get_person_property(person, InfectionStatusType));
-            });
+            });            
         }
         context.execute();
         assert_eq!(population_size, context.get_current_population());
