@@ -466,4 +466,55 @@ mod test {
         context.execute();
         assert!(!*flag.borrow());
     }
+
+    #[test]
+    fn observe_person_property_change_with_set() {
+        let mut context = Context::new();
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<RunningShoes>| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
+        let person_id = context.add_person();
+        // Initializer called as a side effect of set, so event fires.
+        context.set_person_property(person_id, RunningShoes, 42);
+        context.execute();
+        assert!(*flag.borrow());
+    }
+
+    #[test]
+    #[should_panic]    
+    fn calling_initialize_twice_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();        
+        context.initialize_person_property(person_id, IsRunner, true);
+        context.initialize_person_property(person_id, IsRunner, true);                
+    }
+
+    #[test]
+    #[should_panic]    
+    fn calling_initialize_after_get_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();        
+        let _ = context.get_person_property(person_id, IsRunner);
+        context.initialize_person_property(person_id, IsRunner, true);
+    }
+
+    #[test]
+    fn initialize_without_initializer_succeeds() {
+        let mut context = Context::new();
+        let person_id = context.add_person();        
+        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::High);
+    }
+    
+    #[test]
+    #[should_panic]    
+    fn set_without_initializer_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();        
+        context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+    }
 }
