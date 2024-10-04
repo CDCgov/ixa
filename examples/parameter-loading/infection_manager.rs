@@ -34,25 +34,21 @@ pub fn init(context: &mut Context) {
     });
 }
 
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::define_person_property_with_default;
+    use crate::define_person_property;
     use ixa::context::Context;
     use ixa::define_data_plugin;
     use ixa::global_properties::ContextGlobalPropertiesExt;
+    use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent, PersonId};
     use ixa::random::ContextRandomExt;
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     use crate::parameters_loader::ParametersValues;
-
-    fn handle_recovery_event(
-        context: &mut Context,
-        event: PersonPropertyChangeEvent<InfectionStatusType>) {
-        if matches!(event.current, InfectionStatus::R) {
-            *context.get_data_container_mut(RecoveryPlugin) += 1;
-        }
-    }
-
+    
     #[test]
     fn test_handle_infection_change() {
         let p_values = ParametersValues {
@@ -64,26 +60,39 @@ mod test {
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
-
         let mut context = Context::new();
+
         context.set_global_property_value(Parameters, p_values);
         context.init_random(42);
         init(&mut context);
 
         context.subscribe_to_event(move |context, event:PersonPropertyChangeEvent<InfectionStatusType>| {
-            handle_recovery_event(context, event);
+            if matches!(event.current, InfectionStatus::R) {
+                *context.get_data_container_mut(RecoveryPlugin) += 1;
+            }
         });
 
-        let population_size = 10;
-        for id in 0..population_size {
-            context.add_person();
-            context.set_person_property(
-                id,
-                InfectionStatusType,
-                InfectionStatus::I);
-        }
+        let population_size:usize = 10;
+        for _ in 0..population_size {
+            let person = context.add_person();
 
+            context.add_plan(1.0, move |context| {
+                println!("time {:?} - PersonID: {:?} - status: {:?}",
+                    context.get_current_time(), person,
+                    context.get_person_property(person, InfectionStatusType));
+                context.set_person_property(
+                    person,
+                    InfectionStatusType,
+                    InfectionStatus::I);
+            });
+            context.add_plan(30.0, move |context| {
+                println!("time {:?} - PersonID: {:?} - status: {:?}",
+                    context.get_current_time(), person,
+                    context.get_person_property(person, InfectionStatusType));
+            });
+        }
         context.execute();
+        assert_eq!(population_size, context.get_current_population());
         let recovered_size: usize = *context.get_data_container(RecoveryPlugin).unwrap();
 
         assert_eq!(recovered_size, population_size);

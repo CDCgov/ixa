@@ -4,7 +4,6 @@ use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
 use ixa::people::PersonPropertyChangeEvent;
-use ixa::people::PersonId;
 
 use crate::InfectionStatus;
 use crate::InfectionStatusType;
