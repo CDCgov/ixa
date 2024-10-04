@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
 
+
 #[macro_export]
 macro_rules! define_global_property {
     ($global_property:ident, $value:ty) => {
@@ -92,5 +93,35 @@ impl ContextGlobalPropertiesExt for Context {
         let config_file = fs::read_to_string(file_name).expect("file not defined");
         let config: T = toml::from_str(&config_file).expect("could not parse file");
         config
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{context::Context};
+    use serde::{Deserialize, Serialize};
+    
+    #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+    pub struct ParamType {
+        pub days: usize,
+        pub diseases: usize,
+    }
+    
+    define_global_property!(DiseaseParams, ParamType);
+    //Since global properties aren't mutable right now, only
+    // check that they are properly set
+    #[test]
+    fn set_get_global_property() {
+        let params: ParamType = ParamType {
+            days: 10,
+            diseases: 2,
+        };
+        let mut context = Context::new();
+        context.set_global_property_value(DiseaseParams, params.clone());
+        let global_params = context.get_global_property_value(DiseaseParams).clone();
+        assert_eq!(global_params.days, params.days);
+        assert_eq!(global_params.diseases, params.diseases);
+        
     }
 }
