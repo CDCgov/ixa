@@ -224,7 +224,7 @@ impl ContextPeopleExt for Context {
         initialized_value
     }
 
-     fn initialize_person_property<T: PersonProperty + 'static>(
+    fn initialize_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
         property: T,
@@ -232,12 +232,12 @@ impl ContextPeopleExt for Context {
     ) {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-        
-         let current_value = *data_container.get_person_property_ref(person_id, property);
-         if current_value.is_some() {
-             panic!("Property already initialized");
-         }
-         data_container.set_person_property(person_id, property, value);             
+
+        let current_value = *data_container.get_person_property_ref(person_id, property);
+        if current_value.is_some() {
+            panic!("Property already initialized");
+        }
+        data_container.set_person_property(person_id, property, value);
     }
 
     fn set_person_property<T: PersonProperty + 'static>(
@@ -262,7 +262,7 @@ impl ContextPeopleExt for Context {
         let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
             person_id,
             current: value,
-             previous: previous_value,
+            previous: previous_value,
         };
         data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
@@ -486,19 +486,19 @@ mod test {
     }
 
     #[test]
-    #[should_panic]    
+    #[should_panic]
     fn calling_initialize_twice_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();        
+        let person_id = context.add_person();
         context.initialize_person_property(person_id, IsRunner, true);
-        context.initialize_person_property(person_id, IsRunner, true);                
+        context.initialize_person_property(person_id, IsRunner, true);
     }
 
     #[test]
-    #[should_panic]    
+    #[should_panic]
     fn calling_initialize_after_get_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();        
+        let person_id = context.add_person();
         let _ = context.get_person_property(person_id, IsRunner);
         context.initialize_person_property(person_id, IsRunner, true);
     }
@@ -506,15 +506,15 @@ mod test {
     #[test]
     fn initialize_without_initializer_succeeds() {
         let mut context = Context::new();
-        let person_id = context.add_person();        
+        let person_id = context.add_person();
         context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
-    
+
     #[test]
-    #[should_panic]    
+    #[should_panic]
     fn set_without_initializer_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();        
+        let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
 }
