@@ -16,6 +16,20 @@ type Callback = dyn FnOnce(&mut Context);
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
 
+/// An enum to indicate the priority for plans at a given time.
+///
+/// Most plans will have `Normal` priority. Plans with priority `First` are
+/// handled before all `Normal` plans, and those with priority `Last` are
+/// handled after all `Normal` plans. In all cases ties between plans at the
+/// same time and with the same priority are handled in the order of scheduling.
+///
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
+pub enum PlanPriority {
+    First,
+    Normal,
+    Last,
+}
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -44,7 +58,7 @@ type EventHandler<E> = dyn Fn(&mut Context, E);
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>>,
+    plan_queue: Queue<Box<Callback>, PlanPriority>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
@@ -104,7 +118,8 @@ impl Context {
         }
     }
 
-    /// Add a plan to the future event list at the specified time
+    /// Add a plan to the future event list at the specified time with normal
+    /// priority
     ///
     /// Returns an `Id` for the newly-added plan that can be used to cancel it
     /// if needed.
@@ -112,11 +127,28 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
+        self.add_plan_with_priority(time, callback, PlanPriority::Normal)
+    }
+
+    /// Add a plan to the future event list at the specified time and with the
+    /// specified priority
+    ///
+    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan_with_priority(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        priority: PlanPriority,
+    ) -> Id {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
             "Time is invalid"
         );
-        self.plan_queue.add_plan(time, Box::new(callback))
+        self.plan_queue.add_plan(time, Box::new(callback), priority)
     }
 
     /// Cancel a plan that has been added to the queue
@@ -274,6 +306,21 @@ mod tests {
         })
     }
 
+    fn add_plan_with_priority(
+        context: &mut Context,
+        time: f64,
+        value: u32,
+        priority: PlanPriority,
+    ) -> Id {
+        context.add_plan_with_priority(
+            time,
+            move |context| {
+                context.get_data_container_mut(ComponentA).push(value);
+            },
+            priority,
+        )
+    }
+
     #[test]
     #[should_panic(expected = "Time is invalid")]
     fn negative_plan_time() {
@@ -410,6 +457,23 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn plans_at_same_time_follow_priority() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        add_plan_with_priority(&mut context, 1.0, 5, PlanPriority::Last);
+        add_plan_with_priority(&mut context, 1.0, 3, PlanPriority::First);
+        add_plan(&mut context, 1.0, 2);
+        add_plan_with_priority(&mut context, 1.0, 6, PlanPriority::Last);
+        add_plan_with_priority(&mut context, 1.0, 4, PlanPriority::First);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(
+            *context.get_data_container_mut(ComponentA),
+            vec![3, 4, 1, 2, 5, 6]
+        );
     }
 
     #[derive(Copy, Clone)]
