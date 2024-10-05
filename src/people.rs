@@ -234,12 +234,11 @@ impl ContextPeopleExt for Context {
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
         let current_value = *data_container.get_person_property_ref(person_id, property);
-        if current_value.is_some() {
-            panic!("Property already initialized");
-        }
+        assert!(current_value.is_none(), "Property already initialized");
         data_container.set_person_property(person_id, property, value);
     }
 
+    #[allow(clippy::single_match_else)]    
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -486,7 +485,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="Property already initialized")]
     fn calling_initialize_twice_panics() {
         let mut context = Context::new();
         let person_id = context.add_person();
@@ -495,7 +494,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="Property already initialized")]
     fn calling_initialize_after_get_panics() {
         let mut context = Context::new();
         let person_id = context.add_person();
@@ -511,7 +510,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="Property not initialized")]
     fn set_without_initializer_panics() {
         let mut context = Context::new();
         let person_id = context.add_person();
