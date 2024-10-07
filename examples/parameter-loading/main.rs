@@ -3,7 +3,8 @@ use ixa::{context::Context,
     global_properties::ContextGlobalPropertiesExt,
     define_person_property,
     define_person_property_with_default};
-use ixa::people::{ContextPeopleExt};
+use ixa::people::ContextPeopleExt;
+use std::path::Path;
 
 mod incidence_report;
 mod infection_manager;
@@ -26,7 +27,10 @@ define_person_property_with_default!(InfectionStatusType,
 
 fn main() {
     let mut context = Context::new();
-    parameters_loader::init_parameters(&mut context, "examples/parameter-loading/input.toml");
+    let file_path = Path::new("examples")
+        .join("parameter-loading")
+        .join("input.json");
+    parameters_loader::init_parameters(&mut context, &file_path);
 
     let parameters = context.get_global_property_value(Parameters).clone();
     context.init_random(parameters.seed);

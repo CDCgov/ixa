@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
-
+use core::convert::TryInto;
 // * file_prefix: precedes the report name in the filename. An example of a
 // potential prefix might be scenario or simulation name
 // * directory: location that the CSVs are written to. An example of this might
@@ -335,9 +335,10 @@ mod test {
 
             for (j, record) in records.enumerate() {
                 let record: SampleReport = record.expect("Failed to deserialize record");
+                let id_expected = TryInto::<u32>::try_into(i * num_reports_per_thread + j).unwrap();
                 assert_eq!(
                     record.id,
-                    (i * num_reports_per_thread + j).try_into().unwrap()
+                    id_expected
                 );
             }
         }

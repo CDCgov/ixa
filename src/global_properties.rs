@@ -1,10 +1,12 @@
 use crate::context::Context;
+use std::path::Path;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
-
+use serde_json::Result;
+use std::io::BufReader;
 
 #[macro_export]
 macro_rules! define_global_property {
@@ -43,10 +45,14 @@ pub trait ContextGlobalPropertiesExt {
         value: T::Value,
     );
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
-    fn load_parameters_from_config<T: 'static + Debug + DeserializeOwned>(
+    fn load_parameters_from_toml<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &str,
     ) -> T;
+    fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
+        &mut self,
+        file_path: &Path,
+    ) -> Result<T>;
 }
 
 impl GlobalPropertiesDataContainer {
@@ -86,7 +92,7 @@ impl ContextGlobalPropertiesExt for Context {
         data_container.get_global_property_value::<T>()
     }
 
-    fn load_parameters_from_config<T: 'static + Debug + DeserializeOwned>(
+    fn load_parameters_from_toml<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &str,
     ) -> T {
@@ -94,15 +100,26 @@ impl ContextGlobalPropertiesExt for Context {
         let config: T = toml::from_str(&config_file).expect("could not parse file");
         config
     }
+
+    fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
+        &mut self,
+        file_name: &Path,
+    ) -> Result<T> {
+        let config_file = fs::File::open(file_name).expect("file not defined");
+        let reader = BufReader::new(config_file);
+        let config = serde_json::from_reader(reader)?;
+        Ok(config)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{context::Context};
+    use crate::context::Context;
     use serde::{Deserialize, Serialize};
-    
-    #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+    use tempfile::tempdir;
+    use std::path::PathBuf;
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ParamType {
         pub days: usize,
         pub diseases: usize,
@@ -123,5 +140,31 @@ mod test {
         assert_eq!(global_params.days, params.days);
         assert_eq!(global_params.diseases, params.diseases);
         
+    }
+    #[test]
+    fn set_parameters() {
+        let mut context = Context::new();        
+        let temp_dir = tempdir().unwrap();
+        let config_path = PathBuf::from(&temp_dir.path());
+        let file_name = "test.json";
+        let file_path = config_path.join(file_name);
+        let config = fs::File::create(config_path.join(file_name)).unwrap();
+        
+        let params: ParamType = ParamType {
+            days: 10,
+            diseases: 2,
+        };
+
+        define_global_property!(Parameters, ParamType);
+        
+        let _ = serde_json::to_writer(config, &params);
+        let params_json = context
+            .load_parameters_from_json::<ParamType>(&file_path).unwrap();
+        
+        context.set_global_property_value(Parameters, params_json);
+
+        let params_read = context.get_global_property_value(Parameters).clone();
+        assert_eq!(params_read.days, params.days);
+        assert_eq!(params_read.diseases, params.diseases);
     }
 }
