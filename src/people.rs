@@ -173,6 +173,8 @@ pub trait ContextPeopleExt {
     ) -> T::Value;
 
     /// Given a `PersonId`, initialize the value of a defined person property.
+    /// Once the the value is set using this API, any initializer will
+    /// not run.
     /// Panics if the property is already initialized. Does not fire a change
     /// event.
     fn initialize_person_property<T: PersonProperty + 'static>(
