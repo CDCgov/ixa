@@ -384,7 +384,8 @@ mod tests {
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![]);
+        let test_vec: Vec<u32> = vec![];
+        assert_eq!(*context.get_data_container_mut(ComponentA), test_vec);
     }
 
     #[test]
