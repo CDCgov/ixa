@@ -172,7 +172,20 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
+    /// Given a `PersonId`, initialize the value of a defined person property.
+    /// Once the the value is set using this API, any initializer will
+    /// not run.
+    /// Panics if the property is already initialized. Does not fire a change
+    /// event.
+    fn initialize_person_property<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+        value: T::Value,
+    );
+
     /// Given a `PersonId`, sets the value of a defined person property
+    /// Panics if the property is not initialized. Fires a change event.
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -213,6 +226,21 @@ impl ContextPeopleExt for Context {
         initialized_value
     }
 
+    fn initialize_person_property<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+        value: T::Value,
+    ) {
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+
+        let current_value = *data_container.get_person_property_ref(person_id, property);
+        assert!(current_value.is_none(), "Property already initialized");
+        data_container.set_person_property(person_id, property, value);
+    }
+
+    #[allow(clippy::single_match_else)]
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -221,23 +249,24 @@ impl ContextPeopleExt for Context {
     ) {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+
         let current_value = *data_container.get_person_property_ref(person_id, property);
-        match current_value {
-            // The person property is already set, so we emit a change event
-            Some(current_value) => {
-                let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
-                    person_id,
-                    current: value,
-                    previous: current_value,
-                };
-                data_container.set_person_property(person_id, property, value);
-                self.emit_event(change_event);
-            }
-            // The person property is not yet initialized, so we don't emit any events.
+        let previous_value = match current_value {
+            Some(current_value) => current_value,
             None => {
-                data_container.set_person_property(person_id, property, value);
+                let initialize_value = T::initialize(self, person_id);
+                data_container.set_person_property(person_id, property, initialize_value);
+                initialize_value
             }
-        }
+        };
+
+        let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
+            person_id,
+            current: value,
+            previous: previous_value,
+        };
+        data_container.set_person_property(person_id, property, value);
+        self.emit_event(change_event);
     }
 }
 
@@ -284,7 +313,7 @@ mod test {
         let mut context = Context::new();
 
         let person = context.add_person();
-        context.set_person_property(person, Age, 42);
+        context.initialize_person_property(person, Age, 42);
         assert_eq!(context.get_person_property(person, Age), 42);
     }
 
@@ -305,7 +334,7 @@ mod test {
 
         // Add a person and set a property, instantiating the Vec
         let person = context.add_person();
-        context.set_person_property(person, Age, 8);
+        context.initialize_person_property(person, Age, 8);
 
         // Create a bunch of people and don't initialize Age
         for _ in 1..9 {
@@ -314,7 +343,7 @@ mod test {
         let tenth_person = context.add_person();
 
         // Set a person property for a person > index 0
-        context.set_person_property(tenth_person, Age, 42);
+        context.initialize_person_property(tenth_person, Age, 42);
         // Call an initializer
         assert!(!context.get_person_property(tenth_person, IsRunner));
     }
@@ -334,8 +363,8 @@ mod test {
         let mut context = Context::new();
 
         let person_id = context.add_person();
-        context.set_person_property(person_id, Age, 42);
-        context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person_id, Age, 42);
+        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -366,7 +395,7 @@ mod test {
 
         let person = context.add_person();
         // This should not emit a change event
-        context.set_person_property(person, Age, 42);
+        context.initialize_person_property(person, Age, 42);
         context.get_person_property(person, IsRunner);
         context.get_person_property(person, RunningShoes);
 
@@ -385,7 +414,7 @@ mod test {
         let has_value = *people_data.get_person_property_ref(person, RunningShoes);
         assert!(has_value.is_none());
 
-        context.set_person_property(person, IsRunner, true);
+        context.initialize_person_property(person, IsRunner, true);
 
         // This should initialize it
         let value = context.get_person_property(person, RunningShoes);
@@ -415,7 +444,7 @@ mod test {
             },
         );
         let person_id = context.add_person();
-        context.set_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
         context.execute();
         assert!(*flag.borrow());
@@ -433,9 +462,60 @@ mod test {
             },
         );
         let person_id = context.add_person();
-        // Innitializer wasn't called, so don't fire an event
-        context.set_person_property(person_id, RunningShoes, 42);
+        // Initializer wasn't called, so don't fire an event
+        context.initialize_person_property(person_id, RunningShoes, 42);
         context.execute();
         assert!(!*flag.borrow());
+    }
+
+    #[test]
+    fn observe_person_property_change_with_set() {
+        let mut context = Context::new();
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<RunningShoes>| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
+        let person_id = context.add_person();
+        // Initializer called as a side effect of set, so event fires.
+        context.set_person_property(person_id, RunningShoes, 42);
+        context.execute();
+        assert!(*flag.borrow());
+    }
+
+    #[test]
+    #[should_panic(expected = "Property already initialized")]
+    fn calling_initialize_twice_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();
+        context.initialize_person_property(person_id, IsRunner, true);
+        context.initialize_person_property(person_id, IsRunner, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "Property already initialized")]
+    fn calling_initialize_after_get_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();
+        let _ = context.get_person_property(person_id, IsRunner);
+        context.initialize_person_property(person_id, IsRunner, true);
+    }
+
+    #[test]
+    fn initialize_without_initializer_succeeds() {
+        let mut context = Context::new();
+        let person_id = context.add_person();
+        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::High);
+    }
+
+    #[test]
+    #[should_panic(expected = "Property not initialized")]
+    fn set_without_initializer_panics() {
+        let mut context = Context::new();
+        let person_id = context.add_person();
+        context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
 }
