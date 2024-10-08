@@ -8,7 +8,7 @@ use std::{
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
-pub static mut DERIVED_DEPENDENCIES : Lazy<Mutex<HashMap<TypeId, Vec<TypeId>>>> = Lazy::new(|| {
+pub static mut DERIVED_DEPENDENCIES : Lazy<Mutex<HashMap<TypeId, Vec<String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
@@ -16,16 +16,16 @@ pub fn add_dependency<S: 'static, D: 'static>() {
     unsafe {
         let mut hm = DERIVED_DEPENDENCIES.lock().unwrap();
         let dependencies = (*hm).entry(TypeId::of::<S>())
-            .or_insert_with(|| { Vec::<TypeId>::new() });
-        dependencies.push(TypeId::of::<D>());
+            .or_insert_with(|| { Vec::<String>::new() });
+        dependencies.push(String::from(std::any::type_name::<D>()));
     }
 }
 
-pub fn get_dependencies<T: 'static>() -> Vec<TypeId> {
+pub fn get_dependencies<T: 'static>() -> Vec<String> {
     unsafe {
         let mut hm = DERIVED_DEPENDENCIES.lock().unwrap();
         let dependencies = (*hm).entry(TypeId::of::<T>())
-            .or_insert_with(|| { Vec::<TypeId>::new() });
+            .or_insert_with(|| { Vec::<String>::new()});
          dependencies.clone()
     }
 }
@@ -151,7 +151,9 @@ macro_rules! define_derived_person_property {
         paste! {
             #[ctor]
             fn [<$derived_property:snake _add_dep>]() {
-                $crate::people::add_dependency::<$derived_property, $derived_property>();
+                $(
+                    $crate::people::add_dependency::<$dependency, $derived_property>();
+                )*
             }
         }
     };
