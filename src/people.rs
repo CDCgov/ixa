@@ -147,6 +147,13 @@ macro_rules! define_derived_person_property {
                 Self::calculate(context, person)
             }
         }
+
+        paste! {
+            #[ctor]
+            fn [<$derived_property:snake _add_dep>]() {
+                $crate::people::add_dependency::<$derived_property, $derived_property>();
+            }
+        }
     };
 }
 
@@ -189,7 +196,10 @@ impl PeopleData {
         RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
                 .entry(TypeId::of::<T>())
-                .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
+                .or_insert_with(|| {
+                    println!("Dependencies for {} {:?}", std::any::type_name::<T>(), get_dependencies::<T>());
+                    Box::new(Vec::<Option<T::Value>>::with_capacity(index))
+                });
             let values: &mut Vec<Option<T::Value>> = properties
                 .downcast_mut()
                 .expect("Type mismatch in properties_map");
@@ -434,6 +444,8 @@ mod test {
     use super::{ContextPeopleExt, PersonId};
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
+    use paste::paste;
+    use ctor::ctor;
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -714,4 +726,20 @@ mod test {
         context.execute();
         assert_eq!(*flag.borrow(), 2);
     }
+
+
+    #[test]
+    fn property_initialization_fails() {
+        define_derived_person_property!(MastersRunner, bool, [Age, IsRunner], |age, is_runner| age
+            >= 40
+            && is_runner);
+        
+        let mut context = Context::new();
+        let person = context.add_person();
+        let _ = context.set_person_property(person, Age, 100);
+        let _ = context.get_person_property(person, MastersRunner);        
+        
+        assert!(false);
+    }
+    
 }
