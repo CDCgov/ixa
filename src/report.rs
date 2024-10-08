@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
-use core::convert::TryInto;
+
 // * file_prefix: precedes the report name in the filename. An example of a
 // potential prefix might be scenario or simulation name
 // * directory: location that the CSVs are written to. An example of this might
@@ -146,7 +146,8 @@ mod test {
     use serde_derive::{Deserialize, Serialize};
     use std::thread;
     use tempfile::tempdir;
-
+    use core::convert::TryInto;
+    
     #[derive(Serialize, Deserialize)]
     struct SampleReport {
         id: u32,
