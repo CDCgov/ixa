@@ -5,6 +5,30 @@ use std::{
     collections::HashMap,
     fmt,
 };
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+pub static mut DERIVED_DEPENDENCIES : Lazy<Mutex<HashMap<TypeId, Vec<TypeId>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+pub fn add_dependency<S: 'static, D: 'static>() {
+    unsafe {
+        let mut hm = DERIVED_DEPENDENCIES.lock().unwrap();
+        let dependencies = (*hm).entry(TypeId::of::<S>())
+            .or_insert_with(|| { Vec::<TypeId>::new() });
+        dependencies.push(TypeId::of::<D>());
+    }
+}
+
+pub fn get_dependencies<T: 'static>() -> Vec<TypeId> {
+    unsafe {
+        let mut hm = DERIVED_DEPENDENCIES.lock().unwrap();
+        let dependencies = (*hm).entry(TypeId::of::<T>())
+            .or_insert_with(|| { Vec::<TypeId>::new() });
+         dependencies.clone()
+    }
+}
 
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
 
