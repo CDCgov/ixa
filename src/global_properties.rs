@@ -7,6 +7,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Defines a global property with the following parameters:
+/// * `$global_property`: Name for the identifier type of the global property
+/// * `$value`: The type of the property's value
 #[macro_export]
 macro_rules! define_global_property {
     ($global_property:ident, $value:ty) => {
@@ -19,6 +22,8 @@ macro_rules! define_global_property {
     };
 }
 
+/// Provides a specific error IxaError and maps to other errors to
+/// convert to an IxaError
 #[derive(Debug)]
 pub enum IxaError {
     IoError(io::Error),
@@ -46,6 +51,8 @@ impl Display for IxaError {
     }
 }
 
+/// Global properties are not mutable and represent variables that are required
+/// in a global scope during the simulation, such as simulation parameters. 
 pub trait GlobalProperty: Any {
     type Value: Any;
 }
@@ -72,6 +79,10 @@ pub trait ContextGlobalPropertiesExt {
     );
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
 
+    /// # Errors
+    ///
+    /// Will return an Error `IxaError` if the `file_path` does not exist or
+    /// cannot be deserialized 
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_path: &Path,
