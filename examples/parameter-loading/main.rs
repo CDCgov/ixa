@@ -30,7 +30,7 @@ fn main() {
         .join("input.json");
 
     match parameters_loader::init_parameters(&mut context, &file_path) {
-        Ok(_) => {
+        Ok(()) => {
             let parameters = context.get_global_property_value(Parameters).clone();
             context.init_random(parameters.seed);
 
@@ -49,7 +49,7 @@ fn main() {
             context.execute();
         }
         Err(ixa_error) => {
-            println!("Could not read parameters: {}", ixa_error);
+            println!("Could not read parameters: {ixa_error}");
         }
     }
 }
