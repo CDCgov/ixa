@@ -5,8 +5,8 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
+use std::io;
 use serde_json::Result;
-use std::io::BufReader;
 
 #[macro_export]
 macro_rules! define_global_property {
@@ -18,6 +18,24 @@ macro_rules! define_global_property {
             type Value = $value;
         }
     };
+}
+
+#[derive(Debug)]
+pub enum IxaError {
+    IoError(io::Error),
+    JsonError(serde_json::Error),
+}
+
+impl From<io::Error> for IxaError {
+    fn from(error: io::Error) -> Self {
+        IxaError::IoError(error)
+    }
+}
+
+impl From<serde_json::error::Error> for IxaError {
+    fn from(error: serde_json::error::Error) -> Self {
+        IxaError::JsonError(error)
+    }
 }
 
 pub trait GlobalProperty: Any {
@@ -93,9 +111,8 @@ impl ContextGlobalPropertiesExt for Context {
         &mut self,
         file_name: &Path,
     ) -> Result<T> {
-        let config_file = fs::File::open(file_name).expect("no file");
-        let reader = BufReader::new(config_file);
-        let config = serde_json::from_reader(reader)?;
+        let config_file = fs::read_to_string(file_name)?;
+        let config = serde_json::from_str(&config_file)?;
         Ok(config)
     }
 }
