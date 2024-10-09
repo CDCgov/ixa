@@ -1,9 +1,9 @@
-use ixa::random::ContextRandomExt;
-use ixa::{context::Context,
-    global_properties::ContextGlobalPropertiesExt,
-    define_person_property,
-    define_person_property_with_default};
 use ixa::people::ContextPeopleExt;
+use ixa::random::ContextRandomExt;
+use ixa::{
+    context::Context, define_person_property, define_person_property_with_default,
+    global_properties::ContextGlobalPropertiesExt,
+};
 use std::path::Path;
 
 mod incidence_report;
@@ -21,17 +21,15 @@ pub enum InfectionStatus {
     I,
     R,
 }
-define_person_property_with_default!(InfectionStatusType,
-    InfectionStatus,
-    InfectionStatus::S);
+define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
 fn main() {
     let mut context = Context::new();
     let file_path = Path::new("examples")
         .join("parameter-loading")
         .join("input.json");
-    
-    match  parameters_loader::init_parameters(&mut context, &file_path) {
+
+    match parameters_loader::init_parameters(&mut context, &file_path) {
         Ok(_) => {
             let parameters = context.get_global_property_value(Parameters).clone();
             context.init_random(parameters.seed);
@@ -49,7 +47,7 @@ fn main() {
             });
             println!("{parameters:?}");
             context.execute();
-        },
+        }
         Err(ixa_error) => {
             println!("Could not read parameters: {}", ixa_error);
         }

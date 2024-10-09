@@ -1,9 +1,8 @@
 use ixa::context::Context;
-
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
-use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent, PersonId};
 use rand_distr::Exp;
 
 use crate::InfectionStatus;
@@ -22,18 +21,22 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     });
 }
 
-fn handle_infection_status_change(context: &mut Context, event: PersonPropertyChangeEvent<InfectionStatusType>) {
+fn handle_infection_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectionStatusType>,
+) {
     if matches!(event.current, InfectionStatus::I) {
         schedule_recovery(context, event.person_id);
     }
 }
 
 pub fn init(context: &mut Context) {
-    context.subscribe_to_event(move |context, event:PersonPropertyChangeEvent<InfectionStatusType>| {
-        handle_infection_status_change(context, event);
-    });
+    context.subscribe_to_event(
+        move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+            handle_infection_status_change(context, event);
+        },
+    );
 }
-
 
 #[cfg(test)]
 mod test {
@@ -46,7 +49,7 @@ mod test {
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     use crate::parameters_loader::ParametersValues;
-    
+
     #[test]
     fn test_handle_infection_change() {
         let p_values = ParametersValues {
@@ -64,26 +67,24 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        context.subscribe_to_event(move |context, event:PersonPropertyChangeEvent<InfectionStatusType>| {
-            if matches!(event.current, InfectionStatus::R) {
-                *context.get_data_container_mut(RecoveryPlugin) += 1;
-            }
-        });
+        context.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+                if matches!(event.current, InfectionStatus::R) {
+                    *context.get_data_container_mut(RecoveryPlugin) += 1;
+                }
+            },
+        );
 
-
-        let population_size:usize = 10;
+        let population_size: usize = 10;
         for _ in 0..population_size {
             let person = context.add_person();
 
             // This is necessary to emit an event
             context.get_person_property(person, InfectionStatusType);
-            
+
             context.add_plan(1.0, move |context| {
-                context.set_person_property(
-                    person,
-                    InfectionStatusType,
-                    InfectionStatus::I);
-            });            
+                context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
+            });
         }
         context.execute();
         assert_eq!(population_size, context.get_current_population());

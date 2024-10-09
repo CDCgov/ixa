@@ -1,9 +1,9 @@
 use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::people::PersonPropertyChangeEvent;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
-use ixa::people::PersonPropertyChangeEvent;
 
 use crate::InfectionStatus;
 use crate::InfectionStatusType;
@@ -20,7 +20,10 @@ struct IncidenceReportItem {
 
 create_report_trait!(IncidenceReportItem);
 
-fn handle_infection_status_change(context: &mut Context, event:PersonPropertyChangeEvent<InfectionStatusType>) {
+fn handle_infection_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectionStatusType>,
+) {
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: event.person_id.id,
@@ -34,7 +37,9 @@ pub fn init(context: &mut Context) {
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
     context.add_report::<IncidenceReportItem>(&parameters.output_file);
-    context.subscribe_to_event(|context, event:PersonPropertyChangeEvent<InfectionStatusType>| {
-        handle_infection_status_change(context, event);
-    });
+    context.subscribe_to_event(
+        |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+            handle_infection_status_change(context, event);
+        },
+    );
 }

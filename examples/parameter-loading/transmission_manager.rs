@@ -1,8 +1,8 @@
 use ixa::context::Context;
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
-use ixa::people::{ContextPeopleExt};
 
 use crate::InfectionStatus;
 use crate::InfectionStatusType;
@@ -13,16 +13,14 @@ define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_current_population();
-    let person_to_infect = context.get_person_id(
-        context.sample_range(TransmissionRng, 0..population_size));
-    let person_status: InfectionStatus = context.get_person_property(person_to_infect, InfectionStatusType);
+    let person_to_infect =
+        context.get_person_id(context.sample_range(TransmissionRng, 0..population_size));
+    let person_status: InfectionStatus =
+        context.get_person_property(person_to_infect, InfectionStatusType);
     let parameters = context.get_global_property_value(Parameters).clone();
 
     if matches!(person_status, InfectionStatus::S) {
-        context.set_person_property(
-            person_to_infect,
-            InfectionStatusType,
-            InfectionStatus::I);
+        context.set_person_property(person_to_infect, InfectionStatusType, InfectionStatus::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection),
