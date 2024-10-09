@@ -4,7 +4,7 @@ use std::path::Path;
 use std::fmt::Debug;
 
 use ixa::define_global_property;
-
+use ixa::global_properties::IxaError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -19,9 +19,11 @@ pub struct ParametersValues {
 }
 define_global_property!(Parameters, ParametersValues);
 
-pub fn init_parameters(context: &mut Context, file_path: &Path) {
+pub fn init_parameters(context: &mut Context, file_path: &Path) ->
+Result<(),IxaError> {
     println!("{:?}", file_path);
     //let parameters_values = context.load_parameters_from_config::<ParametersValues>(file_name);
-    let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path).unwrap();
+    let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path)?;
     context.set_global_property_value(Parameters, parameters_json);
+    Ok(())
 }

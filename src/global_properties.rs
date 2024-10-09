@@ -3,10 +3,9 @@ use std::path::Path;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display};
 use std::fs;
 use std::io;
-use serde_json::Result;
 
 #[macro_export]
 macro_rules! define_global_property {
@@ -32,9 +31,19 @@ impl From<io::Error> for IxaError {
     }
 }
 
-impl From<serde_json::error::Error> for IxaError {
-    fn from(error: serde_json::error::Error) -> Self {
+impl From<serde_json::Error> for IxaError {
+    fn from(error: serde_json::Error) -> Self {
         IxaError::JsonError(error)
+    }
+}
+
+
+impl std::error::Error for IxaError {}
+
+impl Display for IxaError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error: {self:?}")?;
+        Ok(())
     }
 }
 
@@ -67,7 +76,7 @@ pub trait ContextGlobalPropertiesExt {
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_path: &Path,
-    ) -> Result<T>;
+    ) -> Result<T, IxaError>;
 }
 
 impl GlobalPropertiesDataContainer {
@@ -110,7 +119,7 @@ impl ContextGlobalPropertiesExt for Context {
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &Path,
-    ) -> Result<T> {
+    ) -> Result<T, IxaError> {
         let config_file = fs::read_to_string(file_name)?;
         let config = serde_json::from_str(&config_file)?;
         Ok(config)
