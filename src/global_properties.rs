@@ -22,8 +22,8 @@ macro_rules! define_global_property {
     };
 }
 
-/// Provides a specific error IxaError and maps to other errors to
-/// convert to an IxaError
+/// Provides `IxaError` and maps to other errors to
+/// convert to an `IxaError`
 #[derive(Debug)]
 pub enum IxaError {
     IoError(io::Error),
@@ -52,7 +52,7 @@ impl Display for IxaError {
 }
 
 /// Global properties are not mutable and represent variables that are required
-/// in a global scope during the simulation, such as simulation parameters. 
+/// in a global scope during the simulation, such as simulation parameters.
 pub trait GlobalProperty: Any {
     type Value: Any;
 }
@@ -81,8 +81,8 @@ pub trait ContextGlobalPropertiesExt {
 
     /// # Errors
     ///
-    /// Will return an Error `IxaError` if the `file_path` does not exist or
-    /// cannot be deserialized 
+    /// Will return an `IxaError` if the `file_path` does not exist or
+    /// cannot be deserialized
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_path: &Path,
