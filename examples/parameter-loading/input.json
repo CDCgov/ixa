@@ -1,6 +1,6 @@
 {
-    "population": 10,
-    "max_time": 20.0,
+    "population": 1000,
+    "max_time": 200.0,
     "seed": 123,
     "foi": 0.15,
     "infection_duration": 5.0,

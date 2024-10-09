@@ -1,11 +1,11 @@
 use crate::context::Context;
-use std::path::Path;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
 use std::fs;
 use std::io;
+use std::path::Path;
 
 #[macro_export]
 macro_rules! define_global_property {
@@ -36,7 +36,6 @@ impl From<serde_json::Error> for IxaError {
         IxaError::JsonError(error)
     }
 }
-
 
 impl std::error::Error for IxaError {}
 
@@ -131,14 +130,14 @@ mod test {
     use super::*;
     use crate::context::Context;
     use serde::{Deserialize, Serialize};
-    use tempfile::tempdir;
     use std::path::PathBuf;
+    use tempfile::tempdir;
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ParamType {
         pub days: usize,
         pub diseases: usize,
     }
-    
+
     define_global_property!(DiseaseParams, ParamType);
     //Since global properties aren't mutable right now, only
     // check that they are properly set
@@ -153,28 +152,28 @@ mod test {
         let global_params = context.get_global_property_value(DiseaseParams).clone();
         assert_eq!(global_params.days, params.days);
         assert_eq!(global_params.diseases, params.diseases);
-        
     }
     #[test]
     fn set_parameters() {
-        let mut context = Context::new();        
+        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let config_path = PathBuf::from(&temp_dir.path());
         let file_name = "test.json";
         let file_path = config_path.join(file_name);
         let config = fs::File::create(config_path.join(file_name)).unwrap();
-        
+
         let params: ParamType = ParamType {
             days: 10,
             diseases: 2,
         };
 
         define_global_property!(Parameters, ParamType);
-        
+
         let _ = serde_json::to_writer(config, &params);
         let params_json = context
-            .load_parameters_from_json::<ParamType>(&file_path).unwrap();
-        
+            .load_parameters_from_json::<ParamType>(&file_path)
+            .unwrap();
+
         context.set_global_property_value(Parameters, params_json);
 
         let params_read = context.get_global_property_value(Parameters).clone();

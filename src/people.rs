@@ -1,11 +1,11 @@
 use crate::{context::Context, define_data_plugin};
+use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt,
 };
-use serde::{Deserialize, Serialize};
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -158,7 +158,7 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
 }
 
 pub trait ContextPeopleExt {
-    /// Returns the current population size    
+    /// Returns the current population size
     fn get_current_population(&self) -> usize;
 
     /// Creates a new person with no assigned person properties
@@ -244,8 +244,8 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn get_person_id(&self, person_id: usize) -> PersonId{
-        PersonId {id: person_id}
+    fn get_person_id(&self, person_id: usize) -> PersonId {
+        PersonId { id: person_id }
     }
 }
 
