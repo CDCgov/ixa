@@ -45,10 +45,7 @@ pub trait ContextGlobalPropertiesExt {
         value: T::Value,
     );
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
-    fn load_parameters_from_toml<T: 'static + Debug + DeserializeOwned>(
-        &mut self,
-        file_name: &str,
-    ) -> T;
+
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_path: &Path,
@@ -92,20 +89,11 @@ impl ContextGlobalPropertiesExt for Context {
         data_container.get_global_property_value::<T>()
     }
 
-    fn load_parameters_from_toml<T: 'static + Debug + DeserializeOwned>(
-        &mut self,
-        file_name: &str,
-    ) -> T {
-        let config_file = fs::read_to_string(file_name).expect("file not defined");
-        let config: T = toml::from_str(&config_file).expect("could not parse file");
-        config
-    }
-
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &Path,
     ) -> Result<T> {
-        let config_file = fs::File::open(file_name).expect("file not defined");
+        let config_file = fs::File::open(file_name).expect("no file");
         let reader = BufReader::new(config_file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
