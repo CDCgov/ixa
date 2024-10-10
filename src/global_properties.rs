@@ -72,13 +72,19 @@ crate::context::define_data_plugin!(
 );
 
 pub trait ContextGlobalPropertiesExt {
+    /// Set the value of a global property of type T
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
         value: T::Value,
     );
+
+    /// Return value of global property T
     fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
 
+    /// Given a file path for a valid json file, deserialize parameter values
+    /// for a given struct T
+    ///
     /// # Errors
     ///
     /// Will return an `IxaError` if the `file_path` does not exist or
