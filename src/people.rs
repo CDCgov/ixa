@@ -8,6 +8,11 @@ use std::{
 
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
 
+struct DependencyCallbacks {
+    init: Box<DerivedSetter>,
+    set: Box<DerivedSetter>,
+}
+
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
@@ -15,7 +20,7 @@ struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
-    property_dependencies: RefCell<HashMap<TypeId, Vec<Box<DerivedSetter>>>>,
+    property_dependencies: RefCell<HashMap<TypeId, Vec<DependencyCallbacks>>>,
 }
 
 define_data_plugin!(
@@ -190,16 +195,20 @@ impl PeopleData {
         *property_ref = Some(value);
     }
 
-    fn add_dependency_callback(
+    fn add_dependency_callbacks(
         &self,
         dependency: TypeId,
-        callback: impl Fn(&mut Context, PersonId) + 'static,
+        init: impl Fn(&mut Context, PersonId) + 'static,
+        set: impl Fn(&mut Context, PersonId) + 'static,
     ) {
         self.property_dependencies
             .borrow_mut()
             .entry(dependency)
             .or_default()
-            .push(Box::new(callback));
+            .push(DependencyCallbacks {
+                init: Box::new(init),
+                set: Box::new(set),
+            });
     }
 
     fn register_derived_property<T: PersonProperty + 'static>(&self, property: T) {
@@ -218,8 +227,11 @@ impl PeopleData {
         // For each dependency, create a callback that recalculates the derived property
         // and sets it. This should be called whenever the dependency is set.
         for dependency in dependencies {
-            self.add_dependency_callback(
+            self.add_dependency_callbacks(
                 dependency,
+                move |context: &mut Context, person_id: PersonId| {
+                    context.get_person_property(person_id, property);
+                },
                 move |context: &mut Context, person_id: PersonId| {
                     let new_value = T::calculate(context, person_id);
                     context.set_person_property_internal(person_id, property, new_value);
@@ -258,6 +270,12 @@ pub struct PersonPropertyChangeData<T: PersonProperty> {
 }
 
 trait PrivateContextPeopleExt {
+    fn process_dependency_callbacks<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+        initialize: bool,
+    );
     fn set_person_property_internal<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -267,6 +285,35 @@ trait PrivateContextPeopleExt {
 }
 
 impl PrivateContextPeopleExt for Context {
+    fn process_dependency_callbacks<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _property: T,
+        initialize: bool,
+    ) {
+        let callbacks_temp = {
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+            let mut dependencies = data_container.property_dependencies.borrow_mut();
+            dependencies.get_mut(&TypeId::of::<T>()).map(std::mem::take)
+        };
+
+        if let Some(mut callbacks) = callbacks_temp {
+            for callback in &mut callbacks {
+                let cb = if initialize {
+                    &callback.init
+                } else {
+                    &callback.set
+                };
+                (cb)(self, person_id); // mutable borrow of self
+            }
+
+            // Reinsert the callbacks back into dependencies
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+            let mut dependencies = data_container.property_dependencies.borrow_mut();
+            dependencies.insert(TypeId::of::<T>(), callbacks);
+        }
+    }
+
     fn set_person_property_internal<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -281,12 +328,16 @@ impl PrivateContextPeopleExt for Context {
         let previous_value = match stored {
             Some(stored) => stored,
             None => {
-                let initialize_value = T::initialize(self, person_id);
-                data_container.set_person_property(person_id, property, initialize_value);
-                initialize_value
+                // Initializes the property, including dependency callbacks if necessary
+                self.get_person_property(person_id, property)
             }
         };
 
+        // Initialize dependencies if necessary
+        self.process_dependency_callbacks(person_id, property, true);
+
+        // Send the change event and set the new value
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let change_event: PersonPropertyChangeEventInternal<T> =
             PersonPropertyChangeEventInternal {
                 person_id,
@@ -296,27 +347,8 @@ impl PrivateContextPeopleExt for Context {
         data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
 
-        // Borrow the dependencies immutably and extract the callbacks
-        let callbacks_opt = {
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-            let mut dependencies = data_container.property_dependencies.borrow_mut();
-            dependencies
-                .get_mut(&TypeId::of::<T>())
-                .map(|c| std::mem::take(c))
-        };
-
-        // If we found callbacks, process them
-        if let Some(mut callbacks) = callbacks_opt {
-            // Now, mutably borrow `self` to call the callbacks
-            for callback in &mut callbacks {
-                callback(self, person_id); // Mutably borrow self here
-            }
-
-            // Reinsert the callbacks back into dependencies
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-            let mut dependencies = data_container.property_dependencies.borrow_mut();
-            dependencies.insert(TypeId::of::<T>(), callbacks);
-        }
+        // Set dependencies
+        self.process_dependency_callbacks(person_id, property, false);
     }
 }
 
@@ -738,9 +770,6 @@ mod test {
         let person = context.add_person();
         context.initialize_person_property(person, Age, 50);
         context.initialize_person_property(person, IsRunner, false);
-
-        // Initialize it so we actually get change events
-        assert!(!context.get_person_property(person, MastersRunner));
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
