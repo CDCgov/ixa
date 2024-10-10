@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
 use std::fs;
 use std::io;
+use std::io::BufReader;
 use std::path::Path;
 
 /// Defines a global property with the following parameters:
@@ -136,8 +137,9 @@ impl ContextGlobalPropertiesExt for Context {
         &mut self,
         file_name: &Path,
     ) -> Result<T, IxaError> {
-        let config_file = fs::read_to_string(file_name)?;
-        let config = serde_json::from_str(&config_file)?;
+        let config_file = fs::File::open(file_name)?;
+        let reader = BufReader::new(config_file);
+        let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
 }

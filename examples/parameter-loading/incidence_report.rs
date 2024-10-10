@@ -26,7 +26,7 @@ fn handle_infection_status_change(
 ) {
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
-        person_id: event.person_id.id,
+        person_id: event.person_id.get_id(),
         infection_status: event.current,
     });
 }

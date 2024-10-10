@@ -28,7 +28,7 @@ define_data_plugin!(
 // 0 to population - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId {
-    pub id: usize,
+    id: usize,
 }
 
 impl fmt::Display for PersonId {
@@ -43,6 +43,12 @@ impl fmt::Debug for PersonId {
     }
 }
 
+impl PersonId {
+    #[must_use]
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+}
 // Individual characteristics or states related to a person, such as age or
 // disease status, are represented as "person properties". These properties
 // * are represented by a struct type that implements the PersonProperty trait,
