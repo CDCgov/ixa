@@ -1,4 +1,5 @@
 use crate::{context::Context, define_data_plugin};
+use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
@@ -25,7 +26,7 @@ define_data_plugin!(
 
 // Represents a unique person - the id refers to that person's index in the range
 // 0 to population - 1 in the PeopleData container.
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId {
     id: usize,
 }
@@ -36,6 +37,12 @@ impl fmt::Debug for PersonId {
     }
 }
 
+impl PersonId {
+    #[must_use]
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+}
 // Individual characteristics or states related to a person, such as age or
 // disease status, are represented as "person properties". These properties
 // * are represented by a struct type that implements the PersonProperty trait,
@@ -192,6 +199,9 @@ pub trait ContextPeopleExt {
         _property: T,
         value: T::Value,
     );
+
+    // Returns a PersonId for a usize
+    fn get_person_id(&self, person_id: usize) -> PersonId;
 }
 
 impl ContextPeopleExt for Context {
@@ -267,6 +277,10 @@ impl ContextPeopleExt for Context {
         };
         data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
+    }
+
+    fn get_person_id(&self, person_id: usize) -> PersonId {
+        PersonId { id: person_id }
     }
 }
 
