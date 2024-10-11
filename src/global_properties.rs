@@ -1,10 +1,10 @@
 use crate::context::Context;
+use crate::error::IxaError;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::fmt::{self, Debug, Display};
+use std::fmt::Debug;
 use std::fs;
-use std::io;
 use std::io::BufReader;
 use std::path::Path;
 
@@ -21,35 +21,6 @@ macro_rules! define_global_property {
             type Value = $value;
         }
     };
-}
-
-/// Provides `IxaError` and maps to other errors to
-/// convert to an `IxaError`
-#[derive(Debug)]
-pub enum IxaError {
-    IoError(io::Error),
-    JsonError(serde_json::Error),
-}
-
-impl From<io::Error> for IxaError {
-    fn from(error: io::Error) -> Self {
-        IxaError::IoError(error)
-    }
-}
-
-impl From<serde_json::Error> for IxaError {
-    fn from(error: serde_json::Error) -> Self {
-        IxaError::JsonError(error)
-    }
-}
-
-impl std::error::Error for IxaError {}
-
-impl Display for IxaError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {self:?}")?;
-        Ok(())
-    }
 }
 
 /// Global properties are not mutable and represent variables that are required
