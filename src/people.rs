@@ -30,6 +30,12 @@ pub struct PersonId {
     id: usize,
 }
 
+impl fmt::Display for PersonId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
 impl fmt::Debug for PersonId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Person {}", self.id)
@@ -370,6 +376,15 @@ mod test {
             context.get_person_property(person_id, RiskCategoryType),
             RiskCategory::Low
         );
+    }
+
+    #[test]
+    fn person_debug_display() {
+        let mut context = Context::new();
+
+        let person_id = context.add_person();
+        assert_eq!(format!("{person_id}"), "0");
+        assert_eq!(format!("{person_id:?}"), "Person 0");
     }
 
     #[test]
