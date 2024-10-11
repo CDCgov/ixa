@@ -47,6 +47,16 @@ pub trait PersonProperty: Copy {
     fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
 }
 
+pub trait DerivedProperty: Copy {
+    type Value: Copy;
+    type Dependency: PersonProperty;
+    fn get_dependency() -> Self::Dependency;
+    fn compute(
+        person_id: PersonId,
+        dependency: <Self::Dependency as PersonProperty>::Value,
+    ) -> Self::Value;
+}
+
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
@@ -85,6 +95,27 @@ macro_rules! define_person_property_with_default {
         define_person_property!($person_property, $value, |_context, _person_id| {
             $default
         });
+    };
+}
+
+#[macro_export]
+macro_rules! define_derived_property {
+    ($derived_property:ident, $dependency:ident, $value_type:ty, $compute:expr) => {
+        #[derive(Copy, Clone)]
+        pub struct $derived_property;
+        impl $crate::people::DerivedProperty for $derived_property {
+            type Value = $value_type;
+            type Dependency = $dependency;
+            fn get_dependency() -> $dependency {
+                $dependency
+            }
+            fn compute(
+                person_id: $crate::people::PersonId,
+                dependency: <$dependency as $crate::people::PersonProperty>::Value,
+            ) -> Self::Value {
+                $compute(person_id, dependency)
+            }
+        }
     };
 }
 
@@ -172,6 +203,10 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
+    fn get_derived_property<T>(&self, person_id: PersonId, property: T) -> T::Value
+    where
+        T: DerivedProperty + 'static;
+
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
     /// not run.
@@ -224,6 +259,15 @@ impl ContextPeopleExt for Context {
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
+    }
+
+    fn get_derived_property<T>(&self, person_id: PersonId, _property: T) -> T::Value
+    where
+        T: DerivedProperty + 'static,
+    {
+        let dependency = T::get_dependency();
+        let dependency_value = self.get_person_property(person_id, dependency);
+        T::compute(person_id, dependency_value)
     }
 
     fn initialize_person_property<T: PersonProperty + 'static>(
@@ -517,5 +561,28 @@ mod test {
         let mut context = Context::new();
         let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+    }
+
+    #[test]
+    fn get_derived_property_returns_correct_value() {
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        pub enum AgeGroupType {
+            Child,
+            Adult,
+        }
+        define_derived_property!(AgeGroup, Age, AgeGroupType, |_person, age| {
+            if age < 18 {
+                AgeGroupType::Child
+            } else {
+                AgeGroupType::Adult
+            }
+        });
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 10);
+        assert_eq!(
+            context.get_derived_property(person, AgeGroup),
+            AgeGroupType::Child
+        );
     }
 }
