@@ -13,15 +13,12 @@ This example incorporates vaccination in a population. Vaccination rates depend 
 
 In this model, we do not reproduce clinical manifestations of the disease and only model infected states. Vaccine efficacy reduces the probability of being infected upon an infection attempt, and it is specified for each age group (< 1yr and >65 yr) in the configuration file.
 
-```toml
-- vaccine:
-	- id: 1
-	- ve: 0.6
-	- age_group: 0-1
-- vaccine:
-	- id: 2
-	- ve: 0.8
-	- age_group: 65+
+```json
+{
+	"vaccine": {
+		id:1, ve:0.6,age_group:{0,1},
+		id:2, ve:0.8, age_group:{65,200}
+}
 ```
 
 # Model requirements
@@ -36,18 +33,16 @@ This model builds on the basic-transmission model. It requires additional featur
 
 
 # Main routine
-All modules are loaded and initialized. It is important to specify whether the order of modules affects initialization.
+All modules are loaded and initialized. It is important to specify whether the order of modules affects initialization. Without infection, the main parts to model are: births, aging, deaths and vaccine distribution. 
 
 ```rust
 fn main() {
     let mut context = Context::new();
-
-    context.init_random(SEED);
-
-    for _ in 0..POPULATION {
-        context.create_person();
-    }
-
+    	
+	parameters = parameters_loader::init_parameters();
+	context.init_random(parameters.seed);
+	population_manager::init();
+	
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
     incidence_report::init(&mut context);
@@ -63,15 +58,33 @@ fn main() {
 }
 ```
 
-# Vaccine module
-The main
+# Population manager: initialization, births, deaths, and aging
 
-```rust
-pub fn init(context: &mut Context) {
-    context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
-        handle_infection_status_change(context, event);
+1. Births and deaths are modeled as a Poisson process with a rate defined as `birth_rate` and `death_rate`, so that the time to next birth is defined in the model as `time_to_next_birth = current_time + sample_exp(birth_rate)`. 
+2. Deaths should have an age-specific hazard since it's more likely to die when a person is older. Deaths require the implementation of `sample_random_person` and `remove_person`. 
+   - Deaths require an event that other modules should register to if needed to remove death people from their data bases, cancel all plans, and update population size. 
+
+```rust 
+fn schedule_birth(context: &mut Context) {
+    let person = context.add_person();
+    context.initialize_person_property(person, Age, 0);
+    context.initialize_person_property(person, RiskCategoryType, RiskCategory::Low);
+
+    let next_birth_event = context.get_current_time() +
+        context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
+
+    context.add_plan(next_birth_event,
+        move |context| {
+            schedule_birth(context);
     });
 }
+```
+
+# Vaccine module
+
+```rust
+
+
 ```
 
 # Future improvements

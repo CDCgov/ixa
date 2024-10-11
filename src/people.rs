@@ -106,6 +106,12 @@ impl PeopleData {
         PersonId { id }
     }
 
+    fn remove_person(&mut self,  person_id: PersonId) {
+        println!("People.rs: person removed {:?}", person_id);
+        
+        //self.current_population -= 1;        
+    }
+
     /// Retrieves a specific property of a person by their `PersonId`.
     ///
     /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
@@ -153,6 +159,15 @@ pub struct PersonCreatedEvent {
     pub person_id: PersonId,
 }
 
+
+// Emitted when a new person is removed form simulation
+// These should not be emitted outside this module
+#[derive(Clone, Copy)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PersonRemovedEvent {
+    pub person_id: PersonId,
+}
+
 // Emitted when a person property is updated
 // These should not be emitted outside this module
 #[derive(Copy, Clone)]
@@ -169,6 +184,9 @@ pub trait ContextPeopleExt {
 
     /// Creates a new person with no assigned person properties
     fn add_person(&mut self) -> PersonId;
+
+    /// Remvoes a person from simulation and removes from person properties
+    fn remove_person(&mut self, person_id: PersonId);
 
     /// Given a `PersonId` returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
@@ -214,6 +232,11 @@ impl ContextPeopleExt for Context {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
+    }
+
+    fn remove_person(&mut self, person_id: PersonId) {
+        self.get_data_container_mut(PeoplePlugin).remove_person(person_id);
+        self.emit_event(PersonRemovedEvent { person_id });
     }
 
     fn get_person_property<T: PersonProperty + 'static>(

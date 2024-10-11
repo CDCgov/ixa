@@ -1,0 +1,12 @@
+{
+    "max_time": 200.0,
+    "seed": 123,
+    "foi": 0.15,
+    "infection_duration": 5.0,
+    "birth_rate": 0.1,
+    "death_rate": 0.05,
+    "output_dir": "examples/age-vaccination",
+    "output_file": "incidence",
+    "output_people_file": "people_report",
+    "people_file": "people.csv"
+}
