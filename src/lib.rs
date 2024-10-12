@@ -27,6 +27,8 @@
 //! * A transmission manager that models the process of an infected
 //!   person trying to infect susceptible people in the population.
 pub mod context;
+pub mod error;
+pub mod global_properties;
 pub mod people;
 pub mod plan;
 pub mod random;

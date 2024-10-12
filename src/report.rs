@@ -143,6 +143,7 @@ impl ContextReportExt for Context {
 #[cfg(test)]
 mod test {
     use super::*;
+    use core::convert::TryInto;
     use serde_derive::{Deserialize, Serialize};
     use std::thread;
     use tempfile::tempdir;
@@ -335,10 +336,8 @@ mod test {
 
             for (j, record) in records.enumerate() {
                 let record: SampleReport = record.expect("Failed to deserialize record");
-                assert_eq!(
-                    record.id,
-                    (i * num_reports_per_thread + j).try_into().unwrap()
-                );
+                let id_expected = TryInto::<u32>::try_into(i * num_reports_per_thread + j).unwrap();
+                assert_eq!(record.id, id_expected);
             }
         }
     }
