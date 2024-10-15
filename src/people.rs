@@ -187,6 +187,13 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
+#[derive(Copy, Clone)]
+pub struct DerivedPropertyChangeEvent<T: DerivedProperty> {
+    pub person_id: PersonId,
+    pub current: T::Value,
+    pub previous: T::Value,
+}
+
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
@@ -226,6 +233,15 @@ pub trait ContextPeopleExt {
         person_id: PersonId,
         _property: T,
         value: T::Value,
+    );
+
+    fn subscribe_to_derived_property_changed<
+        T: DerivedProperty + 'static,
+        F: Fn(&mut Context, DerivedPropertyChangeEvent<T>) + 'static,
+    >(
+        &mut self,
+        property: T,
+        callback: F,
     );
 }
 
@@ -312,6 +328,29 @@ impl ContextPeopleExt for Context {
         data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
     }
+
+    fn subscribe_to_derived_property_changed<
+        T: DerivedProperty + 'static,
+        F: Fn(&mut Context, DerivedPropertyChangeEvent<T>) + 'static,
+    >(
+        &mut self,
+        _derived_property: T,
+        callback: F,
+    ) {
+        self.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEvent<T::Dependency>| {
+                let person_id = event.person_id;
+                let current = T::compute(person_id, event.current);
+                let previous = T::compute(person_id, event.previous);
+                let derived_event = DerivedPropertyChangeEvent {
+                    person_id,
+                    current,
+                    previous,
+                };
+                callback(context, derived_event);
+            },
+        );
+    }
 }
 
 #[cfg(test)]
@@ -321,6 +360,19 @@ mod test {
     use std::{cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    pub enum AgeGroupType {
+        Child,
+        Adult,
+    }
+    define_derived_property!(AgeGroup, Age, AgeGroupType, |_person, age| {
+        if age < 18 {
+            AgeGroupType::Child
+        } else {
+            AgeGroupType::Adult
+        }
+    });
+
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategory {
         High,
@@ -565,18 +617,6 @@ mod test {
 
     #[test]
     fn get_derived_property_returns_correct_value() {
-        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-        pub enum AgeGroupType {
-            Child,
-            Adult,
-        }
-        define_derived_property!(AgeGroup, Age, AgeGroupType, |_person, age| {
-            if age < 18 {
-                AgeGroupType::Child
-            } else {
-                AgeGroupType::Adult
-            }
-        });
         let mut context = Context::new();
         let person = context.add_person();
         context.initialize_person_property(person, Age, 10);
@@ -584,5 +624,32 @@ mod test {
             context.get_derived_property(person, AgeGroup),
             AgeGroupType::Child
         );
+    }
+    #[test]
+    fn get_derived_property_changes_correctly() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        assert_eq!(
+            context.get_derived_property(person, AgeGroup),
+            AgeGroupType::Child
+        );
+        context.set_person_property(person, Age, 18);
+        assert_eq!(
+            context.get_derived_property(person, AgeGroup),
+            AgeGroupType::Adult
+        );
+    }
+    #[test]
+    fn get_derived_property_change_event() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        context.subscribe_to_derived_property_changed(AgeGroup, move |_context, event| {
+            assert_eq!(event.person_id.id, 0);
+            assert_eq!(event.previous, AgeGroupType::Child);
+            assert_eq!(event.current, AgeGroupType::Adult);
+        });
+        context.set_person_property(person, Age, 18);
     }
 }
