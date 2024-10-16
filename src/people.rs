@@ -281,7 +281,6 @@ impl PrivateContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
-                println!("Initializing");
                 let initialize_value = T::initialize(self, person_id);
                 data_container.set_person_property(person_id, property, initialize_value);
                 initialize_value
@@ -294,7 +293,6 @@ impl PrivateContextPeopleExt for Context {
             previous: previous_value,
         };
         data_container.set_person_property(person_id, property, value);
-        println!("Emitting event");
         self.emit_event(change_event);
 
         // Now set all the dependent properties.
@@ -307,6 +305,7 @@ impl PrivateContextPeopleExt for Context {
             let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
             
             for callback in &mut collector {
+                println!("Firing callback");
                 callback(self, person_id);
             }
             
@@ -676,12 +675,12 @@ mod test {
             && is_runner);
 
         let paula = context.add_person();
-        context.set_person_property(paula, Age, 50);
-        context.set_person_property(paula, IsRunner, true);
+        context.initialize_person_property(paula, Age, 50);
+        context.initialize_person_property(paula, IsRunner, true);
 
         let colleen = context.add_person();
-        context.set_person_property(colleen, Age, 31);
-        context.set_person_property(colleen, IsRunner, true);
+        context.initialize_person_property(colleen, Age, 31);
+        context.initialize_person_property(colleen, IsRunner, true);
 
         assert!(context.get_person_property(paula, MastersRunner),);
         assert!(!context.get_person_property(colleen, MastersRunner),);
@@ -696,12 +695,12 @@ mod test {
             && is_runner);
 
         let paula = context.add_person();
-        context.set_person_property(paula, Age, 50);
-        context.set_person_property(paula, IsRunner, true);
+        context.initialize_person_property(paula, Age, 50);
+        context.initialize_person_property(paula, IsRunner, true);
 
         let colleen = context.add_person();
-        context.set_person_property(colleen, Age, 31);
-        context.set_person_property(colleen, IsRunner, true);
+        context.initialize_person_property(colleen, Age, 31);
+        context.initialize_person_property(colleen, IsRunner, true);
 
         assert!(context.get_person_property(paula, MastersRunner),);
         assert!(!context.get_person_property(colleen, MastersRunner),);
@@ -745,8 +744,8 @@ mod test {
             && is_runner);
 
         let person = context.add_person();
-        context.set_person_property(person, Age, 50);
-        context.set_person_property(person, IsRunner, false);
+        context.initialize_person_property(person, Age, 50);
+        context.initialize_person_property(person, IsRunner, false);
 
         // Initialize it so we actually get change events
         assert!(!context.get_person_property(person, MastersRunner));
@@ -796,7 +795,8 @@ mod test {
         let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
-    
+
+    #[test]
     fn derived_property_change_event_multiple_changes() {
         let mut context = Context::new();
         define_derived_person_property!(MastersRunner, bool, [Age, IsRunner], |age, is_runner| age
@@ -804,8 +804,8 @@ mod test {
             && is_runner);
 
         let person = context.add_person();
-        context.set_person_property(person, Age, 50);
-        context.set_person_property(person, IsRunner, false);
+        context.initialize_person_property(person, Age, 50);
+        context.initialize_person_property(person, IsRunner, false);
 
         // Initialize it so we actually get change events
         assert!(!context.get_person_property(person, MastersRunner));
