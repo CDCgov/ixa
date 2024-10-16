@@ -78,8 +78,30 @@ Requirements for deaths include removing from simulation and canceling any plans
   * Death people should not be counted for the force of infection or other transmission events. 
   
  
-
-
 # Transmission manager
+Infections are spread throughout the population based on a constant force of infection, which differs for age groups 0-12m, 1-65, and 65+. Infection attempts are scheduled based on each age group force of infection. This requires the implementation of an Ixa functionality to look up individuals based on their current age. 
 
-# Events
+```rust transmission_manager.rs
+fn schedule_infection(context, age_group, foi_age) {
+    transmission_rng = rng.get_rng(id = transmission);
+    population = context.get_population(age_group);
+    person_to_infect = context.get_random_person(age_group);
+
+    if (context.get_infection_status(person_to_infect) == Susceptible) {
+        context.set_infection_status(person_to_infect, Infected);
+    }
+
+    time_next_infection = transmission_rng.draw_exponential(foi_age) / population;
+    context.add_plan(attempt_infection(context, age_group, foi_age), time = context.get_time() + time_next_infection);
+}
+
+//initialization
+init(context) {
+    context.add_rng(id = transmission);
+    age_groups = parameters.age_groups;
+    vec_foi_age = parameters.foi_age;
+    for n in range(vec_foi_age) {
+        context.add_plan(attempt_infection(context, age_groups[n], vec_foi_age[n]), time = 0);
+    }
+}
+```
