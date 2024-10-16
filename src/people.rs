@@ -260,7 +260,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        assert!(T::is_derived(), "Cannot initialize a derived property");
+        assert!(!T::is_derived(), "Cannot initialize a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -276,7 +276,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        assert!(T::is_derived(), "Cannot set a derived property");
+        assert!(!T::is_derived(), "Cannot set a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
