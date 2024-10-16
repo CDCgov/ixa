@@ -1,5 +1,6 @@
 use ixa::{
-    context::Context, define_person_property, define_person_property_with_default,
+    context::Context,
+    define_person_property, define_person_property_with_default,
     people::{ContextPeopleExt, PersonCreatedEvent},
 };
 
@@ -42,14 +43,16 @@ mod tests {
         );
 
         // At 1.0, people should be in the I state
-        context.subscribe_to_event::<PersonPropertyChangeEvent<DiseaseStatusType>>(|context, data| {
-            if context.get_current_time() == 1.0 {
-                assert_eq!(
-                    context.get_person_property(data.person_id, DiseaseStatusType),
-                    DiseaseStatus::I
-                );
-            }
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<DiseaseStatusType>>(
+            |context, data| {
+                if context.get_current_time() == 1.0 {
+                    assert_eq!(
+                        context.get_person_property(data.person_id, DiseaseStatusType),
+                        DiseaseStatus::I
+                    );
+                }
+            },
+        );
 
         context.execute();
 

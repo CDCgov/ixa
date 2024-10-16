@@ -1,21 +1,20 @@
 use crate::{context::Context, define_data_plugin};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt,
-    rc::Rc,    
+    rc::Rc,
 };
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
 
-type RegisterFn =dyn Fn(&mut Context);
+type RegisterFn = dyn Fn(&mut Context);
 type DerivedSetter = dyn Fn(&mut Context, PersonId);
 
-pub static mut DERIVED_PROPERTIES : Lazy<Mutex<Vec<Rc<RegisterFn>>>> = Lazy::new(|| {
-    Mutex::new(Vec::new())
-});
+pub static mut DERIVED_PROPERTIES: Lazy<Mutex<Vec<Rc<RegisterFn>>>> =
+    Lazy::new(|| Mutex::new(Vec::new()));
 
 pub fn add_derived_property<T: 'static>(register: impl Fn(&mut Context) + 'static) {
     unsafe {
@@ -303,19 +302,17 @@ impl PrivateContextPeopleExt for Context {
         {
             // Temporarily move the callbacks out for ownership reasons
             let mut collector: Vec<Box<DerivedSetter>> = std::mem::take(callbacks);
-            
+
             for callback in &mut collector {
                 println!("Firing callback");
                 callback(self, person_id);
             }
-            
+
             // Insert the callbacks back into the map
             self.get_data_container_mut(PeoplePlugin)
                 .property_dependencies
                 .insert(TypeId::of::<T>(), collector);
         }
-
-        
     }
 
     fn ensure_data_container_mut(&mut self) -> &mut PeopleData {
@@ -454,7 +451,7 @@ impl ContextPeopleExt for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonId, PersonCreatedEvent, PersonPropertyChangeEvent};
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
 
@@ -578,9 +575,11 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event::<PersonPropertyChangeEvent<RiskCategoryType>>(move |_context, _data| {
-            *flag_clone.borrow_mut() = true;
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<RiskCategoryType>>(
+            move |_context, _data| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
 
         let person = context.add_person();
         // This should not emit a change event
@@ -616,16 +615,18 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event::<PersonPropertyChangeEvent<RiskCategoryType>>(move |_context, data| {
-            *flag_clone.borrow_mut() = true;
-            assert_eq!(data.person_id.id, 0, "Person id is correct");
-            assert_eq!(
-                data.previous,
-                RiskCategory::Low,
-                "Previous value is correct"
-            );
-            assert_eq!(data.current, RiskCategory::High, "Current value is correct");
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<RiskCategoryType>>(
+            move |_context, data| {
+                *flag_clone.borrow_mut() = true;
+                assert_eq!(data.person_id.id, 0, "Person id is correct");
+                assert_eq!(
+                    data.previous,
+                    RiskCategory::Low,
+                    "Previous value is correct"
+                );
+                assert_eq!(data.current, RiskCategory::High, "Current value is correct");
+            },
+        );
         let person_id = context.add_person();
         context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
@@ -639,9 +640,11 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event::<PersonPropertyChangeEvent<RunningShoes>>(move |_context, _data| {
-            *flag_clone.borrow_mut() = true;
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<RunningShoes>>(
+            move |_context, _data| {
+                *flag_clone.borrow_mut() = true;
+            },
+        );
         let person_id = context.add_person();
         // Initializer wasn't called, so don't fire an event
         context.initialize_person_property(person_id, RunningShoes, 42);
@@ -663,7 +666,7 @@ mod test {
         let person_id = context.add_person();
         // Initializer called as a side effect of set, so event fires.
         context.set_person_property(person_id, RunningShoes, 42);
-        context.execute();        
+        context.execute();
         assert!(*flag.borrow());
     }
 
@@ -686,7 +689,6 @@ mod test {
         assert!(!context.get_person_property(colleen, MastersRunner),);
     }
 
-
     #[test]
     fn derived_property_changes_correctly() {
         let mut context = Context::new();
@@ -706,9 +708,9 @@ mod test {
         assert!(!context.get_person_property(colleen, MastersRunner),);
 
         context.set_person_property(colleen, Age, 50);
-        assert!(context.get_person_property(colleen, MastersRunner),);        
+        assert!(context.get_person_property(colleen, MastersRunner),);
     }
-        
+
     #[test]
     #[should_panic(expected = "Cannot set a derived property directly")]
     fn setting_derived_property_explicitly_panics() {
@@ -752,12 +754,14 @@ mod test {
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event::<PersonPropertyChangeEvent<MastersRunner>>(move |_context, data| {
-            assert_eq!(data.person_id, person);
-            assert!(!data.previous, "Correct previous value");
-            assert!(data.current, "Correct current value");
-            *flag_clone.borrow_mut() = true;
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<MastersRunner>>(
+            move |_context, data| {
+                assert_eq!(data.person_id, person);
+                assert!(!data.previous, "Correct previous value");
+                assert!(data.current, "Correct current value");
+                *flag_clone.borrow_mut() = true;
+            },
+        );
         context.set_person_property(person, IsRunner, true);
         context.execute();
         assert!(*flag.borrow());
@@ -812,9 +816,11 @@ mod test {
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
-        context.subscribe_to_event::<PersonPropertyChangeEvent<MastersRunner>>(move |_context, _data| {
-            *flag_clone.borrow_mut() += 1;
-        });
+        context.subscribe_to_event::<PersonPropertyChangeEvent<MastersRunner>>(
+            move |_context, _data| {
+                *flag_clone.borrow_mut() += 1;
+            },
+        );
         context.set_person_property(person, IsRunner, true);
         context.set_person_property(person, Age, 30);
         context.execute();
