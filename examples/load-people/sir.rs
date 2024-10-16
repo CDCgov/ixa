@@ -1,7 +1,7 @@
 use ixa::{
     context::Context,
     define_person_property, define_person_property_with_default,
-    people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent},
+    people::{ContextPeopleExt, PersonCreatedEvent},
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -28,6 +28,7 @@ pub fn init(context: &mut Context) {
 mod tests {
     use super::*;
     use ixa::context::Context;
+    use ixa::people::PersonPropertyChangeEvent;
 
     #[test]
     fn test_disease_status() {
