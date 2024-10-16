@@ -281,6 +281,7 @@ impl PrivateContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
+                println!("Initializing");
                 let initialize_value = T::initialize(self, person_id);
                 data_container.set_person_property(person_id, property, initialize_value);
                 initialize_value
@@ -293,6 +294,7 @@ impl PrivateContextPeopleExt for Context {
             previous: previous_value,
         };
         data_container.set_person_property(person_id, property, value);
+        println!("Emitting event");
         self.emit_event(change_event);
 
         // Now set all the dependent properties.
@@ -662,9 +664,11 @@ mod test {
         let person_id = context.add_person();
         // Initializer called as a side effect of set, so event fires.
         context.set_person_property(person_id, RunningShoes, 42);
+        context.execute();        
         assert!(*flag.borrow());
     }
-    
+
+    #[test]
     fn derived_property_returns_correct_values() {
         let mut context = Context::new();
         define_derived_person_property!(MastersRunner, bool, [Age, IsRunner], |age, is_runner| age
