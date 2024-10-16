@@ -44,17 +44,11 @@ impl fmt::Debug for PersonId {
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
-    fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
-}
-
-pub trait DerivedProperty: Copy {
-    type Value: Copy;
-    type Dependency: PersonProperty;
-    fn get_dependency() -> Self::Dependency;
-    fn compute(
-        person_id: PersonId,
-        dependency: <Self::Dependency as PersonProperty>::Value,
-    ) -> Self::Value;
+    #[must_use]
+    fn is_derived() -> bool {
+        false
+    }
+    fn compute(context: &Context, person_id: PersonId) -> Self::Value;
 }
 
 /// Defines a person property with the following parameters:
@@ -70,7 +64,7 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn initialize(
+            fn compute(
                 _context: &$crate::context::Context,
                 _person: $crate::people::PersonId,
             ) -> Self::Value {
@@ -100,20 +94,19 @@ macro_rules! define_person_property_with_default {
 
 #[macro_export]
 macro_rules! define_derived_property {
-    ($derived_property:ident, $dependency:ident, $value_type:ty, $compute:expr) => {
+    ($derived_property:ident, $value_type:ty, $compute:expr) => {
         #[derive(Copy, Clone)]
         pub struct $derived_property;
-        impl $crate::people::DerivedProperty for $derived_property {
+        impl $crate::people::PersonProperty for $derived_property {
             type Value = $value_type;
-            type Dependency = $dependency;
-            fn get_dependency() -> $dependency {
-                $dependency
+            fn is_derived() -> bool {
+                true
             }
             fn compute(
-                person_id: $crate::people::PersonId,
-                dependency: <$dependency as $crate::people::PersonProperty>::Value,
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
             ) -> Self::Value {
-                $compute(person_id, dependency)
+                $compute(_context, _person)
             }
         }
     };
@@ -187,13 +180,6 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
-#[derive(Copy, Clone)]
-pub struct DerivedPropertyChangeEvent<T: DerivedProperty> {
-    pub person_id: PersonId,
-    pub current: T::Value,
-    pub previous: T::Value,
-}
-
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
@@ -209,10 +195,6 @@ pub trait ContextPeopleExt {
         person_id: PersonId,
         _property: T,
     ) -> T::Value;
-
-    fn get_derived_property<T>(&self, person_id: PersonId, property: T) -> T::Value
-    where
-        T: DerivedProperty + 'static;
 
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
@@ -233,15 +215,6 @@ pub trait ContextPeopleExt {
         person_id: PersonId,
         _property: T,
         value: T::Value,
-    );
-
-    fn subscribe_to_derived_property_changed<
-        T: DerivedProperty + 'static,
-        F: Fn(&mut Context, DerivedPropertyChangeEvent<T>) + 'static,
-    >(
-        &mut self,
-        property: T,
-        callback: F,
     );
 }
 
@@ -265,25 +238,20 @@ impl ContextPeopleExt for Context {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
+        if T::is_derived() {
+            return T::compute(self, person_id);
+        }
+
         // Attempt to retrieve the existing value
         if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
             return value;
         }
 
         // Initialize the property. This does not fire a change event
-        let initialized_value = T::initialize(self, person_id);
+        let initialized_value = T::compute(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
-    }
-
-    fn get_derived_property<T>(&self, person_id: PersonId, _property: T) -> T::Value
-    where
-        T: DerivedProperty + 'static,
-    {
-        let dependency = T::get_dependency();
-        let dependency_value = self.get_person_property(person_id, dependency);
-        T::compute(person_id, dependency_value)
     }
 
     fn initialize_person_property<T: PersonProperty + 'static>(
@@ -292,6 +260,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        assert!(T::is_derived(), "Cannot initialize a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -307,6 +276,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        assert!(T::is_derived(), "Cannot set a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -314,7 +284,7 @@ impl ContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
-                let initialize_value = T::initialize(self, person_id);
+                let initialize_value = T::compute(self, person_id);
                 data_container.set_person_property(person_id, property, initialize_value);
                 initialize_value
             }
@@ -327,29 +297,6 @@ impl ContextPeopleExt for Context {
         };
         data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
-    }
-
-    fn subscribe_to_derived_property_changed<
-        T: DerivedProperty + 'static,
-        F: Fn(&mut Context, DerivedPropertyChangeEvent<T>) + 'static,
-    >(
-        &mut self,
-        _derived_property: T,
-        callback: F,
-    ) {
-        self.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<T::Dependency>| {
-                let person_id = event.person_id;
-                let current = T::compute(person_id, event.current);
-                let previous = T::compute(person_id, event.previous);
-                let derived_event = DerivedPropertyChangeEvent {
-                    person_id,
-                    current,
-                    previous,
-                };
-                callback(context, derived_event);
-            },
-        );
     }
 }
 
@@ -365,7 +312,8 @@ mod test {
         Child,
         Adult,
     }
-    define_derived_property!(AgeGroup, Age, AgeGroupType, |_person, age| {
+    define_derived_property!(AgeGroup, AgeGroupType, |context: &Context, person| {
+        let age = context.get_person_property(person, Age);
         if age < 18 {
             AgeGroupType::Child
         } else {
@@ -616,40 +564,46 @@ mod test {
     }
 
     #[test]
-    fn get_derived_property_returns_correct_value() {
+    fn get_person_property_returns_correct_value() {
         let mut context = Context::new();
         let person = context.add_person();
         context.initialize_person_property(person, Age, 10);
         assert_eq!(
-            context.get_derived_property(person, AgeGroup),
+            context.get_person_property(person, AgeGroup),
             AgeGroupType::Child
         );
     }
     #[test]
-    fn get_derived_property_changes_correctly() {
+    fn get_person_property_changes_correctly() {
         let mut context = Context::new();
         let person = context.add_person();
         context.initialize_person_property(person, Age, 17);
         assert_eq!(
-            context.get_derived_property(person, AgeGroup),
+            context.get_person_property(person, AgeGroup),
             AgeGroupType::Child
         );
         context.set_person_property(person, Age, 18);
         assert_eq!(
-            context.get_derived_property(person, AgeGroup),
+            context.get_person_property(person, AgeGroup),
             AgeGroupType::Adult
         );
     }
     #[test]
-    fn get_derived_property_change_event() {
+    fn get_person_property_change_event() {
         let mut context = Context::new();
         let person = context.add_person();
         context.initialize_person_property(person, Age, 17);
-        context.subscribe_to_derived_property_changed(AgeGroup, move |_context, event| {
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<Age>| {
             assert_eq!(event.person_id.id, 0);
-            assert_eq!(event.previous, AgeGroupType::Child);
-            assert_eq!(event.current, AgeGroupType::Adult);
+            let current_computed = context.get_person_property(event.person_id, AgeGroup);
+            assert_eq!(current_computed, AgeGroupType::Adult);
+            *flag_clone.borrow_mut() = true;
         });
         context.set_person_property(person, Age, 18);
+        context.execute();
+        assert!(*flag.borrow());
     }
 }
