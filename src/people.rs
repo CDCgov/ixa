@@ -16,6 +16,7 @@ type DerivedSetter = dyn Fn(&mut Context, PersonId);
 pub static mut DERIVED_PROPERTIES: Lazy<Mutex<Vec<Rc<RegisterFn>>>> =
     Lazy::new(|| Mutex::new(Vec::new()));
 
+#[allow(clippy::missing_panics_doc)]
 pub fn add_derived_property<T: 'static>(register: impl Fn(&mut Context) + 'static) {
     unsafe {
         let mut properties = DERIVED_PROPERTIES.lock().unwrap();
@@ -23,6 +24,7 @@ pub fn add_derived_property<T: 'static>(register: impl Fn(&mut Context) + 'stati
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 fn get_derived_properties() -> Vec<Rc<RegisterFn>> {
     unsafe {
         let properties = DERIVED_PROPERTIES.lock().unwrap();
@@ -277,6 +279,7 @@ impl PrivateContextPeopleExt for Context {
 
         // Set this property.
         let current_value = *data_container.get_person_property_ref(person_id, property);
+        #[allow(clippy::single_match_else)]
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
