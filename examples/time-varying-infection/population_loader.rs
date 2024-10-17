@@ -1,9 +1,10 @@
 use ixa::context::Context;
+use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::ContextPeopleExt;
 use ixa::{define_person_property, define_person_property_with_default};
 use serde::{Deserialize, Serialize};
 
-use crate::POPULATION;
+use crate::parameters_loader::Parameters;
 
 #[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DiseaseStatus {
@@ -15,7 +16,8 @@ pub enum DiseaseStatus {
 define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
 
 pub fn init(context: &mut Context) {
-    for _ in 0..POPULATION {
+    let parameters = context.get_global_property_value(Parameters).clone();
+    for _ in 0..parameters.population {
         context.add_person();
     }
 }
@@ -24,20 +26,32 @@ pub fn init(context: &mut Context) {
 mod tests {
     use super::*;
 
-    use crate::POPULATION;
-    use crate::SEED;
     use ixa::context::Context;
+    use ixa::global_properties::ContextGlobalPropertiesExt;
     use ixa::people::ContextPeopleExt;
     use ixa::random::ContextRandomExt;
 
+    use crate::parameters_loader::ParametersValues;
+
     #[test]
     fn test_person_creation_default_properties() {
+        let p_values = ParametersValues {
+            population: 1,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
+        };
         let mut context = Context::new();
-        context.init_random(SEED);
+        context.set_global_property_value(Parameters, p_values);
+        let parameters = context.get_global_property_value(Parameters).clone();
+        context.init_random(parameters.seed);
         init(&mut context);
 
         let population_size = context.get_current_population();
-        assert_eq!(population_size as u64, POPULATION);
+        assert_eq!(population_size, parameters.population);
         for i in 0..population_size {
             let status = context.get_person_property(context.get_person_id(i), DiseaseStatusType);
             assert_eq!(status, DiseaseStatus::S);

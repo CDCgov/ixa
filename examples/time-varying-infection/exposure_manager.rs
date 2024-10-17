@@ -1,17 +1,16 @@
-use ixa::context::Context;
 use ixa::define_rng;
 use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
+use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 
+use crate::parameters_loader::Parameters;
 use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
 use rand_distr::Exp;
-
-use crate::FOI;
-use crate::MAX_TIME;
 
 define_rng!(ExposureRng);
 
 fn attempt_infection(context: &mut Context) {
+    let parameters = context.get_global_property_value(Parameters).clone();
     let population_size: usize = context.get_current_population();
     let person_to_infect: usize = context.sample_range(ExposureRng, 0..population_size);
 
@@ -37,13 +36,12 @@ fn attempt_infection(context: &mut Context) {
 
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
-        + context.sample_distr(ExposureRng, Exp::new(FOI).unwrap()) / population_size as f64;
+        + context.sample_distr(ExposureRng, Exp::new(parameters.foi).unwrap())
+            / population_size as f64;
 
-    if next_attempt_time <= MAX_TIME {
-        context.add_plan(next_attempt_time, move |context| {
-            attempt_infection(context);
-        });
-    }
+    context.add_plan(next_attempt_time, move |context| {
+        attempt_infection(context);
+    });
 }
 
 pub fn init(context: &mut Context) {
@@ -57,20 +55,32 @@ mod test {
     use super::*;
 
     use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
-    use crate::SEED;
     use ixa::context::Context;
+    use ixa::global_properties::ContextGlobalPropertiesExt;
     use ixa::people::ContextPeopleExt;
     use ixa::random::ContextRandomExt;
 
+    use crate::parameters_loader::ParametersValues;
+
     #[test]
     fn test_attempt_infection() {
+        let p_values = ParametersValues {
+            population: 1,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
+        };
         let mut context = Context::new();
-        context.init_random(SEED);
+        context.set_global_property_value(Parameters, p_values);
+        let parameters = context.get_global_property_value(Parameters).clone();
+        context.init_random(parameters.seed);
         context.add_person();
         attempt_infection(&mut context);
         let person_status =
             context.get_person_property(context.get_person_id(0), DiseaseStatusType);
         assert_eq!(person_status, DiseaseStatus::I);
-        context.execute();
     }
 }

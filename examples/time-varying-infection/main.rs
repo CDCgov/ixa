@@ -1,30 +1,43 @@
-use ixa::context::Context;
+use std::path::Path;
+
 use ixa::random::ContextRandomExt;
+use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 
 mod exposure_manager;
 mod incidence_report;
 mod infection_manager;
+mod parameters_loader;
 mod population_loader;
 
-static POPULATION: u64 = 1000;
-static SEED: u64 = 123;
-static MAX_TIME: f64 = 303.0;
-static FOI: f64 = 0.1;
-static INFECTION_DURATION: f64 = 5.0;
+use crate::parameters_loader::Parameters;
 
 fn main() {
     let mut context = Context::new();
 
-    context.init_random(SEED);
+    let file_path = Path::new("examples")
+        .join("time-varying-infection")
+        .join("input.json");
 
-    population_loader::init(&mut context);
-    exposure_manager::init(&mut context);
-    infection_manager::init(&mut context);
-    incidence_report::init(&mut context);
+    match parameters_loader::init_parameters(&mut context, &file_path) {
+        Ok(()) => {
+            let parameters = context.get_global_property_value(Parameters).clone();
+            context.init_random(parameters.seed);
 
-    context.add_plan(MAX_TIME, |context| {
-        context.shutdown();
-    });
+            population_loader::init(&mut context);
+            exposure_manager::init(&mut context);
+            infection_manager::init(&mut context);
+            incidence_report::init(&mut context);
+
+            context.add_plan(parameters.max_time, |context| {
+                context.shutdown();
+            });
+            println!("{parameters:?}");
+            context.execute();
+        }
+        Err(ixa_error) => {
+            println!("Could not read parameters: {ixa_error}");
+        }
+    }
 
     context.execute();
 }
