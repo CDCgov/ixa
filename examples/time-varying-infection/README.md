@@ -275,14 +275,14 @@ the number of infected people changes, we need to recalculate the expected
 recovery time. Alternatively, instead of subscribing the simulation to
 a change in the number of infected people, we could schedule events to occur
 at the maximum rate of change in the number of infected people. This rate
-is the maximum of the absolute value of either the infection rate or the recovery
-rate. The maximum recovery rate is equal to recovery rate scaling factor (i.e.,
-the factor that makes $n(t)$ an _effective_ number of infected people) because
-this is the theoretically fastest recovery rate (1 person is infected), and the
+is the maximum recovery rate over the maximum infection rate. The maximum
+recovery rate is equal to recovery rate scaling factor (i.e., the factor
+that makes $n(t)$ an _effective_ number of infected people) because this
+is the theoretically fastest recovery rate (1 person is infected), and the
 maximum of the infection rate is 2 ($sin(t + c)$ has maximum range of 1,
-and foi$(t) = sin(t + c) + 1$). Let us assume that the recovery rate is less than 1
-(as would be expected for a food-borne illness), so we must schedule rejection sampling
-events to happen at a time of 1/2 days.
+and foi$(t) = sin(t + c) + 1$). Let us call the recovery rate scaling factor
+$\gamma$, so we must schedule rejection sampling events to happen at a rate of
+$\gamma/(1/2) = 2\gamma$.
 
 ### Implementation
 
@@ -329,8 +329,9 @@ fn evaluate_recovery(context: &mut Context, person_id: usize) {
         // recovery has happened by now
         context.set_person_property(person_id, InfectionStatus, InfectionStatus::R);
     } else {
-        // add plan for recovery to happen again at fastest rate
-        context.add_plan(context.get_time() + 0.5, move |context| {
+        // add plan for recovery evaluation to happen again at fastest rate
+        context.add_plan(context.get_time() + context.sample_distr(ExposureRng, Exp::new(2 * parameters.gamma).unwrap()),
+        move |context| {
         evaluate_recovery();
     });
     }
