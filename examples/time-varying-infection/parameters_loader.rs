@@ -13,6 +13,7 @@ pub struct ParametersValues {
     pub max_time: f64,
     pub seed: u64,
     pub foi: f64,
+    pub foi_sin_shift: f64,
     pub infection_duration: f64,
     pub output_dir: String,
     pub output_file: String,

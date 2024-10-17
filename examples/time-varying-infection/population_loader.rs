@@ -14,6 +14,7 @@ pub enum DiseaseStatus {
 }
 
 define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
+define_person_property!(InfectionTime, f64);
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
@@ -40,6 +41,7 @@ mod tests {
             max_time: 10.0,
             seed: 42,
             foi: 0.15,
+            foi_sin_shift: 3,
             infection_duration: 5.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
@@ -54,6 +56,7 @@ mod tests {
         assert_eq!(population_size, parameters.population);
         for i in 0..population_size {
             let status = context.get_person_property(context.get_person_id(i), DiseaseStatusType);
+            let time = context.get_person_property(context.get_person_id(i), InfectionTime);
             assert_eq!(status, DiseaseStatus::S);
         }
     }

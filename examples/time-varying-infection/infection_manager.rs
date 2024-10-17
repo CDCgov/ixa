@@ -62,6 +62,7 @@ mod test {
             max_time: 10.0,
             seed: 42,
             foi: 0.15,
+            foi_sin_shift: 3,
             infection_duration: 5.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),

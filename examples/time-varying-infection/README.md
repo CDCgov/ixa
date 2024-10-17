@@ -136,13 +136,13 @@ use roots::find_root_brent;
 use reikna::integral::*;
 define_rng!(InfectionRng);
 
-pub enum InfectionStatus {
+pub enum DiseaseStatus {
     S, I, R
 }
 
-define_person_property_with_default!(InfectionStatusType,
-                                     InfectionStatus,
-                                     InfectionStatus::S);
+define_person_property_with_default!(DiseaseStatusType,
+                                     DiseaseStatus,
+                                     DiseaseStatus::S);
 
 define_person_property!(InfectionTime, f64);
 
@@ -179,7 +179,7 @@ fn inverse_sampling_infection(context: &mut Context, person_id: PersonID) {
     let t = find_root_brent(0f64, 100f64, // lower and upper bounds for the root finding
                             f_int_shifted).unwrap();
     context.add_plan(t, move |context| {
-        context.set_person_property(person_id, InfectionStatus, InfectionStatusType::I);
+        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusType::I);
         // for reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected
         context.set_person_property(person_id, InfectionTime, t);
@@ -291,14 +291,14 @@ define_rng!(RecoveryRng);
 
 fn init(context: &mut Context) {
     context.subscribe_to_event(move |context,
-                               event: PersonPropertyChangeEvent<InfectionStatusType>| {
+                               event: PersonPropertyChangeEvent<DiseaseStatusType>| {
         handle_infection_status_change(context, event);
     });
 }
 
 fn handle_infection_status_change(context: &mut Context,
-                                  event: PersonPropertyChangeEvent<InfectionStatusType>) {
-    if matches!(event.current, InfectionStatus::I) {
+                                  event: PersonPropertyChangeEvent<DiseaseStatusType>) {
+    if matches!(event.current, DiseaseStatus::I) {
         evaluate_recovery(context, event.person_id);
     }
 }
@@ -313,7 +313,7 @@ fn n_effective_infected(context: &mut Context) -> f64 {
     let mut n_infected = 0;
     for usize_id in 0..context.get_current_population() {
         if matches!(context.get_person_property(context.get_person_id(usize_id),
-                                       InfectionStatusType), InfectionStatus::I) {
+                                       DiseaseStatusType), DiseaseStatus::I) {
                                         n_infected = n_infected + 1;
                                        }
     }
@@ -327,7 +327,7 @@ fn evaluate_recovery(context: &mut Context, person_id: usize) {
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(RecoveryRng, recovey_probability) {
         // recovery has happened by now
-        context.set_person_property(person_id, InfectionStatus, InfectionStatus::R);
+        context.set_person_property(person_id, DiseaseStatus, DiseaseStatus::R);
     } else {
         // add plan for recovery evaluation to happen again at fastest rate
         context.add_plan(context.get_time() + context.sample_distr(ExposureRng, Exp::new(2 * parameters.gamma).unwrap()),
