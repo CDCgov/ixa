@@ -1,5 +1,5 @@
 use crate::{
-    population_loader::Age,
+    population_loader::{Age, RiskCategoryType},
     sir::DiseaseStatusType,
     vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
 };
@@ -25,9 +25,10 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(|context, event: PersonCreatedEvent| {
         let person = event.person_id;
         println!(
-            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({})",
+            "{:?} age: {} ({:?}), {} vaccine doses, vaccine {:?} ({})",
             person,
             context.get_person_property(person, Age),
+            context.get_person_property(person, RiskCategoryType),
             context.get_person_property(person, VaccineDoses),
             context.get_person_property(person, VaccineType),
             context.get_person_property(person, VaccineEfficacy)

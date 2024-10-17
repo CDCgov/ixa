@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::context::Context;
-use ixa::define_person_property;
 use ixa::people::{ContextPeopleExt, PersonId};
+use ixa::{define_derived_person_property, define_person_property};
 use serde::Deserialize;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
@@ -15,19 +15,31 @@ pub enum RiskCategory {
 #[derive(Deserialize, Debug)]
 struct PeopleRecord {
     age: u8,
-    risk_category: RiskCategory,
+    underlying_conditions: u8,
 }
 
 define_person_property!(Age, u8);
-define_person_property!(RiskCategoryType, RiskCategory);
+define_person_property!(UnderlyingConditions, u8);
+define_derived_person_property!(
+    RiskCategoryType,
+    RiskCategory,
+    [Age, UnderlyingConditions],
+    |age, underlying_conditions| {
+        if underlying_conditions >= 3 || age >= 65 {
+            RiskCategory::High
+        } else {
+            RiskCategory::Low
+        }
+    }
+);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     let person = context.add_person();
     context.initialize_person_property(person, Age, record.age);
-    context.initialize_person_property(person, RiskCategoryType, record.risk_category);
+    context.initialize_person_property(person, UnderlyingConditions, record.underlying_conditions);
 
     // Set vaccine type and efficacy based on risk category
-    let (t, e) = context.get_vaccine_props(record.risk_category);
+    let (t, e) = context.get_vaccine_props(context.get_person_property(person, RiskCategoryType));
     context.initialize_person_property(person, VaccineType, t);
     context.initialize_person_property(person, VaccineEfficacy, e);
 
@@ -76,8 +88,8 @@ mod tests {
 
         // Define expected computed values for each person
         let expected_computed = vec![
-            (20, RiskCategory::Low, VaccineTypeValue::B, 0.8, 1),
-            (80, RiskCategory::High, VaccineTypeValue::A, 0.9, 2),
+            (20, 1, RiskCategory::Low, VaccineTypeValue::B, 0.8, 1),
+            (80, 3, RiskCategory::High, VaccineTypeValue::A, 0.9, 2),
         ];
 
         let mut context = Context::new();
@@ -101,10 +113,14 @@ mod tests {
             move |context, event: PersonCreatedEvent| {
                 let person = event.person_id;
                 let current_count = *counter.borrow();
-                let (age, risk_category, vaccine_type, efficacy, doses) =
+                let (age, underlying_conditions, risk_category, vaccine_type, efficacy, doses) =
                     expected_computed[current_count];
 
                 assert_eq!(context.get_person_property(person, Age), age);
+                assert_eq!(
+                    context.get_person_property(person, UnderlyingConditions),
+                    underlying_conditions
+                );
                 assert_eq!(
                     context.get_person_property(person, RiskCategoryType),
                     risk_category
@@ -124,8 +140,14 @@ mod tests {
         });
 
         // Create people from records based on expected values
-        for &(age, risk_category, _, _, _) in expected_computed.iter() {
-            create_person_from_record(&mut context, &PeopleRecord { age, risk_category });
+        for &(age, underlying_conditions, _, _, _, _) in expected_computed.iter() {
+            create_person_from_record(
+                &mut context,
+                &PeopleRecord {
+                    age,
+                    underlying_conditions,
+                },
+            );
         }
 
         // Execute the context
