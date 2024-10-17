@@ -4,29 +4,33 @@ use crate::{
     vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
 };
 use ixa::{
-    context::Context, people::ContextPeopleExt, people::PersonCreatedEvent,
-    people::PersonPropertyChangeEvent,
+    context::Context,
+    people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent},
 };
 
 pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events
     // Note that no event gets fired when the property is set the first time
-    context.subscribe_to_event::<PersonPropertyChangeEvent<DiseaseStatusType>>(|_context, data| {
-        println!(
-            "{:?} changed disease status from {:?} to {:?}",
-            data.person_id, data.previous, data.current
-        );
-    });
+    context.subscribe_to_event(
+        |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
+            let person = event.person_id;
+            println!(
+                "{:?} changed disease status from {:?} to {:?}",
+                person, event.previous, event.current,
+            );
+        },
+    );
 
     // Logs when a person is created
-    context.subscribe_to_event::<PersonCreatedEvent>(|context, event| {
+    context.subscribe_to_event(|context, event: PersonCreatedEvent| {
+        let person = event.person_id;
         println!(
             "{:?} age: {}, {} vaccine doses, vaccine {:?} ({})",
-            event.person_id,
-            context.get_person_property(event.person_id, Age),
-            context.get_person_property(event.person_id, VaccineDoses),
-            context.get_person_property(event.person_id, VaccineType),
-            context.get_person_property(event.person_id, VaccineEfficacy)
+            person,
+            context.get_person_property(person, Age),
+            context.get_person_property(person, VaccineDoses),
+            context.get_person_property(person, VaccineType),
+            context.get_person_property(person, VaccineEfficacy)
         );
     });
 }

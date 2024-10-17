@@ -55,7 +55,8 @@ mod tests {
         vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
     use ixa::{
-        context::Context, people::PersonCreatedEvent, people::PersonPropertyChangeEvent,
+        context::Context,
+        people::{PersonCreatedEvent, PersonPropertyChangeEvent},
         random::ContextRandomExt,
     };
 
@@ -84,8 +85,8 @@ mod tests {
 
         // Subscribe to person property change event
         let flag_clone = Rc::clone(&flag);
-        context.subscribe_to_event::<PersonPropertyChangeEvent<VaccineEfficacy>>(
-            move |_context, _data| {
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<VaccineEfficacy>| {
                 *flag_clone.borrow_mut() = true;
             },
         );
@@ -93,7 +94,7 @@ mod tests {
         let counter = Rc::new(RefCell::new(0));
         let expected_computed = Rc::new(expected_computed);
 
-        context.subscribe_to_event::<PersonCreatedEvent>({
+        context.subscribe_to_event({
             let counter = Rc::clone(&counter);
             let expected_computed = Rc::clone(&expected_computed);
 
@@ -130,7 +131,7 @@ mod tests {
         // Execute the context
         context.execute();
 
-        // Make sure change event didn't didn't fire
+        // Make sure PersonPropertyChangeEvent didn't fire
         assert!(!*flag.borrow());
     }
 }
