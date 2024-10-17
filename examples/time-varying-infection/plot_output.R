@@ -1,7 +1,7 @@
 library(tidyverse)
 
 population = 1000
-foi = 0.1
+foi = 0.15
 output_df <- read_csv("./examples/time-varying-infection/incidence.csv") |>
     filter(infection_status == "I") |>
     group_by(time) |>
