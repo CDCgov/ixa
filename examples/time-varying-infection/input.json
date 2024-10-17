@@ -3,6 +3,7 @@
     "max_time": 200.0,
     "seed": 123,
     "foi": 0.15,
+    "foi_sin_shift": 3,
     "infection_duration": 5.0,
     "output_dir": "examples/time-varying-infection",
     "output_file": "incidence"
