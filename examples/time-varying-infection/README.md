@@ -287,7 +287,7 @@ events to happen at a time of 1/2 days.
 ### Implementation
 
 ```rust
-define_rng!(RecoveryRNG);
+define_rng!(RecoveryRng);
 
 fn init(context: &mut Context) {
     context.subscribe_to_event(move |context,
@@ -325,7 +325,7 @@ fn evaluate_recovery(context: &mut Context, person_id: usize) {
     let time_spent_infected = context.get_time() - context.get_person_property(person_id, InfectionTime)
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
-    if context.sample_bool(recovey_probability) {
+    if context.sample_bool(RecoveryRng, recovey_probability) {
         // recovery has happened by now
         context.set_person_property(person_id, InfectionStatus, InfectionStatus::R);
     } else {
