@@ -80,9 +80,9 @@ follows the time-varying hazard rate and therefore properly apportions people's
 sickness events at the right times.
 
 ### What is inverse-transform sampling?
-If foi$(t)$ describes the hazard rate for infection at a given time,
+If $\textrm{foi}(t)$ describes the hazard rate for infection at a given time,
 $1 - e ^ {-\int_0^t \textrm{foi}(u)du}$ is the cumulative probability of
-infection by $t$ elapsed. In the case where foi$(t) = k$, we recover an
+infection by $t$ elapsed. In the case where $\textrm{foi}(t) = k$, we recover an
 exponential distribution. This is just stating the relationship between the
 hazard rate and the CDF, but this identity provides us with what we need
 to go from the hazard rate to the distribution function. Now we must figure
@@ -98,8 +98,8 @@ uniform distribution.
 In other words, we have a method of going from $\mathcal{U}(0, 1)$ to
 samples of $t$. We can do one additional step of math to make the work
 needed to be done by the modeler easier. In general, the CDF of an
-exponentially distributed random variable with rate 1, $s ~ \textrm{Exp}(1)$,
-is $F(s) = 1 - e^{-s}$. We could rewrite the integral of foi$(t)$ instead as
+exponentially distributed random variable with rate 1, $s \sim \textrm{Exp}(1)$,
+is $F(s) = 1 - e^{-s}$. We can rewrite the integral of $\textrm{foi}(t)$ instead as
 $F(\int_0^t \textrm{foi}(u)du)$. As such, we see that to obtain a uniform
 distributed random variable on (0, 1), we have to pass the integral of the foi
 through an exponential CDF. We can bypass this step if we instead draw an
@@ -133,7 +133,7 @@ $\textrm{foi}(t) = \sin(t + c) + 1$ where $c$ is a user parameter.
 
 ```rust
 use roots::find_root_brent;
-use reikna::integral::*;
+use reikna::integral::integrate;
 define_rng!(InfectionRng);
 
 pub enum DiseaseStatus {
@@ -144,13 +144,15 @@ define_person_property_with_default!(DiseaseStatusType,
                                      DiseaseStatus,
                                      DiseaseStatus::S);
 
-define_person_property!(InfectionTime, f64);
+define_person_property_with_default!(InfectionTime, Option<f64>, None);
 
 fn init(context: &mut Context) {
     // let deviled eggs be our food borne illness
     // as soon as a person enters the simulation, they are exposed to deviled eggs
     // based on foi(t), they will have their infection planned at a given time
-    context.subscribe_to_event(PersonCreatedEvent, expose_person_to_deviled_eggs);
+    context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
+        expose_person_to_deviled_eggs(context, event);
+    });
 }
 
 fn expose_person_to_deviled_eggs(context: &mut Context,
@@ -168,14 +170,14 @@ fn foi(t: f64, sin_shift: f64) -> f64 {
 
 fn inverse_sampling_infection(context: &mut Context, person_id: PersonID) {
     // random exponential value
-    let s = context.sample_distr(InfectionRng, Exp1::new());
+    let s: f64 = context.sample_distr(InfectionRng, Exp1);
     // get the time by following the formula described above
     // first need to get the simulation's sin_shift
     let parameters = context.get_global_property_value(Parameters).clone();
     let sin_shift = parameters.foi_sin_shift;
     let f = func!(move |t| foi(t, sin_shift));
     // as easy as Python to integrate and find roots in Rust!
-    let f_int_shifted = func!(move |t| integrate(&f, 0, t) - s);
+    let f_int_shifted = move |t| integrate(&f, 0, t) - s;
     let t = find_root_brent(0f64, 100f64, // lower and upper bounds for the root finding
                             f_int_shifted).unwrap();
     context.add_plan(t, move |context| {
@@ -203,6 +205,14 @@ modeler does not know how the time-varying rate will change over time as it
 can only be determined as the model is running. Then, this approach will not work.
 Instead, rejection sampling provides a strategy for taking draws from an arbitrary
 and potentially changing distribution, and more is discussed on this below.
+    - Similarly, in this model, we needed to pre-assign all the infection transitions.
+    Had we not done that, we would have had to use rejection sampling instead
+    because we would be evaluating whether an infection had happened by a given time
+    or not as we proceeded through time. However, scheduling the infection attempts
+    (similarly to in the last example) rather than transitions has a benefit
+    of only infecting the existing people in the simulation (or, region/partition)
+    at the time of event rather than pre-scheduling the transition and needing to
+    cancel it if the person dies or is somehow no longer eligible for infection.
 3. Sampling a new value of $t$ requires inverting an integral function
 (i.e., $\int_0^t \textrm{foi}(u)du$). Not only must this process be done every time
 a new sample is required, but inverting the function may not be straightforward. This
@@ -280,7 +290,7 @@ recovery rate is equal to recovery rate scaling factor (i.e., the factor
 that makes $n(t)$ an _effective_ number of infected people) because this
 is the theoretically fastest recovery rate (1 person is infected), and the
 maximum of the infection rate is 2 ($sin(t + c)$ has maximum range of 1,
-and foi$(t) = sin(t + c) + 1$). Let us call the recovery rate scaling factor
+and $\textrm{foi}(t) = \sin(t + c) + 1$). Let us call the recovery rate scaling factor
 $\gamma$, so we must schedule rejection sampling events to happen at a rate of
 $\gamma/(1/2) = 2\gamma$.
 
