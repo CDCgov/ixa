@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
@@ -14,8 +14,8 @@ use crate::parameters_loader::Parameters;
 fn main() {
     let mut context = Context::new();
 
-    let current_dir = Path::new(file!()).parent().unwrap();
-    let file_path = current_dir.join("input.json");
+    let args: Vec<String> = std::env::args().collect();
+    let file_path = PathBuf::from(&args[1]);
 
     match parameters_loader::init_parameters(&mut context, &file_path) {
         Ok(()) => {

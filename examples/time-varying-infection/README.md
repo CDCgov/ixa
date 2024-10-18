@@ -43,6 +43,10 @@ and time of the simulation aka seasonality) while the technique I describe
 for dealing with a time-varying recovery rate may be more likely applied to
 force of infection in real-world models.
 
+# Running the example
+
+`cargo run --example time-varying-infection -- ./examples/time-varying-infection/input.json`
+
 ## Why are time-varying rates special?
 The classic SIR compartmental ODE model assumes a constant recovery rate,
 $\gamma$, so that the infection period is exponentially distributed. In
