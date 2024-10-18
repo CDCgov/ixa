@@ -7,28 +7,71 @@ use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 
 use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
+use crate::population_loader::{DiseaseStatus, DiseaseStatusType, InfectionTime};
 
 define_rng!(InfectionRng);
 
-fn schedule_recovery(context: &mut Context, person_id: PersonId) {
+fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
+    1.0 - f64::exp(-time_spent_infected * n_eff_inv_infec(context))
+}
+
+fn n_eff_inv_infec(context: &mut Context) -> f64 {
     let parameters = context.get_global_property_value(Parameters).clone();
-    let recovery_time = context.get_current_time()
-        + context.sample_distr(
-            InfectionRng,
-            Exp::new(1.0 / parameters.infection_duration).unwrap(),
-        );
-    context.add_plan(recovery_time, move |context| {
+    // get number of infected people
+    let mut n_infected = 0;
+    for usize_id in 0..context.get_current_population() {
+        if matches!(
+            context.get_person_property(context.get_person_id(usize_id), DiseaseStatusType),
+            DiseaseStatus::I
+        ) {
+            n_infected += 1;
+        }
+    }
+    (1.0 / parameters.infection_duration) / f64::from(n_infected)
+}
+
+fn evaluate_recovery(
+    context: &mut Context,
+    person_id: PersonId,
+    resampling_rate: f64,
+) -> Option<f64> {
+    // get time person has spent infected
+    let time_spent_infected = context.get_current_time()
+        - context
+            .get_person_property(person_id, InfectionTime)
+            .unwrap();
+    // evaluate whether recovery has happened by this time or not
+    let recovery_probability = recovery_cdf(context, time_spent_infected);
+    if context.sample_bool(InfectionRng, recovery_probability) {
+        // recovery has happened by now
         context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::R);
-    });
+        Some(context.get_current_time())
+    } else {
+        // add plan for recovery evaluation to happen again at fastest rate
+        context.add_plan(
+            context.get_current_time()
+                + context.sample_distr(InfectionRng, Exp::new(resampling_rate).unwrap()),
+            move |context| {
+                evaluate_recovery(context, person_id, resampling_rate);
+            },
+        );
+        None
+    }
 }
 
 fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<DiseaseStatusType>,
 ) {
+    let parameters = context.get_global_property_value(Parameters).clone();
     if matches!(event.current, DiseaseStatus::I) {
-        schedule_recovery(context, event.person_id);
+        // recall resampling rate is sum of maximum foi rate and gamma
+        // maximum foi rate is foi * 2 -- the 2 because foi is sin(t + c) + 1
+        evaluate_recovery(
+            context,
+            event.person_id,
+            parameters.foi * 2.0 + 1.0 / parameters.infection_duration,
+        );
     }
 }
 
@@ -81,6 +124,7 @@ mod test {
                 DiseaseStatusType,
                 DiseaseStatus::I,
             );
+            context.set_person_property(context.get_person_id(id), InfectionTime, Some(0.0));
         }
 
         // put this subscription after every agent has become infected
@@ -93,5 +137,88 @@ mod test {
         );
 
         context.execute();
+    }
+
+    #[test]
+    fn test_n_eff_inv_infec_recovery_cdf() {
+        let mut context = Context::new();
+        let parameters = ParametersValues {
+            population: 100,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            foi_sin_shift: 3.0,
+            infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
+        };
+        context.set_global_property_value(Parameters, parameters.clone());
+        context.init_random(parameters.seed);
+        for _ in 0..parameters.population {
+            let person_id = context.add_person();
+            context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
+        }
+        assert_eq!(
+            n_eff_inv_infec(&mut context),
+            1.0 / parameters.infection_duration / parameters.population as f64
+        );
+        let time_spent_infected = 0.5;
+        let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);
+        // now make it so that all but 1 person becomes recovered
+        for person_id in 1..parameters.population {
+            context.set_person_property(
+                context.get_person_id(person_id),
+                DiseaseStatusType,
+                DiseaseStatus::R,
+            );
+        }
+        assert_eq!(
+            n_eff_inv_infec(&mut context),
+            1.0 / parameters.infection_duration
+        );
+        // calculate cdf again
+        let cdf_value_few_infected = recovery_cdf(&mut context, time_spent_infected);
+        // we expect the cdf value when few are infected to be greater than when many are infected
+        // if we've written the cdf equation correctly
+        assert!(cdf_value_few_infected >= cdf_value_many_infected);
+    }
+
+    #[test]
+    fn test_rejection_sampling_no_change_infecteds() {
+        // if there is no change in the number of infected people
+        // the recovery time should be the parameter.infection_duration
+        let mut context = Context::new();
+        let parameters = ParametersValues {
+            population: 1,
+            max_time: 10.0,
+            seed: 42,
+            foi: 0.15,
+            foi_sin_shift: 3.0,
+            infection_duration: 5.0,
+            output_dir: ".".to_string(),
+            output_file: ".".to_string(),
+        };
+        context.set_global_property_value(Parameters, parameters.clone());
+        context.init_random(parameters.seed);
+        init(&mut context);
+        let person_id = context.add_person();
+        let n_iter = 10000;
+        let mut sum = 0.0;
+        for _ in 0..n_iter {
+            let start_time = context.get_current_time();
+            context.set_person_property(person_id, InfectionTime, Some(start_time));
+            context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
+            // there should only be one infected person in the simulation
+            assert_eq!(
+                n_eff_inv_infec(&mut context),
+                1.0 / parameters.infection_duration
+            );
+            context.execute();
+            // there should be zero infected people in the simulation
+            assert_eq!(n_eff_inv_infec(&mut context), 1.0 / 0.0);
+            sum += context.get_current_time() - start_time;
+        }
+        // permit up to 5% error
+        assert!(((sum / n_iter as f64) / parameters.infection_duration - 1.0).abs() < 0.05);
     }
 }
