@@ -541,4 +541,20 @@ mod test {
         let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
+
+    #[test]
+    fn bug_person_properties_for_nonexistent_ppl() {
+        define_person_property!(LivesInDC, bool);
+        let mut context = Context::new();
+        context.add_person();
+        // default value of IsRunner is false
+        assert!(!context.get_person_property(context.get_person_id(1), IsRunner));
+        // I can do other kinds of weird reasoning about the person
+        context.set_person_property(context.get_person_id(1), IsRunner, true);
+        // initialize person property for a person who doesn't yet exist?
+        context.initialize_person_property(context.get_person_id(1), LivesInDC, false);
+        assert!(!context.get_person_property(context.get_person_id(1), LivesInDC));
+        // but current population is still just one person, not two
+        assert_eq!(context.get_current_population(), 1);
+    }
 }
