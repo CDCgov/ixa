@@ -32,6 +32,17 @@ readme instead focuses on explaining why modeling time-varying infection in
 continuous time requires a bit of math and then why inverse transform sampling
 and rejection sampling are two viable approaches and their associated pros/cons.
 
+There is one big caveat of this model. Because we are trying to avoid
+person-to-person transmission for now, I've made the force of infection
+seasonal and the recovery rate dependent on the number of infected people.
+If the force of infection depended on the number of infected people, we'd
+basically have an SIR model. But, in reality, the technique I describe with
+dealing for the time-varying foi is much more likely to be applied to a
+time-varying recovery rate (depends on, say, both time since infection
+and time of the simulation aka seasonality) while the technique I describe
+for dealing with a time-varying recovery rate may be more likely applied to
+force of infection in real-world models.
+
 ## Why are time-varying rates special?
 The classic SIR compartmental ODE model assumes a constant recovery rate,
 $\gamma$, so that the infection period is exponentially distributed. In
@@ -280,19 +291,15 @@ the effective number of infected people (effective because it may be
 scaled by a disease recovery rate).
 
 The reason we don't know the recovery time a priori is becaues the recovery
-rate changes with the number of infected people. Therefore, each time
-the number of infected people changes, we need to recalculate the expected
-recovery time. Alternatively, instead of subscribing the simulation to
-a change in the number of infected people, we could schedule events to occur
-at the maximum rate of change in the number of infected people. This rate
-is the maximum recovery rate over the maximum infection rate. The maximum
-recovery rate is equal to recovery rate scaling factor (i.e., the factor
-that makes $n(t)$ an _effective_ number of infected people) because this
-is the theoretically fastest recovery rate (1 person is infected), and the
-maximum of the infection rate is 2 ($sin(t + c)$ has maximum range of 1,
-and $\textrm{foi}(t) = \sin(t + c) + 1$). Let us call the recovery rate scaling factor
-$\gamma$, so we must schedule rejection sampling events to happen at a rate of
-$\gamma/(1/2) = 2\gamma$.
+rate changes with the number of infected people. Imagine the case where the
+recovery rate does not change with the number of people. Then, we would just
+evaluate whether recovery has happened at some $1/\gamma$ (recovery rate) period.
+However, because there is another process by which the number of infected people
+changes the recovery rate, we must figure out the maximum rate at which
+infected people can change -- that is 2 in this toy model (it is 2 because
+the foi is equal to a sin function plus 1). So, recovery must be evaluated
+at the fastest of these two rates -- meaning that the resampling rate
+is their sum, $2 + 1 / \gamma$.
 
 ### Implementation
 
@@ -308,13 +315,14 @@ fn init(context: &mut Context) {
 
 fn handle_infection_status_change(context: &mut Context,
                                   event: PersonPropertyChangeEvent<DiseaseStatusType>) {
+    let parameters = context.get_global_property_value(Parameters).clone();
     if matches!(event.current, DiseaseStatus::I) {
-        evaluate_recovery(context, event.person_id);
+        evaluate_recovery(context, event.person_id, parameters.foi * 2.0 + 1.0 / parameters.infection_distribution);
     }
 }
 
 fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
-    1 - f64::exp(-time_spent_infected / n_effective_infected(context))
+    1 - f64::exp(-time_spent_infected * n_effective_infected(context))
 }
 
 fn n_effective_infected(context: &mut Context) -> f64 {
@@ -327,22 +335,24 @@ fn n_effective_infected(context: &mut Context) -> f64 {
                                         n_infected = n_infected + 1;
                                        }
     }
-    parameters.foi_sin_shift * n_infected
+    parameters.gamma / n_infected
 }
 
-fn evaluate_recovery(context: &mut Context, person_id: usize) {
+fn evaluate_recovery(context: &mut Context, person_id: PersonId, resampling_rate: f64) {
     // get time person has spent infected
-    let time_spent_infected = context.get_time() - context.get_person_property(person_id, InfectionTime)
+    let time_spent_infected = context.get_current_time() - context.get_person_property(person_id,
+    InfectionTime)
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
-    if context.sample_bool(RecoveryRng, recovey_probability) {
+    if context.sample_bool(RecoveryRng, recovery_probability) {
         // recovery has happened by now
-        context.set_person_property(person_id, DiseaseStatus, DiseaseStatus::R);
+        context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::R);
     } else {
         // add plan for recovery evaluation to happen again at fastest rate
-        context.add_plan(context.get_time() + context.sample_distr(ExposureRng, Exp::new(2 * parameters.gamma).unwrap()),
+        context.add_plan(context.get_current_time() + context.sample_distr(ExposureRng,
+        Exp::new(resampling_rate).unwrap()),
         move |context| {
-        evaluate_recovery();
+        evaluate_recovery(context, person_id, resampling_rate);
     });
     }
 }
