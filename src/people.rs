@@ -280,7 +280,11 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_id(&self, person_id: usize) -> PersonId {
-        PersonId { id: person_id }
+        if person_id >= self.get_current_population() {
+            panic!("Person does not exist");
+        } else {
+            PersonId { id: person_id }
+        }
     }
 }
 
@@ -540,5 +544,13 @@ mod test {
         let mut context = Context::new();
         let person_id = context.add_person();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+    }
+
+    #[test]
+    #[should_panic(expected = "Person does not exist")]
+    fn dont_return_person_id() {
+        let mut context = Context::new();
+        context.add_person();
+        context.get_person_id(1);
     }
 }
