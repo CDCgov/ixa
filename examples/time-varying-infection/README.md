@@ -301,6 +301,16 @@ the foi is equal to a sin function plus 1). So, recovery must be evaluated
 at the fastest of these two rates -- meaning that the resampling rate
 is their sum, $2 + 1 / \gamma$.
 
+What is described here is not true vanilla rejection sampling. Vanilla rejection
+sampling would have us try to pick the value from our candidate distribution
+a priori through subsequent samples from some parent distribution. But,
+we cannot do that in this case because the target distribution changes over
+time. As such, we need to employ this iterative checking manner. In vanilla
+rejection sampling, the selection of maximum rate is instead replaced
+by a selection of a parent distribution from which draws are taken and then
+compared to the candidate distribution to assess whether the draw is also
+one potentially from the candidate distribution
+
 ### Implementation
 
 ```rust
@@ -332,7 +342,7 @@ fn n_effective_infected(context: &mut Context) -> f64 {
     for usize_id in 0..context.get_current_population() {
         if matches!(context.get_person_property(context.get_person_id(usize_id),
                                        DiseaseStatusType), DiseaseStatus::I) {
-                                        n_infected = n_infected + 1;
+                                        n_infected += 1;
                                        }
     }
     parameters.gamma / n_infected

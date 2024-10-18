@@ -219,6 +219,9 @@ mod test {
             sum += context.get_current_time() - start_time;
         }
         // permit up to 5% error
-        assert!(((sum / n_iter as f64) / parameters.infection_duration - 1.0).abs() < 0.05);
+        assert!((((sum / n_iter as f64) / parameters.infection_duration) - 1.0).abs() < 0.05);
+        // the implementation of rejection sampling here for constant n_eff_inv_infec
+        // should be downwardly biased
+        assert!((sum / n_iter as f64) < parameters.infection_duration);
     }
 }
