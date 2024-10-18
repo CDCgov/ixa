@@ -25,13 +25,14 @@ output_df <- readr::read_csv(file.path(
     infection_status == "I" ~ parameters$population - cumsum(count),
     infection_status == "R" ~ cumsum(count)
   )) |>
-  # but now infection_status "I" really tells us the number of susceptible people
+  # but now infection_status "I" really tells us
+  # the number of susceptible people
   dplyr::mutate(infection_status = dplyr::case_when(
     infection_status == "I" ~ "S",
     TRUE ~ infection_status
   ))
 
-time_array_susc <- seq(0, ceiling(max(n_inf_output_df$time)), 0.1)
+time_array_susc <- seq(0, ceiling(max(output_df$time)), 0.1)
 
 # dS / dt = -foi(t) * S(t) # nolint: commented_code_linter.
 foi_t <- function(t) {
@@ -53,4 +54,4 @@ ggplot2::ggplot() +
   geom_line(aes(time_array_susc, expected_susc), color = "black") +
   xlab("Time") +
   ylab("People") +
-  scale_y_log10()
+  scale_y_log10(limits = c(1, parameters$population))
