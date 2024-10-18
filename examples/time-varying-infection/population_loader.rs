@@ -3,10 +3,11 @@ use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::ContextPeopleExt;
 use ixa::{define_person_property, define_person_property_with_default};
 use serde::{Deserialize, Serialize};
+use strum_macros::EnumIter;
 
 use crate::parameters_loader::Parameters;
 
-#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, EnumIter)]
 pub enum DiseaseStatus {
     S,
     I,
@@ -43,6 +44,7 @@ mod tests {
             foi: 0.15,
             foi_sin_shift: 3.0,
             infection_duration: 5.0,
+            plan_period: 1.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };

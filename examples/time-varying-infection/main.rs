@@ -7,6 +7,7 @@ mod exposure_manager;
 mod incidence_report;
 mod infection_manager;
 mod parameters_loader;
+mod periodic_report;
 mod population_loader;
 
 use crate::parameters_loader::Parameters;
@@ -26,6 +27,7 @@ fn main() {
             population_loader::init(&mut context);
             infection_manager::init(&mut context);
             incidence_report::init(&mut context);
+            periodic_report::init(&mut context);
 
             context.add_plan(parameters.max_time, |context| {
                 context.shutdown();

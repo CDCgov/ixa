@@ -55,3 +55,15 @@ ggplot2::ggplot() +
   xlab("Time") +
   ylab("People") +
   scale_y_log10(limits = c(1, parameters$population))
+
+person_property_report <- readr::read_csv(file.path(
+  "examples",
+  "time-varying-infection",
+  "person_count.csv"
+))
+
+ggplot2::ggplot() +
+  geom_point(aes(day, count, color = property_value), person_property_report) +
+  xlab("Time") +
+  ylab("People") +
+  scale_y_log10()
