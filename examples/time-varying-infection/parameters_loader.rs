@@ -15,6 +15,7 @@ pub struct ParametersValues {
     pub foi: f64,
     pub foi_sin_shift: f64,
     pub infection_duration: f64,
+    pub plan_period: f64,
     pub output_dir: String,
     pub output_file: String,
 }
