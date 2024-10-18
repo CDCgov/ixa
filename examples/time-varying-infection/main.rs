@@ -14,17 +14,16 @@ use crate::parameters_loader::Parameters;
 fn main() {
     let mut context = Context::new();
 
-    let file_path = Path::new("examples")
-        .join("time-varying-infection")
-        .join("input.json");
+    let current_dir = Path::new(file!()).parent().unwrap();
+    let file_path = current_dir.join("input.json");
 
     match parameters_loader::init_parameters(&mut context, &file_path) {
         Ok(()) => {
             let parameters = context.get_global_property_value(Parameters).clone();
             context.init_random(parameters.seed);
 
-            population_loader::init(&mut context);
             exposure_manager::init(&mut context);
+            population_loader::init(&mut context);
             infection_manager::init(&mut context);
             incidence_report::init(&mut context);
 

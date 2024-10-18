@@ -62,7 +62,7 @@ mod test {
             max_time: 10.0,
             seed: 42,
             foi: 0.15,
-            foi_sin_shift: 3,
+            foi_sin_shift: 3.0,
             infection_duration: 5.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
@@ -83,6 +83,9 @@ mod test {
             );
         }
 
+        // put this subscription after every agent has become infected
+        // so that handle_recovery_event is not triggered by an S --> I transition
+        // but only I --> R transitions, which is what it checks for
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
                 handle_recovery_event(event);
