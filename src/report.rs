@@ -4,7 +4,7 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::path::PathBuf;
 
 // * file_prefix: precedes the report name in the filename. An example of a
@@ -32,7 +32,11 @@ impl ConfigReportOptions {
         self
     }
     /// Sets the directory where reports will be output
+    /// # Panics
+    /// if the directory in which the report is to be stored does not exist and cannot be created
     pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
+        // if the directory does not exist, create it
+        create_dir_all(directory.clone()).expect("Failed to create directory");
         self.directory = directory;
         self
     }
