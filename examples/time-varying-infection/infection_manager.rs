@@ -107,7 +107,7 @@ mod test {
             foi: 0.15,
             foi_sin_shift: 3.0,
             infection_duration: 5.0,
-            plan_period: 1.0,
+            report_period: 1.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
@@ -150,7 +150,7 @@ mod test {
             foi: 0.15,
             foi_sin_shift: 3.0,
             infection_duration: 5.0,
-            plan_period: 1.0,
+            report_period: 1.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
@@ -197,7 +197,7 @@ mod test {
             foi: 0.15,
             foi_sin_shift: 3.0,
             infection_duration: 5.0,
-            plan_period: 1.0,
+            report_period: 1.0,
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
