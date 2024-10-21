@@ -6,10 +6,9 @@ use ixa::{
 };
 use std::path::Path;
 
-//mod incidence_report;
-//mod infection_manager;
 mod parameters_loader;
-//mod transmission_manager;
+mod population_loader;
+mod demographics_report;
 
 use crate::parameters_loader::Parameters;
 
@@ -33,14 +32,9 @@ fn main() {
         Ok(()) => {
             let parameters = context.get_global_property_value(Parameters).clone();
             context.init_random(parameters.seed);
-
-            for _ in 0..parameters.population {
-                context.add_person();
-            }
-
-            //transmission_manager::init(&mut context);
-            //infection_manager::init(&mut context);
-            //incidence_report::init(&mut context);
+            
+            demographics_report::init(&mut context);
+            population_loader::init(&mut context);
 
             context.add_plan(parameters.max_time, |context| {
                 context.shutdown();

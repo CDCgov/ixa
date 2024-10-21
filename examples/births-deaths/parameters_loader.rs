@@ -20,9 +20,11 @@ pub struct ParametersValues {
     pub population: usize,
     pub max_time: f64,
     pub seed: u64,
+    pub birth_rate: f64,
     pub age_groups: Vec<AgeGroups>,
     pub infection_duration: f64,
     pub output_file: String,
+    pub demographic_output_file: String,
 }
 define_global_property!(Parameters, ParametersValues);
 
