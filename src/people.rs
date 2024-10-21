@@ -82,9 +82,8 @@ pub trait PersonProperty: Copy {
     fn is_derived() -> bool {
         false
     }
-    fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
     #[must_use]
-    fn calculate(_context: &Context, _person_id: PersonId) -> Self::Value {
+    fn compute(_context: &Context, _person_id: PersonId) -> Self::Value {
         panic!("Property not derived");
     }
     #[must_use]
@@ -106,7 +105,7 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn initialize(
+            fn compute(
                 _context: &$crate::context::Context,
                 _person: $crate::people::PersonId,
             ) -> Self::Value {
@@ -135,7 +134,7 @@ macro_rules! define_derived_person_property {
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
 
-            fn calculate(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
                 #[allow(unused_parens)]
                 let ($($param),+) = (
                     $(context.get_person_property(person_id, $dependency)),+
@@ -146,12 +145,6 @@ macro_rules! define_derived_person_property {
             fn dependencies() -> Vec<std::any::TypeId> {
                 vec![$(std::any::TypeId::of::<$dependency>()),+]
              }
-            fn initialize(
-                context: &$crate::context::Context,
-                person: $crate::people::PersonId,
-            ) -> Self::Value {
-                Self::calculate(context, person)
-            }
         }
 
         paste::paste! {
@@ -283,7 +276,7 @@ impl PrivateContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
-                let initialize_value = T::initialize(self, person_id);
+                let initialize_value = T::compute(self, person_id);
                 data_container.set_person_property(person_id, property, initialize_value);
                 initialize_value
             }
@@ -400,7 +393,7 @@ impl ContextPeopleExt for Context {
         }
 
         // Initialize the property. This does not fire a change event
-        let initialized_value = T::initialize(self, person_id);
+        let initialized_value = T::compute(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
@@ -440,7 +433,7 @@ impl ContextPeopleExt for Context {
             data_container.add_dependency_callback(
                 dependency,
                 move |context: &mut Context, person_id: PersonId| {
-                    let new_value = T::calculate(context, person_id);
+                    let new_value = T::compute(context, person_id);
                     context.set_person_property_internal(person_id, property, new_value);
                 },
             );
