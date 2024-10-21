@@ -25,7 +25,7 @@ struct PeriodicReportItem {
 
 create_report_trait!(PeriodicReportItem);
 
-fn count_people_and_send_report(context: &mut Context, plan_period: f64) {
+fn count_people_and_send_report(context: &mut Context, report_period: f64) {
     for disease_state in DiseaseStatus::iter() {
         let mut counter = 0;
         for usize_id in 0..context.get_current_population() {
@@ -44,8 +44,8 @@ fn count_people_and_send_report(context: &mut Context, plan_period: f64) {
             count: counter,
         });
     }
-    context.add_plan(context.get_current_time() + plan_period, move |context| {
-        count_people_and_send_report(context, plan_period);
+    context.add_plan(context.get_current_time() + report_period, move |context| {
+        count_people_and_send_report(context, report_period);
     });
 }
 
