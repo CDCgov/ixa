@@ -5,7 +5,7 @@
     "foi": 0.15,
     "foi_sin_shift": 3,
     "infection_duration": 5.0,
-    "plan_period": 1.0,
+    "report_period": 1.0,
     "output_dir": "examples/time-varying-infection",
     "output_file": "incidence"
 }

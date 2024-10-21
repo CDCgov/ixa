@@ -53,7 +53,7 @@ pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
     context
         .report_options()
-        .directory(PathBuf::from("./examples/time-varying-infection/"));
-    context.add_report::<PeriodicReportItem>("person_count");
-    count_people_and_send_report(context, parameters.plan_period);
+        .directory(PathBuf::from(parameters.output_dir));
+    context.add_report::<PeriodicReportItem>("person_property_count");
+    count_people_and_send_report(context, parameters.report_period);
 }
