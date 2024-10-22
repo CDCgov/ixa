@@ -1,0 +1,62 @@
+use ixa::context::Context;
+use ixa::define_rng;
+use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::people::ContextPeopleExt;
+use ixa::random::ContextRandomExt;
+
+use crate::population_manager::InfectionStatus;
+use crate::population_manager::InfectionStatusType;
+use crate::population_manager::AgeGroupRisk;
+use crate::population_manager::Foi;
+use crate::Parameters;
+use rand_distr::Exp;
+
+define_rng!(TransmissionRng);
+
+//Attempt infection for specific age group risk (meaning diferent forces of infection)
+fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
+    let population_size: usize = context.get_current_population();
+    
+    let person_to_infect =
+        context.get_person_id(context.sample_range(TransmissionRng, 0..population_size));
+    
+    let person_status: InfectionStatus =
+        context.get_person_property(person_to_infect, InfectionStatusType);
+    let parameters = context.get_global_property_value(Parameters).clone();
+    let foi = *context
+        .get_global_property_value(Foi)
+        .get(&age_group)
+        .unwrap();
+
+    println!("Attempting infection for age group: {:?} with foi: {:?}", age_group, foi);
+    
+    if matches!(person_status, InfectionStatus::S) {
+        context.set_person_property(person_to_infect, InfectionStatusType, InfectionStatus::I);
+    }
+   
+    #[allow(clippy::cast_precision_loss)]
+    let next_attempt_time = context.get_current_time()
+        + context.sample_distr(TransmissionRng, Exp::new(foi).unwrap())
+            / population_size as f64;
+
+    if next_attempt_time <= parameters.max_time {
+        context.add_plan(next_attempt_time, move |context| {
+            attempt_infection(context, age_group);
+        });
+    }
+}
+
+pub fn init(context: &mut Context) {
+    // Need to convert to a more efficient way
+    context.add_plan(0.0, |context| {
+        attempt_infection(context, AgeGroupRisk::NewBorn);
+    });
+
+    context.add_plan(0.0, |context| {
+        attempt_infection(context, AgeGroupRisk::General);
+    });
+
+    context.add_plan(0.0, |context| {
+        attempt_infection(context, AgeGroupRisk::OldAdult);
+    });
+}

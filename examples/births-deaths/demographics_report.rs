@@ -4,7 +4,7 @@ use ixa::{
 use std::path::PathBuf;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
-use crate::population_loader::{Age, AgeGroupType};
+use crate::population_manager::{Age, AgeGroupType};
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
