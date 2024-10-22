@@ -1,14 +1,14 @@
 use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{ContextPeopleExt, PersonId};
+use ixa::people::{ContextPeopleExt, PersonId, PersonProperty};
 use ixa::random::ContextRandomExt;
-use ixa::{define_data_plugin, define_derived_person_property, define_global_property, define_person_property, define_person_property_with_default};
+use ixa::{define_global_property, define_person_property, define_person_property_with_default};
 use rand_distr::Uniform;
 use std::collections::HashMap;
 use serde::Deserialize;
 use crate::parameters_loader::Parameters;
 use ixa::random::define_rng;
-use ixa::error::IxaError;
+
 define_rng!(PeopleRng);
 
 static MAX_AGE: f64 = 100.0;
@@ -61,31 +61,25 @@ fn schedule_birth(context: &mut Context) {
     });
 }
 
-// fn schedule_death(context: &mut Context) {
-//     let parameters = context.get_global_property_value(Parameters).clone();
-//     let id = context.sample_range(PeopleRng, 0..context.get_current_population());
-//     let person = context.get_person_id(id);
+fn schedule_death(context: &mut Context) {
+    let parameters = context.get_global_property_value(Parameters).clone();
+    let person = context.sample_person_by_property(Alive, true).unwrap();
 
-//     context.remove_person(person);
-//     // Where should we assign all the person properties to be dead and cancel plans? people.rs?
-//     context.set_person_property(person, Alive, false);
+    // Where should we assign all the person properties to be dead and cancel plans? people.rs?
+    context.set_person_property(person, Alive, false);
     
-//     let next_death_event = context.get_current_time() +
-//         context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
+    let next_death_event = context.get_current_time() +
+        context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
 
-//     println!("Attempting to remove {:?} - Next death event: {:?}", person, next_death_event);
+    println!("Attempting to remove {:?} - Next death event: {:?}", person, next_death_event);
     
-//     context.add_plan(next_death_event,
-//         move |context| {
-//             schedule_death(context);
-//     });
-// }
-// struct PopulationData {
-    
-// }
-// define_data_plugin!(PopulationPlugin,
-    
-//     );
+    context.add_plan(next_death_event,
+        move |context| {
+            schedule_death(context);
+        }
+    );
+    // Cancel all plans
+}
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
@@ -113,6 +107,9 @@ pub fn init(context: &mut Context) {
     if parameters.birth_rate > 0.0 {
         context.add_plan(0.0, |context| {schedule_birth(context)});
     }
+    if parameters.death_rate > 0.0 {
+        context.add_plan(0.0, |context| {schedule_death(context)});
+    }
 }
 
 
@@ -121,6 +118,7 @@ pub trait ContextPopulationExt {
     fn get_person_age(&mut self, person_id: PersonId) -> f64;        
     fn get_current_group_population(&mut self, age_group:AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
+    fn sample_person_by_property<T: PersonProperty + 'static>(&mut self, property: T, value: T::Value) -> Option<PersonId> where <T as PersonProperty>::Value: PartialEq;
 }
 
 impl ContextPopulationExt for Context {
@@ -153,6 +151,8 @@ impl ContextPopulationExt for Context {
         }
         current_population
     }
+    
+    
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
         let mut people_vec = Vec::<PersonId>::new();
         for i in 0..self.get_current_population() {
@@ -169,5 +169,21 @@ impl ContextPopulationExt for Context {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
         }
 
+    }
+
+    fn sample_person_by_property<T: PersonProperty + 'static>(&mut self, property: T, value: T::Value) -> Option<PersonId>
+where <T as PersonProperty>::Value: PartialEq{
+        let mut people_vec = Vec::<PersonId>::new();
+        for i in 0..self.get_current_population() {
+            let person_id = self.get_person_id(i);
+            if self.get_person_property(person_id, property) == value {        
+                    people_vec.push(person_id);
+            }
+        }
+        if people_vec.len() == 0 {
+            None
+        } else {
+            Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
+        }
     }
 }
