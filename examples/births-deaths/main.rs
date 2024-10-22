@@ -9,6 +9,7 @@ mod parameters_loader;
 mod population_manager;
 mod demographics_report;
 mod transmission_manager;
+mod incidence_report;
 
 use crate::parameters_loader::Parameters;
 
@@ -24,6 +25,7 @@ fn main() {
             context.init_random(parameters.seed);
             
             demographics_report::init(&mut context);
+            incidence_report::init(&mut context);
             population_manager::init(&mut context);
             transmission_manager::init(&mut context);
             
