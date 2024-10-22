@@ -3,10 +3,10 @@
     "max_time": 200.0,
     "seed": 123,
     "birth_rate": 0.1,
-    "age_groups": [
-        {"min_age": 0, "max_age": 1, "group_name": "newborn", "foi": 0.2},
-        {"min_age": 1, "max_age": 65, "group_name": "general", "foi": 0.1},
-        {"min_age": 65, "max_age": 200, "group_name": "oldadult", "foi": 0.15}
+    "foi_groups": [
+        {"group_name": "NewBorn", "foi": 0.2},
+        {"group_name": "General", "foi": 0.1},
+        {"group_name": "OldAdult", "foi": 0.15}
     ],
     "infection_duration": 5.0,
     "output_file": "incidence",

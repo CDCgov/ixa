@@ -1,26 +1,16 @@
-use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
 use ixa::{
-    context::Context, define_person_property, define_person_property_with_default,
+    context::Context,
     global_properties::ContextGlobalPropertiesExt,
 };
 use std::path::Path;
 
 mod parameters_loader;
-mod population_loader;
+mod population_manager;
 mod demographics_report;
+mod transmission_manager;
 
 use crate::parameters_loader::Parameters;
-
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum InfectionStatus {
-    S,
-    I,
-    R,
-}
-define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
 fn main() {
     let mut context = Context::new();
@@ -34,8 +24,9 @@ fn main() {
             context.init_random(parameters.seed);
             
             demographics_report::init(&mut context);
-            population_loader::init(&mut context);
-
+            population_manager::init(&mut context);
+            transmission_manager::init(&mut context);
+            
             context.add_plan(parameters.max_time, |context| {
                 context.shutdown();
             });
@@ -47,3 +38,4 @@ fn main() {
         }
     }
 }
+
