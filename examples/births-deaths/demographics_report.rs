@@ -4,15 +4,15 @@ use ixa::{
 use std::path::PathBuf;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
-use crate::population_manager::{Age, AgeGroupType};
+use crate::population_manager::{Birth, AgeGroupRisk, ContextPopulationExt};
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PersonReportItem {
     time: f64,
     person_id: String,
-    age: u8,
-    age_group: String,
+    age: f64,
+    age_group: AgeGroupRisk,
     event: String,
 }
 
@@ -23,11 +23,13 @@ fn handle_person_created(
     event: PersonCreatedEvent,
 ) {
     let person = event.person_id;
+    let age_person = context.get_person_age(person);
+    let age_group_person = context.get_person_age_group(person).clone();
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{}", person),
-        age: context.get_person_property(person, Age),
-        age_group: format!("{}", context.get_person_property(person, AgeGroupType)),
+        age: age_person,
+        age_group: age_group_person,
         event: "Created".to_string(),
     });
 }

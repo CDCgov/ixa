@@ -1,8 +1,8 @@
 {
     "population": 100,
-    "max_time": 200.0,
+    "max_time": 380.0,
     "seed": 123,
-    "birth_rate": 0.1,
+    "birth_rate": 0.0,
     "foi_groups": [
         {"group_name": "NewBorn", "foi": 0.2},
         {"group_name": "General", "foi": 0.1},
