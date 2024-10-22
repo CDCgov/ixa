@@ -1,10 +1,10 @@
 use ixa::{
-    context::Context, create_report_trait, global_properties::ContextGlobalPropertiesExt, people::{ContextPeopleExt, PersonCreatedEvent}, report::{ContextReportExt, Report}
+    context::Context, create_report_trait, global_properties::ContextGlobalPropertiesExt, people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent}, report::{ContextReportExt, Report}
 };
 use std::path::PathBuf;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
-use crate::population_manager::{Birth, AgeGroupRisk, ContextPopulationExt};
+use crate::population_manager::{Birth, AgeGroupRisk, ContextPopulationExt, Alive};
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -34,6 +34,25 @@ fn handle_person_created(
     });
 }
 
+fn handle_death_events(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<Alive>,
+) {
+    if event.current == false {
+        let person = event.person_id;
+        let age_person = context.get_person_age(person);
+        let age_group_person = context.get_person_age_group(person).clone();
+        context.send_report(PersonReportItem {
+            time: context.get_current_time(),
+            person_id: format!("{}", person),
+            age: age_person,
+            age_group: age_group_person,
+            event: "Dead".to_string(),
+        });
+    }
+}
+
+
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
 
@@ -46,6 +65,11 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(
         |context, event: PersonCreatedEvent| {            
             handle_person_created(context, event);
+        },        
+    );
+    context.subscribe_to_event(
+        |context, event: PersonPropertyChangeEvent<Alive> | {
+            handle_death_events(context, event);
         },
     );
 }

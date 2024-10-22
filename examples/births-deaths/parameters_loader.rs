@@ -21,6 +21,7 @@ pub struct ParametersValues {
     pub max_time: f64,
     pub seed: u64,
     pub birth_rate: f64,
+    pub death_rate: f64,
     pub foi_groups: Vec<FoiAgeGroups>,
     pub infection_duration: f64,
     pub output_file: String,
