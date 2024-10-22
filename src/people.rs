@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
 use crate::{
     context::{Context, Event},
     define_data_plugin,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
