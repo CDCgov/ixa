@@ -7,7 +7,7 @@ use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
     collections::{HashMap, HashSet},
-    fmt,
+    fmt::{self},
 };
 
 // PeopleData represents each unique person in the simulation with an id ranging
@@ -63,7 +63,7 @@ pub trait PersonProperty: Copy {
         false
     }
     #[must_use]
-    fn dependencies() -> Vec<TypeId> {
+    fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
         panic!("Dependencies not implemented");
     }
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
@@ -83,6 +83,11 @@ pub trait PersonPropertyHolder {
         person: PersonId,
         callback_vec: &mut Vec<Box<ContextCallback>>,
     );
+    fn is_derived(&self) -> bool;
+    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>>;
+    fn non_derived_dependencies(&self) -> Vec<TypeId>;
+    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>);
+    fn property_type_id(&self) -> TypeId;
 }
 
 impl<T> PersonPropertyHolder for T
@@ -106,6 +111,40 @@ where
             ctx.emit_event(change_event);
         }));
     }
+
+    fn is_derived(&self) -> bool {
+        T::is_derived()
+    }
+
+    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>> {
+        T::dependencies()
+    }
+
+    fn property_type_id(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
+
+    /// Returns of dependencies, where any derived dependencies
+    /// are recursively expanded to their non-derived dependencies.
+    /// If the property is not derived, the Vec will be empty.
+    fn non_derived_dependencies(&self) -> Vec<TypeId> {
+        let mut result = HashSet::new();
+        self.collect_non_derived_dependencies(&mut result);
+        result.into_iter().collect()
+    }
+
+    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>) {
+        if !self.is_derived() {
+            return;
+        }
+        for dependency in self.dependencies() {
+            if dependency.is_derived() {
+                dependency.collect_non_derived_dependencies(result);
+            } else {
+                result.insert(dependency.property_type_id());
+            }
+        }
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -117,7 +156,7 @@ where
 #[macro_export]
 macro_rules! define_person_property {
     ($person_property:ident, $value:ty, $initialize:expr) => {
-        #[derive(Copy, Clone)]
+        #[derive(Debug, Copy, Clone)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
@@ -160,12 +199,11 @@ macro_rules! define_person_property_with_default {
 #[macro_export]
 macro_rules! define_derived_property {
     ($derived_property:ident, $value:ty, [$($dependency:ident),+], |$($param:ident),+| $derive_fn:expr) => {
-        #[derive(Copy, Clone)]
+        #[derive(Debug, Copy, Clone)]
         pub struct $derived_property;
 
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
-
             fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
                 #[allow(unused_parens)]
                 let ($($param),+) = (
@@ -174,12 +212,12 @@ macro_rules! define_derived_property {
                 (|$($param),+| $derive_fn)($($param),+)
             }
             fn is_derived() -> bool { true }
-            fn dependencies() -> Vec<std::any::TypeId> {
-                vec![$(std::any::TypeId::of::<$dependency>()),+]
-             }
-             fn get_instance() -> Self {
-                 $derived_property
-             }
+            fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
+                vec![$(Box::new($dependency)),+]
+            }
+            fn get_instance() -> Self {
+                $derived_property
+            }
         }
     };
 }
@@ -323,11 +361,12 @@ impl ContextPeopleExt for Context {
             .borrow()
             .contains(&TypeId::of::<T>())
         {
-            let dependencies = T::dependencies();
+            let instance = T::get_instance();
+            let dependencies = instance.non_derived_dependencies();
             for dependency in dependencies {
-                let mut property_dependencies = data_container.dependency_map.borrow_mut();
-                let deps = property_dependencies.entry(dependency).or_default();
-                deps.push(Box::new(T::get_instance()));
+                let mut dependency_map = data_container.dependency_map.borrow_mut();
+                let derived_prop_list = dependency_map.entry(dependency).or_default();
+                derived_prop_list.push(Box::new(instance));
             }
             data_container
                 .registered_derived_properties
@@ -446,8 +485,11 @@ impl ContextPeopleExt for Context {
 #[cfg(test)]
 mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
-    use crate::{context::Context, people::PeoplePlugin};
-    use std::{cell::RefCell, rc::Rc};
+    use crate::{
+        context::Context,
+        people::{PeoplePlugin, PersonPropertyHolder},
+    };
+    use std::{any::TypeId, cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -824,9 +866,15 @@ mod test {
         assert_eq!(*flag.borrow(), 1);
     }
 
-    // TODO(ryl8@cdc.gov): Nested derived properties don't currently work; we should
-    // probably either fix this or disallow it.
-    #[ignore]
+    #[test]
+    fn test_resolve_dependencies() {
+        let mut actual = UltraRunner.non_derived_dependencies();
+        let mut expected = vec![TypeId::of::<Age>(), TypeId::of::<IsRunner>()];
+        actual.sort();
+        expected.sort();
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     fn get_derived_property_dependent_on_another_derived() {
         let mut context = Context::new();
