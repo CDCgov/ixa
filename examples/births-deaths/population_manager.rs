@@ -143,10 +143,8 @@ impl ContextPopulationExt for Context {
         let mut current_population = 0;
         for i in 0..self.get_current_population() {
             let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive) == true {
-                if self.get_person_age_group(person_id) == age_group {
+            if self.get_person_property(person_id, Alive) && self.get_person_age_group(person_id) == age_group {
                     current_population += 1;
-                }
             }
         }
         current_population
@@ -157,13 +155,11 @@ impl ContextPopulationExt for Context {
         let mut people_vec = Vec::<PersonId>::new();
         for i in 0..self.get_current_population() {
             let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive) == true {
-                if self.get_person_age_group(person_id) == age_group {
+            if self.get_person_property(person_id, Alive) && self.get_person_age_group(person_id) == age_group {
                     people_vec.push(person_id);
-                }
             }
         }
-        if people_vec.len() == 0 {
+        if people_vec.is_empty() {
             None
         } else {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
@@ -180,7 +176,7 @@ where <T as PersonProperty>::Value: PartialEq{
                     people_vec.push(person_id);
             }
         }
-        if people_vec.len() == 0 {
+    if people_vec.is_empty() {
             None
         } else {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
