@@ -1,5 +1,9 @@
 library(tidyverse)
 library(jsonlite)
+## Todo:
+## - Plot population changes
+## - Plot SIR
+## - Compare with theoretical foi with population change
 dir <- file.path("examples", "births-deaths")
 params <- read_json(file.path(dir, "input.json"))
 population <- params$population

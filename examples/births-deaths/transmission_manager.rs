@@ -23,7 +23,6 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         .get_global_property_value(Foi)
         .get(&age_group)
         .unwrap();
-
     if population_size > 0 {
         let person_to_infect = context.sample_person(age_group).unwrap();
     
@@ -47,16 +46,12 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
 }
 
 pub fn init(context: &mut Context) {
-    // Need to convert to a more efficient way
-    context.add_plan(0.0, |context| {
-        attempt_infection(context, AgeGroupRisk::NewBorn);
-    });
-
-    context.add_plan(0.0, |context| {
-        attempt_infection(context, AgeGroupRisk::General);
-    });
-
-    context.add_plan(0.0, |context| {
-        attempt_infection(context, AgeGroupRisk::OldAdult);
-    });
+    
+    let foi_age_groups = context
+        .get_global_property_value(Foi).clone();
+    for (age_group, _) in foi_age_groups {
+        context.add_plan(0.0, move |context| {
+            attempt_infection(context, age_group);
+        });
+    }
 }

@@ -10,6 +10,7 @@ mod population_manager;
 mod demographics_report;
 mod transmission_manager;
 mod incidence_report;
+mod infection_manager;
 
 use crate::parameters_loader::Parameters;
 
@@ -26,8 +27,10 @@ fn main() {
             
             demographics_report::init(&mut context);
             incidence_report::init(&mut context);
+
             population_manager::init(&mut context);
             transmission_manager::init(&mut context);
+            infection_manager::init(&mut context);
             
             context.add_plan(parameters.max_time, |context| {
                 context.shutdown();
