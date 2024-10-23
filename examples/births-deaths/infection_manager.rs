@@ -5,9 +5,9 @@ use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 
+use crate::population_manager::Alive;
 use crate::population_manager::InfectionStatus;
 use crate::population_manager::InfectionStatusType;
-use crate::population_manager::Alive;
 use crate::Parameters;
 
 define_rng!(InfectionRng);
@@ -17,7 +17,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let infection_duration = parameters.infection_duration;
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());
-    if context.get_person_property(person_id, Alive)  {
+    if context.get_person_property(person_id, Alive) {
         context.add_plan(recovery_time, move |context| {
             context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
         });

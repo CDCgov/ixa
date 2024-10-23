@@ -1,6 +1,6 @@
 use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
-use std::{fmt::Debug, vec};
+use std::fmt::Debug;
 use std::path::Path;
 
 use ixa::define_global_property;
@@ -28,10 +28,9 @@ pub struct ParametersValues {
     pub demographic_output_file: String,
 }
 define_global_property!(Parameters, ParametersValues);
-//define_global_property!(Foi, HashMap);
+
 pub fn init_parameters(context: &mut Context, file_path: &Path) -> Result<(), IxaError> {
     let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path)?;
-    context.set_global_property_value(Parameters, parameters_json.clone());            
+    context.set_global_property_value(Parameters, parameters_json.clone());
     Ok(())
 }
-
