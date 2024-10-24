@@ -1,4 +1,4 @@
-use ixa::context::Context;
+use ixa::context::{Context, Event};
 use ixa::define_data_plugin;
 use std::collections::HashMap;
 
@@ -18,6 +18,7 @@ pub struct InfectionStatusEvent {
     pub updated_status: InfectionStatus,
     pub person_id: usize,
 }
+impl Event for InfectionStatusEvent {}
 
 pub trait ContextPeopleExt {
     fn create_person(&mut self);
