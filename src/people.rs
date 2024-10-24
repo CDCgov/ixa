@@ -438,9 +438,12 @@ impl ContextPeopleExt for Context {
         // Temporarily remove dependency properties since we need mutable references
         // to self during callback execution
         let deps_temp = {
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-            let mut dependencies = data_container.dependency_map.borrow_mut();
-            dependencies.get_mut(&TypeId::of::<T>()).map(std::mem::take)
+            self.get_data_container(PeoplePlugin)
+                .unwrap()
+                .dependency_map
+                .borrow_mut()
+                .get_mut(&TypeId::of::<T>())
+                .map(std::mem::take)
         };
 
         let mut dependency_event_callbacks = Vec::new();
