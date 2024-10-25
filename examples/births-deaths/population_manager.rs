@@ -42,16 +42,9 @@ define_person_property_with_default!(InfectionStatusType, InfectionStatus, Infec
 define_person_property!(Birth, f64);
 define_person_property!(Alive, bool);
 
-fn create_new_person(context: &mut Context, birth_time: f64) -> PersonId {
-    let person = context.add_person();
-    context.initialize_person_property(person, Birth, birth_time);
-    context.initialize_person_property(person, Alive, true);
-    person
-}
-
 fn schedule_birth(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
-    let _person = create_new_person(context, context.get_current_time());
+    let _person = context.create_new_person(context.get_current_time());
 
     let next_birth_event = context.get_current_time()
         + context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
@@ -60,21 +53,11 @@ fn schedule_birth(context: &mut Context) {
     });
 }
 
-fn attempt_death(context: &mut Context, person_id: PersonId) {
-    // Where should we assign all the person properties to be dead and cancel plans? people.rs?
-    println!(
-        "Attempting to remove {:?} - at time: {:?}",
-        person_id,
-        context.get_current_time()
-    );
-    context.set_person_property(person_id, Alive, false);
-}
-
 fn schedule_death(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
 
     if let Some(person) = context.sample_person_by_property(Alive, true) {
-        attempt_death(context, person);
+        context.attempt_death(person);
 
         let next_death_event = context.get_current_time()
             + context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
@@ -101,7 +84,7 @@ pub fn init(context: &mut Context) {
     for _ in 0..parameters.population {
         // Define age in days
         let age_days: f64 = context.sample_distr(PeopleRng, Uniform::new(0.0, MAX_AGE)) * 365.0;
-        let _person = create_new_person(context, -age_days);
+        let _person = context.create_new_person(-age_days);
     }
 
     // Plan for births and deaths
@@ -118,6 +101,8 @@ pub fn init(context: &mut Context) {
 }
 
 pub trait ContextPopulationExt {
+    fn create_new_person(&mut self, birth_time: f64) -> PersonId;
+    fn attempt_death(&mut self, person_id: PersonId);
     fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk;
     fn get_person_age(&mut self, person_id: PersonId) -> f64;
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
@@ -140,6 +125,23 @@ pub trait ContextPopulationExt {
 }
 
 impl ContextPopulationExt for Context {
+    fn attempt_death(&mut self, person_id: PersonId) {
+        // Where should we assign all the person properties to be dead and cancel plans? people.rs?
+        println!(
+            "Attempting to Kill {:?} - at time: {:?}",
+            person_id,
+            self.get_current_time()
+        );
+        self.set_person_property(person_id, Alive, false);
+    }
+
+    fn create_new_person(&mut self, birth_time: f64) -> PersonId {
+        let person = self.add_person();
+        self.initialize_person_property(person, Birth, birth_time);
+        self.initialize_person_property(person, Alive, true);
+        person
+    }
+
     fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk {
         let current_age = self.get_person_age(person_id);
         if current_age <= 1.0 {
@@ -237,12 +239,12 @@ mod test {
     fn test_birth_death() {
         let mut context = Context::new();
 
-        let person = create_new_person(&mut context, -10.0);
+        let person = context.create_new_person(-10.0);
         context.add_plan(10.0, |context| {
-            _ = create_new_person(context, 10.0);
+            _ = context.create_new_person(10.0);
         });
         context.add_plan(20.0, move |context| {
-            attempt_death(context, person);
+            context.attempt_death(person);
         });
         context.add_plan(11.0, |context| {
             let pop = context.get_population_by_property(Alive, true);
@@ -305,14 +307,14 @@ mod test {
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values.clone());
         context.init_random(p_values.seed);
-        let _person = create_new_person(&mut context, -10.0);
+        let _person = context.create_new_person(-10.0);
         schedule_death(&mut context);
     }
 
     #[test]
     fn test_current_age() {
         let mut context = Context::new();
-        let person = create_new_person(&mut context, -5.0);
+        let person = context.create_new_person(-5.0);
         context.add_plan(30.0, move |context| {
             assert_eq!(context.get_person_age(person), 35.0 / 365.0);
         });
@@ -332,7 +334,7 @@ mod test {
         ];
         for age in &age_vec {
             let birth = age * (-365.0);
-            let _person = create_new_person(&mut context, birth);
+            let _person = context.create_new_person(birth);
         }
 
         for p in 0..context.get_current_population() {
