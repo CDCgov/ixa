@@ -6,10 +6,9 @@ use ixa::{create_report_trait, report::Report};
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::population_manager::AgeGroupRisk;
-use crate::population_manager::ContextPopulationExt;
-use crate::population_manager::InfectionStatus;
-use crate::population_manager::InfectionStatusType;
+use crate::population_manager::{
+    AgeGroupRisk, ContextPopulationExt, InfectionStatus, InfectionStatusType,
+};
 
 use serde::{Deserialize, Serialize};
 

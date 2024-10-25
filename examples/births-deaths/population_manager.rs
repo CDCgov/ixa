@@ -126,12 +126,6 @@ pub trait ContextPopulationExt {
 
 impl ContextPopulationExt for Context {
     fn attempt_death(&mut self, person_id: PersonId) {
-        // Where should we assign all the person properties to be dead and cancel plans? people.rs?
-        println!(
-            "Attempting to Kill {:?} - at time: {:?}",
-            person_id,
-            self.get_current_time()
-        );
         self.set_person_property(person_id, Alive, false);
     }
 
@@ -157,9 +151,6 @@ impl ContextPopulationExt for Context {
         (self.get_current_time() - birth_time) / 365.0
     }
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
-        // loop through all population
-        // filter those who are alive
-        // filter those with age group risk = age_group
         let mut current_population = 0;
         for i in 0..self.get_current_population() {
             let person_id = self.get_person_id(i);
@@ -233,7 +224,7 @@ impl ContextPopulationExt for Context {
 mod test {
     use super::*;
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
-    use ixa::context::{self, Context};
+    use ixa::context::Context;
 
     #[test]
     fn test_birth_death() {
