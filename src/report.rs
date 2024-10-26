@@ -148,8 +148,6 @@ impl Context {
                     .unwrap()
                     .downcast_ref()
                     .unwrap();
-                //let vec_of_values: RefCell<&mut Vec<Box<dyn Any>>> = RefCell::new(person_properties_map.get(property).unwrap()
-                //.downcast_mut().unwrap());
                 for value in vec_of_values {
                     *property_values_tabulated
                         .entry(format!("{value:?}"))
