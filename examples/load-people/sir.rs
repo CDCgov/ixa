@@ -11,7 +11,7 @@ pub enum DiseaseStatus {
     R,
 }
 
-define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
+define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, true, DiseaseStatus::S);
 
 pub fn init(context: &mut Context) {
     context.subscribe_to_event(move |context, event: PersonCreatedEvent| {

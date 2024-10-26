@@ -13,7 +13,8 @@ use std::{
 #[allow(clippy::module_name_repetitions)]
 pub struct PeopleData {
     current_population: usize,
-    properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    pub(crate) properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    pub include_in_periodic_report: HashMap<TypeId, String>,
 }
 
 define_data_plugin!(
@@ -21,7 +22,8 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
-        properties_map: RefCell::new(HashMap::new())
+        properties_map: RefCell::new(HashMap::new()),
+        include_in_periodic_report: HashMap::new()
     }
 );
 
@@ -53,17 +55,19 @@ impl fmt::Debug for PersonId {
 pub trait PersonProperty: Copy {
     type Value: Copy;
     fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
+    fn include_in_periodic_report(&self) -> bool;
 }
 
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
+/// * `$include`: A boolean indicating whether the property should be included in the periodic report
 /// * `$initialize`: (Optional) A function that takes a `Context` and `PersonId` and
 ///   returns the initial value. If it is not defined, calling `get_person_property`
 ///   on the property without explicitly setting a value first will panic.
 #[macro_export]
 macro_rules! define_person_property {
-    ($person_property:ident, $value:ty, $initialize:expr) => {
+    ($person_property:ident, $value:ty, $include:expr, $initialize:expr) => {
         #[derive(Copy, Clone)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
@@ -74,25 +78,37 @@ macro_rules! define_person_property {
             ) -> Self::Value {
                 $initialize(_context, _person)
             }
+            fn include_in_periodic_report(&self) -> bool {
+                $include
+            }
         }
     };
-    ($person_property:ident, $value:ty) => {
-        define_person_property!($person_property, $value, |_context, _person_id| {
-            panic!("Property not initialized");
-        });
+    ($person_property:ident, $value:ty, $include:expr) => {
+        define_person_property!(
+            $person_property,
+            $value,
+            $include,
+            |_context, _person_id| {
+                panic!("Property not initialized");
+            }
+        );
     };
 }
 
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
+/// * `$include`: A boolean indicating whether the property should be included in the periodic report
 /// * `$default`: An initial value
 #[macro_export]
 macro_rules! define_person_property_with_default {
-    ($person_property:ident, $value:ty, $default:expr) => {
-        define_person_property!($person_property, $value, |_context, _person_id| {
-            $default
-        });
+    ($person_property:ident, $value:ty, $include:expr, $default:expr) => {
+        define_person_property!(
+            $person_property,
+            $value,
+            $include,
+            |_context, _person_id| { $default }
+        );
     };
 }
 
@@ -295,22 +311,27 @@ mod test {
     use crate::{context::Context, people::PeoplePlugin};
     use std::{cell::RefCell, rc::Rc};
 
-    define_person_property!(Age, u8);
+    define_person_property!(Age, u8, false);
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategory {
         High,
         Low,
     }
-    define_person_property!(RiskCategoryType, RiskCategory);
-    define_person_property_with_default!(IsRunner, bool, false);
-    define_person_property!(RunningShoes, u8, |context: &Context, person: PersonId| {
-        let is_runner = context.get_person_property(person, IsRunner);
-        if is_runner {
-            4
-        } else {
-            0
+    define_person_property!(RiskCategoryType, RiskCategory, true);
+    define_person_property_with_default!(IsRunner, bool, false, true);
+    define_person_property!(
+        RunningShoes,
+        u8,
+        false,
+        |context: &Context, person: PersonId| {
+            let is_runner = context.get_person_property(person, IsRunner);
+            if is_runner {
+                4
+            } else {
+                0
+            }
         }
-    });
+    );
 
     #[test]
     fn observe_person_addition() {

@@ -21,7 +21,12 @@ pub enum InfectionStatus {
     I,
     R,
 }
-define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
+define_person_property_with_default!(
+    InfectionStatusType,
+    InfectionStatus,
+    true,
+    InfectionStatus::S
+);
 
 fn main() {
     let mut context = Context::new();

@@ -18,8 +18,8 @@ struct PeopleRecord {
     risk_category: RiskCategory,
 }
 
-define_person_property!(Age, u8);
-define_person_property!(RiskCategoryType, RiskCategory);
+define_person_property!(Age, u8, true);
+define_person_property!(RiskCategoryType, RiskCategory, true);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     let person = context.add_person();
