@@ -52,9 +52,9 @@ impl fmt::Debug for PersonId {
 // * specify a Value type to represent the data associated with the property,
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
-pub trait PersonProperty: Copy {
+pub trait PersonProperty: Copy + fmt::Display {
     type Value: Copy;
-    fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
+    fn initialize(context: &mut Context, person_id: PersonId) -> Self::Value;
     fn include_in_periodic_report(&self) -> bool;
 }
 
@@ -73,13 +73,41 @@ macro_rules! define_person_property {
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
             fn initialize(
-                _context: &$crate::context::Context,
+                context: &mut $crate::context::Context,
                 _person: $crate::people::PersonId,
             ) -> Self::Value {
-                $initialize(_context, _person)
+                // if include this property in periodic report, add it
+                // to properties to include
+                // the problem with this lazy initialization is that properties that
+                // have not yet een initialized will not be included in the report
+                // even if they are reported later
+                // we could fix this problem on the post-processing side,
+                // providing the user with both this periodic report and an "init" report
+                // which gives the default values of the person properties
+                // and then our associated ixa python package can stitch together the two
+                // to make a whole person properties report for all times
+                if $include {
+                    let data_container =
+                        context.get_data_container_mut($crate::people::PeoplePlugin);
+                    // we have both the type id by which the properties map is indexed
+                    // and the string of the person property
+                    // which is the user useful value for reporting out
+                    data_container.include_in_periodic_report.insert(
+                        std::any::TypeId::of::<Self>(),
+                        stringify!($person_property).to_string(),
+                    );
+                }
+                $initialize(context, _person)
             }
+            // still need this in case the person property doesn't
+            // get initialized until later via context.initialize_person_property
             fn include_in_periodic_report(&self) -> bool {
                 $include
+            }
+        }
+        impl std::fmt::Display for $person_property {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, stringify!($person_property))
             }
         }
     };
@@ -191,7 +219,7 @@ pub trait ContextPeopleExt {
     /// initializing it if it hasn't been set yet. If no initializer is
     /// provided, and the property is not set this will panic
     fn get_person_property<T: PersonProperty + 'static>(
-        &self,
+        &mut self,
         person_id: PersonId,
         _property: T,
     ) -> T::Value;
@@ -234,20 +262,27 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_property<T: PersonProperty + 'static>(
-        &self,
+        &mut self,
         person_id: PersonId,
         property: T,
     ) -> T::Value {
-        let data_container = self.get_data_container(PeoplePlugin)
+        // create a scope to deal with ownership rules
+        // in the initialization, we need a mutable reference to context to add the property
+        // to the list of properties to be included in the periodic report
+        {
+            let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
-        // Attempt to retrieve the existing value
-        if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
-            return value;
+            // Attempt to retrieve the existing value
+            if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
+                return value;
+            }
         }
 
         // Initialize the property. This does not fire a change event
         let initialized_value = T::initialize(self, person_id);
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
@@ -265,6 +300,15 @@ impl ContextPeopleExt for Context {
         let current_value = *data_container.get_person_property_ref(person_id, property);
         assert!(current_value.is_none(), "Property already initialized");
         data_container.set_person_property(person_id, property, value);
+
+        // if include this property in periodic report, add it
+        // to properties to include
+        if property.include_in_periodic_report() {
+            let data_container = self.get_data_container_mut(PeoplePlugin);
+            data_container
+                .include_in_periodic_report
+                .insert(std::any::TypeId::of::<T>(), property.to_string());
+        }
     }
 
     #[allow(clippy::single_match_else)]
@@ -274,6 +318,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        let initialize_value = T::initialize(self, person_id);
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -281,7 +326,6 @@ impl ContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
-                let initialize_value = T::initialize(self, person_id);
                 data_container.set_person_property(person_id, property, initialize_value);
                 initialize_value
             }
@@ -323,7 +367,7 @@ mod test {
         RunningShoes,
         u8,
         false,
-        |context: &Context, person: PersonId| {
+        |context: &mut Context, person: PersonId| {
             let is_runner = context.get_person_property(person, IsRunner);
             if is_runner {
                 4
