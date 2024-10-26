@@ -1,5 +1,8 @@
 use crate::context::Context;
+use crate::people::PeoplePlugin;
 use csv::Writer;
+use serde::Serialize;
+use std::any::Any;
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -90,6 +93,14 @@ crate::context::define_data_plugin!(
     }
 );
 
+#[derive(Serialize)]
+struct PeriodicReportItem {
+    time: f64,
+    property_type: String,
+    property_value: String,
+    count: usize,
+}
+
 impl Context {
     // Builds the filename. Called by `add_report`, `short_name` refers to the
     // report type. The three main components are `prefix`, `directory`, and
@@ -102,12 +113,68 @@ impl Context {
         let basename = format!("{prefix}{short_name}");
         directory.join(basename).with_extension("csv")
     }
+    fn count_person_properties_and_report(&mut self, report_period: f64) {
+        // only want to schedule the person properties report
+        // to go through people properties again
+        // if there are plans out on the queue/there is still work
+        // for the simulation to do
+        // note that this may run an extra report at the end
+        // while plans with no data at the end of the queue are removed
+        // the plan_queue will not yet register as empty
+        // this function only checks for plans because (a) callbacks
+        // are always run first and (b) we hope to remove callbacks in
+        // the future anyways
+
+        // however, does this plan need to be scheduled so that it is the _last_ plan
+        // occuring at the decided upon time?
+        // that way it is unequivically reporting out on the state of the world
+        // at the _end_ of the reported time?
+        if self.more_plans() {
+            self.add_plan(self.get_current_time() + report_period, move |context| {
+                context.count_person_properties_and_report(report_period);
+            });
+            let people_data = self.get_data_container(PeoplePlugin).unwrap();
+            let person_properties_map = people_data.properties_map.borrow();
+            let include_in_report = &people_data.include_in_periodic_report;
+            // iterate through the various properties that are in the report
+            // and call their summarize method to get the counts of each property value
+            for property in include_in_report.keys() {
+                // count the number of occurences of each property value
+                let mut property_values_tabulated = HashMap::<String, usize>::new();
+                // get the vector of values for the property from the properties map
+                // changing the box to a reference to the vector
+                let vec_of_values: &Vec<Box<dyn Any>> = person_properties_map
+                    .get(property)
+                    .unwrap()
+                    .downcast_ref()
+                    .unwrap();
+                //let vec_of_values: RefCell<&mut Vec<Box<dyn Any>>> = RefCell::new(person_properties_map.get(property).unwrap()
+                //.downcast_mut().unwrap());
+                for value in vec_of_values {
+                    *property_values_tabulated
+                        .entry(format!("{value:?}"))
+                        .or_insert(0) += 1;
+                }
+                // iterate through the tabulated values and send a report item for each
+                for property_value in property_values_tabulated.keys() {
+                    // send a generic report item for each property value
+                    self.send_report(PeriodicReportItem {
+                        time: self.get_current_time(),
+                        property_type: include_in_report.get(property).unwrap().to_string(),
+                        property_value: property_value.to_string(),
+                        count: *property_values_tabulated.get(property_value).unwrap(),
+                    });
+                }
+            }
+        }
+    }
 }
 
 pub trait ContextReportExt {
     fn add_report<T: Report + 'static>(&mut self, short_name: &str);
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
+    fn add_person_properties_report(&mut self, short_name: &str, report_period: f64);
 }
 
 impl ContextReportExt for Context {
@@ -143,6 +210,26 @@ impl ContextReportExt for Context {
     fn report_options(&mut self) -> &mut ConfigReportOptions {
         let data_container = self.get_data_container_mut(ReportPlugin);
         &mut data_container.config
+    }
+
+    /// Adds a report that counts the number of people with each person property value
+    fn add_person_properties_report(&mut self, short_name: &str, report_period: f64) {
+        create_report_trait!(PeriodicReportItem);
+        self.add_report::<PeriodicReportItem>(short_name);
+        // need to think a little bit about the flow here
+        // we could just call this function (no plan) as the last thing in the init sequence,
+        // but then it would be reporting on the simulation at the end of init
+        // and the beginning of simulation time
+        // need to think a bit about flow here
+        // i think adding it as a plan at time 0 guarantees that it reports out on
+        // the initial state of the simulation in a way the user can reason about more
+        // based on whether they call the add report function at the beginning or end
+        // of init
+        // presumably, the user knows the state of the world that they set up the init with,
+        // but it's not obvious that the user knows the state of the world at the end of init
+        self.add_plan(0.0, move |context| {
+            context.count_person_properties_and_report(report_period);
+        });
     }
 }
 
