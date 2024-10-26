@@ -54,7 +54,7 @@ impl fmt::Debug for PersonId {
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy + fmt::Display {
     type Value: Copy;
-    fn initialize(context: &mut Context, person_id: PersonId) -> Self::Value;
+    fn initialize(context: &mut Context, person_id: PersonId) -> Option<Self::Value>;
     fn include_in_periodic_report(&self) -> bool;
 }
 
@@ -75,7 +75,7 @@ macro_rules! define_person_property {
             fn initialize(
                 context: &mut $crate::context::Context,
                 _person: $crate::people::PersonId,
-            ) -> Self::Value {
+            ) -> Option<$value> {
                 // if include this property in periodic report, add it
                 // to properties to include
                 // the problem with this lazy initialization is that properties that
@@ -97,6 +97,19 @@ macro_rules! define_person_property {
                         stringify!($person_property).to_string(),
                     );
                 }
+                // here is the pattern I want:
+                // the initializer could return none, it could return the default,
+                // or it could return the value from some user callback
+                // i can't just wrap the output in Some and return that, because
+                // then we are returning Some(None) potentially?
+                // the problem is that the user callback needs to also return an option
+                // the question is how to do that here rather than passing it onto the user
+                // ideally, I want to do this
+                // let init_value = $initialize(context, _person);
+                // match init_value {
+                //     None => None,
+                //     _ => Some(value)
+                // }
                 $initialize(context, _person)
             }
             // still need this in case the person property doesn't
@@ -116,9 +129,7 @@ macro_rules! define_person_property {
             $person_property,
             $value,
             $include,
-            |_context, _person_id| {
-                panic!("Property not initialized");
-            }
+            |_context, _person_id| { None }
         );
     };
 }
@@ -135,7 +146,7 @@ macro_rules! define_person_property_with_default {
             $person_property,
             $value,
             $include,
-            |_context, _person_id| { $default }
+            |_context, _person_id| { Some($default) }
         );
     };
 }
@@ -266,21 +277,19 @@ impl ContextPeopleExt for Context {
         person_id: PersonId,
         property: T,
     ) -> T::Value {
-        // create a scope to deal with ownership rules
-        // in the initialization, we need a mutable reference to context to add the property
-        // to the list of properties to be included in the periodic report
-        {
-            let data_container = self.get_data_container(PeoplePlugin)
+        let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
-            // Attempt to retrieve the existing value
-            if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
-                return value;
-            }
+        // Attempt to retrieve the existing value
+        if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
+            return value;
         }
 
         // Initialize the property. This does not fire a change event
-        let initialized_value = T::initialize(self, person_id);
+        // ok to call unwrap here because the property that returns None from get_person_property_ref
+        // in this case (i.e., hasn't been initialized yet) has a user-specified default/initializer
+        // and will return a some variant accordingly
+        let initialized_value = T::initialize(self, person_id).expect("Property not initialized");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         data_container.set_person_property(person_id, property, initialized_value);
@@ -318,6 +327,8 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        // initialize_value will only ever matter if there is something in that function body
+        // don't want to yet call unwrap on the initialize because we don't know if the value is of some variant or not
         let initialize_value = T::initialize(self, person_id);
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
@@ -326,8 +337,14 @@ impl ContextPeopleExt for Context {
         let previous_value = match current_value {
             Some(current_value) => current_value,
             None => {
-                data_container.set_person_property(person_id, property, initialize_value);
-                initialize_value
+                // in the none variant, we know the person property was set up with a default
+                // and therefore an initializer
+                data_container.set_person_property(
+                    person_id,
+                    property,
+                    initialize_value.expect("Property not initialized"),
+                );
+                initialize_value.unwrap()
             }
         };
 
@@ -362,7 +379,7 @@ mod test {
         Low,
     }
     define_person_property!(RiskCategoryType, RiskCategory, true);
-    define_person_property_with_default!(IsRunner, bool, false, true);
+    define_person_property_with_default!(IsRunner, bool, true, false);
     define_person_property!(
         RunningShoes,
         u8,
@@ -370,9 +387,9 @@ mod test {
         |context: &mut Context, person: PersonId| {
             let is_runner = context.get_person_property(person, IsRunner);
             if is_runner {
-                4
+                Some(4)
             } else {
-                0
+                Some(0)
             }
         }
     );

@@ -21,9 +21,9 @@ define_person_property!(
     |context: &mut Context, person_id| {
         let age = context.get_person_property(person_id, Age);
         if age > 10 {
-            context.sample_range(VaccineRng, 0..5)
+            Some(context.sample_range(VaccineRng, 0..5))
         } else {
-            0
+            Some(0)
         }
     }
 );
