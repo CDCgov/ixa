@@ -10,7 +10,8 @@ use std::{
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
-struct PeopleData {
+#[allow(clippy::module_name_repetitions)]
+pub struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
 }

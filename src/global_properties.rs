@@ -31,7 +31,8 @@ pub trait GlobalProperty: Any {
 
 pub use define_global_property;
 
-struct GlobalPropertiesDataContainer {
+#[allow(clippy::module_name_repetitions)]
+pub struct GlobalPropertiesDataContainer {
     global_property_container: HashMap<TypeId, Box<dyn Any>>,
 }
 

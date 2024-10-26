@@ -231,7 +231,7 @@ pub trait DataPlugin: Any {
 #[macro_export]
 macro_rules! define_data_plugin {
     ($plugin:ident, $data_container:ty, $default: expr) => {
-        struct $plugin;
+        pub struct $plugin;
 
         impl $crate::context::DataPlugin for $plugin {
             type DataContainer = $data_container;

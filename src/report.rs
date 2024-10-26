@@ -72,7 +72,8 @@ macro_rules! create_report_trait {
     };
 }
 
-struct ReportData {
+#[allow(clippy::module_name_repetitions)]
+pub struct ReportData {
     file_writers: RefCell<HashMap<TypeId, Writer<File>>>,
     config: ConfigReportOptions,
 }

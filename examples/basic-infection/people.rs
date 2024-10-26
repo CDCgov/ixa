@@ -26,7 +26,8 @@ pub trait ContextPeopleExt {
     fn get_population(&self) -> usize;
 }
 
-struct PeopleData {
+#[allow(clippy::module_name_repetitions)]
+pub struct PeopleData {
     people_map: HashMap<usize, InfectionStatus>,
 }
 // Register the data container in context

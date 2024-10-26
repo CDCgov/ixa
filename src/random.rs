@@ -45,7 +45,8 @@ struct RngHolder {
     rng: Box<dyn Any>,
 }
 
-struct RngData {
+#[allow(clippy::module_name_repetitions)]
+pub struct RngData {
     base_seed: u64,
     rng_holders: RefCell<HashMap<TypeId, RngHolder>>,
 }
