@@ -66,6 +66,11 @@ impl<T> Queue<T> {
         self.data_map.remove(&id.id).expect("Plan does not exist");
     }
 
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
     /// Retrieve the earliest plan in the queue
     ///
     /// Returns the next plan if it exists or else `None` if the queue is empty
@@ -153,19 +158,23 @@ mod tests {
         plan_queue.add_plan(1.0, 1);
         plan_queue.add_plan(3.0, 3);
         plan_queue.add_plan(2.0, 2);
+        assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 2.0);
         assert_eq!(next_plan.data, 2);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 3.0);
         assert_eq!(next_plan.data, 3);
 
+        assert!(plan_queue.is_empty());
         assert!(plan_queue.get_next_plan().is_none());
     }
 
@@ -174,15 +183,18 @@ mod tests {
         let mut plan_queue = Queue::new();
         plan_queue.add_plan(1.0, 1);
         plan_queue.add_plan(1.0, 2);
+        assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 2);
 
+        assert!(plan_queue.is_empty());
         assert!(plan_queue.get_next_plan().is_none());
     }
 
@@ -193,15 +205,18 @@ mod tests {
         let plan_to_cancel = plan_queue.add_plan(2.0, 2);
         plan_queue.add_plan(3.0, 3);
         plan_queue.cancel_plan(&plan_to_cancel);
+        assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 3.0);
         assert_eq!(next_plan.data, 3);
 
+        assert!(plan_queue.is_empty());
         assert!(plan_queue.get_next_plan().is_none());
     }
 
@@ -210,6 +225,7 @@ mod tests {
         let mut plan_queue = Queue::new();
         plan_queue.add_plan(1.0, 1);
         plan_queue.add_plan(2.0, 2);
+        assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.0);
@@ -217,14 +233,17 @@ mod tests {
 
         plan_queue.add_plan(1.5, 3);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 1.5);
         assert_eq!(next_plan.data, 3);
 
+        assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
         assert_eq!(next_plan.time, 2.0);
         assert_eq!(next_plan.data, 2);
 
+        assert!(plan_queue.is_empty());
         assert!(plan_queue.get_next_plan().is_none());
     }
 
@@ -233,7 +252,10 @@ mod tests {
     fn cancel_invalid_plan() {
         let mut plan_queue = Queue::<()>::new();
         let plan_to_cancel = plan_queue.add_plan(1.0, ());
+        // is_empty just checks for a plan existing, not whether it is valid/has data
+        assert!(!plan_queue.is_empty());
         plan_queue.get_next_plan();
+        assert!(plan_queue.is_empty());
         plan_queue.cancel_plan(&plan_to_cancel);
     }
 }

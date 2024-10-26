@@ -184,6 +184,11 @@ impl Context {
         self.current_time
     }
 
+    #[must_use]
+    pub fn more_plans(&self) -> bool {
+        !self.plan_queue.is_empty()
+    }
+
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         // Start plan loop
@@ -251,8 +256,10 @@ mod tests {
     #[test]
     fn empty_context() {
         let mut context = Context::new();
+        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 0.0);
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -299,9 +306,11 @@ mod tests {
     fn timed_plan_only() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
+        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -322,9 +331,11 @@ mod tests {
             context.get_data_container_mut(ComponentA).push(1);
         });
         add_plan(&mut context, 1.0, 2);
+        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -335,9 +346,11 @@ mod tests {
             add_plan(context, 1.0, 2);
             context.get_data_container_mut(ComponentA).push(3);
         });
+        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -351,12 +364,14 @@ mod tests {
             });
             context.get_data_container_mut(ComponentA).push(3);
         });
+        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(
             *context.get_data_container_mut(ComponentA),
             vec![1, 3, 4, 2]
         );
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -370,15 +385,18 @@ mod tests {
                 context.get_data_container_mut(ComponentA).push(2);
             });
         });
+        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2, 3]);
+        assert!(!context.more_plans());
     }
 
     #[test]
     fn cancel_plan() {
         let mut context = Context::new();
         let to_cancel = add_plan(&mut context, 2.0, 1);
+        assert!(context.more_plans());
         context.add_plan(1.0, move |context| {
             context.cancel_plan(&to_cancel);
         });
@@ -386,6 +404,7 @@ mod tests {
         assert_eq!(context.get_current_time(), 1.0);
         let test_vec: Vec<u32> = vec![];
         assert_eq!(*context.get_data_container_mut(ComponentA), test_vec);
+        assert!(!context.more_plans());
     }
 
     #[test]
@@ -398,19 +417,23 @@ mod tests {
                 context.get_data_container_mut(ComponentA).push(3);
             });
         });
+        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
+        assert!(!context.more_plans());
     }
 
     #[test]
     fn plans_at_same_time_fire_in_order() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
+        assert!(context.more_plans());
         add_plan(&mut context, 1.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+        assert!(!context.more_plans());
     }
 
     #[derive(Copy, Clone)]
@@ -516,11 +539,13 @@ mod tests {
     fn shutdown_cancels_plans() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
+        assert!(context.more_plans());
         context.add_plan(1.5, Context::shutdown);
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert!(context.more_plans());
     }
 
     #[test]
@@ -535,9 +560,11 @@ mod tests {
             });
             context.shutdown();
         });
+        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert!(!context.more_plans());
     }
 
     #[test]
