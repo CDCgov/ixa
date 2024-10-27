@@ -19,7 +19,7 @@ fn main() {
     // Load people from csv and set up some base properties
     population_loader::init(&mut context);
 
-    context.add_person_properties_report("person_properties_report", 1.0);
+    context.add_person_properties_report("person_properties_report", 0.5);
 
     context.execute();
 }

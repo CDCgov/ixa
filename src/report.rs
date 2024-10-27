@@ -132,26 +132,26 @@ impl Context {
             self.add_plan(self.get_current_time() + report_period, move |context| {
                 context.count_person_properties_and_report(report_period);
             });
-            let people_data = self.get_data_container(PeoplePlugin).unwrap();
-            let include_in_report = &people_data.include_in_periodic_report;
-            // iterate through the various properties that are in the report
-            // and call their tabulate method to get the counts of each property value
-            for property in include_in_report.values() {
-                // use a trait function to get the tabulation of values for the property
-                // in essence, this function grabs the property vector for this particular property
-                // and turns that into a vector of property values of the right type and then tabulates
-                let property_values_tabulated =
-                    property.get_tabulation(people_data.properties_map.borrow());
-                // iterate through the tabulated values and send a report item for each
-                for property_value in property_values_tabulated.keys() {
-                    // send a generic report item for each property value
-                    self.send_report(PeriodicReportItem {
-                        time: self.get_current_time(),
-                        property_type: property.to_string(),
-                        property_value: property_value.to_string(),
-                        count: *property_values_tabulated.get(property_value).unwrap(),
-                    });
-                }
+        }
+        let people_data = self.get_data_container(PeoplePlugin).unwrap();
+        let include_in_report = &people_data.include_in_periodic_report;
+        // iterate through the various properties that are in the report
+        // and call their tabulate method to get the counts of each property value
+        for property in include_in_report.values() {
+            // use a trait function to get the tabulation of values for the property
+            // in essence, this function grabs the property vector for this particular property
+            // and turns that into a vector of property values of the right type and then tabulates
+            let property_values_tabulated =
+                property.get_tabulation(people_data.properties_map.borrow());
+            // iterate through the tabulated values and send a report item for each
+            for property_value in property_values_tabulated.keys() {
+                // send a generic report item for each property value
+                self.send_report(PeriodicReportItem {
+                    time: self.get_current_time(),
+                    property_type: property.to_string(),
+                    property_value: property_value.to_string(),
+                    count: *property_values_tabulated.get(property_value).unwrap(),
+                });
             }
         }
     }
