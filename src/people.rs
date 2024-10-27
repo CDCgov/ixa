@@ -14,7 +14,7 @@ use std::{
 pub struct PeopleData {
     current_population: usize,
     pub(crate) properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    pub include_in_periodic_report: Vec<Box<dyn PersonPropertiesPeriodicReport>>,
+    pub include_in_periodic_report: HashMap<TypeId, Box<dyn PersonPropertiesPeriodicReport>>,
 }
 
 define_data_plugin!(
@@ -23,7 +23,7 @@ define_data_plugin!(
     PeopleData {
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
-        include_in_periodic_report: Vec::new(),
+        include_in_periodic_report: HashMap::new(),
     }
 );
 
@@ -126,13 +126,19 @@ macro_rules! define_person_property {
                 // which gives the default values of the person properties
                 // and then our associated ixa python package can stitch together the two
                 // to make a whole person properties report for all times
-                if $include {
-                    let data_container =
-                        context.get_data_container_mut($crate::people::PeoplePlugin);
+                // is this the most idiomatic way to do this check?
+                let data_container = context.get_data_container_mut($crate::people::PeoplePlugin);
+                if $include
+                    & !data_container
+                        .include_in_periodic_report
+                        .contains_key(&std::any::TypeId::of::<Self>())
+                {
                     // add the property to the vector of properties to include
+                    // if the type id does not exist already
                     data_container
                         .include_in_periodic_report
-                        .push(Box::new(Self));
+                        .entry(std::any::TypeId::of::<Self>())
+                        .or_insert(Box::new(Self));
                 }
                 // here is the pattern I want:
                 // the initializer could return none, it could return the default,
@@ -344,11 +350,16 @@ impl ContextPeopleExt for Context {
 
         // if include this property in periodic report, add it
         // to properties to include
-        if property.include_in_periodic_report() {
-            let data_container = self.get_data_container_mut(PeoplePlugin);
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        if property.include_in_periodic_report()
+            & !data_container
+                .include_in_periodic_report
+                .contains_key(&std::any::TypeId::of::<T>())
+        {
             data_container
                 .include_in_periodic_report
-                .push(Box::new(property));
+                .entry(std::any::TypeId::of::<T>())
+                .or_insert(Box::new(property));
         }
     }
 
