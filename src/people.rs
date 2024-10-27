@@ -102,8 +102,7 @@ macro_rules! define_person_property {
                             *tabulation.entry(("None").to_string()).or_insert(0) += 1;
                         }
                         Some(value) => {
-                            let count = tabulation.entry(format!("{value:?}")).or_insert(0);
-                            *count += 1;
+                            *tabulation.entry(format!("{value:?}")).or_insert(0) += 1;
                         }
                     }
                 }
@@ -412,8 +411,11 @@ impl ContextPeopleExt for Context {
 #[cfg(test)]
 mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
-    use crate::{context::Context, people::PeoplePlugin};
-    use std::{cell::RefCell, rc::Rc};
+    use crate::{
+        context::Context,
+        people::{PeoplePlugin, PersonPropertiesPeriodicReport},
+    };
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     define_person_property!(Age, u8, false);
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -421,8 +423,8 @@ mod test {
         High,
         Low,
     }
-    define_person_property!(RiskCategoryType, RiskCategory, true);
-    define_person_property_with_default!(IsRunner, bool, true, false);
+    define_person_property!(RiskCategoryType, RiskCategory, false);
+    define_person_property_with_default!(IsRunner, bool, false, false);
     define_person_property!(
         RunningShoes,
         u8,
@@ -678,5 +680,55 @@ mod test {
         let mut context = Context::new();
         context.add_person();
         context.get_person_id(1);
+    }
+
+    #[test]
+    fn get_tabulation() {
+        let mut context = Context::new();
+        for i in 0..5 {
+            let person_id = context.add_person();
+            if i > 2 {
+                context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+            } else {
+                context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::High);
+            }
+            if i < 2 {
+                context.initialize_person_property(person_id, Age, 42);
+            } else if i == 3 {
+                context.initialize_person_property(person_id, Age, 24);
+            }
+            if i == 2 {
+                context.set_person_property(person_id, IsRunner, true);
+            } else if i == 4 {
+                context.get_person_property(person_id, IsRunner);
+            }
+        }
+        let people_data = context.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        let mut hash_map: HashMap<String, usize> = HashMap::new();
+        hash_map.entry("High".to_string()).or_insert(3);
+        hash_map.entry("Low".to_string()).or_insert(2);
+        assert_eq!(
+            RiskCategoryType.get_tabulation(people_data.properties_map.borrow()),
+            hash_map
+        );
+
+        let mut hash_map: HashMap<String, usize> = HashMap::new();
+        hash_map.entry("42".to_string()).or_insert(2);
+        hash_map.entry("24".to_string()).or_insert(1);
+        hash_map.entry("None".to_string()).or_insert(1);
+        assert_eq!(
+            Age.get_tabulation(people_data.properties_map.borrow()),
+            hash_map
+        );
+
+        let mut hash_map: HashMap<String, usize> = HashMap::new();
+        hash_map.entry("None".to_string()).or_insert(3);
+        hash_map.entry("true".to_string()).or_insert(1);
+        hash_map.entry("false".to_string()).or_insert(1);
+        assert_eq!(
+            IsRunner.get_tabulation(people_data.properties_map.borrow()),
+            hash_map
+        );
     }
 }
