@@ -2,7 +2,6 @@ use crate::context::Context;
 use crate::people::PeoplePlugin;
 use csv::Writer;
 use serde::Serialize;
-use std::any::Any;
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -134,31 +133,21 @@ impl Context {
                 context.count_person_properties_and_report(report_period);
             });
             let people_data = self.get_data_container(PeoplePlugin).unwrap();
-            let person_properties_map = people_data.properties_map.borrow();
             let include_in_report = &people_data.include_in_periodic_report;
             // iterate through the various properties that are in the report
-            // and call their summarize method to get the counts of each property value
-            for property in include_in_report.keys() {
-                // count the number of occurences of each property value
-                let mut property_values_tabulated = HashMap::<String, usize>::new();
-                // get the vector of values for the property from the properties map
-                // changing the box to a reference to the vector
-                let vec_of_values: &Vec<Box<dyn Any>> = person_properties_map
-                    .get(property)
-                    .unwrap()
-                    .downcast_ref()
-                    .unwrap();
-                for value in vec_of_values {
-                    *property_values_tabulated
-                        .entry(format!("{value:?}"))
-                        .or_insert(0) += 1;
-                }
+            // and call their tabulate method to get the counts of each property value
+            for property in include_in_report {
+                // use a trait function to get the tabulation of values for the property
+                // in essence, this function grabs the property vector for this particular property
+                // and turns that into a vector of property values of the right type and then tabulates
+                let property_values_tabulated =
+                    property.get_tabulation(people_data.properties_map.borrow());
                 // iterate through the tabulated values and send a report item for each
                 for property_value in property_values_tabulated.keys() {
                     // send a generic report item for each property value
                     self.send_report(PeriodicReportItem {
                         time: self.get_current_time(),
-                        property_type: include_in_report.get(property).unwrap().to_string(),
+                        property_type: property.to_string(),
                         property_value: property_value.to_string(),
                         count: *property_values_tabulated.get(property_value).unwrap(),
                     });

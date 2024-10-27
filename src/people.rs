@@ -2,7 +2,7 @@ use crate::{context::Context, define_data_plugin};
 use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
-    cell::{RefCell, RefMut},
+    cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     fmt,
 };
@@ -14,7 +14,7 @@ use std::{
 pub struct PeopleData {
     current_population: usize,
     pub(crate) properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    pub include_in_periodic_report: HashMap<TypeId, String>,
+    pub include_in_periodic_report: Vec<Box<dyn PersonPropertiesPeriodicReport>>,
 }
 
 define_data_plugin!(
@@ -23,7 +23,7 @@ define_data_plugin!(
     PeopleData {
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
-        include_in_periodic_report: HashMap::new()
+        include_in_periodic_report: Vec::new(),
     }
 );
 
@@ -52,10 +52,17 @@ impl fmt::Debug for PersonId {
 // * specify a Value type to represent the data associated with the property,
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
-pub trait PersonProperty: Copy + fmt::Display {
+pub trait PersonProperty: Copy {
     type Value: Copy;
     fn initialize(context: &mut Context, person_id: PersonId) -> Option<Self::Value>;
     fn include_in_periodic_report(&self) -> bool;
+}
+
+pub trait PersonPropertiesPeriodicReport: fmt::Display {
+    fn get_tabulation(
+        &self,
+        properties_map: Ref<'_, HashMap<TypeId, Box<dyn Any>>>,
+    ) -> HashMap<String, usize>;
 }
 
 /// Defines a person property with the following parameters:
@@ -70,6 +77,39 @@ macro_rules! define_person_property {
     ($person_property:ident, $value:ty, $include:expr, $initialize:expr) => {
         #[derive(Copy, Clone)]
         pub struct $person_property;
+        impl std::fmt::Display for $person_property {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, stringify!($person_property))
+            }
+        }
+        impl $crate::people::PersonPropertiesPeriodicReport for $person_property {
+            fn get_tabulation(
+                &self,
+                properties_map: std::cell::Ref<
+                    '_,
+                    std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any>>,
+                >,
+            ) -> std::collections::HashMap<String, usize> {
+                let values = properties_map
+                    .get(&std::any::TypeId::of::<Self>())
+                    .expect("Property not found in properties_map")
+                    .downcast_ref::<Vec<Option<$value>>>()
+                    .expect("Type mismatch in properties_map");
+                let mut tabulation = std::collections::HashMap::new();
+                for value in values {
+                    match value {
+                        None => {
+                            *tabulation.entry(("None").to_string()).or_insert(0) += 1;
+                        }
+                        Some(value) => {
+                            let count = tabulation.entry(format!("{value:?}")).or_insert(0);
+                            *count += 1;
+                        }
+                    }
+                }
+                tabulation
+            }
+        }
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
             fn initialize(
@@ -89,13 +129,10 @@ macro_rules! define_person_property {
                 if $include {
                     let data_container =
                         context.get_data_container_mut($crate::people::PeoplePlugin);
-                    // we have both the type id by which the properties map is indexed
-                    // and the string of the person property
-                    // which is the user useful value for reporting out
-                    data_container.include_in_periodic_report.insert(
-                        std::any::TypeId::of::<Self>(),
-                        stringify!($person_property).to_string(),
-                    );
+                    // add the property to the vector of properties to include
+                    data_container
+                        .include_in_periodic_report
+                        .push(Box::new(Self));
                 }
                 // here is the pattern I want:
                 // the initializer could return none, it could return the default,
@@ -116,11 +153,6 @@ macro_rules! define_person_property {
             // get initialized until later via context.initialize_person_property
             fn include_in_periodic_report(&self) -> bool {
                 $include
-            }
-        }
-        impl std::fmt::Display for $person_property {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, stringify!($person_property))
             }
         }
     };
@@ -240,7 +272,7 @@ pub trait ContextPeopleExt {
     /// not run.
     /// Panics if the property is already initialized. Does not fire a change
     /// event.
-    fn initialize_person_property<T: PersonProperty + 'static>(
+    fn initialize_person_property<T: PersonProperty + PersonPropertiesPeriodicReport + 'static>(
         &mut self,
         person_id: PersonId,
         _property: T,
@@ -297,7 +329,7 @@ impl ContextPeopleExt for Context {
         initialized_value
     }
 
-    fn initialize_person_property<T: PersonProperty + 'static>(
+    fn initialize_person_property<T: PersonProperty + PersonPropertiesPeriodicReport + 'static>(
         &mut self,
         person_id: PersonId,
         property: T,
@@ -316,7 +348,7 @@ impl ContextPeopleExt for Context {
             let data_container = self.get_data_container_mut(PeoplePlugin);
             data_container
                 .include_in_periodic_report
-                .insert(std::any::TypeId::of::<T>(), property.to_string());
+                .push(Box::new(property));
         }
     }
 
