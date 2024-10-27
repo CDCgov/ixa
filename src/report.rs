@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::people::PeoplePlugin;
 use csv::Writer;
+use serde::Deserialize;
 use serde::Serialize;
 use std::any::TypeId;
 use std::cell::RefCell;
@@ -92,7 +93,7 @@ crate::context::define_data_plugin!(
     }
 );
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct PeriodicReportItem {
     time: f64,
     property_type: String,
@@ -133,7 +134,8 @@ impl Context {
                 context.count_person_properties_and_report(report_period);
             });
         }
-        let people_data = self.get_data_container(PeoplePlugin).unwrap();
+        let people_data = self.get_data_container(PeoplePlugin)
+        .expect("PeoplePlugin is not initialized; make sure you add a person before reporting on their properties.");
         let include_in_report = &people_data.include_in_periodic_report;
         // iterate through the various properties that are in the report
         // and call their tabulate method to get the counts of each property value
@@ -223,6 +225,9 @@ impl ContextReportExt for Context {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{
+        define_person_property, define_person_property_with_default, people::ContextPeopleExt,
+    };
     use core::convert::TryInto;
     use serde_derive::{Deserialize, Serialize};
     use std::thread;
@@ -420,5 +425,166 @@ mod test {
                 assert_eq!(record.id, id_expected);
             }
         }
+    }
+    #[test]
+    fn person_property_report_adds_plan() {
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("person_property_report_adds_plan".to_string())
+            .directory(path.clone());
+        assert!(!context.more_plans());
+        context.add_person_properties_report("", 1.0);
+        assert!(context.more_plans());
+        // check that we have implemented trait report for PeriodicReportItem
+        let periodic_report_item = PeriodicReportItem {
+            time: 0.0,
+            property_type: "test".to_string(),
+            property_value: "test".to_string(),
+            count: 0,
+        };
+        assert_eq!(
+            periodic_report_item.type_id(),
+            TypeId::of::<PeriodicReportItem>()
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "PeoplePlugin is not initialized; make sure you add a person before reporting on their properties."
+    )]
+    fn person_properties_report_with_no_people() {
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("person_properties_report_with_no_people".to_string())
+            .directory(path.clone());
+        assert!(!context.more_plans());
+        context.add_person_properties_report("", 1.0);
+        assert!(context.more_plans());
+        context.execute();
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn person_property_report_self_schedules() {
+        // checks whether the person properties report schedules itself
+        // based on whether there are plans in the queue
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("person_property_report_self_schedules".to_string())
+            .directory(path.clone());
+        define_person_property!(TestProperty, bool, true);
+        context.add_person_properties_report("", 1.0);
+        assert!(context.more_plans());
+        // Add a person to the context
+        let person = context.add_person();
+        context.initialize_person_property(person, TestProperty, false);
+        context.add_plan(1.0, move |context| {
+            context.set_person_property(person, TestProperty, true);
+        });
+        context.add_plan(2.0, move |context| {
+            context.set_person_property(person, TestProperty, true);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn selected_properties_included() {
+        // test that only the properties that are set to be included
+        // in the report are included
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("selected_properties_included".to_string())
+            .directory(path.clone());
+        context.add_person_properties_report("", 1.0);
+        // Add a person with a property that should be included in the report
+        define_person_property_with_default!(IncludedProperty, u8, true, 0);
+        define_person_property_with_default!(ExcludedProperty, u8, false, 0);
+        let person = context.add_person();
+        context.set_person_property(person, IncludedProperty, 42);
+        context.set_person_property(person, ExcludedProperty, 24);
+
+        // Execute the context to generate the report
+        context.execute();
+
+        // Check that the report file exists and contains the expected data
+        let file_path = path.join("selected_properties_included.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut records = reader.deserialize::<PeriodicReportItem>();
+
+        let item: PeriodicReportItem = records.next().expect("No record found").unwrap();
+        assert_eq!(item.time, 0.0);
+        assert_eq!(item.property_type, "IncludedProperty");
+        assert_eq!(item.property_value, "42");
+        assert_eq!(item.count, 1);
+        assert!(records.next().is_none());
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn properties_only_included_after_init() {
+        // up for debate whether this is actually good behavior or not
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("properties_only_included_after_init".to_string())
+            .directory(path.clone());
+        context.add_person_properties_report("", 1.0);
+        // Add a person with a property that should be included in the report
+        define_person_property_with_default!(PropertyWithDefault, u8, true, 0);
+        define_person_property!(PropertyInited, u8, true);
+        let person = context.add_person();
+        context.add_plan(1.0, move |context| {
+            context.set_person_property(person, PropertyWithDefault, 42);
+        });
+        context.add_plan(2.0, move |context| {
+            context.initialize_person_property(person, PropertyInited, 24);
+        });
+        // Execute the context to generate the report
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+
+        // Check that the report file exists and contains the expected data
+        let file_path = path.join("properties_only_included_after_init.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut records = reader.deserialize::<PeriodicReportItem>();
+
+        let item: PeriodicReportItem = records.next().expect("No record found").unwrap();
+        assert_eq!(item.time, 1.0);
+        assert_eq!(item.property_type, "PropertyWithDefault");
+        assert_eq!(item.property_value, "42");
+        assert_eq!(item.count, 1);
+
+        let item: PeriodicReportItem = records.next().expect("No record found").unwrap();
+        assert_eq!(item.time, 2.0);
+        // don't know which item in which order because .values() visits in arbitrary order
+        assert_eq!(item.count, 1);
+
+        // but there should be two properties reported on at time 2.0
+        let item: PeriodicReportItem = records.next().expect("No record found").unwrap();
+        assert_eq!(item.time, 2.0);
+        assert_eq!(item.count, 1);
+
+        // should be no more records left
+        assert!(records.next().is_none());
     }
 }
