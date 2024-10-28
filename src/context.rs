@@ -469,6 +469,12 @@ mod tests {
     }
 
     #[test]
+    fn check_plan_priority_ordering() {
+        assert!(PlanPriority::First < PlanPriority::Normal);
+        assert!(PlanPriority::Normal < PlanPriority::Last);
+    }
+
+    #[test]
     fn plans_at_same_time_follow_priority() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
