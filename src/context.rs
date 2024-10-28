@@ -16,7 +16,7 @@ type Callback = dyn FnOnce(&mut Context);
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
 
-pub trait Event {
+pub trait IxaEvent {
     /// Called every time `context.subscribe_to_event` is called with this event
     fn on_subscribe(_context: &mut Context) {}
 }
@@ -76,7 +76,7 @@ impl Context {
     /// Handlers will be called upon event emission in order of subscription as
     /// queued `Callback`s with the appropriate event.
     #[allow(clippy::missing_panics_doc)]
-    pub fn subscribe_to_event<E: Event + Copy + 'static>(
+    pub fn subscribe_to_event<E: IxaEvent + Copy + 'static>(
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
     ) {
@@ -94,7 +94,7 @@ impl Context {
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
-    pub fn emit_event<E: Event + Copy + 'static>(&mut self, event: E) {
+    pub fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E) {
         // Destructure to obtain event handlers and plan queue
         let Context {
             event_handlers,
@@ -251,6 +251,7 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
+    use ixa_derive::IxaEvent;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -419,17 +420,15 @@ mod tests {
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, IxaEvent)]
     struct Event1 {
         pub data: usize,
     }
-    impl Event for Event1 {}
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, IxaEvent)]
     struct Event2 {
         pub data: usize,
     }
-    impl Event for Event2 {}
 
     #[test]
     fn simple_event() {

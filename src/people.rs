@@ -1,7 +1,8 @@
 use crate::{
-    context::{Context, Event},
+    context::{Context, IxaEvent},
     define_data_plugin,
 };
+use ixa_derive::IxaEvent;
 use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
@@ -72,11 +73,22 @@ pub trait PersonProperty: Copy {
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
-// The purpose of this trait is to allow us to store a vector of different PersonProperties
-// in an object safe way, and use them to emit change events.
+// The purpose of this trait is to enable storing a Vec of different
+// `PersonProperty` types. While `PersonProperty`` is *not* object safe,
+// primarily because it stores a different Value type for each kind of property,
+// `PersonPropertyHolder` is, meaning we can treat different types of properties
+// uniformly at runtime.
 pub trait PersonPropertyHolder {
-    // Adds a callback to callback_vec which can later be called with a new context
-    // to emit a change event
+    // Registers a callback in the provided `callback_vec` that, when invoked, can trigger
+    // a change event within the given `context` for a specific `person`. The purpose of this
+    // is to store the current value of the person property and defer the actual
+    // emission to when we have access to the new value.
+    //
+    // Parameters:
+    // - `context`: The mutable reference to the current execution context
+    // - `person`: The PersonId of the person for whom the property change event will be emitted.
+    // - `callback_vec`: A vector of boxed callback functions that will be called later to emit
+    //   change events.
     fn add_event_callback(
         &self,
         context: &mut Context,
@@ -274,12 +286,11 @@ impl PeopleData {
 
 // Emitted when a new person is created
 // These should not be emitted outside this module
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonCreatedEvent {
     pub person_id: PersonId,
 }
-impl Event for PersonCreatedEvent {}
 
 // Emitted when a person property is updated
 // These should not be emitted outside this module
@@ -290,7 +301,7 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub current: T::Value,
     pub previous: T::Value,
 }
-impl<T: PersonProperty + 'static> Event for PersonPropertyChangeEvent<T> {
+impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
     fn on_subscribe(context: &mut Context) {
         if T::is_derived() {
             context.register_property::<T>();

@@ -1,5 +1,6 @@
-use ixa::context::{Context, Event};
+use ixa::context::{Context, IxaEvent};
 use ixa::define_data_plugin;
+use ixa_derive::IxaEvent;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -11,14 +12,13 @@ pub enum InfectionStatus {
     R,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IxaEvent)]
 pub struct InfectionStatusEvent {
     #[allow(dead_code)]
     pub prev_status: InfectionStatus,
     pub updated_status: InfectionStatus,
     pub person_id: usize,
 }
-impl Event for InfectionStatusEvent {}
 
 pub trait ContextPeopleExt {
     fn create_person(&mut self);
