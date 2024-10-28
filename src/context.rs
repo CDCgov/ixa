@@ -55,7 +55,7 @@ pub enum PlanPriority {
 ///
 /// The simulation also has a separate callback mechanism. Callbacks
 /// fire before the next timed event (even if it is scheduled for the
-/// current time. This allows modules to schedule actions for immediate
+/// current time). This allows modules to schedule actions for immediate
 /// execution but outside of the current iteration of the event loop.
 ///
 /// Modules can also emit 'events' that other modules can subscribe to handle by
@@ -137,7 +137,8 @@ impl Context {
     }
 
     /// Add a plan to the future event list at the specified time and with the
-    /// specified priority
+    /// specified priority (first, normal, or last among plans at the
+    /// specified time)
     ///
     /// Returns an `Id` for the newly-added plan that can be used to cancel it
     /// if needed.

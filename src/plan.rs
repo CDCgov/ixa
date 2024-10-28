@@ -1,7 +1,7 @@
-//! A priority queue that stores arbitrary data sorted by time
+//! A priority queue that stores arbitrary data sorted by time and priority
 //!
-//! Defines a `Queue<T, Q>` that is intended to store a queue of items of type
-//! T - sorted by `f64` time and definable priority `Q` - called 'plans'.
+//! Defines a `Queue<T, U>` that is intended to store a queue of items of type
+//! T - sorted by `f64` time and definable priority `P` - called 'plans'.
 //! This queue has methods for adding plans, cancelling plans, and retrieving
 //! the earliest plan in the queue. Adding a plan is *O*(log(*n*)) while
 //! cancellation and retrieval are *O*(1).
@@ -17,7 +17,7 @@ use std::{
 /// A priority queue that stores arbitrary data sorted by time
 ///
 /// Items of type `T` are stored in order by `f64` time and called `Plan<T>`.
-/// Plans can have priorities given by some specified orderable type `Q`.
+/// Plans can have priorities given by some specified orderable type `P`.
 /// When plans are created they are sequentially assigned an `Id` that is a
 /// wrapped `u64`. If two plans are scheduled for the same time then the plan
 /// with the lowest priority is placed earlier. If two plans have the same time
