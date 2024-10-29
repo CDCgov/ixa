@@ -1,6 +1,6 @@
 //! A priority queue that stores arbitrary data sorted by time and priority
 //!
-//! Defines a `Queue<T, U>` that is intended to store a queue of items of type
+//! Defines a `Queue<T, P>` that is intended to store a queue of items of type
 //! T - sorted by `f64` time and definable priority `P` - called 'plans'.
 //! This queue has methods for adding plans, cancelling plans, and retrieving
 //! the earliest plan in the queue. Adding a plan is *O*(log(*n*)) while

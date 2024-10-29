@@ -29,7 +29,7 @@ pub trait IxaEvent {
 /// same time and with the same priority are handled in the order of scheduling.
 ///
 #[derive(PartialEq, Eq, Ord, PartialOrd)]
-pub enum PlanPriority {
+pub enum ExecutionPhase {
     First,
     Normal,
     Last,
@@ -63,7 +63,7 @@ pub enum PlanPriority {
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>, PlanPriority>,
+    plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
@@ -133,7 +133,7 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
-        self.add_plan_with_priority(time, callback, PlanPriority::Normal)
+        self.add_plan_with_phase(time, callback, ExecutionPhase::Normal)
     }
 
     /// Add a plan to the future event list at the specified time and with the
@@ -145,11 +145,11 @@ impl Context {
     /// # Panics
     ///
     /// Panics if time is in the past, infinite, or NaN.
-    pub fn add_plan_with_priority(
+    pub fn add_plan_with_phase(
         &mut self,
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
-        priority: PlanPriority,
+        priority: ExecutionPhase,
     ) -> Id {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
@@ -314,13 +314,13 @@ mod tests {
         })
     }
 
-    fn add_plan_with_priority(
+    fn add_plan_with_phase(
         context: &mut Context,
         time: f64,
         value: u32,
-        priority: PlanPriority,
+        priority: ExecutionPhase,
     ) -> Id {
-        context.add_plan_with_priority(
+        context.add_plan_with_phase(
             time,
             move |context| {
                 context.get_data_container_mut(ComponentA).push(value);
@@ -470,19 +470,19 @@ mod tests {
 
     #[test]
     fn check_plan_priority_ordering() {
-        assert!(PlanPriority::First < PlanPriority::Normal);
-        assert!(PlanPriority::Normal < PlanPriority::Last);
+        assert!(ExecutionPhase::First < ExecutionPhase::Normal);
+        assert!(ExecutionPhase::Normal < ExecutionPhase::Last);
     }
 
     #[test]
     fn plans_at_same_time_follow_priority() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        add_plan_with_priority(&mut context, 1.0, 5, PlanPriority::Last);
-        add_plan_with_priority(&mut context, 1.0, 3, PlanPriority::First);
+        add_plan_with_phase(&mut context, 1.0, 5, ExecutionPhase::Last);
+        add_plan_with_phase(&mut context, 1.0, 3, ExecutionPhase::First);
         add_plan(&mut context, 1.0, 2);
-        add_plan_with_priority(&mut context, 1.0, 6, PlanPriority::Last);
-        add_plan_with_priority(&mut context, 1.0, 4, PlanPriority::First);
+        add_plan_with_phase(&mut context, 1.0, 6, ExecutionPhase::Last);
+        add_plan_with_phase(&mut context, 1.0, 4, ExecutionPhase::First);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(
