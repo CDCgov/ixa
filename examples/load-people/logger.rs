@@ -25,7 +25,7 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(|context, event: PersonCreatedEvent| {
         let person = event.person_id;
         println!(
-            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({})",
+            "{:?} age: {}, {} vaccine doses, vaccine {:?} ({:?})",
             person,
             context.get_person_property(person, Age),
             context.get_person_property(person, VaccineDoses),
