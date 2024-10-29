@@ -21,12 +21,12 @@ pub trait IxaEvent {
     fn on_subscribe(_context: &mut Context) {}
 }
 
-/// An enum to indicate the priority for plans at a given time.
+/// An enum to indicate the phase for plans at a given time.
 ///
-/// Most plans will have `Normal` priority. Plans with priority `First` are
-/// handled before all `Normal` plans, and those with priority `Last` are
+/// Most plans will occur as `Normal`. Plans with phase `First` are
+/// handled before all `Normal` plans, and those with phase `Last` are
 /// handled after all `Normal` plans. In all cases ties between plans at the
-/// same time and with the same priority are handled in the order of scheduling.
+/// same time and with the same phase are handled in the order of scheduling.
 ///
 #[derive(PartialEq, Eq, Ord, PartialOrd)]
 pub enum ExecutionPhase {
@@ -124,8 +124,8 @@ impl Context {
         }
     }
 
-    /// Add a plan to the future event list at the specified time with normal
-    /// priority
+    /// Add a plan to the future event list at the specified time in the normal
+    /// phase
     ///
     /// Returns an `Id` for the newly-added plan that can be used to cancel it
     /// if needed.
@@ -137,7 +137,7 @@ impl Context {
     }
 
     /// Add a plan to the future event list at the specified time and with the
-    /// specified priority (first, normal, or last among plans at the
+    /// specified phase (first, normal, or last among plans at the
     /// specified time)
     ///
     /// Returns an `Id` for the newly-added plan that can be used to cancel it
@@ -149,13 +149,13 @@ impl Context {
         &mut self,
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
-        priority: ExecutionPhase,
+        phase: ExecutionPhase,
     ) -> Id {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
             "Time is invalid"
         );
-        self.plan_queue.add_plan(time, Box::new(callback), priority)
+        self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
 
     /// Cancel a plan that has been added to the queue
@@ -318,14 +318,14 @@ mod tests {
         context: &mut Context,
         time: f64,
         value: u32,
-        priority: ExecutionPhase,
+        phase: ExecutionPhase,
     ) -> Id {
         context.add_plan_with_phase(
             time,
             move |context| {
                 context.get_data_container_mut(ComponentA).push(value);
             },
-            priority,
+            phase,
         )
     }
 
@@ -469,13 +469,13 @@ mod tests {
     }
 
     #[test]
-    fn check_plan_priority_ordering() {
+    fn check_plan_phase_ordering() {
         assert!(ExecutionPhase::First < ExecutionPhase::Normal);
         assert!(ExecutionPhase::Normal < ExecutionPhase::Last);
     }
 
     #[test]
-    fn plans_at_same_time_follow_priority() {
+    fn plans_at_same_time_follow_phase() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
         add_plan_with_phase(&mut context, 1.0, 5, ExecutionPhase::Last);
