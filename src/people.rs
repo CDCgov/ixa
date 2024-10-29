@@ -1139,6 +1139,7 @@ mod test {
         assert_eq!(people.len(), 1);
     }
 
+    #[test]
     fn query_people_macro_change() {
         let mut context = Context::new();
         let person1 = context.add_person();
