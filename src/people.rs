@@ -600,7 +600,7 @@ macro_rules! people_query {
             // Set up any indexes that don't exist yet
             $(
                 if <$k as $crate::people::PersonProperty>::is_derived() {
-                    $ctx.register_derived_property($k);
+                    $ctx.register_property::<$k>();
                 }
                 $ctx.register_index($k);
             )*
@@ -608,7 +608,7 @@ macro_rules! people_query {
             $ctx.query_people(vec![
                 $((
                     std::any::TypeId::of::<$k>(),
-                    hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
+                    crate::hash::hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
                 ),)*
             ])
         }
@@ -620,12 +620,13 @@ mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
-        people::{PeoplePlugin, PersonPropertyHolder},
+        people::{PeoplePlugin, PersonPropertyHolder, Index},
+        hash::hash_ref,
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub enum AgeGroupType {
         Child,
         Adult,
@@ -1135,7 +1136,7 @@ mod test {
     #[test]
     fn query_derived_prop() {
         let mut context = Context::new();
-        define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
+        define_derived_property!(Senior, bool, [Age], |age| age >= 65);
 
         let person = context.add_person();
         let person2 = context.add_person();
