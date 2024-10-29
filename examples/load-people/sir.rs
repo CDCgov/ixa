@@ -4,7 +4,7 @@ use ixa::{
     people::{ContextPeopleExt, PersonCreatedEvent},
 };
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum DiseaseStatus {
     S,
     I,

@@ -20,3 +20,4 @@ ixa-derive = { path = "ixa-derive" }
 [dev-dependencies]
 rand_distr = "0.4.3"
 tempfile = "3.3"
+ordered-float = "4.3.0"
