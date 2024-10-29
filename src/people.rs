@@ -79,17 +79,15 @@ type ContextCallback = dyn FnOnce(&mut Context);
 // `PersonPropertyHolder` is, meaning we can treat different types of properties
 // uniformly at runtime.
 pub trait PersonPropertyHolder {
-    // Registers a callback in the provided `callback_vec` that, when invoked, can trigger
-    // a change event within the given `context` for a specific `person`. The purpose of this
-    // is to store the current value of the person property and defer the actual
-    // emission to when we have access to the new value.
+    // Registers a callback in the provided `callback_vec` that is invoked when
+    // a dependency of a derived property is updated for the given person
     //
     // Parameters:
     // - `context`: The mutable reference to the current execution context
     // - `person`: The PersonId of the person for whom the property change event will be emitted.
-    // - `callback_vec`: A vector of boxed callback functions that will be called later to emit
-    //   change events.
-    fn add_event_callback(
+    // - `callback_vec`: A vector of boxed callback functions that will be called
+    // - when a property is updated
+    fn dependency_changed(
         &self,
         context: &mut Context,
         person: PersonId,
@@ -106,13 +104,16 @@ impl<T> PersonPropertyHolder for T
 where
     T: PersonProperty + 'static,
 {
-    fn add_event_callback(
+    fn dependency_changed(
         &self,
         context: &mut Context,
         person: PersonId,
         callback_vec: &mut Vec<Box<ContextCallback>>,
     ) {
         let previous = context.get_person_property(person, T::get_instance());
+
+        // Stores the current value of the person property and defer the actual event
+        // emission to when we have access to the new value.
         callback_vec.push(Box::new(move |ctx| {
             let current = ctx.get_person_property(person, T::get_instance());
             let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
@@ -433,18 +434,7 @@ impl ContextPeopleExt for Context {
         value: T::Value,
     ) {
         assert!(!T::is_derived(), "Cannot set a derived property");
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-
-        let current_cached_value = *data_container.get_person_property_ref(person_id, property);
-        let previous_value = match current_cached_value {
-            Some(value) => value,
-            None => {
-                let initialize_value = T::compute(self, person_id);
-                data_container.set_person_property(person_id, property, initialize_value);
-                initialize_value
-            }
-        };
+        let previous_value = self.get_person_property(person_id, property);
 
         // Temporarily remove dependency properties since we need mutable references
         // to self during callback execution
@@ -462,7 +452,7 @@ impl ContextPeopleExt for Context {
             // If there are dependencies, set up a bunch of callbacks with the
             // current value
             for dep in &mut deps {
-                dep.add_event_callback(self, person_id, &mut dependency_event_callbacks);
+                dep.dependency_changed(self, person_id, &mut dependency_event_callbacks);
             }
 
             // Put the dependency list back in
@@ -481,7 +471,6 @@ impl ContextPeopleExt for Context {
         };
         self.emit_event(change_event);
 
-        // If there are dependency callbacks, call them with the updated value
         for callback in dependency_event_callbacks {
             callback(self);
         }
@@ -534,14 +523,24 @@ mod test {
             0
         }
     });
-    define_derived_property!(TrailRunner, bool, [IsRunner, Age], |is_runner, age| {
-        is_runner && age > 29
+    define_derived_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
+        is_runner && age >= 18
     });
     define_derived_property!(
-        UltraRunner,
+        SeniorRunner,
         bool,
-        [TrailRunner, Age],
-        |trail_runner, age| { trail_runner && age > 39 }
+        [AdultRunner, Age],
+        |adult_runner, age| { adult_runner && age >= 65 }
+    );
+    define_person_property_with_default!(IsSwimmer, bool, false);
+    define_derived_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
+        is_swimmer && age >= 18
+    });
+    define_derived_property!(
+        AdultAthlete,
+        bool,
+        [AdultRunner, AdultSwimmer],
+        |adult_runner, adult_swimmer| { adult_runner || adult_swimmer }
     );
 
     #[test]
@@ -838,20 +837,20 @@ mod test {
     fn get_derived_property_multiple_deps() {
         let mut context = Context::new();
         let person = context.add_person();
-        context.initialize_person_property(person, Age, 29);
+        context.initialize_person_property(person, Age, 17);
         context.initialize_person_property(person, IsRunner, true);
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
         context.subscribe_to_event(
-            move |_context, event: PersonPropertyChangeEvent<TrailRunner>| {
+            move |_context, event: PersonPropertyChangeEvent<AdultRunner>| {
                 assert_eq!(event.person_id.id, 0);
                 assert!(!event.previous);
                 assert!(event.current);
                 *flag_clone.borrow_mut() = true;
             },
         );
-        context.set_person_property(person, Age, 30);
+        context.set_person_property(person, Age, 18);
         context.execute();
         assert!(*flag.borrow());
     }
@@ -860,29 +859,29 @@ mod test {
     fn register_derived_only_once() {
         let mut context = Context::new();
         let person = context.add_person();
-        context.initialize_person_property(person, Age, 29);
+        context.initialize_person_property(person, Age, 17);
         context.initialize_person_property(person, IsRunner, true);
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
         context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<TrailRunner>| {
+            move |_context, _event: PersonPropertyChangeEvent<AdultRunner>| {
                 *flag_clone.borrow_mut() += 1;
             },
         );
         context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<TrailRunner>| {
+            move |_context, _event: PersonPropertyChangeEvent<AdultRunner>| {
                 // Make sure that we don't register multiple times
             },
         );
-        context.set_person_property(person, Age, 30);
+        context.set_person_property(person, Age, 18);
         context.execute();
         assert_eq!(*flag.borrow(), 1);
     }
 
     #[test]
     fn test_resolve_dependencies() {
-        let mut actual = UltraRunner.non_derived_dependencies();
+        let mut actual = SeniorRunner.non_derived_dependencies();
         let mut expected = vec![TypeId::of::<Age>(), TypeId::of::<IsRunner>()];
         actual.sort();
         expected.sort();
@@ -893,22 +892,45 @@ mod test {
     fn get_derived_property_dependent_on_another_derived() {
         let mut context = Context::new();
         let person = context.add_person();
-        context.initialize_person_property(person, Age, 40);
+        context.initialize_person_property(person, Age, 88);
         context.initialize_person_property(person, IsRunner, false);
 
-        let flag = Rc::new(RefCell::new(false));
+        let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
-        assert!(!context.get_person_property(person, UltraRunner));
+        assert!(!context.get_person_property(person, SeniorRunner));
         context.subscribe_to_event(
-            move |_context, event: PersonPropertyChangeEvent<UltraRunner>| {
+            move |_context, event: PersonPropertyChangeEvent<SeniorRunner>| {
                 assert_eq!(event.person_id.id, 0);
                 assert!(!event.previous);
                 assert!(event.current);
-                *flag_clone.borrow_mut() = true;
+                *flag_clone.borrow_mut() += 1;
             },
         );
         context.set_person_property(person, IsRunner, true);
         context.execute();
-        assert!(*flag.borrow());
+        assert_eq!(*flag.borrow(), 1);
+    }
+
+    #[test]
+    fn get_derived_property_diamond_dependencies() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        context.initialize_person_property(person, IsSwimmer, true);
+
+        let flag = Rc::new(RefCell::new(0));
+        let flag_clone = flag.clone();
+        assert!(!context.get_person_property(person, AdultAthlete));
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<AdultAthlete>| {
+                assert_eq!(event.person_id.id, 0);
+                assert!(!event.previous);
+                assert!(event.current);
+                *flag_clone.borrow_mut() += 1;
+            },
+        );
+        context.set_person_property(person, Age, 18);
+        context.execute();
+        assert_eq!(*flag.borrow(), 1);
     }
 }
