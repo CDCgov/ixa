@@ -24,6 +24,7 @@ struct Index {
     // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
 }
+
 impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
         let mut index = Self {
@@ -105,7 +106,7 @@ impl fmt::Debug for PersonId {
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
-    type Value: Copy + Debug + Hash;
+    type Value: Copy + Debug + Hash + PartialEq;
     #[must_use]
     fn is_derived() -> bool {
         false
@@ -504,6 +505,10 @@ impl ContextPeopleExt for Context {
         assert!(!T::is_derived(), "Cannot set a derived property");
         let previous_value = self.get_person_property(person_id, property);
 
+        if previous_value != value {
+            self.remove_from_index_maybe(person_id, property);
+        }
+        
         // Temporarily remove dependency properties since we need mutable references
         // to self during callback execution
         let deps_temp = {
@@ -532,6 +537,10 @@ impl ContextPeopleExt for Context {
         // Update the main property and send a change event
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         data_container.set_person_property(person_id, property, value);
+        if previous_value != value {
+            self.add_to_index_maybe(person_id, property);
+        }
+        
         let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
             person_id,
             current: value,
@@ -591,6 +600,34 @@ impl ContextPeopleExt for Context {
     }
 }
 
+trait ContextPeopleExtInternal {
+    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+}
+
+impl ContextPeopleExtInternal for Context {
+    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T)
+    {
+        if let Some(mut index) = self
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_index_ref_by_prop(property)
+        {
+            index.add_index(self, person_id);
+        }
+    }
+
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T)
+    {
+        if let Some(mut index) = self
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_index_ref_by_prop(property)
+        {
+            index.remove_index(self, person_id);
+        }
+    }
+}
 
 #[allow(clippy::module_name_repetitions)]
 #[macro_export]
@@ -1099,6 +1136,25 @@ mod test {
 
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 1);
+    }
+
+    fn query_people_macro_change() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);        
+        assert_eq!(people.len(), 0);
+
+        context.set_person_property(person1, RiskCategoryType, RiskCategory::Low);        
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 0);
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);        
+        assert_eq!(people.len(), 1);        
+        
     }
 
     #[test]
