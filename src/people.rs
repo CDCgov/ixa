@@ -12,7 +12,6 @@ use std::{
     hash::Hash,
 };
 
-type DerivedSetter = dyn Fn(&mut Context, PersonId);
 type Indexer = dyn FnMut(&Context, PersonId) -> u128;
 
 struct Index {
