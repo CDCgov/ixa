@@ -1,10 +1,8 @@
 use crate::{
     context::{Context, IxaEvent},
-    define_data_plugin,
-};
+    define_data_plugin, hash::hash_ref};
 use ixa_derive::IxaEvent;
 use serde::{Deserialize, Serialize};
-use crate::{context::Context, define_data_plugin, hash::hash_ref};
 use std::{
     any::{Any, TypeId},
     borrow::BorrowMut,
@@ -76,7 +74,7 @@ define_data_plugin!(
         current_population: 0,
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
-        dependency_map: RefCell::new(HashMap::new())
+        dependency_map: RefCell::new(HashMap::new()),
         property_indexes: RefCell::new(HashMap::new()),
     }
 );
@@ -591,6 +589,7 @@ impl ContextPeopleExt for Context {
         }
         result
     }
+}
 
 
 #[allow(clippy::module_name_repetitions)]
