@@ -1080,9 +1080,9 @@ mod test {
         let person2 = context.add_person();
         let person3 = context.add_person();
 
-        context.set_person_property(person1, Age, 42);
-        context.set_person_property(person2, Age, 40);
-        context.set_person_property(person3, Age, 41);
+        context.initialize_person_property(person1, Age, 42);
+        context.initialize_person_property(person2, Age, 40);
+        context.initialize_person_property(person3, Age, 41);
 
         context.register_index(Age);
         let hash = hash_ref(&context.get_person_property(person1, Age));
@@ -1095,7 +1095,7 @@ mod test {
         let mut context = Context::new();
         let person1 = context.add_person();
 
-        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
 
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 1);
@@ -1106,7 +1106,7 @@ mod test {
         let mut context = Context::new();
         let person = context.add_person();
 
-        context.set_person_property(person, Age, 42);
+        context.initialize_person_property(person, Age, 42);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
         let people = people_query![context, [Age = 42]];
@@ -1122,12 +1122,12 @@ mod test {
 
         // Note: because of the way indexes are initialized, all properties without initializers need to be
         // set for all people.
-        context.set_person_property(person1, Age, 42);
-        context.set_person_property(person1, RiskCategoryType, RiskCategory::High);
-        context.set_person_property(person2, Age, 42);
-        context.set_person_property(person2, RiskCategoryType, RiskCategory::Low);
-        context.set_person_property(person3, Age, 40);
-        context.set_person_property(person3, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person1, Age, 42);
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.initialize_person_property(person2, Age, 42);
+        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person3, Age, 40);
+        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
@@ -1141,8 +1141,8 @@ mod test {
         let person = context.add_person();
         let person2 = context.add_person();
 
-        context.set_person_property(person, Age, 64);
-        context.set_person_property(person2, Age, 88);
+        context.initialize_person_property(person, Age, 64);
+        context.initialize_person_property(person2, Age, 88);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
         let not_seniors = people_query![context, [Senior = false]];
