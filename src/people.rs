@@ -1,10 +1,14 @@
-use crate::{context::Context, define_data_plugin};
+use crate::{
+    context::{Context, IxaEvent},
+    define_data_plugin,
+};
+use ixa_derive::IxaEvent;
 use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
     cell::{RefCell, RefMut},
-    collections::HashMap,
-    fmt,
+    collections::{HashMap, HashSet},
+    fmt::{self},
 };
 
 // PeopleData represents each unique person in the simulation with an id ranging
@@ -13,6 +17,8 @@ use std::{
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    registered_derived_properties: RefCell<HashSet<TypeId>>,
+    dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
 }
 
 define_data_plugin!(
@@ -20,7 +26,9 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
-        properties_map: RefCell::new(HashMap::new())
+        properties_map: RefCell::new(HashMap::new()),
+        registered_derived_properties: RefCell::new(HashSet::new()),
+        dependency_map: RefCell::new(HashMap::new())
     }
 );
 
@@ -51,7 +59,107 @@ impl fmt::Debug for PersonId {
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
     type Value: Copy;
-    fn initialize(context: &Context, person_id: PersonId) -> Self::Value;
+    #[must_use]
+    fn is_derived() -> bool {
+        false
+    }
+    #[must_use]
+    fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
+        panic!("Dependencies not implemented");
+    }
+    fn compute(context: &Context, person_id: PersonId) -> Self::Value;
+    fn get_instance() -> Self;
+}
+
+type ContextCallback = dyn FnOnce(&mut Context);
+
+// The purpose of this trait is to enable storing a Vec of different
+// `PersonProperty` types. While `PersonProperty`` is *not* object safe,
+// primarily because it stores a different Value type for each kind of property,
+// `PersonPropertyHolder` is, meaning we can treat different types of properties
+// uniformly at runtime.
+// Note: this has to be pub because `PersonProperty` (which is pub) implements
+// a dependency method that returns `PersonPropertyHolder` instances.
+pub trait PersonPropertyHolder {
+    // Registers a callback in the provided `callback_vec` that is invoked when
+    // a dependency of a derived property is updated for the given person
+    //
+    // Parameters:
+    // - `context`: The mutable reference to the current execution context
+    // - `person`: The PersonId of the person for whom the property change event will be emitted.
+    // - `callback_vec`: A vector of boxed callback functions that will be called
+    // - when a property is updated
+    fn dependency_changed(
+        &self,
+        context: &mut Context,
+        person: PersonId,
+        callback_vec: &mut Vec<Box<ContextCallback>>,
+    );
+    fn is_derived(&self) -> bool;
+    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>>;
+    fn non_derived_dependencies(&self) -> Vec<TypeId>;
+    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>);
+    fn property_type_id(&self) -> TypeId;
+}
+
+impl<T> PersonPropertyHolder for T
+where
+    T: PersonProperty + 'static,
+{
+    fn dependency_changed(
+        &self,
+        context: &mut Context,
+        person: PersonId,
+        callback_vec: &mut Vec<Box<ContextCallback>>,
+    ) {
+        let previous = context.get_person_property(person, T::get_instance());
+
+        // Captures the current value of the person property and defers the actual event
+        // emission to when we have access to the new value.
+        callback_vec.push(Box::new(move |ctx| {
+            let current = ctx.get_person_property(person, T::get_instance());
+            let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
+                person_id: person,
+                current,
+                previous,
+            };
+            ctx.emit_event(change_event);
+        }));
+    }
+
+    fn is_derived(&self) -> bool {
+        T::is_derived()
+    }
+
+    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>> {
+        T::dependencies()
+    }
+
+    fn property_type_id(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
+
+    /// Returns of dependencies, where any derived dependencies
+    /// are recursively expanded to their non-derived dependencies.
+    /// If the property is not derived, the Vec will be empty.
+    fn non_derived_dependencies(&self) -> Vec<TypeId> {
+        let mut result = HashSet::new();
+        self.collect_non_derived_dependencies(&mut result);
+        result.into_iter().collect()
+    }
+
+    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>) {
+        if !self.is_derived() {
+            return;
+        }
+        for dependency in self.dependencies() {
+            if dependency.is_derived() {
+                dependency.collect_non_derived_dependencies(result);
+            } else {
+                result.insert(dependency.property_type_id());
+            }
+        }
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -63,15 +171,18 @@ pub trait PersonProperty: Copy {
 #[macro_export]
 macro_rules! define_person_property {
     ($person_property:ident, $value:ty, $initialize:expr) => {
-        #[derive(Copy, Clone)]
+        #[derive(Debug, Copy, Clone)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn initialize(
+            fn compute(
                 _context: &$crate::context::Context,
                 _person: $crate::people::PersonId,
             ) -> Self::Value {
                 $initialize(_context, _person)
+            }
+            fn get_instance() -> Self {
+                $person_property
             }
         }
     };
@@ -92,6 +203,37 @@ macro_rules! define_person_property_with_default {
         define_person_property!($person_property, $value, |_context, _person_id| {
             $default
         });
+    };
+}
+
+/// Defines a derived person property with the following parameters:
+/// * `$person_property`: A name for the identifier type of the property
+/// * `$value`: The type of the property's value
+/// * `[$($dependency),+]`: A list of person properties the derived property depends on
+/// * $calculate: A closure that takes the values of each dependency and returns the derived value
+#[macro_export]
+macro_rules! define_derived_property {
+    ($derived_property:ident, $value:ty, [$($dependency:ident),+], |$($param:ident),+| $derive_fn:expr) => {
+        #[derive(Debug, Copy, Clone)]
+        pub struct $derived_property;
+
+        impl $crate::people::PersonProperty for $derived_property {
+            type Value = $value;
+            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+                #[allow(unused_parens)]
+                let ($($param),+) = (
+                    $(context.get_person_property(person_id, $dependency)),+
+                );
+                (|$($param),+| $derive_fn)($($param),+)
+            }
+            fn is_derived() -> bool { true }
+            fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
+                vec![$(Box::new($dependency)),+]
+            }
+            fn get_instance() -> Self {
+                $derived_property
+            }
+        }
     };
 }
 
@@ -147,7 +289,7 @@ impl PeopleData {
 
 // Emitted when a new person is created
 // These should not be emitted outside this module
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonCreatedEvent {
     pub person_id: PersonId,
@@ -161,6 +303,13 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub person_id: PersonId,
     pub current: T::Value,
     pub previous: T::Value,
+}
+impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
+    fn on_subscribe(context: &mut Context) {
+        if T::is_derived() {
+            context.register_property::<T>();
+        }
+    }
 }
 
 pub trait ContextPeopleExt {
@@ -178,6 +327,8 @@ pub trait ContextPeopleExt {
         person_id: PersonId,
         _property: T,
     ) -> T::Value;
+
+    fn register_property<T: PersonProperty + 'static>(&mut self);
 
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
@@ -216,6 +367,28 @@ impl ContextPeopleExt for Context {
         person_id
     }
 
+    fn register_property<T: PersonProperty + 'static>(&mut self) {
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        if !data_container
+            .registered_derived_properties
+            .borrow()
+            .contains(&TypeId::of::<T>())
+        {
+            let instance = T::get_instance();
+            let dependencies = instance.non_derived_dependencies();
+            for dependency in dependencies {
+                let mut dependency_map = data_container.dependency_map.borrow_mut();
+                let derived_prop_list = dependency_map.entry(dependency).or_default();
+                derived_prop_list.push(Box::new(instance));
+            }
+            data_container
+                .registered_derived_properties
+                .borrow_mut()
+                .insert(TypeId::of::<T>());
+        }
+    }
+
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
         person_id: PersonId,
@@ -224,13 +397,17 @@ impl ContextPeopleExt for Context {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
+        if T::is_derived() {
+            return T::compute(self, person_id);
+        }
+
         // Attempt to retrieve the existing value
         if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
             return value;
         }
 
         // Initialize the property. This does not fire a change event
-        let initialized_value = T::initialize(self, person_id);
+        let initialized_value = T::compute(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
         initialized_value
@@ -242,6 +419,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        assert!(!T::is_derived(), "Cannot initialize a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -257,26 +435,47 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        assert!(!T::is_derived(), "Cannot set a derived property");
+        let previous_value = self.get_person_property(person_id, property);
 
-        let current_value = *data_container.get_person_property_ref(person_id, property);
-        let previous_value = match current_value {
-            Some(current_value) => current_value,
-            None => {
-                let initialize_value = T::initialize(self, person_id);
-                data_container.set_person_property(person_id, property, initialize_value);
-                initialize_value
-            }
+        // Temporarily remove dependency properties since we need mutable references
+        // to self during callback execution
+        let deps_temp = {
+            self.get_data_container(PeoplePlugin)
+                .unwrap()
+                .dependency_map
+                .borrow_mut()
+                .get_mut(&TypeId::of::<T>())
+                .map(std::mem::take)
         };
 
+        let mut dependency_event_callbacks = Vec::new();
+        if let Some(mut deps) = deps_temp {
+            // If there are dependencies, set up a bunch of callbacks with the
+            // current value
+            for dep in &mut deps {
+                dep.dependency_changed(self, person_id, &mut dependency_event_callbacks);
+            }
+
+            // Put the dependency list back in
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+            let mut dependencies = data_container.dependency_map.borrow_mut();
+            dependencies.insert(TypeId::of::<T>(), deps);
+        }
+
+        // Update the main property and send a change event
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        data_container.set_person_property(person_id, property, value);
         let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
             person_id,
             current: value,
             previous: previous_value,
         };
-        data_container.set_person_property(person_id, property, value);
         self.emit_event(change_event);
+
+        for callback in dependency_event_callbacks {
+            callback(self);
+        }
     }
 
     fn get_person_id(&self, person_id: usize) -> PersonId {
@@ -291,10 +490,26 @@ impl ContextPeopleExt for Context {
 #[cfg(test)]
 mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
-    use crate::{context::Context, people::PeoplePlugin};
-    use std::{cell::RefCell, rc::Rc};
+    use crate::{
+        context::Context,
+        people::{PeoplePlugin, PersonPropertyHolder},
+    };
+    use std::{any::TypeId, cell::RefCell, rc::Rc};
 
     define_person_property!(Age, u8);
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    pub enum AgeGroupType {
+        Child,
+        Adult,
+    }
+    define_derived_property!(AgeGroup, AgeGroupType, [Age], |age| {
+        if age < 18 {
+            AgeGroupType::Child
+        } else {
+            AgeGroupType::Adult
+        }
+    });
+
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategory {
         High,
@@ -310,6 +525,25 @@ mod test {
             0
         }
     });
+    define_derived_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
+        is_runner && age >= 18
+    });
+    define_derived_property!(
+        SeniorRunner,
+        bool,
+        [AdultRunner, Age],
+        |adult_runner, age| { adult_runner && age >= 65 }
+    );
+    define_person_property_with_default!(IsSwimmer, bool, false);
+    define_derived_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
+        is_swimmer && age >= 18
+    });
+    define_derived_property!(
+        AdultAthlete,
+        bool,
+        [AdultRunner, AdultSwimmer],
+        |adult_runner, adult_swimmer| { adult_runner || adult_swimmer }
+    );
 
     #[test]
     fn observe_person_addition() {
@@ -552,5 +786,153 @@ mod test {
         let mut context = Context::new();
         context.add_person();
         context.get_person_id(1);
+    }
+
+    #[test]
+    fn get_person_property_returns_correct_value() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 10);
+        assert_eq!(
+            context.get_person_property(person, AgeGroup),
+            AgeGroupType::Child
+        );
+    }
+
+    #[test]
+    fn get_person_property_changes_correctly() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        assert_eq!(
+            context.get_person_property(person, AgeGroup),
+            AgeGroupType::Child
+        );
+        context.set_person_property(person, Age, 18);
+        assert_eq!(
+            context.get_person_property(person, AgeGroup),
+            AgeGroupType::Adult
+        );
+    }
+    #[test]
+    fn get_person_property_change_event() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<AgeGroup>| {
+                assert_eq!(event.person_id.id, 0);
+                assert_eq!(event.previous, AgeGroupType::Child);
+                assert_eq!(event.current, AgeGroupType::Adult);
+                *flag_clone.borrow_mut() = true;
+            },
+        );
+        context.set_person_property(person, Age, 18);
+        context.execute();
+        assert!(*flag.borrow());
+    }
+
+    #[test]
+    fn get_derived_property_multiple_deps() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        context.initialize_person_property(person, IsRunner, true);
+
+        let flag = Rc::new(RefCell::new(false));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<AdultRunner>| {
+                assert_eq!(event.person_id.id, 0);
+                assert!(!event.previous);
+                assert!(event.current);
+                *flag_clone.borrow_mut() = true;
+            },
+        );
+        context.set_person_property(person, Age, 18);
+        context.execute();
+        assert!(*flag.borrow());
+    }
+
+    #[test]
+    fn register_derived_only_once() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        context.initialize_person_property(person, IsRunner, true);
+
+        let flag = Rc::new(RefCell::new(0));
+        let flag_clone = flag.clone();
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<AdultRunner>| {
+                *flag_clone.borrow_mut() += 1;
+            },
+        );
+        context.subscribe_to_event(
+            move |_context, _event: PersonPropertyChangeEvent<AdultRunner>| {
+                // Make sure that we don't register multiple times
+            },
+        );
+        context.set_person_property(person, Age, 18);
+        context.execute();
+        assert_eq!(*flag.borrow(), 1);
+    }
+
+    #[test]
+    fn test_resolve_dependencies() {
+        let mut actual = SeniorRunner.non_derived_dependencies();
+        let mut expected = vec![TypeId::of::<Age>(), TypeId::of::<IsRunner>()];
+        actual.sort();
+        expected.sort();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn get_derived_property_dependent_on_another_derived() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 88);
+        context.initialize_person_property(person, IsRunner, false);
+
+        let flag = Rc::new(RefCell::new(0));
+        let flag_clone = flag.clone();
+        assert!(!context.get_person_property(person, SeniorRunner));
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<SeniorRunner>| {
+                assert_eq!(event.person_id.id, 0);
+                assert!(!event.previous);
+                assert!(event.current);
+                *flag_clone.borrow_mut() += 1;
+            },
+        );
+        context.set_person_property(person, IsRunner, true);
+        context.execute();
+        assert_eq!(*flag.borrow(), 1);
+    }
+
+    #[test]
+    fn get_derived_property_diamond_dependencies() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, Age, 17);
+        context.initialize_person_property(person, IsSwimmer, true);
+
+        let flag = Rc::new(RefCell::new(0));
+        let flag_clone = flag.clone();
+        assert!(!context.get_person_property(person, AdultAthlete));
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<AdultAthlete>| {
+                assert_eq!(event.person_id.id, 0);
+                assert!(!event.previous);
+                assert!(event.current);
+                *flag_clone.borrow_mut() += 1;
+            },
+        );
+        context.set_person_property(person, Age, 18);
+        context.execute();
+        assert_eq!(*flag.borrow(), 1);
     }
 }

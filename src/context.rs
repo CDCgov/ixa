@@ -16,6 +16,11 @@ type Callback = dyn FnOnce(&mut Context);
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
 
+pub trait IxaEvent {
+    /// Called every time `context.subscribe_to_event` is called with this event
+    fn on_subscribe(_context: &mut Context) {}
+}
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -71,7 +76,7 @@ impl Context {
     /// Handlers will be called upon event emission in order of subscription as
     /// queued `Callback`s with the appropriate event.
     #[allow(clippy::missing_panics_doc)]
-    pub fn subscribe_to_event<E: Copy + 'static>(
+    pub fn subscribe_to_event<E: IxaEvent + Copy + 'static>(
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
     ) {
@@ -81,6 +86,7 @@ impl Context {
             .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
         let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
         handler_vec.push(Rc::new(handler));
+        E::on_subscribe(self);
     }
 
     /// Emit and event of type E to be handled by registered receivers
@@ -88,7 +94,7 @@ impl Context {
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
-    pub fn emit_event<E: Copy + 'static>(&mut self, event: E) {
+    pub fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E) {
         // Destructure to obtain event handlers and plan queue
         let Context {
             event_handlers,
@@ -245,6 +251,7 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
+    use ixa_derive::IxaEvent;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -413,12 +420,12 @@ mod tests {
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
     }
 
-    #[derive(Copy, Clone)]
-    struct Event {
+    #[derive(Copy, Clone, IxaEvent)]
+    struct Event1 {
         pub data: usize,
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, IxaEvent)]
     struct Event2 {
         pub data: usize,
     }
@@ -429,11 +436,11 @@ mod tests {
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
 
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
 
-        context.emit_event(Event { data: 1 });
+        context.emit_event(Event1 { data: 1 });
         context.execute();
         assert_eq!(*obs_data.borrow(), 1);
     }
@@ -444,12 +451,12 @@ mod tests {
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
 
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data_clone.borrow_mut() += event.data;
         });
 
-        context.emit_event(Event { data: 1 });
-        context.emit_event(Event { data: 2 });
+        context.emit_event(Event1 { data: 1 });
+        context.emit_event(Event1 { data: 2 });
         context.execute();
 
         // Both of these should have been received.
@@ -464,13 +471,13 @@ mod tests {
         let obs_data2 = Rc::new(RefCell::new(0));
         let obs_data2_clone = Rc::clone(&obs_data2);
 
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data1_clone.borrow_mut() = event.data;
         });
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data2_clone.borrow_mut() = event.data;
         });
-        context.emit_event(Event { data: 1 });
+        context.emit_event(Event1 { data: 1 });
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
         assert_eq!(*obs_data2.borrow(), 1);
@@ -484,13 +491,13 @@ mod tests {
         let obs_data2 = Rc::new(RefCell::new(0));
         let obs_data2_clone = Rc::clone(&obs_data2);
 
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data1_clone.borrow_mut() = event.data;
         });
         context.subscribe_to_event::<Event2>(move |_, event| {
             *obs_data2_clone.borrow_mut() = event.data;
         });
-        context.emit_event(Event { data: 1 });
+        context.emit_event(Event1 { data: 1 });
         context.emit_event(Event2 { data: 2 });
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
@@ -503,8 +510,8 @@ mod tests {
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
 
-        context.emit_event(Event { data: 1 });
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.emit_event(Event1 { data: 1 });
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
 
@@ -545,10 +552,10 @@ mod tests {
         let mut context = Context::new();
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
-        context.subscribe_to_event::<Event>(move |_, event| {
+        context.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
-        context.emit_event(Event { data: 1 });
+        context.emit_event(Event1 { data: 1 });
         context.shutdown();
         context.execute();
         assert_eq!(*obs_data.borrow(), 0);

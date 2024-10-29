@@ -1,5 +1,6 @@
-use ixa::context::Context;
+use ixa::context::{Context, IxaEvent};
 use ixa::define_data_plugin;
+use ixa_derive::IxaEvent;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,7 @@ pub enum InfectionStatus {
     R,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IxaEvent)]
 pub struct InfectionStatusEvent {
     #[allow(dead_code)]
     pub prev_status: InfectionStatus,
