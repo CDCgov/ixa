@@ -112,7 +112,7 @@ where
     ) {
         let previous = context.get_person_property(person, T::get_instance());
 
-        // Stores the current value of the person property and defer the actual event
+        // Captures the current value of the person property and defers the actual event
         // emission to when we have access to the new value.
         callback_vec.push(Box::new(move |ctx| {
             let current = ctx.get_person_property(person, T::get_instance());
