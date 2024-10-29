@@ -160,7 +160,8 @@ where
         callback_vec: &mut Vec<Box<ContextCallback>>,
     ) {
         let previous = context.get_person_property(person, T::get_instance());
-
+        context.remove_from_index_maybe(person, T::get_instance());
+        
         // Captures the current value of the person property and defers the actual event
         // emission to when we have access to the new value.
         callback_vec.push(Box::new(move |ctx| {
@@ -170,6 +171,7 @@ where
                 current,
                 previous,
             };
+            ctx.add_to_index_maybe(person, T::get_instance());            
             ctx.emit_event(change_event);
         }));
     }
