@@ -78,6 +78,8 @@ type ContextCallback = dyn FnOnce(&mut Context);
 // primarily because it stores a different Value type for each kind of property,
 // `PersonPropertyHolder` is, meaning we can treat different types of properties
 // uniformly at runtime.
+// Note: this has to be pub because `PersonProperty` (which is pub) implements
+// a dependency method that returns `PersonPropertyHolder` instances.
 pub trait PersonPropertyHolder {
     // Registers a callback in the provided `callback_vec` that is invoked when
     // a dependency of a derived property is updated for the given person
