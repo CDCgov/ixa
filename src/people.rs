@@ -10,6 +10,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
     hash::Hash,
+    iter::Iterator
 };
 
 type Indexer = dyn FnMut(&Context, PersonId) -> u128;
@@ -19,7 +20,8 @@ struct Index {
     #[allow(dead_code)]
     name: &'static str,
     // The hash of the property value maps to a list of PersonIds
-    lookup: HashMap<u128, Vec<PersonId>>,
+    // or None if we'r enot indexing
+    lookup: Option<HashMap<u128, HashSet<PersonId>>>,
     // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
 }
@@ -28,7 +30,7 @@ impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
         let mut index = Self {
             name: std::any::type_name::<T>(),
-            lookup: HashMap::new(),
+            lookup: Some(HashMap::new()),
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
                 hash_ref(&value)
@@ -39,13 +41,13 @@ impl Index {
     }
     fn add_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        self.lookup.entry(hash).or_default().push(person_id);
+        self.lookup.as_mut().unwrap().entry(hash).or_default().insert(person_id);
     }
     fn remove_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        self.lookup
-            .entry(hash)
-            .and_modify(|people| people.retain(|p| *p != person_id));
+        self.lookup.as_mut().unwrap()
+            .entry(hash).or_default()
+            .remove(&person_id);
     }
     fn setup(&mut self, context: &Context) {
         let current_pop = context.get_current_population();
@@ -56,14 +58,22 @@ impl Index {
     }
 }
 
+#[derive(Default)]
+struct IndexScoreboard {
+    queries: u64,
+    updates: u64,
+}
+
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
+
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
     dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
+    index_scoreboard: RefCell<HashMap<TypeId, IndexScoreboard>>,
     property_indexes: RefCell<HashMap<TypeId, Index>>,
 }
 
@@ -75,6 +85,7 @@ define_data_plugin!(
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),
+        index_scoreboard: RefCell::new(HashMap::new()),                
         property_indexes: RefCell::new(HashMap::new()),
     }
 );
@@ -351,6 +362,48 @@ impl PeopleData {
         let type_id = TypeId::of::<T>();
         self.get_index_ref(type_id)
     }
+
+    fn property_updated<T: PersonProperty + 'static>(&self) {
+        let mut scoreboard_map = self.index_scoreboard.borrow_mut();
+        let value = scoreboard_map.entry(TypeId::of::<T>()).or_default();
+        value.updates += 1;
+    }
+        
+    fn property_queried<T: PersonProperty + 'static>(&self) {
+        let mut scoreboard_map = self.index_scoreboard.borrow_mut();
+        let value = scoreboard_map.entry(TypeId::of::<T>()).or_default();
+        value.queries += 1;
+    }
+
+    // Convenience function to iterate over the current population.
+    // Note that this doesn't hold a reference to PeopleData, so if
+    // you change the population while using it, it won't notice.
+    fn people_iterator(&self) -> PeopleIterator {
+        PeopleIterator {
+            population: self.current_population,
+            person_id: 0
+        }
+    }
+}
+
+struct PeopleIterator {
+    population: usize,
+    person_id: usize,
+}
+
+impl Iterator for PeopleIterator {
+    type Item = PersonId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ret = if self.person_id < self.population {
+            Some(PersonId{id: self.person_id})
+        } else {
+            None
+        };
+        self.person_id += 1;
+
+        ret
+    }
 }
 
 // Emitted when a new person is created
@@ -578,25 +631,69 @@ impl ContextPeopleExt for Context {
     }
 
     fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId> {
-        let mut result: Vec<PersonId> = Vec::new();
+        let mut indexes = Vec::<HashSet<PersonId>>::new();
+        let mut unindexed = Vec::<(TypeId, u128)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
-        for (i, (t, hash)) in property_hashes.into_iter().enumerate() {
-            let mut index_ref = data_container.get_index_ref(t);
-            if let Some(index) = index_ref.borrow_mut() {
-                if let Some(matching_people) = index.lookup.get(&hash) {
-                    // If this is the first property, add them all
-                    if i == 0 {
-                        result.clone_from(matching_people);
-                    } else {
-                        result.retain(|person| matching_people.contains(person));
-                    }
+        // 1. Walk through each property and collect the index entry
+        // corresponding to the value.
+        for (t, hash) in property_hashes.into_iter() {
+            let mut index = data_container.get_index_ref(t).unwrap();
+            if let Some(lookup) = &index.borrow_mut().lookup {
+                if let Some(matching_people) = lookup.get(&hash) {
+                    indexes.push(matching_people.clone()); // UGH
                 } else {
+                    // This is empty and so the intersection will
+                    // also be empty.
                     return Vec::new();
                 }
             }
+            else {
+                // No index, so we'll get to this after.
+                unindexed.push((t, hash));
+            }
         }
+
+        // 2. Create an iterator over people, based one either:
+        //    (1) the smallest index if there is one.
+        //    (2) the overall population if there are no indices.
+
+        let mut holder : HashSet<PersonId>;
+        let to_check : Box<dyn Iterator<Item = PersonId>> = if indexes.len() != 0 {
+            indexes.sort_by_key(|x| x.len());
+
+            holder = indexes.remove(0);
+            Box::new(holder.iter().cloned())
+        } else {
+            Box::new(data_container.people_iterator())
+        };
+
+        // 3. Walk over the iterator and add people to the result
+        // iff:
+        //    (1) they exist in all the indexes
+        //    (2) they match the unindexed properties
+        let mut result = Vec::<PersonId>::new();
+        'outer: for person in to_check {
+            // (1) check all the indexes
+            for index in &indexes {
+                if !index.contains(&person) {
+                    continue 'outer;
+                }
+            }
+
+            // (2) check the unindexed properties
+            for (t, hash) in &unindexed {
+                let mut index = data_container.get_index_ref(*t).unwrap();
+                if *hash != (*index.indexer)(self, person) {
+                    continue 'outer;
+                }
+            }
+
+            // This matches.
+            result.push(person);
+        }
+
         result
     }
 }
@@ -605,7 +702,7 @@ trait ContextPeopleExtInternal {
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
 }
-
+                                                
 impl ContextPeopleExtInternal for Context {
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T)
     {
@@ -614,7 +711,9 @@ impl ContextPeopleExtInternal for Context {
             .unwrap()
             .get_index_ref_by_prop(property)
         {
-            index.add_index(self, person_id);
+            if index.lookup.is_some() {
+                index.add_index(self, person_id);
+            }
         }
     }
 
@@ -625,7 +724,9 @@ impl ContextPeopleExtInternal for Context {
             .unwrap()
             .get_index_ref_by_prop(property)
         {
-            index.remove_index(self, person_id);
+            if index.lookup.is_some() {            
+                index.remove_index(self, person_id);
+            }
         }
     }
 }
