@@ -126,7 +126,7 @@ impl Ord for Entry {
 }
 
 /// A unique identifier for a plan added to a `Queue<T>`
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct Id {
     id: u64,
 }

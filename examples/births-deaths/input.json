@@ -1,6 +1,6 @@
 {
     "population": 100,
-    "max_time": 380.0,
+    "max_time": 780.0,
     "seed": 123,
     "birth_rate": 0.1,
     "death_rate": 0.1,

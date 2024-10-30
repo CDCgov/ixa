@@ -1,17 +1,18 @@
 use crate::parameters_loader::Parameters;
-use ixa::context::Context;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{ContextPeopleExt, PersonId, PersonProperty};
-use ixa::random::define_rng;
-use ixa::random::ContextRandomExt;
-use ixa::{define_global_property, define_person_property, define_person_property_with_default};
-use rand_distr::Uniform;
+use ixa::{
+    define_global_property, define_person_property,
+    define_person_property_with_default,
+    context::Context,
+    global_properties::ContextGlobalPropertiesExt,
+    people::{ContextPeopleExt, PersonId, PersonProperty},
+    random::{define_rng, ContextRandomExt},    
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 
 define_rng!(PeopleRng);
 
-static MAX_AGE: f64 = 100.0;
+static MAX_AGE: u8 = 100;
 use rand_distr::Exp;
 use serde::Serialize;
 use std::fmt;
@@ -36,15 +37,30 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
+
 define_global_property!(Foi, HashMap<AgeGroupRisk, f64>);
 define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
-define_person_property!(Birth, f64);
+define_person_property!(Age, u8);
 define_person_property!(Alive, bool);
+
+fn schedule_aging(context: &mut Context, person_id: PersonId) {
+    if context.get_person_property(person_id, Alive) {
+        let prev_age = context.get_person_property(person_id, Age);
+        context.set_person_property(person_id, Age, prev_age + 1);
+        let next_age_event = context.get_current_time() + 365.0;
+        context.add_plan(next_age_event, move | context| {
+            schedule_aging(context, person_id);
+        });
+    }
+}
 
 fn schedule_birth(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
-    let _person = context.create_new_person(context.get_current_time());
+    let _person = context.create_new_person(0);
+    context.add_plan(context.get_current_time() + 365.0, move |context| {
+        schedule_aging(context, _person);
+    });
 
     let next_birth_event = context.get_current_time()
         + context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
@@ -66,7 +82,6 @@ fn schedule_death(context: &mut Context) {
             schedule_death(context);
         });
     }
-    // Cancel all plans
 }
 
 pub fn init(context: &mut Context) {
@@ -80,11 +95,13 @@ pub fn init(context: &mut Context) {
         .collect::<HashMap<AgeGroupRisk, f64>>();
 
     context.set_global_property_value(Foi, foi_map.clone());
-
+    
     for _ in 0..parameters.population {
-        // Define age in days
-        let age_days: f64 = context.sample_distr(PeopleRng, Uniform::new(0.0, MAX_AGE)) * 365.0;
-        let _person = context.create_new_person(-age_days);
+        let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
+        let _person = context.create_new_person(age);
+        context.add_plan(365.0, move |context| {
+            schedule_aging(context, _person);
+        });
     }
 
     // Plan for births and deaths
@@ -101,10 +118,9 @@ pub fn init(context: &mut Context) {
 }
 
 pub trait ContextPopulationExt {
-    fn create_new_person(&mut self, birth_time: f64) -> PersonId;
+    fn create_new_person(&mut self, age: u8) -> PersonId;
     fn attempt_death(&mut self, person_id: PersonId);
     fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk;
-    fn get_person_age(&mut self, person_id: PersonId) -> f64;
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
     #[allow(dead_code)]
@@ -129,27 +145,24 @@ impl ContextPopulationExt for Context {
         self.set_person_property(person_id, Alive, false);
     }
 
-    fn create_new_person(&mut self, birth_time: f64) -> PersonId {
+    fn create_new_person(&mut self, age: u8) -> PersonId {
         let person = self.add_person();
-        self.initialize_person_property(person, Birth, birth_time);
-        self.initialize_person_property(person, Alive, true);
+        self.initialize_person_property(person, Age, age);
+        self.initialize_person_property(person, Alive, true);        
         person
     }
 
     fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk {
-        let current_age = self.get_person_age(person_id);
-        if current_age <= 1.0 {
+        let current_age = self.get_person_property(person_id, Age);
+        if current_age <= 1 {
             AgeGroupRisk::NewBorn
-        } else if current_age <= 65.0 {
+        } else if current_age <= 65 {
             AgeGroupRisk::General
         } else {
             AgeGroupRisk::OldAdult
         }
     }
-    fn get_person_age(&mut self, person_id: PersonId) -> f64 {
-        let birth_time = self.get_person_property(person_id, Birth);
-        (self.get_current_time() - birth_time) / 365.0
-    }
+
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
         let mut current_population = 0;
         for i in 0..self.get_current_population() {
@@ -300,16 +313,6 @@ mod test {
         context.init_random(p_values.seed);
         let _person = context.create_new_person(-10.0);
         schedule_death(&mut context);
-    }
-
-    #[test]
-    fn test_current_age() {
-        let mut context = Context::new();
-        let person = context.create_new_person(-5.0);
-        context.add_plan(30.0, move |context| {
-            assert_eq!(context.get_person_age(person), 35.0 / 365.0);
-        });
-        context.execute();
     }
 
     #[test]

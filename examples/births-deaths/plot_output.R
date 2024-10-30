@@ -27,5 +27,10 @@ for (a in seq_along(age_groups)) {
   expected_susc <- population * exp(-foi * time_array)
   tmp_df <- filter(output_df, age_group == age_group_name)
   plot(tmp_df$time, tmp_df$inf, ylim = c(0,population), main = age_group_name)
-  lines(time_array, expected_susc, col = "red")
+  ##lines(time_array, expected_susc, col = "red")
 }
+
+##================================#
+## demographic info-------------
+##================================#
+people_df <- read_csv(file.path(dir, "people_report.csv"))

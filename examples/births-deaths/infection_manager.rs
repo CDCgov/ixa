@@ -36,14 +36,13 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         let plan_id = context
             .add_plan(recovery_time, move |context| {
                 context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
-            })
-            .clone();
+            });
         let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
         plans_data_container
             .plans_map
             .entry(person_id)
             .or_default()
-            .insert(plan_id.clone());
+            .insert(plan_id);
     }
 }
 
