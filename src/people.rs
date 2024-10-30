@@ -28,7 +28,7 @@ struct Index {
 
 impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
-        let mut index = Self {
+        let index = Self {
             name: std::any::type_name::<T>(),
             lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
@@ -453,6 +453,7 @@ pub trait ContextPeopleExt {
     // Returns a PersonId for a usize
     fn get_person_id(&self, person_id: usize) -> PersonId;
     fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T);
+    fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId>;
 }
 
@@ -610,6 +611,20 @@ impl ContextPeopleExt for Context {
         property_indexes.insert(TypeId::of::<T>(), index);
     }
 
+    fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
+        self.register_indexer(property);
+        
+        let data_container = self.get_data_container(PeoplePlugin)
+            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        
+        let mut index = data_container.get_index_ref_by_prop(property).unwrap();
+        if index.lookup.is_none() {
+            index.lookup = Some(HashMap::new());
+            index.setup(self);
+            
+        }
+    }
+    
     fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId> {
         let mut indexes = Vec::<HashSet<PersonId>>::new();
         let mut unindexed = Vec::<(TypeId, u128)>::new();
@@ -1221,6 +1236,39 @@ mod test {
     }
 
     #[test]
+    fn query_people_macro_index_first() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.index_property(RiskCategoryType);
+        assert!(property_is_indexed::<RiskCategoryType>(&context));        
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+    }
+
+    fn property_is_indexed<T: 'static>(context: &Context) -> bool {
+        context.get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_index_ref(TypeId::of::<T>()).unwrap().lookup.is_some()
+    }
+    
+    #[test]
+    fn query_people_macro_index_second() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert!(!property_is_indexed::<RiskCategoryType>(&context));
+        assert_eq!(people.len(), 1);
+        context.index_property(RiskCategoryType);
+        assert!(property_is_indexed::<RiskCategoryType>(&context));
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);        
+        assert_eq!(people.len(), 1);        
+    }
+
+    #[test]
     fn query_people_macro_change() {
         let mut context = Context::new();
         let person1 = context.add_person();
@@ -1237,7 +1285,6 @@ mod test {
         assert_eq!(people.len(), 0);
         let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);        
         assert_eq!(people.len(), 1);        
-        
     }
 
     #[test]
@@ -1297,4 +1344,6 @@ mod test {
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
+
+
 }
