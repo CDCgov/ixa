@@ -36,10 +36,8 @@ fn evaluate_recovery(
     resampling_rate: f64,
 ) -> Option<f64> {
     // get time person has spent infected
-    let time_spent_infected = context.get_current_time()
-        - context
-            .get_person_property(person_id, InfectionTime)
-            .unwrap();
+    let time_spent_infected =
+        context.get_current_time() - context.get_person_property(person_id, InfectionTime);
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(InfectionRng, recovery_probability) {
@@ -125,7 +123,7 @@ mod test {
                 DiseaseStatusType,
                 DiseaseStatus::I,
             );
-            context.set_person_property(context.get_person_id(id), InfectionTime, Some(0.0));
+            context.initialize_person_property(context.get_person_id(id), InfectionTime, 0.0);
         }
 
         // put this subscription after every agent has become infected
@@ -189,7 +187,6 @@ mod test {
     fn test_rejection_sampling_no_change_infecteds() {
         // if there is no change in the number of infected people
         // the recovery time should be the parameter.infection_duration
-        let mut context = Context::new();
         let parameters = ParametersValues {
             population: 1,
             max_time: 10.0,
@@ -201,15 +198,15 @@ mod test {
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
-        context.set_global_property_value(Parameters, parameters.clone());
-        context.init_random(parameters.seed);
-        init(&mut context);
-        let person_id = context.add_person();
         let n_iter = 10000;
         let mut sum = 0.0;
-        for _ in 0..n_iter {
-            let start_time = context.get_current_time();
-            context.set_person_property(person_id, InfectionTime, Some(start_time));
+        for seed in 0..n_iter {
+            let mut context = Context::new();
+            context.set_global_property_value(Parameters, parameters.clone());
+            context.init_random(seed);
+            init(&mut context);
+            let person_id = context.add_person();
+            context.initialize_person_property(person_id, InfectionTime, 0.0);
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(
@@ -219,9 +216,13 @@ mod test {
             context.execute();
             // there should be zero infected people in the simulation
             assert_eq!(n_eff_inv_infec(&mut context), 1.0 / 0.0);
-            sum += context.get_current_time() - start_time;
+            sum += context.get_current_time();
         }
         // permit up to 5% error
+        println!(
+            "{}",
+            (((sum / n_iter as f64) / parameters.infection_duration) - 1.0).abs()
+        );
         assert!((((sum / n_iter as f64) / parameters.infection_duration) - 1.0).abs() < 0.05);
         // the implementation of rejection sampling here for constant n_eff_inv_infec
         // should be downwardly biased

@@ -15,7 +15,7 @@ pub enum DiseaseStatus {
 }
 
 define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
-define_person_property_with_default!(InfectionTime, Option<f64>, None);
+define_person_property!(InfectionTime, f64);
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
@@ -36,6 +36,7 @@ mod tests {
     use crate::parameters_loader::ParametersValues;
 
     #[test]
+    #[should_panic(expected = "Property not initialized")]
     fn test_person_creation_default_properties() {
         let p_values = ParametersValues {
             population: 1,
@@ -58,9 +59,8 @@ mod tests {
         assert_eq!(population_size, parameters.population);
         for i in 0..population_size {
             let status = context.get_person_property(context.get_person_id(i), DiseaseStatusType);
-            let time = context.get_person_property(context.get_person_id(i), InfectionTime);
             assert_eq!(status, DiseaseStatus::S);
-            assert!(time.is_none());
+            context.get_person_property(context.get_person_id(i), InfectionTime);
         }
     }
 }
