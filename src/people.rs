@@ -30,13 +30,12 @@ impl Index {
     fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
         let mut index = Self {
             name: std::any::type_name::<T>(),
-            lookup: Some(HashMap::new()),
+            lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
                 hash_ref(&value)
             }),
         };
-        index.setup(context);
         index
     }
     fn add_index(&mut self, context: &Context, person_id: PersonId) {
@@ -453,7 +452,7 @@ pub trait ContextPeopleExt {
 
     // Returns a PersonId for a usize
     fn get_person_id(&self, person_id: usize) -> PersonId;
-    fn register_index<T: PersonProperty + 'static>(&mut self, property: T);
+    fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId>;
 }
 
@@ -595,7 +594,7 @@ impl ContextPeopleExt for Context {
         PersonId { id: person_id }
     }
             
-    fn register_index<T: PersonProperty + 'static>(&mut self, property: T) {
+    fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T) {
         {
             let data_container = self.get_data_container_mut(PeoplePlugin);
             let property_indexes = data_container.property_indexes.borrow_mut();
@@ -722,7 +721,7 @@ macro_rules! people_query {
                 if <$k as $crate::people::PersonProperty>::is_derived() {
                     $ctx.register_property::<$k>();
                 }
-                $ctx.register_index($k);
+                $ctx.register_indexer($k);
             )*
             // Do the query
             $ctx.query_people(vec![
@@ -1204,7 +1203,7 @@ mod test {
         context.initialize_person_property(person2, Age, 40);
         context.initialize_person_property(person3, Age, 41);
 
-        context.register_index(Age);
+        context.register_indexer(Age);
         let hash = hash_ref(&context.get_person_property(person1, Age));
         let people = context.query_people(vec![(TypeId::of::<Age>(), hash)]);
         assert_eq!(people.len(), 1);
