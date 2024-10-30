@@ -58,11 +58,6 @@ impl Index {
     }
 }
 
-#[derive(Default)]
-struct IndexScoreboard {
-    queries: u64,
-    updates: u64,
-}
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -73,7 +68,6 @@ struct PeopleData {
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
     dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
-    index_scoreboard: RefCell<HashMap<TypeId, IndexScoreboard>>,
     property_indexes: RefCell<HashMap<TypeId, Index>>,
 }
 
@@ -85,7 +79,6 @@ define_data_plugin!(
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),
-        index_scoreboard: RefCell::new(HashMap::new()),                
         property_indexes: RefCell::new(HashMap::new()),
     }
 );
@@ -361,18 +354,6 @@ impl PeopleData {
     ) -> Option<RefMut<Index>> {
         let type_id = TypeId::of::<T>();
         self.get_index_ref(type_id)
-    }
-
-    fn property_updated<T: PersonProperty + 'static>(&self) {
-        let mut scoreboard_map = self.index_scoreboard.borrow_mut();
-        let value = scoreboard_map.entry(TypeId::of::<T>()).or_default();
-        value.updates += 1;
-    }
-        
-    fn property_queried<T: PersonProperty + 'static>(&self) {
-        let mut scoreboard_map = self.index_scoreboard.borrow_mut();
-        let value = scoreboard_map.entry(TypeId::of::<T>()).or_default();
-        value.queries += 1;
     }
 
     // Convenience function to iterate over the current population.
