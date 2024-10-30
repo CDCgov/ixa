@@ -640,7 +640,7 @@ impl ContextPeopleExt for Context {
         //    (1) the smallest index if there is one.
         //    (2) the overall population if there are no indices.
 
-        let mut holder : HashSet<PersonId>;
+        let holder : HashSet<PersonId>;
         let to_check : Box<dyn Iterator<Item = PersonId>> = if indexes.len() != 0 {
             indexes.sort_by_key(|x| x.len());
 
