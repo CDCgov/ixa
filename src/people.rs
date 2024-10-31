@@ -14,14 +14,33 @@ use std::{
     iter::Iterator,
 };
 
-type Indexer = dyn FnMut(&Context, PersonId) -> IndexValue;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+// The lookup key for entries in the index. This is a serialized
+// version of the value. If that serialization fits in 128 bits, we
+// store it in Fixed to avoid the allocation of the Vec. Otherwise it
+// goes in Variable.
 pub enum IndexValue {
     Fixed(u128),
     Variable(Vec<u8>)
 }
 
+impl IndexValue {
+    pub fn compute<T: Hash>(val: &T) -> IndexValue {
+        let mut hasher = IndexValueHasher::new();
+        val.hash(&mut hasher);
+        if hasher.buf.len() <= 16 {
+            let mut tmp: [u8; 16] = [0; 16];
+            tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
+            return IndexValue::Fixed(u128::from_le_bytes(tmp))
+        }
+        IndexValue::Variable(hasher.buf)
+    }
+}
+
+// Implementation of the Hasher interface for IndexValue, used
+// for serialization. We're actually abusing this interface
+// because you can't call finish().
 struct IndexValueHasher {
     buf: Vec<u8>,
 }
@@ -42,19 +61,10 @@ impl Hasher for IndexValueHasher {
     }
 }
 
-impl IndexValue {
-    pub fn compute<T: Hash>(val: &T) -> IndexValue {
-        let mut hasher = IndexValueHasher::new();
-        val.hash(&mut hasher);
-        if hasher.buf.len() <= 16 {
-            let mut tmp: [u8; 16] = [0; 16];
-            tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
-            return IndexValue::Fixed(u128::from_le_bytes(tmp))
-        }
-        IndexValue::Variable(hasher.buf)
-    }
-}
 
+type Indexer = dyn FnMut(&Context, PersonId) -> IndexValue;
+
+// An index for a single property.
 struct Index {
     // Primarily for debugging purposes
     #[allow(dead_code)]
@@ -62,9 +72,10 @@ struct Index {
     // The hash of the property value maps to a list of PersonIds
     // or None if we're not indexing
     lookup: Option<HashMap<IndexValue, HashSet<PersonId>>>,
-    // A callback that calculates the hash of a person's current property value
+    // A callback that calculates the IndexValue of a person's current property value
     indexer: Box<Indexer>,
-    // The largest person ID that has been indexed.
+    // The largest person ID that has been indexed. Used so that we
+    // can lazily index when a person is added.
     max_indexed: usize
 }
 
@@ -81,7 +92,7 @@ impl Index {
         };
         index
     }
-    fn add_index(&mut self, context: &Context, person_id: PersonId) {
+    fn add_person(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
         self.lookup
             .as_mut()
@@ -90,7 +101,7 @@ impl Index {
             .or_default()
             .insert(person_id);
     }
-    fn remove_index(&mut self, context: &Context, person_id: PersonId) {
+    fn remove_person(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
         self.lookup
             .as_mut()
@@ -106,7 +117,7 @@ impl Index {
         let current_pop = context.get_current_population();
         for id in self.max_indexed..current_pop {
             let person_id = PersonId { id };
-            self.add_index(context, person_id);
+            self.add_person(context, person_id);
         }
         self.max_indexed = current_pop;
     }
@@ -769,7 +780,7 @@ impl ContextPeopleExtInternal for Context {
             .get_index_ref_by_prop(property)
         {
             if index.lookup.is_some() {
-                index.add_index(self, person_id);
+                index.add_person(self, person_id);
             }
         }
     }
@@ -777,7 +788,7 @@ impl ContextPeopleExtInternal for Context {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         for (_, index) in (data_container.property_indexes.borrow_mut()).iter_mut() {
             if index.lookup.is_some() {
-                index.add_index(self, person_id);
+                index.add_person(self, person_id);
             }
         }
     }
@@ -793,7 +804,7 @@ impl ContextPeopleExtInternal for Context {
             .get_index_ref_by_prop(property)
         {
             if index.lookup.is_some() {
-                index.remove_index(self, person_id);
+                index.remove_person(self, person_id);
             }
         }
     }
@@ -1389,8 +1400,25 @@ mod test {
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 2);
     }
-    
-    
+
+    #[test]
+    // This is safe because we reindex only when someone queries.
+    fn query_people_add_after_index_without_query() {
+        let mut context = Context::new();
+        context.add_person();
+        context.index_property(RiskCategoryType);
+    }
+        
+    #[test]
+    #[should_panic(expected = "Property not initialized")]
+    // This will panic when we query.
+    fn query_people_add_after_index_panic() {
+        let mut context = Context::new();
+        context.add_person();
+        context.index_property(RiskCategoryType);
+        people_query!(context, [RiskCategoryType = RiskCategory::High]);
+    }
+
     #[test]
     fn query_people_cast_value() {
         let mut context = Context::new();
@@ -1450,6 +1478,33 @@ mod test {
         let mut context = Context::new();
         define_derived_property!(Senior, bool, [Age], |age| age >= 65);
 
+        let person = context.add_person();
+        let person2 = context.add_person();
+
+        context.initialize_person_property(person, Age, 64);
+        context.initialize_person_property(person2, Age, 88);
+
+        // Age is a u8, by default integer literals are i32; the macro should cast it.
+        let not_seniors = people_query![context, [Senior = false]];
+        let seniors = people_query![context, [Senior = true]];
+        assert_eq!(seniors.len(), 1, "One senior");
+        assert_eq!(not_seniors.len(), 1, "One non-senior");
+
+        context.set_person_property(person, Age, 65);
+
+        let not_seniors = people_query![context, [Senior = false]];
+        let seniors = people_query![context, [Senior = true]];
+
+        assert_eq!(seniors.len(), 2, "Two seniors");
+        assert_eq!(not_seniors.len(), 0, "No non-seniors");
+    }
+
+    #[test]
+    fn query_derived_prop_with_index() {
+        let mut context = Context::new();
+        define_derived_property!(Senior, bool, [Age], |age| age >= 65);
+
+        context.index_property(Senior);
         let person = context.add_person();
         let person2 = context.add_person();
 
