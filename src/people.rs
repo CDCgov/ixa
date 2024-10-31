@@ -758,7 +758,6 @@ impl ContextPeopleExt for Context {
 
 trait ContextPeopleExtInternal {
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
-    fn add_person_to_indexes(&mut self, person_id: PersonId);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -777,14 +776,6 @@ impl ContextPeopleExtInternal for Context {
             .unwrap()
             .get_index_ref_by_prop(property)
         {
-            if index.lookup.is_some() {
-                index.add_person(self, person_id);
-            }
-        }
-    }
-    fn add_person_to_indexes(&mut self, person_id: PersonId) {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        for (_, index) in (data_container.property_indexes.borrow_mut()).iter_mut() {
             if index.lookup.is_some() {
                 index.add_person(self, person_id);
             }
@@ -824,7 +815,7 @@ macro_rules! people_query {
             $ctx.query_people(vec![
                 $((
                     std::any::TypeId::of::<$k>(),
-                    crate::people::IndexValue::compute(&($v as <$k as $crate::people::PersonProperty>::Value))
+                    $crate::people::IndexValue::compute(&($v as <$k as $crate::people::PersonProperty>::Value))
                 ),)*
             ])
         }
