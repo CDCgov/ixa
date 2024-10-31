@@ -1,7 +1,6 @@
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
-    hash::Hasher128,
 };
 use ixa_derive::IxaEvent;
 use serde::{Deserialize, Serialize};
@@ -11,23 +10,48 @@ use std::{
     cell::{RefCell, RefMut},
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
-    hash::Hash,
+    hash::{Hash, Hasher},
     iter::Iterator,
 };
 
 type Indexer = dyn FnMut(&Context, PersonId) -> IndexValue;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum IndexValue {
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum IndexValue {
     Fixed(u128),
     Variable(Vec<u8>)
 }
 
+struct IndexValueHasher {
+    buf: Vec<u8>,
+}
+
+impl IndexValueHasher {
+    fn new() -> Self {
+        IndexValueHasher { buf: Vec::new() }
+    }
+}
+
+impl Hasher for IndexValueHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        self.buf.extend_from_slice(bytes);
+    }
+
+    fn finish(&self) -> u64 {
+        panic!("Unimplemented")
+    }
+}
+
 impl IndexValue {
     pub fn compute<T: Hash>(val: &T) -> IndexValue {
-        let mut hasher = Hasher128::new();
+        let mut hasher = IndexValueHasher::new();
         val.hash(&mut hasher);
-        IndexValue::Fixed(hasher.finish_128())
+        if hasher.buf.len() <= 16 {
+            let mut tmp: [u8; 16] = [0; 16];
+            tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
+            return IndexValue::Fixed(u128::from_le_bytes(tmp))
+        }
+        IndexValue::Variable(hasher.buf)
     }
 }
 
@@ -131,7 +155,7 @@ impl fmt::Debug for PersonId {
 // * specify an initializer, which returns the initial value
 // They may be defined with the define_person_property! macro.
 pub trait PersonProperty: Copy {
-    type Value: Copy + Debug + Hash + PartialEq;
+    type Value: Copy + Debug + PartialEq + Hash;
     #[must_use]
     fn is_derived() -> bool {
         false
@@ -785,8 +809,7 @@ mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
-        hash::hash_ref,
-        people::{Index, PeoplePlugin, PersonPropertyHolder},
+        people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
@@ -1250,7 +1273,7 @@ mod test {
         context.initialize_person_property(person3, Age, 41);
 
         context.register_indexer(Age);
-        let hash = hash_ref(&context.get_person_property(person1, Age));
+        let hash = IndexValue::compute(&context.get_person_property(person1, Age));
         let people = context.query_people(vec![(TypeId::of::<Age>(), hash)]);
         assert_eq!(people.len(), 1);
     }
@@ -1400,4 +1423,34 @@ mod test {
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
+
+    #[test]
+    fn test_index_value_hasher_finish2_short() {
+        let value = 42;
+        let index = IndexValue::compute(&value);
+        assert!(matches!(index, IndexValue::Fixed(_)));
+    }
+
+    #[test]
+    fn test_index_value_hasher_finish2_long() {
+        let value = "this is a longer string that exceeds 16 bytes";
+        let index = IndexValue::compute(&value);
+        assert!(matches!(index, IndexValue::Variable(_)));
+    }
+
+    #[test]
+    fn test_index_value_compute_same_values() {
+        let value = "test value";
+        let value2 = "test value";
+        assert_eq!(IndexValue::compute(&value), IndexValue::compute(&value2));
+    }
+
+    #[test]
+    fn test_index_value_compute_different_values() {
+        let value1 = 42;
+        let value2 = 43;
+        assert_ne!(IndexValue::compute(&value1),
+                   IndexValue::compute(&value2));
+    }
+    
 }
