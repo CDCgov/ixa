@@ -33,10 +33,9 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());
 
     if context.get_person_property(person_id, Alive) {
-        let plan_id = context
-            .add_plan(recovery_time, move |context| {
-                context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
-            });
+        let plan_id = context.add_plan(recovery_time, move |context| {
+            context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
+        });
         let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
         plans_data_container
             .plans_map
@@ -139,7 +138,7 @@ mod test {
 
         let population_size: usize = 10;
         for _ in 0..population_size {
-            let person = context.create_new_person(0.0);
+            let person = context.create_new_person(0);
 
             context.add_plan(1.0, move |context| {
                 context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
@@ -164,7 +163,7 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        let person = context.create_new_person(0.0);
+        let person = context.create_new_person(0);
         context.add_plan(1.1, move |context| {
             cancel_recovery_plans(context, person);
         });

@@ -1,11 +1,11 @@
 use crate::parameters_loader::Parameters;
 use ixa::{
-    define_global_property, define_person_property,
-    define_person_property_with_default,
     context::Context,
+    define_derived_property, define_global_property, define_person_property,
+    define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
     people::{ContextPeopleExt, PersonId, PersonProperty},
-    random::{define_rng, ContextRandomExt},    
+    random::{define_rng, ContextRandomExt},
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -37,19 +37,27 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
-
 define_global_property!(Foi, HashMap<AgeGroupRisk, f64>);
 define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
 define_person_property!(Age, u8);
 define_person_property!(Alive, bool);
+define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
+    if age <= 1 {
+        AgeGroupRisk::NewBorn
+    } else if age <= 65 {
+        AgeGroupRisk::General
+    } else {
+        AgeGroupRisk::OldAdult
+    }
+});
 
 fn schedule_aging(context: &mut Context, person_id: PersonId) {
     if context.get_person_property(person_id, Alive) {
         let prev_age = context.get_person_property(person_id, Age);
         context.set_person_property(person_id, Age, prev_age + 1);
         let next_age_event = context.get_current_time() + 365.0;
-        context.add_plan(next_age_event, move | context| {
+        context.add_plan(next_age_event, move |context| {
             schedule_aging(context, person_id);
         });
     }
@@ -57,9 +65,9 @@ fn schedule_aging(context: &mut Context, person_id: PersonId) {
 
 fn schedule_birth(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
-    let _person = context.create_new_person(0);
+    let person = context.create_new_person(0);
     context.add_plan(context.get_current_time() + 365.0, move |context| {
-        schedule_aging(context, _person);
+        schedule_aging(context, person);
     });
 
     let next_birth_event = context.get_current_time()
@@ -95,12 +103,12 @@ pub fn init(context: &mut Context) {
         .collect::<HashMap<AgeGroupRisk, f64>>();
 
     context.set_global_property_value(Foi, foi_map.clone());
-    
+
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-        let _person = context.create_new_person(age);
+        let person = context.create_new_person(age);
         context.add_plan(365.0, move |context| {
-            schedule_aging(context, _person);
+            schedule_aging(context, person);
         });
     }
 
@@ -120,7 +128,6 @@ pub fn init(context: &mut Context) {
 pub trait ContextPopulationExt {
     fn create_new_person(&mut self, age: u8) -> PersonId;
     fn attempt_death(&mut self, person_id: PersonId);
-    fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk;
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
     #[allow(dead_code)]
@@ -148,19 +155,8 @@ impl ContextPopulationExt for Context {
     fn create_new_person(&mut self, age: u8) -> PersonId {
         let person = self.add_person();
         self.initialize_person_property(person, Age, age);
-        self.initialize_person_property(person, Alive, true);        
+        self.initialize_person_property(person, Alive, true);
         person
-    }
-
-    fn get_person_age_group(&mut self, person_id: PersonId) -> AgeGroupRisk {
-        let current_age = self.get_person_property(person_id, Age);
-        if current_age <= 1 {
-            AgeGroupRisk::NewBorn
-        } else if current_age <= 65 {
-            AgeGroupRisk::General
-        } else {
-            AgeGroupRisk::OldAdult
-        }
     }
 
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
@@ -168,7 +164,7 @@ impl ContextPopulationExt for Context {
         for i in 0..self.get_current_population() {
             let person_id = self.get_person_id(i);
             if self.get_person_property(person_id, Alive)
-                && self.get_person_age_group(person_id) == age_group
+                && self.get_person_property(person_id, AgeGroupFoi) == age_group
             {
                 current_population += 1;
             }
@@ -181,7 +177,7 @@ impl ContextPopulationExt for Context {
         for i in 0..self.get_current_population() {
             let person_id = self.get_person_id(i);
             if self.get_person_property(person_id, Alive)
-                && self.get_person_age_group(person_id) == age_group
+                && self.get_person_property(person_id, AgeGroupFoi) == age_group
             {
                 people_vec.push(person_id);
             }
@@ -243,18 +239,18 @@ mod test {
     fn test_birth_death() {
         let mut context = Context::new();
 
-        let person = context.create_new_person(-10.0);
-        context.add_plan(10.0, |context| {
-            _ = context.create_new_person(10.0);
+        let person = context.create_new_person(10);
+        context.add_plan(380.0, |context| {
+            _ = context.create_new_person(0);
         });
-        context.add_plan(20.0, move |context| {
+        context.add_plan(400.0, move |context| {
             context.attempt_death(person);
         });
-        context.add_plan(11.0, |context| {
+        context.add_plan(390.0, |context| {
             let pop = context.get_population_by_property(Alive, true);
             assert_eq!(pop, 2);
         });
-        context.add_plan(21.0, |context| {
+        context.add_plan(401.0, |context| {
             let pop = context.get_population_by_property(Alive, true);
             assert_eq!(pop, 1);
         });
@@ -262,10 +258,10 @@ mod test {
         let population = context.get_current_population();
 
         // Even if these people have died during simulation, we can still get their properties
-        let birth_day_0 = context.get_person_property(context.get_person_id(0), Birth);
-        let birth_day_1 = context.get_person_property(context.get_person_id(1), Birth);
-        assert_eq!(birth_day_0, -10.0);
-        assert_eq!(birth_day_1, 10.0);
+        let age_0 = context.get_person_property(context.get_person_id(0), Age);
+        let age_1 = context.get_person_property(context.get_person_id(1), Age);
+        assert_eq!(age_0, 10);
+        assert_eq!(age_1, 0);
 
         // Ixa population contains all individuals ever created
         assert_eq!(population, 2);
@@ -311,14 +307,14 @@ mod test {
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values.clone());
         context.init_random(p_values.seed);
-        let _person = context.create_new_person(-10.0);
+        let _person = context.create_new_person(0);
         schedule_death(&mut context);
     }
 
     #[test]
     fn test_sample_person_group() {
         let mut context = Context::new();
-        let age_vec = vec![0.5, 5.0, 62.0, 80.0];
+        let age_vec = vec![0, 5, 62, 80];
         let years = 5.0;
         let age_groups = vec![
             AgeGroupRisk::NewBorn,
@@ -327,14 +323,16 @@ mod test {
             AgeGroupRisk::OldAdult,
         ];
         for age in &age_vec {
-            let birth = age * (-365.0);
-            let _person = context.create_new_person(birth);
+            let _person = context.create_new_person(*age);
         }
 
         for p in 0..context.get_current_population() {
             let person = context.get_person_id(p);
+            context.add_plan(365.0, move |context| {
+                schedule_aging(context, person);
+            });
             let age_group = age_groups[p];
-            assert_eq!(age_group, context.get_person_age_group(person));
+            assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
         }
 
         // Plan to check in 5 years
@@ -348,8 +346,12 @@ mod test {
             for p in 0..context.get_current_population() {
                 let person = context.get_person_id(p);
                 let age_group = future_age_groups[p];
-                assert_eq!(age_group, context.get_person_age_group(person));
+                assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
             }
+        });
+
+        context.add_plan((years * 365.0) + 1.0, |context| {
+            context.shutdown();
         });
         context.execute();
     }

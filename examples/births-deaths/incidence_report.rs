@@ -1,14 +1,13 @@
 use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{PersonPropertyChangeEvent, ContextPeopleExt};
+use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use std::path::Path;
 use std::path::PathBuf;
 
 use crate::population_manager::{
-    AgeGroupRisk, Age,
-    ContextPopulationExt, InfectionStatus, InfectionStatusType,
+    Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusType,
 };
 
 use serde::{Deserialize, Serialize};
@@ -31,7 +30,7 @@ fn handle_infection_status_change(
     event: PersonPropertyChangeEvent<InfectionStatusType>,
 ) {
     let age_person = context.get_person_property(event.person_id, Age);
-    let age_group_person = context.get_person_age_group(event.person_id);
+    let age_group_person = context.get_person_property(event.person_id, AgeGroupFoi);
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: format!("{}", event.person_id),

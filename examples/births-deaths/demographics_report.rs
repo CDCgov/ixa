@@ -1,13 +1,10 @@
-use crate::population_manager::{
-    AgeGroupRisk,
-    Alive,Age,
-    ContextPopulationExt};
+use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::Parameters;
 use ixa::{
     context::Context,
     create_report_trait,
     global_properties::ContextGlobalPropertiesExt,
-    people::{PersonCreatedEvent, PersonPropertyChangeEvent, ContextPeopleExt},
+    people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent},
     report::{ContextReportExt, Report},
 };
 use serde::{Deserialize, Serialize};
@@ -28,20 +25,20 @@ create_report_trait!(PersonReportItem);
 
 fn handle_person_created(context: &mut Context, event: PersonCreatedEvent) {
     let person = event.person_id;
-    let age_group_person = context.get_person_age_group(person);
+    let age_group_person = context.get_person_property(person, AgeGroupFoi);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
         age_group: age_group_person,
         property: "Created".to_string(),
-        property_prev: "".to_string(),
-        property_current:  "".to_string(),
+        property_prev: String::new(),
+        property_current: String::new(),
     });
 }
 
 fn handle_person_aging(context: &mut Context, event: PersonPropertyChangeEvent<Age>) {
     let person = event.person_id;
-    let age_group_person = context.get_person_age_group(person);
+    let age_group_person = context.get_person_property(person, AgeGroupFoi);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
@@ -55,14 +52,14 @@ fn handle_person_aging(context: &mut Context, event: PersonPropertyChangeEvent<A
 fn handle_death_events(context: &mut Context, event: PersonPropertyChangeEvent<Alive>) {
     if !event.current {
         let person = event.person_id;
-        let age_group_person = context.get_person_age_group(person);
+        let age_group_person = context.get_person_property(person, AgeGroupFoi);
         context.send_report(PersonReportItem {
             time: context.get_current_time(),
             person_id: format!("{person}"),
             age_group: age_group_person,
             property: "Alive".to_string(),
             property_prev: format!("{:?}", event.previous),
-            property_current: format!("{:?}", event.current),            
+            property_current: format!("{:?}", event.current),
         });
     }
 }
