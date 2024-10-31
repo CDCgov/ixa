@@ -29,7 +29,6 @@
 pub mod context;
 pub mod error;
 pub mod global_properties;
-pub mod hash;
 pub mod people;
 pub mod plan;
 pub mod random;
