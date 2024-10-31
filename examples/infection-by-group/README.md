@@ -38,7 +38,7 @@ B--k_2-->A
 
 The global model parameters are as follows:
 * `population_size`: number of individuals in the simulation (in this example, we assume that each region has on average the same number of people to start)
-* `k`: number of population groups/regions.
+* `k`: number of population groups/regions (derived from the )
 * `foi_sin_shift`: for ease in this example, imagine that the force of infection is $sin(foi_sin_shift + t) + 1$; this parameter specifies that phase shift for each region and is a hashmap of (region, foi_sin_shift) pairs. Because this is an _agent_-based model, this is the _per-person_ foi.
 * `base_infection_period`: base time that an individual spends from infection to recovery, gets scaled by number of infecteds in region.
 * `movement`: pair-wise movement rates, square matrix of length `k` coded as a hashmap with the key being the region and the value being a second hashmap that again has regions as the key and movement rates as the value (`ixa` should -- in its parameter loading component -- provide functionality for taking a dataframe and turning it into a nested hashmap like this). Because this is an _agent_-based model, this is the _per-person_ movement rate.
@@ -76,7 +76,6 @@ As in other `ixa` models, the simulation is managed by a central `Context` objec
 struct Parameters {
     random_seed: u64,
     population_size: usize,
-    k: usize,
     foi: HashMap<Counties, f64>,
     base_infection_period: f64,
     movement: HashMap<HashMap<Counties, f64>>
@@ -143,7 +142,6 @@ fn init(context: &mut Context) {
     // assign people to regions and plan their movement upon their creation
     // this may not be the structure we ultimately decide upon for assigning
     // information to people upon their creation
-    panic!(parameters.get_parameter(k) < parameters.get_paramter(population_size));
     context.subscribe_to_event(PersonCreationEvent, assign_and_plan_movement);
 }
 
@@ -152,7 +150,12 @@ fn init(context: &mut Context) {
 fn assign_and_plan_movement(context: &mut Context,
                             person_creation_event: PersonCreationEvent) {
     // evenly distribute ppl among the counties
-    let county_index = parameters.get_parameter(population_size) % parameters.get_parameter(k);
+    // get number of counties
+    let mut k;
+    for county in Counties::iter() {
+        k += 1;
+    }
+    let county_index = parameters.get_parameter(population_size) % k;
     let mut county: Counties;
     let county_iter = Counties::iter();
     // because county_index = 0 means the first option in enum Counties
