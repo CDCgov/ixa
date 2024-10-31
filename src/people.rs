@@ -64,6 +64,8 @@ struct Index {
     lookup: Option<HashMap<IndexValue, HashSet<PersonId>>>,
     // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
+    // The largest person ID that has been indexed.
+    max_indexed: usize
 }
 
 impl Index {
@@ -75,6 +77,7 @@ impl Index {
                 let value = context.get_person_property(person_id, property);
                 IndexValue::compute(&value)
             }),
+            max_indexed: 0,
         };
         index
     }
@@ -96,19 +99,22 @@ impl Index {
             .or_default()
             .remove(&person_id);
     }
-    fn setup(&mut self, context: &Context) {
+    fn index_unindexed_people(&mut self, context: &Context) {
+        if self.lookup.is_none() {
+            return;
+        }
         let current_pop = context.get_current_population();
-        for id in 0..current_pop {
+        for id in self.max_indexed..current_pop {
             let person_id = PersonId { id };
             self.add_index(context, person_id);
         }
+        self.max_indexed = current_pop;
     }
 }
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
-
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
@@ -512,6 +518,7 @@ impl ContextPeopleExt for Context {
 
     fn add_person(&mut self) -> PersonId {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
+        self.add_person_to_indexes(person_id);
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
     }
@@ -571,10 +578,11 @@ impl ContextPeopleExt for Context {
         assert!(!T::is_derived(), "Cannot initialize a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-
+        
         let current_value = *data_container.get_person_property_ref(person_id, property);
         assert!(current_value.is_none(), "Property already initialized");
         data_container.set_person_property(person_id, property, value);
+        self.add_to_index_maybe(person_id, property);
     }
 
     #[allow(clippy::single_match_else)]
@@ -667,7 +675,6 @@ impl ContextPeopleExt for Context {
         let mut index = data_container.get_index_ref_by_prop(property).unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
-            index.setup(self);
         }
     }
 
@@ -681,6 +688,9 @@ impl ContextPeopleExt for Context {
         // corresponding to the value.
         for (t, hash) in property_hashes.into_iter() {
             let mut index = data_container.get_index_ref(t).unwrap();
+            index.index_unindexed_people(self);
+            
+            // Update the index.
             if let Some(lookup) = &index.borrow_mut().lookup {
                 if let Some(matching_people) = lookup.get(&hash) {
                     indexes.push(matching_people.clone()); // UGH
@@ -740,6 +750,7 @@ impl ContextPeopleExt for Context {
 
 trait ContextPeopleExtInternal {
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn add_person_to_indexes(&mut self, person_id: PersonId);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -763,7 +774,15 @@ impl ContextPeopleExtInternal for Context {
             }
         }
     }
-
+    fn add_person_to_indexes(&mut self, person_id: PersonId) {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        for (_, index) in (data_container.property_indexes.borrow_mut()).iter_mut() {
+            if index.lookup.is_some() {
+                index.add_index(self, person_id);
+            }
+        }
+    }
+    
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -1346,6 +1365,18 @@ mod test {
     }
 
     #[test]
+    fn query_people_index_after_add() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.index_property(RiskCategoryType);
+        assert!(property_is_indexed::<RiskCategoryType>(&context));
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+    }
+
+    
+    #[test]
     fn query_people_cast_value() {
         let mut context = Context::new();
         let person = context.add_person();
@@ -1396,6 +1427,7 @@ mod test {
         context.index_property(Age);
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
+
     }
 
     #[test]
