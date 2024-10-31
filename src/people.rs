@@ -14,7 +14,6 @@ use std::{
     iter::Iterator,
 };
 
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized
 // version of the value. If that serialization fits in 128 bits, we
@@ -22,7 +21,7 @@ use std::{
 // goes in Variable.
 pub enum IndexValue {
     Fixed(u128),
-    Variable(Vec<u8>)
+    Variable(Vec<u8>),
 }
 
 impl IndexValue {
@@ -32,7 +31,7 @@ impl IndexValue {
         if hasher.buf.len() <= 16 {
             let mut tmp: [u8; 16] = [0; 16];
             tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
-            return IndexValue::Fixed(u128::from_le_bytes(tmp))
+            return IndexValue::Fixed(u128::from_le_bytes(tmp));
         }
         IndexValue::Variable(hasher.buf)
     }
@@ -61,7 +60,6 @@ impl Hasher for IndexValueHasher {
     }
 }
 
-
 type Indexer = dyn FnMut(&Context, PersonId) -> IndexValue;
 
 // An index for a single property.
@@ -76,7 +74,7 @@ struct Index {
     indexer: Box<Indexer>,
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
-    max_indexed: usize
+    max_indexed: usize,
 }
 
 impl Index {
@@ -588,7 +586,7 @@ impl ContextPeopleExt for Context {
         assert!(!T::is_derived(), "Cannot initialize a derived property");
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-        
+
         let current_value = *data_container.get_person_property_ref(person_id, property);
         assert!(current_value.is_none(), "Property already initialized");
         data_container.set_person_property(person_id, property, value);
@@ -699,7 +697,7 @@ impl ContextPeopleExt for Context {
         for (t, hash) in property_hashes.into_iter() {
             let mut index = data_container.get_index_ref(t).unwrap();
             index.index_unindexed_people(self);
-            
+
             // Update the index.
             if let Some(lookup) = &index.borrow_mut().lookup {
                 if let Some(matching_people) = lookup.get(&hash) {
@@ -792,7 +790,7 @@ impl ContextPeopleExtInternal for Context {
             }
         }
     }
-    
+
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -1385,7 +1383,7 @@ mod test {
         assert_eq!(people.len(), 1);
     }
 
-     #[test]
+    #[test]
     fn query_people_add_after_index() {
         let mut context = Context::new();
         let person = context.add_person();
@@ -1408,7 +1406,7 @@ mod test {
         context.add_person();
         context.index_property(RiskCategoryType);
     }
-        
+
     #[test]
     #[should_panic(expected = "Property not initialized")]
     // This will panic when we query.
@@ -1470,7 +1468,6 @@ mod test {
         context.index_property(Age);
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
-
     }
 
     #[test]
@@ -1551,8 +1548,6 @@ mod test {
     fn test_index_value_compute_different_values() {
         let value1 = 42;
         let value2 = 43;
-        assert_ne!(IndexValue::compute(&value1),
-                   IndexValue::compute(&value2));
+        assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
     }
-    
 }
