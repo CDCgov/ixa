@@ -651,7 +651,10 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_id(&self, person_id: usize) -> PersonId {
-        assert!(!(person_id >= self.get_current_population()), "Person does not exist");
+        assert!(
+            person_id < self.get_current_population(),
+            "Person does not exist"
+        );
         PersonId { id: person_id }
     }
 
@@ -715,13 +718,13 @@ impl ContextPeopleExt for Context {
         //    (2) the overall population if there are no indices.
 
         let holder: HashSet<PersonId>;
-        let to_check: Box<dyn Iterator<Item = PersonId>> = if !indexes.is_empty() {
+        let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
+            Box::new(data_container.people_iterator())
+        } else {
             indexes.sort_by_key(HashSet::len);
 
             holder = indexes.remove(0);
             Box::new(holder.iter().copied())
-        } else {
-            Box::new(data_container.people_iterator())
         };
 
         // 3. Walk over the iterator and add people to the result
