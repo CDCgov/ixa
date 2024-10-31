@@ -20,7 +20,6 @@ roots = "0.0.8"
 strum = "0.26.3"
 strum_macros = "0.26.4"
 ixa-derive = { path = "ixa-derive" }
-bytevec = "0.2.0"
 
 [dev-dependencies]
 rand_distr = "0.4.3"
