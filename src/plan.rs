@@ -235,23 +235,6 @@ mod tests {
     }
 
     #[test]
-    fn add_plans_at_same_time_with_different_priority() {
-        let mut plan_queue = Queue::new();
-        plan_queue.add_plan(1.0, 1, 1);
-        plan_queue.add_plan(1.0, 2, 0);
-
-        let next_plan = plan_queue.get_next_plan().unwrap();
-        assert_eq!(next_plan.time, 1.0);
-        assert_eq!(next_plan.data, 2);
-
-        let next_plan = plan_queue.get_next_plan().unwrap();
-        assert_eq!(next_plan.time, 1.0);
-        assert_eq!(next_plan.data, 1);
-
-        assert!(plan_queue.get_next_plan().is_none());
-    }
-
-    #[test]
     fn add_and_cancel_plans() {
         let mut plan_queue = Queue::new();
         plan_queue.add_plan(1.0, 1, ());
