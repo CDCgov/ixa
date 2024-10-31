@@ -20,14 +20,14 @@ struct Index {
     #[allow(dead_code)]
     name: &'static str,
     // The hash of the property value maps to a list of PersonIds
-    // or None if we'r enot indexing
+    // or None if we're not indexing
     lookup: Option<HashMap<u128, HashSet<PersonId>>>,
     // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
 }
 
 impl Index {
-    fn new<T: PersonProperty + 'static>(context: &Context, property: T) -> Self {
+    fn new<T: PersonProperty + 'static>(_context: &Context, property: T) -> Self {
         let index = Self {
             name: std::any::type_name::<T>(),
             lookup: None,
@@ -1318,6 +1318,28 @@ mod test {
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
     }
+
+    #[test]
+    fn query_people_intersection_one_indexed() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+        let person2 = context.add_person();
+        let person3 = context.add_person();
+
+        // Note: because of the way indexes are initialized, all properties without initializers need to be
+        // set for all people.
+        context.initialize_person_property(person1, Age, 42);
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.initialize_person_property(person2, Age, 42);
+        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person3, Age, 40);
+        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
+
+        context.index_property(Age);
+        let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
+        assert_eq!(people.len(), 1);
+    }
+    
 
     #[test]
     fn query_derived_prop() {
