@@ -651,9 +651,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_id(&self, person_id: usize) -> PersonId {
-        if person_id >= self.get_current_population() {
-            panic!("Person does not exist");
-        }
+        assert!(!(person_id >= self.get_current_population()), "Person does not exist");
         PersonId { id: person_id }
     }
 
@@ -693,7 +691,7 @@ impl ContextPeopleExt for Context {
 
         // 1. Walk through each property and collect the index entry
         // corresponding to the value.
-        for (t, hash) in property_hashes.into_iter() {
+        for (t, hash) in property_hashes {
             let mut index = data_container.get_index_ref(t).unwrap();
             index.index_unindexed_people(self);
 
@@ -718,10 +716,10 @@ impl ContextPeopleExt for Context {
 
         let holder: HashSet<PersonId>;
         let to_check: Box<dyn Iterator<Item = PersonId>> = if !indexes.is_empty() {
-            indexes.sort_by_key(|x| x.len());
+            indexes.sort_by_key(HashSet::len);
 
             holder = indexes.remove(0);
-            Box::new(holder.iter().cloned())
+            Box::new(holder.iter().copied())
         } else {
             Box::new(data_container.people_iterator())
         };
