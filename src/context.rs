@@ -21,6 +21,20 @@ pub trait IxaEvent {
     fn on_subscribe(_context: &mut Context) {}
 }
 
+/// An enum to indicate the phase for plans at a given time.
+///
+/// Most plans will occur as `Normal`. Plans with phase `First` are
+/// handled before all `Normal` plans, and those with phase `Last` are
+/// handled after all `Normal` plans. In all cases ties between plans at the
+/// same time and with the same phase are handled in the order of scheduling.
+///
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
+pub enum ExecutionPhase {
+    First,
+    Normal,
+    Last,
+}
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -41,7 +55,7 @@ pub trait IxaEvent {
 ///
 /// The simulation also has a separate callback mechanism. Callbacks
 /// fire before the next timed event (even if it is scheduled for the
-/// current time. This allows modules to schedule actions for immediate
+/// current time). This allows modules to schedule actions for immediate
 /// execution but outside of the current iteration of the event loop.
 ///
 /// Modules can also emit 'events' that other modules can subscribe to handle by
@@ -49,7 +63,7 @@ pub trait IxaEvent {
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>>,
+    plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
@@ -110,7 +124,8 @@ impl Context {
         }
     }
 
-    /// Add a plan to the future event list at the specified time
+    /// Add a plan to the future event list at the specified time in the normal
+    /// phase
     ///
     /// Returns an `Id` for the newly-added plan that can be used to cancel it
     /// if needed.
@@ -118,11 +133,29 @@ impl Context {
     ///
     /// Panics if time is in the past, infinite, or NaN.
     pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
+        self.add_plan_with_phase(time, callback, ExecutionPhase::Normal)
+    }
+
+    /// Add a plan to the future event list at the specified time and with the
+    /// specified phase (first, normal, or last among plans at the
+    /// specified time)
+    ///
+    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan_with_phase(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> Id {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
             "Time is invalid"
         );
-        self.plan_queue.add_plan(time, Box::new(callback))
+        self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
 
     /// Cancel a plan that has been added to the queue
@@ -281,6 +314,21 @@ mod tests {
         })
     }
 
+    fn add_plan_with_phase(
+        context: &mut Context,
+        time: f64,
+        value: u32,
+        phase: ExecutionPhase,
+    ) -> Id {
+        context.add_plan_with_phase(
+            time,
+            move |context| {
+                context.get_data_container_mut(ComponentA).push(value);
+            },
+            phase,
+        )
+    }
+
     #[test]
     #[should_panic(expected = "Time is invalid")]
     fn negative_plan_time() {
@@ -418,6 +466,29 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn check_plan_phase_ordering() {
+        assert!(ExecutionPhase::First < ExecutionPhase::Normal);
+        assert!(ExecutionPhase::Normal < ExecutionPhase::Last);
+    }
+
+    #[test]
+    fn plans_at_same_time_follow_phase() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        add_plan_with_phase(&mut context, 1.0, 5, ExecutionPhase::Last);
+        add_plan_with_phase(&mut context, 1.0, 3, ExecutionPhase::First);
+        add_plan(&mut context, 1.0, 2);
+        add_plan_with_phase(&mut context, 1.0, 6, ExecutionPhase::Last);
+        add_plan_with_phase(&mut context, 1.0, 4, ExecutionPhase::First);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(
+            *context.get_data_container_mut(ComponentA),
+            vec![3, 4, 1, 2, 5, 6]
+        );
     }
 
     #[derive(Copy, Clone, IxaEvent)]
