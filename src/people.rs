@@ -518,7 +518,6 @@ impl ContextPeopleExt for Context {
 
     fn add_person(&mut self) -> PersonId {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
-        self.add_person_to_indexes(person_id);
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
     }
@@ -1375,6 +1374,22 @@ mod test {
         assert_eq!(people.len(), 1);
     }
 
+     #[test]
+    fn query_people_add_after_index() {
+        let mut context = Context::new();
+        let person = context.add_person();
+        context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
+        context.index_property(RiskCategoryType);
+        assert!(property_is_indexed::<RiskCategoryType>(&context));
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+
+        let person = context.add_person();
+        context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 2);
+    }
+    
     
     #[test]
     fn query_people_cast_value() {
