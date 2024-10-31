@@ -1,6 +1,6 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-struct Hasher128 {
+pub struct Hasher128 {
     buf: Vec<u8>,
 }
 

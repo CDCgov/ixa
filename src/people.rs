@@ -1,6 +1,8 @@
 use crate::{
     context::{Context, IxaEvent},
-    define_data_plugin, hash::hash_ref};
+    define_data_plugin,
+    hash::Hasher128,
+};
 use ixa_derive::IxaEvent;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -10,10 +12,24 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
     hash::Hash,
-    iter::Iterator
+    iter::Iterator,
 };
 
-type Indexer = dyn FnMut(&Context, PersonId) -> u128;
+type Indexer = dyn FnMut(&Context, PersonId) -> IndexValue;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum IndexValue {
+    Fixed(u128),
+    Variable(Vec<u8>)
+}
+
+impl IndexValue {
+    pub fn compute<T: Hash>(val: &T) -> IndexValue {
+        let mut hasher = Hasher128::new();
+        val.hash(&mut hasher);
+        IndexValue::Fixed(hasher.finish_128())
+    }
+}
 
 struct Index {
     // Primarily for debugging purposes
@@ -21,7 +37,7 @@ struct Index {
     name: &'static str,
     // The hash of the property value maps to a list of PersonIds
     // or None if we're not indexing
-    lookup: Option<HashMap<u128, HashSet<PersonId>>>,
+    lookup: Option<HashMap<IndexValue, HashSet<PersonId>>>,
     // A callback that calculates the hash of a person's current property value
     indexer: Box<Indexer>,
 }
@@ -33,19 +49,27 @@ impl Index {
             lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
-                hash_ref(&value)
+                IndexValue::compute(&value)
             }),
         };
         index
     }
     fn add_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        self.lookup.as_mut().unwrap().entry(hash).or_default().insert(person_id);
+        self.lookup
+            .as_mut()
+            .unwrap()
+            .entry(hash)
+            .or_default()
+            .insert(person_id);
     }
     fn remove_index(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
-        self.lookup.as_mut().unwrap()
-            .entry(hash).or_default()
+        self.lookup
+            .as_mut()
+            .unwrap()
+            .entry(hash)
+            .or_default()
             .remove(&person_id);
     }
     fn setup(&mut self, context: &Context) {
@@ -56,7 +80,6 @@ impl Index {
         }
     }
 }
-
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -164,7 +187,7 @@ where
     ) {
         let previous = context.get_person_property(person, T::get_instance());
         context.remove_from_index_maybe(person, T::get_instance());
-        
+
         // Captures the current value of the person property and defers the actual event
         // emission to when we have access to the new value.
         callback_vec.push(Box::new(move |ctx| {
@@ -174,7 +197,7 @@ where
                 current,
                 previous,
             };
-            ctx.add_to_index_maybe(person, T::get_instance());            
+            ctx.add_to_index_maybe(person, T::get_instance());
             ctx.emit_event(change_event);
         }));
     }
@@ -361,7 +384,7 @@ impl PeopleData {
     fn people_iterator(&self) -> PeopleIterator {
         PeopleIterator {
             population: self.current_population,
-            person_id: 0
+            person_id: 0,
         }
     }
 }
@@ -376,7 +399,7 @@ impl Iterator for PeopleIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = if self.person_id < self.population {
-            Some(PersonId{id: self.person_id})
+            Some(PersonId { id: self.person_id })
         } else {
             None
         };
@@ -454,7 +477,7 @@ pub trait ContextPeopleExt {
     fn get_person_id(&self, person_id: usize) -> PersonId;
     fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T);
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
-    fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId>;
+    fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
 }
 
 impl ContextPeopleExt for Context {
@@ -543,7 +566,7 @@ impl ContextPeopleExt for Context {
         if previous_value != value {
             self.remove_from_index_maybe(person_id, property);
         }
-        
+
         // Temporarily remove dependency properties since we need mutable references
         // to self during callback execution
         let deps_temp = {
@@ -575,7 +598,7 @@ impl ContextPeopleExt for Context {
         if previous_value != value {
             self.add_to_index_maybe(person_id, property);
         }
-        
+
         let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
             person_id,
             current: value,
@@ -594,7 +617,7 @@ impl ContextPeopleExt for Context {
         }
         PersonId { id: person_id }
     }
-            
+
     fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T) {
         {
             let data_container = self.get_data_container_mut(PeoplePlugin);
@@ -613,21 +636,20 @@ impl ContextPeopleExt for Context {
 
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
         self.register_indexer(property);
-        
+
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-        
+
         let mut index = data_container.get_index_ref_by_prop(property).unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
             index.setup(self);
-            
         }
     }
-    
-    fn query_people(&self, property_hashes: Vec<(TypeId, u128)>) -> Vec<PersonId> {
+
+    fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId> {
         let mut indexes = Vec::<HashSet<PersonId>>::new();
-        let mut unindexed = Vec::<(TypeId, u128)>::new();
+        let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
@@ -643,8 +665,7 @@ impl ContextPeopleExt for Context {
                     // also be empty.
                     return Vec::new();
                 }
-            }
-            else {
+            } else {
                 // No index, so we'll get to this after.
                 unindexed.push((t, hash));
             }
@@ -654,8 +675,8 @@ impl ContextPeopleExt for Context {
         //    (1) the smallest index if there is one.
         //    (2) the overall population if there are no indices.
 
-        let holder : HashSet<PersonId>;
-        let to_check : Box<dyn Iterator<Item = PersonId>> = if indexes.len() != 0 {
+        let holder: HashSet<PersonId>;
+        let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.len() != 0 {
             indexes.sort_by_key(|x| x.len());
 
             holder = indexes.remove(0);
@@ -695,12 +716,19 @@ impl ContextPeopleExt for Context {
 
 trait ContextPeopleExtInternal {
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    );
 }
-                                                
+
 impl ContextPeopleExtInternal for Context {
-    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T)
-    {
+    fn add_to_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    ) {
         if let Some(mut index) = self
             .get_data_container(PeoplePlugin)
             .unwrap()
@@ -712,14 +740,17 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T)
-    {
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    ) {
         if let Some(mut index) = self
             .get_data_container(PeoplePlugin)
             .unwrap()
             .get_index_ref_by_prop(property)
         {
-            if index.lookup.is_some() {            
+            if index.lookup.is_some() {
                 index.remove_index(self, person_id);
             }
         }
@@ -742,7 +773,7 @@ macro_rules! people_query {
             $ctx.query_people(vec![
                 $((
                     std::any::TypeId::of::<$k>(),
-                    crate::hash::hash_ref(&($v as <$k as $crate::people::PersonProperty>::Value))
+                    crate::people::IndexValue::compute(&($v as <$k as $crate::people::PersonProperty>::Value))
                 ),)*
             ])
         }
@@ -754,8 +785,8 @@ mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
-        people::{PeoplePlugin, PersonPropertyHolder, Index},
         hash::hash_ref,
+        people::{Index, PeoplePlugin, PersonPropertyHolder},
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
@@ -1242,17 +1273,21 @@ mod test {
 
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
         context.index_property(RiskCategoryType);
-        assert!(property_is_indexed::<RiskCategoryType>(&context));        
+        assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 1);
     }
 
     fn property_is_indexed<T: 'static>(context: &Context) -> bool {
-        context.get_data_container(PeoplePlugin)
+        context
+            .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_index_ref(TypeId::of::<T>()).unwrap().lookup.is_some()
+            .get_index_ref(TypeId::of::<T>())
+            .unwrap()
+            .lookup
+            .is_some()
     }
-    
+
     #[test]
     fn query_people_macro_index_second() {
         let mut context = Context::new();
@@ -1264,8 +1299,8 @@ mod test {
         assert_eq!(people.len(), 1);
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);        
-        assert_eq!(people.len(), 1);        
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
     }
 
     #[test]
@@ -1277,14 +1312,14 @@ mod test {
 
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 1);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);        
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);
         assert_eq!(people.len(), 0);
 
-        context.set_person_property(person1, RiskCategoryType, RiskCategory::Low);        
+        context.set_person_property(person1, RiskCategoryType, RiskCategory::Low);
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
         assert_eq!(people.len(), 0);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);        
-        assert_eq!(people.len(), 1);        
+        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);
+        assert_eq!(people.len(), 1);
     }
 
     #[test]
@@ -1339,7 +1374,6 @@ mod test {
         let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
         assert_eq!(people.len(), 1);
     }
-    
 
     #[test]
     fn query_derived_prop() {
@@ -1366,6 +1400,4 @@ mod test {
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
-
-
 }
