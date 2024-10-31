@@ -1,14 +1,13 @@
 use crate::parameters_loader::Parameters;
 use ixa::{
     context::Context,
-    define_derived_property, define_global_property, define_person_property,
+    define_derived_property, define_person_property,
     define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
     people::{ContextPeopleExt, PersonId, PersonProperty},
     random::{define_rng, ContextRandomExt},
 };
 use serde::Deserialize;
-use std::collections::HashMap;
 
 define_rng!(PeopleRng);
 
@@ -37,11 +36,10 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
-define_global_property!(Foi, HashMap<AgeGroupRisk, f64>);
 define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
 define_person_property!(Age, u8);
-define_person_property!(Alive, bool);
+define_person_property_with_default!(Alive, bool, true);
 define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
     if age <= 1 {
         AgeGroupRisk::NewBorn
@@ -81,7 +79,7 @@ fn schedule_death(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
 
     if let Some(person) = context.sample_person_by_property(Alive, true) {
-        context.attempt_death(person);
+        context.kill_person(person);
 
         let next_death_event = context.get_current_time()
             + context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
@@ -94,15 +92,6 @@ fn schedule_death(context: &mut Context) {
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
-
-    let foi_map = parameters
-        .foi_groups
-        .clone()
-        .into_iter()
-        .map(|x| (x.group_name, x.foi))
-        .collect::<HashMap<AgeGroupRisk, f64>>();
-
-    context.set_global_property_value(Foi, foi_map.clone());
 
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
@@ -127,7 +116,7 @@ pub fn init(context: &mut Context) {
 
 pub trait ContextPopulationExt {
     fn create_new_person(&mut self, age: u8) -> PersonId;
-    fn attempt_death(&mut self, person_id: PersonId);
+    fn kill_person(&mut self, person_id: PersonId);
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
     #[allow(dead_code)]
@@ -148,14 +137,13 @@ pub trait ContextPopulationExt {
 }
 
 impl ContextPopulationExt for Context {
-    fn attempt_death(&mut self, person_id: PersonId) {
+    fn kill_person(&mut self, person_id: PersonId) {
         self.set_person_property(person_id, Alive, false);
     }
 
     fn create_new_person(&mut self, age: u8) -> PersonId {
         let person = self.add_person();
         self.initialize_person_property(person, Age, age);
-        self.initialize_person_property(person, Alive, true);
         person
     }
 
@@ -244,7 +232,7 @@ mod test {
             _ = context.create_new_person(0);
         });
         context.add_plan(400.0, move |context| {
-            context.attempt_death(person);
+            context.kill_person(person);
         });
         context.add_plan(390.0, |context| {
             let pop = context.get_population_by_property(Alive, true);

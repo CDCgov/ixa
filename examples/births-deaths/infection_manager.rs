@@ -7,7 +7,7 @@ use ixa::define_data_plugin;
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
-use ixa::plan;
+use ixa::plan::Id;
 use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 use std::collections::{HashMap, HashSet};
@@ -17,13 +17,13 @@ define_data_plugin!(
     InfectionPlansPlugin,
     InfectionPlansData,
     InfectionPlansData {
-        plans_map: HashMap::<PersonId, HashSet::<plan::Id>>::new(),
+        plans_map: HashMap::<PersonId, HashSet::<Id>>::new(),
     }
 );
 
 #[derive(Debug)]
 struct InfectionPlansData {
-    plans_map: HashMap<PersonId, HashSet<plan::Id>>,
+    plans_map: HashMap<PersonId, HashSet<Id>>,
 }
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
@@ -55,7 +55,7 @@ fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
     let plans_set = plans_data_container
         .plans_map
         .get(&person_id)
-        .unwrap_or(&HashSet::<plan::Id>::new())
+        .unwrap_or(&HashSet::<Id>::new())
         .clone();
 
     for plan_id in plans_set {
@@ -146,7 +146,7 @@ mod test {
         }
 
         context.add_plan(1.1, move |context| {
-            context.attempt_death(context.get_person_id(0));
+            context.kill_person(context.get_person_id(0));
         });
 
         context.execute();

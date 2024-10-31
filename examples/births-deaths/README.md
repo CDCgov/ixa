@@ -1,6 +1,6 @@
 # Birth and death processes
 
-This example describes the process of loading a population, adding new births and deaths. It has a simple sir model that represents infections from a constant force of infection that differs by age category (0,2m, 6m, 65y).
+This example describes the process of loading a population, adding new births and deaths. It has a simple disease model that represents infections from a constant force of infection that differs by age category (0,1,65) .
 
 # Features
   * Adding newborns to the simulation with some default person properties,
@@ -14,7 +14,7 @@ This simulation builds on the basic infection example. Mainly, susceptible indiv
 The exposure process is initialized by scheduling an initial infection attempt for each age group. This depends on the force of infection defined for each age group, and the current size of the group, which only includes people who are alive. Individuals who are infected by the pathogen may recover based on a recovery period (`t + infection_period`) specified at initialization. These recovery times are scheduled at the time of infection as a `plan`. The `id` for this plan is saved in a data structure that holds the current plans for recovery scheduled for each individual. Once the person recovers, these plans are removed from the data structure. However, if the person dies before recovering, these plans are canceled at the time of death. The infection status of recovered individuals remains as recovered for the rest of the simulation, which will stop when the plan queue is empty.
 
 # Population manager
-At initialization, the population manager adds people to the simulation as defined in the input parameters file, and initializes each person with two person properties: `Birth` time and `Alive` status. Birth time is estimated as a random number between 0 and -100 to represent ages from 0 to 100 years. To trait `get_person_age` can return a person's age based on their time of birth.
+At initialization, the population manager adds people to the simulation as defined in the input parameters file, and initializes each person with two person properties: `Birth` time and `Alive` status. Birth time is estimated as a random number between 0 and -100 to represent ages from 0 to 100 years. The method `get_person_age` (implemented as a trait extension on `context`) can return a person's age based on their time of birth.
 
 ## Births
 New people are constantly added to the simulation based on a birth rate, which is defined by the input parameters. The creation of new individuals is performed as any other person added to the simulation, and their person property `Birth` is assigned to the current simulation time `context.get_current_time()`.
@@ -38,7 +38,7 @@ fn attempt_death(&mut self, person_id) {
 ```
 
 ## Age Groups
-Age groups are defined in the population manager as an `enum`. These groups are determined for each person using the trait `get_person_age_group`. This function estimates the current age group based on the time of the simulation and the time of birth. In this example, the force of infection varies for each of the three age groups defined below. Hence, a hash map contains the force of infection for each of these groups and is saved as a global property.
+Age groups are defined in the population manager as an `enum`. These groups are determined for each person using the method `get_person_age_group`. This function estimates the current age group based on the time of the simulation and the time of birth. In this example, the force of infection varies for each of the three age groups defined below. Hence, a hash map contains the force of infection for each of these groups and is saved as a global property.
 
 ```rust
 pub enum AgeGroupRisk {

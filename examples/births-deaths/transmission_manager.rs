@@ -6,9 +6,9 @@ use ixa::random::ContextRandomExt;
 
 use crate::population_manager::AgeGroupRisk;
 use crate::population_manager::ContextPopulationExt;
-use crate::population_manager::Foi;
 use crate::population_manager::InfectionStatus;
 use crate::population_manager::InfectionStatusType;
+use crate::parameters_loader::Foi;
 use crate::Parameters;
 use rand_distr::Exp;
 

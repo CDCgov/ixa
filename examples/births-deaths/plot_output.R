@@ -14,7 +14,7 @@ age_groups <- params$foi_groups
 output_df <- read_csv(file.path(dir, "incidence.csv")) |>
   dplyr::filter(infection_status == "I") |>
   group_by(time, age_group) |>
-  mutate(inf = n()) |>
+  summarize(inf = n()) |>
   ungroup() |>
   mutate(inf = cumsum(inf))
 
