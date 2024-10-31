@@ -79,7 +79,7 @@ struct Index {
 
 impl Index {
     fn new<T: PersonProperty + 'static>(_context: &Context, property: T) -> Self {
-        let index = Self {
+        Self {
             name: std::any::type_name::<T>(),
             lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
@@ -87,8 +87,7 @@ impl Index {
                 IndexValue::compute(&value)
             }),
             max_indexed: 0,
-        };
-        index
+        }
     }
     fn add_person(&mut self, context: &Context, person_id: PersonId) {
         let hash = (self.indexer)(context, person_id);
@@ -718,7 +717,7 @@ impl ContextPeopleExt for Context {
         //    (2) the overall population if there are no indices.
 
         let holder: HashSet<PersonId>;
-        let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.len() != 0 {
+        let to_check: Box<dyn Iterator<Item = PersonId>> = if !indexes.is_empty() {
             indexes.sort_by_key(|x| x.len());
 
             holder = indexes.remove(0);
