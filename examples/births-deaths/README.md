@@ -105,7 +105,7 @@ fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
 ```
 
 # Transmission  & infection progression
-Infections are spread throughout the population based on a constant force of infection, which differs for age groups 0-12m, 1-65, and 65+. Infection attempts are scheduled based on each age group force of infection. To spread the pathogen in the population, a random person is selected for each age group using `sample_person(age_group)`, if this person is susceptible to infection.
+Infections are spread throughout the population based on a constant force of infection, which differs for age groups 0-12m, 1-65, and 65+. Given that population changes over time in this example, the p constant force of infection is an approximation, as opposed to a rejection sampling approach. Infection attempts are scheduled based on each age group force of infection. To spread the pathogen in the population, a random person is selected for each age group using `sample_person(age_group)`, if this person is susceptible to infection.
 
 Infected individuals are scheduled to recover based on the infection period. These are the only type of plans that are scheduled for an individual in this simulation. Hence, when recovery is scheduled using `context.add_plan()`, the `plan id` is stored in a data container named `InfectionPlansPlugin`.
 

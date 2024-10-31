@@ -11,12 +11,13 @@ age_groups <- params$foi_groups
 
 
 
-output_df <- read_csv(file.path(dir, "incidence.csv")) |>
+overall_output_df <- read_csv(file.path(dir, "incidence.csv"))
+output_df <- overall_output_df |>
   dplyr::filter(infection_status == "I") |>
   group_by(time, age_group) |>
-  summarize(inf = n()) |>
-  ungroup() |>
-  mutate(inf = cumsum(inf))
+  summarize(infections = n(), .groups = "drop") |>
+  group_by(age_group) |>
+  mutate(infections = cumsum(infections))
 
 time_array <- 0:ceiling(max(output_df$time))
 
@@ -26,7 +27,7 @@ for (a in seq_along(age_groups)) {
   age_group_name <- age_groups[[a]]$group_name
   expected_susc <- population * exp(-foi * time_array)
   tmp_df <- filter(output_df, age_group == age_group_name)
-  plot(tmp_df$time, tmp_df$inf, ylim = c(0,population), main = age_group_name)
+  plot(tmp_df$time, tmp_df$infections, ylim = c(0,population), main = age_group_name)
   ##lines(time_array, expected_susc, col = "red")
 }
 
