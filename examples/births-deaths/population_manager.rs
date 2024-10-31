@@ -1,8 +1,7 @@
 use crate::parameters_loader::Parameters;
 use ixa::{
     context::Context,
-    define_derived_property, define_person_property,
-    define_person_property_with_default,
+    define_derived_property, define_person_property, define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
     people::{ContextPeopleExt, PersonId, PersonProperty},
     random::{define_rng, ContextRandomExt},

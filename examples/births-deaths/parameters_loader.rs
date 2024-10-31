@@ -1,11 +1,11 @@
 use ixa::context::Context;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use std::fmt::Debug;
-use std::path::Path;
-use std::collections::HashMap;
 use ixa::define_global_property;
 use ixa::error::IxaError;
+use ixa::global_properties::ContextGlobalPropertiesExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::path::Path;
 
 use crate::population_manager::AgeGroupRisk;
 
