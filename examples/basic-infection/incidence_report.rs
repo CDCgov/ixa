@@ -25,11 +25,18 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 }
 
 pub fn init(context: &mut Context) {
-    context
+    let dir_creation_res = context
         .report_options()
         .directory(PathBuf::from("./examples/basic-infection/"));
-    context.add_report::<IncidenceReportItem>("incidence");
-    context.subscribe_to_event::<InfectionStatusEvent>(|context, event| {
-        handle_infection_status_change(context, event);
-    });
+    match dir_creation_res {
+        Ok(()) => {
+            context.add_report::<IncidenceReportItem>("incidence");
+            context.subscribe_to_event::<InfectionStatusEvent>(|context, event| {
+                handle_infection_status_change(context, event);
+            });
+        }
+        Err(ixa_error) => {
+            println!("Error creating directory: {ixa_error}");
+        }
+    }
 }

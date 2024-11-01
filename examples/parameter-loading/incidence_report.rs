@@ -33,13 +33,20 @@ fn handle_infection_status_change(
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).clone();
-    context
+    let dir_creation_res = context
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
-    context.add_report::<IncidenceReportItem>(&parameters.output_file);
-    context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
-            handle_infection_status_change(context, event);
-        },
-    );
+    match dir_creation_res {
+        Ok(()) => {
+            context.add_report::<IncidenceReportItem>(&parameters.output_file);
+            context.subscribe_to_event(
+                |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+                    handle_infection_status_change(context, event);
+                },
+            );
+        }
+        Err(ixa_error) => {
+            println!("Error creating directory: {ixa_error}");
+        }
+    }
 }

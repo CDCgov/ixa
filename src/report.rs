@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::error::IxaError;
 use csv::Writer;
 use std::any::TypeId;
 use std::cell::RefCell;
@@ -32,13 +33,15 @@ impl ConfigReportOptions {
         self
     }
     /// Sets the directory where reports will be output
-    /// # Panics
-    /// if the directory in which the report is to be stored does not exist and cannot be created
-    pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
+    /// Returns `Result<(), IxaError>` indicating success
+    /// # Errors
+    /// Returns an `IxaError::IoError` if the provided directory does not
+    /// exist and could not be successfully created
+    pub fn directory(&mut self, directory: PathBuf) -> Result<(), IxaError> {
         // if the directory does not exist, create it
-        create_dir_all(directory.clone()).expect("Failed to create directory");
+        create_dir_all(directory.clone())?;
         self.directory = directory;
-        self
+        Ok(())
     }
 }
 
@@ -168,7 +171,8 @@ mod test {
         let config = context.report_options();
         config
             .file_prefix("prefix1_".to_string())
-            .directory(path.clone());
+            .directory(path.clone())
+            .expect("Failed to create directory");
         context.add_report::<SampleReport>("sample_report");
         let report = SampleReport {
             id: 1,
@@ -189,12 +193,33 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "Failed to create directory")]
+    fn directory_creation_error() {
+        let mut context = Context::new();
+        let path = PathBuf::from("/ixa-temporary-files");
+        let config = context.report_options();
+        let dir_creation_res = config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone());
+        #[allow(clippy::match_wildcard_for_single_variants)]
+        match dir_creation_res {
+            Ok(()) => {}
+            Err(ixa_error) => match ixa_error {
+                IxaError::IoError(_) => panic!("Failed to create directory"),
+                _ => panic!("Unexpected error"),
+            },
+        }
+    }
+
+    #[test]
     fn add_report_empty_prefix() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
-        config.directory(path.clone());
+        config
+            .directory(path.clone())
+            .expect("Failed to create directory");
         context.add_report::<SampleReport>("sample_report");
         let report = SampleReport {
             id: 1,
@@ -222,7 +247,8 @@ mod test {
         let config = context.report_options();
         config
             .file_prefix("test_prefix_".to_string())
-            .directory(path.clone());
+            .directory(path.clone())
+            .expect("Failed to create directory");
         context.add_report::<SampleReport>("sample_report");
         let report = SampleReport {
             id: 1,
@@ -262,7 +288,8 @@ mod test {
         let config = context.report_options();
         config
             .file_prefix("mult_report_".to_string())
-            .directory(path.clone());
+            .directory(path.clone())
+            .expect("Failed to create directory");
         context.add_report::<SampleReport>("sample_report");
         let report1 = SampleReport {
             id: 1,
@@ -311,7 +338,10 @@ mod test {
             let handle = thread::spawn(move || {
                 let mut context = Context::new();
                 let config = context.report_options();
-                config.file_prefix(i.to_string()).directory(path.clone());
+                config
+                    .file_prefix(i.to_string())
+                    .directory(path.clone())
+                    .expect("Failed to create directory");
                 context.add_report::<SampleReport>("sample_report");
 
                 for j in 0..num_reports_per_thread {

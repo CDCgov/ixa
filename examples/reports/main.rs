@@ -23,31 +23,39 @@ create_report_trait!(Death);
 fn main() {
     let mut context = Context::new();
 
-    context
+    let dir_creation_res = context
         .report_options()
         .file_prefix("Reports_".to_string())
         .directory(PathBuf::from("./"));
-    context.add_report::<Incidence>("incidence");
-    context.add_report::<Death>("death");
 
-    context.add_plan(1.0, |context| {
-        context.send_report(Incidence {
-            person_id: 1.to_string(),
-            t: context.get_current_time(),
-        });
-        println!(
-            "Person 1 was infected at time {}",
-            context.get_current_time()
-        );
-    });
+    match dir_creation_res {
+        Ok(()) => {
+            context.add_report::<Incidence>("incidence");
+            context.add_report::<Death>("death");
 
-    context.add_plan(2.0, |context| {
-        context.send_report(Death {
-            person_id: 1.to_string(),
-            t: context.get_current_time(),
-        });
-        println!("Person 1 died at time {}", context.get_current_time());
-    });
+            context.add_plan(1.0, |context| {
+                context.send_report(Incidence {
+                    person_id: 1.to_string(),
+                    t: context.get_current_time(),
+                });
+                println!(
+                    "Person 1 was infected at time {}",
+                    context.get_current_time()
+                );
+            });
 
-    context.execute();
+            context.add_plan(2.0, |context| {
+                context.send_report(Death {
+                    person_id: 1.to_string(),
+                    t: context.get_current_time(),
+                });
+                println!("Person 1 died at time {}", context.get_current_time());
+            });
+
+            context.execute();
+        }
+        Err(ixa_error) => {
+            println!("Error creating directory: {ixa_error}");
+        }
+    }
 }
