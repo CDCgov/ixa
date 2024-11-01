@@ -541,7 +541,7 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
-    fn register_property<T: PersonProperty + 'static>(&mut self);
+    fn register_property<T: PersonProperty + 'static>(&self);
 
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
@@ -584,7 +584,7 @@ impl ContextPeopleExt for Context {
         person_id
     }
 
-    fn register_property<T: PersonProperty + 'static>(&mut self) {
+    fn register_property<T: PersonProperty + 'static>(&self) {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         if !data_container
@@ -715,6 +715,7 @@ impl ContextPeopleExt for Context {
     fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T) {
         {
             let data_container = self.get_data_container_mut(PeoplePlugin);
+            
             let property_indexes = data_container.property_indexes.borrow_mut();
             if property_indexes.contains_key(&TypeId::of::<T>()) {
                 return; // Index already exists, do nothing
@@ -723,7 +724,7 @@ impl ContextPeopleExt for Context {
 
         // If it doesn't exist, insert the new index
         let index = Index::new(self, property);
-        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut property_indexes = data_container.property_indexes.borrow_mut();
         property_indexes.insert(TypeId::of::<T>(), index);
     }
