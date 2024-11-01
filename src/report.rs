@@ -39,7 +39,7 @@ impl ConfigReportOptions {
     /// exist and could not be successfully created
     pub fn directory(&mut self, directory: PathBuf) -> Result<(), IxaError> {
         // if the directory does not exist, create it
-        create_dir_all(directory.clone())?;
+        create_dir_all(&directory)?;
         self.directory = directory;
         Ok(())
     }
