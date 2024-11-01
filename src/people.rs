@@ -37,6 +37,59 @@ impl IndexValue {
     }
 }
 
+trait Query {
+    fn setup(context: &mut Context);
+    fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
+}
+
+impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
+    fn setup(context: &mut Context) {
+        context.register_property::<T1>();
+        context.register_indexer(T1::get_instance());
+    }
+
+    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+        let mut q = Vec::new();
+        q.push((std::any::TypeId::of::<T1>(), IndexValue::compute(&self.1)));
+        q
+    }
+}
+
+macro_rules! impl_query {
+    ( ($t:ty),* ) => {
+        impl <
+            $(
+                $t: T1: PersonProperty + 'static,
+            )*
+            >
+            Query for (
+                $(
+                    ($t, $t::Value),
+                )*
+            )
+
+    fn setup(context: &mut Context) {
+        $(
+            context.register_property::<$t>();
+            context.register_indexer($t::get_instance());
+        )*
+    }
+
+    fn get_query(&self) ->         Vec<(TypeId, IndexValue)> {
+        let mut q = Vec::new();
+        $(
+            q.push(
+                (
+                    std::any::TypeId::of::<$t>(),
+                    IndexValue::compute(&self.1) // TODO: Count
+                )
+            );
+        )*
+        q
+    }
+    }
+}
+
 // Implementation of the Hasher interface for IndexValue, used
 // for serialization. We're actually abusing this interface
 // because you can't call finish().
@@ -516,6 +569,7 @@ pub trait ContextPeopleExt {
     fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T);
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
+    fn query_people2<T: Query>(&mut self, q: T) -> Vec<PersonId>;
 }
 
 impl ContextPeopleExt for Context {
@@ -753,6 +807,11 @@ impl ContextPeopleExt for Context {
         }
 
         result
+    }
+
+    fn query_people2<T: Query>(&mut self, q: T) -> Vec<PersonId> {
+        T::setup(self);
+        self.query_people(q.get_query())
     }
 }
 
@@ -1304,6 +1363,17 @@ mod test {
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
 
         let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_people2() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+
+        let people = context.query_people2((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
     }
 
