@@ -38,13 +38,22 @@ impl IndexValue {
     }
 }
 
+// Encapsulates a person query, allowing the user to call query_people()
+// with tuple syntax, like so:
+//
+//   query_people((Age, 50), (IsInfected, true))
+//
+// query_people actually takes an instance of Query, but because
+// we implement Query for tuples of up to size 20, that's invisible
+// to the caller.
 trait Query {
-    fn setup(context: &mut Context);
+    fn setup(context: &Context);
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
 
+// Implement the query version with one parameter.
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
-    fn setup(context: &mut Context) {
+    fn setup(context: &Context) {
         context.register_property::<T1>();
         context.register_indexer(T1::get_instance());
     }
@@ -56,6 +65,7 @@ impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     }
 }
 
+// Implement the versions with 1..20 parameters.
 macro_rules! impl_query {
     ($ct:expr) => {
         seq!(N in 0..$ct {
@@ -69,7 +79,7 @@ macro_rules! impl_query {
                 )*
             )
             {
-                fn setup(context: &mut Context) {
+                fn setup(context: &Context) {
                     #(
                         context.register_property::<T~N>();
                         context.register_indexer(T~N::get_instance());
@@ -88,7 +98,7 @@ macro_rules! impl_query {
     }
 }
 
-seq!(Z in 2..20 {
+seq!(Z in 1..20 {
     impl_query!(Z);
 });
 
@@ -570,10 +580,10 @@ pub trait ContextPeopleExt {
 
     // Returns a PersonId for a usize
     fn get_person_id(&self, person_id: usize) -> PersonId;
-    fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T);
+    fn register_indexer<T: PersonProperty + 'static>(&self, property: T);
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
-    fn query_people2<T: Query>(&mut self, q: T) -> Vec<PersonId>;
+    fn query_people2<T: Query>(&self, q: T) -> Vec<PersonId>;
 }
 
 impl ContextPeopleExt for Context {
@@ -716,9 +726,9 @@ impl ContextPeopleExt for Context {
         PersonId { id: person_id }
     }
 
-    fn register_indexer<T: PersonProperty + 'static>(&mut self, property: T) {
+    fn register_indexer<T: PersonProperty + 'static>(&self, property: T) {
         {
-            let data_container = self.get_data_container_mut(PeoplePlugin);
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
             
             let property_indexes = data_container.property_indexes.borrow_mut();
             if property_indexes.contains_key(&TypeId::of::<T>()) {
@@ -734,11 +744,15 @@ impl ContextPeopleExt for Context {
     }
 
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
+        // Ensure that the data container exists
+        {
+            let data_container = self.get_data_container_mut(PeoplePlugin);
+        }
+            
+        self.register_property::<T>();
         self.register_indexer(property);
 
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut index = data_container.get_index_ref_by_prop(property).unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
@@ -814,7 +828,7 @@ impl ContextPeopleExt for Context {
         result
     }
 
-    fn query_people2<T: Query>(&mut self, q: T) -> Vec<PersonId> {
+    fn query_people2<T: Query>(&self, q: T) -> Vec<PersonId> {
         T::setup(self);
         self.query_people(q.get_query())
     }
