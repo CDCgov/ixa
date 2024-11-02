@@ -88,8 +88,10 @@ macro_rules! impl_query {
     }
 }
 
-impl_query!(2);
-impl_query!(3);
+seq!(Z in 2..20 {
+    impl_query!(Z);
+});
+
 
 
 // Implementation of the Hasher interface for IndexValue, used
