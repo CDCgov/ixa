@@ -13,6 +13,7 @@ use std::{
     hash::{Hash, Hasher},
     iter::Iterator,
 };
+use seq_macro::seq;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized
@@ -56,39 +57,40 @@ impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
 }
 
 macro_rules! impl_query {
-    ( ($t:ty),* ) => {
-        impl <
-            $(
-                $t: T1: PersonProperty + 'static,
-            )*
-            >
-            Query for (
-                $(
-                    ($t, $t::Value),
+    ($ct:expr) => {
+        seq!(N in 0..$ct {
+            impl<
+                #(
+                    T~N : PersonProperty + 'static,
+                )*
+            > Query for (
+                #(
+                    (T~N, T~N::Value),
                 )*
             )
-
-    fn setup(context: &mut Context) {
-        $(
-            context.register_property::<$t>();
-            context.register_indexer($t::get_instance());
-        )*
-    }
-
-    fn get_query(&self) ->         Vec<(TypeId, IndexValue)> {
-        let mut q = Vec::new();
-        $(
-            q.push(
-                (
-                    std::any::TypeId::of::<$t>(),
-                    IndexValue::compute(&self.1) // TODO: Count
-                )
-            );
-        )*
-        q
-    }
+            {
+                fn setup(context: &mut Context) {
+                    #(
+                        context.register_property::<T~N>();
+                        context.register_indexer(T~N::get_instance());
+                    )*
+                }
+                
+                fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+                    let mut q = Vec::new();
+                    #(
+                        q.push((std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)));
+                    )*
+                    q
+                }
+            }
+        });
     }
 }
+
+impl_query!(2);
+impl_query!(3);
+
 
 // Implementation of the Hasher interface for IndexValue, used
 // for serialization. We're actually abusing this interface
@@ -1511,6 +1513,26 @@ mod test {
         assert_eq!(people.len(), 1);
     }
 
+    #[test]
+    fn query_people_intersection_non_macro() {
+        let mut context = Context::new();
+        let person1 = context.add_person();
+        let person2 = context.add_person();
+        let person3 = context.add_person();
+
+        // Note: because of the way indexes are initialized, all properties without initializers need to be
+        // set for all people.
+        context.initialize_person_property(person1, Age, 42);
+        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        context.initialize_person_property(person2, Age, 42);
+        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
+        context.initialize_person_property(person3, Age, 40);
+        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
+
+        let people = context.query_people2(((Age,42), (RiskCategoryType, RiskCategory::High)));
+        assert_eq!(people.len(), 1);
+    }
+    
     #[test]
     fn query_people_intersection_one_indexed() {
         let mut context = Context::new();
