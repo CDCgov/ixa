@@ -46,7 +46,7 @@ impl IndexValue {
 // query_people actually takes an instance of Query, but because
 // we implement Query for tuples of up to size 20, that's invisible
 // to the caller.
-trait Query {
+pub trait Query {
     fn setup(context: &Context);
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
