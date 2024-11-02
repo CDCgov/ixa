@@ -757,6 +757,11 @@ impl ContextPeopleExt for Context {
     }
 
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
+        // Special case the situation where nobody exists.
+        if self.get_data_container(PeoplePlugin).is_none() {
+            return Vec::new();
+        }
+        
         T::setup(self);
         self.query_people_internal(q.get_query())
     }
@@ -1361,6 +1366,15 @@ mod test {
         assert_eq!(people.len(), 1);
     }
 
+    #[test]
+    fn query_people_empty() {
+        let context = Context::new();
+
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        assert_eq!(people.len(), 0);
+    }
+
+    
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
