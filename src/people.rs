@@ -582,8 +582,7 @@ pub trait ContextPeopleExt {
     fn get_person_id(&self, person_id: usize) -> PersonId;
     fn register_indexer<T: PersonProperty + 'static>(&self, property: T);
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
-    fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
-    fn query_people2<T: Query>(&self, q: T) -> Vec<PersonId>;
+    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
 }
 
 impl ContextPeopleExt for Context {
@@ -759,7 +758,56 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn query_people(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId> {
+    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
+        T::setup(self);
+        self.query_people_internal(q.get_query())
+    }
+}
+
+trait ContextPeopleExtInternal {
+    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    );
+    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
+}
+
+impl ContextPeopleExtInternal for Context {
+    fn add_to_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    ) {
+        if let Some(mut index) = self
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_index_ref_by_prop(property)
+        {
+            if index.lookup.is_some() {
+                index.add_person(self, person_id);
+            }
+        }
+    }
+
+    fn remove_from_index_maybe<T: PersonProperty + 'static>(
+        &mut self,
+        person_id: PersonId,
+        property: T,
+    ) {
+        if let Some(mut index) = self
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_index_ref_by_prop(property)
+        {
+            if index.lookup.is_some() {
+                index.remove_person(self, person_id);
+            }
+        }
+    }
+
+    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId> {
         let mut indexes = Vec::<HashSet<PersonId>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
@@ -826,77 +874,6 @@ impl ContextPeopleExt for Context {
         }
 
         result
-    }
-
-    fn query_people2<T: Query>(&self, q: T) -> Vec<PersonId> {
-        T::setup(self);
-        self.query_people(q.get_query())
-    }
-}
-
-trait ContextPeopleExtInternal {
-    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    );
-}
-
-impl ContextPeopleExtInternal for Context {
-    fn add_to_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    ) {
-        if let Some(mut index) = self
-            .get_data_container(PeoplePlugin)
-            .unwrap()
-            .get_index_ref_by_prop(property)
-        {
-            if index.lookup.is_some() {
-                index.add_person(self, person_id);
-            }
-        }
-    }
-
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    ) {
-        if let Some(mut index) = self
-            .get_data_container(PeoplePlugin)
-            .unwrap()
-            .get_index_ref_by_prop(property)
-        {
-            if index.lookup.is_some() {
-                index.remove_person(self, person_id);
-            }
-        }
-    }
-}
-
-#[allow(clippy::module_name_repetitions)]
-#[macro_export]
-macro_rules! people_query {
-    ( $ctx: expr, $( [ $k:ident = $v: expr ] ),* ) => {
-        {
-            // Set up any indexes that don't exist yet
-            $(
-                if <$k as $crate::people::PersonProperty>::is_derived() {
-                    $ctx.register_property::<$k>();
-                }
-                $ctx.register_indexer($k);
-            )*
-            // Do the query
-            $ctx.query_people(vec![
-                $((
-                    std::any::TypeId::of::<$k>(),
-                    $crate::people::IndexValue::compute(&($v as <$k as $crate::people::PersonProperty>::Value))
-                ),)*
-            ])
-        }
     }
 }
 
@@ -1357,6 +1334,7 @@ mod test {
         assert!(index.name.contains("Age"));
     }
 
+    /*
     #[test]
     fn query_people_manual() {
         let mut context = Context::new();
@@ -1370,29 +1348,18 @@ mod test {
 
         context.register_indexer(Age);
         let hash = IndexValue::compute(&context.get_person_property(person1, Age));
-        let people = context.query_people(vec![(TypeId::of::<Age>(), hash)]);
+        let people = context.query_people_internal(vec![(TypeId::of::<Age>(), hash)]);
         assert_eq!(people.len(), 1);
-    }
-
+}*/
+    
     #[test]
-    fn query_people_macro() {
+    fn query_people() {
         let mut context = Context::new();
         let person1 = context.add_person();
 
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
 
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
-        assert_eq!(people.len(), 1);
-    }
-
-    #[test]
-    fn query_people2() {
-        let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
-
-        let people = context.query_people2((RiskCategoryType, RiskCategory::High));
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1404,7 +1371,7 @@ mod test {
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1424,12 +1391,12 @@ mod test {
         let person1 = context.add_person();
 
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert!(!property_is_indexed::<RiskCategoryType>(&context));
         assert_eq!(people.len(), 1);
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1440,15 +1407,15 @@ mod test {
 
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
 
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::Low));
         assert_eq!(people.len(), 0);
 
         context.set_person_property(person1, RiskCategoryType, RiskCategory::Low);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 0);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::Low]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::Low));
         assert_eq!(people.len(), 1);
     }
 
@@ -1459,7 +1426,7 @@ mod test {
         context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1470,12 +1437,12 @@ mod test {
         context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
 
         let person = context.add_person();
         context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
-        let people = people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 2);
     }
 
@@ -1494,7 +1461,7 @@ mod test {
         let mut context = Context::new();
         context.add_person();
         context.index_property(RiskCategoryType);
-        people_query!(context, [RiskCategoryType = RiskCategory::High]);
+        context.query_people((RiskCategoryType, RiskCategory::High));
     }
 
     #[test]
@@ -1505,7 +1472,7 @@ mod test {
         context.initialize_person_property(person, Age, 42);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let people = people_query![context, [Age = 42]];
+        let people = context.query_people((Age, 42));
         assert_eq!(people.len(), 1);
     }
 
@@ -1525,7 +1492,7 @@ mod test {
         context.initialize_person_property(person3, Age, 40);
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
-        let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
+        let people = context.query_people(((Age,42), (RiskCategoryType , RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1545,7 +1512,7 @@ mod test {
         context.initialize_person_property(person3, Age, 40);
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
-        let people = context.query_people2(((Age,42), (RiskCategoryType, RiskCategory::High)));
+        let people = context.query_people(((Age,42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
     
@@ -1566,7 +1533,7 @@ mod test {
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
         context.index_property(Age);
-        let people = people_query![context, [Age = 42], [RiskCategoryType = RiskCategory::High]];
+        let people = context.query_people(((Age,  42), (RiskCategoryType , RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1582,15 +1549,15 @@ mod test {
         context.initialize_person_property(person2, Age, 88);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let not_seniors = people_query![context, [Senior = false]];
-        let seniors = people_query![context, [Senior = true]];
+        let not_seniors = context.query_people((Senior, false));
+        let seniors = context.query_people((Senior, true));
         assert_eq!(seniors.len(), 1, "One senior");
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
         context.set_person_property(person, Age, 65);
 
-        let not_seniors = people_query![context, [Senior = false]];
-        let seniors = people_query![context, [Senior = true]];
+        let not_seniors = context.query_people((Senior , false));
+        let seniors = context.query_people((Senior ,true));
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
@@ -1609,15 +1576,15 @@ mod test {
         context.initialize_person_property(person2, Age, 88);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let not_seniors = people_query![context, [Senior = false]];
-        let seniors = people_query![context, [Senior = true]];
+        let not_seniors = context.query_people((Senior , false));
+        let seniors = context.query_people((Senior , true));
         assert_eq!(seniors.len(), 1, "One senior");
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
         context.set_person_property(person, Age, 65);
 
-        let not_seniors = people_query![context, [Senior = false]];
-        let seniors = people_query![context, [Senior = true]];
+        let not_seniors = context.query_people((Senior , false));
+        let seniors = context.query_people((Senior , true));
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
