@@ -3,6 +3,7 @@ use crate::{
     define_data_plugin,
 };
 use ixa_derive::IxaEvent;
+use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
@@ -13,7 +14,6 @@ use std::{
     hash::{Hash, Hasher},
     iter::Iterator,
 };
-use seq_macro::seq;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized
@@ -85,7 +85,7 @@ macro_rules! impl_query {
                         context.register_indexer(T~N::get_instance());
                     )*
                 }
-                
+
                 fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
                     let mut q = Vec::new();
                     #(
@@ -101,8 +101,6 @@ macro_rules! impl_query {
 seq!(Z in 1..20 {
     impl_query!(Z);
 });
-
-
 
 // Implementation of the Hasher interface for IndexValue, used
 // for serialization. We're actually abusing this interface
@@ -728,7 +726,7 @@ impl ContextPeopleExt for Context {
     fn register_indexer<T: PersonProperty + 'static>(&self, property: T) {
         {
             let data_container = self.get_data_container(PeoplePlugin).unwrap();
-            
+
             let property_indexes = data_container.property_indexes.borrow_mut();
             if property_indexes.contains_key(&TypeId::of::<T>()) {
                 return; // Index already exists, do nothing
@@ -745,9 +743,9 @@ impl ContextPeopleExt for Context {
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
         // Ensure that the data container exists
         {
-            let data_container = self.get_data_container_mut(PeoplePlugin);
+            let _ = self.get_data_container_mut(PeoplePlugin);
         }
-            
+
         self.register_property::<T>();
         self.register_indexer(property);
 
@@ -1335,23 +1333,23 @@ mod test {
     }
 
     /*
-    #[test]
-    fn query_people_manual() {
-        let mut context = Context::new();
-        let person1 = context.add_person();
-        let person2 = context.add_person();
-        let person3 = context.add_person();
+        #[test]
+        fn query_people_manual() {
+            let mut context = Context::new();
+            let person1 = context.add_person();
+            let person2 = context.add_person();
+            let person3 = context.add_person();
 
-        context.initialize_person_property(person1, Age, 42);
-        context.initialize_person_property(person2, Age, 40);
-        context.initialize_person_property(person3, Age, 41);
+            context.initialize_person_property(person1, Age, 42);
+            context.initialize_person_property(person2, Age, 40);
+            context.initialize_person_property(person3, Age, 41);
 
-        context.register_indexer(Age);
-        let hash = IndexValue::compute(&context.get_person_property(person1, Age));
-        let people = context.query_people_internal(vec![(TypeId::of::<Age>(), hash)]);
-        assert_eq!(people.len(), 1);
-}*/
-    
+            context.register_indexer(Age);
+            let hash = IndexValue::compute(&context.get_person_property(person1, Age));
+            let people = context.query_people_internal(vec![(TypeId::of::<Age>(), hash)]);
+            assert_eq!(people.len(), 1);
+    }*/
+
     #[test]
     fn query_people() {
         let mut context = Context::new();
@@ -1492,7 +1490,7 @@ mod test {
         context.initialize_person_property(person3, Age, 40);
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
-        let people = context.query_people(((Age,42), (RiskCategoryType , RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1512,10 +1510,10 @@ mod test {
         context.initialize_person_property(person3, Age, 40);
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
-        let people = context.query_people(((Age,42), (RiskCategoryType, RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
-    
+
     #[test]
     fn query_people_intersection_one_indexed() {
         let mut context = Context::new();
@@ -1533,7 +1531,7 @@ mod test {
         context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
         context.index_property(Age);
-        let people = context.query_people(((Age,  42), (RiskCategoryType , RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1556,8 +1554,8 @@ mod test {
 
         context.set_person_property(person, Age, 65);
 
-        let not_seniors = context.query_people((Senior , false));
-        let seniors = context.query_people((Senior ,true));
+        let not_seniors = context.query_people((Senior, false));
+        let seniors = context.query_people((Senior, true));
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
@@ -1576,15 +1574,15 @@ mod test {
         context.initialize_person_property(person2, Age, 88);
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let not_seniors = context.query_people((Senior , false));
-        let seniors = context.query_people((Senior , true));
+        let not_seniors = context.query_people((Senior, false));
+        let seniors = context.query_people((Senior, true));
         assert_eq!(seniors.len(), 1, "One senior");
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
         context.set_person_property(person, Age, 65);
 
-        let not_seniors = context.query_people((Senior , false));
-        let seniors = context.query_people((Senior , true));
+        let not_seniors = context.query_people((Senior, false));
+        let seniors = context.query_people((Senior, true));
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
