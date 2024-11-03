@@ -553,7 +553,6 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
-
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
     /// not run.
@@ -699,7 +698,6 @@ impl ContextPeopleExt for Context {
         PersonId { id: person_id }
     }
 
-
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
         // Ensure that the data container exists
         {
@@ -721,7 +719,7 @@ impl ContextPeopleExt for Context {
         if self.get_data_container(PeoplePlugin).is_none() {
             return Vec::new();
         }
-        
+
         T::setup(self);
         self.query_people_internal(q.get_query())
     }
@@ -730,7 +728,7 @@ impl ContextPeopleExt for Context {
 trait ContextPeopleExtInternal {
     fn register_property<T: PersonProperty + 'static>(&self);
     fn register_indexer<T: PersonProperty + 'static>(&self);
-        fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -760,7 +758,7 @@ impl ContextPeopleExtInternal for Context {
                 .insert(TypeId::of::<T>());
         }
     }
-    
+
     fn register_indexer<T: PersonProperty + 'static>(&self) {
         {
             let data_container = self.get_data_container(PeoplePlugin).unwrap();
@@ -777,7 +775,7 @@ impl ContextPeopleExtInternal for Context {
         let mut property_indexes = data_container.property_indexes.borrow_mut();
         property_indexes.insert(TypeId::of::<T>(), index);
     }
-    
+
     fn add_to_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -1356,7 +1354,6 @@ mod test {
         assert_eq!(people.len(), 0);
     }
 
-    
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
