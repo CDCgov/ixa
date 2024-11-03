@@ -59,9 +59,7 @@ impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     }
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-        let mut q = Vec::new();
-        q.push((std::any::TypeId::of::<T1>(), IndexValue::compute(&self.1)));
-        q
+        vec![(std::any::TypeId::of::<T1>(), IndexValue::compute(&self.1))]
     }
 }
 
@@ -87,11 +85,11 @@ macro_rules! impl_query {
                 }
 
                 fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-                    let mut q = Vec::new();
+                    vec![
                     #(
-                        q.push((std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)));
+                        (std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)),
                     )*
-                    q
+                    ]
                 }
             }
         });
