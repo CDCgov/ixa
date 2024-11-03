@@ -55,7 +55,7 @@ pub trait Query {
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     fn setup(context: &Context) {
         context.register_property::<T1>();
-        context.register_indexer(T1::get_instance());
+        context.register_indexer::<T1>();
     }
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
@@ -82,7 +82,7 @@ macro_rules! impl_query {
                 fn setup(context: &Context) {
                     #(
                         context.register_property::<T~N>();
-                        context.register_indexer(T~N::get_instance());
+                        context.register_indexer::<T~N>();
                     )*
                 }
 
@@ -578,7 +578,6 @@ pub trait ContextPeopleExt {
 
     // Returns a PersonId for a usize
     fn get_person_id(&self, person_id: usize) -> PersonId;
-    fn register_indexer<T: PersonProperty + 'static>(&self, property: T);
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
 }
@@ -723,22 +722,6 @@ impl ContextPeopleExt for Context {
         PersonId { id: person_id }
     }
 
-    fn register_indexer<T: PersonProperty + 'static>(&self, property: T) {
-        {
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-            let property_indexes = data_container.property_indexes.borrow_mut();
-            if property_indexes.contains_key(&TypeId::of::<T>()) {
-                return; // Index already exists, do nothing
-            }
-        }
-
-        // If it doesn't exist, insert the new index
-        let index = Index::new(self, property);
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let mut property_indexes = data_container.property_indexes.borrow_mut();
-        property_indexes.insert(TypeId::of::<T>(), index);
-    }
 
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
         // Ensure that the data container exists
@@ -747,7 +730,7 @@ impl ContextPeopleExt for Context {
         }
 
         self.register_property::<T>();
-        self.register_indexer(property);
+        self.register_indexer::<T>();
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut index = data_container.get_index_ref_by_prop(property).unwrap();
@@ -768,7 +751,8 @@ impl ContextPeopleExt for Context {
 }
 
 trait ContextPeopleExtInternal {
-    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
+    fn register_indexer<T: PersonProperty + 'static>(&self);
+        fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
@@ -778,6 +762,23 @@ trait ContextPeopleExtInternal {
 }
 
 impl ContextPeopleExtInternal for Context {
+    fn register_indexer<T: PersonProperty + 'static>(&self) {
+        {
+            let data_container = self.get_data_container(PeoplePlugin).unwrap();
+
+            let property_indexes = data_container.property_indexes.borrow_mut();
+            if property_indexes.contains_key(&TypeId::of::<T>()) {
+                return; // Index already exists, do nothing
+            }
+        }
+
+        // If it doesn't exist, insert the new index
+        let index = Index::new(self, T::get_instance());
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let mut property_indexes = data_container.property_indexes.borrow_mut();
+        property_indexes.insert(TypeId::of::<T>(), index);
+    }
+    
     fn add_to_index_maybe<T: PersonProperty + 'static>(
         &mut self,
         person_id: PersonId,
