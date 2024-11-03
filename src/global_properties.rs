@@ -7,6 +7,36 @@ use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;
 use std::path::Path;
+use std::cell::RefCell;
+use std::sync::Mutex;
+use std::sync::Arc;
+use std::sync::LazyLock;
+
+type PropertySetterFn = dyn Fn(&mut Context, serde_json::Value)-> Result<(), IxaError> + Send + Sync;
+
+pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> = LazyLock::new(|| {
+    Mutex::new(RefCell::new(HashMap::new())) });
+
+
+#[allow(clippy::missing_panics_doc)]
+pub fn add_global_property<T: GlobalProperty> (name: &String) where for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>{
+    let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    properties.borrow_mut().insert(name.clone(), Arc::new(| context: &mut Context, value | -> Result<(), IxaError> {
+        let val: T::Value = serde_json::from_value(value)?;
+        context.set_global_property_value(T::new(), val);
+        Ok(())
+    }));
+}
+
+#[allow(clippy::missing_panics_doc)]
+fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {
+    let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    let tmp = properties.borrow();
+    match tmp.get(name) {
+        Some(func) => Some(Arc::clone(func)),
+        None => None
+    }
+}
 
 /// Defines a global property with the following parameters:
 /// * `$global_property`: Name for the identifier type of the global property
@@ -19,14 +49,26 @@ macro_rules! define_global_property {
 
         impl $crate::global_properties::GlobalProperty for $global_property {
             type Value = $value;
+
+            fn new() -> Self { $global_property }
+        }
+
+        paste::paste! {
+            #[ctor::ctor]
+            fn [<$global_property:snake _register>]() {
+                $crate::global_properties::add_global_property::<$global_property>(&String::from(stringify!($global_property)));
+            }
         }
     };
 }
+
 
 /// Global properties are not mutable and represent variables that are required
 /// in a global scope during the simulation, such as simulation parameters.
 pub trait GlobalProperty: Any {
     type Value: Any;
+
+    fn new() -> Self;
 }
 
 pub use define_global_property;
@@ -68,6 +110,9 @@ pub trait ContextGlobalPropertiesExt {
         &mut self,
         file_path: &Path,
     ) -> Result<T, IxaError>;
+
+
+    fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;    
 }
 
 impl GlobalPropertiesDataContainer {
@@ -123,12 +168,30 @@ impl ContextGlobalPropertiesExt for Context {
         let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
+
+    fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError> {
+        let config_file = fs::File::open(file_name)?;
+        let reader = BufReader::new(config_file);
+        let val : serde_json::Map<String, serde_json::Value>  =
+            serde_json::from_reader(reader)?;
+        
+        for (k, v) in val {
+            if let Some(handler) = get_global_property(&k) {
+                handler(self, v)?;                
+            } else {
+                return Err(IxaError::from(format!("No global property: {}", k)));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::context::Context;
+    use crate::error::IxaError;
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -194,4 +257,56 @@ mod test {
         assert_eq!(params_read.days, params.days);
         assert_eq!(params_read.diseases, params.diseases);
     }
+    
+    #[derive(Deserialize)]
+    pub struct Property1Type {
+        field_int: u32,
+        field_str: String,
+    }
+    define_global_property!(Property1, Property1Type);
+
+    #[derive(Deserialize)]
+    pub struct Property2Type {
+        field_int: u32,
+    }
+    define_global_property!(Property2, Property2Type);
+    
+    #[test]
+    fn read_global_properties() {
+        let mut context = Context::new();        
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/global_properties_test1.json");
+        context.load_global_properties(&path).unwrap();
+        let p1 = context.get_global_property_value(Property1).unwrap();
+        assert_eq!(p1.field_int,1);
+        assert_eq!(p1.field_str,"test");
+        let p2 = context.get_global_property_value(Property2).unwrap();
+        assert_eq!(p2.field_int, 2);
+    }
+
+    #[test]
+    fn read_unknown_property() {
+        let mut context = Context::new();        
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/global_properties_missing.json");
+        match context.load_global_properties(&path) {
+            Err(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "No global property: Property3");
+            },
+            _ => panic!("Unexpected error type")
+        }
+    }
+
+    #[test]
+    fn read_malformed_property() {
+        let mut context = Context::new();        
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/global_properties_malformed.json");
+        let error = context.load_global_properties(&path);
+        println!("Error {:?}", error);
+        match error {
+            Err(IxaError::JsonError(_)) => {
+            },
+            _ => panic!("Unexpected error type")
+        }
+    }
+    
 }
+                        

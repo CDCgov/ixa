@@ -1,0 +1,10 @@
+{
+  "Property1": {
+    "field_int": 1,
+    "field_str": "test"
+  },
+
+  "Property2": {
+    "field_int": 2
+  }
+}
