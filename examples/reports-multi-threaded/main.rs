@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
@@ -14,43 +15,52 @@ struct Incidence {
 
 create_report_trait!(Incidence);
 
-#[allow(unexpected_cfgs)]
+fn init(scenario: &str) -> Result<Context, IxaError> {
+    let mut context = Context::new();
+
+    context.add_report::<Incidence>(&format!("{scenario}_incidence.csv"))?;
+
+    println!("Scenario: {scenario}");
+
+    let people = vec!["1", "2", "3"];
+    for person in people {
+        let person = person.to_string();
+        let scenario = scenario.to_string().clone();
+        context.add_plan(1.0, {
+            move |context| {
+                context.send_report(Incidence {
+                    scenario: scenario.to_string(),
+                    person_id: person.clone(),
+                    t: context.get_current_time(),
+                });
+                println!(
+                    "Scenario: {}, Person {} was infected at time {}.",
+                    scenario,
+                    person,
+                    context.get_current_time()
+                );
+            }
+        });
+    }
+    Ok(context)
+}
+
 fn main() {
     let scenarios = vec!["Illinois", "Wisconsin", "Arizona", "California"];
     let mut handles = vec![];
 
     for scenario in scenarios {
-        let scenario = scenario.to_string();
         let handle = thread::spawn(move || {
-            let mut context = Context::new();
-
-            context.report_options().file_prefix(format!("{scenario}_"));
-            context.add_report::<Incidence>("incidence");
-
-            println!("Scenario: {scenario}");
-
-            let people = vec!["1", "2", "3"];
-            for person in people {
-                let person = person.to_string();
-                let scenario = scenario.clone();
-                context.add_plan(1.0, {
-                    move |context| {
-                        context.send_report(Incidence {
-                            scenario: scenario.to_string(),
-                            person_id: person.clone(),
-                            t: context.get_current_time(),
-                        });
-                        println!(
-                            "Scenario: {}, Person {} was infected at time {}.",
-                            scenario,
-                            person,
-                            context.get_current_time()
-                        );
-                    }
-                });
+            let init_context = init(scenario);
+            match init_context {
+                Ok(mut context) => {
+                    context.execute();
+                    println!("Simulation completed successfully for scenario {scenario}",);
+                }
+                Err(ixa_error) => {
+                    println!("Initialization failure: {ixa_error}");
+                }
             }
-
-            context.execute();
         });
         handles.push(handle);
     }

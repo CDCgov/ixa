@@ -9,6 +9,7 @@ use std::io;
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),
+    ReportError(String),
 }
 
 impl From<io::Error> for IxaError {

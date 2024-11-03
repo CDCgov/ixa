@@ -4,52 +4,9 @@ use csv::Writer;
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::env;
+use std::ffi::OsStr;
 use std::fs::{create_dir_all, File};
-use std::path::PathBuf;
-
-// * file_prefix: precedes the report name in the filename. An example of a
-// potential prefix might be scenario or simulation name
-// * directory: location that the CSVs are written to. An example of this might
-// be /data/
-pub struct ConfigReportOptions {
-    pub file_prefix: String,
-    pub directory: PathBuf,
-}
-
-impl ConfigReportOptions {
-    #[must_use]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn new() -> Self {
-        // Sets the defaults
-        ConfigReportOptions {
-            file_prefix: String::new(),
-            directory: env::current_dir().unwrap(),
-        }
-    }
-    /// Sets the file prefix option (e.g., "report_")
-    pub fn file_prefix(&mut self, file_prefix: String) -> &mut ConfigReportOptions {
-        self.file_prefix = file_prefix;
-        self
-    }
-    /// Sets the directory where reports will be output
-    /// Returns `Result<(), IxaError>` indicating success
-    /// # Errors
-    /// Returns an `IxaError::IoError` if the provided directory does not
-    /// exist and could not be successfully created
-    pub fn directory(&mut self, directory: PathBuf) -> Result<(), IxaError> {
-        // if the directory does not exist, create it
-        create_dir_all(&directory)?;
-        self.directory = directory;
-        Ok(())
-    }
-}
-
-impl Default for ConfigReportOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use std::path::Path;
 
 pub trait Report: 'static {
     // Returns report type
@@ -76,7 +33,6 @@ macro_rules! create_report_trait {
 
 struct ReportData {
     file_writers: RefCell<HashMap<TypeId, Writer<File>>>,
-    config: ConfigReportOptions,
 }
 
 // Registers a data container that stores
@@ -87,46 +43,51 @@ crate::context::define_data_plugin!(
     ReportData,
     ReportData {
         file_writers: RefCell::new(HashMap::new()),
-        config: ConfigReportOptions::new(),
     }
 );
 
-impl Context {
-    // Builds the filename. Called by `add_report`, `short_name` refers to the
-    // report type. The three main components are `prefix`, `directory`, and
-    // `short_name`.
-    fn generate_filename(&mut self, short_name: &str) -> PathBuf {
-        let data_container = self.get_data_container_mut(ReportPlugin);
-        let prefix = data_container.config.file_prefix.clone();
-        let directory = data_container.config.directory.clone();
-        let short_name = short_name.to_string();
-        let basename = format!("{prefix}{short_name}");
-        directory.join(basename).with_extension("csv")
+// Checks that the path is valid. Creates the file and all parent directories if
+// they do not exist. Returns the file if successful. Called by `add_report`
+fn generate_validate_filepath(path_name: &str) -> Result<File, IxaError> {
+    let path = Path::new(path_name);
+    match path.extension().and_then(OsStr::to_str) {
+        Some("csv") => {
+            create_dir_all(path.parent().expect("Either root or empty path provided"))?;
+            let file = File::create(path)?;
+            Ok(file)
+        }
+        _ => Err(IxaError::ReportError(
+            "Report output files must be CSVs at this time".to_string(),
+        )),
     }
 }
 
 pub trait ContextReportExt {
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str);
+    /// Call `add_report` with each report type, passing the name of the report type.
+    /// Takes the complete path to which the output the report as argument.
+    /// Returns `Result<(), IxaError>` indicating success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `IxaError` detailing what may have gone wrong
+    fn add_report<T: Report + 'static>(&mut self, filepath: &str) -> Result<(), IxaError>;
+
+    /// Write a new row with columns following items in the report struct
+    /// to the report file associated with the report type struct.
     fn send_report<T: Report>(&self, report: T);
-    fn report_options(&mut self) -> &mut ConfigReportOptions;
 }
 
 impl ContextReportExt for Context {
-    /// Call `add_report` with each report type, passing the name of the report type.
-    /// The `short_name` is used for file naming to distinguish what data each
-    /// output file points to.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) {
-        let path = self.generate_filename(short_name);
+    fn add_report<T: Report + 'static>(&mut self, filepath: &str) -> Result<(), IxaError> {
+        let file = generate_validate_filepath(filepath)?;
 
         let data_container = self.get_data_container_mut(ReportPlugin);
-
-        let file = File::create(path).expect("Couldn't create file");
         let writer = Writer::from_writer(file);
         let mut file_writer = data_container.file_writers.borrow_mut();
         file_writer.insert(TypeId::of::<T>(), writer);
+        Ok(())
     }
 
-    /// Write a new row to the appropriate report file
     fn send_report<T: Report>(&self, report: T) {
         // No data container will exist if no reports have been added
         let data_container = self
@@ -138,12 +99,6 @@ impl ContextReportExt for Context {
             .expect("No writer found for the report type");
         report.serialize(writer);
         writer.flush().expect("Failed to flush writer");
-    }
-
-    /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
-    fn report_options(&mut self) -> &mut ConfigReportOptions {
-        let data_container = self.get_data_container_mut(ReportPlugin);
-        &mut data_container.config
     }
 }
 
@@ -167,60 +122,10 @@ mod test {
     fn add_and_send_report() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("prefix1_".to_string())
-            .directory(path.clone())
-            .expect("Failed to create directory");
-        context.add_report::<SampleReport>("sample_report");
-        let report = SampleReport {
-            id: 1,
-            value: "Test Value".to_string(),
-        };
-
-        context.send_report(report);
-
-        let file_path = path.join("prefix1_sample_report.csv");
-        assert!(file_path.exists(), "CSV file should exist");
-
-        let mut reader = csv::Reader::from_path(file_path).unwrap();
-        for result in reader.deserialize() {
-            let record: SampleReport = result.unwrap();
-            assert_eq!(record.id, 1);
-            assert_eq!(record.value, "Test Value");
-        }
-    }
-
-    #[test]
-    #[should_panic(expected = "Failed to create directory")]
-    fn directory_creation_error() {
-        let mut context = Context::new();
-        let path = PathBuf::from("/ixa-temporary-files");
-        let config = context.report_options();
-        let dir_creation_res = config
-            .file_prefix("prefix1_".to_string())
-            .directory(path.clone());
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match dir_creation_res {
-            Ok(()) => {}
-            Err(ixa_error) => match ixa_error {
-                IxaError::IoError(_) => panic!("Failed to create directory"),
-                _ => panic!("Unexpected error"),
-            },
-        }
-    }
-
-    #[test]
-    fn add_report_empty_prefix() {
-        let mut context = Context::new();
-        let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .directory(path.clone())
-            .expect("Failed to create directory");
-        context.add_report::<SampleReport>("sample_report");
+        let path = temp_dir.path();
+        context
+            .add_report::<SampleReport>(path.join("sample_report.csv").to_str().unwrap())
+            .unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -240,16 +145,34 @@ mod test {
     }
 
     #[test]
-    fn add_report_no_dir() {
+    #[should_panic(expected = "Permission denied (os error 13)")]
+    fn directory_creation_error() {
+        // way to make this path in a way that could be tested on Windows too?
+        let res = generate_validate_filepath("/ixa-temporary-files/sample_report.csv");
+        match res {
+            Ok(_) => {
+                panic!("File should not have been created")
+            }
+            Err(ixa_error) => match ixa_error {
+                IxaError::IoError(error_message) => panic!("{}", error_message),
+                _ => panic!("Unexpected error"),
+            },
+        }
+    }
+
+    #[test]
+    fn directory_creation_writing_works() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("test_prefix_".to_string())
-            .directory(path.clone())
-            .expect("Failed to create directory");
-        context.add_report::<SampleReport>("sample_report");
+        let path = temp_dir.path();
+        context
+            .add_report::<SampleReport>(
+                path.join("test-temp")
+                    .join("sample_report.csv")
+                    .to_str()
+                    .unwrap(),
+            )
+            .unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -257,7 +180,7 @@ mod test {
 
         context.send_report(report);
 
-        let file_path = path.join("test_prefix_sample_report.csv");
+        let file_path = path.join("test-temp").join("sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
 
         let mut reader = csv::Reader::from_path(file_path).unwrap();
@@ -265,6 +188,23 @@ mod test {
             let record: SampleReport = result.unwrap();
             assert_eq!(record.id, 1);
             assert_eq!(record.value, "Test Value");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Report output files must be CSVs at this time")]
+    fn only_csvs_allowed() {
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path();
+        let res = generate_validate_filepath(path.join("sample_report.tsv").to_str().unwrap());
+        match res {
+            Ok(_) => {
+                panic!("Other file types beyond CSV are not allowed (yet)")
+            }
+            Err(ixa_error) => match ixa_error {
+                IxaError::ReportError(error_message) => panic!("{}", error_message),
+                _ => panic!("Unexpected error"),
+            },
         }
     }
 
@@ -284,13 +224,12 @@ mod test {
     fn multiple_reports_one_context() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("mult_report_".to_string())
-            .directory(path.clone())
-            .expect("Failed to create directory");
-        context.add_report::<SampleReport>("sample_report");
+        let path = temp_dir.path();
+        context
+            .add_report::<SampleReport>(
+                path.join("mult_report_sample_report.csv").to_str().unwrap(),
+            )
+            .unwrap();
         let report1 = SampleReport {
             id: 1,
             value: "Value,1".to_string(),
@@ -331,18 +270,18 @@ mod test {
 
         let mut handles = vec![];
         let temp_dir = tempdir().unwrap();
+        // needs to be owned in this test
         let base_path = temp_dir.path().to_path_buf();
 
         for i in 0..num_threads {
             let path = base_path.clone();
             let handle = thread::spawn(move || {
                 let mut context = Context::new();
-                let config = context.report_options();
-                config
-                    .file_prefix(i.to_string())
-                    .directory(path.clone())
-                    .expect("Failed to create directory");
-                context.add_report::<SampleReport>("sample_report");
+                context
+                    .add_report::<SampleReport>(
+                        path.join(format!("{i}sample_report.csv")).to_str().unwrap(),
+                    )
+                    .unwrap();
 
                 for j in 0..num_reports_per_thread {
                     let report = SampleReport {

@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 
 mod incidence_report;
@@ -14,7 +15,7 @@ static MAX_TIME: f64 = 303.0;
 static FOI: f64 = 0.1;
 static INFECTION_DURATION: f64 = 5.0;
 
-fn main() {
+fn init() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
     context.init_random(SEED);
@@ -25,11 +26,24 @@ fn main() {
 
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
-    incidence_report::init(&mut context);
+    incidence_report::init(&mut context)?;
 
     context.add_plan(MAX_TIME, |context| {
         context.shutdown();
     });
 
-    context.execute();
+    Ok(context)
+}
+
+fn main() {
+    let init_result = init();
+    match init_result {
+        Ok(mut context) => {
+            context.execute();
+            println!("Simulation completed successfully");
+        }
+        Err(ixa_error) => {
+            println!("Initialization failure: {ixa_error}");
+        }
+    }
 }

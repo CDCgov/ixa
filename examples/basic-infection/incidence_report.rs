@@ -1,7 +1,7 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
-use std::path::PathBuf;
 
 use crate::people::InfectionStatus;
 use crate::people::InfectionStatusEvent;
@@ -24,19 +24,10 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
     });
 }
 
-pub fn init(context: &mut Context) {
-    let dir_creation_res = context
-        .report_options()
-        .directory(PathBuf::from("./examples/basic-infection/"));
-    match dir_creation_res {
-        Ok(()) => {
-            context.add_report::<IncidenceReportItem>("incidence");
-            context.subscribe_to_event::<InfectionStatusEvent>(|context, event| {
-                handle_infection_status_change(context, event);
-            });
-        }
-        Err(ixa_error) => {
-            println!("Error creating directory: {ixa_error}");
-        }
-    }
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    context.add_report::<IncidenceReportItem>("./examples/basic-infection/incidence.csv")?;
+    context.subscribe_to_event::<InfectionStatusEvent>(|context, event| {
+        handle_infection_status_change(context, event);
+    });
+    Ok(())
 }

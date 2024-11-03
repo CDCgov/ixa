@@ -58,7 +58,6 @@ mod test {
             seed: 42,
             foi: 0.15,
             infection_duration: 5.0,
-            output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
         let mut context = Context::new();
