@@ -1337,24 +1337,6 @@ mod test {
         assert!(index.name.contains("Age"));
     }
 
-    /*
-        #[test]
-        fn query_people_manual() {
-            let mut context = Context::new();
-            let person1 = context.add_person();
-            let person2 = context.add_person();
-            let person3 = context.add_person();
-
-            context.initialize_person_property(person1, Age, 42);
-            context.initialize_person_property(person2, Age, 40);
-            context.initialize_person_property(person3, Age, 41);
-
-            context.register_indexer(Age);
-            let hash = IndexValue::compute(&context.get_person_property(person1, Age));
-            let people = context.query_people_internal(vec![(TypeId::of::<Age>(), hash)]);
-            assert_eq!(people.len(), 1);
-    }*/
-
     #[test]
     fn query_people() {
         let mut context = Context::new();
