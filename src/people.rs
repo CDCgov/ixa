@@ -553,7 +553,6 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
-    fn register_property<T: PersonProperty + 'static>(&self);
 
     /// Given a `PersonId`, initialize the value of a defined person property.
     /// Once the the value is set using this API, any initializer will
@@ -592,28 +591,6 @@ impl ContextPeopleExt for Context {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
         self.emit_event(PersonCreatedEvent { person_id });
         person_id
-    }
-
-    fn register_property<T: PersonProperty + 'static>(&self) {
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-        if !data_container
-            .registered_derived_properties
-            .borrow()
-            .contains(&TypeId::of::<T>())
-        {
-            let instance = T::get_instance();
-            let dependencies = instance.non_derived_dependencies();
-            for dependency in dependencies {
-                let mut dependency_map = data_container.dependency_map.borrow_mut();
-                let derived_prop_list = dependency_map.entry(dependency).or_default();
-                derived_prop_list.push(Box::new(instance));
-            }
-            data_container
-                .registered_derived_properties
-                .borrow_mut()
-                .insert(TypeId::of::<T>());
-        }
     }
 
     fn get_person_property<T: PersonProperty + 'static>(
@@ -751,6 +728,7 @@ impl ContextPeopleExt for Context {
 }
 
 trait ContextPeopleExtInternal {
+    fn register_property<T: PersonProperty + 'static>(&self);
     fn register_indexer<T: PersonProperty + 'static>(&self);
         fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(
@@ -762,6 +740,27 @@ trait ContextPeopleExtInternal {
 }
 
 impl ContextPeopleExtInternal for Context {
+    fn register_property<T: PersonProperty + 'static>(&self) {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        if !data_container
+            .registered_derived_properties
+            .borrow()
+            .contains(&TypeId::of::<T>())
+        {
+            let instance = T::get_instance();
+            let dependencies = instance.non_derived_dependencies();
+            for dependency in dependencies {
+                let mut dependency_map = data_container.dependency_map.borrow_mut();
+                let derived_prop_list = dependency_map.entry(dependency).or_default();
+                derived_prop_list.push(Box::new(instance));
+            }
+            data_container
+                .registered_derived_properties
+                .borrow_mut()
+                .insert(TypeId::of::<T>());
+        }
+    }
+    
     fn register_indexer<T: PersonProperty + 'static>(&self) {
         {
             let data_container = self.get_data_container(PeoplePlugin).unwrap();
