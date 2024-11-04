@@ -11,7 +11,7 @@ use serde::Deserialize;
 define_rng!(PeopleRng);
 
 static MAX_AGE: u8 = 100;
-use rand_distr::Exp;
+use rand_distr::{Exp, Uniform};
 use serde::Serialize;
 use std::fmt;
 
@@ -95,7 +95,8 @@ pub fn init(context: &mut Context) {
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
         let person = context.create_new_person(age);
-        context.add_plan(365.0, move |context| {
+        let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0));
+        context.add_plan(365.0 + birthday, move |context| {
             schedule_aging(context, person);
         });
     }
