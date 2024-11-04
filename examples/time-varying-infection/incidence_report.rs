@@ -31,7 +31,7 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context.get_global_property_value(Parameters).unwrap().clone();
     context
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));

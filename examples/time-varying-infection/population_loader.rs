@@ -18,7 +18,7 @@ define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseSt
 define_person_property!(InfectionTime, f64);
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context.get_global_property_value(Parameters).unwrap().clone();
     for _ in 0..parameters.population {
         context.add_person();
     }
@@ -51,7 +51,7 @@ mod tests {
         };
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
-        let parameters = context.get_global_property_value(Parameters).clone();
+        let parameters = context.get_global_property_value(Parameters).unwrap().clone();
         context.init_random(parameters.seed);
         init(&mut context);
 

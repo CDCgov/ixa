@@ -16,7 +16,7 @@ fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
 }
 
 fn n_eff_inv_infec(context: &mut Context) -> f64 {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context.get_global_property_value(Parameters).unwrap().clone();
     // get number of infected people
     let mut n_infected = 0;
     for usize_id in 0..context.get_current_population() {
@@ -61,7 +61,7 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<DiseaseStatusType>,
 ) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context.get_global_property_value(Parameters).unwrap().clone();
     if matches!(event.current, DiseaseStatus::I) {
         // recall resampling rate is sum of maximum foi rate and gamma
         // maximum foi rate is foi * 2 -- the 2 because foi is sin(t + c) + 1
@@ -112,7 +112,7 @@ mod test {
         let mut context = Context::new();
 
         context.set_global_property_value(Parameters, p_values);
-        let parameters = context.get_global_property_value(Parameters).clone();
+        let parameters = context.get_global_property_value(Parameters).unwrap().clone();
         context.init_random(parameters.seed);
         init(&mut context);
 

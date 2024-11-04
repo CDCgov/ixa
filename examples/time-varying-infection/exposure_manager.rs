@@ -39,7 +39,7 @@ fn inverse_sampling_infection(context: &mut Context) -> f64 {
     let s: f64 = context.sample_distr(ExposureRng, Exp1);
     // get the time by following the formula described above
     // first need to get the simulation's sin_shift
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context.get_global_property_value(Parameters).unwrap().clone();
     let sin_shift = parameters.foi_sin_shift;
     let foi = parameters.foi;
     let f = func!(move |t| foi_t(t, foi, sin_shift));
@@ -91,7 +91,7 @@ mod test {
         };
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
-        let parameters = context.get_global_property_value(Parameters).clone();
+        let parameters = context.get_global_property_value(Parameters).unwrap().clone();
         context.init_random(parameters.seed);
         init(&mut context);
         context.add_person();
@@ -124,7 +124,7 @@ mod test {
         };
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
-        let parameters = context.get_global_property_value(Parameters).clone();
+        let parameters = context.get_global_property_value(Parameters).unwrap().clone();
         context.init_random(parameters.seed);
         // empirical mean
         let mut sum = 0.0;
