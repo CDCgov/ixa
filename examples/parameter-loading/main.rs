@@ -31,7 +31,10 @@ fn main() {
 
     match parameters_loader::init_parameters(&mut context, &file_path) {
         Ok(()) => {
-            let parameters = context.get_global_property_value(Parameters).clone();
+            let parameters = context
+                .get_global_property_value(Parameters)
+                .unwrap()
+                .clone();
             context.init_random(parameters.seed);
 
             for _ in 0..parameters.population {
