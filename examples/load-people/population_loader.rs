@@ -22,16 +22,15 @@ define_person_property!(Age, u8);
 define_person_property!(RiskCategoryType, RiskCategory);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
-    let person = context.add_person();
-    context.initialize_person_property(person, Age, record.age);
-    context.initialize_person_property(person, RiskCategoryType, record.risk_category);
-
-    // Set vaccine type and efficacy based on risk category
     let (t, e) = context.get_vaccine_props(record.risk_category);
-    context.initialize_person_property(person, VaccineType, t);
-    context.initialize_person_property(person, VaccineEfficacy, e);
-
-    person
+    context
+        .add_person((
+            (Age, record.age),
+            (RiskCategoryType, record.risk_category),
+            (VaccineType, t),
+            (VaccineEfficacy, e),
+        ))
+        .unwrap()
 }
 
 pub fn init(context: &mut Context) {

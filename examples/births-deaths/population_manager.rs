@@ -151,9 +151,7 @@ impl ContextPopulationExt for Context {
     }
 
     fn create_new_person(&mut self, age: u8) -> PersonId {
-        let person = self.add_person();
-        self.initialize_person_property(person, Age, age);
-        person
+        self.add_person((Age, age)).unwrap()
     }
 
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
