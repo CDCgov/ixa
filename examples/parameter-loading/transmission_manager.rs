@@ -70,7 +70,9 @@ mod test {
         };
 
         let mut context = Context::new();
-        context.set_global_property_value(Parameters, p_values);
+        context
+            .set_global_property_value(Parameters, p_values)
+            .unwrap();
         context.init_random(123);
         let pid = context.add_person(()).unwrap();
         attempt_infection(&mut context);

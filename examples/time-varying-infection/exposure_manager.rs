@@ -94,7 +94,9 @@ mod test {
             output_file: ".".to_string(),
         };
         let mut context = Context::new();
-        context.set_global_property_value(Parameters, p_values);
+        context
+            .set_global_property_value(Parameters, p_values)
+            .unwrap();
         let parameters = context
             .get_global_property_value(Parameters)
             .unwrap()
@@ -132,7 +134,7 @@ mod test {
             output_file: ".".to_string(),
         };
         let mut context = Context::new();
-        context.set_global_property_value(Parameters, p_values);
+        context.set_global_property_value(Parameters, p_values).unwrap();
         let parameters = context
             .get_global_property_value(Parameters)
             .unwrap()

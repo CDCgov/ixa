@@ -4,8 +4,8 @@ use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-/// A wrapper around other error types, as well
-/// as our specific error type.
+/// Provides `IxaError` and maps to other errors to
+/// convert to an `IxaError`
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),
