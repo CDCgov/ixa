@@ -52,7 +52,10 @@ pub trait ContextGlobalPropertiesExt {
     );
 
     /// Return value of global property T
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value;
+    fn get_global_property_value<T: GlobalProperty + 'static>(
+        &self,
+        _property: T,
+    ) -> Option<&T::Value>;
 
     /// Given a file path for a valid json file, deserialize parameter values
     /// for a given struct T
@@ -79,12 +82,14 @@ impl GlobalPropertiesDataContainer {
             .or_insert_with(|| Box::new(value));
     }
 
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self) -> &T::Value {
-        let data_container = self
-            .global_property_container
-            .get(&TypeId::of::<T>())
-            .expect("Global property not initialized");
-        data_container.downcast_ref::<T::Value>().unwrap()
+    #[must_use]
+    fn get_global_property_value<T: GlobalProperty + 'static>(&self) -> Option<&T::Value> {
+        let data_container = self.global_property_container.get(&TypeId::of::<T>());
+
+        match data_container {
+            Some(property) => Some(property.downcast_ref::<T::Value>().unwrap()),
+            None => None,
+        }
     }
 }
 
@@ -99,9 +104,14 @@ impl ContextGlobalPropertiesExt for Context {
     }
 
     #[allow(unused_variables)]
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self, _property: T) -> &T::Value {
-        let data_container = self.get_data_container(GlobalPropertiesPlugin).unwrap();
-        data_container.get_global_property_value::<T>()
+    fn get_global_property_value<T: GlobalProperty + 'static>(
+        &self,
+        _property: T,
+    ) -> Option<&T::Value> {
+        if let Some(data_container) = self.get_data_container(GlobalPropertiesPlugin) {
+            return data_container.get_global_property_value::<T>();
+        };
+        None
     }
 
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
@@ -139,10 +149,21 @@ mod test {
         };
         let mut context = Context::new();
         context.set_global_property_value(DiseaseParams, params.clone());
-        let global_params = context.get_global_property_value(DiseaseParams).clone();
+        let global_params = context
+            .get_global_property_value(DiseaseParams)
+            .unwrap()
+            .clone();
         assert_eq!(global_params.days, params.days);
         assert_eq!(global_params.diseases, params.diseases);
     }
+
+    #[test]
+    fn get_global_propert_missing() {
+        let context = Context::new();
+        let global_params = context.get_global_property_value(DiseaseParams);
+        assert!(global_params.is_none());
+    }
+
     #[test]
     fn set_parameters() {
         let mut context = Context::new();
@@ -166,7 +187,10 @@ mod test {
 
         context.set_global_property_value(Parameters, params_json);
 
-        let params_read = context.get_global_property_value(Parameters).clone();
+        let params_read = context
+            .get_global_property_value(Parameters)
+            .unwrap()
+            .clone();
         assert_eq!(params_read.days, params.days);
         assert_eq!(params_read.diseases, params.diseases);
     }

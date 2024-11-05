@@ -50,7 +50,10 @@ fn count_people_and_send_report(context: &mut Context, report_period: f64) {
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
     context
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
