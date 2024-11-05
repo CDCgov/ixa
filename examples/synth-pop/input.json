@@ -1,0 +1,6 @@
+{
+    "population": 100,
+    "max_time": 780.0,
+    "seed": 123,
+    "output_file": "incidence"
+}
