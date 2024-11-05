@@ -10,12 +10,14 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self},
 };
+use seq_macro::seq;
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
 struct PeopleData {
     current_population: usize,
+    required_properties: RefCell<HashSet<TypeId>>,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
     dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
@@ -26,6 +28,7 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
+        required_properties: RefCell::new(HashSet::new()),
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new())
@@ -63,6 +66,9 @@ pub trait PersonProperty: Copy {
     fn is_derived() -> bool {
         false
     }
+    fn must_be_initialized() -> bool {
+        false
+    }
     #[must_use]
     fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
         panic!("Dependencies not implemented");
@@ -70,6 +76,49 @@ pub trait PersonProperty: Copy {
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
     fn get_instance() -> Self;
 }
+
+
+pub trait InitializationList {
+    fn set_properties(&self, context: &mut Context, person_id: PersonId);
+}
+
+// Implement the query version with one parameter.
+impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
+    fn set_properties(&self, context: &mut Context, person_id: PersonId) {
+        context.initialize_person_property(person_id, 
+                                           T1::get_instance(),
+                                           self.1);
+    }
+}
+
+// Implement the versions with 1..20 parameters.
+macro_rules! impl_initialization_list {
+    ($ct:expr) => {
+        seq!(N in 0..$ct {
+            impl<
+                #(
+                    T~N : PersonProperty + 'static,
+                )*
+            > InitializationList for (
+                #(
+                    (T~N, T~N::Value),
+                )*
+            )
+            {
+                fn set_properties(&self, context: &mut Context, person_id: PersonId) {
+                    #(
+                    context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
+                    )*
+                }
+            }
+        });
+    }
+}
+
+seq!(Z in 1..20 {
+    impl_initialization_list!(Z);
+});
+
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
@@ -187,9 +236,23 @@ macro_rules! define_person_property {
         }
     };
     ($person_property:ident, $value:ty) => {
-        define_person_property!($person_property, $value, |_context, _person_id| {
-            panic!("Property not initialized");
-        });
+        #[derive(Debug, Copy, Clone)]                
+        pub struct $person_property;
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = $value;
+            fn compute(
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
+            ) -> Self::Value {
+                panic!("Property not initialized. This should be impossible.");
+            }
+            fn must_be_initialized() -> bool {
+                true
+            }
+            fn get_instance() -> Self {
+                $person_property
+            }
+        }
     };
 }
 
@@ -248,6 +311,14 @@ impl PeopleData {
         PersonId { id }
     }
 
+    /// Adds a person and returns a `PersonId` that can be used to reference them.
+    /// This will increment the current population by 1.
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId {
+        let id = self.current_population;
+        self.current_population += 1;
+        PersonId { id }
+    }
+    
     /// Retrieves a specific property of a person by their `PersonId`.
     ///
     /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
