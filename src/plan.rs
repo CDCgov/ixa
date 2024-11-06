@@ -148,6 +148,7 @@ impl<P: Eq + PartialEq + Ord> Ord for Entry<P> {
 }
 
 /// A unique identifier for a plan added to a `Queue<T>`
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct Id {
     id: u64,
 }

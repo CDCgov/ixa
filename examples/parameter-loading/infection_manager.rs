@@ -66,7 +66,7 @@ mod test {
         };
         let mut context = Context::new();
 
-        context.set_global_property_value(Parameters, p_values);
+        context.set_global_property_value(Parameters, p_values.clone());
         context.init_random(42);
         init(&mut context);
 
@@ -81,9 +81,6 @@ mod test {
         let population_size: usize = 10;
         for _ in 0..population_size {
             let person = context.add_person();
-
-            // This is necessary to emit an event
-            context.get_person_property(person, InfectionStatusType);
 
             context.add_plan(1.0, move |context| {
                 context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
