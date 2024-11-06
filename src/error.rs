@@ -9,6 +9,7 @@ use std::io;
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),
+    IxaError(String),
 }
 
 impl From<io::Error> for IxaError {
@@ -20,6 +21,18 @@ impl From<io::Error> for IxaError {
 impl From<serde_json::Error> for IxaError {
     fn from(error: serde_json::Error) -> Self {
         IxaError::JsonError(error)
+    }
+}
+
+impl From<String> for IxaError {
+    fn from(error: String) -> Self {
+        IxaError::IxaError(error)
+    }
+}
+
+impl From<&str> for IxaError {
+    fn from(error: &str) -> Self {
+        IxaError::IxaError(error.to_string())
     }
 }
 
