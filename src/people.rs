@@ -91,22 +91,25 @@ pub trait PersonProperty: Copy {
 }
 
 pub trait InitializationList {
-    fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId>;
+    fn has_property(&self, t: TypeId) -> bool;
+    fn set_properties(&self, context: &mut Context, person_id: PersonId);
 }
 
 // Implement the query version with 0 and 1 parameters
 impl InitializationList for () {
-    fn set_properties(&self, _context: &mut Context, _person_id: PersonId) -> HashSet<TypeId> {
-        HashSet::new()
+    fn has_property(&self, t: TypeId) -> bool {
+        false
     }
+    fn set_properties(&self, _context: &mut Context, _person_id: PersonId) {}
 }
 
 impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
-    fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId> {
+    fn has_property(&self, t: TypeId) -> bool {
+        t == TypeId::of::<T1>()
+    }
+    
+    fn set_properties(&self, context: &mut Context, person_id: PersonId) {
         context.initialize_person_property(person_id, T1::get_instance(), self.1);
-        let mut hs = HashSet::new();
-        hs.insert(TypeId::of::<T1>());
-        hs
     }
 }
 
@@ -124,16 +127,17 @@ macro_rules! impl_initialization_list {
                 )*
             )
             {
-                fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId> {
+                fn has_property(&self, t: TypeId) -> bool {
+                    #(
+                        if t == TypeId::of::<T~N>() { return true; }
+                    )*
+                    return false
+                }
+                
+                fn set_properties(&self, context: &mut Context, person_id: PersonId)  {
                     #(
                        context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
                     )*
-                    let mut hs = HashSet::new();
-                    #(
-                        hs.insert(TypeId::of::<T~N>());
-
-                    )*
-                    hs
                 }
             }
         });
@@ -374,18 +378,14 @@ impl PeopleData {
         *property_ref = Some(value);
     }
 
-    fn verify_property_initialization(
+    fn check_initialization_list<T: InitializationList>(
         &self,
-        initialized: &HashSet<TypeId>,
+        initialization: &T
     ) -> Result<(), IxaError> {
         let properties_map = self.properties_map.borrow();
-        for (t, property) in properties_map.iter() {
-            if !property.must_be_initialized {
-                continue;
-            }
-
-            if !initialized.contains(t) {
-                panic!("Uninitialized value");
+        for (t, _) in properties_map.iter() {
+            if !initialization.has_property(*t) {
+                panic!("not initialized");
             }
         }
 
@@ -425,7 +425,7 @@ pub trait ContextPeopleExt {
     /// Creates a new person with no assigned person properties
     fn add_person(&mut self) -> PersonId;
 
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId;
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
     /// Given a `PersonId` returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
@@ -475,14 +475,13 @@ impl ContextPeopleExt for Context {
         person_id
     }
 
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId {
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError> {
         let data_container = self.get_data_container_mut(PeoplePlugin);
+        data_container.check_initialization_list(&props)?;
         let person_id = data_container.add_person();
-        let properties_set = props.set_properties(self, person_id);
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let _ = data_container.verify_property_initialization(&properties_set);
+        props.set_properties(self, person_id);
         self.emit_event(PersonCreatedEvent { person_id });
-        person_id
+        Ok(person_id)
     }
 
     fn register_property<T: PersonProperty + 'static>(&mut self) {
@@ -746,7 +745,7 @@ mod test {
     fn add_person_with_initialize() {
         let mut context = Context::new();
 
-        let person_id = context.add_person2(((Age, 42), (RiskCategoryType, RiskCategory::Low)));
+        let person_id = context.add_person2(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -755,12 +754,12 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Uninitialized value")]
     fn add_person_with_initialize_missing() {
         let mut context = Context::new();
 
-        context.add_person2((Age, 10));
+        context.add_person2((Age, 10)).unwrap();;
         context.add_person2(());
+        panic!("Need to check for the right error");
     }
 
     #[test]
