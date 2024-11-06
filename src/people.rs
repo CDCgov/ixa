@@ -97,7 +97,7 @@ pub trait InitializationList {
 
 // Implement the query version with 0 and 1 parameters
 impl InitializationList for () {
-    fn has_property(&self, t: TypeId) -> bool {
+    fn has_property(&self, _: TypeId) -> bool {
         false
     }
     fn set_properties(&self, _context: &mut Context, _person_id: PersonId) {}
@@ -383,9 +383,9 @@ impl PeopleData {
         initialization: &T
     ) -> Result<(), IxaError> {
         let properties_map = self.properties_map.borrow();
-        for (t, _) in properties_map.iter() {
-            if !initialization.has_property(*t) {
-                panic!("not initialized");
+        for (t, property) in properties_map.iter() {
+            if property.must_be_initialized && !initialization.has_property(*t) {
+                return Err(IxaError::IxaError(String::from("Missing initial value")));
             }
         }
 
@@ -610,6 +610,7 @@ mod test {
     use crate::{
         context::Context,
         people::{PeoplePlugin, PersonPropertyHolder},
+        error::IxaError
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
@@ -757,17 +758,28 @@ mod test {
     fn add_person_with_initialize_missing() {
         let mut context = Context::new();
 
-        context.add_person2((Age, 10)).unwrap();;
-        context.add_person2(());
-        panic!("Need to check for the right error");
+        context.add_person2((Age, 10)).unwrap();
+        // Fails because we don't provide a value for Age
+        assert!(matches!(context.add_person2(()), Err(IxaError::IxaError(_))));
     }
 
+
     #[test]
-    fn add_person_with_initialize_missing_default() {
+    fn add_person_with_initialize_missing_first() {
         let mut context = Context::new();
 
-        context.add_person2((IsRunner, true));
-        context.add_person2(());
+        // Succeeds because context doesn't know about any properties
+        // yet.
+        context.add_person2(()).unwrap();
+    }
+    
+    #[test]
+    fn add_person_with_initialize_missing_with_default() {
+        let mut context = Context::new();
+
+        context.add_person2((IsRunner, true)).unwrap();
+        // Succeeds because |IsRunner| has a default.
+        context.add_person2(()).unwrap();
     }
 
     #[test]
