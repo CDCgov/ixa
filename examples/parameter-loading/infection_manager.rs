@@ -80,7 +80,7 @@ mod test {
 
         let population_size: usize = 10;
         for _ in 0..population_size {
-            let person = context.add_person();
+            let person = context.add_person(()).unwrap();
 
             // This is necessary to emit an event
             context.get_person_property(person, InfectionStatusType);

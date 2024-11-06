@@ -125,14 +125,13 @@ mod test {
         context.init_random(parameters.seed);
         init(&mut context);
 
-        for id in 0..parameters.population {
-            context.add_person();
+        for _ in 0..parameters.population {
+            let person_id = context.add_person((InfectionTime, 0.0)).unwrap();
             context.set_person_property(
-                context.get_person_id(id),
+                person_id,
                 DiseaseStatusType,
                 DiseaseStatus::I,
             );
-            context.initialize_person_property(context.get_person_id(id), InfectionTime, 0.0);
         }
 
         // put this subscription after every agent has become infected
@@ -164,7 +163,7 @@ mod test {
         context.set_global_property_value(Parameters, parameters.clone());
         context.init_random(parameters.seed);
         for _ in 0..parameters.population {
-            let person_id = context.add_person();
+            let person_id = context.add_person(()).unwrap();
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         }
         assert_eq!(
@@ -214,8 +213,7 @@ mod test {
             context.set_global_property_value(Parameters, parameters.clone());
             context.init_random(seed);
             init(&mut context);
-            let person_id = context.add_person();
-            context.initialize_person_property(person_id, InfectionTime, 0.0);
+            let person_id = context.add_person((InfectionTime, 0.0)).unwrap();
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(

@@ -35,7 +35,7 @@ mod tests {
         let mut context = Context::new();
         init(&mut context);
 
-        let person = context.add_person();
+        let person = context.add_person(()).unwrap();
 
         // People should start in the S state
         assert_eq!(

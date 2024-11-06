@@ -100,7 +100,7 @@ mod test {
             .clone();
         context.init_random(parameters.seed);
         init(&mut context);
-        context.add_person();
+        context.add_person(()).unwrap();
         context.execute();
         let person_status =
             context.get_person_property(context.get_person_id(0), DiseaseStatusType);

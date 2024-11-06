@@ -422,10 +422,10 @@ pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
 
-    /// Creates a new person with no assigned person properties
-    fn add_person(&mut self) -> PersonId;
 
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
+    /// Creates a new person. The caller must supply initial values
+    /// for all non-derived properties that don't have a default or an initializer.
+    fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
     /// Given a `PersonId` returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
@@ -469,13 +469,7 @@ impl ContextPeopleExt for Context {
             .map_or(0, |data_container| data_container.current_population)
     }
 
-    fn add_person(&mut self) -> PersonId {
-        let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
-        self.emit_event(PersonCreatedEvent { person_id });
-        person_id
-    }
-
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError> {
+    fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError> {
         let data_container = self.get_data_container_mut(PeoplePlugin);
         data_container.check_initialization_list(&props)?;
         let person_id = data_container.add_person();
@@ -674,7 +668,7 @@ mod test {
             assert_eq!(event.person_id.id, 0);
         });
 
-        let _ = context.add_person();
+        let _ = context.add_person(()).unwrap();
         context.execute();
         assert!(*flag.borrow());
     }
@@ -682,8 +676,7 @@ mod test {
     fn set_get_properties() {
         let mut context = Context::new();
 
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 42);
+        let person = context.add_person((Age, 42)).unwrap();
         assert_eq!(context.get_person_property(person, Age), 42);
     }
 
@@ -692,38 +685,17 @@ mod test {
     #[should_panic]
     fn get_uninitialized_property_panics() {
         let mut context = Context::new();
-        let person = context.add_person();
+        let person = context.add_person(()).unwrap();
         context.get_person_property(person, Age);
     }
 
-    // Tests that if we try to set or access a property for an index greater than
-    // the current size of the property Vec, the vector will be resized.
-    #[test]
-    fn set_property_resize() {
-        let mut context = Context::new();
-
-        // Add a person and set a property, instantiating the Vec
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 8);
-
-        // Create a bunch of people and don't initialize Age
-        for _ in 1..9 {
-            let _person = context.add_person();
-        }
-        let tenth_person = context.add_person();
-
-        // Set a person property for a person > index 0
-        context.initialize_person_property(tenth_person, Age, 42);
-        // Call an initializer
-        assert!(!context.get_person_property(tenth_person, IsRunner));
-    }
 
     #[test]
     fn get_current_population() {
         let mut context = Context::new();
         assert_eq!(context.get_current_population(), 0);
         for _ in 0..3 {
-            context.add_person();
+            context.add_person(()).unwrap();
         }
         assert_eq!(context.get_current_population(), 3);
     }
@@ -732,9 +704,7 @@ mod test {
     fn add_person() {
         let mut context = Context::new();
 
-        let person_id = context.add_person();
-        context.initialize_person_property(person_id, Age, 42);
-        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        let person_id = context.add_person(((Age, 42),(RiskCategoryType, RiskCategory::Low)) ).unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -746,7 +716,7 @@ mod test {
     fn add_person_with_initialize() {
         let mut context = Context::new();
 
-        let person_id = context.add_person2(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let person_id = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -758,9 +728,9 @@ mod test {
     fn add_person_with_initialize_missing() {
         let mut context = Context::new();
 
-        context.add_person2((Age, 10)).unwrap();
+        context.add_person((Age, 10)).unwrap();
         // Fails because we don't provide a value for Age
-        assert!(matches!(context.add_person2(()), Err(IxaError::IxaError(_))));
+        assert!(matches!(context.add_person(()), Err(IxaError::IxaError(_))));
     }
 
 
@@ -770,23 +740,23 @@ mod test {
 
         // Succeeds because context doesn't know about any properties
         // yet.
-        context.add_person2(()).unwrap();
+        context.add_person(()).unwrap();
     }
     
     #[test]
     fn add_person_with_initialize_missing_with_default() {
         let mut context = Context::new();
 
-        context.add_person2((IsRunner, true)).unwrap();
+        context.add_person((IsRunner, true)).unwrap();
         // Succeeds because |IsRunner| has a default.
-        context.add_person2(()).unwrap();
+        context.add_person(()).unwrap();
     }
 
     #[test]
     fn person_debug_display() {
         let mut context = Context::new();
 
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
         assert_eq!(format!("{person_id}"), "0");
         assert_eq!(format!("{person_id:?}"), "Person 0");
     }
@@ -794,7 +764,7 @@ mod test {
     #[test]
     fn add_person_initializers() {
         let mut context = Context::new();
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
 
         assert_eq!(context.get_person_property(person_id, RunningShoes), 0);
         assert!(!context.get_person_property(person_id, IsRunner));
@@ -812,7 +782,7 @@ mod test {
             },
         );
 
-        let person = context.add_person();
+        let person = context.add_person(()).unwrap();
         // This should not emit a change event
         context.initialize_person_property(person, Age, 42);
         context.get_person_property(person, IsRunner);
@@ -826,14 +796,13 @@ mod test {
     #[test]
     fn property_initialization_is_lazy() {
         let mut context = Context::new();
-        let person = context.add_person();
+        let person = context.add_person((IsRunner, true)).unwrap();
         let people_data = context.get_data_container_mut(PeoplePlugin);
 
         // Verify we haven't initialized the property yet
         let has_value = *people_data.get_person_property_ref(person, RunningShoes);
         assert!(has_value.is_none());
 
-        context.initialize_person_property(person, IsRunner, true);
 
         // This should initialize it
         let value = context.get_person_property(person, RunningShoes);
@@ -862,8 +831,7 @@ mod test {
                 );
             },
         );
-        let person_id = context.add_person();
-        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::Low);
+        let person_id = context.add_person((RiskCategoryType, RiskCategory::Low)).unwrap();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
         context.execute();
         assert!(*flag.borrow());
@@ -880,7 +848,7 @@ mod test {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
         // Initializer wasn't called, so don't fire an event
         context.initialize_person_property(person_id, RunningShoes, 42);
         context.execute();
@@ -898,7 +866,7 @@ mod test {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
         // Initializer called as a side effect of set, so event fires.
         context.set_person_property(person_id, RunningShoes, 42);
         context.execute();
@@ -909,8 +877,7 @@ mod test {
     #[should_panic(expected = "Property already initialized")]
     fn calling_initialize_twice_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();
-        context.initialize_person_property(person_id, IsRunner, true);
+        let person_id = context.add_person((IsRunner, true)).unwrap();
         context.initialize_person_property(person_id, IsRunner, true);
     }
 
@@ -918,7 +885,7 @@ mod test {
     #[should_panic(expected = "Property already initialized")]
     fn calling_initialize_after_get_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
         let _ = context.get_person_property(person_id, IsRunner);
         context.initialize_person_property(person_id, IsRunner, true);
     }
@@ -926,15 +893,15 @@ mod test {
     #[test]
     fn initialize_without_initializer_succeeds() {
         let mut context = Context::new();
-        let person_id = context.add_person();
-        context.initialize_person_property(person_id, RiskCategoryType, RiskCategory::High);
+        context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
     }
+
 
     #[test]
     #[should_panic(expected = "Property not initialized")]
     fn set_without_initializer_panics() {
         let mut context = Context::new();
-        let person_id = context.add_person();
+        let person_id = context.add_person(()).unwrap();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
     }
 
@@ -942,15 +909,14 @@ mod test {
     #[should_panic(expected = "Person does not exist")]
     fn dont_return_person_id() {
         let mut context = Context::new();
-        context.add_person();
+        context.add_person(()).unwrap();
         context.get_person_id(1);
     }
 
     #[test]
     fn get_person_property_returns_correct_value() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 10);
+        let person = context.add_person((Age, 10)).unwrap();
         assert_eq!(
             context.get_person_property(person, AgeGroup),
             AgeGroupType::Child
@@ -960,8 +926,7 @@ mod test {
     #[test]
     fn get_person_property_changes_correctly() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 17);
+        let person = context.add_person((Age, 17)).unwrap();
         assert_eq!(
             context.get_person_property(person, AgeGroup),
             AgeGroupType::Child
@@ -975,10 +940,10 @@ mod test {
     #[test]
     fn get_person_property_change_event() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 17);
+        let person = context.add_person((Age, 17)).unwrap();
 
         let flag = Rc::new(RefCell::new(false));
+
         let flag_clone = flag.clone();
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<AgeGroup>| {
@@ -996,10 +961,7 @@ mod test {
     #[test]
     fn get_derived_property_multiple_deps() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 17);
-        context.initialize_person_property(person, IsRunner, true);
-
+        let person = context.add_person(((Age, 17), (IsRunner, true))).unwrap();
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
         context.subscribe_to_event(
@@ -1018,9 +980,7 @@ mod test {
     #[test]
     fn register_derived_only_once() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 17);
-        context.initialize_person_property(person, IsRunner, true);
+        let person = context.add_person(((Age, 17), (IsRunner, true))).unwrap();
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
@@ -1048,13 +1008,11 @@ mod test {
         assert_eq!(actual, expected);
     }
 
+
     #[test]
     fn get_derived_property_dependent_on_another_derived() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 88);
-        context.initialize_person_property(person, IsRunner, false);
-
+        let person = context.add_person(((Age, 88),(IsRunner, false))).unwrap();
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
         assert!(!context.get_person_property(person, SeniorRunner));
@@ -1074,9 +1032,7 @@ mod test {
     #[test]
     fn get_derived_property_diamond_dependencies() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, Age, 17);
-        context.initialize_person_property(person, IsSwimmer, true);
+        let person = context.add_person(((Age, 17),(IsSwimmer, true))).unwrap();
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();

@@ -23,7 +23,7 @@ pub fn init(context: &mut Context) {
         .unwrap()
         .clone();
     for _ in 0..parameters.population {
-        context.add_person();
+        context.add_person(()).unwrap();
     }
 }
 
