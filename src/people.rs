@@ -107,7 +107,7 @@ impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
     fn has_property(&self, t: TypeId) -> bool {
         t == TypeId::of::<T1>()
     }
-    
+
     fn set_properties(&self, context: &mut Context, person_id: PersonId) {
         context.initialize_person_property(person_id, T1::get_instance(), self.1);
     }
@@ -133,7 +133,7 @@ macro_rules! impl_initialization_list {
                     )*
                     return false
                 }
-                
+
                 fn set_properties(&self, context: &mut Context, person_id: PersonId)  {
                     #(
                        context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
@@ -380,7 +380,7 @@ impl PeopleData {
 
     fn check_initialization_list<T: InitializationList>(
         &self,
-        initialization: &T
+        initialization: &T,
     ) -> Result<(), IxaError> {
         let properties_map = self.properties_map.borrow();
         for (t, property) in properties_map.iter() {
@@ -421,7 +421,6 @@ impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
-
 
     /// Creates a new person. The caller must supply initial values
     /// for all non-derived properties that don't have a default or an initializer.
@@ -603,8 +602,8 @@ mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
+        error::IxaError,
         people::{PeoplePlugin, PersonPropertyHolder},
-        error::IxaError
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
@@ -689,7 +688,6 @@ mod test {
         context.get_person_property(person, Age);
     }
 
-
     #[test]
     fn get_current_population() {
         let mut context = Context::new();
@@ -704,7 +702,9 @@ mod test {
     fn add_person() {
         let mut context = Context::new();
 
-        let person_id = context.add_person(((Age, 42),(RiskCategoryType, RiskCategory::Low)) ).unwrap();
+        let person_id = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -716,7 +716,9 @@ mod test {
     fn add_person_with_initialize() {
         let mut context = Context::new();
 
-        let person_id = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let person_id = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
             context.get_person_property(person_id, RiskCategoryType),
@@ -733,7 +735,6 @@ mod test {
         assert!(matches!(context.add_person(()), Err(IxaError::IxaError(_))));
     }
 
-
     #[test]
     fn add_person_with_initialize_missing_first() {
         let mut context = Context::new();
@@ -742,7 +743,7 @@ mod test {
         // yet.
         context.add_person(()).unwrap();
     }
-    
+
     #[test]
     fn add_person_with_initialize_missing_with_default() {
         let mut context = Context::new();
@@ -803,7 +804,6 @@ mod test {
         let has_value = *people_data.get_person_property_ref(person, RunningShoes);
         assert!(has_value.is_none());
 
-
         // This should initialize it
         let value = context.get_person_property(person, RunningShoes);
         assert_eq!(value, 4);
@@ -831,7 +831,9 @@ mod test {
                 );
             },
         );
-        let person_id = context.add_person((RiskCategoryType, RiskCategory::Low)).unwrap();
+        let person_id = context
+            .add_person((RiskCategoryType, RiskCategory::Low))
+            .unwrap();
         context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
         context.execute();
         assert!(*flag.borrow());
@@ -893,9 +895,10 @@ mod test {
     #[test]
     fn initialize_without_initializer_succeeds() {
         let mut context = Context::new();
-        context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
     }
-
 
     #[test]
     #[should_panic(expected = "Property not initialized")]
@@ -1008,11 +1011,10 @@ mod test {
         assert_eq!(actual, expected);
     }
 
-
     #[test]
     fn get_derived_property_dependent_on_another_derived() {
         let mut context = Context::new();
-        let person = context.add_person(((Age, 88),(IsRunner, false))).unwrap();
+        let person = context.add_person(((Age, 88), (IsRunner, false))).unwrap();
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();
         assert!(!context.get_person_property(person, SeniorRunner));
@@ -1032,7 +1034,7 @@ mod test {
     #[test]
     fn get_derived_property_diamond_dependencies() {
         let mut context = Context::new();
-        let person = context.add_person(((Age, 17),(IsSwimmer, true))).unwrap();
+        let person = context.add_person(((Age, 17), (IsSwimmer, true))).unwrap();
 
         let flag = Rc::new(RefCell::new(0));
         let flag_clone = flag.clone();

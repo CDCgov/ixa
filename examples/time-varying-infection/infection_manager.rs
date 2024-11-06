@@ -127,11 +127,7 @@ mod test {
 
         for _ in 0..parameters.population {
             let person_id = context.add_person((InfectionTime, 0.0)).unwrap();
-            context.set_person_property(
-                person_id,
-                DiseaseStatusType,
-                DiseaseStatus::I,
-            );
+            context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         }
 
         // put this subscription after every agent has become infected
