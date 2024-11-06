@@ -86,8 +86,6 @@ impl ContextPeopleExt for Context {
 mod test {
     use super::*;
     use ixa::context::Context;
-    use ixa::define_data_plugin;
-    use std::collections::HashMap;
 
     #[test]
     fn test_person_creation() {

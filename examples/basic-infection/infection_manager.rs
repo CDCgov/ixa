@@ -40,7 +40,6 @@ mod test {
     use crate::people::InfectionStatusEvent;
     use ixa::context::Context;
     use ixa::define_data_plugin;
-    use ixa::define_rng;
     use ixa::random::ContextRandomExt;
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
@@ -53,7 +52,6 @@ mod test {
 
     #[test]
     fn test_handle_infection_change() {
-        use super::handle_infection_status_change;
         use super::init;
         let mut context = Context::new();
         context.init_random(42);
