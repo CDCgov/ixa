@@ -21,9 +21,9 @@ struct StoredPeopleProperties {
 }
 
 impl StoredPeopleProperties {
-    fn new<T : 'static>() -> Self {
-        StoredPeopleProperties { must_be_initialized: false,
-                                 values: Box::new(Vec::<T>::new())
+    fn new<T : PersonProperty + 'static>() -> Self {
+        StoredPeopleProperties { must_be_initialized: T::must_be_initialized(),
+                                 values: Box::new(Vec::<Option<T::Value>>::new())
         }
     }
 }
@@ -337,7 +337,7 @@ impl PeopleData {
         RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
                 .entry(TypeId::of::<T>())
-                .or_insert_with(|| StoredPeopleProperties::new::<Option<T::Value>>());
+                .or_insert_with(|| StoredPeopleProperties::new::<T>());
             let values: &mut Vec<Option<T::Value>> = properties
                 .values
                 .downcast_mut()
