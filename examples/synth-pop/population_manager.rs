@@ -6,6 +6,11 @@ use ixa::{
     people::{ContextPeopleExt, PersonId, PersonProperty},
     random::{define_rng, ContextRandomExt},
 };
+
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
+use std::path::Path;
 use serde::Deserialize;
 
 define_rng!(PeopleRng);
@@ -21,11 +26,13 @@ pub enum InfectionStatus {
     R,
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash, EnumIter)]
 pub enum AgeGroupRisk {
     NewBorn,
+    YoungChild,
     General,
     OldAdult,
+    Elderly,
 }
 
 impl fmt::Display for AgeGroupRisk {
@@ -34,51 +41,127 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
-pub struct PersonRecord {
+#[derive(Deserialize, Debug)]
+pub struct PeopleRecord {
     age: u8,
-    home_id: usize,
-    school_id: usize
+    homeId: usize,
+    schoolId: usize,
+    workplaceId: usize
 }
 
 
 define_person_property!(Age, u8);
+define_person_property!(WorkplaceId, usize);
+define_person_property!(SchoolId, usize);
+define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
 
 define_derived_property!(VaccineAgeGroup, AgeGroupRisk, [Age], |age| {
     if age <= 1 {
         AgeGroupRisk::NewBorn
-    } else if age <= 65 {
+    } else if age <= 2 {
+        AgeGroupRisk::YoungChild
+    } else if age < 60 {
         AgeGroupRisk::General
-    } else {
+    } else if age < 75 {
         AgeGroupRisk::OldAdult
+    } else {
+        AgeGroupRisk::Elderly
     }
 });
 
+define_derived_property!(CensusTract, usize, [HomeId], |home_id| {
+    home_id / 10000
+});
+
+pub fn create_new_person(context: &mut Context, person_record: &PeopleRecord) -> PersonId {
+    let person = context.add_person();
+    context.initialize_person_property(person, Age, person_record.age);
+    context.initialize_person_property(person, WorkplaceId, person_record.workplaceId);
+    context.initialize_person_property(person, SchoolId, person_record.schoolId);
+    context.initialize_person_property(person, HomeId, person_record.homeId);
+    person
+}
 
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters)
         .unwrap()
         .clone();
 
-    for _ in 0..parameters.population {
-        let p_record = PersonRecord {
-            age: context.sample_range(PeopleRng, 0..MAX_AGE),
-            home_id: 0,
-            school_id: 0,
-        };
-        let person = context.create_new_person(p_record);        
+    let record_dir = Path::new(file!()).parent().unwrap();
+    let mut reader = csv::Reader::from_path(record_dir.join(parameters.synth_population_file)).unwrap();
+
+    for result in reader.deserialize() {
+        let record: PeopleRecord = result.expect("Failed to parse record");
+        create_new_person(context, &record);
     }
+
 }
 
 pub trait ContextPopulationExt {
-    fn create_new_person(&mut self, person_record: PersonRecord) -> PersonId;
+    fn get_population_by_property<T: PersonProperty + 'static>(
+        &mut self,
+        property: T,
+        value: T::Value,
+    ) -> usize
+    where
+        <T as PersonProperty>::Value: PartialEq;
+
+    fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
+        &mut self,
+        property_a: T,
+        value_a: T::Value,
+        property_b: U,
+        value_b: U::Value,
+    ) -> usize
+    where
+        <T as PersonProperty>::Value: PartialEq,
+        <U as PersonProperty>::Value: PartialEq;
 }
 
 impl ContextPopulationExt for Context {
-    fn create_new_person(&mut self, person_record: PersonRecord) -> PersonId{
-        let person = self.add_person();
-        self.initialize_person_property(person, Age, person_record.age);
-        person
+    fn get_population_by_property<T: PersonProperty + 'static>(
+        &mut self,
+        property: T,
+        value: T::Value,
+    ) -> usize
+    where
+        <T as PersonProperty>::Value: PartialEq,
+    {
+        let mut population_counter = 0;
+        for i in 0..self.get_current_population() {
+            let person_id = self.get_person_id(i);
+            if self.get_person_property(person_id, property) == value {
+                population_counter += 1;
+            }
+        }
+        population_counter
     }
-}
 
+    fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
+        &mut self,
+        property_a: T,
+        value_a: T::Value,
+        property_b: U,
+        value_b: U::Value,
+    ) -> usize
+    where
+        <T as PersonProperty>::Value: PartialEq,
+        <U as PersonProperty>::Value: PartialEq,
+    {
+        let mut population_counter = 0;
+        for i in 0..self.get_current_population() {
+            let person_id = self.get_person_id(i);
+
+            if self.get_person_property(person_id, Alive) {
+                if self.get_person_property(person_id, property_a) == value_a
+                    && self.get_person_property(person_id, property_b) == value_b {
+                    population_counter += 1;
+                }
+            }
+        }
+
+        population_counter
+    }
+
+}
