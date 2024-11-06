@@ -1,8 +1,10 @@
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
+    error::IxaError,
 };
 use ixa_derive::IxaEvent;
+use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::{
     any::{Any, TypeId},
@@ -10,7 +12,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self},
 };
-use seq_macro::seq;
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -21,13 +22,14 @@ struct StoredPeopleProperties {
 }
 
 impl StoredPeopleProperties {
-    fn new<T : PersonProperty + 'static>() -> Self {
-        StoredPeopleProperties { must_be_initialized: T::must_be_initialized(),
-                                 values: Box::new(Vec::<Option<T::Value>>::new())
+    fn new<T: PersonProperty + 'static>() -> Self {
+        StoredPeopleProperties {
+            must_be_initialized: T::must_be_initialized(),
+            values: Box::new(Vec::<Option<T::Value>>::new()),
         }
     }
 }
-    
+
 struct PeopleData {
     current_population: usize,
     properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
@@ -88,17 +90,23 @@ pub trait PersonProperty: Copy {
     fn get_instance() -> Self;
 }
 
-
 pub trait InitializationList {
-    fn set_properties(&self, context: &mut Context, person_id: PersonId);
+    fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId>;
 }
 
-// Implement the query version with one parameter.
+// Implement the query version with 0 and 1 parameters
+impl InitializationList for () {
+    fn set_properties(&self, _context: &mut Context, _person_id: PersonId) -> HashSet<TypeId> {
+        HashSet::new()
+    }
+}
+
 impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
-    fn set_properties(&self, context: &mut Context, person_id: PersonId) {
-        context.initialize_person_property(person_id, 
-                               T1::get_instance(),
-                               self.1);
+    fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId> {
+        context.initialize_person_property(person_id, T1::get_instance(), self.1);
+        let mut hs = HashSet::new();
+        hs.insert(TypeId::of::<T1>());
+        hs
     }
 }
 
@@ -116,10 +124,16 @@ macro_rules! impl_initialization_list {
                 )*
             )
             {
-                fn set_properties(&self, context: &mut Context, person_id: PersonId) {
+                fn set_properties(&self, context: &mut Context, person_id: PersonId) -> HashSet<TypeId> {
                     #(
                        context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
                     )*
+                    let mut hs = HashSet::new();
+                    #(
+                        hs.insert(TypeId::of::<T~N>());
+
+                    )*
+                    hs
                 }
             }
         });
@@ -129,7 +143,6 @@ macro_rules! impl_initialization_list {
 seq!(Z in 1..20 {
     impl_initialization_list!(Z);
 });
-
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
@@ -247,7 +260,7 @@ macro_rules! define_person_property {
         }
     };
     ($person_property:ident, $value:ty) => {
-        #[derive(Debug, Copy, Clone)]                
+        #[derive(Debug, Copy, Clone)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
@@ -321,7 +334,7 @@ impl PeopleData {
         self.current_population += 1;
         PersonId { id }
     }
-    
+
     /// Retrieves a specific property of a person by their `PersonId`.
     ///
     /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
@@ -360,6 +373,24 @@ impl PeopleData {
         let mut property_ref = self.get_person_property_ref(person_id, property);
         *property_ref = Some(value);
     }
+
+    fn verify_property_initialization(
+        &self,
+        initialized: &HashSet<TypeId>,
+    ) -> Result<(), IxaError> {
+        let properties_map = self.properties_map.borrow();
+        for (t, property) in properties_map.iter() {
+            if !property.must_be_initialized {
+                continue;
+            }
+
+            if !initialized.contains(t) {
+                panic!("Uninitialized value");
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // Emitted when a new person is created
@@ -395,7 +426,6 @@ pub trait ContextPeopleExt {
     fn add_person(&mut self) -> PersonId;
 
     fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId;
-
 
     /// Given a `PersonId` returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
@@ -445,10 +475,13 @@ impl ContextPeopleExt for Context {
         person_id
     }
 
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId  {
-        let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId {
+        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let person_id = data_container.add_person();
+        let properties_set = props.set_properties(self, person_id);
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let _ = data_container.verify_property_initialization(&properties_set);
         self.emit_event(PersonCreatedEvent { person_id });
-        props.set_properties(self, person_id);
         person_id
     }
 
@@ -720,7 +753,24 @@ mod test {
             RiskCategory::Low
         );
     }
-    
+
+    #[test]
+    #[should_panic(expected = "Uninitialized value")]
+    fn add_person_with_initialize_missing() {
+        let mut context = Context::new();
+
+        context.add_person2((Age, 10));
+        context.add_person2(());
+    }
+
+    #[test]
+    fn add_person_with_initialize_missing_default() {
+        let mut context = Context::new();
+
+        context.add_person2((IsRunner, true));
+        context.add_person2(());
+    }
+
     #[test]
     fn person_debug_display() {
         let mut context = Context::new();
