@@ -61,7 +61,10 @@ fn schedule_aging(context: &mut Context, person_id: PersonId) {
 }
 
 fn schedule_birth(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
     let person = context.create_new_person(0);
     context.add_plan(context.get_current_time() + 365.0, move |context| {
         schedule_aging(context, person);
@@ -75,7 +78,10 @@ fn schedule_birth(context: &mut Context) {
 }
 
 fn schedule_death(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
 
     if let Some(person) = context.sample_person_by_property(Alive, true) {
         context.kill_person(person);
@@ -90,7 +96,10 @@ fn schedule_death(context: &mut Context) {
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
 
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);

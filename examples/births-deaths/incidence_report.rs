@@ -41,7 +41,10 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
     let current_dir = Path::new(file!()).parent().unwrap();
     context
         .report_options()
