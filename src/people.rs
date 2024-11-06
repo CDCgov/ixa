@@ -15,9 +15,22 @@ use seq_macro::seq;
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
+struct StoredPeopleProperties {
+    must_be_initialized: bool,
+    values: Box<dyn Any>,
+}
+
+impl StoredPeopleProperties {
+    fn new<T : 'static>() -> Self {
+        StoredPeopleProperties { must_be_initialized: false,
+                                 values: Box::new(Vec::<T>::new())
+        }
+    }
+}
+    
 struct PeopleData {
     current_population: usize,
-    properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
     dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
 }
@@ -324,8 +337,9 @@ impl PeopleData {
         RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
                 .entry(TypeId::of::<T>())
-                .or_insert_with(|| Box::new(Vec::<Option<T::Value>>::with_capacity(index)));
+                .or_insert_with(|| StoredPeopleProperties::new::<Option<T::Value>>());
             let values: &mut Vec<Option<T::Value>> = properties
+                .values
                 .downcast_mut()
                 .expect("Type mismatch in properties_map");
             if index >= values.len() {
