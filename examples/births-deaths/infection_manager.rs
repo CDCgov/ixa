@@ -27,7 +27,10 @@ struct InfectionPlansData {
 }
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
     let infection_duration = parameters.infection_duration;
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());

@@ -14,12 +14,16 @@ use rand_distr::Exp;
 
 define_rng!(TransmissionRng);
 
-//Attempt infection for specific age group risk (meaning diferent forces of infection)
+//Attempt infection for specific age group risk (meaning different forces of infection)
 fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
     let population_size: usize = context.get_current_group_population(age_group);
-    let parameters = context.get_global_property_value(Parameters).clone();
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
     let foi = *context
         .get_global_property_value(Foi)
+        .unwrap()
         .get(&age_group)
         .unwrap();
     if population_size > 0 {
@@ -45,7 +49,7 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
 }
 
 pub fn init(context: &mut Context) {
-    let foi_age_groups = context.get_global_property_value(Foi).clone();
+    let foi_age_groups = context.get_global_property_value(Foi).unwrap().clone();
     for (age_group, _) in foi_age_groups {
         context.add_plan(0.0, move |context| {
             attempt_infection(context, age_group);
