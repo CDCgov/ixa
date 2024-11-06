@@ -17,7 +17,6 @@ use seq_macro::seq;
 // via their id.
 struct PeopleData {
     current_population: usize,
-    required_properties: RefCell<HashSet<TypeId>>,
     properties_map: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     registered_derived_properties: RefCell<HashSet<TypeId>>,
     dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
@@ -28,7 +27,6 @@ define_data_plugin!(
     PeopleData,
     PeopleData {
         current_population: 0,
-        required_properties: RefCell::new(HashSet::new()),
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new())
@@ -86,8 +84,8 @@ pub trait InitializationList {
 impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
     fn set_properties(&self, context: &mut Context, person_id: PersonId) {
         context.initialize_person_property(person_id, 
-                                           T1::get_instance(),
-                                           self.1);
+                               T1::get_instance(),
+                               self.1);
     }
 }
 
@@ -107,7 +105,7 @@ macro_rules! impl_initialization_list {
             {
                 fn set_properties(&self, context: &mut Context, person_id: PersonId) {
                     #(
-                    context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
+                       context.initialize_person_property(person_id, T~N::get_instance(), self.N.1 );
                     )*
                 }
             }
@@ -310,14 +308,6 @@ impl PeopleData {
         self.current_population += 1;
         PersonId { id }
     }
-
-    /// Adds a person and returns a `PersonId` that can be used to reference them.
-    /// This will increment the current population by 1.
-    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId {
-        let id = self.current_population;
-        self.current_population += 1;
-        PersonId { id }
-    }
     
     /// Retrieves a specific property of a person by their `PersonId`.
     ///
@@ -390,6 +380,9 @@ pub trait ContextPeopleExt {
     /// Creates a new person with no assigned person properties
     fn add_person(&mut self) -> PersonId;
 
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId;
+
+
     /// Given a `PersonId` returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
     /// provided, and the property is not set this will panic
@@ -435,6 +428,13 @@ impl ContextPeopleExt for Context {
     fn add_person(&mut self) -> PersonId {
         let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
         self.emit_event(PersonCreatedEvent { person_id });
+        person_id
+    }
+
+    fn add_person2<T: InitializationList>(&mut self, props: T) -> PersonId  {
+        let person_id = self.get_data_container_mut(PeoplePlugin).add_person();
+        self.emit_event(PersonCreatedEvent { person_id });
+        props.set_properties(self, person_id);
         person_id
     }
 
@@ -695,6 +695,18 @@ mod test {
         );
     }
 
+    #[test]
+    fn add_person_with_initialize() {
+        let mut context = Context::new();
+
+        let person_id = context.add_person2(((Age, 42), (RiskCategoryType, RiskCategory::Low)));
+        assert_eq!(context.get_person_property(person_id, Age), 42);
+        assert_eq!(
+            context.get_person_property(person_id, RiskCategoryType),
+            RiskCategory::Low
+        );
+    }
+    
     #[test]
     fn person_debug_display() {
         let mut context = Context::new();
