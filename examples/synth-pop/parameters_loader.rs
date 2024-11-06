@@ -12,6 +12,7 @@ pub struct ParametersValues {
     pub population: usize,
     pub max_time: f64,
     pub seed: u64,
+    pub report_period: f64,
     pub synth_population_file: String,
     pub output_file: String,
 }

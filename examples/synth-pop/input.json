@@ -1,6 +1,8 @@
 {
     "population": 100,
-    "max_time": 780.0,
+    "max_time": 14.1,
     "seed": 123,
-    "output_file": "incidence"
+    "report_period": 7.0,
+    "output_file": "report_test",
+    "synth_population_file": "synth_pop_test.csv"
 }
