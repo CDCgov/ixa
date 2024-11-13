@@ -105,6 +105,27 @@ impl Context {
         let basename = format!("{prefix}{short_name}");
         directory.join(basename).with_extension("csv")
     }
+
+    //fn evaluate_periodic_output<T: Report + 'static>(&mut self, report_period: f64, report_output_fcn: fn(&Context) -> T) {
+    fn evaluate_periodic_output<T: Report + 'static, C: Fn(&Context) -> T + 'static>(
+        &mut self,
+        report_period: f64,
+        report_output_fcn: C,
+    ) {
+        // first run the report output fcn and send the report
+        self.send_report(report_output_fcn(self));
+
+        if self.more_plans() {
+            // add the next periodic report
+            self.add_plan_with_phase(
+                self.get_current_time() + report_period,
+                move |context| {
+                    context.evaluate_periodic_output::<T, C>(report_period, report_output_fcn);
+                },
+                ExecutionPhase::Last,
+            );
+        }
+    }
 }
 
 pub trait ContextReportExt {
@@ -117,6 +138,12 @@ pub trait ContextReportExt {
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
+    fn add_periodic_report<T: Report + 'static, C: Fn(&Context) -> T + 'static>(
+        &mut self,
+        short_name: &str,
+        report_period: f64,
+        report_output_fcn: C,
+    );
 }
 
 impl ContextReportExt for Context {
@@ -169,6 +196,24 @@ impl ContextReportExt for Context {
     fn report_options(&mut self) -> &mut ConfigReportOptions {
         let data_container = self.get_data_container_mut(ReportPlugin);
         &mut data_container.config
+    }
+
+    fn add_periodic_report<T: Report + 'static, C: Fn(&Context) -> T + 'static>(
+        &mut self,
+        short_name: &str,
+        report_period: f64,
+        report_output_fcn: C,
+    ) {
+        // make the report
+        self.add_report::<T>(short_name);
+
+        self.add_plan_with_phase(
+            0.0,
+            move |context| {
+                context.evaluate_periodic_output::<T, C>(report_period, report_output_fcn);
+            },
+            ExecutionPhase::Last,
+        );
     }
 }
 
