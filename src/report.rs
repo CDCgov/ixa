@@ -106,7 +106,7 @@ impl Context {
         directory.join(basename).with_extension("csv")
     }
 
-    //fn evaluate_periodic_output<T: Report + 'static>(&mut self, report_period: f64, report_output_fcn: fn(&Context) -> T) {
+    // self schedules periodic output
     fn evaluate_periodic_output<T: Report + 'static, C: Fn(&Context) -> T + 'static>(
         &mut self,
         report_period: f64,
@@ -115,6 +115,7 @@ impl Context {
         // first run the report output fcn and send the report
         self.send_report(report_output_fcn(self));
 
+        // if there are more plans, add the next periodic report
         if self.more_plans() {
             // add the next periodic report
             self.add_plan_with_phase(
@@ -198,6 +199,8 @@ impl ContextReportExt for Context {
         &mut data_container.config
     }
 
+    /// Adds a periodic report to the context. The report will be output every `report_period` time
+    /// and will print out the output from the `report_output_fcn` function.
     fn add_periodic_report<T: Report + 'static, C: Fn(&Context) -> T + 'static>(
         &mut self,
         short_name: &str,
