@@ -479,7 +479,7 @@ impl PeopleData {
         }
     }
 
-    fn get_index_ref_by_prop<T: PersonProperty + 'static>(
+    fn get_index_ref_mut_by_prop<T: PersonProperty + 'static>(
         &self,
         _property: T,
     ) -> Option<RefMut<Index>> {
@@ -714,7 +714,7 @@ impl ContextPeopleExt for Context {
         self.register_indexer::<T>();
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let mut index = data_container.get_index_ref_by_prop(property).unwrap();
+        let mut index = data_container.get_index_ref_mut_by_prop(property).unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
         }
@@ -790,7 +790,7 @@ impl ContextPeopleExtInternal for Context {
         if let Some(mut index) = self
             .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_index_ref_by_prop(property)
+            .get_index_ref_mut_by_prop(property)
         {
             if index.lookup.is_some() {
                 index.add_person(self, person_id);
@@ -806,7 +806,7 @@ impl ContextPeopleExtInternal for Context {
         if let Some(mut index) = self
             .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_index_ref_by_prop(property)
+            .get_index_ref_mut_by_prop(property)
         {
             if index.lookup.is_some() {
                 index.remove_person(self, person_id);
@@ -829,7 +829,6 @@ impl ContextPeopleExtInternal for Context {
         // 2. Collect the index entry corresponding to the value.
         for (t, hash) in property_hashes {
             let index = data_container.get_index_ref(t).unwrap();
-            // Update the index.
             if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
                 if let Ok(matching_people) = Ref::filter_map(lookup, |x| x.get(&hash)) {
                     indexes.push(matching_people);
@@ -1379,7 +1378,7 @@ mod test {
         context
             .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_index_ref_mut(TypeId::of::<T>())
+            .get_index_ref(TypeId::of::<T>())
             .unwrap()
             .lookup
             .is_some()
