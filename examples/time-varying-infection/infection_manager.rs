@@ -133,7 +133,11 @@ mod test {
                 DiseaseStatusType,
                 DiseaseStatus::I,
             );
-            context.initialize_person_property(context.get_person_id(id), InfectionTime, OrderedFloat(0.0));
+            context.initialize_person_property(
+                context.get_person_id(id),
+                InfectionTime,
+                OrderedFloat(0.0),
+            );
         }
 
         // put this subscription after every agent has become infected

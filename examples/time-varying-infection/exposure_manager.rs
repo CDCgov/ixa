@@ -2,8 +2,8 @@ use ixa::define_rng;
 use ixa::people::{ContextPeopleExt, PersonCreatedEvent};
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
-use std::rc::Rc;
 use ordered_float::OrderedFloat;
+use std::rc::Rc;
 
 use crate::parameters_loader::Parameters;
 use crate::population_loader::{DiseaseStatus, DiseaseStatusType, InfectionTime};
@@ -20,7 +20,7 @@ fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: Pe
     // when the person is exposed to deviled eggs, make a plan for them to fall
     // sick based on foi(t), where inverse sampling is used to draw times from
     // the corresponding distribution
-    let t= inverse_sampling_infection(context);
+    let t = inverse_sampling_infection(context);
     let person_id = person_created_event.person_id;
     context.add_plan(t, move |context| {
         context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);

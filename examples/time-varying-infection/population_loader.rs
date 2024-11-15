@@ -2,9 +2,9 @@ use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::ContextPeopleExt;
 use ixa::{define_person_property, define_person_property_with_default};
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
-use ordered_float::OrderedFloat;
 
 use crate::parameters_loader::Parameters;
 
