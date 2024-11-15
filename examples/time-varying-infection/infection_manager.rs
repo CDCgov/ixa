@@ -3,6 +3,7 @@ use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
+use ordered_float::OrderedFloat;
 
 use rand_distr::Exp;
 
@@ -40,7 +41,7 @@ fn evaluate_recovery(
 ) -> Option<f64> {
     // get time person has spent infected
     let time_spent_infected =
-        context.get_current_time() - context.get_person_property(person_id, InfectionTime);
+        context.get_current_time() - *context.get_person_property(person_id, InfectionTime);
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(InfectionRng, recovery_probability) {
@@ -132,7 +133,7 @@ mod test {
                 DiseaseStatusType,
                 DiseaseStatus::I,
             );
-            context.initialize_person_property(context.get_person_id(id), InfectionTime, 0.0);
+            context.initialize_person_property(context.get_person_id(id), InfectionTime, OrderedFloat(0.0));
         }
 
         // put this subscription after every agent has become infected
@@ -215,7 +216,7 @@ mod test {
             context.init_random(seed);
             init(&mut context);
             let person_id = context.add_person();
-            context.initialize_person_property(person_id, InfectionTime, 0.0);
+            context.initialize_person_property(person_id, InfectionTime, OrderedFloat(0.0));
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(
