@@ -2,6 +2,7 @@ use ixa::define_rng;
 use ixa::people::{ContextPeopleExt, PersonCreatedEvent};
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+use ordered_float::OrderedFloat;
 use std::rc::Rc;
 
 use crate::parameters_loader::Parameters;
@@ -25,7 +26,7 @@ fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: Pe
         context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         // for reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected
-        context.initialize_person_property(person_id, InfectionTime, t);
+        context.initialize_person_property(person_id, InfectionTime, OrderedFloat(t));
     });
 }
 

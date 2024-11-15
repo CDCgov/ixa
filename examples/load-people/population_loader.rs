@@ -6,7 +6,7 @@ use ixa::define_person_property;
 use ixa::people::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
 
-#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum RiskCategory {
     High,
     Low,

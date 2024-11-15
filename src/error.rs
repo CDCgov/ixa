@@ -1,11 +1,10 @@
 use std::fmt::{self, Debug, Display};
 use std::io;
 
-#[allow(clippy::module_name_repetitions)]
-
 /// Provides `IxaError` and maps to other errors to
 /// convert to an `IxaError`
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),
