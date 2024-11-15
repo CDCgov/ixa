@@ -3,7 +3,6 @@ use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
-use ordered_float::OrderedFloat;
 
 use rand_distr::Exp;
 
@@ -94,6 +93,7 @@ mod test {
     use ixa::context::Context;
     use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
     use ixa::random::ContextRandomExt;
+    use ordered_float::OrderedFloat;
 
     use crate::parameters_loader::ParametersValues;
     use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
