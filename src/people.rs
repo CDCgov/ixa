@@ -187,14 +187,14 @@ impl Index {
 // from 0 to population - 1. Person properties are associated with a person
 // via their id.
 struct StoredPeopleProperties {
-    must_be_initialized: bool,
+    is_required: bool,
     values: Box<dyn Any>,
 }
 
 impl StoredPeopleProperties {
     fn new<T: PersonProperty + 'static>() -> Self {
         StoredPeopleProperties {
-            must_be_initialized: T::must_be_initialized(),
+            is_required: T::is_required(),
             values: Box::new(Vec::<Option<T::Value>>::new()),
         }
     }
@@ -254,7 +254,7 @@ pub trait PersonProperty: Copy {
         false
     }
     #[must_use]
-    fn must_be_initialized() -> bool {
+    fn is_required() -> bool {
         false
     }
     #[must_use]
@@ -451,7 +451,7 @@ macro_rules! define_person_property {
             ) -> Self::Value {
                 panic!("Property not initialized when person created.");
             }
-            fn must_be_initialized() -> bool {
+            fn is_required() -> bool {
                 true
             }
             fn get_instance() -> Self {
@@ -597,7 +597,7 @@ impl PeopleData {
     ) -> Result<(), IxaError> {
         let properties_map = self.properties_map.borrow();
         for (t, property) in properties_map.iter() {
-            if property.must_be_initialized && !initialization.has_property(*t) {
+            if property.is_required && !initialization.has_property(*t) {
                 return Err(IxaError::IxaError(String::from("Missing initial value")));
             }
         }
