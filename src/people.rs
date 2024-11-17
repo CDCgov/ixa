@@ -1432,9 +1432,7 @@ mod test {
     #[test]
     fn query_people() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
 
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
@@ -1451,9 +1449,7 @@ mod test {
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
@@ -1473,9 +1469,7 @@ mod test {
     #[test]
     fn query_people_macro_index_second() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert!(!property_is_indexed::<RiskCategoryType>(&context));
         assert_eq!(people.len(), 1);
@@ -1488,9 +1482,7 @@ mod test {
     #[test]
     fn query_people_macro_change() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let person1 = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
 
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
@@ -1507,8 +1499,7 @@ mod test {
     #[test]
     fn query_people_index_after_add() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
@@ -1518,15 +1509,13 @@ mod test {
     #[test]
     fn query_people_add_after_index() {
         let mut context = Context::new();
-        let person = context.add_person();
-        context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
 
-        let person = context.add_person();
-        context.initialize_person_property(person, RiskCategoryType, RiskCategory::High);
+        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 2);
     }
@@ -1535,7 +1524,7 @@ mod test {
     // This is safe because we reindex only when someone queries.
     fn query_people_add_after_index_without_query() {
         let mut context = Context::new();
-        context.add_person();
+        let _ = context.add_person(()).unwrap();
         context.index_property(RiskCategoryType);
     }
 
@@ -1544,7 +1533,7 @@ mod test {
     // This will panic when we query.
     fn query_people_add_after_index_panic() {
         let mut context = Context::new();
-        context.add_person();
+        context.add_person(()).unwrap();
         context.index_property(RiskCategoryType);
         context.query_people((RiskCategoryType, RiskCategory::High));
     }
@@ -1552,9 +1541,7 @@ mod test {
     #[test]
     fn query_people_cast_value() {
         let mut context = Context::new();
-        let person = context.add_person();
-
-        context.initialize_person_property(person, Age, 42);
+        let _ = context.add_person((Age, 42)).unwrap();
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
         let people = context.query_people((Age, 42));
@@ -1564,18 +1551,9 @@ mod test {
     #[test]
     fn query_people_intersection() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-        let person2 = context.add_person();
-        let person3 = context.add_person();
-
-        // Note: because of the way indexes are initialized, all properties without initializers need to be
-        // set for all people.
-        context.initialize_person_property(person1, Age, 42);
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
-        context.initialize_person_property(person2, Age, 42);
-        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
-        context.initialize_person_property(person3, Age, 40);
-        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();        
 
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
@@ -1584,18 +1562,9 @@ mod test {
     #[test]
     fn query_people_intersection_non_macro() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-        let person2 = context.add_person();
-        let person3 = context.add_person();
-
-        // Note: because of the way indexes are initialized, all properties without initializers need to be
-        // set for all people.
-        context.initialize_person_property(person1, Age, 42);
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
-        context.initialize_person_property(person2, Age, 42);
-        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
-        context.initialize_person_property(person3, Age, 40);
-        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();
 
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
@@ -1604,18 +1573,10 @@ mod test {
     #[test]
     fn query_people_intersection_one_indexed() {
         let mut context = Context::new();
-        let person1 = context.add_person();
-        let person2 = context.add_person();
-        let person3 = context.add_person();
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
+        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();
 
-        // Note: because of the way indexes are initialized, all properties without initializers need to be
-        // set for all people.
-        context.initialize_person_property(person1, Age, 42);
-        context.initialize_person_property(person1, RiskCategoryType, RiskCategory::High);
-        context.initialize_person_property(person2, Age, 42);
-        context.initialize_person_property(person2, RiskCategoryType, RiskCategory::Low);
-        context.initialize_person_property(person3, Age, 40);
-        context.initialize_person_property(person3, RiskCategoryType, RiskCategory::Low);
 
         context.index_property(Age);
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
@@ -1627,11 +1588,8 @@ mod test {
         let mut context = Context::new();
         define_derived_property!(Senior, bool, [Age], |age| age >= 65);
 
-        let person = context.add_person();
-        let person2 = context.add_person();
-
-        context.initialize_person_property(person, Age, 64);
-        context.initialize_person_property(person2, Age, 88);
+        let person = context.add_person((Age, 64)).unwrap();
+        let _ = context.add_person((Age, 88)).unwrap();
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
         let not_seniors = context.query_people((Senior, false));
@@ -1654,11 +1612,8 @@ mod test {
         define_derived_property!(Senior, bool, [Age], |age| age >= 65);
 
         context.index_property(Senior);
-        let person = context.add_person();
-        let person2 = context.add_person();
-
-        context.initialize_person_property(person, Age, 64);
-        context.initialize_person_property(person2, Age, 88);
+        let person = context.add_person((Age, 64)).unwrap();
+        let _ = context.add_person((Age, 88)).unwrap();
 
         // Age is a u8, by default integer literals are i32; the macro should cast it.
         let not_seniors = context.query_people((Senior, false));

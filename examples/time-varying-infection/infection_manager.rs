@@ -39,15 +39,10 @@ fn evaluate_recovery(
     resampling_rate: f64,
 ) -> Option<f64> {
     // get time person has spent infected
-<<<<<<< HEAD
-    let time_spent_infected =
-        context.get_current_time() - *context.get_person_property(person_id, InfectionTime);
-=======
     let time_spent_infected = context.get_current_time()
-        - context
+        - *context
             .get_person_property(person_id, InfectionTime)
             .unwrap();
->>>>>>> e03806c (Checkpoint)
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(InfectionRng, recovery_probability) {
@@ -133,24 +128,9 @@ mod test {
         context.init_random(parameters.seed);
         init(&mut context);
 
-<<<<<<< HEAD
-        for id in 0..parameters.population {
-            context.add_person();
-            context.set_person_property(
-                context.get_person_id(id),
-                DiseaseStatusType,
-                DiseaseStatus::I,
-            );
-            context.initialize_person_property(
-                context.get_person_id(id),
-                InfectionTime,
-                OrderedFloat(0.0),
-            );
-=======
         for _ in 0..parameters.population {
             let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
->>>>>>> e03806c (Checkpoint)
         }
 
         // put this subscription after every agent has become infected
@@ -232,12 +212,7 @@ mod test {
             context.set_global_property_value(Parameters, parameters.clone());
             context.init_random(seed);
             init(&mut context);
-<<<<<<< HEAD
-            let person_id = context.add_person();
-            context.initialize_person_property(person_id, InfectionTime, OrderedFloat(0.0));
-=======
             let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
->>>>>>> e03806c (Checkpoint)
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(
