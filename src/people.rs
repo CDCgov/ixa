@@ -774,19 +774,19 @@ impl ContextPeopleExt for Context {
         let (previous_value, deps_temp) = if initializing {
             (None, None)
         } else {
-
             let previous_value = self.get_person_property(person_id, property);
             if previous_value != value {
-                    self.remove_from_index_maybe(person_id, property);
+                self.remove_from_index_maybe(person_id, property);
             }
-            
-            ( Some(previous_value),
-              self.get_data_container(PeoplePlugin)
-              .unwrap()
-              .dependency_map
-              .borrow_mut()
-              .get_mut(&TypeId::of::<T>())
-              .map(std::mem::take),
+
+            (
+                Some(previous_value),
+                self.get_data_container(PeoplePlugin)
+                    .unwrap()
+                    .dependency_map
+                    .borrow_mut()
+                    .get_mut(&TypeId::of::<T>())
+                    .map(std::mem::take),
             )
         };
 
@@ -808,12 +808,11 @@ impl ContextPeopleExt for Context {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         data_container.set_person_property(person_id, property, value);
 
-
         if !initializing {
             if previous_value.unwrap() != value {
                 self.add_to_index_maybe(person_id, property);
             }
-            
+
             let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
                 person_id,
                 current: value,
@@ -1021,8 +1020,8 @@ mod test {
     use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
-        people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
         error::IxaError,
+        people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
     };
     use std::{any::TypeId, cell::RefCell, rc::Rc};
 
@@ -1432,7 +1431,9 @@ mod test {
     #[test]
     fn query_people() {
         let mut context = Context::new();
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
 
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
@@ -1449,7 +1450,9 @@ mod test {
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
@@ -1482,7 +1485,9 @@ mod test {
     #[test]
     fn query_people_macro_change() {
         let mut context = Context::new();
-        let person1 = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let person1 = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
 
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
@@ -1499,7 +1504,9 @@ mod test {
     #[test]
     fn query_people_index_after_add() {
         let mut context = Context::new();
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
@@ -1509,13 +1516,17 @@ mod test {
     #[test]
     fn query_people_add_after_index() {
         let mut context = Context::new();
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
         context.index_property(RiskCategoryType);
         assert!(property_is_indexed::<RiskCategoryType>(&context));
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 1);
 
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High)).unwrap();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 2);
     }
@@ -1551,9 +1562,15 @@ mod test {
     #[test]
     fn query_people_intersection() {
         let mut context = Context::new();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
-        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();        
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
 
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
@@ -1562,9 +1579,15 @@ mod test {
     #[test]
     fn query_people_intersection_non_macro() {
         let mut context = Context::new();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
-        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
 
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
         assert_eq!(people.len(), 1);
@@ -1573,10 +1596,15 @@ mod test {
     #[test]
     fn query_people_intersection_one_indexed() {
         let mut context = Context::new();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::High))).unwrap();
-        let _ = context.add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low))).unwrap();
-        let _ = context.add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low))).unwrap();
-
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .unwrap();
 
         context.index_property(Age);
         let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
