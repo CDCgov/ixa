@@ -129,7 +129,7 @@ mod test {
         init(&mut context);
 
         for _ in 0..parameters.population {
-            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
+            let person_id = context.add_person((InfectionTime, Some(OrderedFloat(0.0)))).unwrap();
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         }
 
@@ -212,7 +212,7 @@ mod test {
             context.set_global_property_value(Parameters, parameters.clone());
             context.init_random(seed);
             init(&mut context);
-            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
+            let person_id = context.add_person((InfectionTime, Some(OrderedFloat(0.0)))).unwrap();
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(
