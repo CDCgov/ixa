@@ -26,7 +26,7 @@ fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: Pe
         context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         // for reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected
-        context.initialize_person_property(person_id, InfectionTime, OrderedFloat(t));
+        context.set_person_property(person_id, InfectionTime, Some(OrderedFloat(t)));
     });
 }
 
@@ -101,12 +101,14 @@ mod test {
             .clone();
         context.init_random(parameters.seed);
         init(&mut context);
-        context.add_person();
+        context.add_person(()).unwrap();
         context.execute();
         let person_status =
             context.get_person_property(context.get_person_id(0), DiseaseStatusType);
         assert_eq!(person_status, DiseaseStatus::I);
-        let infection_time = context.get_person_property(context.get_person_id(0), InfectionTime);
+        let infection_time = context
+            .get_person_property(context.get_person_id(0), InfectionTime)
+            .unwrap();
         assert_eq!(infection_time, context.get_current_time());
     }
 

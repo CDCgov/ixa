@@ -72,7 +72,7 @@ mod test {
         let mut context = Context::new();
         context.set_global_property_value(Parameters, p_values);
         context.init_random(123);
-        let pid = context.add_person();
+        let pid = context.add_person(()).unwrap();
         attempt_infection(&mut context);
         let person_status = context.get_person_property(pid, InfectionStatusType);
         assert_eq!(person_status, InfectionStatus::I);

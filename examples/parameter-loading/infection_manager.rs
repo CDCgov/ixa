@@ -80,7 +80,7 @@ mod test {
 
         let population_size: usize = 10;
         for _ in 0..population_size {
-            let person = context.add_person();
+            let person = context.add_person(()).unwrap();
 
             context.add_plan(1.0, move |context| {
                 context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
