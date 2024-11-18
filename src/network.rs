@@ -57,8 +57,7 @@ impl NetworkData {
 
         for edge in edges.iter_mut() {
             if edge.neighbor == neighbor {
-                edge.weight = weight;
-                return Ok(());
+                return Err(IxaError::IxaError(String::from("Edge already exists")));
             }
         }
 
@@ -68,7 +67,37 @@ impl NetworkData {
         Ok(())
     }
 
-    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>> {
+    fn remove_edge<T: EdgeType + 'static>(
+        &mut self,
+        person: PersonId,
+        neighbor: PersonId,
+    ) -> Result<(), IxaError> {
+
+        if person.id >= self.network.len() {
+            return Err(IxaError::IxaError(String::from("Edge does not exist")));
+        }
+
+        let entry = match self.network[person.id]
+            .neighbors.get_mut(&TypeId::of::<T>()) {
+                None => {
+                    return Err(IxaError::IxaError(String::from("Edge does not exist")));
+                },
+                Some(entry) => entry
+            };
+
+        let edges : &mut Vec<Edge<T::Value>> = entry.downcast_mut().expect("Type mismatch");
+        for index in 0..edges.len() {
+            if edges[index].neighbor == neighbor {
+                edges.remove(index);
+                return Ok(());
+            }
+        }
+
+        Err(IxaError::IxaError(String::from("Edge does not exist")))
+    }
+
+
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>> {
         if person.id >= self.network.len() {
             return None;
         }
@@ -77,31 +106,26 @@ impl NetworkData {
         let edges : &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");        
         for edge in edges {
             if edge.neighbor == neighbor {
-                return Some(*edge);
+                return Some(edge);
             }
         }
 
         None
     }
 
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>> {
         if person.id >= self.network.len() {
-            return Vec::new();
+            return None;
         }
 
         let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>());
         if entry.is_none() {
-            return Vec::new();
+            return None;
         }
         
         let edges : &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");        
 
-        let mut result = Vec::new();
-        for edge in edges {
-            result.push(*edge);
-        }
-
-        result
+        Some(edges)
     }
 }
 
@@ -133,8 +157,8 @@ pub trait ContextNetworkExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError>;
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
-    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>>;
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>>;
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>>;
 }
 
 impl ContextNetworkExt for Context {
@@ -160,7 +184,7 @@ impl ContextNetworkExt for Context {
         data_container.add_edge::<T>(person2, person1, weight, inner)
     }
 
-    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>> {
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
         match data_container {
@@ -169,11 +193,11 @@ impl ContextNetworkExt for Context {
         }
     }
 
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
         match data_container {
-            None => Vec::new(),
+            None => None,
             Some(data_container) => data_container.get_edges::<T>(person),
         }
     }
@@ -233,10 +257,10 @@ mod test_inner {
             .unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
+        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 }).unwrap();
         assert_eq!(
             edges,
-            vec![
+            &vec![
                 Edge {
                     neighbor: PersonId { id: 2 },
                     weight: 0.01,
@@ -268,10 +292,10 @@ mod test_inner {
             .unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
+        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 }).unwrap();
         assert_eq!(
             edges,
-            vec![Edge {
+            &vec![Edge {
                 neighbor: PersonId { id: 2 },
                 weight: 0.01,
                 inner: ()
@@ -280,7 +304,7 @@ mod test_inner {
     }
 
     #[test]
-    fn replace_edge() {
+    fn add_edge_twice() {
         let mut nd = NetworkData::new();
 
         nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
@@ -289,12 +313,8 @@ mod test_inner {
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
         assert_eq!(edge.weight, 0.01);
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
-            .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
-        assert_eq!(edge.weight, 0.02);
+        assert!(matches!(nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ()),
+                         Err(IxaError::IxaError(_))));
     }
 
     #[test]
@@ -319,6 +339,8 @@ mod test_inner {
             nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
+
+    
 }
 
 
@@ -349,7 +371,7 @@ mod test_api {
             .unwrap();
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(
-            context.get_edges::<EdgeType1>(person1),
+            *context.get_edges::<EdgeType1>(person1).unwrap(),
             vec![Edge {
                 neighbor: person2,
                 weight: 0.01,
