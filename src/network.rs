@@ -371,8 +371,6 @@ mod test_inner {
             nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
-
-    
 }
 
 
@@ -425,7 +423,7 @@ mod test_api {
     }
 
     #[test]
-    fn add_edge_different_weightsi() {
+    fn add_edge_different_weights() {
         let (mut context, person1, person2) = setup();
 
         context
