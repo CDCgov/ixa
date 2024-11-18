@@ -1,16 +1,21 @@
 use crate::{context::Context, define_data_plugin, error::IxaError, people::PersonId};
-use std::{any::TypeId, collections::HashMap};
+use std::{any::{Any, TypeId}, collections::HashMap};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Edge {
+pub struct Edge<T: Sized> {
     neighbor: PersonId,
     weight: f32,
+    inner: T,
+}
+
+trait EdgeType {
+    type Value: Sized + Default + Copy;
 }
 
 #[derive(Default)]
 struct PersonNetwork {
     // A vector of vectors of NetworkEdge, indexed by edge type.
-    neighbors: HashMap<TypeId, Vec<Edge>>,
+    neighbors: HashMap<TypeId, Box<dyn Any>>,
 }
 
 struct NetworkData {
@@ -24,7 +29,7 @@ impl NetworkData {
         }
     }
 
-    fn add_edge<T: 'static>(
+    fn add_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
         neighbor: PersonId,
@@ -46,26 +51,30 @@ impl NetworkData {
         let entry = self.network[person.id]
             .neighbors
             .entry(TypeId::of::<T>())
-            .or_default();
+            .or_insert_with(|| Box::new(Vec::<Edge<T::Value>>::new()));
+        let edges : &mut Vec<Edge<T::Value>> = entry.downcast_mut().expect("Type mismatch");
 
-        for edge in entry.iter_mut() {
+        for edge in edges.iter_mut() {
             if edge.neighbor == neighbor {
                 edge.weight = weight;
                 return Ok(());
             }
         }
 
-        entry.push(Edge { neighbor, weight });
+        edges.push(Edge{ neighbor,
+                         weight,
+                         inner: T::Value::default() });
         Ok(())
     }
 
-    fn get_edge<T: 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<f32> {
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<f32> {
         if person.id >= self.network.len() {
             return None;
         }
 
         let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>())?;
-        for edge in entry {
+        let edges : &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");        
+        for edge in edges {
             if edge.neighbor == neighbor {
                 return Some(edge.weight);
             }
@@ -74,7 +83,7 @@ impl NetworkData {
         None
     }
 
-    fn get_edges<T: 'static>(&self, person: PersonId) -> Vec<Edge> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
         if person.id >= self.network.len() {
             return Vec::new();
         }
@@ -83,9 +92,11 @@ impl NetworkData {
         if entry.is_none() {
             return Vec::new();
         }
+        
+        let edges : &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");        
 
         let mut result = Vec::new();
-        for edge in entry.unwrap() {
+        for edge in edges {
             result.push(*edge);
         }
 
@@ -93,8 +104,20 @@ impl NetworkData {
     }
 }
 
+macro_rules! define_edge_type {
+    ($edge_type:ident, $value:ty) => {
+        #[derive(Debug, Copy, Clone)]
+        pub struct $edge_type;
+
+        impl $crate::network::EdgeType for $edge_type {
+            type Value = $value;
+        }
+    }
+}
+    
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
+/*
 pub trait ContextNetworkExt {
     fn add_edge<T: 'static>(
         &mut self,
@@ -151,6 +174,7 @@ impl ContextNetworkExt for Context {
         }
     }
 }
+*/
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
@@ -160,8 +184,8 @@ mod test_inner {
     use crate::error::IxaError;
     use crate::people::PersonId;
 
-    struct EdgeType1;
-    struct EdgeType2;
+    define_edge_type!(EdgeType1, ());
+    define_edge_type!(EdgeType2, ());    
 
     #[test]
     fn add_edge() {
@@ -198,11 +222,13 @@ mod test_inner {
             vec![
                 Edge {
                     neighbor: PersonId { id: 2 },
-                    weight: 0.01
+                    weight: 0.01,
+                    inner: ()
                 },
-                Edge {
+                Edge{
                     neighbor: PersonId { id: 3 },
-                    weight: 0.02
+                    weight: 0.02,
+                    inner: ()
                 }
             ]
         );
@@ -230,7 +256,8 @@ mod test_inner {
             edges,
             vec![Edge {
                 neighbor: PersonId { id: 2 },
-                weight: 0.01
+                weight: 0.01,
+                inner: ()
             }]
         );
     }
@@ -276,6 +303,8 @@ mod test_inner {
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
 }
+
+/*
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
@@ -337,3 +366,4 @@ mod test_api {
         assert_eq!(context.get_edge::<EdgeType1>(person2, person1), Some(0.02));
     }
 }
+*/
