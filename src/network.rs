@@ -8,7 +8,7 @@ pub struct Edge<T: Sized> {
     inner: T,
 }
 
-trait EdgeType {
+pub trait EdgeType {
     type Value: Sized + Default + Copy;
 }
 
@@ -118,46 +118,49 @@ macro_rules! define_edge_type {
     
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
-/*
 pub trait ContextNetworkExt {
-    fn add_edge<T: 'static>(
+    fn add_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
         neighbor: PersonId,
         weight: f32,
+        inner: T::Value,
     ) -> Result<(), IxaError>;
-    fn add_edge_bidi<T: 'static>(
+    fn add_edge_bidi<T: EdgeType + 'static>(
         &mut self,
         person1: PersonId,
         person2: PersonId,
         weight: f32,
+        inner: T::Value,
     ) -> Result<(), IxaError>;
-    fn get_edges<T: 'static>(&self, person: PersonId) -> Vec<Edge>;
-    fn get_edge<T: 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<f32>;
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>>;
 }
 
 impl ContextNetworkExt for Context {
-    fn add_edge<T: 'static>(
+    fn add_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
         neighbor: PersonId,
         weight: f32,
+        inner: T::Value,
     ) -> Result<(), IxaError> {
         let data_container = self.get_data_container_mut(NetworkPlugin);
-        data_container.add_edge::<T>(person, neighbor, weight)
+        data_container.add_edge::<T>(person, neighbor, weight, inner)
     }
-    fn add_edge_bidi<T: 'static>(
+    fn add_edge_bidi<T: EdgeType + 'static>(
         &mut self,
         person1: PersonId,
         person2: PersonId,
         weight: f32,
+        inner: T::Value,
     ) -> Result<(), IxaError> {
         let data_container = self.get_data_container_mut(NetworkPlugin);
-        data_container.add_edge::<T>(person1, person2, weight)?;
-        data_container.add_edge::<T>(person2, person1, weight)
+        data_container.add_edge::<T>(person1, person2, weight, inner)?;
+        data_container.add_edge::<T>(person2, person1, weight, inner)
     }
 
-    fn get_edge<T: 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<f32> {
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
         match data_container {
@@ -166,7 +169,7 @@ impl ContextNetworkExt for Context {
         }
     }
 
-    fn get_edges<T: 'static>(&self, person: PersonId) -> Vec<Edge> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
         match data_container {
@@ -175,7 +178,6 @@ impl ContextNetworkExt for Context {
         }
     }
 }
-*/
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
@@ -320,7 +322,6 @@ mod test_inner {
 }
 
 
-/*
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 // Tests for the API.
@@ -329,7 +330,7 @@ mod test_api {
     use crate::network::{ContextNetworkExt, Edge};
     use crate::people::{ContextPeopleExt, PersonId};
 
-    struct EdgeType1;
+    define_edge_type!(EdgeType1, ());
 
     fn setup() -> (Context, PersonId, PersonId) {
         let mut context = Context::new();
@@ -344,14 +345,15 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01)
+            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
             .unwrap();
-        assert_eq!(context.get_edge::<EdgeType1>(person1, person2), Some(0.01));
+        assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(
             context.get_edges::<EdgeType1>(person1),
             vec![Edge {
                 neighbor: person2,
-                weight: 0.01
+                weight: 0.01,
+                inner: ()
             }]
         );
     }
@@ -361,10 +363,11 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge_bidi::<EdgeType1>(person1, person2, 0.01)
+            .add_edge_bidi::<EdgeType1>(person1, person2, 0.01, ())
             .unwrap();
-        assert_eq!(context.get_edge::<EdgeType1>(person1, person2), Some(0.01));
-        assert_eq!(context.get_edge::<EdgeType1>(person2, person1), Some(0.01));
+        assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
+        assert_eq!(context.get_edge::<EdgeType1>(person2, person1).unwrap().weight, 0.01);
+
     }
 
     #[test]
@@ -372,13 +375,12 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01)
+            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
             .unwrap();
         context
-            .add_edge::<EdgeType1>(person2, person1, 0.02)
+            .add_edge::<EdgeType1>(person2, person1, 0.02, ())
             .unwrap();
-        assert_eq!(context.get_edge::<EdgeType1>(person1, person2), Some(0.01));
-        assert_eq!(context.get_edge::<EdgeType1>(person2, person1), Some(0.02));
+        assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
+        assert_eq!(context.get_edge::<EdgeType1>(person2, person1).unwrap().weight, 0.02);
     }
 }
-*/
