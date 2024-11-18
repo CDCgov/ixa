@@ -226,7 +226,7 @@ define_data_plugin!(
 // 0 to population - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId {
-    id: usize,
+    pub(crate) id: usize,
 }
 
 impl fmt::Display for PersonId {
