@@ -40,7 +40,7 @@ impl NetworkData {
 
         // Make sure we have data for this person.
         if person.id >= self.network.len() {
-            self.network.resize_with(person.id + 1, Default::default)
+            self.network.resize_with(person.id + 1, Default::default);
         }
 
         let entry = self.network[person.id]
@@ -153,6 +153,7 @@ impl ContextNetworkExt for Context {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 // Tests for the inner core.
 mod test_inner {
     use super::{Edge, NetworkData};
@@ -249,7 +250,7 @@ mod test_inner {
         let weight = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.02)
+        assert_eq!(weight, 0.02);
     }
 
     #[test]
@@ -277,6 +278,7 @@ mod test_inner {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 // Tests for the API.
 mod test_api {
     use crate::context::Context;
