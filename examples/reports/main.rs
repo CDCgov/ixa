@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
@@ -20,15 +21,26 @@ create_report_trait!(Incidence);
 create_report_trait!(Death);
 
 #[allow(unexpected_cfgs)]
-fn main() {
+
+fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
     context
         .report_options()
         .file_prefix("Reports_".to_string())
         .directory(PathBuf::from("./"));
-    context.add_report::<Incidence>("incidence");
-    context.add_report::<Death>("death");
+    context.add_report::<Incidence>("incidence")?;
+    context.add_report::<Death>("death")?;
+    Ok(context)
+}
+
+fn main() {
+    let mut context = match initialize() {
+        Ok(context) => context,
+        Err(e) => {
+            panic!("Error adding report: {e}");
+        }
+    };
 
     context.add_plan(1.0, |context| {
         context.send_report(Incidence {

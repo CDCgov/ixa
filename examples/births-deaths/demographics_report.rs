@@ -1,5 +1,6 @@
 use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::Parameters;
+use ixa::error::IxaError;
 use ixa::{
     context::Context,
     create_report_trait,
@@ -64,7 +65,7 @@ fn handle_death_events(context: &mut Context, event: PersonPropertyChangeEvent<A
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -75,7 +76,7 @@ pub fn init(context: &mut Context) {
         .report_options()
         .directory(PathBuf::from(current_dir));
 
-    context.add_report::<PersonReportItem>(&parameters.demographic_output_file);
+    context.add_report::<PersonReportItem>(&parameters.demographic_output_file)?;
     context.subscribe_to_event(|context, event: PersonCreatedEvent| {
         handle_person_created(context, event);
     });
@@ -86,4 +87,6 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<Age>| {
         handle_person_aging(context, event);
     });
+
+    Ok(())
 }

@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::ContextPeopleExt;
 use ixa::report::ContextReportExt;
@@ -49,7 +50,7 @@ fn count_people_and_send_report(context: &mut Context, report_period: f64) {
     });
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -57,6 +58,7 @@ pub fn init(context: &mut Context) {
     context
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
-    context.add_report::<PeriodicReportItem>("person_property_count");
+    context.add_report::<PeriodicReportItem>("person_property_count")?;
     count_people_and_send_report(context, parameters.report_period);
+    Ok(())
 }

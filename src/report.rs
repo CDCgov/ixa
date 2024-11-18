@@ -108,6 +108,12 @@ impl Context {
 }
 
 pub trait ContextReportExt {
+    /// Call `add_report` with each report type, passing the name of the report type.
+    /// The `short_name` is used for file naming to distinguish what data each
+    /// output file points to.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, raises an error.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
@@ -133,7 +139,7 @@ impl ContextReportExt for Context {
                     if data_container.config.overwrite {
                         created_file = File::create(&path)?;
                     } else {
-                        println!("File already exists: {:?}. Please rerun setting overwrite to true in the file config.", path);
+                        println!("File already exists: {}. Please rerun setting overwrite to true in the file config.", path.display());
                         return Err(IxaError::IoError(e));
                     }
                 }
@@ -171,8 +177,6 @@ impl ContextReportExt for Context {
 
 #[cfg(test)]
 mod test {
-    use crate::error;
-
     use super::*;
     use core::convert::TryInto;
     use serde_derive::{Deserialize, Serialize};
@@ -196,7 +200,7 @@ mod test {
         config
             .file_prefix("prefix1_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -222,7 +226,7 @@ mod test {
         let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
         config.directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -250,7 +254,7 @@ mod test {
         config
             .file_prefix("test_prefix_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -290,7 +294,7 @@ mod test {
         config
             .file_prefix("mult_report_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report1 = SampleReport {
             id: 1,
             value: "Value,1".to_string(),
@@ -339,7 +343,7 @@ mod test {
                 let mut context = Context::new();
                 let config = context.report_options();
                 config.file_prefix(i.to_string()).directory(path.clone());
-                context.add_report::<SampleReport>("sample_report");
+                context.add_report::<SampleReport>("sample_report").unwrap();
 
                 for j in 0..num_reports_per_thread {
                     let report = SampleReport {
@@ -382,7 +386,9 @@ mod test {
         config
             .file_prefix("prefix1_".to_string())
             .directory(path.clone());
-        context1.add_report::<SampleReport>("sample_report");
+        context1
+            .add_report::<SampleReport>("sample_report")
+            .unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -420,7 +426,9 @@ mod test {
         config
             .file_prefix("prefix1_".to_string())
             .directory(path.clone());
-        context1.add_report::<SampleReport>("sample_report");
+        context1
+            .add_report::<SampleReport>("sample_report")
+            .unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),

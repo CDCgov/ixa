@@ -25,32 +25,37 @@ fn main() {
             let mut context = Context::new();
 
             context.report_options().file_prefix(format!("{scenario}_"));
-            context.add_report::<Incidence>("incidence");
+            match context.add_report::<Incidence>("incidence") {
+                Ok(()) => {
+                    println!("Scenario: {scenario}");
 
-            println!("Scenario: {scenario}");
-
-            let people = vec!["1", "2", "3"];
-            for person in people {
-                let person = person.to_string();
-                let scenario = scenario.clone();
-                context.add_plan(1.0, {
-                    move |context| {
-                        context.send_report(Incidence {
-                            scenario: scenario.to_string(),
-                            person_id: person.clone(),
-                            t: context.get_current_time(),
+                    let people = vec!["1", "2", "3"];
+                    for person in people {
+                        let person = person.to_string();
+                        let scenario = scenario.clone();
+                        context.add_plan(1.0, {
+                            move |context| {
+                                context.send_report(Incidence {
+                                    scenario: scenario.to_string(),
+                                    person_id: person.clone(),
+                                    t: context.get_current_time(),
+                                });
+                                println!(
+                                    "Scenario: {}, Person {} was infected at time {}.",
+                                    scenario,
+                                    person,
+                                    context.get_current_time()
+                                );
+                            }
                         });
-                        println!(
-                            "Scenario: {}, Person {} was infected at time {}.",
-                            scenario,
-                            person,
-                            context.get_current_time()
-                        );
                     }
-                });
-            }
 
-            context.execute();
+                    context.execute();
+                }
+                Err(e) => {
+                    panic!("Error adding report: {e}");
+                }
+            };
         });
         handles.push(handle);
     }
