@@ -38,9 +38,9 @@ fn initialize() -> Result<Context, IxaError> {
         .clone();
     context.init_random(parameters.seed);
 
-            for _ in 0..parameters.population {
-                context.add_person(()).unwrap();
-            }
+    for _ in 0..parameters.population {
+        context.add_person(()).unwrap();
+    }
 
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
