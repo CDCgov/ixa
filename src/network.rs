@@ -342,6 +342,12 @@ mod test_inner {
         assert_eq!(edge.weight, 0.02);
     }
 
+    #[test]
+    fn remove_nonexistent_edge() {
+        let mut nd = NetworkData::new();
+        assert!(matches!(nd.remove_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }),
+                                                     Err(IxaError::IxaError(_))));
+    }
     
     #[test]
     fn add_edge_to_self() {
