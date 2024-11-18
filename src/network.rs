@@ -113,19 +113,18 @@ impl NetworkData {
         None
     }
 
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
         if person.id >= self.network.len() {
-            return None;
+            return Vec::new();
         }
 
         let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>());
         if entry.is_none() {
-            return None;
+            return Vec::new();
         }
-        
-        let edges : &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");        
 
-        Some(edges)
+        let edges : &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");        
+        edges.clone()
     }
 }
 
@@ -157,7 +156,12 @@ pub trait ContextNetworkExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError>;
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>>;
+    fn remove_edge<T: EdgeType + 'static>(
+        &mut self,
+        person: PersonId,
+        neighbor: PersonId,
+    ) -> Result<(), IxaError>;
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
     fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>>;
 }
 
@@ -172,6 +176,7 @@ impl ContextNetworkExt for Context {
         let data_container = self.get_data_container_mut(NetworkPlugin);
         data_container.add_edge::<T>(person, neighbor, weight, inner)
     }
+    
     fn add_edge_bidi<T: EdgeType + 'static>(
         &mut self,
         person1: PersonId,
@@ -184,6 +189,20 @@ impl ContextNetworkExt for Context {
         data_container.add_edge::<T>(person2, person1, weight, inner)
     }
 
+    fn remove_edge<T: EdgeType + 'static>(
+        &mut self,
+        person: PersonId,
+        neighbor: PersonId,
+    ) -> Result<(), IxaError> {
+        let data_container = self.get_data_container(NetworkPlugin);
+        // Generate an error if not initialized.
+        if data_container.is_none() {
+            return Err(IxaError::IxaError(String::from("Network not initialized")));
+        }
+        let data_container = self.get_data_container_mut(NetworkPlugin);
+        data_container.remove_edge::<T>(person, neighbor)
+    }
+
     fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
@@ -193,11 +212,11 @@ impl ContextNetworkExt for Context {
         }
     }
 
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Option<&Vec<Edge<T::Value>>> {
+    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
         match data_container {
-            None => None,
+            None => Vec::new(),
             Some(data_container) => data_container.get_edges::<T>(person),
         }
     }
@@ -257,10 +276,10 @@ mod test_inner {
             .unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 }).unwrap();
+        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
         assert_eq!(
             edges,
-            &vec![
+            vec![
                 Edge {
                     neighbor: PersonId { id: 2 },
                     weight: 0.01,
@@ -292,10 +311,10 @@ mod test_inner {
             .unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 }).unwrap();
+        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
         assert_eq!(
             edges,
-            &vec![Edge {
+            vec![Edge {
                 neighbor: PersonId { id: 2 },
                 weight: 0.01,
                 inner: ()
@@ -381,7 +400,8 @@ mod test_api {
     use crate::context::Context;
     use crate::network::{ContextNetworkExt, Edge};
     use crate::people::{ContextPeopleExt, PersonId};
-
+    use crate::error::IxaError;
+    
     define_edge_type!(EdgeType1, ());
 
     fn setup() -> (Context, PersonId, PersonId) {
@@ -401,7 +421,7 @@ mod test_api {
             .unwrap();
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(
-            *context.get_edges::<EdgeType1>(person1).unwrap(),
+            context.get_edges::<EdgeType1>(person1),
             vec![Edge {
                 neighbor: person2,
                 weight: 0.01,
@@ -410,6 +430,21 @@ mod test_api {
         );
     }
 
+    #[test]
+    fn remove_edge() {
+        let (mut context, person1, person2) = setup();
+        // Check that we get an error if nothing has been added.
+        
+        assert!(matches!(context.remove_edge::<EdgeType1>(person1, person2),
+                Err(IxaError::IxaError(_))));
+        context
+            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .unwrap();
+        context.remove_edge::<EdgeType1>(person1, person2).unwrap();
+        assert!(context.get_edge::<EdgeType1>(person1, person2).is_none());
+        assert_eq!(context.get_edges::<EdgeType1>(person1).len(), 0);
+    }
+    
     #[test]
     fn add_edge_bidi() {
         let (mut context, person1, person2) = setup();
