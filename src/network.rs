@@ -304,7 +304,7 @@ mod test_inner {
     }
 
     #[test]
-    fn add_edge_twice() {
+    fn add_edge_twice_fails() {
         let mut nd = NetworkData::new();
 
         nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
@@ -313,10 +313,36 @@ mod test_inner {
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
         assert_eq!(edge.weight, 0.01);
+
         assert!(matches!(nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ()),
                          Err(IxaError::IxaError(_))));
     }
 
+    #[test]
+    fn add_remove_add_edge() {
+        let mut nd = NetworkData::new();
+
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+            .unwrap();
+        let edge = nd
+            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
+            .unwrap();
+        assert_eq!(edge.weight, 0.01);
+        
+        nd.remove_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }).unwrap();
+        let edge = nd
+            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 });
+        assert!(edge.is_none());
+
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
+            .unwrap();
+        let edge = nd
+            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
+            .unwrap();
+        assert_eq!(edge.weight, 0.02);
+    }
+
+    
     #[test]
     fn add_edge_to_self() {
         let mut nd = NetworkData::new();
