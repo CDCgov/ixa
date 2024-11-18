@@ -34,6 +34,7 @@ impl NetworkData {
         person: PersonId,
         neighbor: PersonId,
         weight: f32,
+        inner: T::Value
     ) -> Result<(), IxaError> {
         if person == neighbor {
             return Err(IxaError::IxaError(String::from("Cannot make edge to self")));
@@ -63,11 +64,11 @@ impl NetworkData {
 
         edges.push(Edge{ neighbor,
                          weight,
-                         inner: T::Value::default() });
+                         inner });
         Ok(())
     }
 
-    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<f32> {
+    fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<Edge<T::Value>> {
         if person.id >= self.network.len() {
             return None;
         }
@@ -76,7 +77,7 @@ impl NetworkData {
         let edges : &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");        
         for edge in edges {
             if edge.neighbor == neighbor {
-                return Some(edge.weight);
+                return Some(*edge);
             }
         }
 
@@ -185,36 +186,50 @@ mod test_inner {
     use crate::people::PersonId;
 
     define_edge_type!(EdgeType1, ());
-    define_edge_type!(EdgeType2, ());    
+    define_edge_type!(EdgeType2, ());
+    define_edge_type!(EdgeType3, bool);
 
     #[test]
     fn add_edge() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01)
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
             .unwrap();
-        let weight = nd
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.01);
+        assert_eq!(edge.weight, 0.01);
+    }
+
+    #[test]
+    fn add_edge_with_inner() {
+        let mut nd = NetworkData::new();
+
+        nd.add_edge::<EdgeType3>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, true)
+            .unwrap();
+        let edge = nd
+            .get_edge::<EdgeType3>(PersonId { id: 1 }, PersonId { id: 2 })
+            .unwrap();
+        assert_eq!(edge.weight, 0.01);
+        assert!(edge.inner);
     }
 
     #[test]
     fn add_two_edges() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01)
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
             .unwrap();
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 }, 0.02)
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 }, 0.02, ())
             .unwrap();
-        let weight = nd
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.01);
-        let weight = nd
+        assert_eq!(edge.weight, 0.01);
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 })
             .unwrap();
-        assert_eq!(weight, 0.02);
+        assert_eq!(edge.weight, 0.02);
 
         let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
         assert_eq!(
@@ -238,18 +253,18 @@ mod test_inner {
     fn add_two_edge_types() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01)
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
             .unwrap();
-        nd.add_edge::<EdgeType2>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02)
+        nd.add_edge::<EdgeType2>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
             .unwrap();
-        let weight = nd
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.01);
-        let weight = nd
+        assert_eq!(edge.weight, 0.01);
+        let edge = nd
             .get_edge::<EdgeType2>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.02);
+        assert_eq!(edge.weight, 0.02);
 
         let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
         assert_eq!(
@@ -266,25 +281,25 @@ mod test_inner {
     fn replace_edge() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01)
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
             .unwrap();
-        let weight = nd
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.01);
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02)
+        assert_eq!(edge.weight, 0.01);
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
             .unwrap();
-        let weight = nd
+        let edge = nd
             .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
             .unwrap();
-        assert_eq!(weight, 0.02);
+        assert_eq!(edge.weight, 0.02);
     }
 
     #[test]
     fn add_edge_to_self() {
         let mut nd = NetworkData::new();
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 1 }, 0.01);
+        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 1 }, 0.01, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
 
@@ -292,20 +307,20 @@ mod test_inner {
     fn add_edge_bogus_weight() {
         let mut nd = NetworkData::new();
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, -1.0);
+        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, -1.0, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::NAN);
+        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::NAN, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
 
         let result =
-            nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY);
+            nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
 }
 
-/*
 
+/*
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 // Tests for the API.
