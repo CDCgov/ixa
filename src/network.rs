@@ -420,7 +420,7 @@ mod test_api {
     use crate::people::{ContextPeopleExt, PersonId, define_person_property};
     use crate::error::IxaError;
     
-    define_edge_type!(EdgeType1, ());
+    define_edge_type!(EdgeType1, u32);
     define_person_property!(Age, u8);
     
     fn setup() -> (Context, PersonId, PersonId) {
@@ -436,7 +436,7 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(
@@ -444,7 +444,7 @@ mod test_api {
             vec![Edge {
                 neighbor: person2,
                 weight: 0.01,
-                inner: ()
+                inner: 1
             }]
         );
     }
@@ -457,7 +457,7 @@ mod test_api {
         assert!(matches!(context.remove_edge::<EdgeType1>(person1, person2),
                 Err(IxaError::IxaError(_))));
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         context.remove_edge::<EdgeType1>(person1, person2).unwrap();
         assert!(context.get_edge::<EdgeType1>(person1, person2).is_none());
@@ -469,7 +469,7 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge_bidi::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge_bidi::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(context.get_edge::<EdgeType1>(person2, person1).unwrap().weight, 0.01);
@@ -481,10 +481,10 @@ mod test_api {
         let (mut context, person1, person2) = setup();
 
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         context
-            .add_edge::<EdgeType1>(person2, person1, 0.02, ())
+            .add_edge::<EdgeType1>(person2, person1, 0.02, 1)
             .unwrap();
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(context.get_edge::<EdgeType1>(person2, person1).unwrap().weight, 0.02);
@@ -496,10 +496,10 @@ mod test_api {
         let person3 = context.add_person((Age, 3)).unwrap();
         
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         context
-            .add_edge::<EdgeType1>(person1, person3, 0.03, ())
+            .add_edge::<EdgeType1>(person1, person3, 0.03, 1)
             .unwrap();
         let edges = context.get_matching_edges::<EdgeType1>(person1, | _context, edge| {
             edge.weight > 0.01
@@ -514,13 +514,13 @@ mod test_api {
         let person3 = context.add_person((Age, 3)).unwrap();
         
         context
-            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         context
-            .add_edge::<EdgeType1>(person1, person3, 0.03, ())
+            .add_edge::<EdgeType1>(person1, person3, 0.03, 3)
             .unwrap();
-        let edges = context.get_matching_edges::<EdgeType1>(person1, | context, edge| {
-            context.match_person(edge.neighbor, (Age, 3))
+        let edges = context.get_matching_edges::<EdgeType1>(person1, | _context, edge| {
+            edge.inner == 3
         });
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].neighbor, person3);
