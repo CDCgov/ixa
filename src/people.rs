@@ -688,7 +688,7 @@ pub trait ContextPeopleExt {
     fn get_person_id(&self, person_id: usize) -> PersonId;
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
-    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;    
+    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 }
 
 impl ContextPeopleExt for Context {
@@ -865,7 +865,7 @@ impl ContextPeopleExt for Context {
         T::setup(&self);
         // This cannot fail because someone must have been made by now.
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-    
+
         let query = q.get_query();
 
         for (t, hash) in &query {
@@ -876,7 +876,7 @@ impl ContextPeopleExt for Context {
         }
         true
     }
-    
+
     fn register_property<T: PersonProperty + 'static>(&self) {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         if !data_container
@@ -1675,7 +1675,6 @@ mod test {
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
 
-
     #[test]
     fn text_match_person() {
         let mut context = Context::new();
@@ -1686,7 +1685,7 @@ mod test {
         assert!(!context.match_person(person, ((Age, 43), (RiskCategoryType, RiskCategory::High))));
         assert!(!context.match_person(person, ((Age, 42), (RiskCategoryType, RiskCategory::Low))));
     }
-    
+
     #[test]
     fn test_index_value_hasher_finish2_short() {
         let value = 42;
