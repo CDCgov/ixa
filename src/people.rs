@@ -862,7 +862,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
-        T::setup(&self);
+        T::setup(self);
         // This cannot fail because someone must have been made by now.
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 

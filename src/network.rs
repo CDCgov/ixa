@@ -113,13 +113,7 @@ impl NetworkData {
 
         let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>())?;
         let edges: &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");
-        for edge in edges {
-            if edge.neighbor == neighbor {
-                return Some(edge);
-            }
-        }
-
-        None
+        edges.iter().find(|&edge| edge.neighbor == neighbor)
     }
 
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
@@ -137,6 +131,7 @@ impl NetworkData {
     }
 }
 
+#[allow(unused_macros)]
 macro_rules! define_edge_type {
     ($edge_type:ident, $value:ty) => {
         #[derive(Debug, Copy, Clone)]
