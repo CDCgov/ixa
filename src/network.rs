@@ -162,6 +162,10 @@ pub trait ContextNetworkExt {
         neighbor: PersonId,
     ) -> Result<(), IxaError>;
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
+    fn get_matching_edges<T: EdgeType + 'static>(&self, person: PersonId,
+                                                 filter: impl Fn(&Context, &Edge<T::Value>)
+                                                            -> bool + 'static)
+                                                 -> Vec<Edge<T::Value>>;
     fn get_edge<T: EdgeType + 'static>(&self, person: PersonId, neighbor: PersonId) -> Option<&Edge<T::Value>>;
 }
 
@@ -219,6 +223,20 @@ impl ContextNetworkExt for Context {
             None => Vec::new(),
             Some(data_container) => data_container.get_edges::<T>(person),
         }
+    }
+
+    fn get_matching_edges<T: EdgeType + 'static>(&self, person: PersonId,
+                                                 filter: impl Fn(&Context, &Edge<T::Value>)
+                                                            -> bool + 'static)
+                                                 -> Vec<Edge<T::Value>> {
+        let edges = self.get_edges::<T>(person);
+        let mut result = Vec::new();
+        for edge in &edges {
+            if filter(self, edge) {
+                result.push(*edge);
+            }
+        }
+        result
     }
 }
 
@@ -399,15 +417,16 @@ mod test_inner {
 mod test_api {
     use crate::context::Context;
     use crate::network::{ContextNetworkExt, Edge};
-    use crate::people::{ContextPeopleExt, PersonId};
+    use crate::people::{ContextPeopleExt, PersonId, define_person_property};
     use crate::error::IxaError;
     
     define_edge_type!(EdgeType1, ());
-
+    define_person_property!(Age, u8);
+    
     fn setup() -> (Context, PersonId, PersonId) {
         let mut context = Context::new();
-        let person1 = context.add_person(()).unwrap();
-        let person2 = context.add_person(()).unwrap();
+        let person1 = context.add_person((Age, 1)).unwrap();
+        let person2 = context.add_person((Age, 2)).unwrap();
 
         (context, person1, person2)
     }
@@ -470,4 +489,41 @@ mod test_api {
         assert_eq!(context.get_edge::<EdgeType1>(person1, person2).unwrap().weight, 0.01);
         assert_eq!(context.get_edge::<EdgeType1>(person2, person1).unwrap().weight, 0.02);
     }
+
+    #[test]
+    fn get_matching_edges_weight() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_person((Age, 3)).unwrap();
+        
+        context
+            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .unwrap();
+        context
+            .add_edge::<EdgeType1>(person1, person3, 0.03, ())
+            .unwrap();
+        let edges = context.get_matching_edges::<EdgeType1>(person1, | _context, edge| {
+            edge.weight > 0.01
+        });
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].neighbor, person3);
+    }
+
+    #[test]
+    fn get_matching_edges_property() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_person((Age, 3)).unwrap();
+        
+        context
+            .add_edge::<EdgeType1>(person1, person2, 0.01, ())
+            .unwrap();
+        context
+            .add_edge::<EdgeType1>(person1, person3, 0.03, ())
+            .unwrap();
+        let edges = context.get_matching_edges::<EdgeType1>(person1, | context, edge| {
+            context.match_person(edge.neighbor, (Age, 3))
+        });
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].neighbor, person3);
+    }
+    
 }
