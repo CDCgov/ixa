@@ -129,6 +129,22 @@ impl NetworkData {
         let edges: &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");
         edges.clone()
     }
+
+    fn search_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
+        let mut result = Vec::new();
+        
+        for id in 0..self.network.len() {
+            let entry = self.network[id].neighbors.get(&TypeId::of::<T>());
+            if entry.is_none() {
+                continue;
+            }
+            let edges: &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");
+            if edges.len() == degree {
+                result.push(PersonId{id});
+            }
+        }
+        result
+    }
 }
 
 #[allow(unused_macros)]
@@ -425,6 +441,21 @@ mod test_inner {
         let result =
             nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
+    }
+
+    #[test]
+    fn search_by_degree() {
+        let mut nd = NetworkData::new();
+        
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.0, ()).unwrap();
+        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 }, 0.0, ()).unwrap();
+        nd.add_edge::<EdgeType1>(PersonId { id: 2 }, PersonId { id: 3 }, 0.0, ()).unwrap();
+        nd.add_edge::<EdgeType1>(PersonId { id: 3 }, PersonId { id: 2 }, 0.0, ()).unwrap();
+
+        let matches = nd.search_by_degree::<EdgeType1>(2);
+        assert_eq!(matches, vec![PersonId{id:1}]);
+        let matches = nd.search_by_degree::<EdgeType1>(1);
+        assert_eq!(matches, vec![PersonId{id:2}, PersonId{id:3}]);
     }
 }
 
