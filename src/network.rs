@@ -601,7 +601,7 @@ mod test_api {
     }
 
     #[test]
-    fn get_matching_edges_property() {
+    fn get_matching_edges_inner() {
         let (mut context, person1, person2) = setup();
         let person3 = context.add_person((Age, 3)).unwrap();
 
@@ -613,6 +613,24 @@ mod test_api {
             .unwrap();
         let edges =
             context.get_matching_edges::<EdgeType1>(person1, |_context, edge| edge.inner == 3);
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].neighbor, person3);
+    }
+
+    #[test]
+    fn get_matching_edges_person_property() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_person((Age, 3)).unwrap();
+
+        context
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
+            .unwrap();
+        context
+            .add_edge::<EdgeType1>(person1, person3, 0.03, 3)
+            .unwrap();
+        let edges = context.get_matching_edges::<EdgeType1>(person1, |context, edge| {
+            context.match_person(edge.neighbor, (Age, 3))
+        });
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].neighbor, person3);
     }
