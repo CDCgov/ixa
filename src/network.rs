@@ -1,3 +1,10 @@
+//! A module for modeling contact networks.
+//!
+//! A network is modeled as a directed graph.  Edges are typed in the
+//! usual fashion, i.e., keyed by a Rust type, and each person can have an
+//! arbitrary number of outgoing edges of a given type, with each edge
+//! having a weight. Edge types can also specify their own per-type
+//! data which will be stored along with the edge.
 use crate::{context::Context, define_data_plugin, error::IxaError, people::PersonId};
 use std::{
     any::{Any, TypeId},
@@ -5,10 +12,15 @@ use std::{
 };
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+/// An edge in network graph. Edges are directed, so the
+/// source person is implicit.
 pub struct Edge<T: Sized> {
-    neighbor: PersonId,
-    weight: f32,
-    inner: T,
+    /// The person this edge points to.
+    pub neighbor: PersonId,
+    /// The weight associated with the edge.
+    pub weight: f32,
+    /// An inner value defined by type `T`.
+    pub inner: T,
 }
 
 pub trait EdgeType {
@@ -147,7 +159,12 @@ impl NetworkData {
     }
 }
 
+/// Define a new edge type for use with `network`.
+///
+/// Defines a new edge type of type `$edge_type`, with inner type `$value`.
+/// Use `()` for `$value` to have no inner type.
 #[allow(unused_macros)]
+#[macro_export]
 macro_rules! define_edge_type {
     ($edge_type:ident, $value:ty) => {
         #[derive(Debug, Copy, Clone)]
@@ -162,6 +179,17 @@ macro_rules! define_edge_type {
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
 pub trait ContextNetworkExt {
+    /// Add an edge of type `T` between `person` and `neighbor` with a
+    /// given `weight`.  `inner` is a value of whatever type is
+    /// associated with `T`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IxaError` if:
+    ///
+    /// * `person` and `neighbor` are the same or an edge already
+    /// exists between them.
+    /// * `weight` is invalid
     fn add_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
@@ -169,6 +197,20 @@ pub trait ContextNetworkExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError>;
+
+    /// Add a pair of edges of type `T` between `person1` and
+    /// `neighbor2` with a given `weight`, one edge in each
+    /// direction. `inner` is a value of whatever type is associated
+    /// with `T`. This is syntactic sugar for calling `add_edge()`
+    /// twice.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IxaError` if:
+    ///
+    /// * `person` and `neighbor` are the same or an edge already
+    /// exists between them.
+    /// * `weight` is invalid
     fn add_edge_bidi<T: EdgeType + 'static>(
         &mut self,
         person1: PersonId,
@@ -176,25 +218,46 @@ pub trait ContextNetworkExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError>;
+
+    /// Remove an edge of type `T` between `person` and `neighbor`
+    /// if one exists.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if no edge exists.
     fn remove_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
         neighbor: PersonId,
     ) -> Result<(), IxaError>;
+
+    /// Get an edge of type `T` between `person` and `neighbor`
+    /// if one exists.
+    fn get_edge<T: EdgeType + 'static>(
+        &self,
+        person: PersonId,
+         neighbor: PersonId,
+    ) -> Option<&Edge<T::Value>>;
+
+    /// Get all edges of type `T` from `person`.
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
+    
+    /// Get all edges of type `T` from `person` that match the predicate
+    /// provided in `filter`. Note that because `filter` has access to
+    /// both the edge, which contains the neighbor and `Context`, it is
+    /// possible to filter on properties of the neighbor. The function
+    /// `context.matching_person()` might be helpful here.
+    ///
     fn get_matching_edges<T: EdgeType + 'static>(
         &self,
         person: PersonId,
         filter: impl Fn(&Context, &Edge<T::Value>) -> bool + 'static,
     ) -> Vec<Edge<T::Value>>;
-    fn get_edge<T: EdgeType + 'static>(
-        &self,
-        person: PersonId,
-        neighbor: PersonId,
-    ) -> Option<&Edge<T::Value>>;
+
+    /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId>;
 }
 
+// Public API.
 impl ContextNetworkExt for Context {
     fn add_edge<T: EdgeType + 'static>(
         &mut self,
