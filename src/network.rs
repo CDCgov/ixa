@@ -130,7 +130,7 @@ impl NetworkData {
         edges.clone()
     }
 
-    fn search_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
+    fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
         let mut result = Vec::new();
         
         for id in 0..self.network.len() {
@@ -192,7 +192,9 @@ pub trait ContextNetworkExt {
         person: PersonId,
         neighbor: PersonId,
     ) -> Option<&Edge<T::Value>>;
+    fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId>;    
 }
+
 
 impl ContextNetworkExt for Context {
     fn add_edge<T: EdgeType + 'static>(
@@ -267,6 +269,15 @@ impl ContextNetworkExt for Context {
             }
         }
         result
+    }
+
+    fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
+        let data_container = self.get_data_container(NetworkPlugin);
+
+        match data_container {
+            None => Vec::new(),
+            Some(data_container) => data_container.find_people_by_degree::<T>(degree),
+        }
     }
 }
 
@@ -444,7 +455,7 @@ mod test_inner {
     }
 
     #[test]
-    fn search_by_degree() {
+    fn find_people_by_degree() {
         let mut nd = NetworkData::new();
         
         nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.0, ()).unwrap();
@@ -452,9 +463,9 @@ mod test_inner {
         nd.add_edge::<EdgeType1>(PersonId { id: 2 }, PersonId { id: 3 }, 0.0, ()).unwrap();
         nd.add_edge::<EdgeType1>(PersonId { id: 3 }, PersonId { id: 2 }, 0.0, ()).unwrap();
 
-        let matches = nd.search_by_degree::<EdgeType1>(2);
+        let matches = nd.find_people_by_degree::<EdgeType1>(2);
         assert_eq!(matches, vec![PersonId{id:1}]);
-        let matches = nd.search_by_degree::<EdgeType1>(1);
+        let matches = nd.find_people_by_degree::<EdgeType1>(1);
         assert_eq!(matches, vec![PersonId{id:2}, PersonId{id:3}]);
     }
 }
