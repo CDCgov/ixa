@@ -5,11 +5,12 @@
 //! arbitrary number of outgoing edges of a given type, with each edge
 //! having a weight. Edge types can also specify their own per-type
 //! data which will be stored along with the edge.
-use crate::{context::Context, define_data_plugin, error::IxaError, people::PersonId};
+use crate::{context::Context, define_data_plugin, error::IxaError, people::PersonId, random::RngId, random::ContextRandomExt};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
 };
+use rand::{Rng};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 /// An edge in network graph. Edges are directed, so the
@@ -255,7 +256,10 @@ pub trait ContextNetworkExt {
 
     /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId>;
+
+    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, edges: &Vec<Edge<T::Value>>) -> Result<Edge<T::Value>, IxaError> where R::RngType: Rng;    
 }
+
 
 // Public API.
 impl ContextNetworkExt for Context {
@@ -340,6 +344,18 @@ impl ContextNetworkExt for Context {
             None => Vec::new(),
             Some(data_container) => data_container.find_people_by_degree::<T>(degree),
         }
+    }
+
+    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, edges: &Vec<Edge<T::Value>>) -> Result<Edge<T::Value>, IxaError>
+        where R::RngType: Rng,
+    {
+        if edges.len() == 0 {
+            return Err(IxaError::IxaError(String::from("Can't sample from empty list")));
+        }
+
+        let weights = edges.iter().map(|x| x.weight).collect();
+        let index = self.sample_weighted(rng_id, weights);
+        Ok(edges[index])
     }
 }
 

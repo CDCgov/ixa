@@ -1,11 +1,12 @@
 use crate::context::Context;
-use rand::distributions::uniform::SampleRange;
-use rand::distributions::uniform::SampleUniform;
+use rand::distributions::uniform::{SampleUniform, SampleRange};
+use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
+use std::ops::DerefMut;
 
 /// Use this to define a unique type which will be used as a key to retrieve
 /// an independent rng instance when calling `.get_rng`.
@@ -125,6 +126,10 @@ pub trait ContextRandomExt {
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
         R::RngType: Rng;
+
+    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: Vec<T>) -> usize
+    where R::RngType: Rng,
+    T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
 }
 
 impl ContextRandomExt for Context {
@@ -174,6 +179,16 @@ impl ContextRandomExt for Context {
         R::RngType: Rng,
     {
         self.sample(rng_id, |rng| rng.gen_bool(p))
+    }
+
+    fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: Vec<T>) -> usize
+    where
+        R::RngType: Rng,
+            T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd
+    {
+        let index = WeightedIndex::new(weights).unwrap();
+        let mut rng = get_rng::<R>(self);
+        index.sample(rng.deref_mut())
     }
 }
 
@@ -295,4 +310,13 @@ mod test {
         context.init_random(42);
         let _r: bool = context.sample_bool(FooRng, 0.5);
     }
+
+    #[test]
+    fn sample_weighted() {
+        let mut context = Context::new();
+        context.init_random(42);
+        let r: usize = context.sample_weighted(FooRng, vec![0.1, 0.3, 0.4]);
+        assert!(r < 3);
+    }
+    
 }
