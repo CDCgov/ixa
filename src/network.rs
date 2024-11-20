@@ -10,7 +10,7 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
 };
-use rand::{Rng};
+use rand::Rng;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 /// An edge in network graph. Edges are directed, so the
@@ -257,7 +257,7 @@ pub trait ContextNetworkExt {
     /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId>;
 
-    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, edges: &Vec<Edge<T::Value>>) -> Result<Edge<T::Value>, IxaError> where R::RngType: Rng;    
+    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, person_id: PersonId) -> Result<Edge<T::Value>, IxaError> where R::RngType: Rng;    
 }
 
 
@@ -346,9 +346,10 @@ impl ContextNetworkExt for Context {
         }
     }
 
-    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, edges: &Vec<Edge<T::Value>>) -> Result<Edge<T::Value>, IxaError>
+    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(&self, rng_id: R, person_id: PersonId) -> Result<Edge<T::Value>, IxaError>
         where R::RngType: Rng,
     {
+        let edges = self.get_edges::<T>(person_id);
         if edges.len() == 0 {
             return Err(IxaError::IxaError(String::from("Can't sample from empty list")));
         }
@@ -560,7 +561,9 @@ mod test_api {
     use crate::error::IxaError;
     use crate::network::{ContextNetworkExt, Edge};
     use crate::people::{define_person_property, ContextPeopleExt, PersonId};
-
+    use crate::define_rng;
+    use crate::random::ContextRandomExt;
+    
     define_edge_type!(EdgeType1, u32);
     define_person_property!(Age, u8);
 
@@ -713,4 +716,24 @@ mod test_api {
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].neighbor, person3);
     }
+
+    #[test]
+    fn select_random_edge() {
+        define_rng!(NetworkTestRng);
+        
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_person((Age, 3)).unwrap();
+        context.init_random(42);
+        
+        context
+            .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
+            .unwrap();
+        context
+            .add_edge::<EdgeType1>(person1, person3, 10000000.0, 3)
+            .unwrap();
+
+        let edge = context.select_random_edge::<EdgeType1, _>(NetworkTestRng, person1).unwrap();
+        assert_eq!(edge.neighbor, person3);
+    }
+        
 }
