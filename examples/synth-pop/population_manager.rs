@@ -4,10 +4,9 @@ use ixa::{
     define_derived_property, define_person_property, define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
     people::{ContextPeopleExt, PersonId, PersonProperty},
-    random::{define_rng, ContextRandomExt},
+    random::define_rng,
 };
 
-use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 use std::path::Path;
@@ -15,7 +14,6 @@ use serde::Deserialize;
 
 define_rng!(PeopleRng);
 
-static MAX_AGE: u8 = 100;
 use serde::Serialize;
 use std::fmt;
 
@@ -45,14 +43,10 @@ impl fmt::Display for AgeGroupRisk {
 pub struct PeopleRecord {
     age: u8,
     homeId: usize,
-    schoolId: usize,
-    workplaceId: usize
 }
 
 
 define_person_property!(Age, u8);
-define_person_property!(WorkplaceId, usize);
-define_person_property!(SchoolId, usize);
 define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
 
@@ -75,11 +69,9 @@ define_derived_property!(CensusTract, usize, [HomeId], |home_id| {
 });
 
 pub fn create_new_person(context: &mut Context, person_record: &PeopleRecord) -> PersonId {
-    let person = context.add_person();
-    context.initialize_person_property(person, Age, person_record.age);
-    context.initialize_person_property(person, WorkplaceId, person_record.workplaceId);
-    context.initialize_person_property(person, SchoolId, person_record.schoolId);
-    context.initialize_person_property(person, HomeId, person_record.homeId);
+    let person = context
+        .add_person( ((Age, person_record.age),
+        (HomeId, person_record.homeId))).unwrap();
     person
 }
 
@@ -99,14 +91,6 @@ pub fn init(context: &mut Context) {
 }
 
 pub trait ContextPopulationExt {
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq;
-
     fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
         &mut self,
         property_a: T,
@@ -120,24 +104,6 @@ pub trait ContextPopulationExt {
 }
 
 impl ContextPopulationExt for Context {
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq,
-    {
-        let mut population_counter = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, property) == value {
-                population_counter += 1;
-            }
-        }
-        population_counter
-    }
-
     fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
         &mut self,
         property_a: T,

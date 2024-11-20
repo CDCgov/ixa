@@ -1,15 +1,13 @@
 use crate::population_manager::{
-    Age,
     VaccineAgeGroup,
     AgeGroupRisk,
-    Alive,
-    HomeId,
     CensusTract,
     ContextPopulationExt,
 };
 
 use crate::Parameters;
 use ixa::{
+    error::IxaError,
     context::Context,
     create_report_trait,
     global_properties::ContextGlobalPropertiesExt,
@@ -87,7 +85,7 @@ fn update_property_set(context: &mut Context, event: PersonCreatedEvent) {
 }
 
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_global_property_value(Parameters)
         .unwrap()
         .clone();
@@ -95,6 +93,7 @@ pub fn init(context: &mut Context) {
     let current_dir = Path::new(file!()).parent().unwrap();
     context
         .report_options()
+        .overwrite(true)
         .directory(PathBuf::from(current_dir));
 
     context.subscribe_to_event(
@@ -103,8 +102,9 @@ pub fn init(context: &mut Context) {
         }
     );
 
-    context.add_report::<PersonReportItem>(&parameters.output_file);
+    context.add_report::<PersonReportItem>(&parameters.output_file)?;
     context.add_plan(0.0, move |context| {
         build_property_groups(context, parameters.report_period);
     });
+    Ok(())
 }

@@ -1,5 +1,6 @@
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+use ixa::error::IxaError;
 use std::path::Path;
 
 
@@ -9,29 +10,28 @@ mod population_report;
 
 use crate::parameters_loader::Parameters;
 
-fn main() {
+fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
     let current_dir = Path::new(file!()).parent().unwrap();
     let file_path = current_dir.join("input.json");
 
-    match parameters_loader::init_parameters(&mut context, &file_path) {
-        Ok(()) => {
-            let parameters = context.get_global_property_value(Parameters)
-                .unwrap()
-                .clone();
-            context.init_random(parameters.seed);
+     parameters_loader::init_parameters(&mut context, &file_path)?;
 
-            population_report::init(&mut context);
-            population_manager::init(&mut context);
+    let parameters = context.get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
+    context.init_random(parameters.seed);
 
-            context.add_plan(parameters.max_time, |context| {
-                context.shutdown();
-            });
-            println!("{parameters:?}");
-            context.execute();
-        }
-        Err(ixa_error) => {
-            println!("Could not read parameters: {ixa_error}");
-        }
-    }
+    population_report::init(&mut context)?;
+    population_manager::init(&mut context);
+
+    context.add_plan(parameters.max_time, |context| {
+        context.shutdown();
+    });
+    println!("{parameters:?}");
+    Ok(context)
+}
+fn main() {
+    let mut context = initialize().expect("Could not initialize context.");
+    context.execute();
 }
