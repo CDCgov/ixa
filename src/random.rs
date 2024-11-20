@@ -126,7 +126,7 @@ pub trait ContextRandomExt {
     where
         R::RngType: Rng;
 
-    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &Vec<T>) -> usize
+    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
         T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
@@ -181,7 +181,7 @@ impl ContextRandomExt for Context {
         self.sample(rng_id, |rng| rng.gen_bool(p))
     }
 
-    fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &Vec<T>) -> usize
+    fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
         T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd,
