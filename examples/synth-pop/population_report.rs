@@ -1,8 +1,7 @@
 use crate::population_manager::{
     VaccineAgeGroup,
     AgeGroupRisk,
-    CensusTract,
-    ContextPopulationExt,
+    CensusTract
 };
 
 use crate::Parameters;
@@ -22,7 +21,6 @@ use std::path::PathBuf;
 use std::collections::HashSet;
 
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 struct PersonReportItem {
@@ -58,7 +56,8 @@ fn build_property_groups(context: &mut Context, report_period: f64) {
     for age_group in AgeGroupRisk::iter() {
         for tract in &current_census_set{
             let age_group_pop = context
-            .get_population_by_properties(VaccineAgeGroup, age_group, CensusTract, (*tract).clone());
+                .query_people(((VaccineAgeGroup, age_group), (CensusTract, (*tract).clone())))
+                .len();
 
             context.send_report(PersonReportItem {
                 time: context.get_current_time(),

@@ -3,7 +3,7 @@ use ixa::{
     context::Context,
     define_derived_property, define_person_property, define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId, PersonProperty},
+    people::{ContextPeopleExt, PersonId},
     random::define_rng,
 };
 
@@ -87,47 +87,7 @@ pub fn init(context: &mut Context) {
         let record: PeopleRecord = result.expect("Failed to parse record");
         create_new_person(context, &record);
     }
-
-}
-
-pub trait ContextPopulationExt {
-    fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
-        &mut self,
-        property_a: T,
-        value_a: T::Value,
-        property_b: U,
-        value_b: U::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq,
-        <U as PersonProperty>::Value: PartialEq;
-}
-
-impl ContextPopulationExt for Context {
-    fn get_population_by_properties<T: PersonProperty + 'static, U: PersonProperty + 'static>(
-        &mut self,
-        property_a: T,
-        value_a: T::Value,
-        property_b: U,
-        value_b: U::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq,
-        <U as PersonProperty>::Value: PartialEq,
-    {
-        let mut population_counter = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-
-            if self.get_person_property(person_id, Alive) {
-                if self.get_person_property(person_id, property_a) == value_a
-                    && self.get_person_property(person_id, property_b) == value_b {
-                    population_counter += 1;
-                }
-            }
-        }
-
-        population_counter
-    }
+    context.index_property(Age);
+    context.index_property(CensusTract);
 
 }
