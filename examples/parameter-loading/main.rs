@@ -1,3 +1,4 @@
+use ixa::error::IxaError;
 use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
 use ixa::{
@@ -23,36 +24,38 @@ pub enum InfectionStatus {
 }
 define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
 
-fn main() {
+fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
     let file_path = Path::new("examples")
         .join("parameter-loading")
         .join("input.json");
 
-    match parameters_loader::init_parameters(&mut context, &file_path) {
-        Ok(()) => {
-            let parameters = context
-                .get_global_property_value(Parameters)
-                .unwrap()
-                .clone();
-            context.init_random(parameters.seed);
+    parameters_loader::init_parameters(&mut context, &file_path)?;
 
-            for _ in 0..parameters.population {
-                context.add_person(()).unwrap();
-            }
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
+    context.init_random(parameters.seed);
 
-            transmission_manager::init(&mut context);
-            infection_manager::init(&mut context);
-            incidence_report::init(&mut context);
-
-            context.add_plan(parameters.max_time, |context| {
-                context.shutdown();
-            });
-            println!("{parameters:?}");
-            context.execute();
-        }
-        Err(ixa_error) => {
-            println!("Could not read parameters: {ixa_error}");
-        }
+    for _ in 0..parameters.population {
+        context.add_person(()).unwrap();
     }
+
+    transmission_manager::init(&mut context);
+    infection_manager::init(&mut context);
+    incidence_report::init(&mut context)?;
+
+    context.add_plan(parameters.max_time, |context| {
+        context.shutdown();
+    });
+    println!("{parameters:?}");
+
+    Ok(context)
+}
+
+fn main() {
+    let mut context = initialize().expect("Could not initialize context.");
+
+    context.execute();
 }

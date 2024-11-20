@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 
@@ -12,36 +13,34 @@ mod population_loader;
 
 use crate::parameters_loader::Parameters;
 
-fn main() {
+fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
     let args: Vec<String> = std::env::args().collect();
     let file_path = PathBuf::from(&args[1]);
 
-    match parameters_loader::init_parameters(&mut context, &file_path) {
-        Ok(()) => {
-            let parameters = context
-                .get_global_property_value(Parameters)
-                .unwrap()
-                .clone();
-            context.init_random(parameters.seed);
+    parameters_loader::init_parameters(&mut context, &file_path)?;
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
 
-            exposure_manager::init(&mut context);
-            population_loader::init(&mut context);
-            infection_manager::init(&mut context);
-            incidence_report::init(&mut context);
-            periodic_report::init(&mut context);
+    context.init_random(parameters.seed);
 
-            context.add_plan(parameters.max_time, |context| {
-                context.shutdown();
-            });
-            println!("{parameters:?}");
-            context.execute();
-        }
-        Err(ixa_error) => {
-            println!("Could not read parameters: {ixa_error}");
-        }
-    }
+    exposure_manager::init(&mut context);
+    population_loader::init(&mut context);
+    infection_manager::init(&mut context);
+    incidence_report::init(&mut context)?;
+    periodic_report::init(&mut context)?;
 
+    context.add_plan(parameters.max_time, |context| {
+        context.shutdown();
+    });
+    println!("{parameters:?}");
+    Ok(context)
+}
+
+fn main() {
+    let mut context = initialize().expect("Could not initialize context.");
     context.execute();
 }

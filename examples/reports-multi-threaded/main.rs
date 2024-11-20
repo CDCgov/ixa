@@ -25,8 +25,9 @@ fn main() {
             let mut context = Context::new();
 
             context.report_options().file_prefix(format!("{scenario}_"));
-            context.add_report::<Incidence>("incidence");
-
+            context
+                .add_report::<Incidence>("incidence")
+                .expect("Error adding report");
             println!("Scenario: {scenario}");
 
             let people = vec!["1", "2", "3"];

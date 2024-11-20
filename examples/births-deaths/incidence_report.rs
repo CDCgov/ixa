@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use ixa::error::IxaError;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
 use ixa::report::ContextReportExt;
@@ -40,7 +41,7 @@ fn handle_infection_status_change(
     });
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -50,10 +51,11 @@ pub fn init(context: &mut Context) {
         .report_options()
         .directory(PathBuf::from(current_dir));
 
-    context.add_report::<IncidenceReportItem>(&parameters.output_file);
+    context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(
         |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
             handle_infection_status_change(context, event);
         },
     );
+    Ok(())
 }

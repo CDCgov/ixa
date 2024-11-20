@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::error::IxaError;
 use csv::Writer;
 use std::any::TypeId;
 use std::cell::RefCell;
@@ -11,9 +12,11 @@ use std::path::PathBuf;
 // potential prefix might be scenario or simulation name
 // * directory: location that the CSVs are written to. An example of this might
 // be /data/
+// * overwrite: if true, will overwrite existing files in the same location
 pub struct ConfigReportOptions {
     pub file_prefix: String,
     pub directory: PathBuf,
+    pub overwrite: bool,
 }
 
 impl ConfigReportOptions {
@@ -24,6 +27,7 @@ impl ConfigReportOptions {
         ConfigReportOptions {
             file_prefix: String::new(),
             directory: env::current_dir().unwrap(),
+            overwrite: false,
         }
     }
     /// Sets the file prefix option (e.g., "report_")
@@ -34,6 +38,11 @@ impl ConfigReportOptions {
     /// Sets the directory where reports will be output
     pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
         self.directory = directory;
+        self
+    }
+    /// Sets the overwrite option
+    pub fn overwrite(&mut self, overwrite: bool) -> &mut ConfigReportOptions {
+        self.overwrite = overwrite;
         self
     }
 }
@@ -99,7 +108,13 @@ impl Context {
 }
 
 pub trait ContextReportExt {
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str);
+    /// Call `add_report` with each report type, passing the name of the report type.
+    /// The `short_name` is used for file naming to distinguish what data each
+    /// output file points to.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, raises an error.
+    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
 }
@@ -108,15 +123,32 @@ impl ContextReportExt for Context {
     /// Call `add_report` with each report type, passing the name of the report type.
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) {
+    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
         let path = self.generate_filename(short_name);
 
         let data_container = self.get_data_container_mut(ReportPlugin);
 
-        let file = File::create(path).expect("Couldn't create file");
-        let writer = Writer::from_writer(file);
+        let file_creation_result = File::create_new(&path);
+        let created_file = match file_creation_result {
+            Ok(file) => file,
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::AlreadyExists => {
+                    if data_container.config.overwrite {
+                        File::create(&path)?
+                    } else {
+                        println!("File already exists: {}. Please rerun setting overwrite to true in the file config.", path.display());
+                        return Err(IxaError::IoError(e));
+                    }
+                }
+                _ => {
+                    return Err(IxaError::IoError(e));
+                }
+            },
+        };
+        let writer = Writer::from_writer(created_file);
         let mut file_writer = data_container.file_writers.borrow_mut();
         file_writer.insert(TypeId::of::<T>(), writer);
+        Ok(())
     }
 
     /// Write a new row to the appropriate report file
@@ -165,7 +197,7 @@ mod test {
         config
             .file_prefix("prefix1_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -191,7 +223,7 @@ mod test {
         let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
         config.directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -219,7 +251,7 @@ mod test {
         config
             .file_prefix("test_prefix_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
             value: "Test Value".to_string(),
@@ -259,7 +291,7 @@ mod test {
         config
             .file_prefix("mult_report_".to_string())
             .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report");
+        context.add_report::<SampleReport>("sample_report").unwrap();
         let report1 = SampleReport {
             id: 1,
             value: "Value,1".to_string(),
@@ -308,7 +340,7 @@ mod test {
                 let mut context = Context::new();
                 let config = context.report_options();
                 config.file_prefix(i.to_string()).directory(path.clone());
-                context.add_report::<SampleReport>("sample_report");
+                context.add_report::<SampleReport>("sample_report").unwrap();
 
                 for j in 0..num_reports_per_thread {
                     let report = SampleReport {
@@ -340,5 +372,82 @@ mod test {
                 assert_eq!(record.id, id_expected);
             }
         }
+    }
+
+    #[test]
+    fn dont_overwrite_report() {
+        let mut context1 = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context1.report_options();
+        config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone());
+        context1
+            .add_report::<SampleReport>("sample_report")
+            .unwrap();
+        let report = SampleReport {
+            id: 1,
+            value: "Test Value".to_string(),
+        };
+
+        context1.send_report(report);
+
+        let file_path = path.join("prefix1_sample_report.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        let mut context2 = Context::new();
+        let config = context2.report_options();
+        config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone());
+        let result = context2.add_report::<SampleReport>("sample_report");
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        match error {
+            IxaError::IoError(e) => {
+                assert_eq!(e.kind(), std::io::ErrorKind::AlreadyExists);
+            }
+            _ => {
+                panic!("Unexpected error type");
+            }
+        }
+    }
+
+    #[test]
+    fn overwrite_report() {
+        let mut context1 = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context1.report_options();
+        config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone());
+        context1
+            .add_report::<SampleReport>("sample_report")
+            .unwrap();
+        let report = SampleReport {
+            id: 1,
+            value: "Test Value".to_string(),
+        };
+
+        context1.send_report(report);
+
+        let file_path = path.join("prefix1_sample_report.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        let mut context2 = Context::new();
+        let config = context2.report_options();
+        config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone())
+            .overwrite(true);
+        let result = context2.add_report::<SampleReport>("sample_report");
+        assert!(result.is_ok());
+        // file should also be empty
+        let file = File::open(file_path).unwrap();
+        let reader = csv::Reader::from_reader(file);
+        let records = reader.into_records();
+        assert_eq!(records.count(), 0);
     }
 }
