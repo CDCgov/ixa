@@ -6,7 +6,6 @@ use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
-use std::ops::DerefMut;
 
 /// Use this to define a unique type which will be used as a key to retrieve
 /// an independent rng instance when calling `.get_rng`.
@@ -189,7 +188,7 @@ impl ContextRandomExt for Context {
     {
         let index = WeightedIndex::new(weights).unwrap();
         let mut rng = get_rng::<R>(self);
-        index.sample(rng.deref_mut())
+        index.sample(&mut *rng)
     }
 }
 

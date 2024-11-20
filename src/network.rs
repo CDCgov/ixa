@@ -192,7 +192,7 @@ pub trait ContextNetworkExt {
     /// Returns `IxaError` if:
     ///
     /// * `person` and `neighbor` are the same or an edge already
-    /// exists between them.
+    ///    exists between them.
     /// * `weight` is invalid
     fn add_edge<T: EdgeType + 'static>(
         &mut self,
@@ -262,6 +262,9 @@ pub trait ContextNetworkExt {
 
     /// Select a random edge out of the list of outgoing edges of type
     /// `T` from `person_id`, weighted by the edge weights.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if there are no edges.
     fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(
         &self,
         rng_id: R,
@@ -365,7 +368,7 @@ impl ContextNetworkExt for Context {
         R::RngType: Rng,
     {
         let edges = self.get_edges::<T>(person_id);
-        if edges.len() == 0 {
+        if edges.is_empty() {
             return Err(IxaError::IxaError(String::from(
                 "Can't sample from empty list",
             )));
@@ -746,7 +749,7 @@ mod test_api {
             .add_edge::<EdgeType1>(person1, person2, 0.01, 1)
             .unwrap();
         context
-            .add_edge::<EdgeType1>(person1, person3, 10000000.0, 3)
+            .add_edge::<EdgeType1>(person1, person3, 10_000_000.0, 3)
             .unwrap();
 
         let edge = context
