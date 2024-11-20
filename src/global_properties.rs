@@ -13,7 +13,7 @@ use std::sync::LazyLock;
 use std::sync::Mutex;
 
 type PropertySetterFn =
-    dyn Fn(&mut Context, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
+    dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
@@ -23,14 +23,13 @@ pub fn add_global_property<T: GlobalProperty>(name: &String)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
-    println!("Adding property {}", name);
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     properties.borrow_mut().insert(
         name.clone(),
-        Arc::new(|context: &mut Context, value| -> Result<(), IxaError> {
+        Arc::new(|context: &mut Context, name, value| -> Result<(), IxaError> {
             let val: T::Value = serde_json::from_value(value)?;
             if context.get_global_property_value(T::new()).is_some() {
-                return Err(IxaError::IxaError(format!("Duplicate property")));
+                return Err(IxaError::IxaError(format!("Duplicate property {name}")));
             }
             context.set_global_property_value(T::new(), val);
             Ok(())
@@ -39,7 +38,7 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {
+fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {        
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     let tmp = properties.borrow();
     match tmp.get(name) {
@@ -187,7 +186,7 @@ impl ContextGlobalPropertiesExt for Context {
 
         for (k, v) in val {
             if let Some(handler) = get_global_property(&k) {
-                handler(self, v)?;
+                handler(self, &k, v)?;
             } else {
                 return Err(IxaError::from(format!("No global property: {}", k)));
             }
