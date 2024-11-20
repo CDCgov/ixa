@@ -122,6 +122,23 @@ pub trait ContextGlobalPropertiesExt {
         file_path: &Path,
     ) -> Result<T, IxaError>;
 
+    /// Load global properties from a JSON file.
+    ///
+    /// The expected structure is a dictionary with each name being
+    /// the fully qualified name of a struct, e.g. `ixa::diseases::FluStrains`
+    /// and the value being an object which can serde deserialize into the
+    /// relevant struct.
+    ///
+    /// # Errors
+    /// Will return an `IxaError` if:
+    /// * The `file_path` doesn't exist
+    /// * The file isn't valid JSON
+    /// * A specified object doesn't correspond to an existing global property.
+    /// * There are two values for the same object.
+    ///
+    /// Ixa automatically knows about any property defined with
+    /// `define_global_property!()` so you don't need to register them
+    /// explicitly.
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
 
