@@ -1,4 +1,4 @@
-use ixa::context::Context;
+use ixa::context::{Context, ExecutionPhase};
 use ixa::error::IxaError;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::ContextPeopleExt;
@@ -26,7 +26,7 @@ struct PeriodicReportItem {
 
 create_report_trait!(PeriodicReportItem);
 
-fn count_people_and_send_report(context: &mut Context, report_period: f64) {
+fn count_people_and_send_report(context: &mut Context) {
     for disease_state in DiseaseStatus::iter() {
         let mut counter = 0;
         for usize_id in 0..context.get_current_population() {
@@ -45,9 +45,6 @@ fn count_people_and_send_report(context: &mut Context, report_period: f64) {
             count: counter,
         });
     }
-    context.add_plan(context.get_current_time() + report_period, move |context| {
-        count_people_and_send_report(context, report_period);
-    });
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
@@ -59,6 +56,12 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
     context.add_report::<PeriodicReportItem>("person_property_count")?;
-    count_people_and_send_report(context, parameters.report_period);
+    context.add_periodic_plan_with_phase(
+        parameters.report_period,
+        |context| {
+            count_people_and_send_report(context);
+        },
+        ExecutionPhase::Last,
+    );
     Ok(())
 }

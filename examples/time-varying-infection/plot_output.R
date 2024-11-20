@@ -59,11 +59,12 @@ ggplot2::ggplot() +
 person_property_report <- readr::read_csv(file.path(
   "examples",
   "time-varying-infection",
-  "person_count.csv"
+  "person_property_count.csv"
 ))
 
 ggplot2::ggplot() +
   geom_point(aes(day, count, color = property_value), person_property_report) +
+  geom_line(aes(time_array_susc, expected_susc), color = "black") +
   xlab("Time") +
   ylab("People") +
-  scale_y_log10()
+  scale_y_log10(limits = c(1, parameters$population))
