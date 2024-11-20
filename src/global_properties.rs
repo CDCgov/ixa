@@ -29,6 +29,9 @@ where
         name.clone(),
         Arc::new(|context: &mut Context, value| -> Result<(), IxaError> {
             let val: T::Value = serde_json::from_value(value)?;
+            if context.get_global_property_value(T::new()).is_some() {
+                return Err(IxaError::IxaError(format!("Duplicate property")));
+            }
             context.set_global_property_value(T::new(), val);
             Ok(())
         }),
@@ -316,4 +319,18 @@ mod test {
             _ => panic!("Unexpected error type"),
         }
     }
+
+    #[test]
+    fn read_duplicate_property() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/global_properties_test1.json");
+        context.load_global_properties(&path).unwrap();
+        let error = context.load_global_properties(&path);
+        match error {
+            Err(IxaError::IxaError(_)) => {}
+            _ => panic!("Unexpected error type"),
+        }
+    }
+    
 }
