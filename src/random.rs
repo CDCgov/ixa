@@ -1,5 +1,5 @@
 use crate::context::Context;
-use rand::distributions::uniform::{SampleUniform, SampleRange};
+use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{Rng, SeedableRng};
@@ -128,8 +128,9 @@ pub trait ContextRandomExt {
         R::RngType: Rng;
 
     fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &Vec<T>) -> usize
-    where R::RngType: Rng,
-    T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
+    where
+        R::RngType: Rng,
+        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
 }
 
 impl ContextRandomExt for Context {
@@ -184,7 +185,7 @@ impl ContextRandomExt for Context {
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &Vec<T>) -> usize
     where
         R::RngType: Rng,
-            T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd
+        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd,
     {
         let index = WeightedIndex::new(weights).unwrap();
         let mut rng = get_rng::<R>(self);
@@ -318,5 +319,4 @@ mod test {
         let r: usize = context.sample_weighted(FooRng, &vec![0.1, 0.3, 0.4]);
         assert!(r < 3);
     }
-    
 }
