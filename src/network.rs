@@ -355,7 +355,7 @@ impl ContextNetworkExt for Context {
         }
 
         let weights = edges.iter().map(|x| x.weight).collect();
-        let index = self.sample_weighted(rng_id, weights);
+        let index = self.sample_weighted(rng_id, &weights);
         Ok(edges[index])
     }
 }

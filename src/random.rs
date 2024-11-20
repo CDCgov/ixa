@@ -127,7 +127,7 @@ pub trait ContextRandomExt {
     where
         R::RngType: Rng;
 
-    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: Vec<T>) -> usize
+    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &Vec<T>) -> usize
     where R::RngType: Rng,
     T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
 }
@@ -181,7 +181,7 @@ impl ContextRandomExt for Context {
         self.sample(rng_id, |rng| rng.gen_bool(p))
     }
 
-    fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: Vec<T>) -> usize
+    fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &Vec<T>) -> usize
     where
         R::RngType: Rng,
             T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd
@@ -315,7 +315,7 @@ mod test {
     fn sample_weighted() {
         let mut context = Context::new();
         context.init_random(42);
-        let r: usize = context.sample_weighted(FooRng, vec![0.1, 0.3, 0.4]);
+        let r: usize = context.sample_weighted(FooRng, &vec![0.1, 0.3, 0.4]);
         assert!(r < 3);
     }
     
