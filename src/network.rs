@@ -374,7 +374,7 @@ impl ContextNetworkExt for Context {
             )));
         }
 
-        let weights : Vec<_> = edges.iter().map(|x| x.weight).collect();
+        let weights: Vec<_> = edges.iter().map(|x| x.weight).collect();
         let index = self.sample_weighted(rng_id, &weights);
         Ok(edges[index])
     }
