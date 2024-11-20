@@ -245,12 +245,8 @@ mod test {
     #[test]
     fn add_report_no_dir() {
         let mut context = Context::new();
-        let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
-        config
-            .file_prefix("test_prefix_".to_string())
-            .directory(path.clone());
+        config.file_prefix("test_prefix_".to_string());
         context.add_report::<SampleReport>("sample_report").unwrap();
         let report = SampleReport {
             id: 1,
@@ -259,15 +255,19 @@ mod test {
 
         context.send_report(report);
 
+        let path = env::current_dir().unwrap();
         let file_path = path.join("test_prefix_sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
 
-        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut reader = csv::Reader::from_path(file_path.clone()).unwrap();
         for result in reader.deserialize() {
             let record: SampleReport = result.unwrap();
             assert_eq!(record.id, 1);
             assert_eq!(record.value, "Test Value");
         }
+
+        // now want to remove this file so it does not clutter up working dir
+        std::fs::remove_file(file_path).unwrap();
     }
 
     #[test]

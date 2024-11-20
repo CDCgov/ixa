@@ -28,7 +28,7 @@ pub trait IxaEvent {
 /// handled after all `Normal` plans. In all cases ties between plans at the
 /// same time and with the same phase are handled in the order of scheduling.
 ///
-#[derive(PartialEq, Eq, Ord, PartialOrd)]
+#[derive(PartialEq, Eq, Ord, Clone, Copy, PartialOrd)]
 pub enum ExecutionPhase {
     First,
     Normal,
@@ -158,6 +158,50 @@ impl Context {
         self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
 
+    fn evaluate_periodic_and_schedule_next(
+        &mut self,
+        period: f64,
+        callback: impl Fn(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) {
+        callback(self);
+        if !self.plan_queue.is_empty() {
+            let next_time = self.current_time + period;
+            self.add_plan_with_phase(
+                next_time,
+                move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
+                phase,
+            );
+        }
+    }
+
+    /// Add a plan with specified priority to the future event list, and
+    /// continuously repeat the plan at the specified period, stopping
+    /// only once there are no other plans scheduled.
+    ///
+    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is negative, infinite, or NaN.
+    pub fn add_periodic_plan_with_phase(
+        &mut self,
+        period: f64,
+        callback: impl Fn(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) {
+        assert!(
+            period > 0.0 && !period.is_nan() && !period.is_infinite(),
+            "Period must be greater than 0"
+        );
+
+        self.add_plan_with_phase(
+            0.0,
+            move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
+            phase,
+        );
+    }
+
     /// Cancel a plan that has been added to the queue
     ///
     /// # Panics
@@ -221,11 +265,6 @@ impl Context {
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
-    }
-
-    #[must_use]
-    pub fn more_plans(&self) -> bool {
-        !self.plan_queue.is_empty()
     }
 
     /// Execute the simulation until the plan and callback queues are empty
@@ -296,10 +335,8 @@ mod tests {
     #[test]
     fn empty_context() {
         let mut context = Context::new();
-        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 0.0);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -361,11 +398,9 @@ mod tests {
     fn timed_plan_only() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -386,11 +421,9 @@ mod tests {
             context.get_data_container_mut(ComponentA).push(1);
         });
         add_plan(&mut context, 1.0, 2);
-        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -401,11 +434,9 @@ mod tests {
             add_plan(context, 1.0, 2);
             context.get_data_container_mut(ComponentA).push(3);
         });
-        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -419,14 +450,12 @@ mod tests {
             });
             context.get_data_container_mut(ComponentA).push(3);
         });
-        assert!(!context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(
             *context.get_data_container_mut(ComponentA),
             vec![1, 3, 4, 2]
         );
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -440,18 +469,15 @@ mod tests {
                 context.get_data_container_mut(ComponentA).push(2);
             });
         });
-        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2, 3]);
-        assert!(!context.more_plans());
     }
 
     #[test]
     fn cancel_plan() {
         let mut context = Context::new();
         let to_cancel = add_plan(&mut context, 2.0, 1);
-        assert!(context.more_plans());
         context.add_plan(1.0, move |context| {
             context.cancel_plan(&to_cancel);
         });
@@ -459,7 +485,6 @@ mod tests {
         assert_eq!(context.get_current_time(), 1.0);
         let test_vec: Vec<u32> = vec![];
         assert_eq!(*context.get_data_container_mut(ComponentA), test_vec);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -472,23 +497,19 @@ mod tests {
                 context.get_data_container_mut(ComponentA).push(3);
             });
         });
-        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
-        assert!(!context.more_plans());
     }
 
     #[test]
     fn plans_at_same_time_fire_in_order() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        assert!(context.more_plans());
         add_plan(&mut context, 1.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -617,13 +638,11 @@ mod tests {
     fn shutdown_cancels_plans() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
-        assert!(context.more_plans());
         context.add_plan(1.5, Context::shutdown);
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
-        assert!(context.more_plans());
     }
 
     #[test]
@@ -638,11 +657,9 @@ mod tests {
             });
             context.shutdown();
         });
-        assert!(context.more_plans());
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
         assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
-        assert!(!context.more_plans());
     }
 
     #[test]
@@ -657,5 +674,31 @@ mod tests {
         context.shutdown();
         context.execute();
         assert_eq!(*obs_data.borrow(), 0);
+    }
+
+    #[test]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    fn periodic_plan_self_schedules() {
+        // checks whether the person properties report schedules itself
+        // based on whether there are plans in the queue
+        let mut context = Context::new();
+        context.add_periodic_plan_with_phase(
+            1.0,
+            |context| {
+                let time = context.get_current_time();
+                context.get_data_container_mut(ComponentA).push(time as u32);
+            },
+            ExecutionPhase::Last,
+        );
+        context.add_plan(1.0, move |_context| {});
+        context.add_plan(1.5, move |_context| {});
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+
+        assert_eq!(
+            *context.get_data_container(ComponentA).unwrap(),
+            vec![0, 1, 2]
+        ); // time 0.0, 1.0, and 2.0
     }
 }
