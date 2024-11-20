@@ -23,6 +23,7 @@ pub fn add_global_property<T: GlobalProperty>(name: &String)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
+    println!("Adding property {}", name);
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     properties.borrow_mut().insert(
         name.clone(),
@@ -62,7 +63,10 @@ macro_rules! define_global_property {
         paste::paste! {
             #[ctor::ctor]
             fn [<$global_property:snake _register>]() {
-                $crate::global_properties::add_global_property::<$global_property>(&String::from(stringify!($global_property)));
+                let mut name = String::from(module_path!());
+                name += "::";
+                name += stringify!($global_property);
+                $crate::global_properties::add_global_property::<$global_property>(&name);
             }
         }
     };
@@ -294,7 +298,7 @@ mod test {
             .join("tests/data/global_properties_missing.json");
         match context.load_global_properties(&path) {
             Err(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "No global property: Property3");
+                assert_eq!(msg, "No global property: ixa::global_properties::test::Property3");
             }
             _ => panic!("Unexpected error type"),
         }
