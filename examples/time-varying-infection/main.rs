@@ -41,9 +41,6 @@ fn initialize() -> Result<Context, IxaError> {
 }
 
 fn main() {
-    let mut context = match initialize() {
-        Ok(context) => context,
-        Err(ixa_error) => panic!("Could not initialize context: {ixa_error}"),
-    };
+    let mut context = initialize().expect("Could not initialize context.");
     context.execute();
 }

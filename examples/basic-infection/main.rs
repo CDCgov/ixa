@@ -35,11 +35,6 @@ fn initialize() -> Result<Context, IxaError> {
 }
 
 fn main() {
-    let mut context = match initialize() {
-        Ok(context) => context,
-        Err(e) => {
-            panic!("Error adding report: {e}");
-        }
-    };
+    let mut context = initialize().expect("Error adding report.");
     context.execute();
 }

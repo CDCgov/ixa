@@ -129,15 +129,12 @@ impl ContextReportExt for Context {
         let data_container = self.get_data_container_mut(ReportPlugin);
 
         let file_creation_result = File::create_new(&path);
-        let created_file: File;
-        match file_creation_result {
-            Ok(file) => {
-                created_file = file;
-            }
+        let created_file = match file_creation_result {
+            Ok(file) => file,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::AlreadyExists => {
                     if data_container.config.overwrite {
-                        created_file = File::create(&path)?;
+                        File::create(&path)?
                     } else {
                         println!("File already exists: {}. Please rerun setting overwrite to true in the file config.", path.display());
                         return Err(IxaError::IoError(e));
