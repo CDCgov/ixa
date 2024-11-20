@@ -9,8 +9,8 @@ use ixa::{
 
 use strum_macros::EnumIter;
 
-use std::path::Path;
 use serde::Deserialize;
+use std::path::Path;
 
 define_rng!(PeopleRng);
 
@@ -45,7 +45,6 @@ pub struct PeopleRecord {
     homeId: usize,
 }
 
-
 define_person_property!(Age, u8);
 define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
@@ -64,24 +63,24 @@ define_derived_property!(VaccineAgeGroup, AgeGroupRisk, [Age], |age| {
     }
 });
 
-define_derived_property!(CensusTract, usize, [HomeId], |home_id| {
-    home_id / 10000
-});
+define_derived_property!(CensusTract, usize, [HomeId], |home_id| { home_id / 10000 });
 
 pub fn create_new_person(context: &mut Context, person_record: &PeopleRecord) -> PersonId {
     let person = context
-        .add_person( ((Age, person_record.age),
-        (HomeId, person_record.homeId))).unwrap();
+        .add_person(((Age, person_record.age), (HomeId, person_record.homeId)))
+        .unwrap();
     person
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters)
+    let parameters = context
+        .get_global_property_value(Parameters)
         .unwrap()
         .clone();
 
     let record_dir = Path::new(file!()).parent().unwrap();
-    let mut reader = csv::Reader::from_path(record_dir.join(parameters.synth_population_file)).unwrap();
+    let mut reader =
+        csv::Reader::from_path(record_dir.join(parameters.synth_population_file)).unwrap();
 
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
@@ -89,5 +88,4 @@ pub fn init(context: &mut Context) {
     }
     context.index_property(Age);
     context.index_property(CensusTract);
-
 }

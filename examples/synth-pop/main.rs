@@ -1,8 +1,7 @@
+use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
-use ixa::error::IxaError;
 use std::path::Path;
-
 
 mod parameters_loader;
 mod population_manager;
@@ -15,9 +14,10 @@ fn initialize() -> Result<Context, IxaError> {
     let current_dir = Path::new(file!()).parent().unwrap();
     let file_path = current_dir.join("input.json");
 
-     parameters_loader::init_parameters(&mut context, &file_path)?;
+    parameters_loader::init_parameters(&mut context, &file_path)?;
 
-    let parameters = context.get_global_property_value(Parameters)
+    let parameters = context
+        .get_global_property_value(Parameters)
         .unwrap()
         .clone();
     context.init_random(parameters.seed);
