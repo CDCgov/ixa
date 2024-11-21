@@ -99,8 +99,8 @@ impl Context {
     // `short_name`.
     fn generate_filename(&mut self, short_name: &str) -> PathBuf {
         let data_container = self.get_data_container_mut(ReportPlugin);
-        let prefix = data_container.config.file_prefix.clone();
-        let directory = data_container.config.directory.clone();
+        let prefix = &data_container.config.file_prefix;
+        let directory = &data_container.config.directory;
         let short_name = short_name.to_string();
         let basename = format!("{prefix}{short_name}");
         directory.join(basename).with_extension("csv")
@@ -242,6 +242,16 @@ mod test {
         }
     }
 
+    struct PathBuffWithDrop {
+        file: PathBuf,
+    }
+
+    impl Drop for PathBuffWithDrop {
+        fn drop(&mut self) {
+            std::fs::remove_file(&self.file).unwrap();
+        }
+    }
+
     #[test]
     fn add_report_no_dir() {
         let mut context = Context::new();
@@ -256,18 +266,17 @@ mod test {
         context.send_report(report);
 
         let path = env::current_dir().unwrap();
-        let file_path = path.join("test_prefix_sample_report.csv");
-        assert!(file_path.exists(), "CSV file should exist");
+        let file_path = PathBuffWithDrop {
+            file: path.join("test_prefix_sample_report.csv"),
+        };
+        assert!(file_path.file.exists(), "CSV file should exist");
 
-        let mut reader = csv::Reader::from_path(file_path.clone()).unwrap();
+        let mut reader = csv::Reader::from_path(&file_path.file).unwrap();
         for result in reader.deserialize() {
             let record: SampleReport = result.unwrap();
             assert_eq!(record.id, 1);
             assert_eq!(record.value, "Test Value");
         }
-
-        // now want to remove this file so it does not clutter up working dir
-        std::fs::remove_file(file_path).unwrap();
     }
 
     #[test]
@@ -339,7 +348,7 @@ mod test {
             let handle = thread::spawn(move || {
                 let mut context = Context::new();
                 let config = context.report_options();
-                config.file_prefix(i.to_string()).directory(path.clone());
+                config.file_prefix(i.to_string()).directory(path);
                 context.add_report::<SampleReport>("sample_report").unwrap();
 
                 for j in 0..num_reports_per_thread {
@@ -398,9 +407,7 @@ mod test {
 
         let mut context2 = Context::new();
         let config = context2.report_options();
-        config
-            .file_prefix("prefix1_".to_string())
-            .directory(path.clone());
+        config.file_prefix("prefix1_".to_string()).directory(path);
         let result = context2.add_report::<SampleReport>("sample_report");
         assert!(result.is_err());
         let error = result.err().unwrap();
@@ -440,7 +447,7 @@ mod test {
         let config = context2.report_options();
         config
             .file_prefix("prefix1_".to_string())
-            .directory(path.clone())
+            .directory(path)
             .overwrite(true);
         let result = context2.add_report::<SampleReport>("sample_report");
         assert!(result.is_ok());
