@@ -242,11 +242,11 @@ mod test {
         }
     }
 
-    struct PathBuffWithDrop {
+    struct PathBufWithDrop {
         file: PathBuf,
     }
 
-    impl Drop for PathBuffWithDrop {
+    impl Drop for PathBufWithDrop {
         fn drop(&mut self) {
             std::fs::remove_file(&self.file).unwrap();
         }
@@ -266,7 +266,7 @@ mod test {
         context.send_report(report);
 
         let path = env::current_dir().unwrap();
-        let file_path = PathBuffWithDrop {
+        let file_path = PathBufWithDrop {
             file: path.join("test_prefix_sample_report.csv"),
         };
         assert!(file_path.file.exists(), "CSV file should exist");
