@@ -1,5 +1,5 @@
 {
-  "ixa::global_properties::test::Property1": {
+  "ixa.Property1": {
     "field_str": "test"
   }
 }

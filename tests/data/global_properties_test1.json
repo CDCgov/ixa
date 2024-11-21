@@ -1,10 +1,10 @@
 {
-  "ixa::global_properties::test::Property1": {
+  "ixa.Property1": {
     "field_int": 1,
     "field_str": "test"
   },
 
-  "ixa::global_properties::test::Property2": {
+  "ixa.Property2": {
     "field_int": 2
   }
 }

@@ -16,6 +16,12 @@ type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
 #[allow(clippy::type_complexity)]
+// This is a global list of all the global properties that
+// are compiled in. Fundamentally it's a HashMap of property
+// names to the setter function, but it's wrapped in the
+// RefCell/Mutex/LazyLock combo to allow it to be globally
+// shared and initialized at startup time while still being
+// safe.
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
@@ -70,9 +76,11 @@ macro_rules! define_global_property {
         paste::paste! {
             #[ctor::ctor]
             fn [<$global_property:snake _register>]() {
-                let mut name = String::from(module_path!());
-                name += "::";
+                let module = module_path!();
+                let mut name = module.split("::").next().unwrap().to_string();
+                name += ".";
                 name += stringify!($global_property);
+                println!("Adding {name}");
                 $crate::global_properties::add_global_property::<$global_property>(&name);
             }
         }
@@ -130,9 +138,9 @@ pub trait ContextGlobalPropertiesExt {
     /// Load global properties from a JSON file.
     ///
     /// The expected structure is a dictionary with each name being
-    /// the fully qualified name of a struct, e.g. `ixa::diseases::FluStrains`
-    /// and the value being an object which can serde deserialize into the
-    /// relevant struct.
+    /// the name of the struct prefixed with the crate name, as in:
+    /// `ixa.NumFluVariants` and the value being an object which can
+    /// serde deserialize into the relevant struct.
     ///
     /// # Errors
     /// Will return an `IxaError` if:
