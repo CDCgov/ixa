@@ -332,7 +332,7 @@ mod test {
             Err(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "No global property: ixa::global_properties::test::Property3"
+                    "No global property: ixa.Property3"
                 );
             }
             _ => panic!("Unexpected error type"),
