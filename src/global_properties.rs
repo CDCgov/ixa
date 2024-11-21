@@ -329,10 +329,7 @@ mod test {
             .join("tests/data/global_properties_missing.json");
         match context.load_global_properties(&path) {
             Err(IxaError::IxaError(msg)) => {
-                assert_eq!(
-                    msg,
-                    "No global property: ixa.Property3"
-                );
+                assert_eq!(msg, "No global property: ixa.Property3");
             }
             _ => panic!("Unexpected error type"),
         }
