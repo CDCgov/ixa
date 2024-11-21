@@ -49,19 +49,22 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::people::ContextPeopleExt;
-    use crate::people::InfectionStatus;
-    use crate::SEED;
     use ixa::context::Context;
 
     #[test]
     fn test_attempt_infection() {
         let mut context = Context::new();
-        context.init_random(SEED);
-        context.create_person();
+        context.init_random(0);
+        let person = context.add_person(()).unwrap();
+
+        // Infect a person
         attempt_infection(&mut context);
-        let person_status = context.get_person_status(0);
-        assert_eq!(person_status, InfectionStatus::I);
+
+        // Execute and ensure they are infected
         context.execute();
+        assert_eq!(
+            context.get_person_property(person, InfectionStatusType),
+            InfectionStatus::I
+        );
     }
 }

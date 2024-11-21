@@ -1,5 +1,4 @@
 use ixa::context::Context;
-
 use ixa::define_rng;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
@@ -7,19 +6,21 @@ use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 
 use crate::population_loader::{InfectionStatus, InfectionStatusType};
-
 use crate::INFECTION_DURATION;
 
 define_rng!(InfectionRng);
 
+/// Schedules a recovery for every infected person
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
+
     context.add_plan(recovery_time, move |context| {
         context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
     });
 }
 
+/// Handles changes to the `InfectionStatusType` property
 fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectionStatusType>,
@@ -29,6 +30,7 @@ fn handle_infection_status_change(
     }
 }
 
+/// Initializes the infection status change event handling in the given context.
 pub fn init(context: &mut Context) {
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatusType>>(
         move |context, event| {
@@ -38,42 +40,26 @@ pub fn init(context: &mut Context) {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::people::ContextPeopleExt;
-    use crate::people::InfectionStatus;
-    use crate::people::InfectionStatusEvent;
+mod tests {
+    use super::*;
     use ixa::context::Context;
-    use ixa::define_data_plugin;
-    use ixa::random::ContextRandomExt;
-
-    define_data_plugin!(RecoveryPlugin, usize, 0);
-
-    fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
-        if matches!(event.updated_status, InfectionStatus::R) {
-            *context.get_data_container_mut(RecoveryPlugin) += 1;
-        }
-    }
+    use ixa::people::ContextPeopleExt;
 
     #[test]
-    fn test_handle_infection_change() {
-        use super::init;
+    fn test_schedule_recovery() {
         let mut context = Context::new();
-        context.init_random(42);
+        context.init_random(0);
         init(&mut context);
 
-        context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
-            handle_recovery_event(context, event);
-        });
+        // Add a person and infect them
+        let person = context.add_person(()).unwrap();
+        context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
 
-        let population_size = 10;
-        for id in 0..population_size {
-            context.create_person();
-            context.set_person_status(id, InfectionStatus::I);
-        }
-
+        // Execute and ensure person recovered
         context.execute();
-        let recovered_size: usize = *context.get_data_container(RecoveryPlugin).unwrap();
-
-        assert_eq!(recovered_size, population_size);
+        assert_eq!(
+            context.get_person_property(person, InfectionStatusType),
+            InfectionStatus::R
+        );
     }
 }
