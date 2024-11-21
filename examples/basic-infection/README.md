@@ -4,45 +4,37 @@ assuming a constant force of infection. In other words, all individuals have the
 characteristics, and infections are caused by something like a food-borne disease
  and not from interactions between individuals.
 
+Run the model with `cargo run --example basic-infection`, which will produce a
+report in `examples/basic-infection/incidence.csv`.
+
 ## Simulation overview
 
 ![Diagram of infection](infection-diagram.png)
 ![alt text](image.png)
 
-The first infection attempt is scheduled at time 0. Infection attempts are scheduled to occur based on the constant force of infection. Once an infection event is scheduled, a susceptible individual is selected to be infected. After an infection attempt is finished, the next infection event is scheduled based on a constant force of infection. The simulation ends after no more infection events are scheduled.
+The first infection attempt is scheduled at time 0. Infection attempts are
+scheduled to occur based on the constant force of infection. Once an infection
+event is scheduled, a susceptible individual is selected to be infected. After
+an infection attempt is finished, the next infection event is scheduled based
+on a constant force of infection. The simulation ends after no more infection
+events are scheduled.
 
-Infected individuals schedule their recovery at time `t + infection_period`. The infection status of recovered individuals remains as recovered for the rest of the simulation.
+Infected individuals schedule their recovery at time `t + infection_period`.
+The infection status of recovered individuals remains as recovered for the
+rest of the simulation.
 
-The global model parameters are as follows:
-* `population_size`: number of individuals to include in the simulation
-* `foi`: force of infection, rate at which susceptible individuals become infected
-* `infection_period`: time that an individual spends from infection to recovery
+## Parameters
+
+* `SEED`: A seed used to ensure deterministic execution of the model's random number generators.
+* `MAX_TIME`: The time at which the model terminates
+* `FOI`: force of infection, rate at which susceptible individuals become infected
+* `INFECTION_DURATION`: time that an individual spends from infection to recovery
+* `POPULATION`: number of individuals to include in the simulation
 
 ## Architecture
-As in other `ixa` models, the simulation is managed by a central `Context` object
-which loads parameters, initializes user-defined modules, and starts a callback
-execution loop:
-
-```rust
-struct Parameters {
-    random_seed: u64,
-    population_size: usize,
-    foi: f64,
-    infection_period: u64
-}
-
-let context = Context::new();
-context::load_parameters<Parameters>("config.toml")
-
-// Initialize modules
-context::add_module(population_manager);
-context::add_module(transmission_manager);
-context::add_module(infection_manager);
-context::add_module(person_property_report);
-
-// Run the simulation
-context::execute();
-```
+As in other `ixa` models, the simulation's is managed by a central `Context` object
+created in `main.rs`, which loads parameters, initializes user-defined modules,
+and starts a callback execution loop.
 
 Individuals transition through a typical SIR pattern where they
 start off as susceptible (S), are randomly selected to become infected
@@ -59,53 +51,41 @@ recoveries are scheduled.
 
 The basic structure of the model is as follows:
 
-* A `Population Loader` that initializes a population and attaches an infection
+* A `population_loader` module  that initializes a population and attaches an infection
   status property to each individual
-* A `Transmission Manager` that attempts infections, updates the infections status when successful, and schedules the next attempt
-* An `Infection Manager` that listens for infections and schedules recoveries
-* A `Report Writer` module that listens for infections and recoveries and writes output to csv
- files.
-
- Note this will require some kind of parameter loading utility
-from `ixa` that reads from a config file or command line arguments,
-and exposes values to modules as global properties.
+* A `transmission_manager` module that attempts infections, updates the infections status when successful, and schedules the next attempt
+* An `infection_manager` module that listens for infections and schedules recoveries
+* An `incidence_report` module that listens for infections and recoveries and writes output to csv files.
 
 ### People and person properties
-When the `Population Loader` module initializes, a number of
-persons are created and given a unique person id (from `0` to `population_size`).
-This functionality is provided by an `create_person` method from `ixa`, which adds
-them to a `People` data container.
+When the `population_loader` module initializes, a number of
+people are created and given a unique person id (from `0` to `POPULATION`).
+This functionality is provided by an `add_person` method from `ixa`'s `people`
+module.
 
 In order to record the infection status of a person, we use another `ixa` utility
-for defining "person properties". Internally, this associates each person in
-the `People` data container with an enum value and and provides an API for modules
-to read it, change it, or subscribe to events
-when the property is changed somewhere else in the system.
+to define an `InfectionStatusType` "person property". Internally, this associates
+each person in the simulation with an enum representing their status as Susceptible,
+Infected, or Recovered:
 
 ```rust
-InfectionStatus = enum(
-    Susceptible,
-    Infected,
-    Recovered
-);
-
-for (person_id in 0..parameters.get_parameter(population_size)) {
-    context.create_person(person_id = person_id)
+pub enum InfectionStatus {
+    S,
+    I,
+    R,
 }
-
-context.define_person_property(
-    infection_status,
-    default = Susceptible
+define_person_property_with_default!(
+    InfectionStatusType,
+    InfectionStatus,
+    InfectionStatus::S
 );
 ```
 
-When initialized, each person is assigned a default state (`Susceptible`).
-
-Once the population has been created, all modules have been initialized, and event listeners have been registered (more on this below), the simulation is ready
-to begin the execution loop.
+When created, each person is assigned a default state (`InfectionStatus::S`).
 
 ### Scheduling infections and recoveries
-In this model, the `Transmission Manager` module begins the simulation by adding an
+
+In this model, the `transmission_manager` module begins the simulation by adding an
 infection attempt `plan`, which is just a callback scheduled to execute at
 `current_time = 0`. The callback randomly selects a person and transitions
 them to infected if they are susceptible; if they are not susceptible,
@@ -113,69 +93,14 @@ it will skip over them. Finally, a new infection attempt is scheduled for
  a time drawn from an exponential distribution with mean value of
  `1/foi`.
 
-```rust
-fn attempt_infection(context) {
-    transmission_rng = rng.get_rng(id = transmission);
-    population = context.get_population();
-    person_to_infect = transmission_rng.sample_int(from = 0, to = population);
-
-    if (context.get_infection_status(person_to_infect) == Susceptible) {
-        context.set_infection_status(person_to_infect, Infected);
-    }
-
-    foi = parameters.get_parameter(foi);
-    time_next_infection = transmission_rng.draw_exponential(foi) / population;
-    context.add_plan(attempt_infection(context), time = context.get_time() + time_next_infection);
-}
-
-//initialization
-init(context) {
-    context.add_rng(id = transmission);
-    context.add_plan(attempt_infection(context), time = 0);
-}
-```
-
-Note that this makes use of the following `ixa` functionality:
-
-* The getters/setters provided by `person_properties`, as described in the previous
-  section
-* An `add_plan` method to register infection attempt callbacks
-* A `random` module to sample the population and generate the next infection time
-
-Updating the `infection_status` of a person should broadcast a mutation
-event through the system, which might be structured something like the following:
-
-![Event diagram](events.png)
-
-For any person property that is registered, `ixa` stores a list of callbacks
-registered by other modules. When that person property is mutated,
-the event manager releases an event with relevant related data
-(the id of the person, the old and/or new property) to all matching
-callbacks.
-
-In this model, when the `disease_status` is updated to `Infected`, a handler
-registered by the `Infection Manager` will be triggered, which is responsible
-for scheduling recovery plans:
-
-```rust
-fn handler(context, person_id, previous_infection_status) {
-    if (context.get_infection_status(person_id) == Infected) {
-        infection_rng = context.get_rng(id = infection);
-        infection_period = parameters.get_parameter(infection_period)
-        recovery_time = infection_rng.draw_exponential(1/infection_period);
-    context.add_plan(context.set_infection_status(person_id, Recovered), time = recovery_time);
-    }
-}
-
-//initialization
-init(context) {
-    context.add_rng(id = infection);
-    context.observe_person_property_event::<DiseaseStatus>(handler);
-}
-```
+Updating the `InfectionStatusType` of a person broadcasts a `PersonPropertyChangeEvent`
+through the system. In this model, when the infection status is updated to `Infected`,
+a handler registered by the `infection_manager` module will be triggered,
+which is responsible for scheduling recovery plans.
 
 Recovery of an infected individuals are scheduled for a time `t + infection_period`
-where `infection_period` comes from an exponential distribution. A `rng` instance provides one independent from the one in the `Transmission Manager`.
+where `infection_period` comes from an exponential distribution.
+A `rng` instance provides one independent from the one in the `transmission_manager`.
 
 ### Reports
 
@@ -197,36 +122,25 @@ person_id,infection_status,t
 1,Infected,8.5
 ...
 ```
-At initialization, a `Report` module registers a type for `Incidence`
-and subscribes change events on the `infection_status` of a person
+At initialization, an `incidence_report` module registers a type for `Incidence`
+and subscribes change events on the `infection_status` of a person. Note that
+`PersonId`s are serialized to their internal identifier.
 
 ```rust
-struct IncidenceReport {
-    person_id: u64,
+struct IncidenceReportItem {
+    person_id: PersonId,
     infection_status: InfectionStatus,
     t: u64
 }
 
-fn init(context) {
-    context.add_report::<IncidenceReport>("incidence");
-    context.observe_person_property_event::<InfectionStatus>(handle_infection_status_change);
-}
+context.add_report::<IncidenceReportItem>("incidence");
+context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatusType>>(|context, event| {
+        handle_infection_status_change(context, event);
+});
 ```
 
-The method `handle_infection_status_change` writes a new line to the report file, the status, and the current time:
-
-```rust
-fn handle_infection_status_change(context, person_id, prev, current) {
-    context.add_report(Incidence(
-        person_id,
-        infection_status: current,
-        t: context.get_current_time()
-    ));
-}
-```
-
-One consideration here is that if the callback references context, it should
-provide the state of the context exactly at the time the event was released.
+The method `handle_infection_status_change` writes a new line to the report file
+using `context.send_report`.
 
 #### Periodic Reports
 The second type of report records something about the current state of the
@@ -313,20 +227,3 @@ fn report_periodic_item(t, context) {
     }
 }
 ```
-
-## Ixa dependencies
-
-The following are a summary of assumed dependencies from `ixa`:
-
-* `parameters` component: Loads parameters from a file or command line args,
-   loads them into global properties (below)
-* `global_properties` component: Defines properties which can be accessible
-   to any module
-* `person` component: Creates a `People` data container which unique ID for each person,
-   provides an `add_person()` method
-* `person_properties` component: connects each person ID defined by the `person`
-   component with a specific property (e.g., `infection_status`), provides add/change/subscribe API
-* `reports` component: Handles file writing, provides api for writing typed rows
-* `random_number_generator` component: Provides seedable rng api to sample over
-   a distribution, list of person ids
-* `event_manager` component: provides a global send/subscribe interface

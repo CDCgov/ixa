@@ -4,26 +4,21 @@ use ixa::random::ContextRandomExt;
 
 mod incidence_report;
 mod infection_manager;
-mod people;
+mod population_loader;
 mod transmission_manager;
 
-use crate::people::ContextPeopleExt;
-
-static POPULATION: u64 = 1000;
 static SEED: u64 = 123;
 static MAX_TIME: f64 = 303.0;
 static FOI: f64 = 0.1;
 static INFECTION_DURATION: f64 = 5.0;
+static POPULATION: u64 = 1000;
 
 fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
     context.init_random(SEED);
 
-    for _ in 0..POPULATION {
-        context.create_person();
-    }
-
+    population_loader::init(&mut context);
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
     incidence_report::init(&mut context)?;

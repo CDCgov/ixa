@@ -195,7 +195,7 @@ impl StoredPeopleProperties {
     fn new<T: PersonProperty + 'static>() -> Self {
         StoredPeopleProperties {
             is_required: T::is_required(),
-            values: Box::new(Vec::<Option<T::Value>>::new()),
+            values: Box::<Vec<Option<T::Value>>>::default(),
         }
     }
 }
@@ -225,6 +225,7 @@ define_data_plugin!(
 // Represents a unique person - the id refers to that person's index in the range
 // 0 to population - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct PersonId {
     id: usize,
 }
