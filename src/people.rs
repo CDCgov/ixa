@@ -1,17 +1,17 @@
 //! A generic mechanism for representing people and associated data.
 //!
-//! We have a set of people indexed by [PersonId] and then each person
+//! We have a set of people indexed by [`PersonId`] and then each person
 //! can have an arbitrary number of person properties
-//! [PersonProperty], which are values keyed by a type. Person
+//! [`PersonProperty`], which are values keyed by a type. Person
 //! properties are defined with a set of macros, such as
-//! [define_person_property!()].
+//! [`define_person_property!()`].
 //!
 //! # Initializing Person Properties
 //!
 //! Person properties can have their initial values set in several ways:
 //!
 //! * An initial value can be provided at person creation time in
-//!   [Context::add_person()].
+//!   [`Context::add_person()`].
 //! * The property can have a default value (provided when the
 //!   property is defined.)
 //! * The property can have an initializer function (provided when
@@ -21,7 +21,7 @@
 //! If neither a default or an initializer is provided, then you
 //! must provide an initial value for each person on person
 //! creation. Failure to do so will generally cause failure of
-//! [Context::add_person()].
+//! [`Context::add_person()`].
 //!
 //! # Setting Person Properties
 //!
@@ -46,10 +46,10 @@
 //! Whenever a person property `E` has potentially changed, either
 //! because it was set directly or because it is a derived property
 //! and one of its dependencies changed, a
-//! [PersonPropertyChangeEvent] will be emitted. Note that Ixa does
+//! [`PersonPropertyChangeEvent`] will be emitted. Note that Ixa does
 //! not currently check that the value actually changed, so calling
-//! [Context::set_person_property()] with the current value still emits an event.
-//! Initialization is not considered a change, but [Context::set_person_property()]
+//! [`Context::set_person_property()`] with the current value still emits an event.
+//! Initialization is not considered a change, but [`Context::set_person_property()`]
 //! on a lazily initialized event will emit an event for the change from
 //! the initialized value to the new value.
 //!
@@ -59,14 +59,14 @@
 //! a given set of properties. The basic syntax is to supply a set of
 //! (property, value) pairs, like so `query_people(((Age, 30), (Gender, Female)))`.
 //! Note that these need to be wrapped in an extra set of parentheses
-//! to make them a single tuple to pass to [Context::query_people()]. Queries implement
+//! to make them a single tuple to pass to [`Context::query_people()`]. Queries implement
 //! strict equality, so if you want a fancier predicate you need to implement
 //! a derived property that computes it and then query over the derived property.
 //!
 //! The internals of query are deliberately opaque in that Ixa may or
 //! may not ordinarily choose to create caches or indexes for
 //! queries. However, you force an index to be created for a single
-//! property by using [Context::index_property()].
+//! property by using [`Context::index_property()`].
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
@@ -727,7 +727,7 @@ impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
     }
 }
 
-/// A trait extension for [Context] that exposes the people
+/// A trait extension for [`Context`] that exposes the people
 /// functionality.
 pub trait ContextPeopleExt {
     /// Returns the current population size
@@ -737,11 +737,11 @@ pub trait ContextPeopleExt {
     /// for all non-derived properties that don't have a default or an initializer.
     /// Note that although this technically takes any type that implements
     /// [InitializationList] it is best to take advantage of the provided
-    /// syntax that implements [InitializationList] for tuples, such as:
+    /// syntax that implements [`InitializationList`] for tuples, such as:
     /// `let person = context.add_person((Age, 42)).unwrap();`
     ///
     /// # Errors
-    /// Will return `IxaError` if a required initializer is not provided.
+    /// Will return [`IxaError`] if a required initializer is not provided.
     fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
     /// Given a `PersonId` returns the value of a defined person property,
@@ -758,7 +758,7 @@ pub trait ContextPeopleExt {
     #[doc(hidden)]
     fn register_property<T: PersonProperty + 'static>(&self);
 
-    /// Given a `PersonId`, sets the value of a defined person property
+    /// Given a [`PersonId`], sets the value of a defined person property
     /// Panics if the property is not initialized. Fires a change event.
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
@@ -773,16 +773,16 @@ pub trait ContextPeopleExt {
 
     /// Create an index for property `T`.
     ///
-    /// If an index is available [Context::query_people()] will use it, so this is
+    /// If an index is available [`Context::query_people()`] will use it, so this is
     /// intended to allow faster querying of commonly used properties.
     /// Ixa may choose to create an index for its own reasons even if
-    /// [Context::index_property()] is not called, so this function just ensures
+    /// [`Context::index_property()`] is not called, so this function just ensures
     /// that one is created.
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
 
     /// Query for all people matching a given set of criteria.
     ///
-    /// [Context::query_people()] takes any type that implements [Query],
+    /// [`Context::query_people()`] takes any type that implements [Query],
     /// but instead of implementing query yourself it is best
     /// to use the automatic syntax that implements [Query] for
     /// a tuple of pairs of (property, value), like so:
