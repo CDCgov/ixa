@@ -291,8 +291,9 @@ define_data_plugin!(
     }
 );
 
-// Represents a unique person - the id refers to that person's index in the range
-// 0 to population - 1 in the PeopleData container.
+/// Represents a unique person.
+//  the id refers to that person's index in the range 0 to population
+// - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId {
     id: usize,
@@ -695,22 +696,25 @@ impl Iterator for PeopleIterator {
     }
 }
 
+/// Emitted when a new person is created
+/// These should not be emitted outside this module
 #[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
-// Emitted when a new person is created
-// These should not be emitted outside this module
 pub struct PersonCreatedEvent {
     /// The [PersonId] of the new person.
     pub person_id: PersonId,
 }
 
-// Emitted when a person property is updated
-// These should not be emitted outside this module
+/// Emitted when a person property is updated
+/// These should not be emitted outside this module
 #[derive(Copy, Clone)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonPropertyChangeEvent<T: PersonProperty> {
+    /// The [PersonId] that changed
     pub person_id: PersonId,
+    /// The new value
     pub current: T::Value,
+    /// The old value
     pub previous: T::Value,
 }
 impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
