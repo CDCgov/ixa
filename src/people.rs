@@ -712,7 +712,7 @@ pub struct PersonCreatedEvent {
 #[derive(Copy, Clone)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonPropertyChangeEvent<T: PersonProperty> {
-    /// The [PersonId] that changed
+    /// The [`PersonId`] that changed
     pub person_id: PersonId,
     /// The new value
     pub current: T::Value,
