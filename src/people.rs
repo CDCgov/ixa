@@ -167,6 +167,39 @@ seq!(Z in 1..20 {
     impl_query!(Z);
 });
 
+pub trait Tabulator {
+    fn get_typelist(&self) -> Vec<TypeId>;
+}
+
+macro_rules! impl_tabulator {
+    ($ct:expr) => {
+        seq!(N in 0..$ct {
+            impl<
+                #(
+                    T~N : PersonProperty + 'static,
+                )*
+            > Tabulator for (
+                #(
+                    T~N,
+                )*
+            )
+            {
+                fn get_typelist(&self) -> Vec<TypeId> {
+                    vec![
+                    #(
+                        std::any::TypeId::of::<T~N>(),
+                    )*
+                    ]
+                }
+            }
+        });
+    }
+}
+
+seq!(Z in 1..20 {
+    impl_tabulator!(Z);
+});
+
 // Implementation of the Hasher interface for IndexValue, used
 // for serialization. We're actually abusing this interface
 // because you can't call finish().
@@ -190,7 +223,7 @@ impl Hasher for IndexValueHasher {
     }
 }
 
-type Indexer = dyn Fn(&Context, PersonId) -> IndexValue;
+type Indexer = dyn Fn(&Context, PersonId) -> (IndexValue, String);
 
 // An index for a single property.
 struct Index {
@@ -199,7 +232,7 @@ struct Index {
     name: &'static str,
     // The hash of the property value maps to a list of PersonIds
     // or None if we're not indexing
-    lookup: Option<HashMap<IndexValue, HashSet<PersonId>>>,
+    lookup: Option<HashMap<IndexValue, (HashSet<PersonId>, String)>>,
     // A callback that calculates the IndexValue of a person's current property value
     indexer: Box<Indexer>,
     // The largest person ID that has been indexed. Used so that we
@@ -214,28 +247,30 @@ impl Index {
             lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
-                IndexValue::compute(&value)
+                (IndexValue::compute(&value), format!("{value:?}"))
             }),
             max_indexed: 0,
         }
     }
     fn add_person(&mut self, context: &Context, person_id: PersonId) {
-        let hash = (self.indexer)(context, person_id);
+        let (hash, display) = (self.indexer)(context, person_id);
         self.lookup
             .as_mut()
             .unwrap()
             .entry(hash)
-            .or_default()
+            .or_insert_with(|| (HashSet::new(), display))
+            .0
             .insert(person_id);
     }
     fn remove_person(&mut self, context: &Context, person_id: PersonId) {
-        let hash = (self.indexer)(context, person_id);
-        self.lookup
-            .as_mut()
-            .unwrap()
-            .entry(hash)
-            .or_default()
-            .remove(&person_id);
+        let (hash, _) = (self.indexer)(context, person_id);
+        if let Some(entry) = self.lookup.as_mut().unwrap().get_mut(&hash) {
+            entry.0.remove(&person_id);
+            // Clean up the entry if there are no people
+            if entry.0.is_empty() {
+                self.lookup.as_mut().unwrap().remove(&hash);
+            }
+        }
     }
     fn index_unindexed_people(&mut self, context: &Context) {
         if self.lookup.is_none() {
@@ -262,7 +297,7 @@ impl StoredPeopleProperties {
     fn new<T: PersonProperty + 'static>() -> Self {
         StoredPeopleProperties {
             is_required: T::is_required(),
-            values: Box::new(Vec::<Option<T::Value>>::new()),
+            values: Box::<Vec<Option<T::Value>>>::default(),
         }
     }
 }
@@ -285,7 +320,7 @@ define_data_plugin!(
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),
-        property_indexes: RefCell::new(HashMap::new()),
+        property_indexes: RefCell::new(HashMap::new())
     }
 );
 
@@ -789,6 +824,50 @@ pub trait ContextPeopleExt {
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+    fn get_counts<T: Tabulator>(&self, tabulator: T, print_fn: &dyn Fn(&[String], usize));
+}
+
+fn process_indices(
+    remaining_indices: &[&Index],
+    accumulated_values: &mut [IndexValue],
+    display_values: &mut Vec<String>,
+    current_matches: &mut HashSet<PersonId>,
+    intersect: bool,
+    print_fn: &dyn Fn(&[String], usize),
+) {
+    if remaining_indices.is_empty() {
+        print_fn(display_values, current_matches.len());
+        return;
+    }
+
+    if let Some((next_index, rest_indices)) = remaining_indices.split_first() {
+        // TODO this might be empty?
+        let lookup = next_index.lookup.as_ref().unwrap();
+        for (value, (people, display)) in lookup {
+            let mut updated_values = accumulated_values.to_owned();
+            updated_values.push(value.clone());
+            display_values.push(display.clone());
+
+            let mut matches = if intersect {
+                current_matches
+                    .iter()
+                    .filter(|person| people.contains(person))
+                    .copied()
+                    .collect()
+            } else {
+                people.clone()
+            };
+
+            process_indices(
+                rest_indices,
+                &mut updated_values,
+                display_values,
+                &mut matches,
+                true,
+                print_fn,
+            );
+        }
+    }
 }
 
 impl ContextPeopleExt for Context {
@@ -970,7 +1049,7 @@ impl ContextPeopleExt for Context {
 
         for (t, hash) in &query {
             let index = data_container.get_index_ref(*t).unwrap();
-            if *hash != (*index.indexer)(self, person_id) {
+            if *hash != (*index.indexer)(self, person_id).0 {
                 return false;
             }
         }
@@ -996,6 +1075,45 @@ impl ContextPeopleExt for Context {
                 .borrow_mut()
                 .insert(TypeId::of::<T>());
         }
+    }
+
+    fn get_counts<T: Tabulator>(&self, tabulator: T, print_fn: &dyn Fn(&[String], usize)) {
+        let type_ids = tabulator.get_typelist();
+
+        // First, update indexes
+        {
+            let mut index_container = self.get_data_container(PeoplePlugin)
+                .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties")
+                .property_indexes
+                .borrow_mut();
+
+            for (typeid, index) in index_container.iter_mut() {
+                if type_ids.contains(typeid) {
+                    index.index_unindexed_people(self);
+                }
+            }
+        }
+
+        // Now process each index
+        let index_container = self
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .property_indexes
+            .borrow();
+
+        let indices = type_ids
+            .iter()
+            .filter_map(|t| index_container.get(t))
+            .collect::<Vec<&Index>>();
+
+        process_indices(
+            indices.as_slice(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut HashSet::new(),
+            false,
+            &print_fn,
+        );
     }
 }
 
@@ -1076,7 +1194,9 @@ impl ContextPeopleExtInternal for Context {
         for (t, hash) in property_hashes {
             let index = data_container.get_index_ref(t).unwrap();
             if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
-                if let Ok(matching_people) = Ref::filter_map(lookup, |x| x.get(&hash)) {
+                if let Ok(matching_people) =
+                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.0))
+                {
                     indexes.push(matching_people);
                 } else {
                     // This is empty and so the intersection will
@@ -1119,7 +1239,7 @@ impl ContextPeopleExtInternal for Context {
             // (2) check the unindexed properties
             for (t, hash) in &unindexed {
                 let index = data_container.get_index_ref(*t).unwrap();
-                if *hash != (*index.indexer)(self, person) {
+                if *hash != (*index.indexer)(self, person).0 {
                     continue 'outer;
                 }
             }
@@ -1140,7 +1260,7 @@ mod test {
         error::IxaError,
         people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
     };
-    use std::{any::TypeId, cell::RefCell, rc::Rc};
+    use std::{any::TypeId, cell::RefCell, rc::Rc, vec};
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -1812,5 +1932,23 @@ mod test {
         let value1 = 42;
         let value2 = 43;
         assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
+    }
+
+    #[test]
+    fn test_get_counts() {
+        let mut context = Context::new();
+        context.index_property(IsRunner);
+        context.index_property(IsSwimmer);
+
+        let anne = context.add_person(()).unwrap();
+        let charlie = context.add_person(()).unwrap();
+
+        context.set_person_property(anne, IsRunner, true);
+        context.set_person_property(charlie, IsRunner, true);
+        context.set_person_property(anne, IsSwimmer, true);
+
+        context.get_counts((IsRunner, IsSwimmer), &|values, count| {
+            println!("{values:?} {count}");
+        });
     }
 }
