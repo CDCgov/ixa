@@ -10,7 +10,6 @@ use ixa::{
 use strum_macros::EnumIter;
 
 use serde::Deserialize;
-use std::path::Path;
 
 define_rng!(PeopleRng);
 
@@ -40,6 +39,7 @@ impl fmt::Display for AgeGroupRisk {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(non_snake_case)]
 pub struct PeopleRecord {
     age: u8,
     homeId: usize,
@@ -78,10 +78,12 @@ pub fn init(context: &mut Context) {
         .unwrap()
         .clone();
 
-    let record_dir = Path::new(file!()).parent().unwrap();
+    //let record_dir = Path::new(file!()).parent().unwrap();
+    //let mut reader =
+    //    csv::Reader::from_path(record_dir.join(parameters.synth_population_file.clone())).unwrap();
     let mut reader =
-        csv::Reader::from_path(record_dir.join(parameters.synth_population_file)).unwrap();
-
+        csv::Reader::from_path(parameters.synth_population_file.clone()).unwrap();
+    println!("{:?}",parameters.synth_population_file);
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
         create_new_person(context, &record);
