@@ -695,11 +695,12 @@ impl Iterator for PeopleIterator {
     }
 }
 
-// Emitted when a new person is created
-// These should not be emitted outside this module
 #[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
+// Emitted when a new person is created
+// These should not be emitted outside this module
 pub struct PersonCreatedEvent {
+    /// The [PersonId] of the new person.
     pub person_id: PersonId,
 }
 
