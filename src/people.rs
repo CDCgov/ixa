@@ -108,10 +108,7 @@ impl IndexValue {
     }
 }
 
-/// Encapsulates a person query, allowing the user to call query_people()
-/// with tuple syntax, like so:
-///
-///   query_people((Age, 50), (IsInfected, true))
+/// Encapsulates a person query.
 ///
 /// query_people actually takes an instance of Query, but because
 /// we implement Query for tuples of up to size 20, that's invisible
