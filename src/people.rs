@@ -25,7 +25,7 @@
 //!
 //! # Setting Person Properties
 //!
-//! Properties can also have their values changed with [Context::set_person_property()].
+//! Properties can also have their values changed with [`Context::set_person_property()`].
 //! If the property is not initialized yet, this will implicitly call the
 //! initializer (or set the default) and then reset the value.
 //!
@@ -110,7 +110,7 @@ impl IndexValue {
 
 /// Encapsulates a person query.
 ///
-/// query_people actually takes an instance of Query, but because
+/// [`Context::query_people`] actually takes an instance of [`Query`], but because
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
 pub trait Query {
@@ -312,7 +312,7 @@ impl fmt::Debug for PersonId {
 /// An individual characteristics or states related to a person, such as age or
 /// disease status.
 ///
-/// Person properties should defined with the [define_person_property!()],
+/// Person properties should defined with the [`define_person_property!()`],
 /// `define_person_property_with_default!()` and `define_derived_property!()`
 /// macros.
 pub trait PersonProperty: Copy {
@@ -703,7 +703,7 @@ impl Iterator for PeopleIterator {
 #[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonCreatedEvent {
-    /// The [PersonId] of the new person.
+    /// The [`PersonId`] of the new person.
     pub person_id: PersonId,
 }
 
@@ -736,7 +736,7 @@ pub trait ContextPeopleExt {
     /// Creates a new person. The caller must supply initial values
     /// for all non-derived properties that don't have a default or an initializer.
     /// Note that although this technically takes any type that implements
-    /// [InitializationList] it is best to take advantage of the provided
+    /// [`InitializationList`] it is best to take advantage of the provided
     /// syntax that implements [`InitializationList`] for tuples, such as:
     /// `let person = context.add_person((Age, 42)).unwrap();`
     ///
