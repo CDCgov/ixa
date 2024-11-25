@@ -1,0 +1,10 @@
+{
+  "ixa.Property1": {
+    "field_int": 1,
+    "field_str": "test"
+  },
+
+  "ixa.Property2": {
+    "field_int": 2
+  }
+}
