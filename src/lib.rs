@@ -5,7 +5,7 @@
 //! agent-based models for disease transmission, but the approach is applicable
 //! in a wide array of circumstances.
 //!
-//! The central object of an Eosim simulation is the `Context` that is
+//! The central object of an Ixa simulation is the `Context` that is
 //! responsible for managing all the behavior of the simulation. All of the
 //! simulation-specific logic is embedded in modules that rely on the `Context`
 //! for core services such as:
@@ -29,6 +29,7 @@
 pub mod context;
 pub mod error;
 pub mod global_properties;
+pub mod network;
 pub mod people;
 pub mod plan;
 pub mod random;
