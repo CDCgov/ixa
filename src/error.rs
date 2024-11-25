@@ -8,6 +8,8 @@ use std::io;
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),
+    CSVError(csv::Error),
+    Utf8Error(std::string::FromUtf8Error),
     IxaError(String),
 }
 
@@ -20,6 +22,18 @@ impl From<io::Error> for IxaError {
 impl From<serde_json::Error> for IxaError {
     fn from(error: serde_json::Error) -> Self {
         IxaError::JsonError(error)
+    }
+}
+
+impl From<csv::Error> for IxaError {
+    fn from(error: csv::Error) -> Self {
+        IxaError::CSVError(error)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for IxaError {
+    fn from(error: std::string::FromUtf8Error) -> Self {
+        IxaError::Utf8Error(error)
     }
 }
 
