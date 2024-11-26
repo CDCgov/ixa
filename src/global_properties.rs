@@ -60,6 +60,7 @@ fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {
 /// Defines a global property with the following parameters:
 /// * `$global_property`: Name for the identifier type of the global property
 /// * `$value`: The type of the property's value
+/// * `$validate`: A function (or closure) that checks the validity of the property (optional)
 #[macro_export]
 macro_rules! define_global_property {
     ($global_property:ident, $value:ty, $validate: expr) => {
