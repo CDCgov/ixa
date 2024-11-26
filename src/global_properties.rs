@@ -92,7 +92,7 @@ macro_rules! define_global_property {
     };
 
     ($global_property: ident, $value: ty) => {
-        define_global_property!($global_property, $value, | _ | { Ok(()) });
+        define_global_property!($global_property, $value, |_| { Ok(()) });
     };
 }
 
@@ -379,9 +379,12 @@ mod test {
     define_global_property!(Property3, Property3Type, |v: &Property3Type| {
         match v.field_int {
             0 => Ok(()),
-            _ => Err(IxaError::IxaError(format!("Illegal value for `field_int`: {}", v.field_int)))
+            _ => Err(IxaError::IxaError(format!(
+                "Illegal value for `field_int`: {}",
+                v.field_int
+            ))),
         }
-    });    
+    });
     #[test]
     fn validate_property_success() {
         let mut context = Context::new();
@@ -397,8 +400,7 @@ mod test {
             .join("tests/data/global_properties_invalid.json");
         assert!(matches!(
             context.load_global_properties(&path),
-            Err(IxaError::IxaError(_)))
-        )
+            Err(IxaError::IxaError(_))
+        ))
     }
-    
 }
