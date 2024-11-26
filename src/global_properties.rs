@@ -102,6 +102,7 @@ pub trait GlobalProperty: Any {
     type Value: Any;
 
     fn new() -> Self;
+    #[allow(clippy::missing_errors_doc)]
     fn validate(value: &Self::Value) -> Result<(), IxaError>;
 }
 
@@ -401,6 +402,6 @@ mod test {
         assert!(matches!(
             context.load_global_properties(&path),
             Err(IxaError::IxaError(_))
-        ))
+        ));
     }
 }
