@@ -36,6 +36,7 @@ where
         Arc::new(
             |context: &mut Context, name, value| -> Result<(), IxaError> {
                 let val: T::Value = serde_json::from_value(value)?;
+                T::validate(&val)?;
                 if context.get_global_property_value(T::new()).is_some() {
                     return Err(IxaError::IxaError(format!("Duplicate property {name}")));
                 }
@@ -61,7 +62,7 @@ fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {
 /// * `$value`: The type of the property's value
 #[macro_export]
 macro_rules! define_global_property {
-    ($global_property:ident, $value:ty) => {
+    ($global_property:ident, $value:ty, $validate: expr) => {
         #[derive(Copy, Clone)]
         pub struct $global_property;
 
@@ -70,6 +71,10 @@ macro_rules! define_global_property {
 
             fn new() -> Self {
                 $global_property
+            }
+
+            fn validate(val: &$value) -> Result<(), IxaError> {
+                $validate(val)
             }
         }
 
@@ -84,6 +89,10 @@ macro_rules! define_global_property {
             }
         }
     };
+
+    ($global_property: ident, $value: ty) => {
+        define_global_property!($global_property, $value, | _ | { Ok(()) });
+    };
 }
 
 /// Global properties are not mutable and represent variables that are required
@@ -92,6 +101,7 @@ pub trait GlobalProperty: Any {
     type Value: Any;
 
     fn new() -> Self;
+    fn validate(value: &Self::Value) -> Result<(), IxaError>;
 }
 
 pub use define_global_property;
@@ -360,4 +370,34 @@ mod test {
             _ => panic!("Unexpected error type"),
         }
     }
+
+    #[derive(Deserialize)]
+    pub struct Property3Type {
+        field_int: u32,
+    }
+    define_global_property!(Property3, Property3Type, |v: &Property3Type| {
+        match v.field_int {
+            0 => Ok(()),
+            _ => Err(IxaError::IxaError(format!("Illegal value for `field_int`: {}", v.field_int)))
+        }
+    });    
+    #[test]
+    fn validate_property_success() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/global_properties_valid.json");
+        context.load_global_properties(&path).unwrap();
+    }
+
+    #[test]
+    fn validate_property_failure() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/global_properties_invalid.json");
+        assert!(matches!(
+            context.load_global_properties(&path),
+            Err(IxaError::IxaError(_)))
+        )
+    }
+    
 }
