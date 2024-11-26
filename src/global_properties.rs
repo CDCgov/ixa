@@ -31,6 +31,7 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    println!("Registering {}", name);
     properties.borrow_mut().insert(
         name.to_string(),
         Arc::new(
@@ -341,7 +342,7 @@ mod test {
             .join("tests/data/global_properties_missing.json");
         match context.load_global_properties(&path) {
             Err(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "No global property: ixa.Property3");
+                assert_eq!(msg, "No global property: ixa.PropertyUnknown");
             }
             _ => panic!("Unexpected error type"),
         }
