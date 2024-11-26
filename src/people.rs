@@ -169,6 +169,7 @@ seq!(Z in 1..20 {
 
 pub trait Tabulator {
     fn get_typelist(&self) -> Vec<TypeId>;
+    fn get_columns(&self) -> Vec<String>;
 }
 
 macro_rules! impl_tabulator {
@@ -188,6 +189,14 @@ macro_rules! impl_tabulator {
                     vec![
                     #(
                         std::any::TypeId::of::<T~N>(),
+                    )*
+                    ]
+                }
+
+                fn get_columns(&self) -> Vec<String> {
+                    vec![
+                    #(
+                        String::from(std::any::type_name::<T~N>().split("::").last().unwrap()),
                     )*
                     ]
                 }
@@ -1254,7 +1263,9 @@ impl ContextPeopleExtInternal for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
+    use super::{
+        ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent, Tabulator,
+    };
     use crate::{
         context::Context,
         error::IxaError,
@@ -1932,6 +1943,16 @@ mod test {
         let value1 = 42;
         let value2 = 43;
         assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
+    }
+
+    #[test]
+    fn test_tabulator() {
+        let cols = (Age, RiskCategoryType);
+        assert_eq!(
+            cols.get_typelist(),
+            vec![TypeId::of::<Age>(), TypeId::of::<RiskCategoryType>()]
+        );
+        assert_eq!(cols.get_columns(), vec!["Age", "RiskCategoryType"]);
     }
 
     #[test]
