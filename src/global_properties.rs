@@ -31,7 +31,6 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    println!("Registering {}", name);
     properties.borrow_mut().insert(
         name.to_string(),
         Arc::new(
