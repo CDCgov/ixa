@@ -10,6 +10,7 @@ pub enum IxaError {
     JsonError(serde_json::Error),
     CsvError(csv::Error),
     Utf8Error(std::string::FromUtf8Error),
+    ParseIntError(std::num::ParseIntError),
     IxaError(String),
 }
 
@@ -34,6 +35,12 @@ impl From<csv::Error> for IxaError {
 impl From<std::string::FromUtf8Error> for IxaError {
     fn from(error: std::string::FromUtf8Error) -> Self {
         IxaError::Utf8Error(error)
+    }
+}
+
+impl From<std::num::ParseIntError> for IxaError {
+    fn from(error: std::num::ParseIntError) -> Self {
+        IxaError::ParseIntError(error)
     }
 }
 
