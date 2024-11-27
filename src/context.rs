@@ -306,6 +306,7 @@ pub trait DataPlugin: Any {
     fn create_data_container() -> Self::DataContainer;
 }
 
+/// Defines a new type for storing data in Context.
 #[macro_export]
 macro_rules! define_data_plugin {
     ($plugin:ident, $data_container:ty, $default: expr) => {

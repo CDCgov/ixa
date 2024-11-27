@@ -1,3 +1,72 @@
+//! A generic mechanism for representing people and associated data.
+//!
+//! We have a set of people indexed by [`PersonId`] and then each person
+//! can have an arbitrary number of person properties
+//! [`PersonProperty`], which are values keyed by a type. Person
+//! properties are defined with a macro ([`define_person_property!()`]
+//! or [`define_person_property_with_default!()`])
+//!
+//! # Initializing Person Properties
+//!
+//! Person properties can have their initial values set in several ways:
+//!
+//! * An initial value can be provided at person creation time in
+//!   [`Context::add_person()`].
+//! * The property can have a default value (provided when the
+//!   property is defined.)
+//! * The property can have an initializer function (provided when
+//!   the property is defined) that is called lazily when the
+//!   property is first accessed.
+//!
+//! If neither a default or an initializer is provided, then you
+//! must provide an initial value for each person on person
+//! creation. Failure to do so will generally cause failure of
+//! [`Context::add_person()`].
+//!
+//! # Setting Person Properties
+//!
+//! Properties can also have their values changed with [`Context::set_person_property()`].
+//! If the property is not initialized yet, this will implicitly call the
+//! initializer (or set the default) and then reset the value.
+//!
+//! # Derived Properties
+//!
+//! It is also possible to have a "derived property" whose value is
+//! computed based on a set of other properties. When a derived
+//! property is defined, you must supply a function that takes the
+//! values for those dependencies and computes the current value
+//! of the property. Note that this function cannot access the context
+//! directly and therefore cannot read any other properties. It also
+//! should have a consistent result for any set of inputs, because
+//! it may be called multiple times with those inputs, depending
+//! on the program structure.
+//!
+//! # Change Events
+//!
+//! Whenever a person property `E` has potentially changed, either
+//! because it was set directly or because it is a derived property
+//! and one of its dependencies changed, a
+//! [`PersonPropertyChangeEvent<E>`] will be emitted. Note that Ixa does
+//! not currently check that the new value is actually different from the old value,
+//! so calling [`Context::set_person_property()`] will always emit an event.
+//! Initialization is not considered a change, but [`Context::set_person_property()`]
+//! on a lazily initialized event will emit an event for the change from
+//! the initialized value to the new value.
+//!
+//! # Querying
+//!
+//! Person properties provides an interface to query for people matching
+//! a given set of properties. The basic syntax is to supply a set of
+//! (property, value) pairs, like so `query_people(((Age, 30), (Gender, Female)))`.
+//! Note that these need to be wrapped in an extra set of parentheses
+//! to make them a single tuple to pass to [`Context::query_people()`]. Queries implement
+//! strict equality, so if you want a fancier predicate you need to implement
+//! a derived property that computes it and then query over the derived property.
+//!
+//! The internals of query are deliberately opaque in that Ixa may or
+//! may not ordinarily choose to create caches or indexes for
+//! queries. However, you force an index to be created for a single
+//! property by using [`Context::index_property()`].
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
@@ -20,6 +89,7 @@ use std::{
 // version of the value. If that serialization fits in 128 bits, we
 // store it in Fixed to avoid the allocation of the Vec. Otherwise it
 // goes in Variable.
+#[doc(hidden)]
 pub enum IndexValue {
     Fixed(u128),
     Variable(Vec<u8>),
@@ -38,14 +108,11 @@ impl IndexValue {
     }
 }
 
-// Encapsulates a person query, allowing the user to call query_people()
-// with tuple syntax, like so:
-//
-//   query_people((Age, 50), (IsInfected, true))
-//
-// query_people actually takes an instance of Query, but because
-// we implement Query for tuples of up to size 20, that's invisible
-// to the caller.
+/// Encapsulates a person query.
+///
+/// [`Context::query_people`] actually takes an instance of [`Query`], but because
+/// we implement Query for tuples of up to size 20, that's invisible
+/// to the caller. Do not use this trait directly.
 pub trait Query {
     fn setup(context: &Context);
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
@@ -222,8 +289,9 @@ define_data_plugin!(
     }
 );
 
-// Represents a unique person - the id refers to that person's index in the range
-// 0 to population - 1 in the PeopleData container.
+/// Represents a unique person.
+//  the id refers to that person's index in the range 0 to population
+// - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId {
     pub(crate) id: usize,
@@ -241,12 +309,12 @@ impl fmt::Debug for PersonId {
     }
 }
 
-// Individual characteristics or states related to a person, such as age or
-// disease status, are represented as "person properties". These properties
-// * are represented by a struct type that implements the PersonProperty trait,
-// * specify a Value type to represent the data associated with the property,
-// * specify an initializer, which returns the initial value
-// They may be defined with the define_person_property! macro.
+/// An individual characteristic or state related to a person, such as age or
+/// disease status.
+///
+/// Person properties should defined with the [`define_person_property!()`],
+/// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
+/// macros.
 pub trait PersonProperty: Copy {
     type Value: Copy + Debug + PartialEq + Hash;
     #[must_use]
@@ -265,6 +333,9 @@ pub trait PersonProperty: Copy {
     fn get_instance() -> Self;
 }
 
+/// A trait that contains the initialization values for a
+/// new person. Do not use this directly, but instead use
+/// the tuple syntax.
 pub trait InitializationList {
     fn has_property(&self, t: TypeId) -> bool;
     fn set_properties(&self, context: &mut Context, person_id: PersonId);
@@ -332,6 +403,7 @@ type ContextCallback = dyn FnOnce(&mut Context);
 // uniformly at runtime.
 // Note: this has to be pub because `PersonProperty` (which is pub) implements
 // a dependency method that returns `PersonPropertyHolder` instances.
+#[doc(hidden)]
 pub trait PersonPropertyHolder {
     // Registers a callback in the provided `callback_vec` that is invoked when
     // a dependency of a derived property is updated for the given person
@@ -626,21 +698,25 @@ impl Iterator for PeopleIterator {
     }
 }
 
-// Emitted when a new person is created
-// These should not be emitted outside this module
+/// Emitted when a new person is created
+/// These should not be emitted outside this module
 #[derive(Clone, Copy, IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonCreatedEvent {
+    /// The [`PersonId`] of the new person.
     pub person_id: PersonId,
 }
 
-// Emitted when a person property is updated
-// These should not be emitted outside this module
+/// Emitted when a person property is updated
+/// These should not be emitted outside this module
 #[derive(Copy, Clone)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PersonPropertyChangeEvent<T: PersonProperty> {
+    /// The [`PersonId`] that changed
     pub person_id: PersonId,
+    /// The new value
     pub current: T::Value,
+    /// The old value
     pub previous: T::Value,
 }
 impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
@@ -651,15 +727,21 @@ impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
     }
 }
 
+/// A trait extension for [`Context`] that exposes the people
+/// functionality.
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
 
     /// Creates a new person. The caller must supply initial values
     /// for all non-derived properties that don't have a default or an initializer.
+    /// Note that although this technically takes any type that implements
+    /// [`InitializationList`] it is best to take advantage of the provided
+    /// syntax that implements [`InitializationList`] for tuples, such as:
+    /// `let person = context.add_person((Age, 42)).unwrap();`
     ///
     /// # Errors
-    /// Will return `IxaError` if a required initializer is not provided.
+    /// Will return [`IxaError`] if a required initializer is not provided.
     fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
     /// Given a `PersonId` returns the value of a defined person property,
@@ -673,9 +755,10 @@ pub trait ContextPeopleExt {
         _property: T,
     ) -> T::Value;
 
+    #[doc(hidden)]
     fn register_property<T: PersonProperty + 'static>(&self);
 
-    /// Given a `PersonId`, sets the value of a defined person property
+    /// Given a [`PersonId`], sets the value of a defined person property
     /// Panics if the property is not initialized. Fires a change event.
     fn set_person_property<T: PersonProperty + 'static>(
         &mut self,
@@ -685,8 +768,25 @@ pub trait ContextPeopleExt {
     );
 
     // Returns a PersonId for a usize
+    #[doc(hidden)]
     fn get_person_id(&self, person_id: usize) -> PersonId;
+
+    /// Create an index for property `T`.
+    ///
+    /// If an index is available [`Context::query_people()`] will use it, so this is
+    /// intended to allow faster querying of commonly used properties.
+    /// Ixa may choose to create an index for its own reasons even if
+    /// [`Context::index_property()`] is not called, so this function just ensures
+    /// that one is created.
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
+
+    /// Query for all people matching a given set of criteria.
+    ///
+    /// [`Context::query_people()`] takes any type that implements [Query],
+    /// but instead of implementing query yourself it is best
+    /// to use the automatic syntax that implements [Query] for
+    /// a tuple of pairs of (property, value), like so:
+    /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 }

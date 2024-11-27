@@ -21,7 +21,6 @@ create_report_trait!(Incidence);
 create_report_trait!(Death);
 
 #[allow(unexpected_cfgs)]
-
 fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
