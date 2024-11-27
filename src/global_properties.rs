@@ -74,7 +74,7 @@ macro_rules! define_global_property {
                 $global_property
             }
 
-            fn validate(val: &$value) -> Result<(), IxaError> {
+            fn validate(val: &$value) -> Result<(), $crate::error::IxaError> {
                 $validate(val)
             }
         }
