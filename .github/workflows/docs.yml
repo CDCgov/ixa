@@ -1,0 +1,24 @@
+name: Build Docs
+
+on:
+  push:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+  steps:
+    - uses: actions/checkout@v4
+    - name: Clean up
+      run: cargo clean --doc
+    - name: Build
+      run: cargo doc --no-deps
+    - name: Upload doc
+      uses: actions/upload-artifact@v4
+      with:
+        path: |
+          target/doc
+      
