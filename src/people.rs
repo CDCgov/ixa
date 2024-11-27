@@ -46,9 +46,9 @@
 //! Whenever a person property `E` has potentially changed, either
 //! because it was set directly or because it is a derived property
 //! and one of its dependencies changed, a
-//! [`PersonPropertyChangeEvent`] will be emitted. Note that Ixa does
-//! not currently check that the value actually changed, so calling
-//! [`Context::set_person_property()`] with the current value still emits an event.
+//! [`PersonPropertyChangeEvent<E>`] will be emitted. Note that Ixa does
+//! not currently check that the new value is actually different from the old value,
+//! so calling [`Context::set_person_property()`] will always emit an event.
 //! Initialization is not considered a change, but [`Context::set_person_property()`]
 //! on a lazily initialized event will emit an event for the change from
 //! the initialized value to the new value.
@@ -309,7 +309,7 @@ impl fmt::Debug for PersonId {
     }
 }
 
-/// An individual characteristics or states related to a person, such as age or
+/// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
 /// Person properties should defined with the [`define_person_property!()`],
