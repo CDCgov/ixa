@@ -3,8 +3,8 @@
 //! We have a set of people indexed by [`PersonId`] and then each person
 //! can have an arbitrary number of person properties
 //! [`PersonProperty`], which are values keyed by a type. Person
-//! properties are defined with a set of macros, such as
-//! [`define_person_property!()`].
+//! properties are defined with a macro ([`define_person_property!()`]
+//! or [`define_person_property_with_default!()`])
 //!
 //! # Initializing Person Properties
 //!
