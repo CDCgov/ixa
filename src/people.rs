@@ -960,9 +960,12 @@ impl ContextPeopleExt for Context {
 
         T::setup(self);
         let mut result = Vec::new();
-        self.query_people_internal(| person | {
-            result.push(person);
-        }, q.get_query());
+        self.query_people_internal(
+            |person| {
+                result.push(person);
+            },
+            q.get_query(),
+        );
         result
     }
 
@@ -973,10 +976,13 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
-        let mut count : usize = 0;
-        self.query_people_internal(| _person | {
-            count += 1;
-        }, q.get_query());
+        let mut count: usize = 0;
+        self.query_people_internal(
+            |_person| {
+                count += 1;
+            },
+            q.get_query(),
+        );
         count
     }
 
@@ -1017,7 +1023,6 @@ impl ContextPeopleExt for Context {
         }
     }
 }
-
 
 trait ContextPeopleExtInternal {
     fn register_indexer<T: PersonProperty + 'static>(&self);
