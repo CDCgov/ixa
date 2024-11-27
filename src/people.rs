@@ -788,7 +788,23 @@ pub trait ContextPeopleExt {
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+
+    /// Get the count of all people matching a given set of criteria.
+    ///
+    /// [`Context::query_people_count()`] takes any type that implements [Query],
+    /// but instead of implementing query yourself it is best
+    /// to use the automatic syntax that implements [Query] for
+    /// a tuple of pairs of (property, value), like so:
+    /// `context.query_people(((Age, 30), (Gender, Female)))`.
+    ///
+    /// This is intended to be slightly faster than [`Context::query_people()`]
+    /// because it does not need to allocate a list. We haven't actually
+    /// measured it, so the difference may be modest if any.
     fn query_people_count<T: Query>(&self, q: T) -> usize;
+
+    /// Determine whether a person matches a given expression.
+    ///
+    /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 }
 
