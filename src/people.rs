@@ -959,9 +959,11 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
-        let mut accumulator = PeopleAccumulatorVec::default();
-        self.query_people_internal(&mut accumulator, q.get_query());
-        accumulator.people
+        let mut result = Vec::new();
+        self.query_people_internal(| person | {
+            result.push(person);
+        }, q.get_query());
+        result
     }
 
     fn query_people_count<T: Query>(&self, q: T) -> usize {
@@ -971,9 +973,11 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
-        let mut accumulator = PeopleAccumulatorCount::default();
-        self.query_people_internal(&mut accumulator, q.get_query());
-        accumulator.count
+        let mut count : usize = 0;
+        self.query_people_internal(| _person | {
+            count += 1;
+        }, q.get_query());
+        count
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
@@ -1014,31 +1018,6 @@ impl ContextPeopleExt for Context {
     }
 }
 
-trait PeopleAccumulator {
-    fn add_person(&mut self, person_id: PersonId);
-}
-
-#[derive(Default)]
-struct PeopleAccumulatorCount {
-    count: usize,
-}
-
-impl PeopleAccumulator for PeopleAccumulatorCount {
-    fn add_person(&mut self, _person_id: PersonId) {
-        self.count += 1;
-    }
-}
-
-#[derive(Default)]
-struct PeopleAccumulatorVec {
-    people: Vec<PersonId>,
-}
-
-impl PeopleAccumulator for PeopleAccumulatorVec {
-    fn add_person(&mut self, person_id: PersonId) {
-        self.people.push(person_id);
-    }
-}
 
 trait ContextPeopleExtInternal {
     fn register_indexer<T: PersonProperty + 'static>(&self);
@@ -1048,9 +1027,9 @@ trait ContextPeopleExtInternal {
         person_id: PersonId,
         property: T,
     );
-    fn query_people_internal<T: PeopleAccumulator>(
+    fn query_people_internal(
         &self,
-        accumulator: &mut T,
+        accumulator: impl FnMut(PersonId),
         property_hashes: Vec<(TypeId, IndexValue)>,
     );
 }
@@ -1105,9 +1084,9 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn query_people_internal<T: PeopleAccumulator>(
+    fn query_people_internal(
         &self,
-        accumulator: &mut T,
+        mut accumulator: impl FnMut(PersonId),
         property_hashes: Vec<(TypeId, IndexValue)>,
     ) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
@@ -1173,7 +1152,7 @@ impl ContextPeopleExtInternal for Context {
             }
 
             // This matches.
-            accumulator.add_person(person);
+            accumulator(person);
         }
     }
 }
