@@ -313,7 +313,7 @@ impl fmt::Debug for PersonId {
 /// disease status.
 ///
 /// Person properties should defined with the [`define_person_property!()`],
-/// `define_person_property_with_default!()` and `define_derived_property!()`
+/// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
 /// macros.
 pub trait PersonProperty: Copy {
     type Value: Copy + Debug + PartialEq + Hash;
