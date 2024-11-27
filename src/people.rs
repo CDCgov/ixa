@@ -967,7 +967,7 @@ impl ContextPeopleExt for Context {
     fn query_people_count<T: Query>(&self, q: T) -> usize {
         // Special case the situation where nobody exists.
         if self.get_data_container(PeoplePlugin).is_none() {
-            return 0
+            return 0;
         }
 
         T::setup(self);
@@ -1048,8 +1048,11 @@ trait ContextPeopleExtInternal {
         person_id: PersonId,
         property: T,
     );
-    fn query_people_internal<T: PeopleAccumulator> (&self, accumulator: &mut T,
-                                                    property_hashes: Vec<(TypeId, IndexValue)>);
+    fn query_people_internal<T: PeopleAccumulator>(
+        &self,
+        accumulator: &mut T,
+        property_hashes: Vec<(TypeId, IndexValue)>,
+    );
 }
 
 impl ContextPeopleExtInternal for Context {
@@ -1102,7 +1105,11 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn query_people_internal<T: PeopleAccumulator>(&self, accumulator: &mut T, property_hashes: Vec<(TypeId, IndexValue)>) {
+    fn query_people_internal<T: PeopleAccumulator>(
+        &self,
+        accumulator: &mut T,
+        property_hashes: Vec<(TypeId, IndexValue)>,
+    ) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
@@ -1610,16 +1617,22 @@ mod test {
             .add_person((RiskCategoryType, RiskCategory::High))
             .unwrap();
 
-        assert_eq!(context.query_people_count((RiskCategoryType, RiskCategory::High)), 1);
+        assert_eq!(
+            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            1
+        );
     }
 
     #[test]
     fn query_people_count_empty() {
         let context = Context::new();
 
-        assert_eq!(context.query_people_count((RiskCategoryType, RiskCategory::High)), 0);
+        assert_eq!(
+            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            0
+        );
     }
-    
+
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
