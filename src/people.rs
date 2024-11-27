@@ -958,7 +958,9 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
-        self.query_people_internal(q.get_query())
+        let mut accumulator = PeopleAccumulatorVec::default();
+        self.query_people_internal(&mut accumulator, q.get_query());
+        accumulator.people
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
@@ -999,6 +1001,32 @@ impl ContextPeopleExt for Context {
     }
 }
 
+trait PeopleAccumulator {
+    fn add_person(&mut self, person_id: PersonId);
+}
+
+#[derive(Default)]
+struct PeopleAccumulatorCount {
+    count: usize,
+}
+
+impl PeopleAccumulator for PeopleAccumulatorCount {
+    fn add_person(&mut self, _person_id: PersonId) {
+        self.count += 1;
+    }
+}
+
+#[derive(Default)]
+struct PeopleAccumulatorVec {
+    people: Vec<PersonId>,
+}
+
+impl PeopleAccumulator for PeopleAccumulatorVec {
+    fn add_person(&mut self, person_id: PersonId) {
+        self.people.push(person_id);
+    }
+}
+
 trait ContextPeopleExtInternal {
     fn register_indexer<T: PersonProperty + 'static>(&self);
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
@@ -1007,7 +1035,8 @@ trait ContextPeopleExtInternal {
         person_id: PersonId,
         property: T,
     );
-    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
+    fn query_people_internal<T: PeopleAccumulator> (&self, accumulator: &mut T,
+                                                    property_hashes: Vec<(TypeId, IndexValue)>);
 }
 
 impl ContextPeopleExtInternal for Context {
@@ -1060,7 +1089,7 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId> {
+    fn query_people_internal<T: PeopleAccumulator>(&self, accumulator: &mut T, property_hashes: Vec<(TypeId, IndexValue)>) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
@@ -1081,7 +1110,7 @@ impl ContextPeopleExtInternal for Context {
                 } else {
                     // This is empty and so the intersection will
                     // also be empty.
-                    return Vec::new();
+                    return;
                 }
             } else {
                 // No index, so we'll get to this after.
@@ -1107,7 +1136,6 @@ impl ContextPeopleExtInternal for Context {
         // iff:
         //    (1) they exist in all the indexes
         //    (2) they match the unindexed properties
-        let mut result = Vec::<PersonId>::new();
         'outer: for person in to_check {
             // (1) check all the indexes
             for index in &indexes {
@@ -1125,10 +1153,8 @@ impl ContextPeopleExtInternal for Context {
             }
 
             // This matches.
-            result.push(person);
+            accumulator.add_person(person);
         }
-
-        result
     }
 }
 
