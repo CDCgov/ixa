@@ -11,14 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
   steps:
-    - name: "Checkout"
-      uses: actions/checkout@v2
-    - name: Clean up
-      run: cargo clean --doc
-    - name: Build
-      run: cargo doc --no-deps
-    - name: Upload doc
-      uses: actions/upload-artifact@v4
-      with:
-        path: |
-          target/doc
+  - name: "Checkout"
+    uses: actions/checkout@v2
+  - name: Clean up
+    run: cargo clean --doc
+  - name: Build
+    run: cargo doc --no-deps
+  - name: Upload doc
+    uses: actions/upload-artifact@v4
+    with:
+      path: |
+        target/doc
