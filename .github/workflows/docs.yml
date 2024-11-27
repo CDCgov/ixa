@@ -23,4 +23,6 @@ jobs:
       run: rm -rf docs/api
     - name: Copy docs
       run: cp -pR target/doc docs/api
- 
+    - name: Commit
+      run: git add docs/api
+    
