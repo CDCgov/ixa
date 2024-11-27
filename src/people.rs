@@ -788,6 +788,7 @@ pub trait ContextPeopleExt {
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+    fn query_people_count<T: Query>(&self, q: T) -> usize;
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 }
 
@@ -961,6 +962,18 @@ impl ContextPeopleExt for Context {
         let mut accumulator = PeopleAccumulatorVec::default();
         self.query_people_internal(&mut accumulator, q.get_query());
         accumulator.people
+    }
+
+    fn query_people_count<T: Query>(&self, q: T) -> usize {
+        // Special case the situation where nobody exists.
+        if self.get_data_container(PeoplePlugin).is_none() {
+            return 0
+        }
+
+        T::setup(self);
+        let mut accumulator = PeopleAccumulatorCount::default();
+        self.query_people_internal(&mut accumulator, q.get_query());
+        accumulator.count
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
@@ -1590,6 +1603,23 @@ mod test {
         assert_eq!(people.len(), 0);
     }
 
+    #[test]
+    fn query_people_count() {
+        let mut context = Context::new();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
+
+        assert_eq!(context.query_people_count((RiskCategoryType, RiskCategory::High)), 1);
+    }
+
+    #[test]
+    fn query_people_count_empty() {
+        let context = Context::new();
+
+        assert_eq!(context.query_people_count((RiskCategoryType, RiskCategory::High)), 0);
+    }
+    
     #[test]
     fn query_people_macro_index_first() {
         let mut context = Context::new();
