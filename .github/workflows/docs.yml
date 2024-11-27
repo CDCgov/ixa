@@ -16,7 +16,8 @@ jobs:
     - name: Build
       run: cargo doc --no-deps
     - uses: actions/checkout@v4
-      ref: gh-pages
+      with:
+        ref: gh-pages
     - name: Clean directory
       run: rm -rf docs/api
     - name: Copy docs
