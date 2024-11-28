@@ -168,8 +168,23 @@ seq!(Z in 1..20 {
 });
 
 pub trait Tabulator {
+    fn setup(&self, context: &mut Context);
     fn get_typelist(&self) -> Vec<TypeId>;
     fn get_columns(&self) -> Vec<String>;
+}
+
+impl<T: PersonProperty + 'static> Tabulator for (T,) {
+    fn setup(&self, context: &mut Context) {
+        context.index_property_noargs::<T>();
+    }
+    fn get_typelist(&self) -> Vec<TypeId> {
+        vec![std::any::TypeId::of::<T>()]
+    }
+    fn get_columns(&self) -> Vec<String> {
+        vec![String::from(
+            std::any::type_name::<T>().split("::").last().unwrap(),
+        )]
+    }
 }
 
 macro_rules! impl_tabulator {
@@ -185,6 +200,11 @@ macro_rules! impl_tabulator {
                 )*
             )
             {
+                fn setup(&self, context: &mut Context) {
+                    #(
+                        context.index_property_noargs::<T~N>();
+                    )*
+                }
                 fn get_typelist(&self) -> Vec<TypeId> {
                     vec![
                     #(
@@ -205,7 +225,7 @@ macro_rules! impl_tabulator {
     }
 }
 
-seq!(Z in 1..20 {
+seq!(Z in 2..20 {
     impl_tabulator!(Z);
 });
 
@@ -261,6 +281,7 @@ impl Index {
             max_indexed: 0,
         }
     }
+
     fn add_person(&mut self, context: &Context, person_id: PersonId) {
         let (hash, display) = (self.indexer)(context, person_id);
         self.lookup
@@ -689,12 +710,18 @@ impl PeopleData {
         }
     }
 
+    fn get_index_ref_mut_by_prop_noargs<T: PersonProperty + 'static>(
+        &self,
+    ) -> Option<RefMut<Index>> {
+        let type_id = TypeId::of::<T>();
+        self.get_index_ref_mut(type_id)
+    }
+
     fn get_index_ref_mut_by_prop<T: PersonProperty + 'static>(
         &self,
         _property: T,
     ) -> Option<RefMut<Index>> {
-        let type_id = TypeId::of::<T>();
-        self.get_index_ref_mut(type_id)
+        self.get_index_ref_mut_by_prop_noargs::<T>()
     }
 
     // Convenience function to iterate over the current population.
@@ -823,6 +850,7 @@ pub trait ContextPeopleExt {
     /// [`Context::index_property()`] is not called, so this function just ensures
     /// that one is created.
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
+    fn index_property_noargs<T: PersonProperty + 'static>(&mut self);
 
     /// Query for all people matching a given set of criteria.
     ///
@@ -833,25 +861,33 @@ pub trait ContextPeopleExt {
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
-    fn get_counts<T: Tabulator>(&self, tabulator: T, print_fn: &dyn Fn(&[String], usize));
+    fn get_counts<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    where
+        F: Fn(&Context, &[String], usize);
 }
 
 fn process_indices(
+    context: &Context,
     remaining_indices: &[&Index],
     accumulated_values: &mut [IndexValue],
     display_values: &mut Vec<String>,
     current_matches: &mut HashSet<PersonId>,
     intersect: bool,
-    print_fn: &dyn Fn(&[String], usize),
+    print_fn: &dyn Fn(&Context, &[String], usize),
 ) {
     if remaining_indices.is_empty() {
-        print_fn(display_values, current_matches.len());
+        print_fn(context, display_values, current_matches.len());
         return;
     }
 
     if let Some((next_index, rest_indices)) = remaining_indices.split_first() {
-        // TODO this might be empty?
         let lookup = next_index.lookup.as_ref().unwrap();
+
+        // If there is nothing in the index, we don't need to process it
+        if lookup.is_empty() {
+            return;
+        }
+
         for (value, (people, display)) in lookup {
             let mut updated_values = accumulated_values.to_owned();
             updated_values.push(value.clone());
@@ -868,6 +904,7 @@ fn process_indices(
             };
 
             process_indices(
+                context,
                 rest_indices,
                 &mut updated_values,
                 display_values,
@@ -875,6 +912,8 @@ fn process_indices(
                 true,
                 print_fn,
             );
+            display_values.pop();
+            updated_values.pop();
         }
     }
 }
@@ -1023,7 +1062,11 @@ impl ContextPeopleExt for Context {
         PersonId { id: person_id }
     }
 
-    fn index_property<T: PersonProperty + 'static>(&mut self, property: T) {
+    fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
+        self.index_property_noargs::<T>();
+    }
+
+    fn index_property_noargs<T: PersonProperty + 'static>(&mut self) {
         // Ensure that the data container exists
         {
             let _ = self.get_data_container_mut(PeoplePlugin);
@@ -1033,7 +1076,9 @@ impl ContextPeopleExt for Context {
         self.register_indexer::<T>();
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let mut index = data_container.get_index_ref_mut_by_prop(property).unwrap();
+        let mut index = data_container
+            .get_index_ref_mut_by_prop_noargs::<T>()
+            .unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
         }
@@ -1086,7 +1131,10 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn get_counts<T: Tabulator>(&self, tabulator: T, print_fn: &dyn Fn(&[String], usize)) {
+    fn get_counts<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    where
+        F: Fn(&Context, &[String], usize),
+    {
         let type_ids = tabulator.get_typelist();
 
         // First, update indexes
@@ -1116,6 +1164,7 @@ impl ContextPeopleExt for Context {
             .collect::<Vec<&Index>>();
 
         process_indices(
+            self,
             indices.as_slice(),
             &mut Vec::new(),
             &mut Vec::new(),
@@ -1271,7 +1320,7 @@ mod test {
         error::IxaError,
         people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
     };
-    use std::{any::TypeId, cell::RefCell, rc::Rc, vec};
+    use std::{any::TypeId, cell::RefCell, collections::HashSet, hash::Hash, rc::Rc, vec};
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -1955,21 +2004,66 @@ mod test {
         assert_eq!(cols.get_columns(), vec!["Age", "RiskCategoryType"]);
     }
 
+    fn get_counts_test_setup<T: Tabulator>(
+        tabulator: &T,
+        setup: impl FnOnce(&mut Context),
+        expected_values: &HashSet<(Vec<String>, usize)>,
+    ) {
+        let mut context = Context::new();
+        setup(&mut context);
+        tabulator.setup(&mut context);
+
+        let results: RefCell<HashSet<(Vec<String>, usize)>> = RefCell::new(HashSet::new());
+        context.get_counts(tabulator, |_context, values, count| {
+            results.borrow_mut().insert((values.to_vec(), count));
+        });
+
+        let results = &*results.borrow();
+        assert_eq!(results, expected_values);
+    }
+
     #[test]
     fn test_get_counts() {
-        let mut context = Context::new();
-        context.index_property(IsRunner);
-        context.index_property(IsSwimmer);
+        let tabulator = (IsRunner,);
+        let mut expected = HashSet::new();
+        expected.insert((vec!["true".to_string()], 1));
+        expected.insert((vec!["false".to_string()], 1));
+        get_counts_test_setup(
+            &tabulator,
+            |context| {
+                let bob = context.add_person(()).unwrap();
+                context.add_person(()).unwrap();
+                context.set_person_property(bob, IsRunner, true);
+            },
+            &expected,
+        );
+    }
 
-        let anne = context.add_person(()).unwrap();
-        let charlie = context.add_person(()).unwrap();
+    #[test]
+    fn test_get_counts_multi() {
+        let tabulator = (IsRunner, IsSwimmer);
+        let mut expected = HashSet::new();
+        expected.insert((vec!["false".to_string(), "false".to_string()], 3));
+        expected.insert((vec!["false".to_string(), "true".to_string()], 1));
+        expected.insert((vec!["true".to_string(), "false".to_string()], 1));
+        expected.insert((vec!["true".to_string(), "true".to_string()], 1));
 
-        context.set_person_property(anne, IsRunner, true);
-        context.set_person_property(charlie, IsRunner, true);
-        context.set_person_property(anne, IsSwimmer, true);
+        get_counts_test_setup(
+            &tabulator,
+            |context| {
+                context.add_person(()).unwrap();
+                context.add_person(()).unwrap();
+                context.add_person(()).unwrap();
+                let bob = context.add_person(()).unwrap();
+                let anne = context.add_person(()).unwrap();
+                let charlie = context.add_person(()).unwrap();
 
-        context.get_counts((IsRunner, IsSwimmer), &|values, count| {
-            println!("{values:?} {count}");
-        });
+                context.set_person_property(bob, IsRunner, true);
+                context.set_person_property(charlie, IsRunner, true);
+                context.set_person_property(anne, IsSwimmer, true);
+                context.set_person_property(charlie, IsSwimmer, true);
+            },
+            &expected,
+        );
     }
 }
