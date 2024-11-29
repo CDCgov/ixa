@@ -116,16 +116,26 @@ pub trait ContextRandomExt {
     where
         R::RngType: Rng;
 
+    /// Gets a random sample within the range provided by `range`
+    /// using the generator associated with the given `RngId`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_type: R, range: S) -> T
     where
         R::RngType: Rng,
         S: SampleRange<T>,
         T: SampleUniform;
 
+    /// Gets a random boolean value which is true with probability `p`
+    /// using the generator associated with the given `RngId`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
         R::RngType: Rng;
 
+    /// Draws a random entry out of the list provided in `weights`
+    /// with the given weights using the generator associated with the
+    /// given `RngId`.  Note that this will panic if
+    /// `set_base_random_seed` was not called yet.
     fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
