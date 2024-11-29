@@ -788,6 +788,23 @@ pub trait ContextPeopleExt {
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+
+    /// Get the count of all people matching a given set of criteria.
+    ///
+    /// [`Context::query_people_count()`] takes any type that implements [Query],
+    /// but instead of implementing query yourself it is best
+    /// to use the automatic syntax that implements [Query] for
+    /// a tuple of pairs of (property, value), like so:
+    /// `context.query_people(((Age, 30), (Gender, Female)))`.
+    ///
+    /// This is intended to be slightly faster than [`Context::query_people()`]
+    /// because it does not need to allocate a list. We haven't actually
+    /// measured it, so the difference may be modest if any.
+    fn query_people_count<T: Query>(&self, q: T) -> usize;
+
+    /// Determine whether a person matches a given expression.
+    ///
+    /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 }
 
@@ -958,7 +975,31 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
-        self.query_people_internal(q.get_query())
+        let mut result = Vec::new();
+        self.query_people_internal(
+            |person| {
+                result.push(person);
+            },
+            q.get_query(),
+        );
+        result
+    }
+
+    fn query_people_count<T: Query>(&self, q: T) -> usize {
+        // Special case the situation where nobody exists.
+        if self.get_data_container(PeoplePlugin).is_none() {
+            return 0;
+        }
+
+        T::setup(self);
+        let mut count: usize = 0;
+        self.query_people_internal(
+            |_person| {
+                count += 1;
+            },
+            q.get_query(),
+        );
+        count
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
@@ -1007,7 +1048,11 @@ trait ContextPeopleExtInternal {
         person_id: PersonId,
         property: T,
     );
-    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId>;
+    fn query_people_internal(
+        &self,
+        accumulator: impl FnMut(PersonId),
+        property_hashes: Vec<(TypeId, IndexValue)>,
+    );
 }
 
 impl ContextPeopleExtInternal for Context {
@@ -1060,7 +1105,11 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn query_people_internal(&self, property_hashes: Vec<(TypeId, IndexValue)>) -> Vec<PersonId> {
+    fn query_people_internal(
+        &self,
+        mut accumulator: impl FnMut(PersonId),
+        property_hashes: Vec<(TypeId, IndexValue)>,
+    ) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
         let data_container = self.get_data_container(PeoplePlugin)
@@ -1081,7 +1130,7 @@ impl ContextPeopleExtInternal for Context {
                 } else {
                     // This is empty and so the intersection will
                     // also be empty.
-                    return Vec::new();
+                    return;
                 }
             } else {
                 // No index, so we'll get to this after.
@@ -1107,7 +1156,6 @@ impl ContextPeopleExtInternal for Context {
         // iff:
         //    (1) they exist in all the indexes
         //    (2) they match the unindexed properties
-        let mut result = Vec::<PersonId>::new();
         'outer: for person in to_check {
             // (1) check all the indexes
             for index in &indexes {
@@ -1125,10 +1173,8 @@ impl ContextPeopleExtInternal for Context {
             }
 
             // This matches.
-            result.push(person);
+            accumulator(person);
         }
-
-        result
     }
 }
 
@@ -1562,6 +1608,29 @@ mod test {
 
         let people = context.query_people((RiskCategoryType, RiskCategory::High));
         assert_eq!(people.len(), 0);
+    }
+
+    #[test]
+    fn query_people_count() {
+        let mut context = Context::new();
+        let _ = context
+            .add_person((RiskCategoryType, RiskCategory::High))
+            .unwrap();
+
+        assert_eq!(
+            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            1
+        );
+    }
+
+    #[test]
+    fn query_people_count_empty() {
+        let context = Context::new();
+
+        assert_eq!(
+            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            0
+        );
     }
 
     #[test]
