@@ -3,7 +3,7 @@ use crate::error::IxaError;
 use crate::people::{ContextPeopleExt, Tabulator};
 use csv::Writer;
 use std::any::TypeId;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -61,27 +61,6 @@ pub trait Report: 'static {
     fn serialize(&self, writer: &mut Writer<File>);
 }
 
-#[allow(clippy::module_name_repetitions)]
-pub struct PeriodicReport {
-    t: f64,
-    values: Vec<String>,
-    count: usize,
-}
-
-impl Report for PeriodicReport {
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<PeriodicReport>()
-    }
-
-    fn serialize(&self, writer: &mut Writer<File>) {
-        let mut row = vec![self.t.to_string()];
-        row.extend(self.values.clone());
-        row.push(self.count.to_string());
-
-        writer.write_record(&row).expect("Failed to write row");
-    }
-}
-
 /// Use this macro to define a unique report type
 #[macro_export]
 macro_rules! create_report_trait {
@@ -130,6 +109,14 @@ impl Context {
 }
 
 pub trait ContextReportExt {
+    /// Add a report file keyed by a `TypeId`.
+    /// The `short_name` is used for file naming to distinguish what data each
+    /// output file points to.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, raises an error.
+    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError>;
+
     /// Call `add_report` with each report type, passing the name of the report type.
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
@@ -137,6 +124,7 @@ pub trait ContextReportExt {
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
     /// If the file cannot be created, raises an error.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
+
     /// Adds a periodic report ad the end of period `period` which summarizes the
     /// number of people in each combination of properties in `tabulator`.
     /// # Errors
@@ -148,15 +136,13 @@ pub trait ContextReportExt {
         period: f64,
         tabulator: T,
     ) -> Result<(), IxaError>;
+    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>>;
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
 }
 
 impl ContextReportExt for Context {
-    /// Call `add_report` with each report type, passing the name of the report type.
-    /// The `short_name` is used for file naming to distinguish what data each
-    /// output file points to.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
         let path = self.generate_filename(short_name);
 
         let data_container = self.get_data_container_mut(ReportPlugin);
@@ -180,17 +166,19 @@ impl ContextReportExt for Context {
         };
         let writer = Writer::from_writer(created_file);
         let mut file_writer = data_container.file_writers.borrow_mut();
-        file_writer.insert(TypeId::of::<T>(), writer);
+        file_writer.insert(type_id, writer);
         Ok(())
     }
-
+    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+        self.add_report_by_type_id(TypeId::of::<T>(), short_name)
+    }
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
         &mut self,
         short_name: &str,
         period: f64,
         tabulator: T,
     ) -> Result<(), IxaError> {
-        self.add_report::<PeriodicReport>(short_name)?;
+        self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
 
         {
             // Write the header
@@ -199,34 +187,27 @@ impl ContextReportExt for Context {
             header.extend(columns);
             header.push("count".to_string());
 
-            let data_container = self
-                .get_data_container(ReportPlugin)
-                .expect("No writer found for the report type");
-            let mut writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
-            let writer = writer_cell
-                .get_mut(&TypeId::of::<PeriodicReport>())
-                .expect("No writer found for the report type");
+            let mut writer = self.get_writer(TypeId::of::<T>());
             writer
                 .write_record(&header)
                 .expect("Failed to write header");
             writer.flush().expect("Failed to flush writer");
         }
 
-        // TODO add indexes
         tabulator.setup(self);
 
         self.add_periodic_plan_with_phase(
             period,
             move |context: &mut Context| {
                 context.get_counts(&tabulator, move |context, values, count| {
-                    println!("{} {}", values.join(","), count);
-                    context.send_report(PeriodicReport {
-                        t: context.get_current_time(),
-                        values: values.to_vec(),
-                        count,
-                    });
+                    let mut writer = context.get_writer(TypeId::of::<T>());
+                    let mut row = vec![context.get_current_time().to_string()];
+                    row.extend(values.to_owned());
+                    row.push(count.to_string());
+
+                    writer.write_record(&row).expect("Failed to write row");
+                    writer.flush().expect("Failed to flush writer");
                 });
-                // Hello world
             },
             crate::context::ExecutionPhase::Last,
         );
@@ -234,16 +215,22 @@ impl ContextReportExt for Context {
         Ok(())
     }
 
-    /// Write a new row to the appropriate report file
-    fn send_report<T: Report>(&self, report: T) {
+    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
         let data_container = self
             .get_data_container(ReportPlugin)
             .expect("No writer found for the report type");
-        let mut writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
-        let writer = writer_cell
-            .get_mut(&report.type_id())
-            .expect("No writer found for the report type");
+        let writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
+        RefMut::map(writer_cell, |writers| {
+            writers
+                .get_mut(&type_id)
+                .expect("No writer found for the report type")
+        })
+    }
+
+    /// Write a new row to the appropriate report file
+    fn send_report<T: Report>(&self, report: T) {
+        let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
         writer.flush().expect("Failed to flush writer");
     }
