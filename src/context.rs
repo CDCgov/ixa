@@ -179,11 +179,9 @@ impl Context {
     /// continuously repeat the plan at the specified period, stopping
     /// only once there are no other plans scheduled.
     ///
-    /// Returns an `Id` for the newly-added plan that can be used to cancel it
-    /// if needed.
     /// # Panics
     ///
-    /// Panics if time is negative, infinite, or NaN.
+    /// Panics if report period is negative, infinite, or NaN.
     pub fn add_periodic_plan_with_phase(
         &mut self,
         period: f64,
