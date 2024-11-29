@@ -1,3 +1,20 @@
+//! A generic mechanism for storing context-wide data.
+//!
+//! Global properties are not mutable and represent variables that are
+//! required in a global scope during the simulation, such as
+//! simulation parameters.
+//! A global property can be of any type, and is is just a value
+//! stored in the context. Global properties are defined by the
+//! [`define_global_property!()`] macro and can then be
+//! set in one of two ways:
+//!
+//! * Directly by using [`Context::set_global_property_value()`]
+//! * Loaded from a configuration file using [`Context::load_global_properties()`]
+//!
+//! Attempting to change a global property which has been set already
+//! will result in an error.
+//!
+//! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
 use serde::de::DeserializeOwned;
@@ -22,6 +39,7 @@ type PropertySetterFn =
 // RefCell/Mutex/LazyLock combo to allow it to be globally
 // shared and initialized at startup time while still being
 // safe.
+#[doc(hidden)]
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
@@ -96,13 +114,15 @@ macro_rules! define_global_property {
     };
 }
 
-/// Global properties are not mutable and represent variables that are required
-/// in a global scope during the simulation, such as simulation parameters.
+/// The trait representing a global property. Do not use this
+/// directly, but instead define global properties with
+/// [`define_global_property()`]
 pub trait GlobalProperty: Any {
-    type Value: Any;
+    type Value: Any; // The actual type of the data.
 
     fn new() -> Self;
     #[allow(clippy::missing_errors_doc)]
+    // A function which validates the global property.
     fn validate(value: &Self::Value) -> Result<(), IxaError>;
 }
 
@@ -161,8 +181,12 @@ pub trait ContextGlobalPropertiesExt {
     /// * There are two values for the same object.
     ///
     /// Ixa automatically knows about any property defined with
-    /// `define_global_property!()` so you don't need to register them
+    /// [`define_global_property!()`] so you don't need to register them
     /// explicitly.
+    ///
+    /// It is possible to call [`Context::load_global_properties()`] multiple
+    /// times with different files as long as the files have disjoint
+    /// sets of properties.
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
 
