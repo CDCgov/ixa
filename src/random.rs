@@ -118,7 +118,7 @@ pub trait ContextRandomExt {
 
     /// Gets a random sample within the range provided by `range`
     /// using the generator associated with the given `RngId`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.    
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_type: R, range: S) -> T
     where
         R::RngType: Rng,
@@ -127,7 +127,7 @@ pub trait ContextRandomExt {
 
     /// Gets a random boolean value which is true with probability `p`
     /// using the generator associated with the given `RngId`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.    
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
         R::RngType: Rng;
