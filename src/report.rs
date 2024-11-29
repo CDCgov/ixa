@@ -40,7 +40,7 @@ impl ConfigReportOptions {
         self.directory = directory;
         self
     }
-    /// Sets the overwrite option
+    /// Sets whether to overwrite existing reports of the same name if they exist
     pub fn overwrite(&mut self, overwrite: bool) -> &mut ConfigReportOptions {
         self.overwrite = overwrite;
         self
@@ -136,7 +136,7 @@ impl ContextReportExt for Context {
                     if data_container.config.overwrite {
                         File::create(&path)?
                     } else {
-                        println!("File already exists: {}. Please rerun setting overwrite to true in the file config.", path.display());
+                        println!("File already exists: {}. Please set `overwrite` to true in the file configuration and rerun.", path.display());
                         return Err(IxaError::IoError(e));
                     }
                 }
