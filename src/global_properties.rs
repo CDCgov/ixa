@@ -54,6 +54,7 @@ where
         Arc::new(
             |context: &mut Context, name, value| -> Result<(), IxaError> {
                 let val: T::Value = serde_json::from_value(value)?;
+                T::validate(&val)?;
                 if context.get_global_property_value(T::new()).is_some() {
                     return Err(IxaError::IxaError(format!("Duplicate property {name}")));
                 }
