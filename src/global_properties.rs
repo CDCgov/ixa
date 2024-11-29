@@ -118,7 +118,7 @@ macro_rules! define_global_property {
 /// directly, but instead define global properties with
 /// [`define_global_property()`]
 pub trait GlobalProperty: Any {
-    type Value: Any;  // The actual type of the data.
+    type Value: Any; // The actual type of the data.
 
     fn new() -> Self;
     #[allow(clippy::missing_errors_doc)]
@@ -212,7 +212,6 @@ impl GlobalPropertiesDataContainer {
         }
     }
 }
-
 
 impl ContextGlobalPropertiesExt for Context {
     fn set_global_property_value<T: GlobalProperty + 'static>(
