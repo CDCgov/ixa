@@ -6,6 +6,8 @@ Ixa (Interactive eXecution of ABMs) is a framework for building modular agent-ba
 
 It's named after the [Ixa crab](https://www.crabdatabase.info/en/crabs/brachyura/eubrachyura/heterotremata/leucosioidea/leucosiidae/ixa/ixa-cylindrus-5874), a genus of Indo-Pacific pebble crabs from the family Leucosiidae.
 
+API documentation can be found at [https://ixa.rs/doc/ixa](https://ixa.rs/doc/ixa).
+
 ** This project is currently in the early stages of development and not ready for use in production.**
 
 **General disclaimer** This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm).  GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
