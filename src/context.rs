@@ -181,7 +181,7 @@ impl Context {
     ///
     /// # Panics
     ///
-    /// Panics if report period is negative, infinite, or NaN.
+    /// Panics if plan period is negative, infinite, or NaN.
     pub fn add_periodic_plan_with_phase(
         &mut self,
         period: f64,
