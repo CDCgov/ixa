@@ -129,7 +129,7 @@ pub trait ContextReportExt {
     /// number of people in each combination of properties in `tabulator`.
     /// # Errors
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
-    /// If the file cannot be created, raises an error.
+    /// If the file cannot be created, returns [`IxaError`]
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
         &mut self,
         short_name: &str,
