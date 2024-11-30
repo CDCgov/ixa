@@ -217,8 +217,8 @@ impl ContextReportExt for Context {
         let data_container = self
             .get_data_container(ReportPlugin)
             .expect("No writer found for the report type");
-        let writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
-        RefMut::map(writer_cell, |writers| {
+        let writers = data_container.file_writers.try_borrow_mut().unwrap();
+        RefMut::map(writers, |writers| {
             writers
                 .get_mut(&type_id)
                 .expect("No writer found for the report type")
