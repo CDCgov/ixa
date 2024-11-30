@@ -259,7 +259,7 @@ struct Index {
     name: &'static str,
     // The hash of the property value maps to a list of PersonIds
     // or None if we're not indexing
-    lookup: Option<HashMap<IndexValue, (HashSet<PersonId>, String)>>,
+    lookup: Option<HashMap<IndexValue, (String, HashSet<PersonId>)>>,
     // A callback that calculates the IndexValue of a person's current property value
     indexer: Box<Indexer>,
     // The largest person ID that has been indexed. Used so that we
@@ -286,14 +286,14 @@ impl Index {
             .as_mut()
             .unwrap()
             .entry(hash)
-            .or_insert_with(|| (HashSet::new(), display))
-            .0
+            .or_insert_with(|| (display, HashSet::new()))
+            .1
             .insert(person_id);
     }
     fn remove_person(&mut self, context: &Context, person_id: PersonId) {
         let (hash, _) = (self.indexer)(context, person_id);
         if let Some(entry) = self.lookup.as_mut().unwrap().get_mut(&hash) {
-            entry.0.remove(&person_id);
+            entry.1.remove(&person_id);
             // Clean up the entry if there are no people
             if entry.0.is_empty() {
                 self.lookup.as_mut().unwrap().remove(&hash);
@@ -862,7 +862,7 @@ pub trait ContextPeopleExt {
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
-    fn get_counts<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
 }
@@ -870,14 +870,13 @@ pub trait ContextPeopleExt {
 fn process_indices(
     context: &Context,
     remaining_indices: &[&Index],
-    accumulated_values: &mut [IndexValue],
-    display_values: &mut Vec<String>,
-    current_matches: &mut HashSet<PersonId>,
+    property_names: &mut Vec<String>,
+    current_matches: &HashSet<PersonId>,
     intersect: bool,
     print_fn: &dyn Fn(&Context, &[String], usize),
 ) {
     if remaining_indices.is_empty() {
-        print_fn(context, display_values, current_matches.len());
+        print_fn(context, property_names, current_matches.len());
         return;
     }
 
@@ -889,12 +888,10 @@ fn process_indices(
             return;
         }
 
-        for (value, (people, display)) in lookup {
-            let mut updated_values = accumulated_values.to_owned();
-            updated_values.push(value.clone());
-            display_values.push(display.clone());
+        for (display, people) in lookup.values() {
+            property_names.push(display.clone());
 
-            let mut matches = if intersect {
+            let matches = if intersect {
                 current_matches
                     .iter()
                     .filter(|person| people.contains(person))
@@ -907,14 +904,12 @@ fn process_indices(
             process_indices(
                 context,
                 rest_indices,
-                &mut updated_values,
-                display_values,
-                &mut matches,
+                property_names,
+                &matches,
                 true,
                 print_fn,
             );
-            display_values.pop();
-            updated_values.pop();
+            property_names.pop();
         }
     }
 }
@@ -1128,7 +1123,7 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn get_counts<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize),
     {
@@ -1164,8 +1159,7 @@ impl ContextPeopleExt for Context {
             self,
             indices.as_slice(),
             &mut Vec::new(),
-            &mut Vec::new(),
-            &mut HashSet::new(),
+            &HashSet::new(),
             false,
             &print_fn,
         );
@@ -1250,7 +1244,7 @@ impl ContextPeopleExtInternal for Context {
             let index = data_container.get_index_ref(t).unwrap();
             if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
                 if let Ok(matching_people) =
-                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.0))
+                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
                 {
                     indexes.push(matching_people);
                 } else {
@@ -2011,7 +2005,7 @@ mod test {
         tabulator.setup(&mut context);
 
         let results: RefCell<HashSet<(Vec<String>, usize)>> = RefCell::new(HashSet::new());
-        context.get_counts(tabulator, |_context, values, count| {
+        context.tabulate_person_properties(tabulator, |_context, values, count| {
             results.borrow_mut().insert((values.to_vec(), count));
         });
 

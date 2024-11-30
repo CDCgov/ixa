@@ -199,7 +199,7 @@ impl ContextReportExt for Context {
         self.add_periodic_plan_with_phase(
             period,
             move |context: &mut Context| {
-                context.get_counts(&tabulator, move |context, values, count| {
+                context.tabulate_person_properties(&tabulator, move |context, values, count| {
                     let mut writer = context.get_writer(TypeId::of::<T>());
                     let mut row = vec![context.get_current_time().to_string()];
                     row.extend(values.to_owned());
