@@ -1125,13 +1125,10 @@ impl ContextPeopleExt for Context {
 
         // First, update indexes
         {
-            let mut index_container = self.get_data_container(PeoplePlugin)
-                .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties")
-                .property_indexes
-                .borrow_mut();
-
-            for (typeid, index) in index_container.iter_mut() {
-                if type_ids.contains(typeid) {
+            let data_container = self.get_data_container(PeoplePlugin)
+                .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+            for t in &type_ids {
+                if let Some(mut index) = data_container.get_index_ref_mut(*t) {
                     index.index_unindexed_people(self);
                 }
             }
