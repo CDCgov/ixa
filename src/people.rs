@@ -250,7 +250,7 @@ impl Hasher for IndexValueHasher {
     }
 }
 
-type Indexer = dyn Fn(&Context, PersonId) -> (IndexValue, String);
+type PersonCallback<T> = dyn Fn(&Context, PersonId) -> T;
 
 // An index for a single property.
 struct Index {
@@ -261,7 +261,9 @@ struct Index {
     // or None if we're not indexing
     lookup: Option<HashMap<IndexValue, (String, HashSet<PersonId>)>>,
     // A callback that calculates the IndexValue of a person's current property value
-    indexer: Box<Indexer>,
+    indexer: Box<PersonCallback<IndexValue>>,
+    // A callback that calculates the display value of a person's current property value
+    get_display: Box<PersonCallback<String>>,
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
     max_indexed: usize,
@@ -274,24 +276,28 @@ impl Index {
             lookup: None,
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, property);
-                (IndexValue::compute(&value), format!("{value:?}"))
+                IndexValue::compute(&value)
+            }),
+            get_display: Box::new(move |context: &Context, person_id: PersonId| {
+                let value = context.get_person_property(person_id, property);
+                format!("{value:?}")
             }),
             max_indexed: 0,
         }
     }
 
     fn add_person(&mut self, context: &Context, person_id: PersonId) {
-        let (hash, display) = (self.indexer)(context, person_id);
+        let hash = (self.indexer)(context, person_id);
         self.lookup
             .as_mut()
             .unwrap()
             .entry(hash)
-            .or_insert_with(|| (display, HashSet::new()))
+            .or_insert_with(|| ((self.get_display)(context, person_id), HashSet::new()))
             .1
             .insert(person_id);
     }
     fn remove_person(&mut self, context: &Context, person_id: PersonId) {
-        let (hash, _) = (self.indexer)(context, person_id);
+        let hash = (self.indexer)(context, person_id);
         if let Some(entry) = self.lookup.as_mut().unwrap().get_mut(&hash) {
             entry.1.remove(&person_id);
             // Clean up the entry if there are no people
@@ -1083,7 +1089,7 @@ impl ContextPeopleExt for Context {
 
         for (t, hash) in &query {
             let index = data_container.get_index_ref(*t).unwrap();
-            if *hash != (*index.indexer)(self, person_id).0 {
+            if *hash != (*index.indexer)(self, person_id) {
                 return false;
             }
         }
@@ -1275,7 +1281,7 @@ impl ContextPeopleExtInternal for Context {
             // (2) check the unindexed properties
             for (t, hash) in &unindexed {
                 let index = data_container.get_index_ref(*t).unwrap();
-                if *hash != (*index.indexer)(self, person).0 {
+                if *hash != (*index.indexer)(self, person) {
                     continue 'outer;
                 }
             }
