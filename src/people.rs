@@ -872,7 +872,6 @@ fn process_indices(
     remaining_indices: &[&Index],
     property_names: &mut Vec<String>,
     current_matches: &HashSet<PersonId>,
-    intersect: bool,
     print_fn: &dyn Fn(&Context, &[String], usize),
 ) {
     if remaining_indices.is_empty() {
@@ -891,24 +890,13 @@ fn process_indices(
         for (display, people) in lookup.values() {
             property_names.push(display.clone());
 
-            let matches = if intersect {
-                current_matches
-                    .iter()
-                    .filter(|person| people.contains(person))
-                    .copied()
-                    .collect()
+            let matches = if property_names.is_empty() {
+                people
             } else {
-                people.clone()
+                &current_matches.intersection(people).copied().collect()
             };
 
-            process_indices(
-                context,
-                rest_indices,
-                property_names,
-                &matches,
-                true,
-                print_fn,
-            );
+            process_indices(context, rest_indices, property_names, matches, print_fn);
             property_names.pop();
         }
     }
@@ -1160,7 +1148,6 @@ impl ContextPeopleExt for Context {
             indices.as_slice(),
             &mut Vec::new(),
             &HashSet::new(),
-            false,
             &print_fn,
         );
     }
