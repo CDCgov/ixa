@@ -125,7 +125,7 @@ pub trait ContextReportExt {
     /// If the file cannot be created, raises an error.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
 
-    /// Adds a periodic report ad the end of period `period` which summarizes the
+    /// Adds a periodic report at the end of period `period` which summarizes the
     /// number of people in each combination of properties in `tabulator`.
     /// # Errors
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
