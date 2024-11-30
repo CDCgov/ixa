@@ -182,12 +182,11 @@ impl ContextReportExt for Context {
 
         {
             // Write the header
+            let mut writer = self.get_writer(TypeId::of::<T>());
             let columns = tabulator.get_columns();
             let mut header = vec!["t".to_string()];
             header.extend(columns);
             header.push("count".to_string());
-
-            let mut writer = self.get_writer(TypeId::of::<T>());
             writer
                 .write_record(&header)
                 .expect("Failed to write header");
