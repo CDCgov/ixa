@@ -1,8 +1,9 @@
 use crate::context::Context;
 use crate::error::IxaError;
+use crate::people::{ContextPeopleExt, Tabulator};
 use csv::Writer;
 use std::any::TypeId;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -108,6 +109,14 @@ impl Context {
 }
 
 pub trait ContextReportExt {
+    /// Add a report file keyed by a `TypeId`.
+    /// The `short_name` is used for file naming to distinguish what data each
+    /// output file points to.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, raises an error.
+    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError>;
+
     /// Call `add_report` with each report type, passing the name of the report type.
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
@@ -115,15 +124,25 @@ pub trait ContextReportExt {
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
     /// If the file cannot be created, raises an error.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
+
+    /// Adds a periodic report at the end of period `period` which summarizes the
+    /// number of people in each combination of properties in `tabulator`.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, returns [`IxaError`]
+    fn add_periodic_report<T: Tabulator + Clone + 'static>(
+        &mut self,
+        short_name: &str,
+        period: f64,
+        tabulator: T,
+    ) -> Result<(), IxaError>;
+    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>>;
     fn send_report<T: Report>(&self, report: T);
     fn report_options(&mut self) -> &mut ConfigReportOptions;
 }
 
 impl ContextReportExt for Context {
-    /// Call `add_report` with each report type, passing the name of the report type.
-    /// The `short_name` is used for file naming to distinguish what data each
-    /// output file points to.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
         let path = self.generate_filename(short_name);
 
         let data_container = self.get_data_container_mut(ReportPlugin);
@@ -147,22 +166,69 @@ impl ContextReportExt for Context {
         };
         let writer = Writer::from_writer(created_file);
         let mut file_writer = data_container.file_writers.borrow_mut();
-        file_writer.insert(TypeId::of::<T>(), writer);
+        file_writer.insert(type_id, writer);
+        Ok(())
+    }
+    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+        self.add_report_by_type_id(TypeId::of::<T>(), short_name)
+    }
+    fn add_periodic_report<T: Tabulator + Clone + 'static>(
+        &mut self,
+        short_name: &str,
+        period: f64,
+        tabulator: T,
+    ) -> Result<(), IxaError> {
+        self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
+
+        {
+            // Write the header
+            let mut writer = self.get_writer(TypeId::of::<T>());
+            let columns = tabulator.get_columns();
+            let mut header = vec!["t".to_string()];
+            header.extend(columns);
+            header.push("count".to_string());
+            writer
+                .write_record(&header)
+                .expect("Failed to write header");
+        }
+
+        tabulator.setup(self);
+
+        self.add_periodic_plan_with_phase(
+            period,
+            move |context: &mut Context| {
+                context.tabulate_person_properties(&tabulator, move |context, values, count| {
+                    let mut writer = context.get_writer(TypeId::of::<T>());
+                    let mut row = vec![context.get_current_time().to_string()];
+                    row.extend(values.to_owned());
+                    row.push(count.to_string());
+
+                    writer.write_record(&row).expect("Failed to write row");
+                });
+            },
+            crate::context::ExecutionPhase::Last,
+        );
+
         Ok(())
     }
 
-    /// Write a new row to the appropriate report file
-    fn send_report<T: Report>(&self, report: T) {
+    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
         let data_container = self
             .get_data_container(ReportPlugin)
             .expect("No writer found for the report type");
-        let mut writer_cell = data_container.file_writers.try_borrow_mut().unwrap();
-        let writer = writer_cell
-            .get_mut(&report.type_id())
-            .expect("No writer found for the report type");
+        let writers = data_container.file_writers.try_borrow_mut().unwrap();
+        RefMut::map(writers, |writers| {
+            writers
+                .get_mut(&type_id)
+                .expect("No writer found for the report type")
+        })
+    }
+
+    /// Write a new row to the appropriate report file
+    fn send_report<T: Report>(&self, report: T) {
+        let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
-        writer.flush().expect("Failed to flush writer");
     }
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
@@ -174,11 +240,15 @@ impl ContextReportExt for Context {
 
 #[cfg(test)]
 mod test {
+    use crate::{define_person_property, define_person_property_with_default};
+
     use super::*;
     use core::convert::TryInto;
     use serde_derive::{Deserialize, Serialize};
     use std::thread;
     use tempfile::tempdir;
+
+    define_person_property_with_default!(IsRunner, bool, false);
 
     #[derive(Serialize, Deserialize)]
     struct SampleReport {
@@ -293,25 +363,28 @@ mod test {
 
     #[test]
     fn multiple_reports_one_context() {
-        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("mult_report_".to_string())
-            .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report").unwrap();
-        let report1 = SampleReport {
-            id: 1,
-            value: "Value,1".to_string(),
-        };
-        let report2 = SampleReport {
-            id: 2,
-            value: "Value\n2".to_string(),
-        };
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config
+                .file_prefix("mult_report_".to_string())
+                .directory(path.clone());
+            context.add_report::<SampleReport>("sample_report").unwrap();
+            let report1 = SampleReport {
+                id: 1,
+                value: "Value,1".to_string(),
+            };
+            let report2 = SampleReport {
+                id: 2,
+                value: "Value\n2".to_string(),
+            };
 
-        context.send_report(report1);
-        context.send_report(report2);
+            context.send_report(report1);
+            context.send_report(report2);
+        }
 
         let file_path = path.join("mult_report_sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
@@ -451,10 +524,54 @@ mod test {
             .overwrite(true);
         let result = context2.add_report::<SampleReport>("sample_report");
         assert!(result.is_ok());
-        // file should also be empty
         let file = File::open(file_path).unwrap();
         let reader = csv::Reader::from_reader(file);
         let records = reader.into_records();
         assert_eq!(records.count(), 0);
+    }
+
+    #[test]
+    fn add_periodic_report() {
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config
+                .file_prefix("test_".to_string())
+                .directory(path.clone());
+            let _ = context.add_periodic_report("periodic", 1.2, (IsRunner,));
+            let person = context.add_person(()).unwrap();
+            context.add_person(()).unwrap();
+
+            context.add_plan(1.2, move |context: &mut Context| {
+                context.set_person_property(person, IsRunner, true);
+            });
+
+            context.execute();
+        }
+
+        let file_path = path.join("test_periodic.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+
+        assert_eq!(reader.headers().unwrap(), vec!["t", "IsRunner", "count"]);
+
+        let mut actual: Vec<Vec<String>> = reader
+            .records()
+            .map(|result| result.unwrap().iter().map(String::from).collect())
+            .collect();
+        let mut expected = vec![
+            vec!["0", "false", "2"],
+            vec!["1.2", "false", "1"],
+            vec!["1.2", "true", "1"],
+        ];
+
+        actual.sort();
+        expected.sort();
+
+        assert_eq!(actual, expected, "CSV file should contain the correct data");
     }
 }
