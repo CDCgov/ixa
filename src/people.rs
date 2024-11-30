@@ -175,15 +175,13 @@ pub trait Tabulator {
 
 impl<T: PersonProperty + 'static> Tabulator for (T,) {
     fn setup(&self, context: &mut Context) {
-        context.index_property_noargs::<T>();
+        context.index_property(T::get_instance());
     }
     fn get_typelist(&self) -> Vec<TypeId> {
         vec![std::any::TypeId::of::<T>()]
     }
     fn get_columns(&self) -> Vec<String> {
-        vec![String::from(
-            std::any::type_name::<T>().split("::").last().unwrap(),
-        )]
+        vec![String::from(T::name())]
     }
 }
 
@@ -202,7 +200,7 @@ macro_rules! impl_tabulator {
             {
                 fn setup(&self, context: &mut Context) {
                     #(
-                        context.index_property_noargs::<T~N>();
+                        context.index_property(T~N::get_instance());
                     )*
                 }
                 fn get_typelist(&self) -> Vec<TypeId> {
@@ -216,7 +214,7 @@ macro_rules! impl_tabulator {
                 fn get_columns(&self) -> Vec<String> {
                     vec![
                     #(
-                        String::from(std::any::type_name::<T~N>().split("::").last().unwrap()),
+                        String::from(T~N::name()),
                     )*
                     ]
                 }
@@ -396,6 +394,7 @@ pub trait PersonProperty: Copy {
     }
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
     fn get_instance() -> Self;
+    fn name() -> &'static str;
 }
 
 /// A trait that contains the initialization values for a
@@ -575,6 +574,9 @@ macro_rules! define_person_property {
             fn get_instance() -> Self {
                 $person_property
             }
+            fn name() -> &'static str {
+                stringify!($person_property)
+            }
         }
     };
     ($person_property:ident, $value:ty) => {
@@ -593,6 +595,9 @@ macro_rules! define_person_property {
             }
             fn get_instance() -> Self {
                 $person_property
+            }
+            fn name() -> &'static str {
+                stringify!($person_property)
             }
         }
     };
@@ -637,6 +642,9 @@ macro_rules! define_derived_property {
             }
             fn get_instance() -> Self {
                 $derived_property
+            }
+            fn name() -> &'static str {
+                stringify!($derived_property)
             }
         }
     };
@@ -710,18 +718,12 @@ impl PeopleData {
         }
     }
 
-    fn get_index_ref_mut_by_prop_noargs<T: PersonProperty + 'static>(
-        &self,
-    ) -> Option<RefMut<Index>> {
-        let type_id = TypeId::of::<T>();
-        self.get_index_ref_mut(type_id)
-    }
-
     fn get_index_ref_mut_by_prop<T: PersonProperty + 'static>(
         &self,
         _property: T,
     ) -> Option<RefMut<Index>> {
-        self.get_index_ref_mut_by_prop_noargs::<T>()
+        let type_id = TypeId::of::<T>();
+        self.get_index_ref_mut(type_id)
     }
 
     // Convenience function to iterate over the current population.
@@ -850,7 +852,6 @@ pub trait ContextPeopleExt {
     /// [`Context::index_property()`] is not called, so this function just ensures
     /// that one is created.
     fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
-    fn index_property_noargs<T: PersonProperty + 'static>(&mut self);
 
     /// Query for all people matching a given set of criteria.
     ///
@@ -1063,10 +1064,6 @@ impl ContextPeopleExt for Context {
     }
 
     fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
-        self.index_property_noargs::<T>();
-    }
-
-    fn index_property_noargs<T: PersonProperty + 'static>(&mut self) {
         // Ensure that the data container exists
         {
             let _ = self.get_data_container_mut(PeoplePlugin);
@@ -1077,7 +1074,7 @@ impl ContextPeopleExt for Context {
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut index = data_container
-            .get_index_ref_mut_by_prop_noargs::<T>()
+            .get_index_ref_mut_by_prop(T::get_instance())
             .unwrap();
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
