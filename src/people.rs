@@ -1982,7 +1982,7 @@ mod test {
         assert_eq!(cols.get_columns(), vec!["Age", "RiskCategoryType"]);
     }
 
-    fn get_counts_test_setup<T: Tabulator>(
+    fn tabulate_properties_test_setup<T: Tabulator>(
         tabulator: &T,
         setup: impl FnOnce(&mut Context),
         expected_values: &HashSet<(Vec<String>, usize)>,
@@ -2001,12 +2001,12 @@ mod test {
     }
 
     #[test]
-    fn test_get_counts() {
+    fn test_periodic_report() {
         let tabulator = (IsRunner,);
         let mut expected = HashSet::new();
         expected.insert((vec!["true".to_string()], 1));
         expected.insert((vec!["false".to_string()], 1));
-        get_counts_test_setup(
+        tabulate_properties_test_setup(
             &tabulator,
             |context| {
                 let bob = context.add_person(()).unwrap();
@@ -2026,7 +2026,7 @@ mod test {
         expected.insert((vec!["true".to_string(), "false".to_string()], 1));
         expected.insert((vec!["true".to_string(), "true".to_string()], 1));
 
-        get_counts_test_setup(
+        tabulate_properties_test_setup(
             &tabulator,
             |context| {
                 context.add_person(()).unwrap();

@@ -542,11 +542,11 @@ mod test {
             config
                 .file_prefix("test_".to_string())
                 .directory(path.clone());
-            let _ = context.add_periodic_report("periodic", 1.0, (IsRunner,));
+            let _ = context.add_periodic_report("periodic", 1.2, (IsRunner,));
             let person = context.add_person(()).unwrap();
             context.add_person(()).unwrap();
 
-            context.add_plan(1.0, move |context: &mut Context| {
+            context.add_plan(1.2, move |context: &mut Context| {
                 context.set_person_property(person, IsRunner, true);
             });
 
@@ -566,8 +566,8 @@ mod test {
             .collect();
         let mut expected = vec![
             vec!["0", "false", "2"],
-            vec!["1", "false", "1"],
-            vec!["1", "true", "1"],
+            vec!["1.2", "false", "1"],
+            vec!["1.2", "true", "1"],
         ];
 
         actual.sort();
