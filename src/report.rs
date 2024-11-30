@@ -191,7 +191,6 @@ impl ContextReportExt for Context {
             writer
                 .write_record(&header)
                 .expect("Failed to write header");
-            writer.flush().expect("Failed to flush writer");
         }
 
         tabulator.setup(self);
@@ -206,7 +205,6 @@ impl ContextReportExt for Context {
                     row.push(count.to_string());
 
                     writer.write_record(&row).expect("Failed to write row");
-                    writer.flush().expect("Failed to flush writer");
                 });
             },
             crate::context::ExecutionPhase::Last,
@@ -232,7 +230,6 @@ impl ContextReportExt for Context {
     fn send_report<T: Report>(&self, report: T) {
         let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
-        writer.flush().expect("Failed to flush writer");
     }
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
@@ -367,25 +364,28 @@ mod test {
 
     #[test]
     fn multiple_reports_one_context() {
-        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("mult_report_".to_string())
-            .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report").unwrap();
-        let report1 = SampleReport {
-            id: 1,
-            value: "Value,1".to_string(),
-        };
-        let report2 = SampleReport {
-            id: 2,
-            value: "Value\n2".to_string(),
-        };
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config
+                .file_prefix("mult_report_".to_string())
+                .directory(path.clone());
+            context.add_report::<SampleReport>("sample_report").unwrap();
+            let report1 = SampleReport {
+                id: 1,
+                value: "Value,1".to_string(),
+            };
+            let report2 = SampleReport {
+                id: 2,
+                value: "Value\n2".to_string(),
+            };
 
-        context.send_report(report1);
-        context.send_report(report2);
+            context.send_report(report1);
+            context.send_report(report2);
+        }
 
         let file_path = path.join("mult_report_sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
@@ -533,22 +533,25 @@ mod test {
 
     #[test]
     fn add_periodic_report() {
-        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("test_".to_string())
-            .directory(path.clone());
-        let _ = context.add_periodic_report("periodic", 1.0, (IsRunner,));
-        let person = context.add_person(()).unwrap();
-        context.add_person(()).unwrap();
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config
+                .file_prefix("test_".to_string())
+                .directory(path.clone());
+            let _ = context.add_periodic_report("periodic", 1.0, (IsRunner,));
+            let person = context.add_person(()).unwrap();
+            context.add_person(()).unwrap();
 
-        context.add_plan(1.0, move |context: &mut Context| {
-            context.set_person_property(person, IsRunner, true);
-        });
+            context.add_plan(1.0, move |context: &mut Context| {
+                context.set_person_property(person, IsRunner, true);
+            });
 
-        context.execute();
+            context.execute();
+        }
 
         let file_path = path.join("test_periodic.csv");
         assert!(file_path.exists(), "CSV file should exist");

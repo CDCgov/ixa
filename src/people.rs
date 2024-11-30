@@ -879,26 +879,25 @@ fn process_indices(
         return;
     }
 
-    if let Some((next_index, rest_indices)) = remaining_indices.split_first() {
-        let lookup = next_index.lookup.as_ref().unwrap();
+    let (next_index, rest_indices) = remaining_indices.split_first().unwrap();
+    let lookup = next_index.lookup.as_ref().unwrap();
 
-        // If there is nothing in the index, we don't need to process it
-        if lookup.is_empty() {
-            return;
-        }
+    // If there is nothing in the index, we don't need to process it
+    if lookup.is_empty() {
+        return;
+    }
 
-        for (display, people) in lookup.values() {
-            property_names.push(display.clone());
+    for (display, people) in lookup.values() {
+        property_names.push(display.clone());
 
-            let matches = if property_names.is_empty() {
-                people
-            } else {
-                &current_matches.intersection(people).copied().collect()
-            };
+        let matches = if property_names.is_empty() {
+            people
+        } else {
+            &current_matches.intersection(people).copied().collect()
+        };
 
-            process_indices(context, rest_indices, property_names, matches, print_fn);
-            property_names.pop();
-        }
+        process_indices(context, rest_indices, property_names, matches, print_fn);
+        property_names.pop();
     }
 }
 
