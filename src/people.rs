@@ -888,12 +888,13 @@ fn process_indices(
     }
 
     for (display, people) in lookup.values() {
+        let intersect = !property_names.is_empty();
         property_names.push(display.clone());
 
-        let matches = if property_names.is_empty() {
-            people
-        } else {
+        let matches = if intersect {
             &current_matches.intersection(people).copied().collect()
+        } else {
+            people
         };
 
         process_indices(context, rest_indices, property_names, matches, print_fn);
