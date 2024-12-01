@@ -2,13 +2,14 @@ use std::path::PathBuf;
 
 use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
+use ixa::report::ContextReportExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+use population_loader::DiseaseStatusType;
 
 mod exposure_manager;
 mod incidence_report;
 mod infection_manager;
 mod parameters_loader;
-mod periodic_report;
 mod population_loader;
 
 use crate::parameters_loader::Parameters;
@@ -31,7 +32,8 @@ fn initialize() -> Result<Context, IxaError> {
     population_loader::init(&mut context);
     infection_manager::init(&mut context);
     incidence_report::init(&mut context)?;
-    periodic_report::init(&mut context)?;
+    // add periodic report
+    context.add_periodic_report("person_property_count", 1.0, (DiseaseStatusType,))?;
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();

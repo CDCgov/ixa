@@ -4,11 +4,10 @@ use ixa::people::ContextPeopleExt;
 use ixa::{define_person_property, define_person_property_with_default};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
-use strum_macros::EnumIter;
 
 use crate::parameters_loader::Parameters;
 
-#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, EnumIter, Hash)]
+#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum DiseaseStatus {
     S,
     I,
