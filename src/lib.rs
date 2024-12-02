@@ -27,10 +27,25 @@
 //! * A transmission manager that models the process of an infected
 //!   person trying to infect susceptible people in the population.
 pub mod context;
+pub use context::{Context, ExecutionPhase, IxaEvent};
+
 pub mod error;
+pub use error::IxaError;
+
 pub mod global_properties;
+pub use global_properties::{ContextGlobalPropertiesExt, GlobalProperty};
+
 pub mod network;
+pub use network::{ContextNetworkExt, Edge, EdgeType};
+
 pub mod people;
+pub use people::{
+    ContextPeopleExt, PersonCreatedEvent, PersonId, PersonProperty, PersonPropertyChangeEvent,
+};
+
 pub mod plan;
 pub mod random;
+pub use random::{ContextRandomExt, RngId};
+
 pub mod report;
+pub use report::{ConfigReportOptions, ContextReportExt, Report};
