@@ -278,7 +278,9 @@ mod test {
         };
 
         let mut context = Context::new();
-        context.set_global_property_value(Parameters, p_values.clone()).unwrap();
+        context
+            .set_global_property_value(Parameters, p_values.clone())
+            .unwrap();
         context.init_random(p_values.seed);
 
         schedule_birth(&mut context);
@@ -300,7 +302,9 @@ mod test {
         };
 
         let mut context = Context::new();
-        context.set_global_property_value(Parameters, p_values.clone()).unwrap();
+        context
+            .set_global_property_value(Parameters, p_values.clone())
+            .unwrap();
         context.init_random(p_values.seed);
         let _person = context.create_new_person(0);
         schedule_death(&mut context);
