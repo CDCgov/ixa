@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::context::Context;
 use ixa::define_person_property;
-use ixa::people::{ContextPeopleExt, PersonId};
+use ixa::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
