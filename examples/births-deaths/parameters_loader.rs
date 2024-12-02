@@ -32,7 +32,9 @@ define_global_property!(Foi, HashMap<AgeGroupRisk, f64>);
 
 pub fn init_parameters(context: &mut Context, file_path: &Path) -> Result<(), IxaError> {
     let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path)?;
-    context.set_global_property_value(Parameters, parameters_json.clone()).unwrap();
+    context
+        .set_global_property_value(Parameters, parameters_json.clone())
+        .unwrap();
 
     let foi_map = parameters_json
         .foi_groups
@@ -41,7 +43,9 @@ pub fn init_parameters(context: &mut Context, file_path: &Path) -> Result<(), Ix
         .map(|x| (x.group_name, x.foi))
         .collect::<HashMap<AgeGroupRisk, f64>>();
 
-    context.set_global_property_value(Foi, foi_map.clone()).unwrap();
+    context
+        .set_global_property_value(Foi, foi_map.clone())
+        .unwrap();
 
     Ok(())
 }

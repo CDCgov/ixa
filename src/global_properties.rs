@@ -276,7 +276,10 @@ mod test {
         context
             .set_global_property_value(DiseaseParams, params.clone())
             .unwrap();
-        let global_params = context.get_global_property_value(DiseaseParams).unwrap().clone();
+        let global_params = context
+            .get_global_property_value(DiseaseParams)
+            .unwrap()
+            .clone();
         assert_eq!(global_params.days, params.days);
         assert_eq!(global_params.diseases, params.diseases);
 
@@ -286,7 +289,10 @@ mod test {
             .is_err());
 
         // Check that the value is unchanged.
-        let global_params = context.get_global_property_value(DiseaseParams).unwrap().clone();
+        let global_params = context
+            .get_global_property_value(DiseaseParams)
+            .unwrap()
+            .clone();
         assert_eq!(global_params.days, params.days);
         assert_eq!(global_params.diseases, params.diseases);
     }

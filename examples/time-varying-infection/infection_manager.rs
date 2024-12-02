@@ -120,7 +120,9 @@ mod test {
         };
         let mut context = Context::new();
 
-        context.set_global_property_value(Parameters, p_values).unwrap();
+        context
+            .set_global_property_value(Parameters, p_values)
+            .unwrap();
         let parameters = context
             .get_global_property_value(Parameters)
             .unwrap()
