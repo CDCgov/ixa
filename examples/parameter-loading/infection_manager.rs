@@ -66,7 +66,9 @@ mod test {
         };
         let mut context = Context::new();
 
-        context.set_global_property_value(Parameters, p_values.clone());
+        context
+            .set_global_property_value(Parameters, p_values.clone())
+            .unwrap();
         context.init_random(42);
         init(&mut context);
 

@@ -20,7 +20,7 @@ use crate::error::IxaError;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;
@@ -58,7 +58,7 @@ where
                 if context.get_global_property_value(T::new()).is_some() {
                     return Err(IxaError::IxaError(format!("Duplicate property {name}")));
                 }
-                context.set_global_property_value(T::new(), val);
+                let _ = context.set_global_property_value(T::new(), val);
                 Ok(())
             },
         ),
@@ -142,11 +142,14 @@ crate::context::define_data_plugin!(
 
 pub trait ContextGlobalPropertiesExt {
     /// Set the value of a global property of type T
+    ///
+    /// # Errors
+    /// Will return an error if an attempt is made to change a value.
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
         value: T::Value,
-    );
+    ) -> Result<(), IxaError>;
 
     /// Return value of global property T
     fn get_global_property_value<T: GlobalProperty + 'static>(
@@ -195,11 +198,14 @@ impl GlobalPropertiesDataContainer {
         &mut self,
         _property: &T,
         value: T::Value,
-    ) {
-        let _data_container = self
-            .global_property_container
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(value));
+    ) -> Result<(), IxaError> {
+        match self.global_property_container.entry(TypeId::of::<T>()) {
+            Entry::Vacant(entry) => {
+                entry.insert(Box::new(value));
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(IxaError::from("Entry already exists")),
+        }
     }
 
     #[must_use]
@@ -218,9 +224,9 @@ impl ContextGlobalPropertiesExt for Context {
         &mut self,
         property: T,
         value: T::Value,
-    ) {
+    ) -> Result<(), IxaError> {
         let data_container = self.get_data_container_mut(GlobalPropertiesPlugin);
-        data_container.set_global_property_value(&property, value);
+        data_container.set_global_property_value(&property, value)
     }
 
     #[allow(unused_variables)]
@@ -276,16 +282,37 @@ mod test {
     }
 
     define_global_property!(DiseaseParams, ParamType);
-    //Since global properties aren't mutable right now, only
-    // check that they are properly set
+
     #[test]
     fn set_get_global_property() {
         let params: ParamType = ParamType {
             days: 10,
             diseases: 2,
         };
+        let params2: ParamType = ParamType {
+            days: 11,
+            diseases: 3,
+        };
+
         let mut context = Context::new();
-        context.set_global_property_value(DiseaseParams, params.clone());
+
+        // Set and check the stored value.
+        context
+            .set_global_property_value(DiseaseParams, params.clone())
+            .unwrap();
+        let global_params = context
+            .get_global_property_value(DiseaseParams)
+            .unwrap()
+            .clone();
+        assert_eq!(global_params.days, params.days);
+        assert_eq!(global_params.diseases, params.diseases);
+
+        // Setting again should fail because global properties are immutable.
+        assert!(context
+            .set_global_property_value(DiseaseParams, params2.clone())
+            .is_err());
+
+        // Check that the value is unchanged.
         let global_params = context
             .get_global_property_value(DiseaseParams)
             .unwrap()
@@ -322,7 +349,9 @@ mod test {
             .load_parameters_from_json::<ParamType>(&file_path)
             .unwrap();
 
-        context.set_global_property_value(Parameters, params_json);
+        context
+            .set_global_property_value(Parameters, params_json)
+            .unwrap();
 
         let params_read = context
             .get_global_property_value(Parameters)

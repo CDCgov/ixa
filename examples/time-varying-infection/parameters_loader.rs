@@ -23,6 +23,6 @@ define_global_property!(Parameters, ParametersValues);
 
 pub fn init_parameters(context: &mut Context, file_path: &Path) -> Result<(), IxaError> {
     let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path)?;
-    context.set_global_property_value(Parameters, parameters_json);
+    context.set_global_property_value(Parameters, parameters_json)?;
     Ok(())
 }

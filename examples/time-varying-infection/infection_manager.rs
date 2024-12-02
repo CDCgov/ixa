@@ -120,7 +120,9 @@ mod test {
         };
         let mut context = Context::new();
 
-        context.set_global_property_value(Parameters, p_values);
+        context
+            .set_global_property_value(Parameters, p_values)
+            .unwrap();
         let parameters = context
             .get_global_property_value(Parameters)
             .unwrap()
@@ -161,7 +163,9 @@ mod test {
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
-        context.set_global_property_value(Parameters, parameters.clone());
+        context
+            .set_global_property_value(Parameters, parameters.clone())
+            .unwrap();
         context.init_random(parameters.seed);
         for _ in 0..parameters.population {
             let person_id = context.add_person(()).unwrap();
@@ -211,7 +215,9 @@ mod test {
         let mut sum = 0.0;
         for seed in 0..n_iter {
             let mut context = Context::new();
-            context.set_global_property_value(Parameters, parameters.clone());
+            context
+                .set_global_property_value(Parameters, parameters.clone())
+                .unwrap();
             context.init_random(seed);
             init(&mut context);
             let person_id = context
