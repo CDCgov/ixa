@@ -34,3 +34,4 @@ pub mod people;
 pub mod plan;
 pub mod random;
 pub mod report;
+pub mod runner;
