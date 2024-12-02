@@ -443,22 +443,20 @@ mod test {
     #[test]
     fn validate_property_set_success() {
         let mut context = Context::new();
-        context.set_global_property_value(Property3, Property3Type {
-            field_int: 0}).unwrap();
+        context
+            .set_global_property_value(Property3, Property3Type { field_int: 0 })
+            .unwrap();
     }
-    
+
     #[test]
     fn validate_property_set_failure() {
         let mut context = Context::new();
         assert!(matches!(
-            context.set_global_property_value(Property3,
-                                              Property3Type {
-                                                  field_int: 1
-                                              }),
+            context.set_global_property_value(Property3, Property3Type { field_int: 1 }),
             Err(IxaError::IxaError(_))
         ));
     }
-    
+
     #[test]
     fn validate_property_load_success() {
         let mut context = Context::new();
