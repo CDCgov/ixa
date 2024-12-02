@@ -13,7 +13,7 @@ fn main() {
         context.add_plan(1.0, |_| {
             println!("Hello, world!");
         });
-        println!("{}", args.seed);
+        println!("{}", args.random_seed);
         if let Some(extra) = extra {
             println!("{}", extra.foo);
         }

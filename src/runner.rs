@@ -11,7 +11,7 @@ use clap::{Args, Command, FromArgMatches as _};
 pub struct BaseArgs {
     /// Random seed
     #[arg(short, long, default_value = "0")]
-    pub seed: u64,
+    pub random_seed: u64,
 
     /// Optional path for a global properties config file
     #[arg(short, long, default_value = "")]
@@ -26,12 +26,12 @@ pub struct BaseArgs {
 pub struct PlaceholderCustom {}
 
 fn create_ixa_cli() -> Command {
-    let cli = Command::new("Ixa");
+    let cli = Command::new("ixa");
     BaseArgs::augment_args(cli)
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_custom_args<A, F>(load: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
 where
     A: Args,
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
@@ -42,11 +42,11 @@ where
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
     let custom_matches = A::from_arg_matches(&matches)?;
-    run_with_args_internal(base_args_matches, Some(custom_matches), load)
+    run_with_args_internal(base_args_matches, Some(custom_matches), setup_fn)
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_args<F>(load: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_args<F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
 {
@@ -54,10 +54,17 @@ where
     let matches = cli.get_matches();
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
-    run_with_args_internal(base_args_matches, None, load)
+    run_with_args_internal(base_args_matches, None, setup_fn)
 }
 
-fn setup_context(args: &BaseArgs) -> Result<Context, IxaError> {
+fn run_with_args_internal<A, F>(
+    args: BaseArgs,
+    custom_args: Option<A>,
+    setup_fn: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
+{
     // Instantiate a context
     let mut context = Context::new();
 
@@ -75,24 +82,10 @@ fn setup_context(args: &BaseArgs) -> Result<Context, IxaError> {
         report_config.directory(output_dir);
     }
 
-    context.init_random(args.seed);
-    Ok(context)
-}
-
-fn run_with_args_internal<A, F>(
-    args: BaseArgs,
-    custom_args: Option<A>,
-    load: F,
-) -> Result<(), Box<dyn std::error::Error>>
-where
-    A: Args,
-    F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
-{
-    // Create a context
-    let mut context = setup_context(&args)?;
+    context.init_random(args.random_seed);
 
     // Run the provided Fn
-    load(&mut context, args, custom_args)?;
+    setup_fn(&mut context, args, custom_args)?;
 
     // Execute the context
     context.execute();
@@ -102,7 +95,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::define_global_property;
+    use crate::{define_global_property, define_rng};
     use serde::Deserialize;
 
     #[derive(Args, Debug)]
@@ -126,12 +119,20 @@ mod tests {
     #[test]
     fn test_run_with_random_seed() {
         let test_args = BaseArgs {
-            seed: 42,
+            random_seed: 42,
             config: String::new(),
             output_dir: String::new(),
         };
-        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<CustomArgs>| {
-            assert_eq!(ctx.get_base_seed(), 42);
+
+        // Use a comparison context to verify the random seed was set
+        let mut compare_ctx = Context::new();
+        compare_ctx.init_random(42);
+        define_rng!(TestRng);
+        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
+            assert_eq!(
+                ctx.sample_range(TestRng, 0..100),
+                compare_ctx.sample_range(TestRng, 0..100)
+            );
             Ok(())
         });
         assert!(result.is_ok());
@@ -146,11 +147,11 @@ mod tests {
     #[test]
     fn test_run_with_config_path() {
         let test_args = BaseArgs {
-            seed: 42,
+            random_seed: 42,
             config: "tests/data/global_properties_runner.json".to_string(),
             output_dir: String::new(),
         };
-        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<CustomArgs>| {
+        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
             let p3 = ctx.get_global_property_value(RunnerProperty).unwrap();
             assert_eq!(p3.field_int, 0);
             Ok(())
@@ -161,11 +162,11 @@ mod tests {
     #[test]
     fn test_run_with_output_dir() {
         let test_args = BaseArgs {
-            seed: 42,
+            random_seed: 42,
             config: String::new(),
             output_dir: "data".to_string(),
         };
-        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<CustomArgs>| {
+        let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
             let output_dir = &ctx.report_options().directory;
             assert_eq!(output_dir, &PathBuf::from("data"));
             Ok(())
@@ -176,7 +177,7 @@ mod tests {
     #[test]
     fn test_run_with_custom() {
         let test_args = BaseArgs {
-            seed: 42,
+            random_seed: 42,
             config: String::new(),
             output_dir: String::new(),
         };

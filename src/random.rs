@@ -94,8 +94,6 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
 pub trait ContextRandomExt {
     fn init_random(&mut self, base_seed: u64);
 
-    fn get_base_seed(&self) -> u64;
-
     /// Gets a random sample from the random number generator associated with the given
     /// `RngId` by applying the specified sampler function. If the Rng has not been used
     /// before, one will be created with the base seed you defined in `set_base_random_seed`.
@@ -154,12 +152,6 @@ impl ContextRandomExt for Context {
         // Clear any existing Rngs to ensure they get re-seeded when `get_rng` is called
         let mut rng_map = data_container.rng_holders.try_borrow_mut().unwrap();
         rng_map.clear();
-    }
-
-    fn get_base_seed(&self) -> u64 {
-        self.get_data_container(RngPlugin)
-            .expect("You must initialize the random number generator with a base seed")
-            .base_seed
     }
 
     fn sample<R: RngId + 'static, T>(
