@@ -54,11 +54,10 @@ where
         Arc::new(
             |context: &mut Context, name, value| -> Result<(), IxaError> {
                 let val: T::Value = serde_json::from_value(value)?;
-                T::validate(&val)?;
                 if context.get_global_property_value(T::new()).is_some() {
                     return Err(IxaError::IxaError(format!("Duplicate property {name}")));
                 }
-                let _ = context.set_global_property_value(T::new(), val);
+                context.set_global_property_value(T::new(), val)?;
                 Ok(())
             },
         ),
@@ -225,6 +224,7 @@ impl ContextGlobalPropertiesExt for Context {
         property: T,
         value: T::Value,
     ) -> Result<(), IxaError> {
+        T::validate(&value)?;
         let data_container = self.get_data_container_mut(GlobalPropertiesPlugin);
         data_container.set_global_property_value(&property, value)
     }
@@ -439,8 +439,28 @@ mod test {
             ))),
         }
     });
+
     #[test]
-    fn validate_property_success() {
+    fn validate_property_set_success() {
+        let mut context = Context::new();
+        context.set_global_property_value(Property3, Property3Type {
+            field_int: 0}).unwrap();
+    }
+    
+    #[test]
+    fn validate_property_set_failure() {
+        let mut context = Context::new();
+        assert!(matches!(
+            context.set_global_property_value(Property3,
+                                              Property3Type {
+                                                  field_int: 1
+                                              }),
+            Err(IxaError::IxaError(_))
+        ));
+    }
+    
+    #[test]
+    fn validate_property_load_success() {
         let mut context = Context::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/global_properties_valid.json");
@@ -448,7 +468,7 @@ mod test {
     }
 
     #[test]
-    fn validate_property_failure() {
+    fn validate_property_load_failure() {
         let mut context = Context::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/global_properties_invalid.json");
