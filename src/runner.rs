@@ -25,20 +25,23 @@ pub struct BaseArgs {
 #[derive(Args)]
 pub struct PlaceholderCustom {}
 
+fn create_ixa_cli() -> Command {
+    let cli = Command::new("Ixa");
+    BaseArgs::augment_args(cli)
+}
+
 #[allow(clippy::missing_errors_doc)]
 pub fn run_with_custom_args<A, F>(load: F) -> Result<(), Box<dyn std::error::Error>>
 where
     A: Args,
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
-    let cli = Command::new("Ixa");
-    let cli = BaseArgs::augment_args(cli);
-    let cli = A::augment_args(cli);
+    let mut cli = create_ixa_cli();
+    cli = A::augment_args(cli);
     let matches = cli.get_matches();
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
     let custom_matches = A::from_arg_matches(&matches)?;
-
     run_with_args_internal(base_args_matches, Some(custom_matches), load)
 }
 
@@ -47,12 +50,10 @@ pub fn run_with_args<F>(load: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
 {
-    let cli = Command::new("Ixa");
-    let cli = BaseArgs::augment_args(cli);
+    let cli = create_ixa_cli();
     let matches = cli.get_matches();
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
-
     run_with_args_internal(base_args_matches, None, load)
 }
 
@@ -167,6 +168,21 @@ mod tests {
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<CustomArgs>| {
             let output_dir = &ctx.report_options().directory;
             assert_eq!(output_dir, &PathBuf::from("data"));
+            Ok(())
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_with_custom() {
+        let test_args = BaseArgs {
+            seed: 42,
+            config: String::new(),
+            output_dir: String::new(),
+        };
+        let custom = CustomArgs { field: 42 };
+        let result = run_with_args_internal(test_args, Some(custom), |_, _, c| {
+            assert_eq!(c.unwrap().field, 42);
             Ok(())
         });
         assert!(result.is_ok());
