@@ -226,11 +226,11 @@ mod test {
             context.kill_person(person);
         });
         context.add_plan(390.0, |context| {
-            let pop = context.get_population_by_property(Alive, true);
+            let pop = context.query_people_count((Alive, true));
             assert_eq!(pop, 2);
         });
         context.add_plan(401.0, |context| {
-            let pop = context.get_population_by_property(Alive, true);
+            let pop = context.query_people_count((Alive, true));
             assert_eq!(pop, 1);
         });
         context.execute();
