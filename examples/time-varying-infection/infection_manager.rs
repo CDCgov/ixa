@@ -169,7 +169,6 @@ mod test {
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),
-            #[allow(clippy::cast_precision_loss)]
             1.0 / parameters.infection_duration
                 / parameters.population as f64
         );
