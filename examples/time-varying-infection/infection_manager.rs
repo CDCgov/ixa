@@ -15,6 +15,7 @@ fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
     1.0 - f64::exp(-time_spent_infected * n_eff_inv_infec(context))
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn n_eff_inv_infec(context: &mut Context) -> f64 {
     let parameters = context
         .get_global_property_value(Parameters)
@@ -22,7 +23,6 @@ fn n_eff_inv_infec(context: &mut Context) -> f64 {
         .clone();
     // get number of infected people
     let n_infected = context.query_people_count((DiseaseStatusType, DiseaseStatus::I));
-
     (1.0 / parameters.infection_duration) / (n_infected as f64)
 }
 
@@ -169,7 +169,9 @@ mod test {
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),
-            1.0 / parameters.infection_duration / parameters.population as f64
+            #[allow(clippy::cast_precision_loss)]
+            1.0 / parameters.infection_duration
+                / parameters.population as f64
         );
         let time_spent_infected = 0.5;
         let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);

@@ -896,8 +896,11 @@ pub trait ContextPeopleExt {
 
     /// Randomly sample a person from the population.
     ///
-    /// This is currently implemented by sampling in 0..current_population
+    /// This is currently implemented by sampling in `0..current_population`
     /// but in the future we might have holes where people were removed.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if population is 0.
     fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng;
