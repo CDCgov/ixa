@@ -129,13 +129,6 @@ pub trait ContextPopulationExt {
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
     #[allow(dead_code)]
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq;
     fn sample_person_by_property<T: PersonProperty + 'static>(
         &mut self,
         property: T,
@@ -167,24 +160,7 @@ impl ContextPopulationExt for Context {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
         }
     }
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq,
-    {
-        let mut population_counter = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, property) == value {
-                population_counter += 1;
-            }
-        }
-        population_counter
-    }
-
+    
     fn sample_person_by_property<T: PersonProperty + 'static>(
         &mut self,
         property: T,
@@ -193,13 +169,7 @@ impl ContextPopulationExt for Context {
     where
         <T as PersonProperty>::Value: PartialEq,
     {
-        let mut people_vec = Vec::<PersonId>::new();
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, property) == value {
-                people_vec.push(person_id);
-            }
-        }
+        let people_vec = self.query_people((property, value));
         if people_vec.is_empty() {
             None
         } else {
