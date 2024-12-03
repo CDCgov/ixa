@@ -856,10 +856,6 @@ pub trait ContextPeopleExt {
         value: T::Value,
     );
 
-    // Returns a PersonId for a usize
-    #[doc(hidden)]
-    fn get_person_id(&self, person_id: usize) -> PersonId;
-
     /// Create an index for property `T`.
     ///
     /// If an index is available [`Context::query_people()`] will use it, so this is
@@ -891,16 +887,6 @@ pub trait ContextPeopleExt {
     /// measured it, so the difference may be modest if any.
     fn query_people_count<T: Query>(&self, q: T) -> usize;
 
-    /// Apply a function to everyone who matches a given predicate.
-    ///
-    /// [`Context::apply_function_to_people()`] takes any predicate that
-    /// implements [Query],
-    /// but instead of implementing query yourself it is best
-    /// to use the automatic syntax that implements [Query] for
-    /// a tuple of pairs of (property, value), like so:
-    /// `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn apply_function_to_people<T: Query>(&mut self, q: T, f: impl Fn(&mut Context, PersonId));
-    
     /// Determine whether a person matches a given expression.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
@@ -1088,14 +1074,6 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn get_person_id(&self, person_id: usize) -> PersonId {
-        assert!(
-            person_id < self.get_current_population(),
-            "Person does not exist"
-        );
-        PersonId { id: person_id }
-    }
-
     fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
         // Ensure that the data container exists
         {
@@ -1146,14 +1124,6 @@ impl ContextPeopleExt for Context {
             q.get_query(),
         );
         count
-    }
-
-    fn apply_function_to_people<T: Query>(&mut self, q: T, f: impl Fn(&mut Context, PersonId)) {
-        let people = self.query_people(q);
-
-        for person in people {
-            f(self, person);
-        }
     }
     
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
@@ -1646,13 +1616,6 @@ mod test {
         context.get_person_property(person_id, RiskCategoryType);
     }
 
-    #[test]
-    #[should_panic(expected = "Person does not exist")]
-    fn dont_return_person_id() {
-        let mut context = Context::new();
-        context.add_person(()).unwrap();
-        context.get_person_id(1);
-    }
 
     #[test]
     fn get_person_property_returns_correct_value() {
