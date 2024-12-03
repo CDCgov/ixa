@@ -157,7 +157,7 @@ mod test {
             output_file: ".".to_string(),
         };
         let mut people = Vec::new();
-        
+
         context
             .set_global_property_value(Parameters, parameters.clone())
             .unwrap();
@@ -175,11 +175,7 @@ mod test {
         let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);
         // now make it so that all but 1 person becomes recovered
         for i in 1..parameters.population {
-            context.set_person_property(
-                people[i],
-                DiseaseStatusType,
-                DiseaseStatus::R,
-            );
+            context.set_person_property(people[i], DiseaseStatusType, DiseaseStatus::R);
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),

@@ -152,15 +152,14 @@ impl ContextPopulationExt for Context {
     }
 
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
-        let people_vec =
-            self.query_people(((Alive, true), (AgeGroupFoi, age_group)));
+        let people_vec = self.query_people(((Alive, true), (AgeGroupFoi, age_group)));
         if people_vec.is_empty() {
             None
         } else {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
         }
     }
-    
+
     fn sample_person_by_property<T: PersonProperty + 'static>(
         &mut self,
         property: T,
@@ -185,15 +184,15 @@ mod test {
     use ixa::context::Context;
     use std::cell::RefCell;
     use std::rc::Rc;
-    
+
     #[test]
     fn test_birth_death() {
         let mut context = Context::new();
-        
+
         let person1 = context.create_new_person(10);
         let person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
         let person2_clone = Rc::clone(&person2);
-        
+
         context.add_plan(380.0, move |context| {
             *person2_clone.borrow_mut() = Some(context.create_new_person(0));
         });
@@ -291,7 +290,10 @@ mod test {
                 schedule_aging(context, person);
             });
             let age_group = age_groups[i];
-            assert_eq!(age_group, context.get_person_property(people[i], AgeGroupFoi));
+            assert_eq!(
+                age_group,
+                context.get_person_property(people[i], AgeGroupFoi)
+            );
         }
 
         // Plan to check in 5 years
@@ -304,7 +306,10 @@ mod test {
         context.add_plan(years * 365.0, move |context| {
             for i in 0..people.len() {
                 let age_group = future_age_groups[i];
-                assert_eq!(age_group, context.get_person_property(people[i], AgeGroupFoi));
+                assert_eq!(
+                    age_group,
+                    context.get_person_property(people[i], AgeGroupFoi)
+                );
             }
         });
 

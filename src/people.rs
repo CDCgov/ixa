@@ -70,12 +70,13 @@
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
-    error::IxaError, random::{RngId, ContextRandomExt},
+    error::IxaError,
+    random::{ContextRandomExt, RngId},
 };
 use ixa_derive::IxaEvent;
+use rand::Rng;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
-use rand::Rng;
 use std::{
     any::{Any, TypeId},
     cell::{Ref, RefCell, RefMut},
@@ -120,13 +121,11 @@ pub trait Query {
 }
 
 impl Query for () {
-    fn setup(_: &Context) {
-    }
+    fn setup(_: &Context) {}
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
         vec![]
     }
-
 }
 // Implement the query version with one parameter.
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
@@ -900,7 +899,8 @@ pub trait ContextPeopleExt {
     /// This is currently implemented by sampling in 0..current_population
     /// but in the future we might have holes where people were removed.
     fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
-    where R::RngType: Rng;
+    where
+        R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1125,7 +1125,7 @@ impl ContextPeopleExt for Context {
         );
         count
     }
-    
+
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(self);
         // This cannot fail because someone must have been made by now.
@@ -1203,12 +1203,13 @@ impl ContextPeopleExt for Context {
 
     fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
     where
-        R::RngType: Rng {
+        R::RngType: Rng,
+    {
         if self.get_current_population() == 0 {
             return Err(IxaError::IxaError(String::from("Empty population")));
         }
         let result = self.sample_range(rng_id, 0..self.get_current_population());
-        Ok(PersonId{id:result})
+        Ok(PersonId { id: result })
     }
 }
 
@@ -1615,7 +1616,6 @@ mod test {
         let person_id = context.add_person(()).unwrap();
         context.get_person_property(person_id, RiskCategoryType);
     }
-
 
     #[test]
     fn get_person_property_returns_correct_value() {
@@ -2126,14 +2126,16 @@ mod test {
     }
 
     use crate::random::{define_rng, ContextRandomExt};
-    
+
     #[test]
     fn test_sample_person() {
-        define_rng!(SampleRng1);        
+        define_rng!(SampleRng1);
         let mut context = Context::new();
         context.init_random(42);
-        assert!(matches!(context.sample_person(SampleRng1),
-                         Err(IxaError::IxaError(_))));
+        assert!(matches!(
+            context.sample_person(SampleRng1),
+            Err(IxaError::IxaError(_))
+        ));
         let person = context.add_person(()).unwrap();
         assert_eq!(context.sample_person(SampleRng1).unwrap(), person);
     }
