@@ -103,13 +103,13 @@ mod test {
             .clone();
         context.init_random(parameters.seed);
         init(&mut context);
-        context.add_person(()).unwrap();
+        let person = context.add_person(()).unwrap();
         context.execute();
         let person_status =
-            context.get_person_property(context.get_person_id(0), DiseaseStatusType);
+            context.get_person_property(person, DiseaseStatusType);
         assert_eq!(person_status, DiseaseStatus::I);
         let infection_time = context
-            .get_person_property(context.get_person_id(0), InfectionTime)
+            .get_person_property(person, InfectionTime)
             .unwrap();
         assert_eq!(infection_time, context.get_current_time());
     }
