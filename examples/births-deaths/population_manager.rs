@@ -191,7 +191,7 @@ mod test {
         let mut context = Context::new();
         
         let person1 = context.create_new_person(10);
-        let mut person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
+        let person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
         let person2_clone = Rc::clone(&person2);
         
         context.add_plan(380.0, move |context| {
