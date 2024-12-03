@@ -302,10 +302,10 @@ mod test {
             AgeGroupRisk::OldAdult,
         ];
         context.add_plan(years * 365.0, move |context| {
-            for p in 0..context.get_current_population() {
-                let person = context.get_person_id(p);
-                let age_group = future_age_groups[p];
-                assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
+            for i in 0..people.len() {
+                let person = people[i];
+                let age_group = future_age_groups[i];
+                assert_eq!(age_group, context.get_person_property(people[i], AgeGroupFoi));
             }
         });
 
