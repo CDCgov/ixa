@@ -155,16 +155,7 @@ impl ContextPopulationExt for Context {
     }
 
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
-        let mut current_population = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive)
-                && self.get_person_property(person_id, AgeGroupFoi) == age_group
-            {
-                current_population += 1;
-            }
-        }
-        current_population
+        self.query_people_count(((Alive, true), (AgeGroupFoi, age_group)))
     }
 
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
