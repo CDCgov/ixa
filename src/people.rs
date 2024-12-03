@@ -70,11 +70,12 @@
 use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
-    error::IxaError,
+    error::IxaError, random::{RngId, ContextRandomExt},
 };
 use ixa_derive::IxaEvent;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
+use rand::Rng;
 use std::{
     any::{Any, TypeId},
     cell::{Ref, RefCell, RefMut},
@@ -888,6 +889,13 @@ pub trait ContextPeopleExt {
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
+
+    /// Randomly sample a person from the population.
+    ///
+    /// This is currently implemented by sampling in 0..current_population
+    /// but in the future we might have holes where people were removed.
+    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+        where R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1194,6 +1202,16 @@ impl ContextPeopleExt for Context {
             &HashSet::new(),
             &print_fn,
         );
+    }
+
+    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+    where
+        R::RngType: Rng {
+        if self.get_current_population() == 0 {
+            return Err(IxaError::IxaError(String::from("Empty population")));
+        }
+        let result = self.sample_range(rng_id, 0..self.get_current_population());
+        Ok(PersonId{id:result})
     }
 }
 
@@ -2115,5 +2133,18 @@ mod test {
             },
             &expected,
         );
+    }
+
+    use crate::random::{define_rng, ContextRandomExt};
+    
+    #[test]
+    fn test_sample_person() {
+        define_rng!(SampleRng1);        
+        let mut context = Context::new();
+        context.init_random(42);
+        assert!(matches!(context.sample_person(SampleRng1),
+                         Err(IxaError::IxaError(_))));
+        let person = context.add_person(()).unwrap();
+        assert_eq!(context.sample_person(SampleRng1).unwrap(), person);
     }
 }
