@@ -21,16 +21,9 @@ fn n_eff_inv_infec(context: &mut Context) -> f64 {
         .unwrap()
         .clone();
     // get number of infected people
-    let mut n_infected = 0;
-    for usize_id in 0..context.get_current_population() {
-        if matches!(
-            context.get_person_property(context.get_person_id(usize_id), DiseaseStatusType),
-            DiseaseStatus::I
-        ) {
-            n_infected += 1;
-        }
-    }
-    (1.0 / parameters.infection_duration) / f64::from(n_infected)
+    let n_infected = context.query_people_count((DiseaseStatusType, DiseaseStatus::I));
+
+    (1.0 / parameters.infection_duration) / (n_infected as f64)
 }
 
 fn evaluate_recovery(
