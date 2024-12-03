@@ -169,8 +169,7 @@ mod test {
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),
-            1.0 / parameters.infection_duration
-                / parameters.population as f64
+            1.0 / parameters.infection_duration / parameters.population as f64
         );
         let time_spent_infected = 0.5;
         let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);
