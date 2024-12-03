@@ -183,17 +183,22 @@ mod test {
     use super::*;
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
     use ixa::context::Context;
-
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    
     #[test]
     fn test_birth_death() {
         let mut context = Context::new();
-
-        let person = context.create_new_person(10);
-        context.add_plan(380.0, |context| {
-            _ = context.create_new_person(0);
+        
+        let person1 = context.create_new_person(10);
+        let mut person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
+        let person2_clone = Rc::clone(&person2);
+        
+        context.add_plan(380.0, move |context| {
+            *person2_clone.borrow_mut() = Some(context.create_new_person(0));
         });
         context.add_plan(400.0, move |context| {
-            context.kill_person(person);
+            context.kill_person(person1);
         });
         context.add_plan(390.0, |context| {
             let pop = context.query_people_count((Alive, true));
@@ -207,8 +212,8 @@ mod test {
         let population = context.get_current_population();
 
         // Even if these people have died during simulation, we can still get their properties
-        let age_0 = context.get_person_property(context.get_person_id(0), Age);
-        let age_1 = context.get_person_property(context.get_person_id(1), Age);
+        let age_0 = context.get_person_property(person1, Age);
+        let age_1 = context.get_person_property((*person2).borrow().unwrap(), Age);
         assert_eq!(age_0, 10);
         assert_eq!(age_1, 0);
 
