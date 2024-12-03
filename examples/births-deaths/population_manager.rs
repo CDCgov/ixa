@@ -159,15 +159,8 @@ impl ContextPopulationExt for Context {
     }
 
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
-        let mut people_vec = Vec::<PersonId>::new();
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive)
-                && self.get_person_property(person_id, AgeGroupFoi) == age_group
-            {
-                people_vec.push(person_id);
-            }
-        }
+        let people_vec =
+            self.query_people(((Alive, true), (AgeGroupFoi, age_group)));
         if people_vec.is_empty() {
             None
         } else {
