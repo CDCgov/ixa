@@ -119,6 +119,15 @@ pub trait Query {
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
 
+impl Query for () {
+    fn setup(_: &Context) {
+    }
+
+    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+        vec![]
+    }
+
+}
 // Implement the query version with one parameter.
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     fn setup(context: &Context) {
@@ -882,6 +891,16 @@ pub trait ContextPeopleExt {
     /// measured it, so the difference may be modest if any.
     fn query_people_count<T: Query>(&self, q: T) -> usize;
 
+    /// Apply a function to everyone who matches a given predicate.
+    ///
+    /// [`Context::apply_function_to_people()`] takes any predicate that
+    /// implements [Query],
+    /// but instead of implementing query yourself it is best
+    /// to use the automatic syntax that implements [Query] for
+    /// a tuple of pairs of (property, value), like so:
+    /// `context.query_people(((Age, 30), (Gender, Female)))`.
+    fn apply_function_to_people<T: Query>(&mut self, q: T, f: impl Fn(&mut Context, PersonId));
+    
     /// Determine whether a person matches a given expression.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
@@ -895,7 +914,7 @@ pub trait ContextPeopleExt {
     /// This is currently implemented by sampling in 0..current_population
     /// but in the future we might have holes where people were removed.
     fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
-        where R::RngType: Rng;
+    where R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1129,6 +1148,14 @@ impl ContextPeopleExt for Context {
         count
     }
 
+    fn apply_function_to_people<T: Query>(&mut self, q: T, f: impl Fn(&mut Context, PersonId)) {
+        let people = self.query_people(q);
+
+        for person in people {
+            f(self, person);
+        }
+    }
+    
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(self);
         // This cannot fail because someone must have been made by now.

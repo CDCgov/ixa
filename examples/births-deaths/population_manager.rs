@@ -280,17 +280,18 @@ mod test {
             AgeGroupRisk::General,
             AgeGroupRisk::OldAdult,
         ];
+        let mut people = Vec::<PersonId>::new();
         for age in &age_vec {
-            let _person = context.create_new_person(*age);
+            people.push(context.create_new_person(*age));
         }
 
-        for p in 0..context.get_current_population() {
-            let person = context.get_person_id(p);
+        for i in 0..people.len() {
+            let person = people[i];
             context.add_plan(365.0, move |context| {
                 schedule_aging(context, person);
             });
-            let age_group = age_groups[p];
-            assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
+            let age_group = age_groups[i];
+            assert_eq!(age_group, context.get_person_property(people[i], AgeGroupFoi));
         }
 
         // Plan to check in 5 years
