@@ -303,7 +303,6 @@ mod test {
         ];
         context.add_plan(years * 365.0, move |context| {
             for i in 0..people.len() {
-                let person = people[i];
                 let age_group = future_age_groups[i];
                 assert_eq!(age_group, context.get_person_property(people[i], AgeGroupFoi));
             }
