@@ -96,6 +96,7 @@ where
 mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
+    use assert_cmd::Command;
     use serde::Deserialize;
 
     #[derive(Args, Debug)]
@@ -108,6 +109,18 @@ mod tests {
     fn test_run_with_custom_args() {
         let result = run_with_custom_args(|_, _, _: Option<CustomArgs>| Ok(()));
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_invocation_with_custom_args() {
+        // Note this target is defined in the bin section of Cargo.toml
+        // and the entry point is in tests/bin/runner_test_custom_args
+        Command::cargo_bin("runner_test_custom_args")
+            .unwrap()
+            .args(["--field", "42"])
+            .assert()
+            .success()
+            .stdout("42\n");
     }
 
     #[test]
