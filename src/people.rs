@@ -71,8 +71,10 @@ use crate::{
     context::{Context, IxaEvent},
     define_data_plugin,
     error::IxaError,
+    random::{ContextRandomExt, RngId},
 };
 use ixa_derive::IxaEvent;
+use rand::Rng;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -118,6 +120,13 @@ pub trait Query {
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
 
+impl Query for () {
+    fn setup(_: &Context) {}
+
+    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+        vec![]
+    }
+}
 // Implement the query version with one parameter.
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     fn setup(context: &Context) {
@@ -846,10 +855,6 @@ pub trait ContextPeopleExt {
         value: T::Value,
     );
 
-    // Returns a PersonId for a usize
-    #[doc(hidden)]
-    fn get_person_id(&self, person_id: usize) -> PersonId;
-
     /// Create an index for property `T`.
     ///
     /// If an index is available [`Context::query_people()`] will use it, so this is
@@ -888,6 +893,17 @@ pub trait ContextPeopleExt {
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
+
+    /// Randomly sample a person from the population.
+    ///
+    /// This is currently implemented by sampling in `0..current_population`
+    /// but in the future we might have holes where people were removed.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if population is 0.
+    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+    where
+        R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1061,14 +1077,6 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn get_person_id(&self, person_id: usize) -> PersonId {
-        assert!(
-            person_id < self.get_current_population(),
-            "Person does not exist"
-        );
-        PersonId { id: person_id }
-    }
-
     fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
         // Ensure that the data container exists
         {
@@ -1194,6 +1202,17 @@ impl ContextPeopleExt for Context {
             &HashSet::new(),
             &print_fn,
         );
+    }
+
+    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+    where
+        R::RngType: Rng,
+    {
+        if self.get_current_population() == 0 {
+            return Err(IxaError::IxaError(String::from("Empty population")));
+        }
+        let result = self.sample_range(rng_id, 0..self.get_current_population());
+        Ok(PersonId { id: result })
     }
 }
 
@@ -1599,14 +1618,6 @@ mod test {
         let mut context = Context::new();
         let person_id = context.add_person(()).unwrap();
         context.get_person_property(person_id, RiskCategoryType);
-    }
-
-    #[test]
-    #[should_panic(expected = "Person does not exist")]
-    fn dont_return_person_id() {
-        let mut context = Context::new();
-        context.add_person(()).unwrap();
-        context.get_person_id(1);
     }
 
     #[test]
@@ -2115,5 +2126,20 @@ mod test {
             },
             &expected,
         );
+    }
+
+    use crate::random::{define_rng, ContextRandomExt};
+
+    #[test]
+    fn test_sample_person() {
+        define_rng!(SampleRng1);
+        let mut context = Context::new();
+        context.init_random(42);
+        assert!(matches!(
+            context.sample_person(SampleRng1),
+            Err(IxaError::IxaError(_))
+        ));
+        let person = context.add_person(()).unwrap();
+        assert_eq!(context.sample_person(SampleRng1).unwrap(), person);
     }
 }

@@ -129,13 +129,6 @@ pub trait ContextPopulationExt {
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
     #[allow(dead_code)]
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq;
     fn sample_person_by_property<T: PersonProperty + 'static>(
         &mut self,
         property: T,
@@ -155,50 +148,16 @@ impl ContextPopulationExt for Context {
     }
 
     fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
-        let mut current_population = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive)
-                && self.get_person_property(person_id, AgeGroupFoi) == age_group
-            {
-                current_population += 1;
-            }
-        }
-        current_population
+        self.query_people_count(((Alive, true), (AgeGroupFoi, age_group)))
     }
 
     fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
-        let mut people_vec = Vec::<PersonId>::new();
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, Alive)
-                && self.get_person_property(person_id, AgeGroupFoi) == age_group
-            {
-                people_vec.push(person_id);
-            }
-        }
+        let people_vec = self.query_people(((Alive, true), (AgeGroupFoi, age_group)));
         if people_vec.is_empty() {
             None
         } else {
             Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
         }
-    }
-    fn get_population_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> usize
-    where
-        <T as PersonProperty>::Value: PartialEq,
-    {
-        let mut population_counter = 0;
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, property) == value {
-                population_counter += 1;
-            }
-        }
-        population_counter
     }
 
     fn sample_person_by_property<T: PersonProperty + 'static>(
@@ -209,13 +168,7 @@ impl ContextPopulationExt for Context {
     where
         <T as PersonProperty>::Value: PartialEq,
     {
-        let mut people_vec = Vec::<PersonId>::new();
-        for i in 0..self.get_current_population() {
-            let person_id = self.get_person_id(i);
-            if self.get_person_property(person_id, property) == value {
-                people_vec.push(person_id);
-            }
-        }
+        let people_vec = self.query_people((property, value));
         if people_vec.is_empty() {
             None
         } else {
@@ -229,32 +182,37 @@ mod test {
     use super::*;
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
     use ixa::context::Context;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn test_birth_death() {
         let mut context = Context::new();
 
-        let person = context.create_new_person(10);
-        context.add_plan(380.0, |context| {
-            _ = context.create_new_person(0);
+        let person1 = context.create_new_person(10);
+        let person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
+        let person2_clone = Rc::clone(&person2);
+
+        context.add_plan(380.0, move |context| {
+            *person2_clone.borrow_mut() = Some(context.create_new_person(0));
         });
         context.add_plan(400.0, move |context| {
-            context.kill_person(person);
+            context.kill_person(person1);
         });
         context.add_plan(390.0, |context| {
-            let pop = context.get_population_by_property(Alive, true);
+            let pop = context.query_people_count((Alive, true));
             assert_eq!(pop, 2);
         });
         context.add_plan(401.0, |context| {
-            let pop = context.get_population_by_property(Alive, true);
+            let pop = context.query_people_count((Alive, true));
             assert_eq!(pop, 1);
         });
         context.execute();
         let population = context.get_current_population();
 
         // Even if these people have died during simulation, we can still get their properties
-        let age_0 = context.get_person_property(context.get_person_id(0), Age);
-        let age_1 = context.get_person_property(context.get_person_id(1), Age);
+        let age_0 = context.get_person_property(person1, Age);
+        let age_1 = context.get_person_property((*person2).borrow().unwrap(), Age);
         assert_eq!(age_0, 10);
         assert_eq!(age_1, 0);
 
@@ -321,17 +279,21 @@ mod test {
             AgeGroupRisk::General,
             AgeGroupRisk::OldAdult,
         ];
+        let mut people = Vec::<PersonId>::new();
         for age in &age_vec {
-            let _person = context.create_new_person(*age);
+            people.push(context.create_new_person(*age));
         }
 
-        for p in 0..context.get_current_population() {
-            let person = context.get_person_id(p);
+        for i in 0..people.len() {
+            let person = people[i];
             context.add_plan(365.0, move |context| {
                 schedule_aging(context, person);
             });
-            let age_group = age_groups[p];
-            assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
+            let age_group = age_groups[i];
+            assert_eq!(
+                age_group,
+                context.get_person_property(people[i], AgeGroupFoi)
+            );
         }
 
         // Plan to check in 5 years
@@ -342,10 +304,12 @@ mod test {
             AgeGroupRisk::OldAdult,
         ];
         context.add_plan(years * 365.0, move |context| {
-            for p in 0..context.get_current_population() {
-                let person = context.get_person_id(p);
-                let age_group = future_age_groups[p];
-                assert_eq!(age_group, context.get_person_property(person, AgeGroupFoi));
+            for i in 0..people.len() {
+                let age_group = future_age_groups[i];
+                assert_eq!(
+                    age_group,
+                    context.get_person_property(people[i], AgeGroupFoi)
+                );
             }
         });
 

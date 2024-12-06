@@ -15,22 +15,15 @@ fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
     1.0 - f64::exp(-time_spent_infected * n_eff_inv_infec(context))
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn n_eff_inv_infec(context: &mut Context) -> f64 {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
     // get number of infected people
-    let mut n_infected = 0;
-    for usize_id in 0..context.get_current_population() {
-        if matches!(
-            context.get_person_property(context.get_person_id(usize_id), DiseaseStatusType),
-            DiseaseStatus::I
-        ) {
-            n_infected += 1;
-        }
-    }
-    (1.0 / parameters.infection_duration) / f64::from(n_infected)
+    let n_infected = context.query_people_count((DiseaseStatusType, DiseaseStatus::I));
+    (1.0 / parameters.infection_duration) / (n_infected as f64)
 }
 
 fn evaluate_recovery(
@@ -163,12 +156,15 @@ mod test {
             output_dir: ".".to_string(),
             output_file: ".".to_string(),
         };
+        let mut people = Vec::new();
+
         context
             .set_global_property_value(Parameters, parameters.clone())
             .unwrap();
         context.init_random(parameters.seed);
         for _ in 0..parameters.population {
             let person_id = context.add_person(()).unwrap();
+            people.push(person_id);
             context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
         }
         assert_eq!(
@@ -178,12 +174,8 @@ mod test {
         let time_spent_infected = 0.5;
         let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);
         // now make it so that all but 1 person becomes recovered
-        for person_id in 1..parameters.population {
-            context.set_person_property(
-                context.get_person_id(person_id),
-                DiseaseStatusType,
-                DiseaseStatus::R,
-            );
+        for i in 1..parameters.population {
+            context.set_person_property(people[i], DiseaseStatusType, DiseaseStatus::R);
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),

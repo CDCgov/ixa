@@ -142,17 +142,19 @@ mod test {
         );
 
         let population_size: usize = 10;
-        for _ in 0..population_size {
+        for index in 0..population_size {
             let person = context.create_new_person(0);
 
             context.add_plan(1.0, move |context| {
                 context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
             });
-        }
 
-        context.add_plan(1.1, move |context| {
-            context.kill_person(context.get_person_id(0));
-        });
+            if index == 0 {
+                context.add_plan(1.1, move |context| {
+                    context.kill_person(person);
+                });
+            }
+        }
 
         context.execute();
         assert_eq!(population_size, context.get_current_population());
