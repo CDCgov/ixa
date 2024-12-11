@@ -16,7 +16,7 @@ use serde::Serialize;
 use std::fmt;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum InfectionStatus {
+pub enum InfectionStatusValue {
     S,
     I,
     R,
@@ -35,8 +35,11 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
-define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
-
+define_person_property_with_default!(
+    InfectionStatus,
+    InfectionStatusValue,
+    InfectionStatusValue::S
+);
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
 define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {

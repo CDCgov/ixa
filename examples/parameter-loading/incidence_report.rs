@@ -7,7 +7,7 @@ use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
 
 use crate::InfectionStatus;
-use crate::InfectionStatusType;
+use crate::InfectionStatusValue;
 use serde::{Deserialize, Serialize};
 
 use crate::Parameters;
@@ -16,14 +16,14 @@ use crate::Parameters;
 struct IncidenceReportItem {
     time: f64,
     person_id: String,
-    infection_status: InfectionStatus,
+    infection_status: InfectionStatusValue,
 }
 
 create_report_trait!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatusType>,
+    event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
@@ -42,7 +42,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .directory(PathBuf::from(parameters.output_dir));
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );

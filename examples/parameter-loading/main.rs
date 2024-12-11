@@ -17,12 +17,16 @@ use crate::parameters_loader::Parameters;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum InfectionStatus {
+pub enum InfectionStatusValue {
     S,
     I,
     R,
 }
-define_person_property_with_default!(InfectionStatusType, InfectionStatus, InfectionStatus::S);
+define_person_property_with_default!(
+    InfectionStatus,
+    InfectionStatusValue,
+    InfectionStatusValue::S
+);
 
 fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();

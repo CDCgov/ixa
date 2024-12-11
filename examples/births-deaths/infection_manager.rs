@@ -1,6 +1,6 @@
 use crate::population_manager::Alive;
 use crate::population_manager::InfectionStatus;
-use crate::population_manager::InfectionStatusType;
+use crate::population_manager::InfectionStatusValue;
 use crate::Parameters;
 use ixa::context::Context;
 use ixa::define_data_plugin;
@@ -37,7 +37,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 
     if context.get_person_property(person_id, Alive) {
         let plan_id = context.add_plan(recovery_time, move |context| {
-            context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
+            context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
         });
         let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
         plans_data_container
@@ -70,12 +70,12 @@ fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatusType>,
+    event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
-    if matches!(event.current, InfectionStatus::I) {
+    if matches!(event.current, InfectionStatusValue::I) {
         schedule_recovery(context, event.person_id);
     }
-    if matches!(event.current, InfectionStatus::R) {
+    if matches!(event.current, InfectionStatusValue::R) {
         remove_recovery_plan_data(context, event.person_id);
     }
 }
@@ -87,7 +87,7 @@ fn handle_person_removal(context: &mut Context, event: PersonPropertyChangeEvent
 }
 pub fn init(context: &mut Context) {
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );
@@ -134,8 +134,8 @@ mod test {
         init(&mut context);
 
         context.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
-                if matches!(event.current, InfectionStatus::R) {
+            move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+                if matches!(event.current, InfectionStatusValue::R) {
                     *context.get_data_container_mut(RecoveryPlugin) += 1;
                 }
             },
@@ -146,7 +146,7 @@ mod test {
             let person = context.create_new_person(0);
 
             context.add_plan(1.0, move |context| {
-                context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
+                context.set_person_property(person, InfectionStatus, InfectionStatusValue::I);
             });
 
             if index == 0 {

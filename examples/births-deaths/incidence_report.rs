@@ -8,7 +8,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::population_manager::{
-    Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusType,
+    Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusValue,
 };
 
 use serde::{Deserialize, Serialize};
@@ -21,14 +21,14 @@ struct IncidenceReportItem {
     person_id: String,
     age_group: AgeGroupRisk,
     age: u8,
-    infection_status: InfectionStatus,
+    infection_status: InfectionStatusValue,
 }
 
 create_report_trait!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatusType>,
+    event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
     let age_person = context.get_person_property(event.person_id, Age);
     let age_group_person = context.get_person_property(event.person_id, AgeGroupFoi);
@@ -53,7 +53,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );

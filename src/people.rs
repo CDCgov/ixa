@@ -1370,25 +1370,25 @@ mod test {
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-    pub enum AgeGroupType {
+    pub enum AgeGroupValue {
         Child,
         Adult,
     }
-    define_derived_property!(AgeGroup, AgeGroupType, [Age], |age| {
+    define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
-            AgeGroupType::Child
+            AgeGroupValue::Child
         } else {
-            AgeGroupType::Adult
+            AgeGroupValue::Adult
         }
     });
 
     #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-    pub enum RiskCategory {
+    pub enum RiskCategoryValue {
         High,
         Low,
     }
 
-    define_person_property!(RiskCategoryType, RiskCategory);
+    define_person_property!(RiskCategory, RiskCategoryValue);
     define_person_property_with_default!(IsRunner, bool, false);
     define_person_property!(RunningShoes, u8, |context: &Context, person: PersonId| {
         let is_runner = context.get_person_property(person, IsRunner);
@@ -1465,12 +1465,12 @@ mod test {
         let mut context = Context::new();
 
         let person_id = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
-            context.get_person_property(person_id, RiskCategoryType),
-            RiskCategory::Low
+            context.get_person_property(person_id, RiskCategory),
+            RiskCategoryValue::Low
         );
     }
 
@@ -1479,12 +1479,12 @@ mod test {
         let mut context = Context::new();
 
         let person_id = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(
-            context.get_person_property(person_id, RiskCategoryType),
-            RiskCategory::Low
+            context.get_person_property(person_id, RiskCategory),
+            RiskCategoryValue::Low
         );
     }
 
@@ -1555,25 +1555,25 @@ mod test {
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
         context.subscribe_to_event(
-            move |_context, event: PersonPropertyChangeEvent<RiskCategoryType>| {
+            move |_context, event: PersonPropertyChangeEvent<RiskCategory>| {
                 *flag_clone.borrow_mut() = true;
                 assert_eq!(event.person_id.id, 0, "Person id is correct");
                 assert_eq!(
                     event.previous,
-                    RiskCategory::Low,
+                    RiskCategoryValue::Low,
                     "Previous value is correct"
                 );
                 assert_eq!(
                     event.current,
-                    RiskCategory::High,
+                    RiskCategoryValue::High,
                     "Current value is correct"
                 );
             },
         );
         let person_id = context
-            .add_person((RiskCategoryType, RiskCategory::Low))
+            .add_person((RiskCategory, RiskCategoryValue::Low))
             .unwrap();
-        context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+        context.set_person_property(person_id, RiskCategory, RiskCategoryValue::High);
         context.execute();
         assert!(*flag.borrow());
     }
@@ -1600,7 +1600,7 @@ mod test {
     fn initialize_without_initializer_succeeds() {
         let mut context = Context::new();
         context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
     }
 
@@ -1609,7 +1609,7 @@ mod test {
     fn set_without_initializer_panics() {
         let mut context = Context::new();
         let person_id = context.add_person(()).unwrap();
-        context.set_person_property(person_id, RiskCategoryType, RiskCategory::High);
+        context.set_person_property(person_id, RiskCategory, RiskCategoryValue::High);
     }
 
     #[test]
@@ -1617,7 +1617,7 @@ mod test {
     fn get_without_initializer_panics() {
         let mut context = Context::new();
         let person_id = context.add_person(()).unwrap();
-        context.get_person_property(person_id, RiskCategoryType);
+        context.get_person_property(person_id, RiskCategory);
     }
 
     #[test]
@@ -1626,7 +1626,7 @@ mod test {
         let person = context.add_person((Age, 10)).unwrap();
         assert_eq!(
             context.get_person_property(person, AgeGroup),
-            AgeGroupType::Child
+            AgeGroupValue::Child
         );
     }
 
@@ -1636,12 +1636,12 @@ mod test {
         let person = context.add_person((Age, 17)).unwrap();
         assert_eq!(
             context.get_person_property(person, AgeGroup),
-            AgeGroupType::Child
+            AgeGroupValue::Child
         );
         context.set_person_property(person, Age, 18);
         assert_eq!(
             context.get_person_property(person, AgeGroup),
-            AgeGroupType::Adult
+            AgeGroupValue::Adult
         );
     }
     #[test]
@@ -1655,8 +1655,8 @@ mod test {
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<AgeGroup>| {
                 assert_eq!(event.person_id.id, 0);
-                assert_eq!(event.previous, AgeGroupType::Child);
-                assert_eq!(event.current, AgeGroupType::Adult);
+                assert_eq!(event.previous, AgeGroupValue::Child);
+                assert_eq!(event.current, AgeGroupValue::Adult);
                 *flag_clone.borrow_mut() = true;
             },
         );
@@ -1767,10 +1767,10 @@ mod test {
     fn query_people() {
         let mut context = Context::new();
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
 
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1778,7 +1778,7 @@ mod test {
     fn query_people_empty() {
         let context = Context::new();
 
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 0);
     }
 
@@ -1786,11 +1786,11 @@ mod test {
     fn query_people_count() {
         let mut context = Context::new();
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
 
         assert_eq!(
-            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            context.query_people_count((RiskCategory, RiskCategoryValue::High)),
             1
         );
     }
@@ -1800,7 +1800,7 @@ mod test {
         let context = Context::new();
 
         assert_eq!(
-            context.query_people_count((RiskCategoryType, RiskCategory::High)),
+            context.query_people_count((RiskCategory, RiskCategoryValue::High)),
             0
         );
     }
@@ -1809,11 +1809,11 @@ mod test {
     fn query_people_macro_index_first() {
         let mut context = Context::new();
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategoryType);
-        assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        context.index_property(RiskCategory);
+        assert!(property_is_indexed::<RiskCategory>(&context));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1830,13 +1830,13 @@ mod test {
     #[test]
     fn query_people_macro_index_second() {
         let mut context = Context::new();
-        let _ = context.add_person((RiskCategoryType, RiskCategory::High));
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
-        assert!(!property_is_indexed::<RiskCategoryType>(&context));
+        let _ = context.add_person((RiskCategory, RiskCategoryValue::High));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
+        assert!(!property_is_indexed::<RiskCategory>(&context));
         assert_eq!(people.len(), 1);
-        context.index_property(RiskCategoryType);
-        assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        context.index_property(RiskCategory);
+        assert!(property_is_indexed::<RiskCategory>(&context));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1844,18 +1844,18 @@ mod test {
     fn query_people_macro_change() {
         let mut context = Context::new();
         let person1 = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
 
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
-        let people = context.query_people((RiskCategoryType, RiskCategory::Low));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::Low));
         assert_eq!(people.len(), 0);
 
-        context.set_person_property(person1, RiskCategoryType, RiskCategory::Low);
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        context.set_person_property(person1, RiskCategory, RiskCategoryValue::Low);
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 0);
-        let people = context.query_people((RiskCategoryType, RiskCategory::Low));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::Low));
         assert_eq!(people.len(), 1);
     }
 
@@ -1863,11 +1863,11 @@ mod test {
     fn query_people_index_after_add() {
         let mut context = Context::new();
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategoryType);
-        assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        context.index_property(RiskCategory);
+        assert!(property_is_indexed::<RiskCategory>(&context));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
 
@@ -1875,17 +1875,17 @@ mod test {
     fn query_people_add_after_index() {
         let mut context = Context::new();
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategoryType);
-        assert!(property_is_indexed::<RiskCategoryType>(&context));
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        context.index_property(RiskCategory);
+        assert!(property_is_indexed::<RiskCategory>(&context));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
 
         let _ = context
-            .add_person((RiskCategoryType, RiskCategory::High))
+            .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        let people = context.query_people((RiskCategoryType, RiskCategory::High));
+        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 2);
     }
 
@@ -1894,7 +1894,7 @@ mod test {
     fn query_people_add_after_index_without_query() {
         let mut context = Context::new();
         let _ = context.add_person(()).unwrap();
-        context.index_property(RiskCategoryType);
+        context.index_property(RiskCategory);
     }
 
     #[test]
@@ -1903,8 +1903,8 @@ mod test {
     fn query_people_add_after_index_panic() {
         let mut context = Context::new();
         context.add_person(()).unwrap();
-        context.index_property(RiskCategoryType);
-        context.query_people((RiskCategoryType, RiskCategory::High));
+        context.index_property(RiskCategory);
+        context.query_people((RiskCategory, RiskCategoryValue::High));
     }
 
     #[test]
@@ -1921,16 +1921,16 @@ mod test {
     fn query_people_intersection() {
         let mut context = Context::new();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
 
-        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategory, RiskCategoryValue::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1938,16 +1938,16 @@ mod test {
     fn query_people_intersection_non_macro() {
         let mut context = Context::new();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
 
-        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategory, RiskCategoryValue::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -1955,17 +1955,17 @@ mod test {
     fn query_people_intersection_one_indexed() {
         let mut context = Context::new();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
         let _ = context
-            .add_person(((Age, 40), (RiskCategoryType, RiskCategory::Low)))
+            .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
 
         context.index_property(Age);
-        let people = context.query_people(((Age, 42), (RiskCategoryType, RiskCategory::High)));
+        let people = context.query_people(((Age, 42), (RiskCategory, RiskCategoryValue::High)));
         assert_eq!(people.len(), 1);
     }
 
@@ -2020,11 +2020,11 @@ mod test {
     fn text_match_person() {
         let mut context = Context::new();
         let person = context
-            .add_person(((Age, 42), (RiskCategoryType, RiskCategory::High)))
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
-        assert!(context.match_person(person, ((Age, 42), (RiskCategoryType, RiskCategory::High))));
-        assert!(!context.match_person(person, ((Age, 43), (RiskCategoryType, RiskCategory::High))));
-        assert!(!context.match_person(person, ((Age, 42), (RiskCategoryType, RiskCategory::Low))));
+        assert!(context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::High))));
+        assert!(!context.match_person(person, ((Age, 43), (RiskCategory, RiskCategoryValue::High))));
+        assert!(!context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::Low))));
     }
 
     #[test]
@@ -2057,12 +2057,12 @@ mod test {
 
     #[test]
     fn test_tabulator() {
-        let cols = (Age, RiskCategoryType);
+        let cols = (Age, RiskCategory);
         assert_eq!(
             cols.get_typelist(),
-            vec![TypeId::of::<Age>(), TypeId::of::<RiskCategoryType>()]
+            vec![TypeId::of::<Age>(), TypeId::of::<RiskCategory>()]
         );
-        assert_eq!(cols.get_columns(), vec!["Age", "RiskCategoryType"]);
+        assert_eq!(cols.get_columns(), vec!["Age", "RiskCategory"]);
     }
 
     fn tabulate_properties_test_setup<T: Tabulator>(

@@ -9,20 +9,20 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
+use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {
     time: f64,
     person_id: String,
-    infection_status: DiseaseStatus,
+    infection_status: DiseaseStatusValue,
 }
 
 create_report_trait!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<DiseaseStatusType>,
+    event: PersonPropertyChangeEvent<DiseaseStatus>,
 ) {
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
@@ -40,10 +40,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .report_options()
         .directory(PathBuf::from(parameters.output_dir));
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
-    context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
-            handle_infection_status_change(context, event);
-        },
-    );
+    context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
+        handle_infection_status_change(context, event);
+    });
     Ok(())
 }

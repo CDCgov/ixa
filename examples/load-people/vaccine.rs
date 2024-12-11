@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::population_loader::{Age, RiskCategory};
+use crate::population_loader::{Age, RiskCategoryValue};
 use ixa::{
     context::Context, define_person_property, define_rng, people::ContextPeopleExt,
     random::ContextRandomExt,
@@ -28,15 +28,15 @@ define_person_property!(VaccineDoses, u8, |context: &Context, person_id| {
 });
 
 pub trait ContextVaccineExt {
-    fn get_vaccine_props(&self, risk: RiskCategory) -> (VaccineTypeValue, OrderedFloat<f64>);
+    fn get_vaccine_props(&self, risk: RiskCategoryValue) -> (VaccineTypeValue, OrderedFloat<f64>);
 }
 
 impl ContextVaccineExt for Context {
     fn get_vaccine_props(
         self: &Context,
-        risk: RiskCategory,
+        risk: RiskCategoryValue,
     ) -> (VaccineTypeValue, OrderedFloat<f64>) {
-        if risk == RiskCategory::High {
+        if risk == RiskCategoryValue::High {
             (VaccineTypeValue::A, OrderedFloat(0.9))
         } else {
             (VaccineTypeValue::B, OrderedFloat(0.8))

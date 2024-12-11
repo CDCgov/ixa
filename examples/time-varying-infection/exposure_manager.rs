@@ -6,7 +6,7 @@ use ordered_float::OrderedFloat;
 use std::rc::Rc;
 
 use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusType, InfectionTime};
+use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
 use rand_distr::Exp1;
 
 use reikna::func;
@@ -23,7 +23,7 @@ fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: Pe
     let t = inverse_sampling_infection(context);
     let person_id = person_created_event.person_id;
     context.add_plan(t, move |context| {
-        context.set_person_property(person_id, DiseaseStatusType, DiseaseStatus::I);
+        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
         // for reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected
         context.set_person_property(person_id, InfectionTime, Some(OrderedFloat(t)));
@@ -71,7 +71,7 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
 
-    use crate::population_loader::{DiseaseStatus, DiseaseStatusType};
+    use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
     use ixa::context::Context;
     use ixa::global_properties::ContextGlobalPropertiesExt;
     use ixa::people::ContextPeopleExt;
@@ -105,8 +105,8 @@ mod test {
         init(&mut context);
         let person = context.add_person(()).unwrap();
         context.execute();
-        let person_status = context.get_person_property(person, DiseaseStatusType);
-        assert_eq!(person_status, DiseaseStatus::I);
+        let person_status = context.get_person_property(person, DiseaseStatus);
+        assert_eq!(person_status, DiseaseStatusValue::I);
         let infection_time = context.get_person_property(person, InfectionTime).unwrap();
         assert_eq!(infection_time, context.get_current_time());
     }

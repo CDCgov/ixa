@@ -4,7 +4,7 @@ use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 use ixa::report::ContextReportExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
-use population_loader::DiseaseStatusType;
+use population_loader::DiseaseStatus;
 
 mod exposure_manager;
 mod incidence_report;
@@ -33,7 +33,7 @@ fn initialize() -> Result<Context, IxaError> {
     infection_manager::init(&mut context);
     incidence_report::init(&mut context)?;
     // add periodic report
-    context.add_periodic_report("person_property_count", 1.0, (DiseaseStatusType,))?;
+    context.add_periodic_report("person_property_count", 1.0, (DiseaseStatus,))?;
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();

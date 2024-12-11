@@ -8,7 +8,7 @@ use crate::parameters_loader::Foi;
 use crate::population_manager::AgeGroupRisk;
 use crate::population_manager::ContextPopulationExt;
 use crate::population_manager::InfectionStatus;
-use crate::population_manager::InfectionStatusType;
+use crate::population_manager::InfectionStatusValue;
 use crate::Parameters;
 use rand_distr::Exp;
 
@@ -29,11 +29,11 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
     if population_size > 0 {
         let person_to_infect = context.sample_person(age_group).unwrap();
 
-        let person_status: InfectionStatus =
-            context.get_person_property(person_to_infect, InfectionStatusType);
+        let person_status: InfectionStatusValue =
+            context.get_person_property(person_to_infect, InfectionStatus);
 
-        if matches!(person_status, InfectionStatus::S) {
-            context.set_person_property(person_to_infect, InfectionStatusType, InfectionStatus::I);
+        if matches!(person_status, InfectionStatusValue::S) {
+            context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
         }
         #[allow(clippy::cast_precision_loss)]
         let next_attempt_time = context.get_current_time()
