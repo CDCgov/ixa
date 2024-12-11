@@ -33,10 +33,10 @@ For example, this model implements Age and RiskStatus using
 
 ```rust
 #[derive(Copy)]
-pub enum RiskCategory { High, Low }
+pub enum RiskCategoryValue { High, Low }
 
 define_person_property!(Age, u8);
-define_person_property!(RiskCategoryType, RiskCategory);
+define_person_property!(RiskCategory, RiskCategoryValue);
 ```
 
 Person property value types **must** implement `Copy` in order to make them efficient
@@ -73,8 +73,8 @@ status:
 
 ```rust
 #[derive(Copy)]
-pub enum DiseaseStatus { S, I, R }
-define_person_property_with_default!(DiseaseStatusType, DiseaseStatus, DiseaseStatus::S);
+pub enum DiseaseStatusValue { S, I, R }
+define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatus::S);
 ```
 
 #### Custom initializer
@@ -133,7 +133,7 @@ You can see an example of this in `population_loader.rs`:
 ```rust
 let person = context.add_person();
 context.set_person_property(person, Age, record.age);
-context.set_person_property(person, RiskCategoryType, record.risk_category);
+context.set_person_property(person, RiskCategory, record.risk_category);
 let (vaccine_efficacy, vaccine_type) = context.generate_vaccine_props(record.risk_category);
 context.set_person_property(person, VaccineEfficacy, vaccine_efficacy);
 context.set_person_property(person, VaccineType, vaccine_type);
@@ -151,7 +151,7 @@ that when properties are first set, they will *not* emit any change events;
 
 ```rust
  context.subscribe_to_event(
-        |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
+        |_context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
             let person = event.person_id;
             println!(
                 "Person {} changed disease status from {:?} to {:?}",

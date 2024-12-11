@@ -1,6 +1,6 @@
 use crate::{
     population_loader::Age,
-    sir::DiseaseStatusType,
+    sir::DiseaseStatus,
     vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
 };
 use ixa::{
@@ -12,7 +12,7 @@ pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events
     // Note that no event gets fired when the property is set the first time
     context.subscribe_to_event(
-        |_context, event: PersonPropertyChangeEvent<DiseaseStatusType>| {
+        |_context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
             let person = event.person_id;
             println!(
                 "{:?} changed disease status from {:?} to {:?}",

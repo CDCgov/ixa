@@ -5,7 +5,7 @@ use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
 
 use crate::InfectionStatus;
-use crate::InfectionStatusType;
+use crate::InfectionStatusValue;
 use crate::Parameters;
 use rand_distr::Exp;
 
@@ -14,15 +14,15 @@ define_rng!(TransmissionRng);
 fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_current_population();
     let person_to_infect = context.sample_person(TransmissionRng).unwrap();
-    let person_status: InfectionStatus =
-        context.get_person_property(person_to_infect, InfectionStatusType);
+    let person_status: InfectionStatusValue =
+        context.get_person_property(person_to_infect, InfectionStatus);
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
 
-    if matches!(person_status, InfectionStatus::S) {
-        context.set_person_property(person_to_infect, InfectionStatusType, InfectionStatus::I);
+    if matches!(person_status, InfectionStatusValue::S) {
+        context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection),
@@ -75,8 +75,8 @@ mod test {
         context.init_random(123);
         let pid = context.add_person(()).unwrap();
         attempt_infection(&mut context);
-        let person_status = context.get_person_property(pid, InfectionStatusType);
-        assert_eq!(person_status, InfectionStatus::I);
+        let person_status = context.get_person_property(pid, InfectionStatus);
+        assert_eq!(person_status, InfectionStatusValue::I);
         context.execute();
     }
 }

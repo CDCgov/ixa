@@ -7,7 +7,7 @@ use ixa::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum RiskCategory {
+pub enum RiskCategoryValue {
     High,
     Low,
 }
@@ -15,18 +15,18 @@ pub enum RiskCategory {
 #[derive(Deserialize, Debug)]
 struct PeopleRecord {
     age: u8,
-    risk_category: RiskCategory,
+    risk_category: RiskCategoryValue,
 }
 
 define_person_property!(Age, u8);
-define_person_property!(RiskCategoryType, RiskCategory);
+define_person_property!(RiskCategory, RiskCategoryValue);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     let (t, e) = context.get_vaccine_props(record.risk_category);
     context
         .add_person((
             (Age, record.age),
-            (RiskCategoryType, record.risk_category),
+            (RiskCategory, record.risk_category),
             (VaccineType, t),
             (VaccineEfficacy, e),
         ))
@@ -75,8 +75,8 @@ mod tests {
 
         // Define expected computed values for each person
         let expected_computed = vec![
-            (20, RiskCategory::Low, VaccineTypeValue::B, 0.8, 1),
-            (80, RiskCategory::High, VaccineTypeValue::A, 0.9, 2),
+            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 1),
+            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 2),
         ];
 
         let mut context = Context::new();
@@ -105,7 +105,7 @@ mod tests {
 
                 assert_eq!(context.get_person_property(person, Age), age);
                 assert_eq!(
-                    context.get_person_property(person, RiskCategoryType),
+                    context.get_person_property(person, RiskCategory),
                     risk_category
                 );
                 assert_eq!(

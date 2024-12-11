@@ -63,7 +63,7 @@ person_property_report <- readr::read_csv(file.path(
 ))
 
 ggplot2::ggplot() +
-  geom_point(aes(t, count, color = DiseaseStatusType), person_property_report) +
+  geom_point(aes(t, count, color = DiseaseStatus), person_property_report) +
   geom_line(aes(time_array_susc, expected_susc), color = "black") +
   xlab("Time") +
   ylab("People") +
