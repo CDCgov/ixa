@@ -112,7 +112,7 @@ Infected individuals are scheduled to recover based on the infection period. The
 ```rust
 let plan_id = context
     .add_plan(recovery_time, move |context| {
-context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
+context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
     })
     .clone();
 let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);

@@ -6,7 +6,7 @@ use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 
 use crate::InfectionStatus;
-use crate::InfectionStatusType;
+use crate::InfectionStatusValue;
 use crate::Parameters;
 
 define_rng!(InfectionRng);
@@ -20,22 +20,22 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());
     context.add_plan(recovery_time, move |context| {
-        context.set_person_property(person_id, InfectionStatusType, InfectionStatus::R);
+        context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
     });
 }
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatusType>,
+    event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
-    if matches!(event.current, InfectionStatus::I) {
+    if matches!(event.current, InfectionStatusValue::I) {
         schedule_recovery(context, event.person_id);
     }
 }
 
 pub fn init(context: &mut Context) {
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
+        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );
@@ -73,8 +73,8 @@ mod test {
         init(&mut context);
 
         context.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<InfectionStatusType>| {
-                if matches!(event.current, InfectionStatus::R) {
+            move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+                if matches!(event.current, InfectionStatusValue::R) {
                     *context.get_data_container_mut(RecoveryPlugin) += 1;
                 }
             },
@@ -85,7 +85,7 @@ mod test {
             let person = context.add_person(()).unwrap();
 
             context.add_plan(1.0, move |context| {
-                context.set_person_property(person, InfectionStatusType, InfectionStatus::I);
+                context.set_person_property(person, InfectionStatus, InfectionStatusValue::I);
             });
         }
         context.execute();
