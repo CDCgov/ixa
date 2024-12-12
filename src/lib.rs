@@ -50,4 +50,4 @@ pub use random::{ContextRandomExt, RngId};
 pub mod report;
 pub use report::{ConfigReportOptions, ContextReportExt, Report};
 pub mod runner;
-pub use runner::{BaseArgs, run_with_args, run_with_custom_args};
+pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
