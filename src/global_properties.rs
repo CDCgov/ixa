@@ -49,19 +49,23 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    properties.borrow_mut().insert(
-        name.to_string(),
-        Arc::new(
-            |context: &mut Context, name, value| -> Result<(), IxaError> {
-                let val: T::Value = serde_json::from_value(value)?;
-                if context.get_global_property_value(T::new()).is_some() {
-                    return Err(IxaError::IxaError(format!("Duplicate property {name}")));
-                }
-                context.set_global_property_value(T::new(), val)?;
-                Ok(())
-            },
-        ),
-    );
+    assert!(properties
+        .borrow_mut()
+        .insert(
+            name.to_string(),
+            Arc::new(
+                |context: &mut Context, name, value| -> Result<(), IxaError> {
+                    let val: T::Value = serde_json::from_value(value)?;
+                    T::validate(&val)?;
+                    if context.get_global_property_value(T::new()).is_some() {
+                        return Err(IxaError::IxaError(format!("Duplicate property {name}")));
+                    }
+                    context.set_global_property_value(T::new(), val)?;
+                    Ok(())
+                },
+            ),
+        )
+        .is_none());
 }
 
 #[allow(clippy::missing_panics_doc)]
