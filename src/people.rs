@@ -897,10 +897,16 @@ pub trait ContextPeopleExt {
     /// Randomly sample a person from the population of people who match the query.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    /// 
+    ///
     /// # Errors
     /// Returns `IxaError` if population is 0.
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, q: T) -> Result<PersonId, IxaError>  where R::RngType: Rng;
+    fn sample_person<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        q: T,
+    ) -> Result<PersonId, IxaError>
+    where
+        R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1201,8 +1207,15 @@ impl ContextPeopleExt for Context {
         );
     }
 
-      fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, q: T) -> Result<PersonId, IxaError>
-      where R::RngType: Rng {
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn sample_person<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        q: T,
+    ) -> Result<PersonId, IxaError>
+    where
+        R::RngType: Rng,
+    {
         if self.get_current_population() == 0 {
             return Err(IxaError::IxaError(String::from("Empty population")));
         }
@@ -1219,10 +1232,10 @@ impl ContextPeopleExt for Context {
         // Reservoir-Sampling Algorithms of Time Complexity O(n(l + 10g(/V/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
         // Temporary variables.
-        let mut selected : Option<PersonId> = None;
+        let mut selected: Option<PersonId> = None;
         let mut w: f64 = 0.0;
         let mut ctr: usize = 0;
-        let mut i : usize = 1;
+        let mut i: usize = 1;
 
         self.query_people_internal(
             |person| {
@@ -1230,15 +1243,18 @@ impl ContextPeopleExt for Context {
                 if i == ctr {
                     selected = Some(person);
                     w = self.sample_range(rng_id, 0.0..1.0);
-                    i = i + (f64::ln(self.sample_range(rng_id, 0.0..1.0))/f64::ln(1.0-w)).floor() as usize + 1;
+                    i = i
+                        + (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
+                            as usize
+                        + 1;
                 }
             },
-            q.get_query());
-        
+            q.get_query(),
+        );
+
         // This should always be set by the above algorithm.
         Ok(selected.unwrap())
     }
-
 }
 
 trait ContextPeopleExtInternal {
@@ -2171,7 +2187,7 @@ mod test {
     #[test]
     fn test_sample_matching_person() {
         define_rng!(SampleRng2);
-        
+
         let mut context = Context::new();
         context.init_random(42);
         assert!(matches!(
@@ -2184,9 +2200,12 @@ mod test {
 
         // See that the simple query always returns person3
         for _ in 0..10 {
-          assert_eq!(context.sample_person(SampleRng2, (Age, 30)).unwrap(), person3);
+            assert_eq!(
+                context.sample_person(SampleRng2, (Age, 30)).unwrap(),
+                person3
+            );
         }
-       
+
         let mut count_p1: usize = 0;
         let mut count_p2: usize = 0;
         for _ in 0..10000 {
@@ -2203,5 +2222,5 @@ mod test {
         // The chance of being more unbalanced than this is ~10^{-4}
         assert!(count_p1 >= 4800);
         assert!(count_p2 >= 4800);
-    } 
+    }
 }
