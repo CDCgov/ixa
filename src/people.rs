@@ -1224,6 +1224,8 @@ impl ContextPeopleExt for Context {
         }
 
         T::setup(self);
+
+        // Temporary variables.
         let mut selected : Option<PersonId> = None;
         let mut w: f64 = 0.0;
         let mut ctr: usize = 0;
@@ -1234,7 +1236,7 @@ impl ContextPeopleExt for Context {
                 ctr += 1;
                 if i == ctr {
                     selected = Some(person);
-                    w = f64::ln(self.sample_range(rng_id, 0.0..1.0));
+                    w = self.sample_range(rng_id, 0.0..1.0);
                     i = i + (f64::ln(self.sample_range(rng_id, 0.0..1.0))/f64::ln(1.0-w)).floor() as usize + 1;
                 }
             },
@@ -2172,4 +2174,39 @@ mod test {
         let person = context.add_person(()).unwrap();
         assert_eq!(context.sample_person(SampleRng1).unwrap(), person);
     }
+
+    #[test]
+    fn test_sample_matching_person() {
+        define_rng!(SampleRng2);
+        
+        let mut context = Context::new();
+        context.init_random(42);
+        assert!(matches!(
+            context.sample_person(SampleRng2),
+            Err(IxaError::IxaError(_))
+        ));
+        let person1 = context.add_person((Age, 10)).unwrap();
+        let person2: PersonId = context.add_person((Age, 10)).unwrap();
+        let person3 = context.add_person((Age, 30)).unwrap();
+
+        // See that the simple query always returns person3
+        for _ in 0..10 {
+          assert_eq!(context.sample_matching_person(SampleRng2, (Age, 30)).unwrap(), person3);
+        }
+       
+        let mut count_p1: usize = 0;
+        let mut count_p2: usize = 0;
+        for _ in 0..100 {
+            let p = context.sample_matching_person(SampleRng2, (Age, 10)).unwrap();
+            if p == person1 {
+                count_p1 += 1;
+            } else if p == person2 {
+                count_p2 += 1;
+            } else {
+                panic!("Unexpected person");
+            }
+        }
+        assert!(count_p1 >= 30);
+        assert!(count_p2 >= 30);
+    } 
 }
