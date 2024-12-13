@@ -904,6 +904,8 @@ pub trait ContextPeopleExt {
     fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng;
+
+    fn sample_matching_person<R: RngId + 'static, T: Query>(&self, rng_id: R, q: T) -> Result<PersonId, IxaError>  where R::RngType: Rng;
 }
 
 fn process_indices(
@@ -1214,6 +1216,34 @@ impl ContextPeopleExt for Context {
         let result = self.sample_range(rng_id, 0..self.get_current_population());
         Ok(PersonId { id: result })
     }
+
+      fn sample_matching_person<R: RngId + 'static, T: Query>(&self, rng_id: R, q: T) -> Result<PersonId, IxaError>
+      where R::RngType: Rng {
+        if self.get_current_population() == 0 {
+            return Err(IxaError::IxaError(String::from("Empty population")));
+        }
+
+        T::setup(self);
+        let mut selected : Option<PersonId> = None;
+        let mut w: f64 = 0.0;
+        let mut ctr: usize = 0;
+        let mut i : usize = 1;
+
+        self.query_people_internal(
+            |person| {
+                ctr += 1;
+                if i == ctr {
+                    selected = Some(person);
+                    w = f64::ln(self.sample_range(rng_id, 0.0..1.0));
+                    i = i + (f64::ln(self.sample_range(rng_id, 0.0..1.0))/f64::ln(1.0-w)).floor() as usize + 1;
+                }
+            },
+            q.get_query());
+        
+        // This should always be set by the above algorithm.
+        Ok(selected.unwrap())
+    }
+
 }
 
 trait ContextPeopleExtInternal {
