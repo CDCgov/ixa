@@ -2189,7 +2189,7 @@ mod test {
        
         let mut count_p1: usize = 0;
         let mut count_p2: usize = 0;
-        for _ in 0..100 {
+        for _ in 0..10000 {
             let p = context.sample_person(SampleRng2, (Age, 10)).unwrap();
             if p == person1 {
                 count_p1 += 1;
@@ -2199,7 +2199,9 @@ mod test {
                 panic!("Unexpected person");
             }
         }
-        assert!(count_p1 >= 30);
-        assert!(count_p2 >= 30);
+
+        // The chance of being more unbalanced than this is ~10^{-4}
+        assert!(count_p1 >= 4800);
+        assert!(count_p2 >= 4800);
     } 
 }
