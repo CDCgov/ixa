@@ -22,9 +22,9 @@ pub struct BaseArgs {
     #[arg(short, long, default_value = "")]
     pub output_dir: String,
 
-    /// Set a breakpoint at a given time and start the debugger
+    /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
-    pub debugger: Option<f64>,
+    pub debugger: Option<Option<f64>>,
 }
 
 #[derive(Args)]
@@ -110,7 +110,7 @@ where
 
     // If a breakpoint is provided, stop at that time
     if let Some(t) = args.debugger {
-        context.schedule_breakpoint(t);
+        context.schedule_breakpoint(t.unwrap_or(0.0));
     }
 
     // Run the provided Fn
@@ -125,7 +125,6 @@ where
 mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
-    use assert_cmd::Command;
     use serde::Deserialize;
 
     #[derive(Args, Debug)]
@@ -144,7 +143,7 @@ mod tests {
     fn test_cli_invocation_with_custom_args() {
         // Note this target is defined in the bin section of Cargo.toml
         // and the entry point is in tests/bin/runner_test_custom_args
-        Command::cargo_bin("runner_test_custom_args")
+        assert_cmd::Command::cargo_bin("runner_test_custom_args")
             .unwrap()
             .args(["--field", "42"])
             .assert()

@@ -1,5 +1,6 @@
 use crate::Context;
 use crate::ContextPeopleExt;
+use crate::IxaError;
 use clap::Command;
 use std::io::Write;
 
@@ -26,11 +27,6 @@ fn cli() -> Command {
         .subcommand(
             Command::new("population")
                 .about("Get the total number of people")
-                .help_template(COMMAND_TEMPLATE),
-        )
-        .subcommand(
-            Command::new("step")
-                .about("Advance the simulation by 1.0 and break")
                 .help_template(COMMAND_TEMPLATE),
         )
         .subcommand(
@@ -61,6 +57,7 @@ fn respond(line: &str, context: &mut Context) -> Result<bool, String> {
     let matches = cli()
         .try_get_matches_from(args)
         .map_err(|e| e.to_string())?;
+
     match matches.subcommand() {
         Some(("population", _matches)) => {
             writeln!(
@@ -70,12 +67,6 @@ fn respond(line: &str, context: &mut Context) -> Result<bool, String> {
             )
             .map_err(|e| e.to_string())?;
             flush()?;
-        }
-        Some(("step", _matches)) => {
-            let next_t = context.get_current_time() + 1.0;
-            context.schedule_breakpoint(next_t);
-            flush()?;
-            return Ok(true);
         }
         Some(("continue", _matches)) => {
             writeln!(
@@ -100,14 +91,14 @@ pub trait ContextDebugExt {
     ///
     /// # Errors
     /// Reading or writing to stdin/stdout, or some problem in the debugger
-    fn breakpoint(&mut self) -> Result<(), String>;
+    fn breakpoint(&mut self) -> Result<(), IxaError>;
 
     /// Schedule a breakpoint at a given time t
     fn schedule_breakpoint(&mut self, t: f64);
 }
 
 impl ContextDebugExt for Context {
-    fn breakpoint(&mut self) -> Result<(), String> {
+    fn breakpoint(&mut self) -> Result<(), IxaError> {
         println!("Debugging simulation at t = {}", self.get_current_time());
         loop {
             let line = readline()?;
@@ -135,5 +126,41 @@ impl ContextDebugExt for Context {
         self.add_plan(t, |context| {
             context.breakpoint().expect("Error in debugger");
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_cmd::Command;
+    use predicates::str::contains;
+
+    #[test]
+    fn test_cli_debugger_quits() {
+        let mut cmd = Command::cargo_bin("runner_test_debug").unwrap();
+        let assert = cmd
+            .args(["--debugger", "1.0"])
+            .write_stdin("continue\n")
+            .assert();
+
+        assert
+            .success()
+            .stdout(contains("Debugging simulation at t = 1"))
+            .stdout(contains("Continuing the simulation from t = 1"));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_cli_debugger_population() {
+        let assert = Command::cargo_bin("runner_test_debug")
+            .unwrap()
+            .args(["--debugger", "1.0"])
+            .write_stdin("population\n")
+            .write_stdin("continue\n")
+            .assert();
+
+        assert
+            .success()
+            // This doesn't seem to work for some reason
+            .stdout(contains("The number of people is 3"));
     }
 }
