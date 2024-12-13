@@ -73,7 +73,7 @@ fn respond(line: &str, context: &mut Context) -> Result<bool, String> {
         }
         Some(("step", _matches)) => {
             let next_t = context.get_current_time() + 1.0;
-            context.add_breakpoint(next_t);
+            context.schedule_breakpoint(next_t);
             flush()?;
             return Ok(true);
         }
@@ -94,38 +94,46 @@ fn respond(line: &str, context: &mut Context) -> Result<bool, String> {
     Ok(false)
 }
 
-fn breakpoint(context: &mut Context) -> Result<(), String> {
-    loop {
-        let line = readline()?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        match respond(line, context) {
-            Ok(quit) => {
-                if quit {
-                    break;
-                }
-            }
-            Err(err) => {
-                write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
-                std::io::stdout().flush().map_err(|e| e.to_string())?;
-            }
-        }
-    }
-    Ok(())
-}
-
 pub trait ContextDebugExt {
-    fn add_breakpoint(&mut self, t: f64);
+    /// Pause the simulation at the current time and start the debugger.
+    /// The debugger allows you to inspect the state of the simulation
+    ///
+    /// # Errors
+    /// Reading or writing to stdin/stdout, or some problem in the debugger
+    fn breakpoint(&mut self) -> Result<(), String>;
+
+    /// Schedule a breakpoint at a given time t
+    fn schedule_breakpoint(&mut self, t: f64);
 }
 
 impl ContextDebugExt for Context {
-    fn add_breakpoint(&mut self, t: f64) {
+    fn breakpoint(&mut self) -> Result<(), String> {
+        println!("Debugging simulation at t = {}", self.get_current_time());
+        loop {
+            let line = readline()?;
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            match respond(line, self) {
+                Ok(quit) => {
+                    if quit {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
+                    flush()?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn schedule_breakpoint(&mut self, t: f64) {
         self.add_plan(t, |context| {
-            println!("Debugging simulation at t = {}", context.get_current_time());
-            breakpoint(context).expect("Error in debugger");
+            context.breakpoint().expect("Error in debugger");
         });
     }
 }
