@@ -13,7 +13,7 @@ define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_current_population();
-    let person_to_infect = context.sample_person(TransmissionRng).unwrap();
+    let person_to_infect = context.sample_person(TransmissionRng, ()).unwrap();
     let person_status: InfectionStatusValue =
         context.get_person_property(person_to_infect, InfectionStatus);
     let parameters = context
