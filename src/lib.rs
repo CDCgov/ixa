@@ -51,3 +51,4 @@ pub mod report;
 pub use report::{ConfigReportOptions, ContextReportExt, Report};
 pub mod runner;
 pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
+pub mod debug;
