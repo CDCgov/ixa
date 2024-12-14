@@ -110,7 +110,7 @@ where
 
     // If a breakpoint is provided, stop at that time
     if let Some(t) = args.debugger {
-        context.schedule_breakpoint(t.unwrap_or(0.0));
+        context.schedule_debugger(t.unwrap_or(0.0));
     }
 
     // Run the provided Fn

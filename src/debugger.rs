@@ -1,41 +1,106 @@
 use crate::Context;
 use crate::ContextPeopleExt;
 use crate::IxaError;
-use clap::Command;
+use clap::{ArgMatches, Command};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::Write;
 
-fn cli() -> Command {
-    // strip out "Usage: " in the default template
-    const MAIN_HELP_TEMPLATE: &str = "\
-        {all-args}
-    ";
-    // strip out name/version
-    const COMMAND_TEMPLATE: &str = "\
-        {about-with-newline}\n\
-        {usage-heading}\n    {usage}\n\
-        \n\
-        {all-args}{after-help}\
-    ";
+trait DebuggerCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        cli: &DebuggerRepl,
+        matches: &ArgMatches,
+    ) -> Result<bool, String>;
+    fn about(&self) -> &'static str;
+}
 
-    Command::new("repl")
-        .multicall(true)
-        .arg_required_else_help(true)
-        .subcommand_required(true)
-        .subcommand_value_name("DEBUGGER")
-        .subcommand_help_heading("IXA DEBUGGER")
-        .help_template(MAIN_HELP_TEMPLATE)
-        .subcommand(
-            Command::new("population")
-                .about("Get the total number of people")
-                .help_template(COMMAND_TEMPLATE),
-        )
-        .subcommand(
-            Command::new("continue")
-                .alias("exit")
-                .alias("quit")
-                .about("Continue the simulation and exit the debugger")
-                .help_template(COMMAND_TEMPLATE),
-        )
+struct DebuggerRepl {
+    commands: HashMap<&'static str, Box<dyn DebuggerCommand>>,
+    output: RefCell<Box<dyn Write>>,
+}
+
+fn flush() -> Result<(), String> {
+    std::io::stdout().flush().map_err(|e| e.to_string())
+}
+
+impl DebuggerRepl {
+    fn new() -> Self {
+        DebuggerRepl {
+            commands: HashMap::new(),
+            output: RefCell::new(Box::new(std::io::stdout())),
+        }
+    }
+
+    fn register_command(&mut self, name: &'static str, handler: Box<dyn DebuggerCommand>) {
+        self.commands.insert(name, handler);
+    }
+
+    fn get_command(&self, name: &str) -> Option<&dyn DebuggerCommand> {
+        self.commands.get(name).map(|command| &**command)
+    }
+
+    fn writeln(&self, formatted_string: &str) -> Result<(), String> {
+        writeln!(self.output.borrow_mut(), "{formatted_string}").map_err(|e| e.to_string())?;
+        flush()?;
+        Ok(())
+    }
+
+    fn build_cli(&self) -> Command {
+        let mut cli = Command::new("repl")
+            .multicall(true)
+            .arg_required_else_help(true)
+            .subcommand_required(true)
+            .subcommand_value_name("DEBUGGER")
+            .subcommand_help_heading("IXA DEBUGGER")
+            .help_template("{all-args}");
+
+        for (name, handler) in &self.commands {
+            cli = cli.subcommand(Command::new(*name).about(handler.about()).help_template(
+                "{about-with-newline}\n{usage-heading}\n    {usage}\n\n{all-args}{after-help}",
+            ));
+        }
+
+        cli
+    }
+}
+
+/// Returns the current population of the simulation
+struct PopulationCommand;
+impl DebuggerCommand for PopulationCommand {
+    fn about(&self) -> &'static str {
+        "Get the total number of people"
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        cli: &DebuggerRepl,
+        _matches: &ArgMatches,
+    ) -> Result<bool, String> {
+        cli.writeln(&format!("{}", context.get_current_population()))?;
+        Ok(false)
+    }
+}
+
+/// Exits the debugger and continues the simulation
+struct ContinueCommand;
+impl DebuggerCommand for ContinueCommand {
+    fn about(&self) -> &'static str {
+        "Continue the simulation and exit the debugger"
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        cli: &DebuggerRepl,
+        _matches: &ArgMatches,
+    ) -> Result<bool, String> {
+        cli.writeln(&format!(
+            "Continuing the simulation from t = {}",
+            context.get_current_time()
+        ))?;
+        Ok(true)
+    }
 }
 
 fn readline() -> Result<String, String> {
@@ -48,83 +113,69 @@ fn readline() -> Result<String, String> {
     Ok(buffer)
 }
 
-fn flush() -> Result<(), String> {
-    std::io::stdout().flush().map_err(|e| e.to_string())
-}
-
-fn respond(line: &str, context: &mut Context) -> Result<bool, String> {
+fn setup_repl(line: &str, context: &mut Context) -> Result<bool, String> {
     let args = shlex::split(line).ok_or("error: Invalid quoting")?;
-    let matches = cli()
+
+    let mut repl = DebuggerRepl::new();
+    repl.register_command("population", Box::new(PopulationCommand));
+    repl.register_command("continue", Box::new(ContinueCommand));
+    let matches = repl
+        .build_cli()
         .try_get_matches_from(args)
         .map_err(|e| e.to_string())?;
 
-    match matches.subcommand() {
-        Some(("population", _matches)) => {
-            writeln!(
-                std::io::stdout(),
-                "The number of people is {}",
-                context.get_current_population()
-            )
-            .map_err(|e| e.to_string())?;
-            flush()?;
+    if let Some((command, sub_matches)) = matches.subcommand() {
+        // If the provided command is known, run its handler
+        if let Some(handler) = repl.get_command(command) {
+            return handler.handle(context, &repl, sub_matches);
         }
-        Some(("continue", _matches)) => {
-            writeln!(
-                std::io::stdout(),
-                "Continuing the simulation from t = {}",
-                context.get_current_time()
-            )
-            .map_err(|e| e.to_string())?;
-            flush()?;
-            return Ok(true);
-        }
-        Some((name, _matches)) => unimplemented!("{name}"),
-        None => unreachable!("subcommand required"),
+        // Unexpected command: print an error
+        return Err(format!("Unknown command: {command}"));
     }
 
-    Ok(false)
+    unreachable!("subcommand required");
+}
+
+/// Starts the debugger and pauses execution
+fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
+    println!("Debugging simulation at t = {}", context.get_current_time());
+    loop {
+        let line = readline()?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        match setup_repl(line, context) {
+            Ok(quit) => {
+                if quit {
+                    break;
+                }
+            }
+            Err(err) => {
+                write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
+                flush()?;
+            }
+        }
+    }
+    Ok(())
 }
 
 pub trait ContextDebugExt {
-    /// Pause the simulation at the current time and start the debugger.
-    /// The debugger allows you to inspect the state of the simulation
+    /// Schedule the simulation to pause at time t and start the debugger.
+    /// This will give you a REPL which allows you to inspect the state of
+    /// the simulation (type help to see a list of commands)
     ///
     /// # Errors
-    /// Reading or writing to stdin/stdout, or some problem in the debugger
-    fn breakpoint(&mut self) -> Result<(), IxaError>;
-
-    /// Schedule a breakpoint at a given time t
-    fn schedule_breakpoint(&mut self, t: f64);
+    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
+    /// errors in Ixa are printed to stdout
+    fn schedule_debugger(&mut self, t: f64);
 }
 
 impl ContextDebugExt for Context {
-    fn breakpoint(&mut self) -> Result<(), IxaError> {
-        println!("Debugging simulation at t = {}", self.get_current_time());
-        loop {
-            let line = readline()?;
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            match respond(line, self) {
-                Ok(quit) => {
-                    if quit {
-                        break;
-                    }
-                }
-                Err(err) => {
-                    write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
-                    flush()?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn schedule_breakpoint(&mut self, t: f64) {
+    fn schedule_debugger(&mut self, t: f64) {
         self.add_plan(t, |context| {
-            context.breakpoint().expect("Error in debugger");
+            start_debugger(context).expect("Error in debugger");
         });
     }
 }
