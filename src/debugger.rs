@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 trait DebuggerCommand {
+    /// Handle the command and any inputs; returning true will exit the debugger
     fn handle(
         &self,
         context: &mut Context,
