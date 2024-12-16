@@ -46,7 +46,7 @@ fn create_ixa_cli() -> Command {
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args,
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
@@ -70,7 +70,7 @@ where
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_args<F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_args<F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
 {
@@ -85,7 +85,7 @@ fn run_with_args_internal<A, F>(
     args: BaseArgs,
     custom_args: Option<A>,
     setup_fn: F,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
@@ -118,7 +118,7 @@ where
 
     // Execute the context
     context.execute();
-    Ok(())
+    Ok(context)
 }
 
 #[cfg(test)]
