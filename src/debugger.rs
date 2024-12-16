@@ -22,8 +22,11 @@ struct DebuggerRepl {
     output: RefCell<Box<dyn Write>>,
 }
 
-fn flush() -> Result<(), String> {
-    std::io::stdout().flush().map_err(|e| e.to_string())
+fn flush() {
+    std::io::stdout()
+        .flush()
+        .map_err(|e| e.to_string())
+        .expect("Error flushing stdout");
 }
 
 impl DebuggerRepl {
@@ -42,10 +45,9 @@ impl DebuggerRepl {
         self.commands.get(name).map(|command| &**command)
     }
 
-    fn writeln(&self, formatted_string: &str) -> Result<(), String> {
-        writeln!(self.output.borrow_mut(), "{formatted_string}").map_err(|e| e.to_string())?;
-        flush()?;
-        Ok(())
+    fn writeln(&self, formatted_string: &str) {
+        let _ = writeln!(self.output.borrow_mut(), "{formatted_string}").map_err(|e| e.to_string());
+        flush();
     }
 
     fn build_cli(&self) -> Command {
@@ -79,7 +81,7 @@ impl DebuggerCommand for PopulationCommand {
         cli: &DebuggerRepl,
         _matches: &ArgMatches,
     ) -> Result<bool, String> {
-        cli.writeln(&format!("{}", context.get_current_population()))?;
+        cli.writeln(&format!("{}", context.get_current_population()));
         Ok(false)
     }
 }
@@ -92,20 +94,16 @@ impl DebuggerCommand for ContinueCommand {
     }
     fn handle(
         &self,
-        context: &mut Context,
-        cli: &DebuggerRepl,
+        _context: &mut Context,
+        _cli: &DebuggerRepl,
         _matches: &ArgMatches,
     ) -> Result<bool, String> {
-        cli.writeln(&format!(
-            "Continuing the simulation from t = {}",
-            context.get_current_time()
-        ))?;
         Ok(true)
     }
 }
 
-fn readline() -> Result<String, String> {
-    write!(std::io::stdout(), "$ ").map_err(|e| e.to_string())?;
+fn readline(t: f64) -> Result<String, String> {
+    write!(std::io::stdout(), "t={t} $ ").map_err(|e| e.to_string())?;
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     let mut buffer = String::new();
     std::io::stdin()
@@ -120,6 +118,7 @@ fn setup_repl(line: &str, context: &mut Context) -> Result<bool, String> {
     let mut repl = DebuggerRepl::new();
     repl.register_command("population", Box::new(PopulationCommand));
     repl.register_command("continue", Box::new(ContinueCommand));
+
     let matches = repl
         .build_cli()
         .try_get_matches_from(args)
@@ -139,9 +138,10 @@ fn setup_repl(line: &str, context: &mut Context) -> Result<bool, String> {
 
 /// Starts the debugger and pauses execution
 fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
-    println!("Debugging simulation at t = {}", context.get_current_time());
+    let t = context.get_current_time();
+    println!("Debugging simulation at t = {t}");
     loop {
-        let line = readline()?;
+        let line = readline(t).expect("Error reading input");
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -155,7 +155,7 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
             }
             Err(err) => {
                 write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
-                flush()?;
+                flush();
             }
         }
     }
@@ -187,6 +187,9 @@ mod tests {
     use predicates::str::contains;
 
     #[test]
+    fn test_cli_debugger_command() {}
+
+    #[test]
     fn test_cli_debugger_quits() {
         let mut cmd = Command::cargo_bin("runner_test_debug").unwrap();
         let assert = cmd
@@ -196,8 +199,7 @@ mod tests {
 
         assert
             .success()
-            .stdout(contains("Debugging simulation at t = 1"))
-            .stdout(contains("Continuing the simulation from t = 1"));
+            .stdout(contains("Debugging simulation at t = 1"));
     }
 
     #[test]
