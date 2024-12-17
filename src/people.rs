@@ -1228,12 +1228,12 @@ impl ContextPeopleExt for Context {
 
         T::setup(self);
 
-        // This function implements "Algorithm R" from KIM-HUNG LI
-        // Reservoir-Sampling Algorithms of Time Complexity O(n(l + 10g(/V/n)))
+        // This function implements "Algorithm L" from KIM-HUNG LI
+        // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
         // Temporary variables.
         let mut selected: Option<PersonId> = None;
-        let mut w: f64 = 0.0;
+        let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
         let mut ctr: usize = 0;
         let mut i: usize = 1;
 
@@ -1242,11 +1242,10 @@ impl ContextPeopleExt for Context {
                 ctr += 1;
                 if i == ctr {
                     selected = Some(person);
-                    w = self.sample_range(rng_id, 0.0..1.0);
-                    i = i
-                        + (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
-                            as usize
+                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
+                        as usize
                         + 1;
+                    w *= self.sample_range(rng_id, 0.0..1.0);
                 }
             },
             q.get_query(),
@@ -2195,32 +2194,37 @@ mod test {
             Err(IxaError::IxaError(_))
         ));
         let person1 = context.add_person((Age, 10)).unwrap();
-        let person2: PersonId = context.add_person((Age, 10)).unwrap();
-        let person3 = context.add_person((Age, 30)).unwrap();
+        let person2 = context.add_person((Age, 10)).unwrap();
+        let person3 = context.add_person((Age, 10)).unwrap();
+        let person4 = context.add_person((Age, 30)).unwrap();
 
         // See that the simple query always returns person3
         for _ in 0..10 {
             assert_eq!(
                 context.sample_person(SampleRng2, (Age, 30)).unwrap(),
-                person3
+                person4
             );
         }
 
         let mut count_p1: usize = 0;
         let mut count_p2: usize = 0;
-        for _ in 0..10000 {
+        let mut count_p3: usize = 0;
+        for _ in 0..30000 {
             let p = context.sample_person(SampleRng2, (Age, 10)).unwrap();
             if p == person1 {
                 count_p1 += 1;
             } else if p == person2 {
                 count_p2 += 1;
+            } else if p == person3 {
+                count_p3 += 1;
             } else {
                 panic!("Unexpected person");
             }
         }
 
-        // The chance of being more unbalanced than this is ~10^{-4}
-        assert!(count_p1 >= 4800);
-        assert!(count_p2 >= 4800);
+        // The chance of any of these being more unbalanced than this is ~10^{-4}
+        assert!(count_p1 >= 8700);
+        assert!(count_p2 >= 8700);
+        assert!(count_p3 >= 8700);
     }
 }
