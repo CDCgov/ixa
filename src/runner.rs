@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use crate::context::Context;
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
+use crate::{context::Context, debugger::ContextDebugExt};
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Default cli arguments for ixa runner
@@ -21,6 +21,10 @@ pub struct BaseArgs {
     /// Optional path for report output
     #[arg(short, long, default_value = "")]
     pub output_dir: String,
+
+    /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
+    #[arg(short, long)]
+    pub debugger: Option<Option<f64>>,
 }
 
 #[derive(Args)]
@@ -42,7 +46,7 @@ fn create_ixa_cli() -> Command {
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args,
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
@@ -66,7 +70,7 @@ where
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
 #[allow(clippy::missing_errors_doc)]
-pub fn run_with_args<F>(setup_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn run_with_args<F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
 {
@@ -81,7 +85,7 @@ fn run_with_args_internal<A, F>(
     args: BaseArgs,
     custom_args: Option<A>,
     setup_fn: F,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
@@ -104,19 +108,23 @@ where
 
     context.init_random(args.random_seed);
 
+    // If a breakpoint is provided, stop at that time
+    if let Some(t) = args.debugger {
+        context.schedule_debugger(t.unwrap_or(0.0));
+    }
+
     // Run the provided Fn
     setup_fn(&mut context, args, custom_args)?;
 
     // Execute the context
     context.execute();
-    Ok(())
+    Ok(context)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
-    use assert_cmd::Command;
     use serde::Deserialize;
 
     #[derive(Args, Debug)]
@@ -135,7 +143,7 @@ mod tests {
     fn test_cli_invocation_with_custom_args() {
         // Note this target is defined in the bin section of Cargo.toml
         // and the entry point is in tests/bin/runner_test_custom_args
-        Command::cargo_bin("runner_test_custom_args")
+        assert_cmd::Command::cargo_bin("runner_test_custom_args")
             .unwrap()
             .args(["--field", "42"])
             .assert()
@@ -155,6 +163,7 @@ mod tests {
             random_seed: 42,
             config: String::new(),
             output_dir: String::new(),
+            debugger: None,
         };
 
         // Use a comparison context to verify the random seed was set
@@ -183,6 +192,7 @@ mod tests {
             random_seed: 42,
             config: "tests/data/global_properties_runner.json".to_string(),
             output_dir: String::new(),
+            debugger: None,
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
             let p3 = ctx.get_global_property_value(RunnerProperty).unwrap();
@@ -198,6 +208,7 @@ mod tests {
             random_seed: 42,
             config: String::new(),
             output_dir: "data".to_string(),
+            debugger: None,
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
             let output_dir = &ctx.report_options().directory;
@@ -213,6 +224,7 @@ mod tests {
             random_seed: 42,
             config: String::new(),
             output_dir: String::new(),
+            debugger: None,
         };
         let custom = CustomArgs { field: 42 };
         let result = run_with_args_internal(test_args, Some(custom), |_, _, c| {

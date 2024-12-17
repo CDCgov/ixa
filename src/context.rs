@@ -210,6 +210,12 @@ impl Context {
         self.plan_queue.cancel_plan(id);
     }
 
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub(crate) fn remaining_plan_count(&self) -> usize {
+        self.plan_queue.remaining_plan_count()
+    }
+
     /// Add a `Callback` to the queue to be executed before the next plan
     pub fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static) {
         self.callback_queue.push_back(Box::new(callback));
