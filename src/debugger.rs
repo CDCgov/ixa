@@ -43,7 +43,9 @@ impl DebuggerRepl {
 
     fn writeln(&self, formatted_string: &str) {
         let mut output = self.output.borrow_mut();
-        let _ = writeln!(output, "{formatted_string}").map_err(|e| e.to_string());
+        writeln!(output, "{formatted_string}")
+            .map_err(|e| e.to_string())
+            .unwrap();
         output.flush().unwrap();
     }
 
