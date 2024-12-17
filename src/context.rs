@@ -210,10 +210,8 @@ impl Context {
         self.plan_queue.cancel_plan(id);
     }
 
-    /// Retrieve the number of remaining plans
-    #[must_use]
-    pub fn remaining_plan_count(&self) -> usize {
-        self.plan_queue.remaining_plan_count()
+    pub(crate) fn _remaining_plan_count(&self) -> usize {
+        self.plan_queue._remaining_plan_count()
     }
 
     /// Add a `Callback` to the queue to be executed before the next plan

@@ -12,9 +12,8 @@ trait DebuggerCommand {
     fn handle(
         &self,
         context: &mut Context,
-        cli: &DebuggerRepl,
         matches: &ArgMatches,
-    ) -> Result<bool, String>;
+    ) -> Result<(bool, Option<String>), String>;
     fn about(&self) -> &'static str;
     fn extend(&self, subcommand: Command) -> Command {
         subcommand
@@ -69,7 +68,7 @@ impl DebuggerRepl {
     }
 
     fn process_line(&self, l: &str, context: &mut Context) -> Result<bool, String> {
-        let args = shlex::split(l).ok_or("error: Invalid quoting")?;
+        let args = shlex::split(l).ok_or("Error splitting lines")?;
         let matches = self
             .build_cli()
             .try_get_matches_from(args)
@@ -78,7 +77,11 @@ impl DebuggerRepl {
         if let Some((command, sub_matches)) = matches.subcommand() {
             // If the provided command is known, run its handler
             if let Some(handler) = self.get_command(command) {
-                return handler.handle(context, self, sub_matches);
+                let (quit, output) = handler.handle(context, sub_matches)?;
+                if let Some(output) = output {
+                    self.writeln(&output);
+                }
+                return Ok(quit);
             }
             // Unexpected command: print an error
             return Err(format!("Unknown command: {command}"));
@@ -97,11 +100,10 @@ impl DebuggerCommand for PopulationCommand {
     fn handle(
         &self,
         context: &mut Context,
-        cli: &DebuggerRepl,
         _matches: &ArgMatches,
-    ) -> Result<bool, String> {
-        cli.writeln(&format!("{}", context.get_current_population()));
-        Ok(false)
+    ) -> Result<(bool, Option<String>), String> {
+        let output = format!("{}", context.get_current_population());
+        Ok((false, Some(output)))
     }
 }
 
@@ -122,12 +124,11 @@ impl DebuggerCommand for NextCommand {
     fn handle(
         &self,
         context: &mut Context,
-        _cli: &DebuggerRepl,
         matches: &ArgMatches,
-    ) -> Result<bool, String> {
+    ) -> Result<(bool, Option<String>), String> {
         let t = *matches.get_one::<f64>("t").unwrap();
         context.schedule_debugger(t);
-        Ok(true)
+        Ok((true, None))
     }
 }
 
@@ -140,10 +141,9 @@ impl DebuggerCommand for ContinueCommand {
     fn handle(
         &self,
         _context: &mut Context,
-        _cli: &DebuggerRepl,
         _matches: &ArgMatches,
-    ) -> Result<bool, String> {
-        Ok(true)
+    ) -> Result<(bool, Option<String>), String> {
+        Ok((true, None))
     }
 }
 
@@ -172,6 +172,7 @@ fn readline(t: f64) -> Result<String, String> {
 /// Starts the debugger and pauses execution
 fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     let t = context.get_current_time();
+    let repl = build_repl(std::io::stdout());
     println!("Debugging simulation at t={t}");
     loop {
         let line = readline(t).expect("Error reading input");
@@ -179,8 +180,6 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
         if line.is_empty() {
             continue;
         }
-
-        let repl = build_repl(std::io::stdout());
 
         match repl.process_line(line, context) {
             Ok(quit) => {
@@ -291,13 +290,13 @@ mod tests {
     #[test]
     fn test_cli_next() {
         let context = &mut Context::new();
-        assert_eq!(context.remaining_plan_count(), 0);
+        assert_eq!(context._remaining_plan_count(), 0);
         let output = StdoutMock::new();
         let repl = build_repl(output.clone());
         let quits = repl.process_line("next 2\n", context).unwrap();
         assert!(quits, "should exit");
         assert_eq!(
-            context.remaining_plan_count(),
+            context._remaining_plan_count(),
             1,
             "should schedule a plan for the debugger to pause"
         );

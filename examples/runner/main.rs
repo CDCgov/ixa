@@ -4,21 +4,21 @@ use ixa::ContextPeopleExt;
 
 #[derive(Args, Debug)]
 struct CustomArgs {
-    #[arg(short, long)]
-    population: Option<u8>,
+    #[arg(short = 'p', long)]
+    starting_population: Option<u8>,
 }
 
 fn main() {
     // Try running the following:
     // cargo run --example runner -- --seed 42
-    // cargo run --example runner -- --population 5
+    // cargo run --example runner -- --starting-population 5
     // cargo run --example runner -- -p 5 --debugger
     let context = run_with_custom_args(|context, args, custom_args: Option<CustomArgs>| {
         println!("Setting random seed to {}", args.random_seed);
 
         // If an initial population was provided, add each person
         if let Some(custom_args) = custom_args {
-            if let Some(population) = custom_args.population {
+            if let Some(population) = custom_args.starting_population {
                 for _ in 0..population {
                     context.add_person(()).unwrap();
                 }
