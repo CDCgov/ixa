@@ -903,7 +903,7 @@ pub trait ContextPeopleExt {
     fn sample_person<R: RngId + 'static, T: Query>(
         &self,
         rng_id: R,
-        q: T,
+        query: T,
     ) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng;
@@ -1211,7 +1211,7 @@ impl ContextPeopleExt for Context {
     fn sample_person<R: RngId + 'static, T: Query>(
         &self,
         rng_id: R,
-        q: T,
+        query: T,
     ) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng,
@@ -1221,7 +1221,7 @@ impl ContextPeopleExt for Context {
         }
 
         // Special case the empty query because we can do it in O(1).
-        if q.get_query().is_empty() {
+        if query.get_query().is_empty() {
             let result = self.sample_range(rng_id, 0..self.get_current_population());
             return Ok(PersonId { id: result });
         }
@@ -1248,11 +1248,13 @@ impl ContextPeopleExt for Context {
                     w *= self.sample_range(rng_id, 0.0..1.0);
                 }
             },
-            q.get_query(),
+            query.get_query(),
         );
 
-        // This should always be set by the above algorithm.
-        Ok(selected.unwrap())
+        match selected {
+            Some(person) => Ok(person),
+            None => Err(IxaError::IxaError(String::from("No matching people"))) 
+        }
     }
 }
 
@@ -2189,6 +2191,8 @@ mod test {
 
         let mut context = Context::new();
         context.init_random(42);
+
+        // Test an empty query.
         assert!(matches!(
             context.sample_person(SampleRng2, ()),
             Err(IxaError::IxaError(_))
@@ -2198,6 +2202,12 @@ mod test {
         let person3 = context.add_person((Age, 10)).unwrap();
         let person4 = context.add_person((Age, 30)).unwrap();
 
+        // Test a non-matching query.
+        assert!(matches!(
+            context.sample_person(SampleRng2, (Age, 50)),
+            Err(IxaError::IxaError(_))
+        ));
+        
         // See that the simple query always returns person3
         for _ in 0..10 {
             assert_eq!(
