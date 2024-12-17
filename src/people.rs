@@ -1253,7 +1253,7 @@ impl ContextPeopleExt for Context {
 
         match selected {
             Some(person) => Ok(person),
-            None => Err(IxaError::IxaError(String::from("No matching people"))) 
+            None => Err(IxaError::IxaError(String::from("No matching people"))),
         }
     }
 }
@@ -2207,7 +2207,7 @@ mod test {
             context.sample_person(SampleRng2, (Age, 50)),
             Err(IxaError::IxaError(_))
         ));
-        
+
         // See that the simple query always returns person3
         for _ in 0..10 {
             assert_eq!(
