@@ -292,13 +292,13 @@ mod tests {
     #[test]
     fn test_cli_next() {
         let context = &mut Context::new();
-        assert_eq!(context._remaining_plan_count(), 0);
+        assert_eq!(context.remaining_plan_count(), 0);
         let output = StdoutMock::new();
         let repl = build_repl(output.clone());
         let quits = repl.process_line("next 2\n", context).unwrap();
         assert!(quits, "should exit");
         assert_eq!(
-            context._remaining_plan_count(),
+            context.remaining_plan_count(),
             1,
             "should schedule a plan for the debugger to pause"
         );

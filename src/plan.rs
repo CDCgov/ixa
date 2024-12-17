@@ -98,7 +98,8 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         }
     }
 
-    pub(crate) fn _remaining_plan_count(&self) -> usize {
+    #[doc(hidden)]
+    pub(crate) fn remaining_plan_count(&self) -> usize {
         self.queue.len()
     }
 }
