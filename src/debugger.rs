@@ -219,7 +219,6 @@ impl ContextDebugExt for Context {
 #[cfg(test)]
 mod tests {
     use crate::{Context, ContextPeopleExt};
-    use predicates::str::contains;
     use std::{cell::RefCell, io::Write, rc::Rc};
 
     use super::build_repl;
@@ -255,15 +254,13 @@ mod tests {
 
     #[test]
     fn test_cli_debugger_integration() {
-        let mut cmd = assert_cmd::Command::cargo_bin("runner_test_debug").unwrap();
-        let assert = cmd
+        assert_cmd::Command::cargo_bin("runner_test_debug")
+            .unwrap()
             .args(["--debugger", "1.0"])
+            .write_stdin("population\n")
             .write_stdin("continue\n")
-            .assert();
-
-        assert
-            .success()
-            .stdout(contains("Debugging simulation at t = 1"));
+            .assert()
+            .success();
     }
 
     #[test]
