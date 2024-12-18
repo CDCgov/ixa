@@ -1251,10 +1251,7 @@ impl ContextPeopleExt for Context {
             query.get_query(),
         );
 
-        match selected {
-            Some(person) => Ok(person),
-            None => Err(IxaError::IxaError(String::from("No matching people"))),
-        }
+        selected.ok_or(IxaError::IxaError(String::from("No matching people")))
     }
 }
 
