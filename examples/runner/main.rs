@@ -13,7 +13,7 @@ struct CustomArgs {
     // Example of an optional argument with a required value
     // -p 12            custom_args.starting_population is Some(12)
     // -p               This is invalid; you have to pass a value.
-    // (notjing)        custom_args.starting_population is None
+    // (nothing)        custom_args.starting_population is None
     #[arg(short = 'p', long)]
     starting_population: Option<u8>,
 }
