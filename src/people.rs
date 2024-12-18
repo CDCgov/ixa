@@ -894,14 +894,17 @@ pub trait ContextPeopleExt {
     where
         F: Fn(&Context, &[String], usize);
 
-    /// Randomly sample a person from the population.
+    /// Randomly sample a person from the population of people who match the query.
     ///
-    /// This is currently implemented by sampling in `0..current_population`
-    /// but in the future we might have holes where people were removed.
+    /// The syntax here is the same as with [`Context::query_people()`].
     ///
     /// # Errors
     /// Returns `IxaError` if population is 0.
-    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+    fn sample_person<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        query: T,
+    ) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng;
 }
@@ -1204,15 +1207,51 @@ impl ContextPeopleExt for Context {
         );
     }
 
-    fn sample_person<R: RngId + 'static>(&self, rng_id: R) -> Result<PersonId, IxaError>
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn sample_person<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        query: T,
+    ) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng,
     {
         if self.get_current_population() == 0 {
             return Err(IxaError::IxaError(String::from("Empty population")));
         }
-        let result = self.sample_range(rng_id, 0..self.get_current_population());
-        Ok(PersonId { id: result })
+
+        // Special case the empty query because we can do it in O(1).
+        if query.get_query().is_empty() {
+            let result = self.sample_range(rng_id, 0..self.get_current_population());
+            return Ok(PersonId { id: result });
+        }
+
+        T::setup(self);
+
+        // This function implements "Algorithm L" from KIM-HUNG LI
+        // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
+        // https://dl.acm.org/doi/pdf/10.1145/198429.198435
+        // Temporary variables.
+        let mut selected: Option<PersonId> = None;
+        let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
+        let mut ctr: usize = 0;
+        let mut i: usize = 1;
+
+        self.query_people_internal(
+            |person| {
+                ctr += 1;
+                if i == ctr {
+                    selected = Some(person);
+                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
+                        as usize
+                        + 1;
+                    w *= self.sample_range(rng_id, 0.0..1.0);
+                }
+            },
+            query.get_query(),
+        );
+
+        selected.ok_or(IxaError::IxaError(String::from("No matching people")))
     }
 }
 
@@ -2131,15 +2170,68 @@ mod test {
     use crate::random::{define_rng, ContextRandomExt};
 
     #[test]
-    fn test_sample_person() {
+    fn test_sample_person_simple() {
         define_rng!(SampleRng1);
         let mut context = Context::new();
         context.init_random(42);
         assert!(matches!(
-            context.sample_person(SampleRng1),
+            context.sample_person(SampleRng1, ()),
             Err(IxaError::IxaError(_))
         ));
         let person = context.add_person(()).unwrap();
-        assert_eq!(context.sample_person(SampleRng1).unwrap(), person);
+        assert_eq!(context.sample_person(SampleRng1, ()).unwrap(), person);
+    }
+
+    #[test]
+    fn test_sample_matching_person() {
+        define_rng!(SampleRng2);
+
+        let mut context = Context::new();
+        context.init_random(42);
+
+        // Test an empty query.
+        assert!(matches!(
+            context.sample_person(SampleRng2, ()),
+            Err(IxaError::IxaError(_))
+        ));
+        let person1 = context.add_person((Age, 10)).unwrap();
+        let person2 = context.add_person((Age, 10)).unwrap();
+        let person3 = context.add_person((Age, 10)).unwrap();
+        let person4 = context.add_person((Age, 30)).unwrap();
+
+        // Test a non-matching query.
+        assert!(matches!(
+            context.sample_person(SampleRng2, (Age, 50)),
+            Err(IxaError::IxaError(_))
+        ));
+
+        // See that the simple query always returns person3
+        for _ in 0..10 {
+            assert_eq!(
+                context.sample_person(SampleRng2, (Age, 30)).unwrap(),
+                person4
+            );
+        }
+
+        let mut count_p1: usize = 0;
+        let mut count_p2: usize = 0;
+        let mut count_p3: usize = 0;
+        for _ in 0..30000 {
+            let p = context.sample_person(SampleRng2, (Age, 10)).unwrap();
+            if p == person1 {
+                count_p1 += 1;
+            } else if p == person2 {
+                count_p2 += 1;
+            } else if p == person3 {
+                count_p3 += 1;
+            } else {
+                panic!("Unexpected person");
+            }
+        }
+
+        // The chance of any of these being more unbalanced than this is ~10^{-4}
+        assert!(count_p1 >= 8700);
+        assert!(count_p2 >= 8700);
+        assert!(count_p3 >= 8700);
     }
 }

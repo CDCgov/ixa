@@ -12,6 +12,7 @@ use std::collections::HashMap;
 #[macro_export]
 macro_rules! define_rng {
     ($random_id:ident) => {
+        #[derive(Copy, Clone)]
         struct $random_id;
 
         impl $crate::random::RngId for $random_id {
@@ -34,7 +35,7 @@ macro_rules! define_rng {
 }
 pub use define_rng;
 
-pub trait RngId {
+pub trait RngId: Copy + Clone {
     type RngType: SeedableRng;
     fn get_name() -> &'static str;
 }
