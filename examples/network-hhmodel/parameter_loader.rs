@@ -1,7 +1,7 @@
 use ixa::context::Context;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use std::fmt::Debug;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ixa::define_global_property;
 use ixa::error::IxaError;
@@ -18,7 +18,7 @@ pub struct ParametersValues {
 }
 define_global_property!(Parameters, ParametersValues);
 
-pub fn init_parameters(context: &mut Context, file_path: &Path) -> Result<(), IxaError> {
+pub fn init_parameters(context: &mut Context, file_path: &PathBuf) -> Result<(), IxaError> {
     let parameters_json = context.load_parameters_from_json::<ParametersValues>(file_path)?;
     context.set_global_property_value(Parameters, parameters_json)?;
     Ok(())
