@@ -1,5 +1,7 @@
 use ixa::{context::Context, random::ContextRandomExt};
 mod loader;
+mod parameter_loader;
+mod network_loader;
 
 fn main() {
     let mut context = Context::new();
