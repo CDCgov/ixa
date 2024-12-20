@@ -24,7 +24,7 @@ pub fn init_parameters(context: &mut Context, file_path: &PathBuf) -> Result<(),
     Ok(())
 }
 
-pub fn load_parameters(context: &mut Context) {
+pub fn init(context: &mut Context) {
     let current_dir = Path::new(file!()).parent().unwrap();
     let file_path = current_dir.join("config.json");
 
