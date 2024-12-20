@@ -6,8 +6,8 @@ use ixa::{ContextPeopleExt, PersonId,};
 use serde::Deserialize;
 use csv::Reader;
 use std::fs::File;
-use crate::network_loader::load_network;
-use crate::parameter_loader::load_parameters;
+use crate::network;
+use crate::parameters;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AgeGroupValue {
@@ -66,8 +66,8 @@ pub fn init(context: &mut Context) {
     context.index_property(Id);
     context.index_property(HouseholdId);
 
-    load_parameters(context);
-    load_network(context, &people);
+    parameters::init(context);
+    network::init(context, &people);
 
 }
 

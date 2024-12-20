@@ -1,7 +1,8 @@
 use ixa::{context::Context, random::ContextRandomExt};
 mod loader;
-mod parameter_loader;
-mod network_loader;
+mod seir;
+mod parameters;
+mod network;
 
 fn main() {
     let mut context = Context::new();
@@ -14,5 +15,7 @@ fn main() {
     // Load people from csv and set up some base properties
     loader::init(&mut context);
 
-    // context.execute();
+    seir::init(&mut context);
+
+    context.execute();
 }

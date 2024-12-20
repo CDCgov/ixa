@@ -47,7 +47,7 @@ fn load_edge_list<T: EdgeType + 'static>(context: &mut Context, file_name: &str,
     };
 }
 
-pub fn load_network(context: &mut Context, people: &Vec<PersonId>) {
+pub fn init(context: &mut Context, people: &Vec<PersonId>) {
     // Create dense household networks
     create_household_networks(context, &people);
 
