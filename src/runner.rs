@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
@@ -15,16 +15,43 @@ pub struct BaseArgs {
     pub random_seed: u64,
 
     /// Optional path for a global properties config file
-    #[arg(short, long, default_value = "")]
-    pub config: String,
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
 
     /// Optional path for report output
-    #[arg(short, long, default_value = "")]
-    pub output_dir: String,
+    #[arg(short, long = "output")]
+    pub output_dir: Option<PathBuf>,
+
+    // Optional prefix for report files
+    #[arg(long = "prefix")]
+    pub file_prefix: Option<String>,
+
+    // Overwrite existing report files?
+    #[arg(short, long)]
+    pub force_overwrite: bool,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
     pub debugger: Option<Option<f64>>,
+}
+
+impl BaseArgs {
+    fn new() -> Self {
+        BaseArgs {
+            random_seed: 0,
+            config: None,
+            output_dir: None,
+            file_prefix: None,
+            force_overwrite: false,
+            debugger: None,
+        }
+    }
+}
+
+impl Default for BaseArgs {
+    fn default() -> Self {
+        BaseArgs::new()
+    }
 }
 
 #[derive(Args)]
@@ -93,17 +120,22 @@ where
     let mut context = Context::new();
 
     // Optionally set global properties from a file
-    if !args.config.is_empty() {
-        println!("Loading global properties from: {}", args.config);
-        let config_path = Path::new(&args.config);
-        context.load_global_properties(config_path)?;
+    if args.config.is_some() {
+        let config_path = args.config.clone().unwrap();
+        println!("Loading global properties from: {config_path:?}");
+        context.load_global_properties(&config_path)?;
     }
 
-    // Optionally set output dir for reports
-    if !args.output_dir.is_empty() {
-        let output_dir = PathBuf::from(&args.output_dir);
-        let report_config = context.report_options();
-        report_config.directory(output_dir);
+    // Configure report options
+    let report_config = context.report_options();
+    if args.output_dir.is_some() {
+        report_config.directory(args.output_dir.clone().unwrap());
+    }
+    if args.file_prefix.is_some() {
+        report_config.file_prefix(args.file_prefix.clone().unwrap());
+    }
+    if args.force_overwrite {
+        report_config.overwrite(true);
     }
 
     context.init_random(args.random_seed);
@@ -130,7 +162,7 @@ mod tests {
     #[derive(Args, Debug)]
     struct CustomArgs {
         #[arg(short, long, default_value = "0")]
-        field: u32,
+        a: u32,
     }
 
     #[test]
@@ -145,7 +177,7 @@ mod tests {
         // and the entry point is in tests/bin/runner_test_custom_args
         assert_cmd::Command::cargo_bin("runner_test_custom_args")
             .unwrap()
-            .args(["--field", "42"])
+            .args(["-a", "42"])
             .assert()
             .success()
             .stdout("42\n");
@@ -161,9 +193,7 @@ mod tests {
     fn test_run_with_random_seed() {
         let test_args = BaseArgs {
             random_seed: 42,
-            config: String::new(),
-            output_dir: String::new(),
-            debugger: None,
+            ..Default::default()
         };
 
         // Use a comparison context to verify the random seed was set
@@ -189,10 +219,8 @@ mod tests {
     #[test]
     fn test_run_with_config_path() {
         let test_args = BaseArgs {
-            random_seed: 42,
-            config: "tests/data/global_properties_runner.json".to_string(),
-            output_dir: String::new(),
-            debugger: None,
+            config: Some(PathBuf::from("tests/data/global_properties_runner.json")),
+            ..Default::default()
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
             let p3 = ctx.get_global_property_value(RunnerProperty).unwrap();
@@ -203,16 +231,18 @@ mod tests {
     }
 
     #[test]
-    fn test_run_with_output_dir() {
+    fn test_run_with_report_options() {
         let test_args = BaseArgs {
-            random_seed: 42,
-            config: String::new(),
-            output_dir: "data".to_string(),
-            debugger: None,
+            output_dir: Some(PathBuf::from("data")),
+            file_prefix: Some("test".to_string()),
+            force_overwrite: true,
+            ..Default::default()
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
-            let output_dir = &ctx.report_options().directory;
-            assert_eq!(output_dir, &PathBuf::from("data"));
+            let opts = &ctx.report_options();
+            assert_eq!(opts.output_dir, PathBuf::from("data"));
+            assert_eq!(opts.file_prefix, "test".to_string());
+            assert!(opts.overwrite);
             Ok(())
         });
         assert!(result.is_ok());
@@ -220,15 +250,10 @@ mod tests {
 
     #[test]
     fn test_run_with_custom() {
-        let test_args = BaseArgs {
-            random_seed: 42,
-            config: String::new(),
-            output_dir: String::new(),
-            debugger: None,
-        };
-        let custom = CustomArgs { field: 42 };
+        let test_args = BaseArgs::new();
+        let custom = CustomArgs { a: 42 };
         let result = run_with_args_internal(test_args, Some(custom), |_, _, c| {
-            assert_eq!(c.unwrap().field, 42);
+            assert_eq!(c.unwrap().a, 42);
             Ok(())
         });
         assert!(result.is_ok());
