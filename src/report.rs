@@ -16,7 +16,7 @@ use std::path::PathBuf;
 // * overwrite: if true, will overwrite existing files in the same location
 pub struct ConfigReportOptions {
     pub file_prefix: String,
-    pub directory: PathBuf,
+    pub output_dir: PathBuf,
     pub overwrite: bool,
 }
 
@@ -27,7 +27,7 @@ impl ConfigReportOptions {
         // Sets the defaults
         ConfigReportOptions {
             file_prefix: String::new(),
-            directory: env::current_dir().unwrap(),
+            output_dir: env::current_dir().unwrap(),
             overwrite: false,
         }
     }
@@ -38,7 +38,7 @@ impl ConfigReportOptions {
     }
     /// Sets the directory where reports will be output
     pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
-        self.directory = directory;
+        self.output_dir = directory;
         self
     }
     /// Sets whether to overwrite existing reports of the same name if they exist
@@ -101,7 +101,7 @@ impl Context {
     fn generate_filename(&mut self, short_name: &str) -> PathBuf {
         let data_container = self.get_data_container_mut(ReportPlugin);
         let prefix = &data_container.config.file_prefix;
-        let directory = &data_container.config.directory;
+        let directory = &data_container.config.output_dir;
         let short_name = short_name.to_string();
         let basename = format!("{prefix}{short_name}");
         directory.join(basename).with_extension("csv")
