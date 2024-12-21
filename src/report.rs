@@ -240,7 +240,7 @@ impl ContextReportExt for Context {
 
 #[cfg(test)]
 mod test {
-    use crate::{define_person_property, define_person_property_with_default};
+    use crate::define_person_property_with_default;
 
     use super::*;
     use core::convert::TryInto;
