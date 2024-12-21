@@ -1,3 +1,4 @@
+use crate::define_data_plugin;
 use crate::Context;
 use crate::ContextPeopleExt;
 use crate::IxaError;
@@ -6,6 +7,18 @@ use clap::{Arg, ArgMatches, Command};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+
+struct DebuggerState {
+    breakpoint_requested: bool,
+}
+
+define_data_plugin!(
+    DebuggerDataPlugin,
+    DebuggerState,
+    DebuggerState {
+        breakpoint_requested: false
+    }
+);
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -120,7 +133,7 @@ impl DebuggerCommand for NextCommand {
             Arg::new("t")
                 .help("The next breakpoint (e.g., 4.2)")
                 .value_parser(value_parser!(f64))
-                .required(true),
+                .required(false),
         )
     }
     fn handle(
@@ -128,8 +141,13 @@ impl DebuggerCommand for NextCommand {
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let t = *matches.get_one::<f64>("t").unwrap();
-        context.schedule_debugger(t);
+        let t = matches.get_one::<f64>("t");
+        if let Some(t) = t {
+            context.schedule_debugger(*t);
+        } else {
+            context.set_breakpoint();
+        }
+
         Ok((true, None))
     }
 }
@@ -207,13 +225,43 @@ pub trait ContextDebugExt {
     /// Internal debugger errors e.g., reading or writing to stdin/stdout;
     /// errors in Ixa are printed to stdout
     fn schedule_debugger(&mut self, t: f64);
+
+    fn breakpoint_requested(&self) -> bool;
+
+    fn set_breakpoint(&mut self);
+
+    fn clear_breakpoint(&mut self);
+
+    fn start_debugger(&mut self);
 }
 
 impl ContextDebugExt for Context {
+    fn start_debugger(&mut self) {
+        start_debugger(self).expect("Error in debugger");
+    }
+    fn breakpoint_requested(&self) -> bool {
+        let d = self.get_data_container(DebuggerDataPlugin);
+        if d.is_none() {
+            return false;
+        }
+        d.unwrap().breakpoint_requested
+    }
+    fn set_breakpoint(&mut self) {
+        let data = self.get_data_container_mut(DebuggerDataPlugin);
+        data.breakpoint_requested = true;
+    }
+    fn clear_breakpoint(&mut self) {
+        let data = self.get_data_container_mut(DebuggerDataPlugin);
+        data.breakpoint_requested = false;
+    }
     fn schedule_debugger(&mut self, t: f64) {
-        self.add_plan(t, |context| {
-            start_debugger(context).expect("Error in debugger");
-        });
+        self.add_plan_with_phase(
+            t,
+            |context| {
+                context.set_breakpoint();
+            },
+            crate::ExecutionPhase::Last,
+        );
     }
 }
 

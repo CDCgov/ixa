@@ -8,7 +8,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::plan::{Id, Queue};
+use crate::{
+    debugger::ContextDebugExt,
+    plan::{Id, Queue},
+};
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -277,6 +280,12 @@ impl Context {
         loop {
             if self.shutdown_requested {
                 break;
+            }
+
+            // If there's a breakpoint, pause before continuing execution
+            if self.breakpoint_requested() {
+                self.clear_breakpoint();
+                self.start_debugger();
             }
 
             // If there is a callback, run it.
