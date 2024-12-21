@@ -3,10 +3,10 @@ use crate::ContextPeopleExt;
 use crate::IxaError;
 use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
+use rustyline;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
-use rustyline;
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -168,13 +168,13 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     println!("Debugging simulation at t={t}");
     let mut rl = rustyline::DefaultEditor::new().unwrap();
     loop {
-        let line = 
-        match rl.readline(&format!("t={t} $ ")) {
+        let line = match rl.readline(&format!("t={t} $ ")) {
             Ok(line) => line,
             Err(rustyline::error::ReadlineError::WindowResized) => continue,
             Err(err) => return Err(IxaError::IxaError(format!("Read error: {}", err))),
         };
-        rl.add_history_entry(line.clone()).expect("Should be able to add to input");
+        rl.add_history_entry(line.clone())
+            .expect("Should be able to add to input");
         let line = line.trim();
         if line.is_empty() {
             continue;
