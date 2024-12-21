@@ -193,7 +193,7 @@ fn readline(t: f64) -> Result<String, String> {
 fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     let t = context.get_current_time();
     let repl = build_repl(std::io::stdout());
-    println!("Debugging simulation at t={t}");
+    println!("DEBUGGER: Simulation Paused");
     loop {
         let line = readline(t).expect("Error reading input");
         let line = line.trim();
