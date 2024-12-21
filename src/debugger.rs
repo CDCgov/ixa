@@ -6,6 +6,7 @@ use clap::{Arg, ArgMatches, Command};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+use rustyline;
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -160,24 +161,20 @@ fn build_repl<W: Write + 'static>(output: W) -> DebuggerRepl {
     repl
 }
 
-// Helper function to read a line from stdin
-fn readline(t: f64) -> Result<String, String> {
-    write!(std::io::stdout(), "t={t} $ ").map_err(|e| e.to_string())?;
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
-    let mut buffer = String::new();
-    std::io::stdin()
-        .read_line(&mut buffer)
-        .map_err(|e| e.to_string())?;
-    Ok(buffer)
-}
-
 /// Starts the debugger and pauses execution
 fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     let t = context.get_current_time();
     let repl = build_repl(std::io::stdout());
     println!("Debugging simulation at t={t}");
+    let mut rl = rustyline::DefaultEditor::new().unwrap();
     loop {
-        let line = readline(t).expect("Error reading input");
+        let line = 
+        match rl.readline(&format!("t={t} $ ")) {
+            Ok(line) => line,
+            Err(rustyline::error::ReadlineError::WindowResized) => continue,
+            Err(err) => return Err(IxaError::IxaError(format!("Read error: {}", err))),
+        };
+        rl.add_history_entry(line.clone()).expect("Should be able to add to input");
         let line = line.trim();
         if line.is_empty() {
             continue;
