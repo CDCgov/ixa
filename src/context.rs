@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    debugger::ContextDebugExt,
+    debugger::{start_debugger, ContextDebugExt},
     plan::{Id, Queue},
 };
 
@@ -275,6 +275,8 @@ impl Context {
     }
 
     /// Execute the simulation until the plan and callback queues are empty
+    /// # Panics
+    /// Panics as the result of a callback or if a problem happens during debugging
     pub fn execute(&mut self) {
         // Start plan loop
         loop {
@@ -285,7 +287,7 @@ impl Context {
             // If there's a breakpoint, pause before continuing execution
             if self.breakpoint_requested() {
                 self.clear_breakpoint();
-                self.start_debugger();
+                start_debugger(self).unwrap();
             }
 
             // If there is a callback, run it.

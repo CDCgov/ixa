@@ -189,8 +189,8 @@ fn readline(t: f64) -> Result<String, String> {
     Ok(buffer)
 }
 
-/// Starts the debugger and pauses execution
-fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
+// Used internally to start the debugger and pause execution
+pub(crate) fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     let t = context.get_current_time();
     let repl = build_repl(std::io::stdout());
     println!("DEBUGGER: Simulation Paused");
@@ -217,7 +217,8 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
 }
 
 pub trait ContextDebugExt {
-    /// Schedule the simulation to pause at time t and start the debugger.
+    /// Schedule the simulation to pause at the end of time t
+    /// (`ExecutionPhase::Last`) and start the debugger.
     /// This will give you a REPL which allows you to inspect the state of
     /// the simulation (type help to see a list of commands)
     ///
@@ -226,19 +227,17 @@ pub trait ContextDebugExt {
     /// errors in Ixa are printed to stdout
     fn schedule_debugger(&mut self, t: f64);
 
+    /// Is a breakpoint currently requested?
     fn breakpoint_requested(&self) -> bool;
 
+    /// Sets the breakpoint flag to true
     fn set_breakpoint(&mut self);
 
+    /// Sets the breakpoint flag to false
     fn clear_breakpoint(&mut self);
-
-    fn start_debugger(&mut self);
 }
 
 impl ContextDebugExt for Context {
-    fn start_debugger(&mut self) {
-        start_debugger(self).expect("Error in debugger");
-    }
     fn breakpoint_requested(&self) -> bool {
         let d = self.get_data_container(DebuggerDataPlugin);
         if d.is_none() {
