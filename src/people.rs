@@ -625,7 +625,7 @@ macro_rules! define_person_property {
 #[macro_export]
 macro_rules! define_person_property_with_default {
     ($person_property:ident, $value:ty, $default:expr) => {
-        define_person_property!($person_property, $value, |_context, _person_id| {
+        $crate::define_person_property!($person_property, $value, |_context, _person_id| {
             $default
         });
     };

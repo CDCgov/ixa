@@ -2,7 +2,7 @@ use ixa::error::IxaError;
 use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
 use ixa::{
-    context::Context, define_person_property, define_person_property_with_default,
+    context::Context, define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
 };
 use std::path::Path;

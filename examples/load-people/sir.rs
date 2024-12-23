@@ -1,6 +1,6 @@
 use ixa::{
     context::Context,
-    define_person_property, define_person_property_with_default,
+    define_person_property_with_default,
     people::{ContextPeopleExt, PersonCreatedEvent},
 };
 
