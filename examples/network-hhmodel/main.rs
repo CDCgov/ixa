@@ -1,9 +1,9 @@
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
 use ixa::{define_rng, PersonId};
 mod loader;
-mod seir;
-mod parameters;
 mod network;
+mod parameters;
+mod seir;
 
 define_rng!(MainRng);
 
@@ -14,7 +14,7 @@ fn main() {
 
     // Load people from csv and set up some base properties
     let people = loader::init(&mut context);
-    
+
     // Load parameters from json
     parameters::init(&mut context, "config.json").unwrap();
 
@@ -23,7 +23,7 @@ fn main() {
 
     let mut to_infect: Vec<PersonId> = Vec::new();
     to_infect.push(context.sample_person(MainRng, ()).unwrap());
-
+    #[allow(clippy::vec_init_then_push)]
     seir::init(&mut context, to_infect);
 
     context.execute();

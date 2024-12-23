@@ -1,10 +1,10 @@
 use std::path::Path;
 
+use csv::Reader;
 use ixa::context::Context;
 use ixa::define_person_property;
-use ixa::{ContextPeopleExt, PersonId,};
+use ixa::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
-use csv::Reader;
 use std::fs::File;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -65,17 +65,13 @@ pub fn init(context: &mut Context) -> Vec<PersonId> {
     context.index_property(HouseholdId);
 
     people
-
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use ixa::{
-        context::Context,
-        random::ContextRandomExt,
-    };
+    use ixa::{context::Context, random::ContextRandomExt};
 
     const EXPECTED_ROWS: usize = 12258;
 
@@ -86,5 +82,4 @@ mod tests {
         init(&mut context);
         assert_eq!(context.get_current_population(), EXPECTED_ROWS);
     }
-
 }
