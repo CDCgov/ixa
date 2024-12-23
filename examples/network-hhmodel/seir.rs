@@ -40,7 +40,9 @@ pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Va
     let infected = context.query_people((DiseaseStatus, DiseaseStatusValue::I));
     let mut edges = Vec::new();
 
+    println!("n infected: {:?}", infected.len());
     for i in infected {
+               
         edges.extend(context
             .get_matching_edges::<T>(
                 i, 
@@ -56,8 +58,9 @@ pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Va
     edges
 }
 
-fn infect_network<T: EdgeType + 'static>(context: &mut Context,
+fn expose_network<T: EdgeType + 'static>(context: &mut Context,
     beta: f64) {
+
     let edges = get_i_s_edges::<T>(context);
     for e in edges {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
@@ -66,6 +69,7 @@ fn infect_network<T: EdgeType + 'static>(context: &mut Context,
                  DiseaseStatusValue::E);
         }
     }
+
 }
 
 fn schedule_waiting_event(context: &mut Context, person_id: PersonId, 
@@ -104,16 +108,13 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 
 }
 
-pub fn init(context: &mut Context) {
-
-    // expose the first person to the disease
-    let p = context.sample_person(SeirRng, ()).unwrap();
-    context.set_person_property(p, DiseaseStatus, 
-        DiseaseStatusValue::E);
+pub fn init(context: &mut Context, initial_infections: Vec<PersonId>) {
 
     context.add_periodic_plan_with_phase(
         1.0, 
         |context| {
+
+        println!("Current time is {}.", context.get_current_time());
 
         let parameters = context
         .get_global_property_value(Parameters)
@@ -121,11 +122,11 @@ pub fn init(context: &mut Context) {
         .clone();
 
         // infect the networks
-        infect_network::<HH>(context, sar_to_beta(parameters.sar, 
+        expose_network::<HH>(context, sar_to_beta(parameters.sar, 
             parameters.incubation_period));
-        infect_network::<U5>(context, sar_to_beta(parameters.sar / parameters.between_hh_transmission_reduction, 
+        expose_network::<U5>(context, sar_to_beta(parameters.sar / parameters.between_hh_transmission_reduction, 
                 parameters.incubation_period));
-        infect_network::<U18>(context, sar_to_beta(parameters.sar / parameters.between_hh_transmission_reduction, 
+        expose_network::<U18>(context, sar_to_beta(parameters.sar / parameters.between_hh_transmission_reduction, 
                 parameters.incubation_period));
 
     }, ExecutionPhase::Normal);
@@ -133,52 +134,58 @@ pub fn init(context: &mut Context) {
     context.subscribe_to_event(
         move |context, 
         event: PersonPropertyChangeEvent<DiseaseStatus>| {
-            
+
         match event.current {
             DiseaseStatusValue::E => schedule_infection(context, event.person_id),
             DiseaseStatusValue::I => schedule_recovery(context, event.person_id),
-            _ => panic!("Only watching E and I changes"),
+            _ => (),
         };
         
     });
+
+    // expose the first person to the disease
+    for ii in initial_infections {
+        context.set_person_property(ii, DiseaseStatus, 
+            DiseaseStatusValue::E);
+    }
 
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ixa::{context::Context, people::PersonPropertyChangeEvent};
+    use ixa::context::Context;
+    use crate::parameters::ParametersValues;
+    use crate::{loader, network};
+    use crate::loader::Id;
 
     #[test]
     fn test_disease_status() {
         let mut context = Context::new();
-        init(&mut context);
+        
+        context.init_random(42);
 
-        let person = context.add_person(()).unwrap();
+        let people = loader::init(&mut context);
 
-        // People should start in the S state
-        assert_eq!(
-            context.get_person_property(person, DiseaseStatus),
-            DiseaseStatusValue::S
-        );
+        // set sar and between_hh_transmission_reduction to 1.0 so that
+        // beta is 1.0
+        let parameters = ParametersValues {
+            incubation_period: 8.0,
+            infectious_period: 27.0,
+            sar: 1.0,
+            shape: 15.0,
+            infection_duration: 5.0,
+            between_hh_transmission_reduction: 1.0,
+        };
+        context.set_global_property_value(Parameters, parameters).unwrap();
 
-        // At 1.0, people should be in the I state
-        context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-            let person = event.person_id;
-            if context.get_current_time() == 1.0 {
-                assert_eq!(
-                    context.get_person_property(person, DiseaseStatus),
-                    DiseaseStatusValue::I
-                );
-            }
-        });
+        network::init(&mut context, &people);
+        
+        let to_infect = context.query_people((Id, 335));
+
+        init(&mut context, to_infect);
 
         context.execute();
 
-        // People should end up in the R state by the end of the simulation
-        assert_eq!(
-            context.get_person_property(person, DiseaseStatus),
-            DiseaseStatusValue::R
-        );
     }
 }

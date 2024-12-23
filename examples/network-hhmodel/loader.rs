@@ -6,8 +6,6 @@ use ixa::{ContextPeopleExt, PersonId,};
 use serde::Deserialize;
 use csv::Reader;
 use std::fs::File;
-use crate::network;
-use crate::parameters;
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AgeGroupValue {
@@ -53,7 +51,7 @@ pub fn open_csv(file_name: &str) -> Reader<File> {
     csv::Reader::from_path(file_path).unwrap()
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Vec<PersonId> {
     // Load csv and deserialize records
     let mut reader = open_csv("synthetic_households_us.csv");
     let mut people = Vec::new();
@@ -66,8 +64,7 @@ pub fn init(context: &mut Context) {
     context.index_property(Id);
     context.index_property(HouseholdId);
 
-    parameters::init(context);
-    network::init(context, &people);
+    people
 
 }
 
