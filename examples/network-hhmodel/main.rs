@@ -1,21 +1,30 @@
-use ixa::{context::Context, random::ContextRandomExt};
+use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
+use ixa::{define_rng, PersonId};
 mod loader;
 mod seir;
 mod parameters;
 mod network;
+
+define_rng!(MainRng);
 
 fn main() {
     let mut context = Context::new();
 
     context.init_random(42);
 
-    // Sets up some event listeners on person creation and property changes
-    // logger::init(&mut context);
-
     // Load people from csv and set up some base properties
-    loader::init(&mut context);
+    let people = loader::init(&mut context);
+    
+    // Load parameters from json
+    parameters::init(&mut context, "config.json").unwrap();
 
-    seir::init(&mut context);
+    // Load network
+    network::init(&mut context, &people);
+
+    let mut to_infect: Vec<PersonId> = Vec::new();
+    to_infect.push(context.sample_person(MainRng, ()).unwrap());
+
+    seir::init(&mut context, to_infect);
 
     context.execute();
 }
