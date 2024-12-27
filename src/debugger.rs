@@ -170,8 +170,8 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     loop {
         let line = match rl.readline(&format!("t={t} $ ")) {
             Ok(line) => line,
-            Err(rustyline::error::ReadlineError::WindowResized)
-            | Err(rustyline::error::ReadlineError::Interrupted) => continue,
+            Err(rustyline::error::ReadlineError::WindowResized
+                | rustyline::error::ReadlineError::Interrupted) => continue,
             Err(rustyline::error::ReadlineError::Eof) => return Ok(()),
             Err(err) => return Err(IxaError::IxaError(format!("Read error: {err}"))),
         };
