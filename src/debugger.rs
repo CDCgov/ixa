@@ -171,6 +171,8 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
         let line = match rl.readline(&format!("t={t} $ ")) {
             Ok(line) => line,
             Err(rustyline::error::ReadlineError::WindowResized) => continue,
+            Err(rustyline::error::ReadlineError::Interrupted) => continue,
+            Err(rustyline::error::ReadlineError::Eof) => return Ok(()),
             Err(err) => return Err(IxaError::IxaError(format!("Read error: {err}"))),
         };
         rl.add_history_entry(line.clone())
