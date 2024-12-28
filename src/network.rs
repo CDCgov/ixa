@@ -19,6 +19,8 @@ use std::{
 /// An edge in network graph. Edges are directed, so the
 /// source person is implicit.
 pub struct Edge<T: Sized> {
+    /// The person this edge comes from.
+    pub person: PersonId,
     /// The person this edge points to.
     pub neighbor: PersonId,
     /// The weight associated with the edge.
@@ -81,6 +83,7 @@ impl NetworkData {
         }
 
         edges.push(Edge {
+            person,
             neighbor,
             weight,
             inner,
@@ -439,11 +442,13 @@ mod test_inner {
             edges,
             vec![
                 Edge {
+                    person: PersonId { id: 1 },
                     neighbor: PersonId { id: 2 },
                     weight: 0.01,
                     inner: ()
                 },
                 Edge {
+                    person: PersonId { id: 1 },
                     neighbor: PersonId { id: 3 },
                     weight: 0.02,
                     inner: ()
@@ -473,6 +478,7 @@ mod test_inner {
         assert_eq!(
             edges,
             vec![Edge {
+                person: PersonId { id: 1 },
                 neighbor: PersonId { id: 2 },
                 weight: 0.01,
                 inner: ()
@@ -612,6 +618,7 @@ mod test_api {
         assert_eq!(
             context.get_edges::<EdgeType1>(person1),
             vec![Edge {
+                person: person1,
                 neighbor: person2,
                 weight: 0.01,
                 inner: 1
@@ -699,6 +706,7 @@ mod test_api {
         let edges =
             context.get_matching_edges::<EdgeType1>(person1, |_context, edge| edge.weight > 0.01);
         assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].person, person1);
         assert_eq!(edges[0].neighbor, person3);
     }
 
@@ -716,6 +724,7 @@ mod test_api {
         let edges =
             context.get_matching_edges::<EdgeType1>(person1, |_context, edge| edge.inner == 3);
         assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].person, person1);
         assert_eq!(edges[0].neighbor, person3);
     }
 
@@ -734,6 +743,7 @@ mod test_api {
             context.match_person(edge.neighbor, (Age, 3))
         });
         assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].person, person1);
         assert_eq!(edges[0].neighbor, person3);
     }
 
@@ -755,6 +765,7 @@ mod test_api {
         let edge = context
             .select_random_edge::<EdgeType1, _>(NetworkTestRng, person1)
             .unwrap();
+        assert_eq!(edge.person, person1);
         assert_eq!(edge.neighbor, person3);
     }
 }
