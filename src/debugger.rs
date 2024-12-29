@@ -23,6 +23,7 @@ trait DebuggerCommand {
 }
 
 struct Debugger {
+    rl: rustyline::DefaultEditor,
     cli: Command,
     commands: HashMap<&'static str, Box<dyn DebuggerCommand>>,
 }
@@ -33,7 +34,7 @@ impl Debugger {
         self.commands.get(name).map(|command| &**command)
     }
 
-    fn process_line(
+    fn process_command(
         &self,
         l: &str,
         context: &mut Context,
@@ -140,7 +141,11 @@ fn init(context: &mut Context) {
                 ));
             cli = cli.subcommand(subcommand);
         }
-        *debugger = Some(Debugger { cli, commands });
+        *debugger = Some(Debugger {
+            rl: rustyline::DefaultEditor::new().unwrap(),
+            cli,
+            commands,
+        });
     }
 }
 
@@ -152,12 +157,11 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
     // Temporarily take the data container out of context so that
     // we can operate on context.
     let data_container = context.get_data_container_mut(DebuggerPlugin);
-    let debugger = data_container.take().unwrap();
+    let mut debugger = data_container.take().unwrap();
 
     println!("Debugging simulation at t={t}");
-    let mut rl = rustyline::DefaultEditor::new().unwrap();
     loop {
-        let line = match rl.readline(&format!("t={t} $ ")) {
+        let line = match debugger.rl.readline(&format!("t={t} $ ")) {
             Ok(line) => line,
             Err(
                 rustyline::error::ReadlineError::WindowResized
@@ -166,14 +170,16 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
             Err(rustyline::error::ReadlineError::Eof) => return Ok(()),
             Err(err) => return Err(IxaError::IxaError(format!("Read error: {err}"))),
         };
-        rl.add_history_entry(line.clone())
+        debugger
+            .rl
+            .add_history_entry(line.clone())
             .expect("Should be able to add to input");
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
 
-        match debugger.process_line(line, context) {
+        match debugger.process_command(line, context) {
             Ok((quit, message)) => {
                 if quit {
                     break;
@@ -227,7 +233,7 @@ mod tests {
         let data_container = context.get_data_container_mut(DebuggerPlugin);
         let debugger = data_container.take().unwrap();
 
-        let res = debugger.process_line(line, context).unwrap();
+        let res = debugger.process_command(line, context).unwrap();
 
         let data_container = context.get_data_container_mut(DebuggerPlugin);
         *data_container = Some(debugger);
