@@ -33,26 +33,6 @@ impl Debugger {
         self.commands.get(name).map(|command| &**command)
     }
 
-    fn build_cli(&self) -> Command {
-        let mut cli = Command::new("repl")
-            .multicall(true)
-            .arg_required_else_help(true)
-            .subcommand_required(true)
-            .subcommand_value_name("DEBUGGER")
-            .subcommand_help_heading("IXA DEBUGGER")
-            .help_template("{all-args}");
-
-        for (name, handler) in &self.commands {
-            let subcommand =
-                handler.extend(Command::new(*name).about(handler.about()).help_template(
-                    "{about-with-newline}\n{usage-heading}\n    {usage}\n\n{all-args}{after-help}",
-                ));
-            cli = cli.subcommand(subcommand);
-        }
-
-        cli
-    }
-
     fn process_line(
         &self,
         l: &str,
@@ -135,7 +115,7 @@ impl DebuggerCommand for ContinueCommand {
     }
 }
 
-// Assemble all the commands
+// Build the debugger context.
 fn init(context: &mut Context) {
     let debugger = context.get_data_container_mut(DebuggerPlugin);
 
@@ -199,7 +179,7 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
                     break;
                 }
                 if let Some(message) = message {
-                    write!(std::io::stdout(), "{message}");
+                    let _ = write!(std::io::stdout(), "{message}");
                     std::io::stdout().flush().unwrap();
                 }
             }
