@@ -1,3 +1,4 @@
+use crate::global_properties::get_global_property_getter;
 use crate::Context;
 use crate::ContextPeopleExt;
 use crate::IxaError;
@@ -110,6 +111,32 @@ impl DebuggerCommand for PopulationCommand {
     }
 }
 
+/// Returns the current population of the simulation
+struct GlobalPropertyCommand;
+impl DebuggerCommand for GlobalPropertyCommand {
+    fn about(&self) -> &'static str {
+        "Get the value for a global property"
+    }
+    fn extend(&self, subcommand: Command) -> Command {
+        subcommand.arg(
+            Arg::new("property")
+                .help("The name of the global property")
+                .value_parser(value_parser!(String))
+                .required(true),
+        )
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        let name = matches.get_one::<String>("property").unwrap();
+        let getter = get_global_property_getter(&name).unwrap();
+        let output = format!("{:?}", getter(context));
+        Ok((false, Some(output)))
+    }
+}
+
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
 impl DebuggerCommand for NextCommand {
@@ -157,6 +184,7 @@ fn build_repl<W: Write + 'static>(output: W) -> DebuggerRepl {
     repl.register_command("population", Box::new(PopulationCommand));
     repl.register_command("next", Box::new(NextCommand));
     repl.register_command("continue", Box::new(ContinueCommand));
+    repl.register_command("global", Box::new(GlobalPropertyCommand));
 
     repl
 }

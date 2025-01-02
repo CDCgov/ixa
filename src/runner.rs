@@ -157,7 +157,7 @@ where
 mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Args, Debug)]
     struct CustomArgs {
@@ -210,7 +210,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct RunnerPropertyType {
         field_int: u32,
     }

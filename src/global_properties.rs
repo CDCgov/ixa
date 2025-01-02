@@ -32,6 +32,13 @@ use std::sync::Mutex;
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
+type PropertyGetterFn = dyn Fn(&mut Context) -> Result<String, IxaError> + Send + Sync;
+
+struct PropertyAccessors {
+    setter: Arc<PropertySetterFn>,
+    getter: Arc<PropertyGetterFn>,
+}
+
 #[allow(clippy::type_complexity)]
 // This is a global list of all the global properties that
 // are compiled in. Fundamentally it's a HashMap of property
@@ -40,40 +47,60 @@ type PropertySetterFn =
 // shared and initialized at startup time while still being
 // safe.
 #[doc(hidden)]
-pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
+pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, PropertyAccessors>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
 #[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
-    for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
+    for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de> + serde::Serialize,
 {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     assert!(properties
         .borrow_mut()
         .insert(
             name.to_string(),
-            Arc::new(
-                |context: &mut Context, name, value| -> Result<(), IxaError> {
-                    let val: T::Value = serde_json::from_value(value)?;
-                    T::validate(&val)?;
-                    if context.get_global_property_value(T::new()).is_some() {
-                        return Err(IxaError::IxaError(format!("Duplicate property {name}")));
+            PropertyAccessors {
+                setter: Arc::new(
+                    |context: &mut Context, name, value| -> Result<(), IxaError> {
+                        let val: T::Value = serde_json::from_value(value)?;
+                        T::validate(&val)?;
+                        if context.get_global_property_value(T::new()).is_some() {
+                            return Err(IxaError::IxaError(format!("Duplicate property {name}")));
+                        }
+                        context.set_global_property_value(T::new(), val)?;
+                        Ok(())
                     }
-                    context.set_global_property_value(T::new(), val)?;
-                    Ok(())
-                },
-            ),
+                ),
+                getter: Arc::new(|context: &mut Context| -> Result<String, IxaError> {
+                    let value = context.get_global_property_value(T::new());
+                    match value {
+                        Some(val) => Ok(serde_json::to_string(val)?),
+                        None => Err(IxaError::IxaError(format!("Property not set"))),
+                    }
+                }),
+            }
         )
         .is_none());
 }
 
 #[allow(clippy::missing_panics_doc)]
-fn get_global_property(name: &String) -> Option<Arc<PropertySetterFn>> {
+fn get_global_property_setter(name: &String) -> Option<Arc<PropertySetterFn>> {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     let tmp = properties.borrow();
     match tmp.get(name) {
-        Some(func) => Some(Arc::clone(func)),
+        Some(accessor) => Some(Arc::clone(&accessor.setter)),
+        None => None,
+    }
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn get_global_property_getter(name: &String) -> Option<Arc<PropertyGetterFn>> {
+    let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    println!("Properties: {:?}", properties.borrow().keys());
+    let tmp = properties.borrow();
+    match tmp.get(name) {
+        Some(accessor) => Some(Arc::clone(&accessor.getter)),
         None => None,
     }
 }
@@ -260,7 +287,7 @@ impl ContextGlobalPropertiesExt for Context {
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
 
         for (k, v) in val {
-            if let Some(handler) = get_global_property(&k) {
+            if let Some(handler) = get_global_property_setter(&k) {
                 handler(self, &k, v)?;
             } else {
                 return Err(IxaError::from(format!("No global property: {k}")));
@@ -365,14 +392,14 @@ mod test {
         assert_eq!(params_read.diseases, params.diseases);
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct Property1Type {
         field_int: u32,
         field_str: String,
     }
     define_global_property!(Property1, Property1Type);
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct Property2Type {
         field_int: u32,
     }
@@ -430,7 +457,7 @@ mod test {
         }
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct Property3Type {
         field_int: u32,
     }
