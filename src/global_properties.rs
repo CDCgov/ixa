@@ -535,4 +535,29 @@ mod test {
             Err(IxaError::IxaError(_))
         ));
     }
+
+    #[test]
+    fn list_registered_global_properties() {
+        let context = Context::new();
+        let properties = context.list_registered_global_properties();
+        assert!(properties.contains(&"ixa.DiseaseParams".to_string()));
+    }
+
+    #[test]
+    fn get_serialized_value_by_string() {
+        let mut context = Context::new();
+        context
+            .set_global_property_value(
+                DiseaseParams,
+                ParamType {
+                    days: 10,
+                    diseases: 2,
+                },
+            )
+            .unwrap();
+        let serialized = context
+            .get_serialized_value_by_string("ixa.DiseaseParams")
+            .unwrap();
+        assert_eq!(serialized, Some("{\"days\":10,\"diseases\":2}".to_string()));
+    }
 }
