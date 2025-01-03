@@ -19,6 +19,7 @@ struct CustomArgs {
 }
 
 define_global_property!(Name, String);
+define_global_property!(FavoriteNumber, u32);
 
 fn main() {
     // The runner reads arguments from the command line.
@@ -42,6 +43,7 @@ fn main() {
         }
 
         context.set_global_property_value(Name, "Sim123".to_string())?;
+        context.set_global_property_value(FavoriteNumber, 42)?;
 
         println!("Name: {}", context.get_global_property_value(Name).unwrap());
 

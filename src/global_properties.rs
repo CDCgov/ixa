@@ -32,11 +32,11 @@ use std::sync::Mutex;
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
-type PropertyGetterFn = dyn Fn(&mut Context) -> Result<String, IxaError> + Send + Sync;
+type PropertyGetterFn = dyn Fn(&Context) -> Result<Option<String>, IxaError> + Send + Sync;
 
-struct PropertyAccessors {
-    setter: Arc<PropertySetterFn>,
-    getter: Arc<PropertyGetterFn>,
+pub struct PropertyAccessors {
+    setter: Box<PropertySetterFn>,
+    getter: Box<PropertyGetterFn>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -47,7 +47,7 @@ struct PropertyAccessors {
 // shared and initialized at startup time while still being
 // safe.
 #[doc(hidden)]
-pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, PropertyAccessors>>>> =
+pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertyAccessors>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
 #[allow(clippy::missing_panics_doc)]
@@ -60,8 +60,8 @@ where
         .borrow_mut()
         .insert(
             name.to_string(),
-            PropertyAccessors {
-                setter: Arc::new(
+            Arc::new(PropertyAccessors {
+                setter: Box::new(
                     |context: &mut Context, name, value| -> Result<(), IxaError> {
                         let val: T::Value = serde_json::from_value(value)?;
                         T::validate(&val)?;
@@ -72,38 +72,44 @@ where
                         Ok(())
                     }
                 ),
-                getter: Arc::new(|context: &mut Context| -> Result<String, IxaError> {
+                getter: Box::new(|context: &Context| -> Result<Option<String>, IxaError> {
                     let value = context.get_global_property_value(T::new());
                     match value {
-                        Some(val) => Ok(serde_json::to_string(val)?),
-                        None => Err(IxaError::IxaError(format!("Property not set"))),
+                        Some(val) => Ok(Some(serde_json::to_string(val)?)),
+                        None => Ok(None),
                     }
                 }),
-            }
+            })
         )
         .is_none());
 }
 
-#[allow(clippy::missing_panics_doc)]
-fn get_global_property_setter(name: &String) -> Option<Arc<PropertySetterFn>> {
+fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     let tmp = properties.borrow();
-    match tmp.get(name) {
-        Some(accessor) => Some(Arc::clone(&accessor.setter)),
-        None => None,
-    }
+    tmp.get(name).map(Arc::clone)
 }
 
-#[allow(clippy::missing_panics_doc)]
-pub fn get_global_property_getter(name: &String) -> Option<Arc<PropertyGetterFn>> {
-    let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    println!("Properties: {:?}", properties.borrow().keys());
-    let tmp = properties.borrow();
-    match tmp.get(name) {
-        Some(accessor) => Some(Arc::clone(&accessor.getter)),
-        None => None,
-    }
-}
+// #[allow(clippy::missing_panics_doc)]
+// fn get_global_property_setter(name: &String) -> Option<Arc<PropertySetterFn>> {
+//     let properties = GLOBAL_PROPERTIES.lock().unwrap();
+//     let tmp = properties.borrow();
+//     match tmp.get(name) {
+//         Some(accessor) => Some(Arc::clone(&accessor.setter)),
+//         None => None,
+//     }
+// }
+
+// #[allow(clippy::missing_panics_doc)]
+// pub fn get_global_property_getter(name: &String) -> Option<Arc<PropertyGetterFn>> {
+//     let properties = GLOBAL_PROPERTIES.lock().unwrap();
+//     println!("Properties: {:?}", properties.borrow().keys());
+//     let tmp = properties.borrow();
+//     match tmp.get(name) {
+//         Some(accessor) => Some(Arc::clone(&accessor.getter)),
+//         None => None,
+//     }
+// }
 
 /// Defines a global property with the following parameters:
 /// * `$global_property`: Name for the identifier type of the global property
@@ -186,6 +192,15 @@ pub trait ContextGlobalPropertiesExt {
         &self,
         _property: T,
     ) -> Option<&T::Value>;
+
+    fn list_registered_global_properties(&self) -> Vec<String>;
+
+    /// Return the serialized value of a global property by fully qualified name
+    ///
+    /// # Errors
+    ///
+    /// Will return an `IxaError` if the property does not exist
+    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
 
     /// Given a file path for a valid json file, deserialize parameter values
     /// for a given struct T
@@ -271,6 +286,20 @@ impl ContextGlobalPropertiesExt for Context {
         None
     }
 
+    fn list_registered_global_properties(&self) -> Vec<String> {
+        let properties = GLOBAL_PROPERTIES.lock().unwrap();
+        let tmp = properties.borrow();
+        tmp.keys().map(std::string::ToString::to_string).collect()
+    }
+
+    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
+        let accessor = get_global_property_accessor(name);
+        match accessor {
+            Some(accessor) => (accessor.getter)(self),
+            None => Err(IxaError::from(format!("No global property: {name}"))),
+        }
+    }
+
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &Path,
@@ -287,8 +316,8 @@ impl ContextGlobalPropertiesExt for Context {
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
 
         for (k, v) in val {
-            if let Some(handler) = get_global_property_setter(&k) {
-                handler(self, &k, v)?;
+            if let Some(accessor) = get_global_property_accessor(&k) {
+                (accessor.setter)(self, &k, v)?;
             } else {
                 return Err(IxaError::from(format!("No global property: {k}")));
             }
