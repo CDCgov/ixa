@@ -297,6 +297,31 @@ impl Context {
     }
 }
 
+// TODO(cym4@cdc.gov): This is a temporary hack to let you
+// run a plan with mutable references to both the context
+// and a plugin's data. In the future we hope to make a
+// convenient public API for this, which is why it's not
+// public now.
+pub(crate) fn run_with_plugin<T: DataPlugin>(
+    context: &mut Context,
+    f: impl Fn(&mut Context, &mut T::DataContainer),
+) {
+    // Temporarily take the data container out of context so that
+    // we can operate on context.
+    let mut data_container_box = context.data_plugins.remove(&TypeId::of::<T>()).unwrap();
+    let data_container = data_container_box
+        .downcast_mut::<T::DataContainer>()
+        .unwrap();
+
+    // Call the function.
+    f(context, data_container);
+
+    // Put the data container back into context.
+    context
+        .data_plugins
+        .insert(TypeId::of::<T>(), data_container_box);
+}
+
 impl Default for Context {
     fn default() -> Self {
         Self::new()

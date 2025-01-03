@@ -1,3 +1,4 @@
+use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::Context;
 use crate::ContextPeopleExt;
@@ -150,14 +151,9 @@ fn init(context: &mut Context) {
 }
 
 /// Starts the debugger and pauses execution
-fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
+fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
     init(context);
     let t = context.get_current_time();
-
-    // Temporarily take the data container out of context so that
-    // we can operate on context.
-    let data_container = context.get_data_container_mut(DebuggerPlugin);
-    let mut debugger = data_container.take().unwrap();
 
     println!("Debugging simulation at t={t}");
     loop {
@@ -185,7 +181,7 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
                     break;
                 }
                 if let Some(message) = message {
-                    let _ = write!(std::io::stdout(), "{message}");
+                    let _ = writeln!(std::io::stdout(), "{message}");
                     std::io::stdout().flush().unwrap();
                 }
             }
@@ -196,9 +192,6 @@ fn start_debugger(context: &mut Context) -> Result<(), IxaError> {
         }
     }
 
-    // Put the debugger back into context.
-    let data_container = context.get_data_container_mut(DebuggerPlugin);
-    *data_container = Some(debugger);
     Ok(())
 }
 
@@ -216,7 +209,11 @@ pub trait ContextDebugExt {
 impl ContextDebugExt for Context {
     fn schedule_debugger(&mut self, t: f64) {
         self.add_plan(t, |context| {
-            start_debugger(context).expect("Error in debugger");
+            init(context);
+            run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
+                start_debugger(context, data_container.as_mut().unwrap())
+                    .expect("Error in debugger");
+            });
         });
     }
 }
