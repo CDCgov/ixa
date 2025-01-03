@@ -1,4 +1,5 @@
 use crate::Context;
+use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
 use crate::IxaError;
 use clap::value_parser;
@@ -110,6 +111,50 @@ impl DebuggerCommand for PopulationCommand {
     }
 }
 
+/// Prints the serialized value of a global property
+struct GlobalPropertyCommand;
+/// Helper function when no valid property is provided:
+fn available_properties_str(context: &Context) -> String {
+    let properties = context.list_registered_global_properties();
+    format!(
+        "{} global properties registered:\n{}",
+        properties.len(),
+        properties.join(", ")
+    )
+}
+impl DebuggerCommand for GlobalPropertyCommand {
+    fn about(&self) -> &'static str {
+        "Get the value for a global property"
+    }
+    fn extend(&self, subcommand: Command) -> Command {
+        subcommand.arg(
+            Arg::new("property")
+                .help("The name of the global property")
+                .value_parser(value_parser!(String))
+                .required(false),
+        )
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        let name = matches.get_one::<String>("property");
+        // No property is provided; list the total set
+        if name.is_none() {
+            return Ok((false, Some(available_properties_str(context))));
+        }
+        let output = context.get_serialized_value_by_string(name.unwrap());
+        if output.is_err() {
+            return Ok((false, Some(available_properties_str(context))));
+        }
+        match output.unwrap() {
+            Some(value) => Ok((false, Some(value))),
+            None => Ok((false, Some("Property not set".to_string()))),
+        }
+    }
+}
+
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
 impl DebuggerCommand for NextCommand {
@@ -157,6 +202,7 @@ fn build_repl<W: Write + 'static>(output: W) -> DebuggerRepl {
     repl.register_command("population", Box::new(PopulationCommand));
     repl.register_command("next", Box::new(NextCommand));
     repl.register_command("continue", Box::new(ContinueCommand));
+    repl.register_command("global", Box::new(GlobalPropertyCommand));
 
     repl
 }
@@ -220,10 +266,13 @@ impl ContextDebugExt for Context {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, ContextPeopleExt};
+    use crate::{define_global_property, Context, ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::{cell::RefCell, io::Write, rc::Rc};
 
     use super::build_repl;
+
+    define_global_property!(FooGlobal, String);
+    define_global_property!(BarGlobal, u32);
 
     #[derive(Clone)]
     struct StdoutMock {
@@ -279,6 +328,57 @@ mod tests {
 
         drop(repl);
         assert!(output.into_string().contains('2'));
+    }
+
+    #[test]
+    fn test_cli_debugger_global_() {
+        let context = &mut Context::new();
+        context
+            .set_global_property_value(FooGlobal, "hello".to_string())
+            .unwrap();
+        context.set_global_property_value(BarGlobal, 42).unwrap();
+        let output = StdoutMock::new();
+        let repl = build_repl(output.clone());
+        let quits = repl.process_line("global\n", context).unwrap();
+        assert!(!quits, "should not exit");
+        drop(repl);
+        let expected = format!(
+            "{} global properties registered:",
+            context.list_registered_global_properties().len()
+        );
+        assert!(output.into_string().contains(&expected));
+    }
+
+    #[test]
+    fn test_cli_debugger_global_unregistered_prop() {
+        let context = &mut Context::new();
+        context
+            .set_global_property_value(FooGlobal, "hello".to_string())
+            .unwrap();
+        context.set_global_property_value(BarGlobal, 42).unwrap();
+        let output = StdoutMock::new();
+        let repl = build_repl(output.clone());
+        let quits = repl.process_line("global NotExist\n", context).unwrap();
+        assert!(!quits, "should not exit");
+        drop(repl);
+        assert!(output
+            .into_string()
+            .contains("global properties registered:"));
+    }
+
+    #[test]
+    fn test_cli_debugger_global_registered_prop() {
+        let context = &mut Context::new();
+        context
+            .set_global_property_value(FooGlobal, "hello".to_string())
+            .unwrap();
+        context.set_global_property_value(BarGlobal, 42).unwrap();
+        let output = StdoutMock::new();
+        let repl = build_repl(output.clone());
+        let quits = repl.process_line("global ixa.FooGlobal", context).unwrap();
+        assert!(!quits, "should not exit");
+        drop(repl);
+        assert!(output.into_string().contains("\"hello\""));
     }
 
     #[test]
