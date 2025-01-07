@@ -17,15 +17,15 @@ use roots::find_root_brent;
 define_rng!(ExposureRng);
 
 fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: PersonCreatedEvent) {
-    // when the person is exposed to deviled eggs, make a plan for them to fall
+    // When the person is exposed to deviled eggs, make a plan for them to fall
     // sick based on foi(t), where inverse sampling is used to draw times from
-    // the corresponding distribution
+    // the corresponding distribution.
     let t = inverse_sampling_infection(context);
     let person_id = person_created_event.person_id;
     context.add_plan(t, move |context| {
         context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
-        // for reasons that will become apparent with the recovery rate example,
-        // we also need to record the time at which a person becomes infected
+        // For reasons that will become apparent with the recovery rate example,
+        // we also need to record the time at which a person becomes infected.
         context.set_person_property(person_id, InfectionTime, Some(OrderedFloat(t)));
     });
 }
@@ -59,9 +59,9 @@ fn inverse_sampling_infection(context: &mut Context) -> f64 {
 }
 
 pub fn init(context: &mut Context) {
-    // let deviled eggs be our food borne illness
-    // as soon as a person enters the simulation, they are exposed to deviled eggs
-    // based on foi(t), they will have their infection planned at a given time
+    // Let deviled eggs be our foodborne illness. As soon as a person
+    // enters the simulation, they are exposed to deviled eggs based on
+    // foi(t), and they will have their infection planned at a given time.
     context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
         expose_person_to_deviled_eggs(context, event);
     });
@@ -113,12 +113,10 @@ mod test {
 
     #[test]
     fn test_mean_inverse_sampling() {
-        // calculate empirical mean and compare to theoretical mean
-        // challenging to test the distribution of times
-        // we get out from inverse sampling is correct,
-        // but we can at least test that whether the mean is correct
-        // because the theoretical mean is easily calculatable form
-        // the hazard rate using survival analysis
+        // Calculate empirical mean and compare to theoretical mean.
+        // It is challenging to test the distribution of times we get out from inverse sampling
+        // is correct, but we can at least test that whether the mean is correct, because the
+        // theoretical mean is easily calculable from the hazard rate using survival analysis.
         let p_values = ParametersValues {
             population: 1,
             max_time: 200.0,
@@ -147,8 +145,8 @@ mod test {
         }
         let mean = sum / n as f64;
 
-        // now calculate theoretical mean
-        // use the fact that integral from 0 to infinity of survival fcn is mean
+        // Now calculate theoretical mean.
+        // Use the fact that integral from 0 to infinity of survival fcn is the mean.
         let hazard_fcn = func!(move |t| foi_t(t, parameters.foi, parameters.foi_sin_shift));
         let survival_fcn = func!(move |t| f64::exp(-integrate(&hazard_fcn, 0.0, t)));
         let theoretical_mean = integrate(&survival_fcn, 0.0, 10000.0); // large enough upper bound

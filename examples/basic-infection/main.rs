@@ -7,8 +7,6 @@ mod infection_manager;
 mod people;
 mod transmission_manager;
 
-use crate::people::ContextPeopleExt;
-
 static POPULATION: u64 = 1000;
 static SEED: u64 = 123;
 static MAX_TIME: f64 = 303.0;
@@ -20,10 +18,7 @@ fn initialize() -> Result<Context, IxaError> {
 
     context.init_random(SEED);
 
-    for _ in 0..POPULATION {
-        context.create_person();
-    }
-
+    people::init(&mut context);
     transmission_manager::init(&mut context);
     infection_manager::init(&mut context);
     incidence_report::init(&mut context)?;

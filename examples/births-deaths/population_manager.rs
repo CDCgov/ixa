@@ -3,17 +3,16 @@ use ixa::{
     context::Context,
     define_derived_property, define_person_property, define_person_property_with_default,
     global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId, PersonProperty},
+    people::{ContextPeopleExt, PersonId},
     random::{define_rng, ContextRandomExt},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use rand_distr::{Exp, Uniform};
+use std::fmt;
 
 define_rng!(PeopleRng);
 
 static MAX_AGE: u8 = 100;
-use rand_distr::{Exp, Uniform};
-use serde::Serialize;
-use std::fmt;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum InfectionStatusValue {
@@ -68,7 +67,7 @@ fn schedule_birth(context: &mut Context) {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    let person = context.create_new_person(0);
+    let person = context.add_person((Age, 0)).unwrap();
     context.add_plan(context.get_current_time() + 365.0, move |context| {
         schedule_aging(context, person);
     });
@@ -86,8 +85,8 @@ fn schedule_death(context: &mut Context) {
         .unwrap()
         .clone();
 
-    if let Some(person) = context.sample_person_by_property(Alive, true) {
-        context.kill_person(person);
+    if let Ok(person) = context.sample_person(PeopleRng, (Alive, true)) {
+        context.set_person_property(person, Alive, false);
 
         let next_death_event = context.get_current_time()
             + context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
@@ -106,7 +105,7 @@ pub fn init(context: &mut Context) {
 
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-        let person = context.create_new_person(age);
+        let person = context.add_person((Age, age)).unwrap();
         let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0));
         context.add_plan(365.0 + birthday, move |context| {
             schedule_aging(context, person);
@@ -126,60 +125,6 @@ pub fn init(context: &mut Context) {
     }
 }
 
-pub trait ContextPopulationExt {
-    fn create_new_person(&mut self, age: u8) -> PersonId;
-    fn kill_person(&mut self, person_id: PersonId);
-    fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize;
-    fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId>;
-    #[allow(dead_code)]
-    fn sample_person_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> Option<PersonId>
-    where
-        <T as PersonProperty>::Value: PartialEq;
-}
-
-impl ContextPopulationExt for Context {
-    fn kill_person(&mut self, person_id: PersonId) {
-        self.set_person_property(person_id, Alive, false);
-    }
-
-    fn create_new_person(&mut self, age: u8) -> PersonId {
-        self.add_person((Age, age)).unwrap()
-    }
-
-    fn get_current_group_population(&mut self, age_group: AgeGroupRisk) -> usize {
-        self.query_people_count(((Alive, true), (AgeGroupFoi, age_group)))
-    }
-
-    fn sample_person(&mut self, age_group: AgeGroupRisk) -> Option<PersonId> {
-        let people_vec = self.query_people(((Alive, true), (AgeGroupFoi, age_group)));
-        if people_vec.is_empty() {
-            None
-        } else {
-            Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
-        }
-    }
-
-    fn sample_person_by_property<T: PersonProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> Option<PersonId>
-    where
-        <T as PersonProperty>::Value: PartialEq,
-    {
-        let people_vec = self.query_people((property, value));
-        if people_vec.is_empty() {
-            None
-        } else {
-            Some(people_vec[self.sample_range(PeopleRng, 0..people_vec.len())])
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -192,15 +137,15 @@ mod test {
     fn test_birth_death() {
         let mut context = Context::new();
 
-        let person1 = context.create_new_person(10);
+        let person1 = context.add_person((Age, 10)).unwrap();
         let person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
         let person2_clone = Rc::clone(&person2);
 
         context.add_plan(380.0, move |context| {
-            *person2_clone.borrow_mut() = Some(context.create_new_person(0));
+            *person2_clone.borrow_mut() = Some(context.add_person((Age, 0)).unwrap());
         });
         context.add_plan(400.0, move |context| {
-            context.kill_person(person1);
+            context.set_person_property(person1, Alive, false);
         });
         context.add_plan(390.0, |context| {
             let pop = context.query_people_count((Alive, true));
@@ -267,7 +212,7 @@ mod test {
             .set_global_property_value(Parameters, p_values.clone())
             .unwrap();
         context.init_random(p_values.seed);
-        let _person = context.create_new_person(0);
+        let _person = context.add_person((Age, 0)).unwrap();
         schedule_death(&mut context);
     }
 
@@ -284,7 +229,7 @@ mod test {
         ];
         let mut people = Vec::<PersonId>::new();
         for age in &age_vec {
-            people.push(context.create_new_person(*age));
+            people.push(context.add_person((Age, *age)).unwrap());
         }
 
         for i in 0..people.len() {

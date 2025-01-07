@@ -100,7 +100,6 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::population_manager::ContextPopulationExt;
     use ixa::context::Context;
     use ixa::define_data_plugin;
     use ixa::global_properties::ContextGlobalPropertiesExt;
@@ -108,6 +107,8 @@ mod test {
     use ixa::random::ContextRandomExt;
 
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
+    use crate::population_manager::Age;
+
     define_data_plugin!(RecoveryPlugin, usize, 0);
     define_data_plugin!(PlansPlugin, usize, 0);
 
@@ -143,7 +144,7 @@ mod test {
 
         let population_size: usize = 10;
         for index in 0..population_size {
-            let person = context.create_new_person(0);
+            let person = context.add_person((Age, 0)).unwrap();
 
             context.add_plan(1.0, move |context| {
                 context.set_person_property(person, InfectionStatus, InfectionStatusValue::I);
@@ -151,7 +152,7 @@ mod test {
 
             if index == 0 {
                 context.add_plan(1.1, move |context| {
-                    context.kill_person(person);
+                    context.set_person_property(person, Alive, false);
                 });
             }
         }
@@ -170,7 +171,7 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        let person = context.create_new_person(0);
+        let person = context.add_person((Age, 0)).unwrap();
         context.add_plan(1.1, move |context| {
             cancel_recovery_plans(context, person);
         });

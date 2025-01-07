@@ -5,8 +5,7 @@ use ixa::people::ContextPeopleExt;
 use ixa::random::ContextRandomExt;
 
 use crate::parameters_loader::Foi;
-use crate::population_manager::AgeGroupRisk;
-use crate::population_manager::ContextPopulationExt;
+use crate::population_manager::{AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::population_manager::InfectionStatus;
 use crate::population_manager::InfectionStatusValue;
 use crate::Parameters;
@@ -16,7 +15,7 @@ define_rng!(TransmissionRng);
 
 //Attempt infection for specific age group risk (meaning different forces of infection)
 fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
-    let population_size: usize = context.get_current_group_population(age_group);
+    let population_size: usize = context.query_people_count(((Alive, true), (AgeGroupFoi, age_group)));
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -27,12 +26,12 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         .get(&age_group)
         .unwrap();
     if population_size > 0 {
-        let person_to_infect = context.sample_person(age_group).unwrap();
+        let person_to_infect = context.sample_person(TransmissionRng, ((Alive, true), (AgeGroupFoi, age_group))).unwrap();
 
         let person_status: InfectionStatusValue =
             context.get_person_property(person_to_infect, InfectionStatus);
 
-        if matches!(person_status, InfectionStatusValue::S) {
+        if InfectionStatusValue::S == person_status {
             context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
         }
         #[allow(clippy::cast_precision_loss)]
