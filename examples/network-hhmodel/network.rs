@@ -20,7 +20,7 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
     let mut households = HashSet::new();
     for person_id in people {
         let household_id = context.get_person_property(*person_id, HouseholdId);
-        if  households.insert(household_id) {
+        if households.insert(household_id) {
             let mut members = context.query_people((HouseholdId, household_id));
             // create a dense network
             while let Some(person) = members.pop() {
@@ -35,7 +35,6 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
 }
 
 fn load_edge_list<T: EdgeType + 'static>(context: &mut Context, file_name: &str, value: T::Value) {
-
     let mut reader = open_csv(file_name);
 
     for result in reader.deserialize() {
