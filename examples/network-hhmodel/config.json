@@ -1,8 +1,10 @@
 {
+  "network_hhmodel.Parameters": {
     "incubation_period": 8.0,
     "infectious_period": 27.0,
     "sar": 0.15,
     "shape": 15.0,
     "infection_duration": 5.0,
     "between_hh_transmission_reduction": 3.0
+  }
 }

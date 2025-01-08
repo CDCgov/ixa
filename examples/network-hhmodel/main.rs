@@ -1,5 +1,7 @@
+use std::path::Path;
+
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
-use ixa::{define_rng, PersonId};
+use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
 mod loader;
 mod network;
 mod parameters;
@@ -16,7 +18,8 @@ fn main() {
     let people = loader::init(&mut context);
 
     // Load parameters from json
-    parameters::init(&mut context, "config.json").unwrap();
+    let file_path = Path::new(file!()).parent().unwrap().join("config.json");
+    context.load_global_properties(&file_path).unwrap();
 
     // Load network
     network::init(&mut context, &people);
