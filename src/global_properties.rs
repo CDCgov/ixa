@@ -49,7 +49,6 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    println!("Global property {}", name);
     assert!(properties
         .borrow_mut()
         .insert(
