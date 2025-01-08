@@ -7,19 +7,25 @@ use ixa::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
 use std::fs::File;
 
+define_person_property!(Id, u16);
+
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AgeGroupValue {
-    U5,
-    U18,
-    Adult,
-    Old,
+    AgeUnder5,
+    Age5to17,
+    Age18to64,
+    Age65Plus,
 }
+define_person_property!(AgeGroup, AgeGroupValue);
 
 #[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum SexValue {
     Female,
     Male,
 }
+define_person_property!(Sex, SexValue);
+
+define_person_property!(HouseholdId, u16);
 
 #[derive(Deserialize, Debug)]
 struct PeopleRecord {
@@ -28,11 +34,6 @@ struct PeopleRecord {
     sex: SexValue,
     household_id: u16,
 }
-
-define_person_property!(Id, u16);
-define_person_property!(AgeGroup, AgeGroupValue);
-define_person_property!(Sex, SexValue);
-define_person_property!(HouseholdId, u16);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     context
@@ -53,7 +54,7 @@ pub fn open_csv(file_name: &str) -> Reader<File> {
 
 pub fn init(context: &mut Context) -> Vec<PersonId> {
     // Load csv and deserialize records
-    let mut reader = open_csv("synthetic_households_us.csv");
+    let mut reader = open_csv("Households.csv");
     let mut people = Vec::new();
 
     for result in reader.deserialize() {
@@ -73,7 +74,7 @@ mod tests {
     use super::*;
     use ixa::{context::Context, random::ContextRandomExt};
 
-    const EXPECTED_ROWS: usize = 12258;
+    const EXPECTED_ROWS: usize = 1606;
 
     #[test]
     fn test_init_expected_rows() {

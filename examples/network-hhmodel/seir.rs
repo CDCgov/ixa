@@ -1,8 +1,8 @@
-use crate::network::{HH, U18, U5};
+use crate::network::{Age5to17, AgeUnder5, Household};
 use crate::parameters::Parameters;
 use ixa::{
     context::Context,
-    define_person_property, define_person_property_with_default,
+    define_person_property_with_default,
     network::{ContextNetworkExt, Edge, EdgeType},
     people::{ContextPeopleExt, PersonPropertyChangeEvent},
     random::{define_rng, ContextRandomExt},
@@ -50,6 +50,7 @@ fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
     for e in edges {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
             context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
+            println!("Person {} exposed person {}.", e.person, e.neighbor);
         }
     }
 }
@@ -111,18 +112,18 @@ pub fn init(context: &mut Context, initial_infections: Vec<PersonId>) {
                 .clone();
 
             // infect the networks
-            expose_network::<HH>(
+            expose_network::<Household>(
                 context,
                 sar_to_beta(parameters.sar, parameters.incubation_period),
             );
-            expose_network::<U5>(
+            expose_network::<AgeUnder5>(
                 context,
                 sar_to_beta(
                     parameters.sar / parameters.between_hh_transmission_reduction,
                     parameters.incubation_period,
                 ),
             );
-            expose_network::<U18>(
+            expose_network::<Age5to17>(
                 context,
                 sar_to_beta(
                     parameters.sar / parameters.between_hh_transmission_reduction,
@@ -181,7 +182,7 @@ mod tests {
 
         network::init(&mut context, &people);
 
-        let to_infect = context.query_people((Id, 335));
+        let to_infect = context.query_people((Id, 71));
 
         init(&mut context, to_infect);
 
