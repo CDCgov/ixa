@@ -1,11 +1,14 @@
 use ixa::runner::run_with_args;
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
-use ixa::{define_rng, ContextGlobalPropertiesExt};
+use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
+use loader::{AgeGroup, AgeGroupValue};
+use seir::InfectedBy;
 use std::path::Path;
 mod loader;
 mod network;
 mod parameters;
 mod seir;
+mod incidence_report;
 
 define_rng!(MainRng);
 
@@ -28,8 +31,10 @@ fn initialize(context: &mut Context) {
     context.load_global_properties(&file_path).unwrap();
 
     // Load network
-    network::init(context, &people);
+    network::init(&mut context, &people);
 
     let to_infect = vec![context.sample_person(MainRng, ()).unwrap()];
-    seir::init(context, &to_infect);
+    seir::init(&mut context, &to_infect);
+
+    context.execute();
 }

@@ -9,9 +9,9 @@ use ixa::{
     ContextGlobalPropertiesExt, ExecutionPhase, PersonId,
 };
 use rand_distr::{Bernoulli, Gamma};
-use serde_derive::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
 pub enum DiseaseStatusValue {
     S,
     E,
@@ -22,6 +22,9 @@ pub enum DiseaseStatusValue {
 define_rng!(SeirRng);
 
 define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatusValue::S);
+
+define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
+
 
 fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
     1.0 - (1.0 - sar).powf(1.0 / infectious_period)
@@ -52,6 +55,7 @@ fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
             context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
             println!("Person {} exposed person {}.", e.person, e.neighbor);
+            context.set_person_property(e.neighbor, InfectedBy, Some(e.person));
         }
     }
 }
