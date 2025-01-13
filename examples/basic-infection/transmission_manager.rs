@@ -1,6 +1,6 @@
 use ixa::context::Context;
-use ixa::{define_rng, ContextPeopleExt, PersonId};
 use ixa::random::ContextRandomExt;
+use ixa::{define_rng, ContextPeopleExt, PersonId};
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use rand_distr::Exp;
@@ -14,10 +14,15 @@ fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_current_population();
     let person_to_infect: PersonId = context.sample_person(TransmissionRng, ()).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
 
-    let person_status: InfectionStatusValue = context.get_person_property(person_to_infect, InfectionStatus);
+    let person_status: InfectionStatusValue =
+        context.get_person_property(person_to_infect, InfectionStatus);
 
     if InfectionStatusValue::S == person_status {
-        context.set_person_property::<InfectionStatus>(person_to_infect, InfectionStatus, InfectionStatusValue::I);
+        context.set_person_property::<InfectionStatus>(
+            person_to_infect,
+            InfectionStatus,
+            InfectionStatusValue::I,
+        );
     }
 
     // With a food-borne illness (i.e., constant force of infection), each _person_ experiences an

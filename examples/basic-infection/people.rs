@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::POPULATION;
 
-
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum InfectionStatusValue {
     S,
@@ -14,8 +13,11 @@ pub enum InfectionStatusValue {
 }
 
 // In this model, people only have a single property, their infection status.
-define_person_property_with_default!(InfectionStatus, InfectionStatusValue, InfectionStatusValue::S);
-
+define_person_property_with_default!(
+    InfectionStatus,
+    InfectionStatusValue,
+    InfectionStatusValue::S
+);
 
 /// Populates the "world" with the `POPULATION` number of people.
 pub fn init(context: &mut Context) {

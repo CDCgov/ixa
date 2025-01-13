@@ -1,12 +1,12 @@
+use crate::infection_manager::InfectionStatusEvent;
+use crate::people::InfectionStatusValue;
 use ixa::context::Context;
+use ixa::create_report_trait;
 use ixa::error::IxaError;
 use ixa::report::ContextReportExt;
 use ixa::report::Report;
-use ixa::{create_report_trait};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use crate::infection_manager::InfectionStatusEvent;
-use crate::people::InfectionStatusValue;
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {

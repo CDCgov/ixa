@@ -1,8 +1,8 @@
-use std::path::PathBuf;
 use ixa::context::Context;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::thread;
 
 #[allow(dead_code)]
@@ -25,7 +25,8 @@ fn main() {
         let handle = thread::spawn(move || {
             let mut context = Context::new();
 
-            context.report_options()
+            context
+                .report_options()
                 .directory(PathBuf::from("./examples/reports-multi-threaded"))
                 .file_prefix(format!("{scenario}_"));
             context

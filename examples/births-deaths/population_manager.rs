@@ -6,8 +6,8 @@ use ixa::{
     people::{ContextPeopleExt, PersonId},
     random::{define_rng, ContextRandomExt},
 };
-use serde::{Deserialize, Serialize};
 use rand_distr::{Exp, Uniform};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 define_rng!(PeopleRng);

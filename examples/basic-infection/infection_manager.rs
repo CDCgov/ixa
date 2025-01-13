@@ -1,7 +1,7 @@
 use ixa::context::Context;
 
-use ixa::{define_rng, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::random::ContextRandomExt;
+use ixa::{define_rng, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 
 use rand_distr::Exp;
 
@@ -17,16 +17,13 @@ define_rng!(InfectionRng);
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
-    context.add_plan(
-        recovery_time,
-        move |context| {
-            context.set_person_property::<InfectionStatus>(
-                person_id,
-                InfectionStatus,
-                InfectionStatusValue::R
-            );
-        }
-    );
+    context.add_plan(recovery_time, move |context| {
+        context.set_person_property::<InfectionStatus>(
+            person_id,
+            InfectionStatus,
+            InfectionStatusValue::R,
+        );
+    });
 }
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
@@ -43,12 +40,12 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use crate::infection_manager::InfectionStatusEvent;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusValue;
-    use crate::infection_manager::InfectionStatusEvent;
     use ixa::context::Context;
-    use ixa::{define_data_plugin, ContextPeopleExt};
     use ixa::random::ContextRandomExt;
+    use ixa::{define_data_plugin, ContextPeopleExt};
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
@@ -72,7 +69,11 @@ mod test {
         let population_size = 10;
         for _ in 0..population_size {
             let person_id = context.add_person(()).unwrap();
-            context.set_person_property::<InfectionStatus>(person_id, InfectionStatus, InfectionStatusValue::I);
+            context.set_person_property::<InfectionStatus>(
+                person_id,
+                InfectionStatus,
+                InfectionStatusValue::I,
+            );
         }
 
         context.execute();
