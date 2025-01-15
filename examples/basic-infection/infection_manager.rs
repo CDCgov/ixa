@@ -27,7 +27,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 }
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
-    if InfectionStatusValue::I == event.current {
+    if event.current == InfectionStatusValue::I {
         schedule_recovery(context, event.person_id);
     }
 }
@@ -50,7 +50,7 @@ mod test {
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
-        if InfectionStatusValue::R == event.current {
+        if event.current == InfectionStatusValue::R {
             *context.get_data_container_mut(RecoveryPlugin) += 1;
         }
     }
@@ -68,7 +68,7 @@ mod test {
 
         let population_size = 10;
         for _ in 0..population_size {
-            let person_id = context.add_person(()).unwrap();
+            let person_id = context.add_person((InfectionStatus, InfectionStatusValue::S)).unwrap();
             context.set_person_property::<InfectionStatus>(
                 person_id,
                 InfectionStatus,

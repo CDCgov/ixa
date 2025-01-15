@@ -17,7 +17,7 @@ fn attempt_infection(context: &mut Context) {
     let person_status: InfectionStatusValue =
         context.get_person_property(person_to_infect, InfectionStatus);
 
-    if InfectionStatusValue::S == person_status {
+    if person_status == InfectionStatusValue::S {
         context.set_person_property::<InfectionStatus>(
             person_to_infect,
             InfectionStatus,

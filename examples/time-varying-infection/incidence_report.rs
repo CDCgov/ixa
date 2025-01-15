@@ -39,7 +39,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     context
         .report_options()
         .directory(PathBuf::from(parameters.output_dir))
-        .overwrite(true);
+        .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
         handle_infection_status_change(context, event);

@@ -26,9 +26,14 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    // In the configuration of report options below, we set `overwrite(true)`, which is not
+    // recommended for production code in order to prevent accidental data loss. It is set
+    // here so that newcomers won't have to deal with a confusing error while running
+    // examples.
     context
         .report_options()
-        .directory(PathBuf::from("./examples/basic-infection/"));
+        .directory(PathBuf::from("./examples/basic-infection/"))
+        .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence")?;
     context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
     Ok(())

@@ -28,7 +28,8 @@ fn main() {
             context
                 .report_options()
                 .directory(PathBuf::from("./examples/reports-multi-threaded"))
-                .file_prefix(format!("{scenario}_"));
+                .file_prefix(format!("{scenario}_"))
+                .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
             context
                 .add_report::<Incidence>("incidence")
                 .expect("Error adding report");

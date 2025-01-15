@@ -34,7 +34,7 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         let person_status: InfectionStatusValue =
             context.get_person_property(person_to_infect, InfectionStatus);
 
-        if InfectionStatusValue::S == person_status {
+        if person_status == InfectionStatusValue::S {
             context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
         }
         #[allow(clippy::cast_precision_loss)]

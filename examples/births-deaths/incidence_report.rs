@@ -49,7 +49,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let current_dir = Path::new(file!()).parent().unwrap();
     context
         .report_options()
-        .directory(PathBuf::from(current_dir));
+        .directory(PathBuf::from(current_dir))
+        .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
 
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(
