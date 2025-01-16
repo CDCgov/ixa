@@ -68,7 +68,9 @@ mod test {
 
         let population_size = 10;
         for _ in 0..population_size {
-            let person_id = context.add_person((InfectionStatus, InfectionStatusValue::S)).unwrap();
+            let person_id = context
+                .add_person((InfectionStatus, InfectionStatusValue::S))
+                .unwrap();
             context.set_person_property::<InfectionStatus>(
                 person_id,
                 InfectionStatus,
