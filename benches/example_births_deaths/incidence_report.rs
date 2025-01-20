@@ -1,0 +1,1 @@
+../../examples/births-deaths/incidence_report.rs

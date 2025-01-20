@@ -48,3 +48,8 @@ path = "tests/bin/runner_test_custom_args.rs"
 [[bin]]
 name = "runner_test_debug"
 path = "tests/bin/runner_test_debug.rs"
+
+[[bench]]
+name = "example_births_deaths"
+path = "benches/example_births_deaths/example_births_deaths.rs"
+harness = false

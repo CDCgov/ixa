@@ -1,0 +1,1 @@
+../../examples/births-deaths/demographics_report.rs
