@@ -27,7 +27,8 @@ fn initialize() -> Result<Context, IxaError> {
     context
         .report_options()
         .file_prefix("Reports_".to_string())
-        .directory(PathBuf::from("./"));
+        .directory(PathBuf::from("./"))
+        .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
     context.add_report::<Incidence>("incidence")?;
     context.add_report::<Death>("death")?;
     Ok(context)

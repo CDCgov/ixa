@@ -21,16 +21,17 @@ fn attempt_infection(context: &mut Context) {
         .unwrap()
         .clone();
 
-    if matches!(person_status, InfectionStatusValue::S) {
+    if person_status == InfectionStatusValue::S {
         context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
     }
 
-    // With a food-borne illness (i.e., constant force of infection),
-    // each _person_ experiences an exponentially distributed
-    // time until infected. Here, we use a per-person force of infection derived from the population-level to represent a constant risk of infection for individuals in the population.
+    // With a food-borne illness (i.e., constant force of infection), each _person_
+    // experiences an exponentially distributed time until infected. Here, we
+    // use a per-person force of infection derived from the population-level to
+    // represent a constant risk of infection for individuals in the population.
 
-    // An alternative implementation calculates each person's time to infection
-    // at the beginning of the simulation and scheudles their infection at that time.
+    // An alternative implementation calculates each person's time to infection at
+    // the beginning of the simulation and schedules their infection at that time.
 
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
