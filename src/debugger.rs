@@ -43,7 +43,7 @@ impl Debugger {
         let args = shlex::split(l).ok_or("Error splitting lines")?;
         let matches = self
             .cli
-            .clone()
+            .clone() // cli can only be used once.
             .try_get_matches_from(args)
             .map_err(|e| e.to_string())?;
 
