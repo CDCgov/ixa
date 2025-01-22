@@ -268,7 +268,7 @@ impl ContextGlobalPropertiesExt for Context {
     fn list_registered_global_properties(&self) -> Vec<String> {
         let properties = GLOBAL_PROPERTIES.lock().unwrap();
         let tmp = properties.borrow();
-        tmp.keys().map(std::string::ToString::to_string).collect()
+                tmp.keys().map(|a| a.clone()).collect()
     }
 
     fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
