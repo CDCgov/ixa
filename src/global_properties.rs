@@ -90,27 +90,6 @@ fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
     tmp.get(name).map(Arc::clone)
 }
 
-// #[allow(clippy::missing_panics_doc)]
-// fn get_global_property_setter(name: &String) -> Option<Arc<PropertySetterFn>> {
-//     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-//     let tmp = properties.borrow();
-//     match tmp.get(name) {
-//         Some(accessor) => Some(Arc::clone(&accessor.setter)),
-//         None => None,
-//     }
-// }
-
-// #[allow(clippy::missing_panics_doc)]
-// pub fn get_global_property_getter(name: &String) -> Option<Arc<PropertyGetterFn>> {
-//     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-//     println!("Properties: {:?}", properties.borrow().keys());
-//     let tmp = properties.borrow();
-//     match tmp.get(name) {
-//         Some(accessor) => Some(Arc::clone(&accessor.getter)),
-//         None => None,
-//     }
-// }
-
 /// Defines a global property with the following parameters:
 /// * `$global_property`: Name for the identifier type of the global property
 /// * `$value`: The type of the property's value

@@ -278,8 +278,8 @@ impl ContextDebugExt for Context {
 #[cfg(test)]
 mod tests {
     use super::{init, DebuggerPlugin};
-    use crate::{Context, ContextPeopleExt};
     use crate::{define_global_property, ContextGlobalPropertiesExt};
+    use crate::{Context, ContextPeopleExt};
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
@@ -364,9 +364,11 @@ mod tests {
     #[test]
     fn test_cli_debugger_global_get_registered_prop() {
         let context = &mut Context::new();
-        context.set_global_property_value(FooGlobal, "hello".to_string()).unwrap();
+        context
+            .set_global_property_value(FooGlobal, "hello".to_string())
+            .unwrap();
         let (_quits, output) = process_line("global get ixa.FooGlobal\n", context);
-        assert_eq!( output.unwrap(), "\"hello\"");
+        assert_eq!(output.unwrap(), "\"hello\"");
     }
 
     #[test]
@@ -374,10 +376,7 @@ mod tests {
         define_global_property!(EmptyGlobal, String);
         let context = &mut Context::new();
         let (_quits, output) = process_line("global get ixa.EmptyGlobal\n", context);
-        assert_eq!(
-            output.unwrap(),
-            "Property ixa.EmptyGlobal is not set"
-        );
+        assert_eq!(output.unwrap(), "Property ixa.EmptyGlobal is not set");
     }
 
     #[test]
