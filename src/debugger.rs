@@ -277,7 +277,7 @@ impl ContextDebugExt for Context {
 
 #[cfg(test)]
 mod tests {
-    use super::{init, DebuggerPlugin};
+    use super::{init, run_with_plugin, DebuggerPlugin};
     use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
 
@@ -338,17 +338,20 @@ mod tests {
         let input = "global get\n";
         let context = &mut Context::new();
         init(context);
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
-        let debugger = data_container.take().unwrap();
+        // We can't use process_line here because we an expect an error to be
+        // returned rather than string output
+        run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
+            let debugger = data_container.take().unwrap();
 
-        let result = debugger.process_command(input, context);
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
-        *data_container = Some(debugger);
+            let result = debugger.process_command(input, context);
+            let data_container = context.get_data_container_mut(DebuggerPlugin);
+            *data_container = Some(debugger);
 
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("required arguments were not provided"));
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .contains("required arguments were not provided"));
+        });
     }
 
     #[test]
