@@ -1,6 +1,7 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::Context;
+use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
 use crate::IxaError;
 use clap::value_parser;
@@ -77,6 +78,61 @@ impl DebuggerCommand for PopulationCommand {
     }
 }
 
+/// Helper function for displaying properties
+fn available_properties_str(context: &Context) -> String {
+    let properties = context.list_registered_global_properties();
+    format!(
+        "{} global properties registered:\n{}",
+        properties.len(),
+        properties.join("\n")
+    )
+}
+
+struct GlobalPropertyCommand;
+impl DebuggerCommand for GlobalPropertyCommand {
+    fn about(&self) -> &'static str {
+        "Get the value for a global property"
+    }
+    fn extend(&self, subcommand: Command) -> Command {
+        subcommand
+            .subcommand_required(true)
+            .subcommand(Command::new("list").about("List all global properties"))
+            .subcommand(
+                Command::new("get")
+                    .about("Get the value of a global property")
+                    .arg(
+                        Arg::new("property")
+                            .help("The name of the global property")
+                            .value_parser(value_parser!(String))
+                            .required(true),
+                    ),
+            )
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        match matches.subcommand() {
+            Some(("list", _)) => Ok((false, Some(available_properties_str(context)))),
+            Some(("get", m)) => {
+                let name = m.get_one::<String>("property").unwrap();
+                let output = context.get_serialized_value_by_string(name);
+                if output.is_err() {
+                    return Ok((false, output.err().map(|e| e.to_string())));
+                }
+                match output.unwrap() {
+                    Some(value) => Ok((false, Some(value))),
+                    None => Ok((false, Some(format!("Property {name} is not set")))),
+                }
+            }
+            // This is required by the compiler will never get hit because
+            // .subcommand_required(true) is set in extend
+            _ => unimplemented!("subcommand required"),
+        }
+    }
+}
+
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
 impl DebuggerCommand for NextCommand {
@@ -126,6 +182,7 @@ fn init(context: &mut Context) {
         commands.insert("population", Box::new(PopulationCommand));
         commands.insert("next", Box::new(NextCommand));
         commands.insert("continue", Box::new(ContinueCommand));
+        commands.insert("global", Box::new(GlobalPropertyCommand));
 
         let mut cli = Command::new("repl")
             .multicall(true)
@@ -220,7 +277,8 @@ impl ContextDebugExt for Context {
 
 #[cfg(test)]
 mod tests {
-    use super::{init, DebuggerPlugin};
+    use super::{init, run_with_plugin, DebuggerPlugin};
+    use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
@@ -231,11 +289,13 @@ mod tests {
         let debugger = data_container.take().unwrap();
 
         let res = debugger.process_command(line, context).unwrap();
-
         let data_container = context.get_data_container_mut(DebuggerPlugin);
         *data_container = Some(debugger);
         res
     }
+
+    define_global_property!(FooGlobal, String);
+    define_global_property!(BarGlobal, u32);
 
     #[test]
     fn test_cli_debugger_integration() {
@@ -259,6 +319,67 @@ mod tests {
 
         assert!(!quits, "should not exit");
         assert!(output.unwrap().contains('2'));
+    }
+
+    #[test]
+    fn test_cli_debugger_global_list() {
+        let context = &mut Context::new();
+        let (_quits, output) = process_line("global list\n", context);
+        let expected = format!(
+            "{} global properties registered:",
+            context.list_registered_global_properties().len()
+        );
+        // Note: the global property names are also listed as part of the output
+        assert!(output.unwrap().contains(&expected));
+    }
+
+    #[test]
+    fn test_cli_debugger_global_no_args() {
+        let input = "global get\n";
+        let context = &mut Context::new();
+        init(context);
+        // We can't use process_line here because we an expect an error to be
+        // returned rather than string output
+        run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
+            let debugger = data_container.take().unwrap();
+
+            let result = debugger.process_command(input, context);
+            let data_container = context.get_data_container_mut(DebuggerPlugin);
+            *data_container = Some(debugger);
+
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .contains("required arguments were not provided"));
+        });
+    }
+
+    #[test]
+    fn test_cli_debugger_global_get_unregistered_prop() {
+        let context = &mut Context::new();
+        let (_quits, output) = process_line("global get NotExist\n", context);
+        assert_eq!(
+            output.unwrap(),
+            "Error: IxaError(\"No global property: NotExist\")"
+        );
+    }
+
+    #[test]
+    fn test_cli_debugger_global_get_registered_prop() {
+        let context = &mut Context::new();
+        context
+            .set_global_property_value(FooGlobal, "hello".to_string())
+            .unwrap();
+        let (_quits, output) = process_line("global get ixa.FooGlobal\n", context);
+        assert_eq!(output.unwrap(), "\"hello\"");
+    }
+
+    #[test]
+    fn test_cli_debugger_global_get_empty_prop() {
+        define_global_property!(EmptyGlobal, String);
+        let context = &mut Context::new();
+        let (_quits, output) = process_line("global get ixa.EmptyGlobal\n", context);
+        assert_eq!(output.unwrap(), "Property ixa.EmptyGlobal is not set");
     }
 
     #[test]

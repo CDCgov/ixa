@@ -1,6 +1,6 @@
 use clap::Args;
 use ixa::runner::run_with_custom_args;
-use ixa::ContextPeopleExt;
+use ixa::{define_global_property, ContextGlobalPropertiesExt, ContextPeopleExt};
 
 #[derive(Args, Debug)]
 struct CustomArgs {
@@ -17,6 +17,8 @@ struct CustomArgs {
     #[arg(short = 'p', long)]
     starting_population: Option<u8>,
 }
+
+define_global_property!(Name, String);
 
 fn main() {
     // The runner reads arguments from the command line.
@@ -38,6 +40,10 @@ fn main() {
         if custom_args.say_hello {
             println!("Hello");
         }
+
+        context.set_global_property_value(Name, "Sim123".to_string())?;
+
+        println!("Name: {}", context.get_global_property_value(Name).unwrap());
 
         if let Some(population) = custom_args.starting_population {
             for _ in 0..population {
