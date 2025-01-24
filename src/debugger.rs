@@ -1,5 +1,6 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
+use crate::extension_api::{run_extension, Extension, PopulationExtension};
 use crate::Context;
 use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
@@ -60,7 +61,7 @@ impl Debugger {
 
 struct PopulationCommand;
 #[derive(Parser, Debug)]
-enum PopulationSubcommand {
+pub(crate) enum PopulationSubcommand {
     /// Get the total number of people
     Population,
 }
@@ -70,7 +71,7 @@ impl DebuggerCommand for PopulationCommand {
         context: &mut Context,
         _matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let output = format!("{}", context.get_current_population());
+        let output = format!("{}", run_extension::<PopulationExtension>(context, &()));
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
