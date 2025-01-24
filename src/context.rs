@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::plan::{Id, Queue};
+use crate::plan::{PlanId, Queue};
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -127,12 +127,12 @@ impl Context {
     /// Add a plan to the future event list at the specified time in the normal
     /// phase
     ///
-    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
     /// # Panics
     ///
     /// Panics if time is in the past, infinite, or NaN.
-    pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> Id {
+    pub fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
         self.add_plan_with_phase(time, callback, ExecutionPhase::Normal)
     }
 
@@ -140,7 +140,7 @@ impl Context {
     /// specified phase (first, normal, or last among plans at the
     /// specified time)
     ///
-    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
     /// # Panics
     ///
@@ -150,7 +150,7 @@ impl Context {
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
-    ) -> Id {
+    ) -> PlanId {
         assert!(
             !time.is_nan() && !time.is_infinite() && time >= self.current_time,
             "Time is invalid"
@@ -206,7 +206,7 @@ impl Context {
     ///
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
-    pub fn cancel_plan(&mut self, id: &Id) {
+    pub fn cancel_plan(&mut self, id: &PlanId) {
         self.plan_queue.cancel_plan(id);
     }
 
@@ -382,7 +382,7 @@ mod tests {
         assert!(context.get_data_container(ComponentA).is_none());
     }
 
-    fn add_plan(context: &mut Context, time: f64, value: u32) -> Id {
+    fn add_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
         context.add_plan(time, move |context| {
             context.get_data_container_mut(ComponentA).push(value);
         })
@@ -393,7 +393,7 @@ mod tests {
         time: f64,
         value: u32,
         phase: ExecutionPhase,
-    ) -> Id {
+    ) -> PlanId {
         context.add_plan_with_phase(
             time,
             move |context| {

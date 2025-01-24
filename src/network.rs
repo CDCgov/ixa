@@ -66,11 +66,11 @@ impl NetworkData {
         }
 
         // Make sure we have data for this person.
-        if person.id >= self.network.len() {
-            self.network.resize_with(person.id + 1, Default::default);
+        if person.0 >= self.network.len() {
+            self.network.resize_with(person.0 + 1, Default::default);
         }
 
-        let entry = self.network[person.id]
+        let entry = self.network[person.0]
             .neighbors
             .entry(TypeId::of::<T>())
             .or_insert_with(|| Box::new(Vec::<Edge<T::Value>>::new()));
@@ -96,14 +96,11 @@ impl NetworkData {
         person: PersonId,
         neighbor: PersonId,
     ) -> Result<(), IxaError> {
-        if person.id >= self.network.len() {
+        if person.0 >= self.network.len() {
             return Err(IxaError::IxaError(String::from("Edge does not exist")));
         }
 
-        let entry = match self.network[person.id]
-            .neighbors
-            .get_mut(&TypeId::of::<T>())
-        {
+        let entry = match self.network[person.0].neighbors.get_mut(&TypeId::of::<T>()) {
             None => {
                 return Err(IxaError::IxaError(String::from("Edge does not exist")));
             }
@@ -126,21 +123,21 @@ impl NetworkData {
         person: PersonId,
         neighbor: PersonId,
     ) -> Option<&Edge<T::Value>> {
-        if person.id >= self.network.len() {
+        if person.0 >= self.network.len() {
             return None;
         }
 
-        let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>())?;
+        let entry = self.network[person.0].neighbors.get(&TypeId::of::<T>())?;
         let edges: &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");
         edges.iter().find(|&edge| edge.neighbor == neighbor)
     }
 
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
-        if person.id >= self.network.len() {
+        if person.0 >= self.network.len() {
             return Vec::new();
         }
 
-        let entry = self.network[person.id].neighbors.get(&TypeId::of::<T>());
+        let entry = self.network[person.0].neighbors.get(&TypeId::of::<T>());
         if entry.is_none() {
             return Vec::new();
         }
@@ -152,14 +149,14 @@ impl NetworkData {
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
         let mut result = Vec::new();
 
-        for id in 0..self.network.len() {
-            let entry = self.network[id].neighbors.get(&TypeId::of::<T>());
+        for person_id in 0..self.network.len() {
+            let entry = self.network[person_id].neighbors.get(&TypeId::of::<T>());
             if entry.is_none() {
                 continue;
             }
             let edges: &Vec<Edge<T::Value>> = entry.unwrap().downcast_ref().expect("Type mismatch");
             if edges.len() == degree {
-                result.push(PersonId { id });
+                result.push(PersonId(person_id));
             }
         }
         result
@@ -399,11 +396,9 @@ mod test_inner {
     fn add_edge() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.01, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
     }
 
@@ -411,11 +406,9 @@ mod test_inner {
     fn add_edge_with_inner() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType3>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, true)
+        nd.add_edge::<EdgeType3>(PersonId(1), PersonId(2), 0.01, true)
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType3>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType3>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
         assert!(edge.inner);
     }
@@ -424,32 +417,28 @@ mod test_inner {
     fn add_two_edges() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.01, ())
             .unwrap();
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 }, 0.02, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(3), 0.02, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(3)).unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
+        let edges = nd.get_edges::<EdgeType1>(PersonId(1));
         assert_eq!(
             edges,
             vec![
                 Edge {
-                    person: PersonId { id: 1 },
-                    neighbor: PersonId { id: 2 },
+                    person: PersonId(1),
+                    neighbor: PersonId(2),
                     weight: 0.01,
                     inner: ()
                 },
                 Edge {
-                    person: PersonId { id: 1 },
-                    neighbor: PersonId { id: 3 },
+                    person: PersonId(1),
+                    neighbor: PersonId(3),
                     weight: 0.02,
                     inner: ()
                 }
@@ -461,25 +450,21 @@ mod test_inner {
     fn add_two_edge_types() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.01, ())
             .unwrap();
-        nd.add_edge::<EdgeType2>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
+        nd.add_edge::<EdgeType2>(PersonId(1), PersonId(2), 0.02, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
-        let edge = nd
-            .get_edge::<EdgeType2>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType2>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.02);
 
-        let edges = nd.get_edges::<EdgeType1>(PersonId { id: 1 });
+        let edges = nd.get_edges::<EdgeType1>(PersonId(1));
         assert_eq!(
             edges,
             vec![Edge {
-                person: PersonId { id: 1 },
-                neighbor: PersonId { id: 2 },
+                person: PersonId(1),
+                neighbor: PersonId(2),
                 weight: 0.01,
                 inner: ()
             }]
@@ -490,15 +475,13 @@ mod test_inner {
     fn add_edge_twice_fails() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.01, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
 
         assert!(matches!(
-            nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ()),
+            nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.02, ()),
             Err(IxaError::IxaError(_))
         ));
     }
@@ -507,23 +490,19 @@ mod test_inner {
     fn add_remove_add_edge() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.01, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.01, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.01);
 
-        nd.remove_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
+        nd.remove_edge::<EdgeType1>(PersonId(1), PersonId(2))
             .unwrap();
-        let edge = nd.get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 });
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2));
         assert!(edge.is_none());
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.02, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.02, ())
             .unwrap();
-        let edge = nd
-            .get_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 })
-            .unwrap();
+        let edge = nd.get_edge::<EdgeType1>(PersonId(1), PersonId(2)).unwrap();
         assert_eq!(edge.weight, 0.02);
     }
 
@@ -531,7 +510,7 @@ mod test_inner {
     fn remove_nonexistent_edge() {
         let mut nd = NetworkData::new();
         assert!(matches!(
-            nd.remove_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }),
+            nd.remove_edge::<EdgeType1>(PersonId(1), PersonId(2)),
             Err(IxaError::IxaError(_))
         ));
     }
@@ -540,7 +519,7 @@ mod test_inner {
     fn add_edge_to_self() {
         let mut nd = NetworkData::new();
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 1 }, 0.01, ());
+        let result = nd.add_edge::<EdgeType1>(PersonId(1), PersonId(1), 0.01, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
 
@@ -548,14 +527,13 @@ mod test_inner {
     fn add_edge_bogus_weight() {
         let mut nd = NetworkData::new();
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, -1.0, ());
+        let result = nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), -1.0, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
 
-        let result = nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::NAN, ());
+        let result = nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), f32::NAN, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
 
-        let result =
-            nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, f32::INFINITY, ());
+        let result = nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), f32::INFINITY, ());
         assert!(matches!(result, Err(IxaError::IxaError(_))));
     }
 
@@ -563,19 +541,19 @@ mod test_inner {
     fn find_people_by_degree() {
         let mut nd = NetworkData::new();
 
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 2 }, 0.0, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(2), 0.0, ())
             .unwrap();
-        nd.add_edge::<EdgeType1>(PersonId { id: 1 }, PersonId { id: 3 }, 0.0, ())
+        nd.add_edge::<EdgeType1>(PersonId(1), PersonId(3), 0.0, ())
             .unwrap();
-        nd.add_edge::<EdgeType1>(PersonId { id: 2 }, PersonId { id: 3 }, 0.0, ())
+        nd.add_edge::<EdgeType1>(PersonId(2), PersonId(3), 0.0, ())
             .unwrap();
-        nd.add_edge::<EdgeType1>(PersonId { id: 3 }, PersonId { id: 2 }, 0.0, ())
+        nd.add_edge::<EdgeType1>(PersonId(3), PersonId(2), 0.0, ())
             .unwrap();
 
         let matches = nd.find_people_by_degree::<EdgeType1>(2);
-        assert_eq!(matches, vec![PersonId { id: 1 }]);
+        assert_eq!(matches, vec![PersonId(1)]);
         let matches = nd.find_people_by_degree::<EdgeType1>(1);
-        assert_eq!(matches, vec![PersonId { id: 2 }, PersonId { id: 3 }]);
+        assert_eq!(matches, vec![PersonId(2), PersonId(3)]);
     }
 }
 

@@ -321,7 +321,7 @@ impl Index {
         }
         let current_pop = context.get_current_population();
         for id in self.max_indexed..current_pop {
-            let person_id = PersonId { id };
+            let person_id = PersonId(id);
             self.add_person(context, person_id);
         }
         self.max_indexed = current_pop;
@@ -371,19 +371,17 @@ define_data_plugin!(
 //  the id refers to that person's index in the range 0 to population
 // - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PersonId {
-    pub(crate) id: usize,
-}
+pub struct PersonId(pub(crate) usize);
 
 impl fmt::Display for PersonId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.id)
+        write!(f, "{}", self.0)
     }
 }
 
 impl fmt::Debug for PersonId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Person {}", self.id)
+        write!(f, "Person {}", self.0)
     }
 }
 
@@ -673,7 +671,7 @@ impl PeopleData {
     fn add_person(&mut self) -> PersonId {
         let id = self.current_population;
         self.current_population += 1;
-        PersonId { id }
+        PersonId(id)
     }
 
     /// Retrieves a specific property of a person by their `PersonId`.
@@ -687,7 +685,7 @@ impl PeopleData {
         _property: T,
     ) -> RefMut<Option<T::Value>> {
         let properties_map = self.properties_map.borrow_mut();
-        let index = person.id;
+        let index = person.0;
         RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
                 .entry(TypeId::of::<T>())
@@ -776,7 +774,7 @@ impl Iterator for PeopleIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = if self.person_id < self.population {
-            Some(PersonId { id: self.person_id })
+            Some(PersonId(self.person_id))
         } else {
             None
         };
@@ -1223,7 +1221,7 @@ impl ContextPeopleExt for Context {
         // Special case the empty query because we can do it in O(1).
         if query.get_query().is_empty() {
             let result = self.sample_range(rng_id, 0..self.get_current_population());
-            return Ok(PersonId { id: result });
+            return Ok(PersonId(result));
         }
 
         T::setup(self);
@@ -1465,7 +1463,7 @@ mod test {
         let flag_clone = flag.clone();
         context.subscribe_to_event(move |_context, event: PersonCreatedEvent| {
             *flag_clone.borrow_mut() = true;
-            assert_eq!(event.person_id.id, 0);
+            assert_eq!(event.person_id.0, 0);
         });
 
         let _ = context.add_person(()).unwrap();
@@ -1596,7 +1594,7 @@ mod test {
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<RiskCategory>| {
                 *flag_clone.borrow_mut() = true;
-                assert_eq!(event.person_id.id, 0, "Person id is correct");
+                assert_eq!(event.person_id.0, 0, "Person id is correct");
                 assert_eq!(
                     event.previous,
                     RiskCategoryValue::Low,
@@ -1693,7 +1691,7 @@ mod test {
         let flag_clone = flag.clone();
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<AgeGroup>| {
-                assert_eq!(event.person_id.id, 0);
+                assert_eq!(event.person_id.0, 0);
                 assert_eq!(event.previous, AgeGroupValue::Child);
                 assert_eq!(event.current, AgeGroupValue::Adult);
                 *flag_clone.borrow_mut() = true;
@@ -1712,7 +1710,7 @@ mod test {
         let flag_clone = flag.clone();
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<AdultRunner>| {
-                assert_eq!(event.person_id.id, 0);
+                assert_eq!(event.person_id.0, 0);
                 assert!(!event.previous);
                 assert!(event.current);
                 *flag_clone.borrow_mut() = true;
@@ -1763,7 +1761,7 @@ mod test {
         assert!(!context.get_person_property(person, SeniorRunner));
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<SeniorRunner>| {
-                assert_eq!(event.person_id.id, 0);
+                assert_eq!(event.person_id.0, 0);
                 assert!(!event.previous);
                 assert!(event.current);
                 *flag_clone.borrow_mut() += 1;
@@ -1784,7 +1782,7 @@ mod test {
         assert!(!context.get_person_property(person, AdultAthlete));
         context.subscribe_to_event(
             move |_context, event: PersonPropertyChangeEvent<AdultAthlete>| {
-                assert_eq!(event.person_id.id, 0);
+                assert_eq!(event.person_id.0, 0);
                 assert!(!event.previous);
                 assert!(event.current);
                 *flag_clone.borrow_mut() += 1;

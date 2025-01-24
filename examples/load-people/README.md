@@ -20,7 +20,7 @@ the population range):
 
 ```rust
  let person: PersonId = context.add_person();
- println!("Person {} was created", person.id)
+ println!("Person {} was created", person.0)
  ```
 
 ### Person Properties
@@ -155,7 +155,7 @@ that when properties are first set, they will *not* emit any change events;
             let person = event.person_id;
             println!(
                 "Person {} changed disease status from {:?} to {:?}",
-                person.id, event.previous, event.current,
+                person.0, event.previous, event.current,
             );
         },
     );

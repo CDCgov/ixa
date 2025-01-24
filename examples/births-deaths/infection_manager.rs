@@ -7,7 +7,7 @@ use ixa::define_data_plugin;
 use ixa::define_rng;
 use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
-use ixa::plan::Id;
+use ixa::plan::PlanId;
 use ixa::random::ContextRandomExt;
 use rand_distr::Exp;
 use std::collections::{HashMap, HashSet};
@@ -17,13 +17,13 @@ define_data_plugin!(
     InfectionPlansPlugin,
     InfectionPlansData,
     InfectionPlansData {
-        plans_map: HashMap::<PersonId, HashSet::<Id>>::new(),
+        plans_map: HashMap::<PersonId, HashSet::<PlanId>>::new(),
     }
 );
 
 #[derive(Debug)]
 struct InfectionPlansData {
-    plans_map: HashMap<PersonId, HashSet<Id>>,
+    plans_map: HashMap<PersonId, HashSet<PlanId>>,
 }
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
@@ -58,7 +58,7 @@ fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
     let plans_set = plans_data_container
         .plans_map
         .get(&person_id)
-        .unwrap_or(&HashSet::<Id>::new())
+        .unwrap_or(&HashSet::<PlanId>::new())
         .clone();
 
     for plan_id in plans_set {

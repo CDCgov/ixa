@@ -18,7 +18,7 @@ use std::{
 ///
 /// Items of type `T` are stored in order by `f64` time and called `Plan<T>`.
 /// Plans can have priorities given by some specified orderable type `P`.
-/// When plans are created they are sequentially assigned an `Id` that is a
+/// When plans are created they are sequentially assigned a `PlanId` that is a
 /// wrapped `u64`. If two plans are scheduled for the same time then the plan
 /// with the lowest priority is placed earlier. If two plans have the same time
 /// and priority then the plan that is scheduled first (i.e., that has the
@@ -47,15 +47,19 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
 
     /// Add a plan to the queue at the specified time
     ///
-    /// Returns an `Id` for the newly-added plan that can be used to cancel it
+    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
-    pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> Id {
+    pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> PlanId {
         // Add plan to queue, store data, and increment counter
-        let id = self.plan_counter;
-        self.queue.push(Entry { time, id, priority });
-        self.data_map.insert(id, data);
+        let plan_id = self.plan_counter;
+        self.queue.push(Entry {
+            time,
+            plan_id,
+            priority,
+        });
+        self.data_map.insert(plan_id, data);
         self.plan_counter += 1;
-        Id { id }
+        PlanId(plan_id)
     }
 
     /// Cancel a plan that has been added to the queue
@@ -64,10 +68,12 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     ///
     /// This function panics if you cancel a plan which has already
     /// been cancelled or executed.
-    pub fn cancel_plan(&mut self, id: &Id) {
+    pub fn cancel_plan(&mut self, plan_id: &PlanId) {
         // Delete the plan from the map, but leave in the queue
         // It will be skipped when the plan is popped from the queue
-        self.data_map.remove(&id.id).expect("Plan does not exist");
+        self.data_map
+            .remove(&plan_id.0)
+            .expect("Plan does not exist");
     }
 
     #[must_use]
@@ -84,7 +90,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
             match self.queue.pop() {
                 Some(entry) => {
                     // Skip plans that have been cancelled and thus have no data
-                    if let Some(data) = self.data_map.remove(&entry.id) {
+                    if let Some(data) = self.data_map.remove(&entry.plan_id) {
                         return Some(Plan {
                             time: entry.time,
                             data,
@@ -117,7 +123,7 @@ impl<T, P: Eq + PartialEq + Ord> Default for Queue<T, P> {
 #[derive(PartialEq, Debug)]
 struct Entry<P: Eq + PartialEq + Ord> {
     time: f64,
-    id: u64,
+    plan_id: u64,
     priority: P,
 }
 
@@ -143,7 +149,7 @@ impl<P: Eq + PartialEq + Ord> Ord for Entry<P> {
                     .unwrap()
                     .reverse();
                 match priority_ordering {
-                    Ordering::Equal => self.id.cmp(&other.id).reverse(),
+                    Ordering::Equal => self.plan_id.cmp(&other.plan_id).reverse(),
                     _ => priority_ordering,
                 }
             }
@@ -154,9 +160,7 @@ impl<P: Eq + PartialEq + Ord> Ord for Entry<P> {
 
 /// A unique identifier for a plan added to a `Queue<T>`
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
-pub struct Id {
-    id: u64,
-}
+pub struct PlanId(pub(crate) u64);
 
 /// A plan that holds data of type `T` intended to be used at the specified time
 pub struct Plan<T> {
