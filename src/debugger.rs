@@ -4,8 +4,7 @@ use crate::Context;
 use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
 use crate::IxaError;
-use clap::value_parser;
-use clap::{Arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, FromArgMatches as _, Parser, Subcommand};
 use rustyline;
 
 use std::collections::HashMap;
@@ -18,10 +17,7 @@ trait DebuggerCommand {
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String>;
-    fn about(&self) -> &'static str;
-    fn extend(&self, subcommand: Command) -> Command {
-        subcommand
-    }
+    fn extend(&self, command: Command) -> Command;
 }
 
 struct Debugger {
@@ -48,11 +44,11 @@ impl Debugger {
             .try_get_matches_from(args)
             .map_err(|e| e.to_string())?;
 
-        if let Some((command, sub_matches)) = matches.subcommand() {
+        if let Some((command, _)) = matches.subcommand() {
             // If the provided command is known, run its handler
 
             if let Some(handler) = self.get_command(command) {
-                return handler.handle(context, sub_matches);
+                return handler.handle(context, &matches);
             }
             // Unexpected command: print an error
             return Err(format!("Unknown command: {command}"));
@@ -62,12 +58,13 @@ impl Debugger {
     }
 }
 
-/// Returns the current population of the simulation
 struct PopulationCommand;
+#[derive(Parser, Debug)]
+enum PopulationSubcommand {
+    /// Get the total number of people
+    Population,
+}
 impl DebuggerCommand for PopulationCommand {
-    fn about(&self) -> &'static str {
-        "Get the total number of people"
-    }
     fn handle(
         &self,
         context: &mut Context,
@@ -75,6 +72,9 @@ impl DebuggerCommand for PopulationCommand {
     ) -> Result<(bool, Option<String>), String> {
         let output = format!("{}", context.get_current_population());
         Ok((false, Some(output)))
+    }
+    fn extend(&self, command: Command) -> Command {
+        PopulationSubcommand::augment_subcommands(command)
     }
 }
 
@@ -89,35 +89,40 @@ fn available_properties_str(context: &Context) -> String {
 }
 
 struct GlobalPropertyCommand;
+
+#[derive(Subcommand, Clone, Debug)]
+enum GlobalPropertySubcommandEnum {
+    /// List all global properties
+    List,
+
+    /// Get the value of a global property
+    Get { property: String },
+}
+#[derive(Parser, Debug)]
+enum GlobalPropertySubcommand {
+    #[command(subcommand)]
+    Global(GlobalPropertySubcommandEnum),
+}
+
 impl DebuggerCommand for GlobalPropertyCommand {
-    fn about(&self) -> &'static str {
-        "Get the value for a global property"
-    }
-    fn extend(&self, subcommand: Command) -> Command {
-        subcommand
-            .subcommand_required(true)
-            .subcommand(Command::new("list").about("List all global properties"))
-            .subcommand(
-                Command::new("get")
-                    .about("Get the value of a global property")
-                    .arg(
-                        Arg::new("property")
-                            .help("The name of the global property")
-                            .value_parser(value_parser!(String))
-                            .required(true),
-                    ),
-            )
+    fn extend(&self, command: Command) -> Command {
+        GlobalPropertySubcommand::augment_subcommands(command)
     }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        match matches.subcommand() {
-            Some(("list", _)) => Ok((false, Some(available_properties_str(context)))),
-            Some(("get", m)) => {
-                let name = m.get_one::<String>("property").unwrap();
-                let output = context.get_serialized_value_by_string(name);
+        let args = GlobalPropertySubcommand::from_arg_matches(matches).unwrap();
+
+        let GlobalPropertySubcommand::Global(global_args) = args;
+
+        match global_args {
+            GlobalPropertySubcommandEnum::List => {
+                Ok((false, Some(available_properties_str(context))))
+            }
+            GlobalPropertySubcommandEnum::Get { property: name } => {
+                let output = context.get_serialized_value_by_string(&name);
                 if output.is_err() {
                     return Ok((false, output.err().map(|e| e.to_string())));
                 }
@@ -126,50 +131,49 @@ impl DebuggerCommand for GlobalPropertyCommand {
                     None => Ok((false, Some(format!("Property {name} is not set")))),
                 }
             }
-            // This is required by the compiler will never get hit because
-            // .subcommand_required(true) is set in extend
-            _ => unimplemented!("subcommand required"),
         }
     }
 }
 
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
+#[derive(Parser, Debug)]
+enum NextSubcommand {
+    /// Continue until the given time and then pause again
+    Next { next_time: f64 },
+}
 impl DebuggerCommand for NextCommand {
-    fn about(&self) -> &'static str {
-        "Continue until the given time and then pause again"
-    }
-    fn extend(&self, subcommand: Command) -> Command {
-        subcommand.arg(
-            Arg::new("t")
-                .help("The next breakpoint (e.g., 4.2)")
-                .value_parser(value_parser!(f64))
-                .required(true),
-        )
-    }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let t = *matches.get_one::<f64>("t").unwrap();
-        context.schedule_debugger(t);
+        let args = NextSubcommand::from_arg_matches(matches).unwrap();
+        let NextSubcommand::Next { next_time } = args;
+        context.schedule_debugger(next_time);
         Ok((true, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        NextSubcommand::augment_subcommands(command)
     }
 }
 
-/// Exits the debugger and continues the simulation
 struct ContinueCommand;
+#[derive(Parser, Debug)]
+enum ContinueSubcommand {
+    /// Exits the debugger and continues the simulation
+    Continue,
+}
 impl DebuggerCommand for ContinueCommand {
-    fn about(&self) -> &'static str {
-        "Continue the simulation and exit the debugger"
-    }
     fn handle(
         &self,
         _context: &mut Context,
         _matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
         Ok((true, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        ContinueSubcommand::augment_subcommands(command)
     }
 }
 
@@ -192,13 +196,10 @@ fn init(context: &mut Context) {
             .subcommand_help_heading("IXA DEBUGGER")
             .help_template("{all-args}");
 
-        for (name, handler) in &commands {
-            let subcommand =
-                handler.extend(Command::new(name).about(handler.about()).help_template(
-                    "{about-with-newline}\n{usage-heading}\n    {usage}\n\n{all-args}{after-help}",
-                ));
-            cli = cli.subcommand(subcommand);
+        for handler in commands.values() {
+            cli = handler.extend(cli);
         }
+
         *debugger = Some(Debugger {
             rl: rustyline::DefaultEditor::new().unwrap(),
             cli,
