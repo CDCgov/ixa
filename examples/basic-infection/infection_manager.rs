@@ -1,4 +1,5 @@
 use ixa::context::Context;
+use log::trace;
 
 use ixa::random::ContextRandomExt;
 use ixa::{define_rng, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
@@ -15,6 +16,7 @@ pub type InfectionStatusEvent = PersonPropertyChangeEvent<InfectionStatus>;
 define_rng!(InfectionRng);
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
+    trace!("Scheduling recovery");
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
     context.add_plan(recovery_time, move |context| {
@@ -27,12 +29,19 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 }
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
+    trace!(
+        "Handling infection status change from {:?} to {:?} for {:?}",
+        event.previous,
+        event.current,
+        event.person_id
+    );
     if event.current == InfectionStatusValue::I {
         schedule_recovery(context, event.person_id);
     }
 }
 
 pub fn init(context: &mut Context) {
+    trace!("Initializing infection_manager");
     context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
         handle_infection_status_change(context, event);
     });

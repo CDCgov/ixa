@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::error::IxaError;
 use crate::people::{ContextPeopleExt, Tabulator};
+use crate::{error, trace};
 use csv::Writer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
@@ -24,6 +25,7 @@ impl ConfigReportOptions {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
+        trace!("new ConfigReportOptions");
         // Sets the defaults
         ConfigReportOptions {
             file_prefix: String::new(),
@@ -33,16 +35,19 @@ impl ConfigReportOptions {
     }
     /// Sets the file prefix option (e.g., "report_")
     pub fn file_prefix(&mut self, file_prefix: String) -> &mut ConfigReportOptions {
+        trace!("setting report prefix to {}", file_prefix);
         self.file_prefix = file_prefix;
         self
     }
     /// Sets the directory where reports will be output
     pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
+        trace!("setting report directory to {:?}", directory);
         self.output_dir = directory;
         self
     }
     /// Sets whether to overwrite existing reports of the same name if they exist
     pub fn overwrite(&mut self, overwrite: bool) -> &mut ConfigReportOptions {
+        trace!("setting report overwrite {}", overwrite);
         self.overwrite = overwrite;
         self
     }
@@ -143,6 +148,7 @@ pub trait ContextReportExt {
 
 impl ContextReportExt for Context {
     fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
+        trace!("adding report {} by type_id {:?}", short_name, type_id);
         let path = self.generate_filename(short_name);
 
         let data_container = self.get_data_container_mut(ReportPlugin);
@@ -155,7 +161,8 @@ impl ContextReportExt for Context {
                     if data_container.config.overwrite {
                         File::create(&path)?
                     } else {
-                        println!("File already exists: {}. Please set `overwrite` to true in the file configuration and rerun.", path.display());
+                        error!("File already exists: {}. Please set `overwrite` to true in the file configuration and rerun.", path.display());
+                        // eprintln!("File already exists: {}. Please set `overwrite` to true in the file configuration and rerun.", path.display());
                         return Err(IxaError::IoError(e));
                     }
                 }
@@ -170,6 +177,7 @@ impl ContextReportExt for Context {
         Ok(())
     }
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+        trace!("Adding report {}", short_name);
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
@@ -178,6 +186,8 @@ impl ContextReportExt for Context {
         period: f64,
         tabulator: T,
     ) -> Result<(), IxaError> {
+        trace!("Adding periodic report {}", short_name);
+
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
 
         {

@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::plan::{PlanId, Queue};
+use crate::trace;
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -164,6 +165,11 @@ impl Context {
         callback: impl Fn(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) {
+        trace!(
+            "evaluate periodic at {} (period={})",
+            self.current_time,
+            period
+        );
         callback(self);
         if !self.plan_queue.is_empty() {
             let next_time = self.current_time + period;
@@ -206,8 +212,9 @@ impl Context {
     ///
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
-    pub fn cancel_plan(&mut self, id: &PlanId) {
-        self.plan_queue.cancel_plan(id);
+    pub fn cancel_plan(&mut self, plan_id: &PlanId) {
+        trace!("canceling plan {:?}", plan_id);
+        self.plan_queue.cancel_plan(plan_id);
     }
 
     #[doc(hidden)]
@@ -218,6 +225,7 @@ impl Context {
 
     /// Add a `Callback` to the queue to be executed before the next plan
     pub fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static) {
+        trace!("queuing callback");
         self.callback_queue.push_back(Box::new(callback));
     }
 
@@ -260,6 +268,7 @@ impl Context {
     /// Shutdown the simulation cleanly, abandoning all events after whatever
     /// is currently executing.
     pub fn shutdown(&mut self) {
+        trace!("shutdown context");
         self.shutdown_requested = true;
     }
 
@@ -273,6 +282,7 @@ impl Context {
 
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
+        trace!("entering event loop");
         // Start plan loop
         loop {
             if self.shutdown_requested {
@@ -281,15 +291,18 @@ impl Context {
 
             // If there is a callback, run it.
             if let Some(callback) = self.callback_queue.pop_front() {
+                trace!("calling callback");
                 callback(self);
                 continue;
             }
 
             // There aren't any callbacks, so look at the first plan.
             if let Some(plan) = self.plan_queue.get_next_plan() {
+                trace!("calling plan at {}", plan.time);
                 self.current_time = plan.time;
                 (plan.data)(self);
             } else {
+                trace!("No callbacks or plans; exiting event loop");
                 // OK, there aren't any plans, so we're done.
                 break;
             }

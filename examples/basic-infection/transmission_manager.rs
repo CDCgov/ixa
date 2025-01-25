@@ -1,6 +1,7 @@
 use ixa::context::Context;
 use ixa::random::ContextRandomExt;
 use ixa::{define_rng, ContextPeopleExt, PersonId};
+use log::trace;
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use rand_distr::Exp;
@@ -11,6 +12,7 @@ use crate::MAX_TIME;
 define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
+    trace!("Attempting infection");
     let population_size: usize = context.get_current_population();
     let person_to_infect: PersonId = context.sample_person(TransmissionRng, ()).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
 
@@ -43,6 +45,7 @@ fn attempt_infection(context: &mut Context) {
 }
 
 pub fn init(context: &mut Context) {
+    trace!("Initializing transmission manager");
     context.add_plan(0.0, attempt_infection);
 }
 

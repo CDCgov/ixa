@@ -8,6 +8,7 @@ use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
 use rustyline;
 
+use log::trace;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -265,6 +266,7 @@ pub trait ContextDebugExt {
 
 impl ContextDebugExt for Context {
     fn schedule_debugger(&mut self, t: f64) {
+        trace!("scheduling debugger");
         self.add_plan(t, |context| {
             init(context);
             run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {

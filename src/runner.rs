@@ -5,6 +5,8 @@ use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 use crate::{context::Context, debugger::ContextDebugExt};
+use crate::{enable_logging, info};
+
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Default cli arguments for ixa runner
@@ -22,13 +24,17 @@ pub struct BaseArgs {
     #[arg(short, long = "output")]
     pub output_dir: Option<PathBuf>,
 
-    // Optional prefix for report files
+    /// Optional prefix for report files
     #[arg(long = "prefix")]
     pub file_prefix: Option<String>,
 
-    // Overwrite existing report files?
+    /// Overwrite existing report files?
     #[arg(short, long)]
     pub force_overwrite: bool,
+
+    /// Enable logging
+    #[arg(short, long)]
+    pub enable_logging: bool,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
@@ -43,6 +49,7 @@ impl BaseArgs {
             output_dir: None,
             file_prefix: None,
             force_overwrite: false,
+            enable_logging: false,
             debugger: None,
         }
     }
@@ -92,7 +99,7 @@ where
 /// This function parses command line arguments allows you to define a setup function
 ///
 /// # Parameters
-/// - `setup_fn`: A function that takes a mutable reference to a `Context`and `BaseArgs` struct
+/// - `setup_fn`: A function that takes a mutable reference to a `Context` and `BaseArgs` struct
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
@@ -122,7 +129,6 @@ where
     // Optionally set global properties from a file
     if args.config.is_some() {
         let config_path = args.config.clone().unwrap();
-        println!("Loading global properties from: {config_path:?}");
         context.load_global_properties(&config_path)?;
     }
 
@@ -136,6 +142,13 @@ where
     }
     if args.force_overwrite {
         report_config.overwrite(true);
+    }
+    if args.enable_logging {
+        enable_logging();
+        info!("Logging enabled.");
+    } else {
+        // Not emitted.
+        info!("Logging disabled.");
     }
 
     context.init_random(args.random_seed);
@@ -256,6 +269,14 @@ mod tests {
             assert_eq!(c.unwrap().a, 42);
             Ok(())
         });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_with_logging_enabled() {
+        let mut test_args = BaseArgs::new();
+        test_args.enable_logging = true;
+        let result = run_with_args_internal(test_args, None, |_, _, _: Option<()>| Ok(()));
         assert!(result.is_ok());
     }
 }

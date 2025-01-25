@@ -4,7 +4,7 @@ use ixa::context::Context;
 use ixa::error::IxaError;
 use ixa::report::ContextReportExt;
 use ixa::report::Report;
-use ixa::{create_report_trait, PersonId};
+use ixa::{create_report_trait, trace, PersonId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -18,6 +18,12 @@ struct IncidenceReportItem {
 create_report_trait!(IncidenceReportItem);
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
+    trace!(
+        "Handling infection status change from {:?} to {:?} for {:?}",
+        event.previous,
+        event.current,
+        event.person_id
+    );
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: event.person_id,
@@ -26,6 +32,8 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    trace!("Initializing incidence_report");
+
     // In the configuration of report options below, we set `overwrite(true)`, which is not
     // recommended for production code in order to prevent accidental data loss. It is set
     // here so that newcomers won't have to deal with a confusing error while running

@@ -74,6 +74,7 @@ use crate::{
     random::{ContextRandomExt, RngId},
 };
 use ixa_derive::IxaEvent;
+use log::trace;
 use rand::Rng;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
@@ -89,7 +90,7 @@ use std::{
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized
 // version of the value. If that serialization fits in 128 bits, we
-// store it in Fixed to avoid the allocation of the Vec. Otherwise it
+// store it in Fixed to avoid the allocation of the Vec. Otherwise, it
 // goes in Variable.
 #[doc(hidden)]
 pub enum IndexValue {
@@ -280,6 +281,7 @@ struct Index {
 
 impl Index {
     fn new<T: PersonProperty + 'static>(_context: &Context, property: T) -> Self {
+        trace!("creating index for {}", T::name());
         Self {
             name: std::any::type_name::<T>(),
             lookup: None,
@@ -1079,6 +1081,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
+        trace!("indexing property {}", T::name());
         // Ensure that the data container exists
         {
             let _ = self.get_data_container_mut(PeoplePlugin);
@@ -1147,6 +1150,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn register_property<T: PersonProperty + 'static>(&self) {
+        trace!("registering property {:?}", T::name());
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         if !data_container
             .registered_derived_properties
@@ -1214,6 +1218,7 @@ impl ContextPeopleExt for Context {
     where
         R::RngType: Rng,
     {
+        trace!("sampling person");
         if self.get_current_population() == 0 {
             return Err(IxaError::IxaError(String::from("Empty population")));
         }

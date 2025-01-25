@@ -17,6 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
+use log::trace;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
@@ -55,6 +56,7 @@ pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de> + serde::Serialize,
 {
+    trace!("Adding global property {}", name);
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     assert!(properties
         .borrow_mut()
@@ -283,6 +285,7 @@ impl ContextGlobalPropertiesExt for Context {
         &mut self,
         file_name: &Path,
     ) -> Result<T, IxaError> {
+        trace!("Loading parameters from JSON: {:?}", file_name);
         let config_file = fs::File::open(file_name)?;
         let reader = BufReader::new(config_file);
         let config = serde_json::from_reader(reader)?;
@@ -290,6 +293,7 @@ impl ContextGlobalPropertiesExt for Context {
     }
 
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError> {
+        trace!("Loading global properties from {:?}", file_name);
         let config_file = fs::File::open(file_name)?;
         let reader = BufReader::new(config_file);
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
