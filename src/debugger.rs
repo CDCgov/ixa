@@ -1,6 +1,9 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::extension_api::{run_extension, Extension, PopulationExtension};
+use crate::extension_api::{
+    run_extension, Extension, GlobalPropertyExtension, GlobalPropertyExtensionRetval,
+    NextCommandExtension, PopulationExtension,
+};
 use crate::Context;
 use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
@@ -71,7 +74,10 @@ impl DebuggerCommand for PopulationCommand {
         context: &mut Context,
         _matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let output = format!("{}", run_extension::<PopulationExtension>(context, &()));
+        let output = format!(
+            "{}",
+            run_extension::<PopulationExtension>(context, &()).unwrap()
+        );
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
@@ -79,20 +85,10 @@ impl DebuggerCommand for PopulationCommand {
     }
 }
 
-/// Helper function for displaying properties
-fn available_properties_str(context: &Context) -> String {
-    let properties = context.list_registered_global_properties();
-    format!(
-        "{} global properties registered:\n{}",
-        properties.len(),
-        properties.join("\n")
-    )
-}
-
 struct GlobalPropertyCommand;
 
 #[derive(Subcommand, Clone, Debug)]
-enum GlobalPropertySubcommandEnum {
+pub(crate) enum GlobalPropertySubcommandEnum {
     /// List all global properties
     List,
 
@@ -100,7 +96,7 @@ enum GlobalPropertySubcommandEnum {
     Get { property: String },
 }
 #[derive(Parser, Debug)]
-enum GlobalPropertySubcommand {
+pub(crate) enum GlobalPropertySubcommand {
     #[command(subcommand)]
     Global(GlobalPropertySubcommandEnum),
 }
@@ -115,23 +111,17 @@ impl DebuggerCommand for GlobalPropertyCommand {
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
         let args = GlobalPropertySubcommand::from_arg_matches(matches).unwrap();
-
-        let GlobalPropertySubcommand::Global(global_args) = args;
-
-        match global_args {
-            GlobalPropertySubcommandEnum::List => {
-                Ok((false, Some(available_properties_str(context))))
-            }
-            GlobalPropertySubcommandEnum::Get { property: name } => {
-                let output = context.get_serialized_value_by_string(&name);
-                if output.is_err() {
-                    return Ok((false, output.err().map(|e| e.to_string())));
-                }
-                match output.unwrap() {
-                    Some(value) => Ok((false, Some(value))),
-                    None => Ok((false, Some(format!("Property {name} is not set")))),
-                }
-            }
+        match run_extension::<GlobalPropertyExtension>(context, &args) {
+            Err(e) => Ok((false, Some(e.to_string()))),
+            Ok(GlobalPropertyExtensionRetval::List(properties)) => Ok((
+                false,
+                Some(format!(
+                    "{} global properties registered:\n{}",
+                    properties.len(),
+                    properties.join("\n")
+                )),
+            )),
+            Ok(GlobalPropertyExtensionRetval::Value(value)) => Ok((false, Some(value))),
         }
     }
 }
@@ -139,7 +129,7 @@ impl DebuggerCommand for GlobalPropertyCommand {
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
 #[derive(Parser, Debug)]
-enum NextSubcommand {
+pub(crate) enum NextSubcommand {
     /// Continue until the given time and then pause again
     Next { next_time: f64 },
 }
@@ -150,8 +140,7 @@ impl DebuggerCommand for NextCommand {
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
         let args = NextSubcommand::from_arg_matches(matches).unwrap();
-        let NextSubcommand::Next { next_time } = args;
-        context.schedule_debugger(next_time);
+        run_extension::<NextCommandExtension>(context, &args).unwrap();
         Ok((true, None))
     }
     fn extend(&self, command: Command) -> Command {
