@@ -1,12 +1,11 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::extension_api::{
-    run_extension, Extension, GlobalPropertyExtension, GlobalPropertyExtensionRetval,
-    NextCommandExtension, PopulationExtension,
+    run_extension, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
+    GlobalPropertyExtensionRetval, NextCommandExtension, NextExtensionArgs, PopulationExtension,
+    PopulationExtensionArgs,
 };
 use crate::Context;
-use crate::ContextGlobalPropertiesExt;
-use crate::ContextPeopleExt;
 use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
@@ -63,11 +62,6 @@ impl Debugger {
 }
 
 struct PopulationCommand;
-#[derive(Parser, Debug)]
-pub(crate) enum PopulationSubcommand {
-    /// Get the total number of people
-    Population,
-}
 impl DebuggerCommand for PopulationCommand {
     fn handle(
         &self,
@@ -81,36 +75,21 @@ impl DebuggerCommand for PopulationCommand {
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
-        PopulationSubcommand::augment_subcommands(command)
+        PopulationExtensionArgs::augment_subcommands(command)
     }
 }
 
 struct GlobalPropertyCommand;
-
-#[derive(Subcommand, Clone, Debug)]
-pub(crate) enum GlobalPropertySubcommandEnum {
-    /// List all global properties
-    List,
-
-    /// Get the value of a global property
-    Get { property: String },
-}
-#[derive(Parser, Debug)]
-pub(crate) enum GlobalPropertySubcommand {
-    #[command(subcommand)]
-    Global(GlobalPropertySubcommandEnum),
-}
-
 impl DebuggerCommand for GlobalPropertyCommand {
     fn extend(&self, command: Command) -> Command {
-        GlobalPropertySubcommand::augment_subcommands(command)
+        GlobalPropertyExtensionArgs::augment_subcommands(command)
     }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = GlobalPropertySubcommand::from_arg_matches(matches).unwrap();
+        let args = GlobalPropertyExtensionArgs::from_arg_matches(matches).unwrap();
         match run_extension::<GlobalPropertyExtension>(context, &args) {
             Err(e) => Ok((false, Some(e.to_string()))),
             Ok(GlobalPropertyExtensionRetval::List(properties)) => Ok((
@@ -126,25 +105,20 @@ impl DebuggerCommand for GlobalPropertyCommand {
     }
 }
 
-/// Adds a new debugger breakpoint at t
 struct NextCommand;
-#[derive(Parser, Debug)]
-pub(crate) enum NextSubcommand {
-    /// Continue until the given time and then pause again
-    Next { next_time: f64 },
-}
+/// Adds a new debugger breakpoint at t
 impl DebuggerCommand for NextCommand {
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = NextSubcommand::from_arg_matches(matches).unwrap();
+        let args = NextExtensionArgs::from_arg_matches(matches).unwrap();
         run_extension::<NextCommandExtension>(context, &args).unwrap();
         Ok((true, None))
     }
     fn extend(&self, command: Command) -> Command {
-        NextSubcommand::augment_subcommands(command)
+        NextExtensionArgs::augment_subcommands(command)
     }
 }
 
