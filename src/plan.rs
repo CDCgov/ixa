@@ -9,6 +9,7 @@
 //! This queue is used by `Context` to store future events where some callback
 //! closure `FnOnce(&mut Context)` will be executed at a given point in time.
 
+use log::trace;
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashMap},
@@ -50,6 +51,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
     pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> PlanId {
+        trace!("adding plan at {}", time);
         // Add plan to queue, store data, and increment counter
         let plan_id = self.plan_counter;
         self.queue.push(Entry {
@@ -69,6 +71,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     /// This function panics if you cancel a plan which has already
     /// been cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
+        trace!("cancel plan {:?}", plan_id);
         // Delete the plan from the map, but leave in the queue
         // It will be skipped when the plan is popped from the queue
         self.data_map
@@ -85,6 +88,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     ///
     /// Returns the next plan if it exists or else `None` if the queue is empty
     pub fn get_next_plan(&mut self) -> Option<Plan<T>> {
+        trace!("getting next plan");
         loop {
             // Pop from queue until we find a plan with data or queue is empty
             match self.queue.pop() {

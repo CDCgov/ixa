@@ -1,4 +1,5 @@
 use crate::context::Context;
+use log::trace;
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
@@ -79,6 +80,11 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
             .entry(TypeId::of::<R>())
             // Create a new rng holder if it doesn't exist yet
             .or_insert_with(|| {
+                trace!(
+                    "creating new RNG (seed={}) for type id {:?}",
+                    data_container.base_seed,
+                    TypeId::of::<R>()
+                );
                 let base_seed = data_container.base_seed;
                 let seed_offset = fxhash::hash64(R::get_name());
                 RngHolder {
@@ -147,6 +153,7 @@ impl ContextRandomExt for Context {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
     fn init_random(&mut self, base_seed: u64) {
+        trace!("initializing random module");
         let data_container = self.get_data_container_mut(RngPlugin);
         data_container.base_seed = base_seed;
 
