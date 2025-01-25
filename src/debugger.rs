@@ -66,11 +66,14 @@ impl DebuggerCommand for PopulationCommand {
     fn handle(
         &self,
         context: &mut Context,
-        _matches: &ArgMatches,
+        matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
+        let args = PopulationExtensionArgs::from_arg_matches(matches).unwrap();
         let output = format!(
             "{}",
-            run_extension::<PopulationExtension>(context, &()).unwrap()
+            run_extension::<PopulationExtension>(context, &args)
+                .unwrap()
+                .population
         );
         Ok((false, Some(output)))
     }

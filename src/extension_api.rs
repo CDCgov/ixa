@@ -21,18 +21,27 @@ pub(crate) fn run_extension<T: Extension>(
 }
 
 pub(crate) struct PopulationExtension {}
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Deserialize)]
 pub(crate) enum PopulationExtensionArgs {
     /// Get the total number of people
     Population,
 }
 
+#[derive(Serialize)]
+pub(crate) struct PopulationExtensionRetval {
+    pub population: usize,
+}
 impl Extension for PopulationExtension {
-    type Args = ();
-    type Retval = usize;
+    type Args = PopulationExtensionArgs;
+    type Retval = PopulationExtensionRetval;
 
-    fn run(context: &mut Context, _args: &()) -> Result<usize, IxaError> {
-        Ok(context.get_current_population())
+    fn run(
+        context: &mut Context,
+        _args: &PopulationExtensionArgs,
+    ) -> Result<PopulationExtensionRetval, IxaError> {
+        Ok(PopulationExtensionRetval {
+            population: context.get_current_population(),
+        })
     }
 }
 
