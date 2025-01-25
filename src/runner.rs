@@ -4,7 +4,7 @@ use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{context::Context, debugger::ContextDebugExt};
+use crate::{context::Context, debugger::ContextDebugExt, http_api::ContextWebApiExt};
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Default cli arguments for ixa runner
@@ -33,8 +33,11 @@ pub struct BaseArgs {
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
     pub debugger: Option<Option<f64>>,
-}
 
+    /// Enable the Web API at a given time. Defaults to t=0.0
+    #[arg(short, long)]
+    pub web: Option<Option<f64>>,
+}
 impl BaseArgs {
     fn new() -> Self {
         BaseArgs {
@@ -44,6 +47,7 @@ impl BaseArgs {
             file_prefix: None,
             force_overwrite: false,
             debugger: None,
+            web: None,
         }
     }
 }
@@ -143,6 +147,14 @@ where
     // If a breakpoint is provided, stop at that time
     if let Some(t) = args.debugger {
         context.schedule_debugger(t.unwrap_or(0.0));
+    }
+
+    // If the Web API is provided, stop there.
+    // TODO(cym4@cdc.gov): Do something to avoid both
+    // the Web API and the debugger being started.
+    if let Some(t) = args.web {
+        context.setup_web_api().unwrap();
+        context.schedule_web_api(t.unwrap_or(0.0));
     }
 
     // Run the provided Fn

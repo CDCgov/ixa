@@ -4,6 +4,7 @@ use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::people::ContextPeopleExt;
 use clap::{Parser, Subcommand};
+use serde::{Deserialize, Serialize};
 
 pub(crate) trait Extension {
     type Args;
@@ -36,11 +37,12 @@ impl Extension for PopulationExtension {
 }
 
 pub(crate) struct GlobalPropertyExtension {}
+#[derive(Serialize, Deserialize)]
 pub(crate) enum GlobalPropertyExtensionRetval {
     List(Vec<String>),
     Value(String),
 }
-#[derive(Subcommand, Clone, Debug)]
+#[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
 pub(crate) enum GlobalPropertyExtensionArgsEnum {
     /// List all global properties
     List,
@@ -48,7 +50,7 @@ pub(crate) enum GlobalPropertyExtensionArgsEnum {
     /// Get the value of a global property
     Get { property: String },
 }
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 pub(crate) enum GlobalPropertyExtensionArgs {
     #[command(subcommand)]
     Global(GlobalPropertyExtensionArgsEnum),
