@@ -40,7 +40,6 @@ pub(crate) enum GlobalPropertyExtensionRetval {
     List(Vec<String>),
     Value(String),
 }
-
 #[derive(Subcommand, Clone, Debug)]
 pub(crate) enum GlobalPropertyExtensionArgsEnum {
     /// List all global properties
