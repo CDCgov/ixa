@@ -89,19 +89,24 @@ impl Extension for GlobalPropertyExtension {
     }
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Deserialize)]
 pub(crate) enum NextExtensionArgs {
     /// Continue until the given time and then pause again
     Next { next_time: f64 },
 }
+#[derive(Serialize)]
+pub(crate) struct NextExtensionRetval {}
 pub(crate) struct NextCommandExtension {}
 impl Extension for NextCommandExtension {
     type Args = NextExtensionArgs;
-    type Retval = ();
+    type Retval = NextExtensionRetval;
 
-    fn run(context: &mut Context, args: &NextExtensionArgs) -> Result<(), IxaError> {
+    fn run(
+        context: &mut Context,
+        args: &NextExtensionArgs,
+    ) -> Result<NextExtensionRetval, IxaError> {
         let NextExtensionArgs::Next { next_time } = args;
         context.schedule_debugger(*next_time);
-        Ok(())
+        Ok(NextExtensionRetval {})
     }
 }
