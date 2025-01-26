@@ -238,6 +238,18 @@ mod tests {
         context
     }
 
+    // Continue the simulation. Note that we don't wait for a response
+    // because there is a race condition between sending the final
+    // response and program termination.
+    fn send_continue() {
+        let client = reqwest::blocking::Client::new();
+        client
+            .post("http://127.0.0.1:3000/cmd/continue")
+            .json("")
+            .send()
+            .unwrap();
+    }
+
     #[test]
     // This just starts the web server at t=0.0 and sends
     // "continue". This is the minimum test because if we
@@ -245,12 +257,7 @@ mod tests {
     fn web_api_continue() {
         let mut context = setup_context();
         thread::spawn(|| {
-            let client = reqwest::blocking::Client::new();
-            client
-                .post("http://127.0.0.1:3001/cmd/continue")
-                .json("")
-                .send()
-                .unwrap();
+            send_continue();
         });
         context.execute();
     }
