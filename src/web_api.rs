@@ -227,14 +227,23 @@ impl ContextWebApiExt for Context {
 #[cfg(test)]
 mod tests {
     use super::ContextWebApiExt;
-    use crate::context::Context;
+    use crate::{define_global_property, ContextGlobalPropertiesExt};
+    use crate::{Context, ContextPeopleExt};
     use reqwest::StatusCode;
+    use serde::{Deserialize, Serialize};
     use std::thread;
+
+    define_global_property!(WebApiTestGlobal, String);
 
     fn setup_context() -> Context {
         let mut context = Context::new();
         context.setup_web_api().unwrap();
         context.schedule_web_api(0.0);
+        context
+            .set_global_property_value(WebApiTestGlobal, "foobar".to_string())
+            .unwrap();
+        context.add_person(()).unwrap();
+        context.add_person(()).unwrap();
         context
     }
 
@@ -250,13 +259,39 @@ mod tests {
             .unwrap();
     }
 
+    // Send a request and check the response.
+    fn send_request<T: Serialize + ?Sized>(cmd: &str, req: &T) {
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .post(&format!("http://127.0.0.1:3000/cmd/{cmd}"))
+            .json(req)
+            .send()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        println!("Response body {:?}", response.text());
+    }
+
     #[test]
     // This just starts the web server at t=0.0 and sends
-    // "continue". This is the minimum test because if we
+    // "continue)". This is the minimum test because if we
     // don't continue, then the simulation just stalls.
     fn web_api_continue() {
         let mut context = setup_context();
         thread::spawn(|| {
+            send_continue();
+        });
+        context.execute();
+    }
+
+    #[test]
+    // This just starts the web server at t=0.0 and sends
+    // "continue". This is the minimum test because if we
+    // don't continue, then the simulation just stalls.
+    fn web_api_get_population() {
+        let mut context = setup_context();
+        thread::spawn(|| {
+            send_request(&"population", &"Population");
             send_continue();
         });
         context.execute();
