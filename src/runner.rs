@@ -4,7 +4,7 @@ use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{context::Context, debugger::ContextDebugExt, http_api::ContextWebApiExt};
+use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Default cli arguments for ixa runner

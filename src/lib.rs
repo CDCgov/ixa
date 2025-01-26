@@ -56,4 +56,4 @@ pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
 pub mod debugger;
 
 pub mod extension_api;
-pub mod http_api;
+pub mod web_api;
