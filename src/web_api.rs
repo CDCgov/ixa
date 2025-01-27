@@ -274,7 +274,7 @@ mod tests {
         let client = reqwest::blocking::Client::new();
         client
             .post("http://127.0.0.1:33339/cmd/continue")
-            .json("")
+            .json(&{})
             .send()
             .unwrap();
     }
