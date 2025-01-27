@@ -46,7 +46,7 @@ impl Extension for PopulationExtension {
 }
 
 pub(crate) struct GlobalPropertyExtension {}
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum GlobalPropertyExtensionRetval {
     List(Vec<String>),
     Value(String),

@@ -254,7 +254,7 @@ mod tests {
 
     fn setup_context() -> Context {
         let mut context = Context::new();
-        context.setup_web_api(3000).unwrap();
+        context.setup_web_api(33339).unwrap();
         context.schedule_web_api(0.0);
         context
             .set_global_property_value(WebApiTestGlobal, "foobar".to_string())
@@ -270,7 +270,7 @@ mod tests {
     fn send_continue() {
         let client = reqwest::blocking::Client::new();
         client
-            .post("http://127.0.0.1:3000/cmd/continue")
+            .post("http://127.0.0.1:33339/cmd/continue")
             .json("")
             .send()
             .unwrap();
@@ -280,7 +280,7 @@ mod tests {
     fn send_request<T: Serialize + ?Sized, U: Serialize + ?Sized>(cmd: &str, req: &T, res: &U) {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .post(&format!("http://127.0.0.1:3000/cmd/{cmd}"))
+            .post(&format!("http://127.0.0.1:33339/cmd/{cmd}"))
             .json(req)
             .send()
             .unwrap();
@@ -292,36 +292,38 @@ mod tests {
         );
     }
 
-    #[test]
-    // This just starts the web server at t=0.0 and sends
-    // "continue)". This is the minimum test because if we
-    // don't continue, then the simulation just stalls.
-    fn web_api_continue() {
-        let mut context = setup_context();
-        thread::spawn(|| {
-            send_continue();
-        });
-        context.execute();
-    }
+    // We do all of the tests in one test block to avoid having to
+    // start a lot of servers with different ports and having
+    // to manage that. This may not be ideal, but we're doing it for now.
+    // TODO(cym4@cdc.gov): Consider using some kind of static
+    // object to isolate the test cases.
 
     #[test]
-    // This just starts the web server at t=0.0 and sends
-    // "continue". This is the minimum test because if we
-    // don't continue, then the simulation just stalls.
     fn web_api_get_population() {
         #[derive(Serialize)]
         struct PopulationResponse {
             population: usize,
         }
-        let mut context = setup_context();
-        thread::spawn(|| {
-            send_request(
-                &"population",
-                &"Population",
-                &PopulationResponse { population: 2 },
-            );
-            send_continue();
+
+        // TODO(cym4@cdc.gov): If this thread fails
+        // then the test will stall instead of
+        // erroring out, but there's nothing that
+        // should fail here.
+        let ctx_thread = thread::spawn(|| {
+            let mut context = setup_context();
+            context.execute();
         });
-        context.execute();
+
+        // Test that the population
+        send_request(
+            &"population",
+            &"Population",
+            &PopulationResponse { population: 2 },
+        );
+
+        // Test continue and make sure that the context
+        // exits.
+        send_continue();
+        let _ = ctx_thread.join();
     }
 }
