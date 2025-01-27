@@ -66,7 +66,6 @@ async fn process_cmd(
     Json(payload): Json<serde_json::Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let (tx, rx) = oneshot::channel::<ApiResponse>();
-    println!("Process_cmd");
     let _ = state.sender.send(ApiRequest {
         cmd: path,
         arguments: payload,
@@ -83,7 +82,7 @@ async fn process_cmd(
 async fn serve(
     sender: mpsc::UnboundedSender<ApiRequest>,
     port: u16,
-    prefix: String,
+    prefix: &str,
     ready: oneshot::Sender<Result<String, IxaError>>,
 ) {
     let state = ApiEndpointServer { sender };
@@ -190,7 +189,6 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        //        let rng = StdRng::from_os_rng();
         let mut rng = StdRng::from_rng(rand::rngs::OsRng).unwrap();
         let mut random: [u8; 16] = [0; 16];
         rng.fill_bytes(&mut random);
@@ -199,7 +197,7 @@ impl ContextWebApiExt for Context {
             .to_string();
 
         let (ready_tx, ready_rx) = oneshot::channel::<Result<String, IxaError>>();
-        thread::spawn(move || serve(api_to_ctx_send, port, secret, ready_tx));
+        thread::spawn(move || serve(api_to_ctx_send, port, &secret, ready_tx));
         let url = ready_rx.blocking_recv().unwrap()?;
 
         let mut api_data = ApiData {
@@ -273,16 +271,15 @@ mod tests {
             .json(req)
             .send()
             .unwrap();
-        println!("{url}");
         assert_eq!(response.status(), StatusCode::OK);
         response.json().unwrap()
     }
 
     // Send a request and check the response.
-    fn send_request_text(cmd: &str, req: String) -> reqwest::blocking::Response {
+    fn send_request_text(url: &str, cmd: &str, req: String) -> reqwest::blocking::Response {
         let client = reqwest::blocking::Client::new();
         client
-            .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
+            .post(format!("{url}cmd/{cmd}"))
             .header("Content-Type", "application/json")
             .body(req)
             .send()
@@ -374,13 +371,14 @@ mod tests {
 
         // Valid JSON but wrong type.
         let res = send_request_text(
+            &url,
             "next",
             String::from("{\"Next\": {\"next_time\" : \"invalid\"}}"),
         );
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Invalid JSON.
-        let res = send_request_text("next", String::from("{]"));
+        let res = send_request_text(&url, "next", String::from("{]"));
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Test continue and make sure that the context
