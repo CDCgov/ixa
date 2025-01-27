@@ -350,6 +350,17 @@ mod tests {
             })
         );
 
+        // Test the global property get API point.
+        let res = send_request(
+            "next",
+            &json!({
+                "Next": {
+                    "next_time" : 1.0
+                }
+            }),
+        );
+        assert_eq!(res, json!({}));
+
         // Test continue and make sure that the context
         // exits.
         send_continue();
