@@ -633,19 +633,31 @@ macro_rules! define_person_property_with_default {
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
 /// * `[$($dependency),+]`: A list of person properties the derived property depends on
+/// * `[$($dependency),*]`: A list of global properties the derived property depends on (optional)
 /// * $calculate: A closure that takes the values of each dependency and returns the derived value
 #[macro_export]
 macro_rules! define_derived_property {
-    ($derived_property:ident, $value:ty, [$($dependency:ident),+], |$($param:ident),+| $derive_fn:expr) => {
+    (
+        $derived_property:ident,
+        $value:ty,
+        [$($dependency:ident),*],
+        [$($global_dependency:ident),*],
+        |$($param:ident),+| $derive_fn:expr
+    ) => {
         #[derive(Debug, Copy, Clone)]
         pub struct $derived_property;
 
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
             fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+                #[allow(unused_imports)]
+                use $crate::global_properties::ContextGlobalPropertiesExt;
                 #[allow(unused_parens)]
-                let ($($param),+) = (
-                    $(context.get_person_property(person_id, $dependency)),+
+                let ($($param,)*) = (
+                    $(context.get_person_property(person_id, $dependency)),*,
+                    $(
+                        *context.get_global_property_value($global_dependency).unwrap()
+                    ),*
                 );
                 (|$($param),+| $derive_fn)($($param),+)
             }
@@ -660,6 +672,20 @@ macro_rules! define_derived_property {
                 stringify!($derived_property)
             }
         }
+    };
+    (
+        $derived_property:ident,
+        $value:ty,
+        [$($dependency:ident),*],
+        |$($param:ident),+| $derive_fn:expr
+    ) => {
+        define_derived_property!(
+            $derived_property,
+            $value,
+            [$($dependency),*],
+            [],
+            |$($param),+| $derive_fn
+        );
     };
 }
 
@@ -1400,8 +1426,10 @@ mod test {
     };
     use crate::{
         context::Context,
+        define_global_property,
         error::IxaError,
         people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
+        ContextGlobalPropertiesExt,
     };
     use std::{any::TypeId, cell::RefCell, collections::HashSet, hash::Hash, rc::Rc, vec};
 
@@ -1411,6 +1439,11 @@ mod test {
         Child,
         Adult,
     }
+    define_global_property!(Threshold, u8);
+    define_derived_property!(IsEligible, bool, [Age], [Threshold], |age, threshold| {
+        age >= threshold
+    });
+
     define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
             AgeGroupValue::Child
@@ -1791,6 +1824,16 @@ mod test {
         context.set_person_property(person, Age, 18);
         context.execute();
         assert_eq!(*flag.borrow(), 1);
+    }
+
+    #[test]
+    fn get_derived_property_with_globals() {
+        let mut context = Context::new();
+        context.set_global_property_value(Threshold, 18).unwrap();
+        let child = context.add_person((Age, 17)).unwrap();
+        let adult = context.add_person((Age, 19)).unwrap();
+        assert!(!context.get_person_property(child, IsEligible));
+        assert!(context.get_person_property(adult, IsEligible));
     }
 
     #[test]
