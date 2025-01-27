@@ -248,10 +248,8 @@ mod tests {
     use crate::{Context, ContextPeopleExt};
     use reqwest::StatusCode;
     use serde::Serialize;
+    use serde_json::json;
     use std::thread;
-
-    #[derive(Serialize)]
-    struct EmptyArgs {}
 
     define_global_property!(WebApiTestGlobal, String);
 
@@ -280,7 +278,7 @@ mod tests {
     }
 
     // Send a request and check the response.
-    fn send_request<T: Serialize + ?Sized, U: Serialize + ?Sized>(cmd: &str, req: &T, res: &U) {
+    fn send_request<T: Serialize + ?Sized>(cmd: &str, req: &T) -> serde_json::Value {
         let client = reqwest::blocking::Client::new();
         let response = client
             .post(&format!("http://127.0.0.1:33339/cmd/{cmd}"))
@@ -289,10 +287,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            serde_json::to_string(res).unwrap(),
-            response.text().unwrap()
-        );
+        response.json().unwrap()
     }
 
     // We do all of the tests in one test block to avoid having to
@@ -318,11 +313,26 @@ mod tests {
         });
 
         // Test the population API point.
-        send_request(
-            &"population",
-            &EmptyArgs {},
-            &PopulationResponse { population: 2 },
+        let res = send_request(&"population", &json!({}));
+        assert_eq!(json!(&PopulationResponse { population: 2 }), res);
+
+        // Test the global property list point
+        let res = send_request(
+            &"global",
+            &json!({
+                "Global": "List"
+            }),
         );
+        let list = res.get("List").unwrap().as_array().unwrap();
+        let mut found = false;
+        for prop in list {
+            let prop_val = prop.as_str().unwrap();
+            if prop_val == "ixa.WebApiTestGlobal" {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
 
         // Test continue and make sure that the context
         // exits.
