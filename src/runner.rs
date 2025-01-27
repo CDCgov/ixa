@@ -156,8 +156,8 @@ where
     // If the Web API is provided, stop there.
     if let Some(t) = args.web {
         let port = t.unwrap_or(33334);
-        context.setup_web_api(port).unwrap();
-        println!("Web API active on port {port}");
+        let url = context.setup_web_api(port).unwrap();
+        println!("Web API active on {url}");
         context.schedule_web_api(0.0);
     }
 
