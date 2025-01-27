@@ -1,9 +1,9 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::external_api::{
-    run_extension, EmptyArgs, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
-    GlobalPropertyExtensionRetval, NextCommandExtension, NextExtensionArgs, PopulationExtension,
-    PopulationExtensionArgs,
+    run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs,
+    GlobalPropertyExtApiRetval, NextCommandExtApi, NextExtApiArgs, PopulationExtApi,
+    PopulationExtApiArgs,
 };
 use crate::Context;
 use crate::IxaError;
@@ -70,33 +70,33 @@ impl DebuggerCommand for PopulationCommand {
     ) -> Result<(bool, Option<String>), String> {
         let output = format!(
             "{}",
-            run_extension::<PopulationExtension>(context, &EmptyArgs {})
+            run_ext_api::<PopulationExtApi>(context, &EmptyArgs {})
                 .unwrap()
                 .population
         );
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
-        PopulationExtensionArgs::augment_subcommands(command)
+        PopulationExtApiArgs::augment_subcommands(command)
     }
 }
 
 struct GlobalPropertyCommand;
 impl DebuggerCommand for GlobalPropertyCommand {
     fn extend(&self, command: Command) -> Command {
-        GlobalPropertyExtensionArgs::augment_subcommands(command)
+        GlobalPropertyExtApiArgs::augment_subcommands(command)
     }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = GlobalPropertyExtensionArgs::from_arg_matches(matches).unwrap();
-        let ret = run_extension::<GlobalPropertyExtension>(context, &args);
+        let args = GlobalPropertyExtApiArgs::from_arg_matches(matches).unwrap();
+        let ret = run_ext_api::<GlobalPropertyExtApi>(context, &args);
         match ret {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e)))),
             Err(e) => Ok((false, Some(format!("error: {}", e)))),
-            Ok(GlobalPropertyExtensionRetval::List(properties)) => Ok((
+            Ok(GlobalPropertyExtApiRetval::List(properties)) => Ok((
                 false,
                 Some(format!(
                     "{} global properties registered:\n{}",
@@ -104,7 +104,7 @@ impl DebuggerCommand for GlobalPropertyCommand {
                     properties.join("\n")
                 )),
             )),
-            Ok(GlobalPropertyExtensionRetval::Value(value)) => Ok((false, Some(value))),
+            Ok(GlobalPropertyExtApiRetval::Value(value)) => Ok((false, Some(value))),
         }
     }
 }
@@ -117,12 +117,12 @@ impl DebuggerCommand for NextCommand {
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = NextExtensionArgs::from_arg_matches(matches).unwrap();
-        run_extension::<NextCommandExtension>(context, &args).unwrap();
+        let args = NextExtApiArgs::from_arg_matches(matches).unwrap();
+        run_ext_api::<NextCommandExtApi>(context, &args).unwrap();
         Ok((true, None))
     }
     fn extend(&self, command: Command) -> Command {
-        NextExtensionArgs::augment_subcommands(command)
+        NextExtApiArgs::augment_subcommands(command)
     }
 }
 

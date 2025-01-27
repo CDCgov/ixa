@@ -6,7 +6,7 @@ use crate::people::ContextPeopleExt;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
-pub(crate) trait Extension {
+pub(crate) trait ExtApi {
     type Args;
     type Retval;
 
@@ -16,47 +16,44 @@ pub(crate) trait Extension {
 #[derive(Serialize, Deserialize)]
 pub(crate) struct EmptyArgs {}
 
-pub(crate) fn run_extension<T: Extension>(
+pub(crate) fn run_ext_api<T: ExtApi>(
     context: &mut Context,
     args: &T::Args,
 ) -> Result<T::Retval, IxaError> {
     T::run(context, args)
 }
 
-pub(crate) struct PopulationExtension {}
+pub(crate) struct PopulationExtApi {}
 #[derive(Parser, Debug, Deserialize)]
-pub(crate) enum PopulationExtensionArgs {
+pub(crate) enum PopulationExtApiArgs {
     /// Get the total number of people
     Population,
 }
 
 #[derive(Serialize)]
-pub(crate) struct PopulationExtensionRetval {
+pub(crate) struct PopulationExtApiRetval {
     pub population: usize,
 }
-impl Extension for PopulationExtension {
+impl ExtApi for PopulationExtApi {
     type Args = EmptyArgs;
-    type Retval = PopulationExtensionRetval;
+    type Retval = PopulationExtApiRetval;
 
-    fn run(
-        context: &mut Context,
-        _args: &EmptyArgs,
-    ) -> Result<PopulationExtensionRetval, IxaError> {
-        Ok(PopulationExtensionRetval {
+    fn run(context: &mut Context, _args: &EmptyArgs) -> Result<PopulationExtApiRetval, IxaError> {
+        Ok(PopulationExtApiRetval {
             population: context.get_current_population(),
         })
     }
 }
 
-pub(crate) struct GlobalPropertyExtension {}
+pub(crate) struct GlobalPropertyExtApi {}
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum GlobalPropertyExtensionRetval {
+pub(crate) enum GlobalPropertyExtApiRetval {
     List(Vec<String>),
     Value(String),
 }
 #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
 /// Access global properties
-pub(crate) enum GlobalPropertyExtensionArgsEnum {
+pub(crate) enum GlobalPropertyExtApiArgsEnum {
     /// List all global properties
     List,
 
@@ -68,28 +65,28 @@ pub(crate) enum GlobalPropertyExtensionArgsEnum {
 }
 #[derive(Parser, Debug, Serialize, Deserialize)]
 
-pub(crate) enum GlobalPropertyExtensionArgs {
+pub(crate) enum GlobalPropertyExtApiArgs {
     #[command(subcommand)]
-    Global(GlobalPropertyExtensionArgsEnum),
+    Global(GlobalPropertyExtApiArgsEnum),
 }
-impl Extension for GlobalPropertyExtension {
-    type Args = GlobalPropertyExtensionArgs;
-    type Retval = GlobalPropertyExtensionRetval;
+impl ExtApi for GlobalPropertyExtApi {
+    type Args = GlobalPropertyExtApiArgs;
+    type Retval = GlobalPropertyExtApiRetval;
 
     fn run(
         context: &mut Context,
-        args: &GlobalPropertyExtensionArgs,
-    ) -> Result<GlobalPropertyExtensionRetval, IxaError> {
-        let GlobalPropertyExtensionArgs::Global(global_args) = args;
+        args: &GlobalPropertyExtApiArgs,
+    ) -> Result<GlobalPropertyExtApiRetval, IxaError> {
+        let GlobalPropertyExtApiArgs::Global(global_args) = args;
 
         match global_args {
-            GlobalPropertyExtensionArgsEnum::List => Ok(GlobalPropertyExtensionRetval::List(
+            GlobalPropertyExtApiArgsEnum::List => Ok(GlobalPropertyExtApiRetval::List(
                 context.list_registered_global_properties(),
             )),
-            GlobalPropertyExtensionArgsEnum::Get { property: name } => {
+            GlobalPropertyExtApiArgsEnum::Get { property: name } => {
                 let output = context.get_serialized_value_by_string(name)?;
                 match output {
-                    Some(value) => Ok(GlobalPropertyExtensionRetval::Value(value)),
+                    Some(value) => Ok(GlobalPropertyExtApiRetval::Value(value)),
                     None => Err(IxaError::IxaError(format!("Property {name} is not set"))),
                 }
             }
@@ -98,7 +95,7 @@ impl Extension for GlobalPropertyExtension {
 }
 
 #[derive(Parser, Debug, Deserialize)]
-pub(crate) enum NextExtensionArgs {
+pub(crate) enum NextExtApiArgs {
     /// Continue until the given time and then pause again
     Next {
         /// The time to pause at
@@ -106,18 +103,15 @@ pub(crate) enum NextExtensionArgs {
     },
 }
 #[derive(Serialize)]
-pub(crate) struct NextExtensionRetval {}
-pub(crate) struct NextCommandExtension {}
-impl Extension for NextCommandExtension {
-    type Args = NextExtensionArgs;
-    type Retval = NextExtensionRetval;
+pub(crate) struct NextExtApiRetval {}
+pub(crate) struct NextCommandExtApi {}
+impl ExtApi for NextCommandExtApi {
+    type Args = NextExtApiArgs;
+    type Retval = NextExtApiRetval;
 
-    fn run(
-        context: &mut Context,
-        args: &NextExtensionArgs,
-    ) -> Result<NextExtensionRetval, IxaError> {
-        let NextExtensionArgs::Next { next_time } = args;
+    fn run(context: &mut Context, args: &NextExtApiArgs) -> Result<NextExtApiRetval, IxaError> {
+        let NextExtApiArgs::Next { next_time } = args;
         context.schedule_debugger(*next_time);
-        Ok(NextExtensionRetval {})
+        Ok(NextExtApiRetval {})
     }
 }

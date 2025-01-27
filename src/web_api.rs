@@ -2,8 +2,8 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    run_extension, EmptyArgs, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
-    NextCommandExtension, NextExtensionArgs, PopulationExtension,
+    run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs, NextCommandExtApi,
+    NextExtApiArgs, PopulationExtApi,
 };
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
@@ -22,7 +22,7 @@ macro_rules! register_api_handler {
             Box::new(
                 |context, args_json| -> Result<serde_json::Value, IxaError> {
                     let args: $args_type = serde_json::from_value(args_json)?;
-                    let retval = run_extension::<$extension_type>(context, &args)?;
+                    let retval = run_ext_api::<$extension_type>(context, &args)?;
                     Ok(serde_json::to_value(retval)?)
                 },
             ),
@@ -204,25 +204,25 @@ impl ContextWebApiExt for Context {
         register_api_handler!(
             api_data,
             global,
-            GlobalPropertyExtension,
-            GlobalPropertyExtensionArgs,
-            GlobalPropertyExtensionRetval
+            GlobalPropertyExtApi,
+            GlobalPropertyExtApiArgs,
+            GlobalPropertyExtApiRetval
         );
 
         register_api_handler!(
             api_data,
             population,
-            PopulationExtension,
+            PopulationExtApi,
             EmptyArgs,
-            PopulationExtensionRetval
+            PopulationExtApiRetval
         );
 
         register_api_handler!(
             api_data,
             next,
-            NextCommandExtension,
-            NextExtensionArgs,
-            NextExtensionRetval
+            NextCommandExtApi,
+            NextExtApiArgs,
+            NextExtApiRetval
         );
 
         // Record the data container.
