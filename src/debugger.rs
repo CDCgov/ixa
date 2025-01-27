@@ -1,8 +1,7 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::external_api::{
-    population, run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs,
-    GlobalPropertyExtApiRetval, NextCommandExtApi, NextExtApiArgs,
+    global_properties, population, run_ext_api, EmptyArgs, NextCommandExtApi, NextExtApiArgs,
 };
 use crate::Context;
 use crate::IxaError;
@@ -83,19 +82,19 @@ impl DebuggerCommand for PopulationCommand {
 struct GlobalPropertyCommand;
 impl DebuggerCommand for GlobalPropertyCommand {
     fn extend(&self, command: Command) -> Command {
-        GlobalPropertyExtApiArgs::augment_subcommands(command)
+        global_properties::Args::augment_subcommands(command)
     }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = GlobalPropertyExtApiArgs::from_arg_matches(matches).unwrap();
-        let ret = run_ext_api::<GlobalPropertyExtApi>(context, &args);
+        let args = global_properties::Args::from_arg_matches(matches).unwrap();
+        let ret = run_ext_api::<global_properties::Api>(context, &args);
         match ret {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e)))),
             Err(e) => Ok((false, Some(format!("error: {}", e)))),
-            Ok(GlobalPropertyExtApiRetval::List(properties)) => Ok((
+            Ok(global_properties::Retval::List(properties)) => Ok((
                 false,
                 Some(format!(
                     "{} global properties registered:\n{}",
@@ -103,7 +102,7 @@ impl DebuggerCommand for GlobalPropertyCommand {
                     properties.join("\n")
                 )),
             )),
-            Ok(GlobalPropertyExtApiRetval::Value(value)) => Ok((false, Some(value))),
+            Ok(global_properties::Retval::Value(value)) => Ok((false, Some(value))),
         }
     }
 }

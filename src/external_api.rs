@@ -54,49 +54,52 @@ pub(crate) mod population {
     }
 }
 
-pub(crate) struct GlobalPropertyExtApi {}
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum GlobalPropertyExtApiRetval {
-    List(Vec<String>),
-    Value(String),
-}
-#[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
-/// Access global properties
-pub(crate) enum GlobalPropertyExtApiArgsEnum {
-    /// List all global properties
-    List,
+pub(crate) mod global_properties {
+    use crate::context::Context;
+    use crate::global_properties::ContextGlobalPropertiesExt;
+    use crate::IxaError;
+    use clap::{Parser, Subcommand};
+    use serde::{Deserialize, Serialize};
 
-    /// Get the value of a global property
-    Get {
-        /// The property name
-        property: String,
-    },
-}
-#[derive(Parser, Debug, Serialize, Deserialize)]
+    pub(crate) struct Api {}
+    #[derive(Serialize, Deserialize, Debug)]
+    pub(crate) enum Retval {
+        List(Vec<String>),
+        Value(String),
+    }
+    #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
+    /// Access global properties
+    pub(crate) enum ArgsEnum {
+        /// List all global properties
+        List,
 
-pub(crate) enum GlobalPropertyExtApiArgs {
-    #[command(subcommand)]
-    Global(GlobalPropertyExtApiArgsEnum),
-}
-impl ExtApi for GlobalPropertyExtApi {
-    type Args = GlobalPropertyExtApiArgs;
-    type Retval = GlobalPropertyExtApiRetval;
+        /// Get the value of a global property
+        Get {
+            /// The property name
+            property: String,
+        },
+    }
 
-    fn run(
-        context: &mut Context,
-        args: &GlobalPropertyExtApiArgs,
-    ) -> Result<GlobalPropertyExtApiRetval, IxaError> {
-        let GlobalPropertyExtApiArgs::Global(global_args) = args;
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub(crate) enum Args {
+        #[command(subcommand)]
+        Global(ArgsEnum),
+    }
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
 
-        match global_args {
-            GlobalPropertyExtApiArgsEnum::List => Ok(GlobalPropertyExtApiRetval::List(
-                context.list_registered_global_properties(),
-            )),
-            GlobalPropertyExtApiArgsEnum::Get { property: name } => {
-                let output = context.get_serialized_value_by_string(name)?;
-                match output {
-                    Some(value) => Ok(GlobalPropertyExtApiRetval::Value(value)),
-                    None => Err(IxaError::IxaError(format!("Property {name} is not set"))),
+        fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
+            let Args::Global(global_args) = args;
+
+            match global_args {
+                ArgsEnum::List => Ok(Retval::List(context.list_registered_global_properties())),
+                ArgsEnum::Get { property: name } => {
+                    let output = context.get_serialized_value_by_string(name)?;
+                    match output {
+                        Some(value) => Ok(Retval::Value(value)),
+                        None => Err(IxaError::IxaError(format!("Property {name} is not set"))),
+                    }
                 }
             }
         }

@@ -2,8 +2,7 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    population, run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs,
-    NextCommandExtApi, NextExtApiArgs,
+    global_properties, population, run_ext_api, EmptyArgs, NextCommandExtApi, NextExtApiArgs,
 };
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
@@ -204,9 +203,9 @@ impl ContextWebApiExt for Context {
         register_api_handler!(
             api_data,
             global,
-            GlobalPropertyExtApi,
-            GlobalPropertyExtApiArgs,
-            GlobalPropertyExtApiRetval
+            global_properties::Api,
+            global_properties::Args,
+            global_properties::Retval
         );
 
         register_api_handler!(
@@ -214,7 +213,7 @@ impl ContextWebApiExt for Context {
             population,
             population::Api,
             EmptyArgs,
-            population::Api::Retval
+            population::Retval
         );
 
         register_api_handler!(
