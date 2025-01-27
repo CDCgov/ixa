@@ -104,7 +104,6 @@ pub(crate) mod global_properties {
 
 pub(crate) mod next {
     use crate::context::Context;
-    use crate::debugger::ContextDebugExt;
     use crate::IxaError;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
@@ -126,9 +125,34 @@ pub(crate) mod next {
 
         fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
             let Args::Next { next_time } = args;
-            // TODO(cym4@cdc.gov): This should be made general
-            // to handle the Web API.
-            context.schedule_debugger(*next_time);
+            if *next_time < context.get_current_time() {
+                return Err(IxaError::from(format!(
+                    "Breakpoint time {next_time} is in the past"
+                )));
+            }
+            Ok(Retval {})
+        }
+    }
+}
+
+pub(crate) mod r#continue {
+    use crate::context::Context;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {}
+    #[derive(Serialize)]
+    pub(crate) struct Retval {}
+    #[allow(unused)]
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(_context: &mut Context, _args: &Args) -> Result<Retval, IxaError> {
+            // This is a no-op which allows for arg checking.
             Ok(Retval {})
         }
     }

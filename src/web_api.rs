@@ -133,7 +133,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
         }
 
         let handler = handler.unwrap();
-        match handler(context, req.arguments) {
+        match handler(context, req.arguments.clone()) {
             Err(err) => {
                 let _ = req.rx.send(ApiResponse {
                     code: StatusCode::BAD_REQUEST,
@@ -149,6 +149,18 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                 });
             }
         };
+
+        // Special case the functions which require exiting
+        // the loop.
+        if req.cmd == "next" {
+            // This was already type checked in the handler so .unwrap() cannot fail.
+            let next::Args::Next { next_time } = serde_json::from_value(req.arguments).unwrap();
+            context.schedule_web_api(next_time);
+            return;
+        }
+        if req.cmd == "continue" {
+            return;
+        }
     }
 }
 

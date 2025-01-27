@@ -114,8 +114,15 @@ impl DebuggerCommand for NextCommand {
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
         let args = next::Args::from_arg_matches(matches).unwrap();
-        run_ext_api::<next::Api>(context, &args).unwrap();
-        Ok((true, None))
+        match run_ext_api::<next::Api>(context, &args) {
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
+            Ok(_) => {
+                let next::Args::Next { next_time } = args;
+                context.schedule_debugger(next_time);
+                Ok((true, None))
+            }
+            _ => unimplemented!(),
+        }
     }
     fn extend(&self, command: Command) -> Command {
         next::Args::augment_subcommands(command)
