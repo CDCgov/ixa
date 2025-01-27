@@ -191,6 +191,7 @@ impl ContextWebApiExt for Context {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), IxaError>>();
         thread::spawn(move || serve(api_to_ctx_send, port, ready_tx));
         let ready = ready_rx.recv().unwrap();
+        #[allow(clippy::question_mark)]
         if ready.is_err() {
             return ready;
         }
@@ -320,7 +321,7 @@ mod tests {
         // exact match because the return is every defined
         // global property anywhere in the code.
         let res = send_request(
-            &"global",
+            "global",
             &json!({
                 "Global": "List"
             }),
@@ -338,7 +339,7 @@ mod tests {
 
         // Test the global property get API point.
         let res = send_request(
-            &"global",
+            "global",
             &json!({
                 "Global": {
                     "Get" : {

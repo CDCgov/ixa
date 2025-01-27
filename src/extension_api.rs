@@ -82,8 +82,7 @@ impl Extension for GlobalPropertyExtension {
                 context.list_registered_global_properties(),
             )),
             GlobalPropertyExtensionArgsEnum::Get { property: name } => {
-                let output = context.get_serialized_value_by_string(&name)?;
-                println!("{:?}", output);
+                let output = context.get_serialized_value_by_string(name)?;
                 match output {
                     Some(value) => Ok(GlobalPropertyExtensionRetval::Value(value)),
                     None => Err(IxaError::IxaError(format!("Property {name} is not set"))),

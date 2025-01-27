@@ -94,8 +94,8 @@ impl DebuggerCommand for GlobalPropertyCommand {
         let args = GlobalPropertyExtensionArgs::from_arg_matches(matches).unwrap();
         let ret = run_extension::<GlobalPropertyExtension>(context, &args);
         match ret {
-            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e.to_string())))),
-            Err(e) => Ok((false, Some(format!("error: {}", e.to_string())))),
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e)))),
+            Err(e) => Ok((false, Some(format!("error: {}", e)))),
             Ok(GlobalPropertyExtensionRetval::List(properties)) => Ok((
                 false,
                 Some(format!(
