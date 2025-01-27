@@ -54,7 +54,7 @@ impl Debugger {
                 return handler.handle(context, &matches);
             }
             // Unexpected command: print an error
-            return Err(format!("Unknown command: {command}"));
+            return Err(format!("error: Unknown command: {command}"));
         }
 
         unreachable!("subcommand required");
@@ -94,10 +94,9 @@ impl DebuggerCommand for GlobalPropertyCommand {
     ) -> Result<(bool, Option<String>), String> {
         let args = GlobalPropertyExtensionArgs::from_arg_matches(matches).unwrap();
         let ret = run_extension::<GlobalPropertyExtension>(context, &args);
-        println!("{:?}", ret);
         match ret {
-            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("Error: {}", e.to_string())))),
-            Err(e) => Ok((false, Some(format!("Error: {}", e.to_string())))),
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e.to_string())))),
+            Err(e) => Ok((false, Some(format!("error: {}", e.to_string())))),
             Ok(GlobalPropertyExtensionRetval::List(properties)) => Ok((
                 false,
                 Some(format!(
@@ -329,7 +328,7 @@ mod tests {
     fn test_cli_debugger_global_get_unregistered_prop() {
         let context = &mut Context::new();
         let (_quits, output) = process_line("global get NotExist\n", context);
-        assert_eq!(output.unwrap(), "Error: No global property: NotExist");
+        assert_eq!(output.unwrap(), "error: No global property: NotExist");
     }
 
     #[test]
@@ -349,7 +348,7 @@ mod tests {
         let (_quits, output) = process_line("global get ixa.EmptyGlobal\n", context);
         assert_eq!(
             output.unwrap(),
-            "Error: Property ixa.EmptyGlobal is not set"
+            "error: Property ixa.EmptyGlobal is not set"
         );
     }
 
