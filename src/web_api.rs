@@ -85,18 +85,30 @@ async fn process_cmd(
 }
 
 #[tokio::main]
-async fn serve(sender: mpsc::Sender<ApiRequest>) {
+async fn serve(
+    sender: mpsc::Sender<ApiRequest>,
+    port: u16,
+    ready: std::sync::mpsc::Sender<Result<(), IxaError>>,
+) {
     let state = ApiEndpointServer { sender };
+
+    // run our app with Axum, listening globally on port
+    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await;
+    if listener.is_err() {
+        ready
+            .send(Err(IxaError::IxaError(format!("Could not bind to {port}"))))
+            .unwrap();
+        return;
+    }
+
     // build our application with a route
     let app = Router::new()
         .route("/cmd/{command}", post(process_cmd))
         .with_state(state);
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    axum::serve(listener, app).await.unwrap();
+    // Notify the caller that we are ready.
+    ready.send(Ok(())).unwrap();
+    axum::serve(listener.unwrap(), app).await.unwrap();
 }
 
 /// Starts the Web API and pauses execution
@@ -176,7 +188,12 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        thread::spawn(|| serve(api_to_ctx_send));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), IxaError>>();
+        thread::spawn(|| serve(api_to_ctx_send, 3000, ready_tx));
+        let ready = ready_rx.recv().unwrap();
+        if ready.is_err() {
+            return ready;
+        }
 
         let mut api_data = ApiData {
             receiver: api_to_ctx_recv,
@@ -260,7 +277,7 @@ mod tests {
     }
 
     // Send a request and check the response.
-    fn send_request<T: Serialize + ?Sized>(cmd: &str, req: &T) {
+    fn send_request<T: Serialize + ?Sized, U: Serialize + ?Sized>(cmd: &str, req: &T, res: &U) {
         let client = reqwest::blocking::Client::new();
         let response = client
             .post(&format!("http://127.0.0.1:3000/cmd/{cmd}"))
@@ -269,7 +286,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        println!("Response body {:?}", response.text());
+        assert_eq!(
+            serde_json::to_string(res).unwrap(),
+            response.text().unwrap()
+        );
     }
 
     #[test]
@@ -289,9 +309,17 @@ mod tests {
     // "continue". This is the minimum test because if we
     // don't continue, then the simulation just stalls.
     fn web_api_get_population() {
+        #[derive(Serialize)]
+        struct PopulationResponse {
+            population: usize,
+        }
         let mut context = setup_context();
         thread::spawn(|| {
-            send_request(&"population", &"Population");
+            send_request(
+                &"population",
+                &"Population",
+                &PopulationResponse { population: 2 },
+            );
             send_continue();
         });
         context.execute();
