@@ -1,7 +1,7 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::extension_api::{
-    run_extension, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
+    run_extension, EmptyArgs, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
     GlobalPropertyExtensionRetval, NextCommandExtension, NextExtensionArgs, PopulationExtension,
     PopulationExtensionArgs,
 };
@@ -66,12 +66,11 @@ impl DebuggerCommand for PopulationCommand {
     fn handle(
         &self,
         context: &mut Context,
-        matches: &ArgMatches,
+        _matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = PopulationExtensionArgs::from_arg_matches(matches).unwrap();
         let output = format!(
             "{}",
-            run_extension::<PopulationExtension>(context, &args)
+            run_extension::<PopulationExtension>(context, &EmptyArgs {})
                 .unwrap()
                 .population
         );

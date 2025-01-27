@@ -13,6 +13,9 @@ pub(crate) trait Extension {
     fn run(context: &mut Context, args: &Self::Args) -> Result<Self::Retval, IxaError>;
 }
 
+#[derive(Serialize, Deserialize)]
+pub(crate) struct EmptyArgs {}
+
 pub(crate) fn run_extension<T: Extension>(
     context: &mut Context,
     args: &T::Args,
@@ -32,12 +35,12 @@ pub(crate) struct PopulationExtensionRetval {
     pub population: usize,
 }
 impl Extension for PopulationExtension {
-    type Args = PopulationExtensionArgs;
+    type Args = EmptyArgs;
     type Retval = PopulationExtensionRetval;
 
     fn run(
         context: &mut Context,
-        _args: &PopulationExtensionArgs,
+        _args: &EmptyArgs,
     ) -> Result<PopulationExtensionRetval, IxaError> {
         Ok(PopulationExtensionRetval {
             population: context.get_current_population(),

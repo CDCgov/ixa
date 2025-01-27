@@ -2,8 +2,8 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::extension_api::{
-    run_extension, GlobalPropertyExtension, GlobalPropertyExtensionArgs, NextCommandExtension,
-    NextExtensionArgs, PopulationExtension, PopulationExtensionArgs,
+    run_extension, EmptyArgs, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
+    NextCommandExtension, NextExtensionArgs, PopulationExtension,
 };
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
@@ -212,7 +212,7 @@ impl ContextWebApiExt for Context {
             api_data,
             population,
             PopulationExtension,
-            PopulationExtensionArgs,
+            EmptyArgs,
             PopulationExtensionRetval
         );
 
@@ -247,8 +247,11 @@ mod tests {
     use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
     use reqwest::StatusCode;
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
     use std::thread;
+
+    #[derive(Serialize)]
+    struct EmptyArgs {}
 
     define_global_property!(WebApiTestGlobal, String);
 
@@ -314,10 +317,10 @@ mod tests {
             context.execute();
         });
 
-        // Test that the population
+        // Test the population API point.
         send_request(
             &"population",
-            &"Population",
+            &EmptyArgs {},
             &PopulationResponse { population: 2 },
         );
 
