@@ -79,7 +79,7 @@ async fn process_cmd(
 async fn serve(
     sender: mpsc::Sender<ApiRequest>,
     port: u16,
-    ready: std::sync::mpsc::Sender<Result<(), IxaError>>,
+    ready: &std::sync::mpsc::Sender<Result<(), IxaError>>,
 ) {
     let state = ApiEndpointServer { sender };
 
@@ -154,14 +154,13 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
 
 pub trait ContextWebApiExt {
     /// Set up the Web API and start the Web server.
+    ///
+    /// # Errors
+    /// `IxaError` on failure to bind to `port`
     fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError>;
 
     /// Schedule the simulation to pause at time t and listen for
     /// requests from the Web API.
-    ///
-    /// # Errors
-    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
-    /// errors in Ixa are printed to stdout
     fn schedule_web_api(&mut self, t: f64);
 }
 
@@ -179,7 +178,7 @@ impl ContextWebApiExt for Context {
 
         // Start the API server
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), IxaError>>();
-        thread::spawn(move || serve(api_to_ctx_send, port, ready_tx));
+        thread::spawn(move || serve(api_to_ctx_send, port, &ready_tx));
         let ready = ready_rx.recv().unwrap();
         #[allow(clippy::question_mark)]
         if ready.is_err() {
