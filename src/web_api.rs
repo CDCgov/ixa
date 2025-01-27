@@ -1,7 +1,7 @@
 use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
-use crate::extension_api::{
+use crate::external_api::{
     run_extension, EmptyArgs, GlobalPropertyExtension, GlobalPropertyExtensionArgs,
     NextCommandExtension, NextExtensionArgs, PopulationExtension,
 };
