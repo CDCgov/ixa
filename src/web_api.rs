@@ -190,7 +190,8 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        let mut rng = StdRng::seed_from_u64(0);
+        //        let rng = StdRng::from_os_rng();
+        let mut rng = StdRng::from_rng(rand::rngs::OsRng).unwrap();
         let mut random: [u8; 16] = [0; 16];
         rng.fill_bytes(&mut random);
         let secret = uuid::Builder::from_random_bytes(random)
