@@ -55,14 +55,19 @@ pub(crate) enum GlobalPropertyExtensionRetval {
     Value(String),
 }
 #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
+/// Access global properties
 pub(crate) enum GlobalPropertyExtensionArgsEnum {
     /// List all global properties
     List,
 
     /// Get the value of a global property
-    Get { property: String },
+    Get {
+        /// The property name
+        property: String,
+    },
 }
 #[derive(Parser, Debug, Serialize, Deserialize)]
+
 pub(crate) enum GlobalPropertyExtensionArgs {
     #[command(subcommand)]
     Global(GlobalPropertyExtensionArgsEnum),
@@ -95,7 +100,10 @@ impl Extension for GlobalPropertyExtension {
 #[derive(Parser, Debug, Deserialize)]
 pub(crate) enum NextExtensionArgs {
     /// Continue until the given time and then pause again
-    Next { next_time: f64 },
+    Next {
+        /// The time to pause at
+        next_time: f64,
+    },
 }
 #[derive(Serialize)]
 pub(crate) struct NextExtensionRetval {}
