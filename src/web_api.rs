@@ -316,7 +316,9 @@ mod tests {
         let res = send_request(&"population", &json!({}));
         assert_eq!(json!(&PopulationResponse { population: 2 }), res);
 
-        // Test the global property list point
+        // Test the global property list point. We can't do
+        // exact match because the return is every defined
+        // global property anywhere in the code.
         let res = send_request(
             &"global",
             &json!({
@@ -333,6 +335,26 @@ mod tests {
             }
         }
         assert!(found);
+
+        // Test the global property get point.
+        let res = send_request(
+            &"global",
+            &json!({
+                "Global": {
+                    "Get" : {
+                        "property" : "ixa.WebApiTestGlobal"
+                    }
+                }
+            }),
+        );
+        // The extra quotes here are because we internally JSONify.
+        // TODO(cym4@cdc.gov): Should we fix this internally?
+        assert_eq!(
+            res,
+            json!({
+                "Value": "\"foobar\""
+            })
+        );
 
         // Test continue and make sure that the context
         // exits.
