@@ -104,7 +104,7 @@ async fn serve(
 
 /// Starts the Web API, pausing execution until instructed
 /// to continue.
-fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaError> {
+fn handle_web_api(context: &mut Context, api: &mut ApiData) {
     loop {
         let req = api.receiver.blocking_recv();
 
@@ -150,8 +150,6 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
             }
         };
     }
-
-    Ok(())
 }
 
 pub trait ContextWebApiExt {
@@ -220,8 +218,7 @@ impl ContextWebApiExt for Context {
     fn schedule_web_api(&mut self, t: f64) {
         self.add_plan(t, |context| {
             run_with_plugin::<ApiPlugin>(context, |context, data_container| {
-                handle_web_api(context, data_container.as_mut().unwrap())
-                    .expect("Error in Web API");
+                handle_web_api(context, data_container.as_mut().unwrap());
             });
         });
     }
@@ -267,7 +264,7 @@ mod tests {
     fn send_request<T: Serialize + ?Sized>(cmd: &str, req: &T) -> serde_json::Value {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .post(&format!("http://127.0.0.1:33339/cmd/{cmd}"))
+            .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
             .json(req)
             .send()
             .unwrap();
@@ -299,7 +296,7 @@ mod tests {
         });
 
         // Test the population API point.
-        let res = send_request(&"population", &json!({}));
+        let res = send_request("population", &json!({}));
         assert_eq!(json!(&PopulationResponse { population: 2 }), res);
 
         // Test the global property list point. We can't do

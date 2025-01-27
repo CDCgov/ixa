@@ -90,8 +90,8 @@ impl DebuggerCommand for GlobalPropertyCommand {
         let args = global_properties::Args::from_arg_matches(matches).unwrap();
         let ret = run_ext_api::<global_properties::Api>(context, &args);
         match ret {
-            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {}", e)))),
-            Err(e) => Ok((false, Some(format!("error: {}", e)))),
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
+            Err(e) => Ok((false, Some(format!("error: {e}")))),
             Ok(global_properties::Retval::List(properties)) => Ok((
                 false,
                 Some(format!(

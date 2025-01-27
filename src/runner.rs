@@ -146,9 +146,10 @@ where
 
     // If a breakpoint is provided, stop at that time
     if let Some(t) = args.debugger {
-        if args.web.is_some() {
-            panic!("Cannot run with both the debugger and the Web API");
-        }
+        assert!(
+            args.web.is_none(),
+            "Cannot run with both the debugger and the Web API"
+        );
         context.schedule_debugger(t.unwrap_or(0.0));
     }
 
