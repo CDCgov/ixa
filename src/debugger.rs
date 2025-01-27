@@ -4,7 +4,7 @@ use crate::Context;
 use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
 use crate::IxaError;
-use clap::{ArgMatches, Command, FromArgMatches as _, Parser, Subcommand};
+use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
 use std::collections::HashMap;
