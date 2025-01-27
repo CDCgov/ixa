@@ -164,7 +164,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
 
 pub trait ContextWebApiExt {
     /// Set up the Web API and start the Web server.
-    fn setup_web_api(&mut self) -> Result<(), IxaError>;
+    fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError>;
 
     /// Schedule the simulation to pause at time t and listen for
     /// requests from the Web API.
@@ -176,7 +176,7 @@ pub trait ContextWebApiExt {
 }
 
 impl ContextWebApiExt for Context {
-    fn setup_web_api(&mut self) -> Result<(), IxaError> {
+    fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError> {
         // TODO(cym4@cdc.gov): Check on the limits here.
         let (api_to_ctx_send, api_to_ctx_recv) = mpsc::channel::<ApiRequest>(32);
 
@@ -189,7 +189,7 @@ impl ContextWebApiExt for Context {
 
         // Start the API server
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), IxaError>>();
-        thread::spawn(|| serve(api_to_ctx_send, 3000, ready_tx));
+        thread::spawn(move || serve(api_to_ctx_send, port, ready_tx));
         let ready = ready_rx.recv().unwrap();
         if ready.is_err() {
             return ready;
@@ -254,7 +254,7 @@ mod tests {
 
     fn setup_context() -> Context {
         let mut context = Context::new();
-        context.setup_web_api().unwrap();
+        context.setup_web_api(3000).unwrap();
         context.schedule_web_api(0.0);
         context
             .set_global_property_value(WebApiTestGlobal, "foobar".to_string())

@@ -146,14 +146,15 @@ where
 
     // If a breakpoint is provided, stop at that time
     if let Some(t) = args.debugger {
+        if args.web.is_some() {
+            panic!("Cannot run with both the debugger and the Web API");
+        }
         context.schedule_debugger(t.unwrap_or(0.0));
     }
 
     // If the Web API is provided, stop there.
-    // TODO(cym4@cdc.gov): Do something to avoid both
-    // the Web API and the debugger being started.
     if let Some(t) = args.web {
-        context.setup_web_api().unwrap();
+        context.setup_web_api(33334).unwrap();
         context.schedule_web_api(t.unwrap_or(0.0));
     }
 
