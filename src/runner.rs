@@ -36,7 +36,7 @@ pub struct BaseArgs {
 
     /// Enable the Web API at a given time. Defaults to t=0.0
     #[arg(short, long)]
-    pub web: Option<Option<f64>>,
+    pub web: Option<Option<u16>>,
 }
 impl BaseArgs {
     fn new() -> Self {
@@ -154,8 +154,10 @@ where
 
     // If the Web API is provided, stop there.
     if let Some(t) = args.web {
-        context.setup_web_api(33334).unwrap();
-        context.schedule_web_api(t.unwrap_or(0.0));
+        let port = t.unwrap_or(33334);
+        context.setup_web_api(port).unwrap();
+        println!("Web API active on port {port}");
+        context.schedule_web_api(0.0);
     }
 
     // Run the provided Fn

@@ -38,12 +38,13 @@ define_data_plugin!(ApiPlugin, Option<ApiData>, None);
 struct ApiRequest {
     cmd: String,
     arguments: serde_json::Value,
+    // This channel is used to send the response.
     rx: oneshot::Sender<ApiResponse>,
 }
 
 // Output of the API handler.
 struct ApiResponse {
-    success: bool,
+    code: StatusCode,
     response: serde_json::Value,
 }
 
@@ -69,14 +70,7 @@ async fn process_cmd(
         .await;
 
     match rx.await {
-        Ok(ApiResponse {
-            success: true,
-            response,
-        }) => (StatusCode::OK, Json(response)),
-        Ok(ApiResponse {
-            success: false,
-            response,
-        }) => (StatusCode::BAD_REQUEST, Json(response)),
+        Ok(response) => (response.code, Json(response.response)),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({}))),
     }
 }
@@ -89,7 +83,7 @@ async fn serve(
 ) {
     let state = ApiEndpointServer { sender };
 
-    // run our app with Axum, listening globally on port
+    // run our app with Axum, listening on `port`
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await;
     if listener.is_err() {
         ready
@@ -108,7 +102,8 @@ async fn serve(
     axum::serve(listener.unwrap(), app).await.unwrap();
 }
 
-/// Starts the Web API and pauses execution
+/// Starts the Web API, pausing execution until instructed
+/// to continue.
 fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaError> {
     loop {
         let req = api.receiver.blocking_recv();
@@ -120,7 +115,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
         let req = req.unwrap();
         if req.cmd == "continue" {
             let _ = req.rx.send(ApiResponse {
-                success: true,
+                code: StatusCode::OK,
                 response: json!({}),
             });
             break;
@@ -129,7 +124,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
         let handler = api.handlers.get(&req.cmd);
         if handler.is_none() {
             let _ = req.rx.send(ApiResponse {
-                success: false,
+                code: StatusCode::NOT_FOUND,
                 response: json!({
                     "error" : format!("No command {}", req.cmd)
                 }),
@@ -141,7 +136,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
         match handler(context, req.arguments) {
             Err(err) => {
                 let _ = req.rx.send(ApiResponse {
-                    success: false,
+                    code: StatusCode::BAD_REQUEST,
                     response: json!({
                         "error" : err.to_string()
                     }),
@@ -149,7 +144,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) -> Result<(), IxaErr
             }
             Ok(response) => {
                 let _ = req.rx.send(ApiResponse {
-                    success: true,
+                    code: StatusCode::OK,
                     response,
                 });
             }
@@ -225,7 +220,6 @@ impl ContextWebApiExt for Context {
     fn schedule_web_api(&mut self, t: f64) {
         self.add_plan(t, |context| {
             run_with_plugin::<ApiPlugin>(context, |context, data_container| {
-                println!("Paused in Web API");
                 handle_web_api(context, data_container.as_mut().unwrap())
                     .expect("Error in Web API");
             });
