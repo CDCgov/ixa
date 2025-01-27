@@ -336,7 +336,7 @@ mod tests {
         }
         assert!(found);
 
-        // Test the global property get point.
+        // Test the global property get API point.
         let res = send_request(
             &"global",
             &json!({
