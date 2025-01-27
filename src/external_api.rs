@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::debugger::ContextDebugExt;
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
-use crate::people::ContextPeopleExt;
+
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
@@ -23,25 +23,34 @@ pub(crate) fn run_ext_api<T: ExtApi>(
     T::run(context, args)
 }
 
-pub(crate) struct PopulationExtApi {}
-#[derive(Parser, Debug, Deserialize)]
-pub(crate) enum PopulationExtApiArgs {
-    /// Get the total number of people
-    Population,
-}
+pub(crate) mod population {
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::people::ContextPeopleExt;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
-pub(crate) struct PopulationExtApiRetval {
-    pub population: usize,
-}
-impl ExtApi for PopulationExtApi {
-    type Args = EmptyArgs;
-    type Retval = PopulationExtApiRetval;
+    pub(crate) struct Api {}
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {
+        /// Get the total number of people
+        Population,
+    }
 
-    fn run(context: &mut Context, _args: &EmptyArgs) -> Result<PopulationExtApiRetval, IxaError> {
-        Ok(PopulationExtApiRetval {
-            population: context.get_current_population(),
-        })
+    #[derive(Serialize)]
+    pub(crate) struct Retval {
+        pub population: usize,
+    }
+    impl super::ExtApi for Api {
+        type Args = super::EmptyArgs;
+        type Retval = Retval;
+
+        fn run(context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
+            Ok(Retval {
+                population: context.get_current_population(),
+            })
+        }
     }
 }
 

@@ -1,9 +1,8 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::external_api::{
-    run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs,
-    GlobalPropertyExtApiRetval, NextCommandExtApi, NextExtApiArgs, PopulationExtApi,
-    PopulationExtApiArgs,
+    population, run_ext_api, EmptyArgs, GlobalPropertyExtApi, GlobalPropertyExtApiArgs,
+    GlobalPropertyExtApiRetval, NextCommandExtApi, NextExtApiArgs,
 };
 use crate::Context;
 use crate::IxaError;
@@ -70,14 +69,14 @@ impl DebuggerCommand for PopulationCommand {
     ) -> Result<(bool, Option<String>), String> {
         let output = format!(
             "{}",
-            run_ext_api::<PopulationExtApi>(context, &EmptyArgs {})
+            run_ext_api::<population::Api>(context, &EmptyArgs {})
                 .unwrap()
                 .population
         );
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
-        PopulationExtApiArgs::augment_subcommands(command)
+        population::Args::augment_subcommands(command)
     }
 }
 
