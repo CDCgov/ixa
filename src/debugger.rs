@@ -4,11 +4,14 @@ use crate::Context;
 use crate::ContextGlobalPropertiesExt;
 use crate::ContextPeopleExt;
 use crate::IxaError;
+use crate::{
+    disable_logging, enable_logging, set_log_level, set_module_filter, trace, LevelFilter,
+};
 use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
 use rustyline;
 
-use log::trace;
+use crate::log::remove_module_filter;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -134,6 +137,96 @@ impl DebuggerCommand for GlobalPropertyCommand {
     }
 }
 
+struct LoggingCommand;
+impl DebuggerCommand for LoggingCommand {
+    fn about(&self) -> &'static str {
+        "Configure global logging"
+    }
+    fn extend(&self, subcommand: Command) -> Command {
+        subcommand
+            .subcommand_required(true)
+            .subcommand(Command::new("enable").about("Enable global logging"))
+            .subcommand(Command::new("disable").about("Disable global logging"))
+            .subcommand(
+                Command::new("set_level")
+                    .about("Set global logging level")
+                    .arg(
+                        Arg::new("level")
+                            .help("The new global log level")
+                            .value_parser(value_parser!(LevelFilter))
+                            .required(true),
+                    ),
+            )
+            .subcommand(
+                Command::new("filter")
+                    .about("Apply a log level filter for a specific module")
+                    .arg(
+                        Arg::new("module")
+                            .help("The module to apply the level filter to")
+                            .value_parser(value_parser!(String))
+                            .required(true),
+                    )
+                    .arg(
+                        Arg::new("level")
+                            .help("The log level for the specified module")
+                            .value_parser(value_parser!(LevelFilter)) // Parsing LevelFilter
+                            .required(true),
+                    ),
+            )
+            .subcommand(
+                Command::new("remove_filter")
+                    .about("Remove any log level filter for a specific module")
+                    .arg(
+                        Arg::new("module")
+                            .help("The module to remove the level filter for")
+                            .value_parser(value_parser!(String))
+                            .required(true),
+                    ),
+            )
+    }
+
+    fn handle(
+        &self,
+        _context: &mut Context,
+        matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        match matches.subcommand() {
+            Some(("enable", _)) => {
+                enable_logging();
+                Ok((false, Some("Logging enabled.".to_string())))
+            }
+            Some(("disable", _)) => {
+                disable_logging();
+                Ok((false, Some("Logging disabled.".to_string())))
+            }
+            Some(("set_level", m)) => {
+                let level = m.get_one::<LevelFilter>("level").unwrap();
+                set_log_level(*level);
+                Ok((false, Some(format!("Global log level set to {level:?}"))))
+            }
+            Some(("filter", m)) => {
+                let module = m.get_one::<String>("module").unwrap();
+                let level = m.get_one::<LevelFilter>("level").unwrap();
+                set_module_filter(module, *level);
+                Ok((
+                    false,
+                    Some(format!("Module {module} log level filter set to {level:?}")),
+                ))
+            }
+            Some(("remove_filter", m)) => {
+                let module = m.get_one::<String>("module").unwrap();
+                remove_module_filter(module);
+                Ok((
+                    false,
+                    Some(format!("Module {module} log level filter removed")),
+                ))
+            }
+            // Handle unknown subcommand error (this won't be reached due to subcommand_required(true))
+            _ => unimplemented!("subcommand required"),
+        }
+    }
+}
+
 /// Adds a new debugger breakpoint at t
 struct NextCommand;
 impl DebuggerCommand for NextCommand {
@@ -159,6 +252,26 @@ impl DebuggerCommand for NextCommand {
     }
 }
 
+/// Adds a new debugger breakpoint at t
+struct StepCommand;
+impl DebuggerCommand for StepCommand {
+    fn about(&self) -> &'static str {
+        "Execute the next callback or plan on the queue and then pause again"
+    }
+    fn extend(&self, subcommand: Command) -> Command {
+        subcommand
+    }
+
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        context.step();
+        Ok((false, None))
+    }
+}
+
 /// Exits the debugger and continues the simulation
 struct ContinueCommand;
 impl DebuggerCommand for ContinueCommand {
@@ -174,6 +287,22 @@ impl DebuggerCommand for ContinueCommand {
     }
 }
 
+/// Exits the debugger and continues the simulation
+struct HaltCommand;
+impl DebuggerCommand for HaltCommand {
+    fn about(&self) -> &'static str {
+        "Halt the simulation and exit Ixa"
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        context.shutdown();
+        Ok((true, Some(String::from("Exiting Ixa"))))
+    }
+}
+
 // Build the debugger context.
 fn init(context: &mut Context) {
     let debugger = context.get_data_container_mut(DebuggerPlugin);
@@ -182,8 +311,11 @@ fn init(context: &mut Context) {
         let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
         commands.insert("population", Box::new(PopulationCommand));
         commands.insert("next", Box::new(NextCommand));
+        commands.insert("step", Box::new(StepCommand));
         commands.insert("continue", Box::new(ContinueCommand));
         commands.insert("global", Box::new(GlobalPropertyCommand));
+        commands.insert("log", Box::new(LoggingCommand));
+        commands.insert("halt", Box::new(HaltCommand));
 
         let mut cli = Command::new("repl")
             .multicall(true)

@@ -288,24 +288,29 @@ impl Context {
             if self.shutdown_requested {
                 break;
             }
+            self.step();
+        }
+    }
 
-            // If there is a callback, run it.
-            if let Some(callback) = self.callback_queue.pop_front() {
-                trace!("calling callback");
-                callback(self);
-                continue;
-            }
+    /// Executes exactly one callback or plan.
+    #[inline]
+    pub fn step(&mut self) {
+        // If there is a callback, run it.
+        if let Some(callback) = self.callback_queue.pop_front() {
+            trace!("calling callback");
+            callback(self);
+            return;
+        }
 
-            // There aren't any callbacks, so look at the first plan.
-            if let Some(plan) = self.plan_queue.get_next_plan() {
-                trace!("calling plan at {}", plan.time);
-                self.current_time = plan.time;
-                (plan.data)(self);
-            } else {
-                trace!("No callbacks or plans; exiting event loop");
-                // OK, there aren't any plans, so we're done.
-                break;
-            }
+        // There aren't any callbacks, so look at the first plan.
+        if let Some(plan) = self.plan_queue.get_next_plan() {
+            trace!("calling plan at {}", plan.time);
+            self.current_time = plan.time;
+            (plan.data)(self);
+        } else {
+            trace!("No callbacks or plans; exiting event loop");
+            // OK, there aren't any plans, so we're done.
+            self.shutdown_requested = true;
         }
     }
 }
