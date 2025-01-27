@@ -1,8 +1,6 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::external_api::{
-    global_properties, population, run_ext_api, EmptyArgs, NextCommandExtApi, NextExtApiArgs,
-};
+use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
 use crate::Context;
 use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
@@ -115,12 +113,12 @@ impl DebuggerCommand for NextCommand {
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = NextExtApiArgs::from_arg_matches(matches).unwrap();
-        run_ext_api::<NextCommandExtApi>(context, &args).unwrap();
+        let args = next::Args::from_arg_matches(matches).unwrap();
+        run_ext_api::<next::Api>(context, &args).unwrap();
         Ok((true, None))
     }
     fn extend(&self, command: Command) -> Command {
-        NextExtApiArgs::augment_subcommands(command)
+        next::Args::augment_subcommands(command)
     }
 }
 

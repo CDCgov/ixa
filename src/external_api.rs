@@ -1,9 +1,5 @@
 use crate::context::Context;
-use crate::debugger::ContextDebugExt;
 use crate::error::IxaError;
-use crate::global_properties::ContextGlobalPropertiesExt;
-
-use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
 pub(crate) trait ExtApi {
@@ -106,24 +102,34 @@ pub(crate) mod global_properties {
     }
 }
 
-#[derive(Parser, Debug, Deserialize)]
-pub(crate) enum NextExtApiArgs {
-    /// Continue until the given time and then pause again
-    Next {
-        /// The time to pause at
-        next_time: f64,
-    },
-}
-#[derive(Serialize)]
-pub(crate) struct NextExtApiRetval {}
-pub(crate) struct NextCommandExtApi {}
-impl ExtApi for NextCommandExtApi {
-    type Args = NextExtApiArgs;
-    type Retval = NextExtApiRetval;
+pub(crate) mod next {
+    use crate::context::Context;
+    use crate::debugger::ContextDebugExt;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
 
-    fn run(context: &mut Context, args: &NextExtApiArgs) -> Result<NextExtApiRetval, IxaError> {
-        let NextExtApiArgs::Next { next_time } = args;
-        context.schedule_debugger(*next_time);
-        Ok(NextExtApiRetval {})
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {
+        /// Continue until the given time and then pause again
+        Next {
+            /// The time to pause at
+            next_time: f64,
+        },
+    }
+    #[derive(Serialize)]
+    pub(crate) struct Retval {}
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
+            let Args::Next { next_time } = args;
+            // TODO(cym4@cdc.gov): This should be made general
+            // to handle the Web API.
+            context.schedule_debugger(*next_time);
+            Ok(Retval {})
+        }
     }
 }
