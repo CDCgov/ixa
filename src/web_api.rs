@@ -4,6 +4,7 @@ use crate::error::IxaError;
 use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
+use rand::RngCore;
 use serde_json::json;
 use std::collections::HashMap;
 use std::thread;
@@ -63,7 +64,6 @@ async fn process_cmd(
     Json(payload): Json<serde_json::Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let (tx, rx) = oneshot::channel::<ApiResponse>();
-
     let _ = state.sender.send(ApiRequest {
         cmd: path,
         arguments: payload,
@@ -80,7 +80,8 @@ async fn process_cmd(
 async fn serve(
     sender: mpsc::UnboundedSender<ApiRequest>,
     port: u16,
-    ready: oneshot::Sender<Result<(), IxaError>>,
+    prefix: &str,
+    ready: oneshot::Sender<Result<String, IxaError>>,
 ) {
     let state = ApiEndpointServer { sender };
 
@@ -95,11 +96,13 @@ async fn serve(
 
     // build our application with a route
     let app = Router::new()
-        .route("/cmd/{command}", post(process_cmd))
+        .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
         .with_state(state);
 
     // Notify the caller that we are ready.
-    ready.send(Ok(())).unwrap();
+    ready
+        .send(Ok(format!("http://127.0.0.1:{port}/{prefix}/")))
+        .unwrap();
     axum::serve(listener.unwrap(), app).await.unwrap();
 }
 
@@ -164,7 +167,7 @@ pub trait ContextWebApiExt {
     ///
     /// # Errors
     /// `IxaError` on failure to bind to `port`
-    fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError>;
+    fn setup_web_api(&mut self, port: u16) -> Result<String, IxaError>;
 
     /// Schedule the simulation to pause at time t and listen for
     /// requests from the Web API.
@@ -172,7 +175,7 @@ pub trait ContextWebApiExt {
 }
 
 impl ContextWebApiExt for Context {
-    fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError> {
+    fn setup_web_api(&mut self, port: u16) -> Result<String, IxaError> {
         // TODO(cym4@cdc.gov): Check on the limits here.
         let (api_to_ctx_send, api_to_ctx_recv) = mpsc::unbounded_channel::<ApiRequest>();
 
@@ -184,13 +187,15 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        let (ready_tx, ready_rx) = oneshot::channel::<Result<(), IxaError>>();
-        thread::spawn(move || serve(api_to_ctx_send, port, ready_tx));
-        let ready = ready_rx.blocking_recv().unwrap();
-        #[allow(clippy::question_mark)]
-        if ready.is_err() {
-            return ready;
-        }
+        let mut random: [u8; 16] = [0; 16];
+        rand::rngs::OsRng.fill_bytes(&mut random);
+        let secret = uuid::Builder::from_random_bytes(random)
+            .into_uuid()
+            .to_string();
+
+        let (ready_tx, ready_rx) = oneshot::channel::<Result<String, IxaError>>();
+        thread::spawn(move || serve(api_to_ctx_send, port, &secret, ready_tx));
+        let url = ready_rx.blocking_recv().unwrap()?;
 
         let mut api_data = ApiData {
             receiver: api_to_ctx_recv,
@@ -207,7 +212,7 @@ impl ContextWebApiExt for Context {
         // Record the data container.
         *data_container = Some(api_data);
 
-        Ok(())
+        Ok(url)
     }
 
     fn schedule_web_api(&mut self, t: f64) {
@@ -231,48 +236,47 @@ mod tests {
 
     define_global_property!(WebApiTestGlobal, String);
 
-    fn setup_context() -> Context {
+    fn setup() -> (String, Context) {
         let mut context = Context::new();
-        context.setup_web_api(33339).unwrap();
+        let url = context.setup_web_api(33339).unwrap();
         context.schedule_web_api(0.0);
         context
             .set_global_property_value(WebApiTestGlobal, "foobar".to_string())
             .unwrap();
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
-        context
+        (url, context)
     }
 
     // Continue the simulation. Note that we don't wait for a response
     // because there is a race condition between sending the final
     // response and program termination.
-    fn send_continue() {
+    fn send_continue(url: &str) {
         let client = reqwest::blocking::Client::new();
         client
-            .post("http://127.0.0.1:33339/cmd/continue")
+            .post(format!("{url}cmd/continue"))
             .json(&{})
             .send()
             .unwrap();
     }
 
     // Send a request and check the response.
-    fn send_request<T: Serialize + ?Sized>(cmd: &str, req: &T) -> serde_json::Value {
+    fn send_request<T: Serialize + ?Sized>(url: &str, cmd: &str, req: &T) -> serde_json::Value {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
+            .post(format!("{url}cmd/{cmd}"))
             .json(req)
             .send()
             .unwrap();
-
         assert_eq!(response.status(), StatusCode::OK);
         response.json().unwrap()
     }
 
     // Send a request and check the response.
-    fn send_request_text(cmd: &str, req: String) -> reqwest::blocking::Response {
+    fn send_request_text(url: &str, cmd: &str, req: String) -> reqwest::blocking::Response {
         let client = reqwest::blocking::Client::new();
         client
-            .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
+            .post(format!("{url}cmd/{cmd}"))
             .header("Content-Type", "application/json")
             .body(req)
             .send()
@@ -296,19 +300,23 @@ mod tests {
         // then the test will stall instead of
         // erroring out, but there's nothing that
         // should fail here.
-        let ctx_thread = thread::spawn(|| {
-            let mut context = setup_context();
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let ctx_thread = thread::spawn(move || {
+            let (url, mut context) = setup();
+            let _ = tx.send(url);
             context.execute();
         });
 
+        let url = rx.recv().unwrap();
         // Test the population API point.
-        let res = send_request("population", &json!({}));
+        let res = send_request(&url, "population", &json!({}));
         assert_eq!(json!(&PopulationResponse { population: 2 }), res);
 
         // Test the global property list point. We can't do
         // exact match because the return is every defined
         // global property anywhere in the code.
         let res = send_request(
+            &url,
             "global",
             &json!({
                 "Global": "List"
@@ -327,6 +335,7 @@ mod tests {
 
         // Test the global property get API point.
         let res = send_request(
+            &url,
             "global",
             &json!({
                 "Global": {
@@ -347,6 +356,7 @@ mod tests {
 
         // Test the global property get API point.
         let res = send_request(
+            &url,
             "next",
             &json!({
                 "Next": {
@@ -358,18 +368,19 @@ mod tests {
 
         // Valid JSON but wrong type.
         let res = send_request_text(
+            &url,
             "next",
             String::from("{\"Next\": {\"next_time\" : \"invalid\"}}"),
         );
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Invalid JSON.
-        let res = send_request_text("next", String::from("{]"));
+        let res = send_request_text(&url, "next", String::from("{]"));
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Test continue and make sure that the context
         // exits.
-        send_continue();
+        send_continue(&url);
         let _ = ctx_thread.join();
     }
 }
