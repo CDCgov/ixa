@@ -105,14 +105,7 @@ async fn serve(
 /// Starts the Web API, pausing execution until instructed
 /// to continue.
 fn handle_web_api(context: &mut Context, api: &mut ApiData) {
-    loop {
-        let req = api.receiver.blocking_recv();
-
-        if req.is_none() {
-            continue;
-        }
-
-        let req = req.unwrap();
+    while let Some(req) = api.receiver.blocking_recv() {
         if req.cmd == "continue" {
             let _ = req.rx.send(ApiResponse {
                 code: StatusCode::OK,
