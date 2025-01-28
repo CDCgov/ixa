@@ -280,13 +280,12 @@ mod tests {
     // Send a request and check the response.
     fn send_request_text(cmd: &str, req: String) -> reqwest::blocking::Response {
         let client = reqwest::blocking::Client::new();
-        let response = client
+        client
             .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
             .header("Content-Type", "application/json")
             .body(req)
             .send()
-            .unwrap();
-        response
+            .unwrap()
     }
 
     // We do all of the tests in one test block to avoid having to
