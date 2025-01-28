@@ -32,7 +32,7 @@ fn register_api_handler<
 }
 
 struct ApiData {
-    receiver: mpsc::Receiver<ApiRequest>,
+    receiver: mpsc::UnboundedReceiver<ApiRequest>,
     handlers: HashMap<String, Box<ApiHandler>>,
 }
 
@@ -54,7 +54,7 @@ struct ApiResponse {
 
 #[derive(Clone)]
 struct ApiEndpointServer {
-    sender: mpsc::Sender<ApiRequest>,
+    sender: mpsc::UnboundedSender<ApiRequest>,
 }
 
 async fn process_cmd(
@@ -64,14 +64,11 @@ async fn process_cmd(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let (tx, rx) = oneshot::channel::<ApiResponse>();
 
-    let _ = state
-        .sender
-        .send(ApiRequest {
-            cmd: path,
-            arguments: payload,
-            rx: tx,
-        })
-        .await;
+    let _ = state.sender.send(ApiRequest {
+        cmd: path,
+        arguments: payload,
+        rx: tx,
+    });
 
     match rx.await {
         Ok(response) => (response.code, Json(response.response)),
@@ -81,9 +78,9 @@ async fn process_cmd(
 
 #[tokio::main]
 async fn serve(
-    sender: mpsc::Sender<ApiRequest>,
+    sender: mpsc::UnboundedSender<ApiRequest>,
     port: u16,
-    ready: &std::sync::mpsc::Sender<Result<(), IxaError>>,
+    ready: oneshot::Sender<Result<(), IxaError>>,
 ) {
     let state = ApiEndpointServer { sender };
 
@@ -177,7 +174,7 @@ pub trait ContextWebApiExt {
 impl ContextWebApiExt for Context {
     fn setup_web_api(&mut self, port: u16) -> Result<(), IxaError> {
         // TODO(cym4@cdc.gov): Check on the limits here.
-        let (api_to_ctx_send, api_to_ctx_recv) = mpsc::channel::<ApiRequest>(32);
+        let (api_to_ctx_send, api_to_ctx_recv) = mpsc::unbounded_channel::<ApiRequest>();
 
         let data_container = self.get_data_container_mut(ApiPlugin);
         if data_container.is_some() {
@@ -187,9 +184,9 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), IxaError>>();
-        thread::spawn(move || serve(api_to_ctx_send, port, &ready_tx));
-        let ready = ready_rx.recv().unwrap();
+        let (ready_tx, ready_rx) = oneshot::channel::<Result<(), IxaError>>();
+        thread::spawn(move || serve(api_to_ctx_send, port, ready_tx));
+        let ready = ready_rx.blocking_recv().unwrap();
         #[allow(clippy::question_mark)]
         if ready.is_err() {
             return ready;
