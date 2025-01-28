@@ -83,33 +83,9 @@ use std::{
     cell::{Ref, RefCell, RefMut},
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
-    hash::{Hash, Hasher},
+    hash::Hash,
     iter::Iterator,
 };
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-// The lookup key for entries in the index. This is a serialized
-// version of the value. If that serialization fits in 128 bits, we
-// store it in Fixed to avoid the allocation of the Vec. Otherwise it
-// goes in Variable.
-#[doc(hidden)]
-pub enum IndexValue {
-    Fixed(u128),
-    Variable(Vec<u8>),
-}
-
-impl IndexValue {
-    pub fn compute<T: Hash>(val: &T) -> IndexValue {
-        let mut hasher = IndexValueHasher::new();
-        val.hash(&mut hasher);
-        if hasher.buf.len() <= 16 {
-            let mut tmp: [u8; 16] = [0; 16];
-            tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
-            return IndexValue::Fixed(u128::from_le_bytes(tmp));
-        }
-        IndexValue::Variable(hasher.buf)
-    }
-}
 
 /// Encapsulates a person query.
 ///
@@ -176,98 +152,6 @@ macro_rules! impl_query {
 seq!(Z in 1..20 {
     impl_query!(Z);
 });
-
-// Implementation of the Hasher interface for IndexValue, used
-// for serialization. We're actually abusing this interface
-// because you can't call finish().
-struct IndexValueHasher {
-    buf: Vec<u8>,
-}
-
-impl IndexValueHasher {
-    fn new() -> Self {
-        IndexValueHasher { buf: Vec::new() }
-    }
-}
-
-impl Hasher for IndexValueHasher {
-    fn write(&mut self, bytes: &[u8]) {
-        self.buf.extend_from_slice(bytes);
-    }
-
-    fn finish(&self) -> u64 {
-        panic!("Unimplemented")
-    }
-}
-
-type PersonCallback<T> = dyn Fn(&Context, PersonId) -> T;
-
-// An index for a single property.
-struct Index {
-    // Primarily for debugging purposes
-    #[allow(dead_code)]
-    name: &'static str,
-    // The hash of the property value maps to a list of PersonIds
-    // or None if we're not indexing
-    lookup: Option<HashMap<IndexValue, (String, HashSet<PersonId>)>>,
-    // A callback that calculates the IndexValue of a person's current property value
-    indexer: Box<PersonCallback<IndexValue>>,
-    // A callback that calculates the display value of a person's current property value
-    get_display: Box<PersonCallback<String>>,
-    // The largest person ID that has been indexed. Used so that we
-    // can lazily index when a person is added.
-    max_indexed: usize,
-}
-
-impl Index {
-    fn new<T: PersonProperty + 'static>(_context: &Context, property: T) -> Self {
-        Self {
-            name: std::any::type_name::<T>(),
-            lookup: None,
-            indexer: Box::new(move |context: &Context, person_id: PersonId| {
-                let value = context.get_person_property(person_id, property);
-                IndexValue::compute(&value)
-            }),
-            get_display: Box::new(move |context: &Context, person_id: PersonId| {
-                let value = context.get_person_property(person_id, property);
-                format!("{value:?}")
-            }),
-            max_indexed: 0,
-        }
-    }
-
-    fn add_person(&mut self, context: &Context, person_id: PersonId) {
-        let hash = (self.indexer)(context, person_id);
-        self.lookup
-            .as_mut()
-            .unwrap()
-            .entry(hash)
-            .or_insert_with(|| ((self.get_display)(context, person_id), HashSet::new()))
-            .1
-            .insert(person_id);
-    }
-    fn remove_person(&mut self, context: &Context, person_id: PersonId) {
-        let hash = (self.indexer)(context, person_id);
-        if let Some(entry) = self.lookup.as_mut().unwrap().get_mut(&hash) {
-            entry.1.remove(&person_id);
-            // Clean up the entry if there are no people
-            if entry.0.is_empty() {
-                self.lookup.as_mut().unwrap().remove(&hash);
-            }
-        }
-    }
-    fn index_unindexed_people(&mut self, context: &Context) {
-        if self.lookup.is_none() {
-            return;
-        }
-        let current_pop = context.get_current_population();
-        for id in self.max_indexed..current_pop {
-            let person_id = PersonId(id);
-            self.add_person(context, person_id);
-        }
-        self.max_indexed = current_pop;
-    }
-}
 
 // PeopleData represents each unique person in the simulation with an id ranging
 // from 0 to population - 1. Person properties are associated with a person
@@ -632,6 +516,9 @@ macro_rules! define_derived_property {
 }
 
 pub use define_person_property;
+use index::{Index, IndexValue};
+
+mod index;
 
 impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
@@ -873,41 +760,6 @@ pub trait ContextPeopleExt {
     ) -> Result<PersonId, IxaError>
     where
         R::RngType: Rng;
-}
-
-fn process_indices(
-    context: &Context,
-    remaining_indices: &[&Index],
-    property_names: &mut Vec<String>,
-    current_matches: &HashSet<PersonId>,
-    print_fn: &dyn Fn(&Context, &[String], usize),
-) {
-    if remaining_indices.is_empty() {
-        print_fn(context, property_names, current_matches.len());
-        return;
-    }
-
-    let (next_index, rest_indices) = remaining_indices.split_first().unwrap();
-    let lookup = next_index.lookup.as_ref().unwrap();
-
-    // If there is nothing in the index, we don't need to process it
-    if lookup.is_empty() {
-        return;
-    }
-
-    for (display, people) in lookup.values() {
-        let intersect = !property_names.is_empty();
-        property_names.push(display.clone());
-
-        let matches = if intersect {
-            &current_matches.intersection(people).copied().collect()
-        } else {
-            people
-        };
-
-        process_indices(context, rest_indices, property_names, matches, print_fn);
-        property_names.pop();
-    }
 }
 
 impl ContextPeopleExt for Context {
@@ -1164,7 +1016,7 @@ impl ContextPeopleExt for Context {
             .filter_map(|t| index_container.get(t))
             .collect::<Vec<&Index>>();
 
-        process_indices(
+        index::process_indices(
             self,
             indices.as_slice(),
             &mut Vec::new(),
@@ -1368,7 +1220,7 @@ mod test {
         context::Context,
         define_global_property,
         error::IxaError,
-        people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
+        people::{PeoplePlugin, PersonPropertyHolder},
         ContextGlobalPropertiesExt,
     };
     use std::{any::TypeId, cell::RefCell, hash::Hash, rc::Rc, vec};
@@ -1777,13 +1629,6 @@ mod test {
     }
 
     #[test]
-    fn index_name() {
-        let context = Context::new();
-        let index = Index::new(&context, Age);
-        assert!(index.name.contains("Age"));
-    }
-
-    #[test]
     fn query_people() {
         let mut context = Context::new();
         let _ = context
@@ -2045,34 +1890,6 @@ mod test {
         assert!(context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::High))));
         assert!(!context.match_person(person, ((Age, 43), (RiskCategory, RiskCategoryValue::High))));
         assert!(!context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::Low))));
-    }
-
-    #[test]
-    fn test_index_value_hasher_finish2_short() {
-        let value = 42;
-        let index = IndexValue::compute(&value);
-        assert!(matches!(index, IndexValue::Fixed(_)));
-    }
-
-    #[test]
-    fn test_index_value_hasher_finish2_long() {
-        let value = "this is a longer string that exceeds 16 bytes";
-        let index = IndexValue::compute(&value);
-        assert!(matches!(index, IndexValue::Variable(_)));
-    }
-
-    #[test]
-    fn test_index_value_compute_same_values() {
-        let value = "test value";
-        let value2 = "test value";
-        assert_eq!(IndexValue::compute(&value), IndexValue::compute(&value2));
-    }
-
-    #[test]
-    fn test_index_value_compute_different_values() {
-        let value1 = 42;
-        let value2 = 43;
-        assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
     }
 
     use crate::random::{define_rng, ContextRandomExt};
