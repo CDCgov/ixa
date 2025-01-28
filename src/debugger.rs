@@ -1,8 +1,7 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
+use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
 use crate::Context;
-use crate::ContextGlobalPropertiesExt;
-use crate::ContextPeopleExt;
 use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
@@ -51,7 +50,7 @@ impl Debugger {
                 return handler.handle(context, &matches);
             }
             // Unexpected command: print an error
-            return Err(format!("Unknown command: {command}"));
+            return Err(format!("error: Unknown command: {command}"));
         }
 
         unreachable!("subcommand required");
@@ -59,102 +58,74 @@ impl Debugger {
 }
 
 struct PopulationCommand;
-#[derive(Parser, Debug)]
-enum PopulationSubcommand {
-    /// Get the total number of people
-    Population,
-}
 impl DebuggerCommand for PopulationCommand {
     fn handle(
         &self,
         context: &mut Context,
         _matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let output = format!("{}", context.get_current_population());
+        let output = format!(
+            "{}",
+            run_ext_api::<population::Api>(context, &EmptyArgs {})
+                .unwrap()
+                .population
+        );
         Ok((false, Some(output)))
     }
     fn extend(&self, command: Command) -> Command {
-        PopulationSubcommand::augment_subcommands(command)
+        population::Args::augment_subcommands(command)
     }
 }
 
-/// Helper function for displaying properties
-fn available_properties_str(context: &Context) -> String {
-    let properties = context.list_registered_global_properties();
-    format!(
-        "{} global properties registered:\n{}",
-        properties.len(),
-        properties.join("\n")
-    )
-}
-
 struct GlobalPropertyCommand;
-
-#[derive(Subcommand, Clone, Debug)]
-enum GlobalPropertySubcommandEnum {
-    /// List all global properties
-    List,
-
-    /// Get the value of a global property
-    Get { property: String },
-}
-#[derive(Parser, Debug)]
-enum GlobalPropertySubcommand {
-    #[command(subcommand)]
-    Global(GlobalPropertySubcommandEnum),
-}
-
 impl DebuggerCommand for GlobalPropertyCommand {
     fn extend(&self, command: Command) -> Command {
-        GlobalPropertySubcommand::augment_subcommands(command)
+        global_properties::Args::augment_subcommands(command)
     }
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = GlobalPropertySubcommand::from_arg_matches(matches).unwrap();
-
-        let GlobalPropertySubcommand::Global(global_args) = args;
-
-        match global_args {
-            GlobalPropertySubcommandEnum::List => {
-                Ok((false, Some(available_properties_str(context))))
-            }
-            GlobalPropertySubcommandEnum::Get { property: name } => {
-                let output = context.get_serialized_value_by_string(&name);
-                if output.is_err() {
-                    return Ok((false, output.err().map(|e| e.to_string())));
-                }
-                match output.unwrap() {
-                    Some(value) => Ok((false, Some(value))),
-                    None => Ok((false, Some(format!("Property {name} is not set")))),
-                }
-            }
+        let args = global_properties::Args::from_arg_matches(matches).unwrap();
+        let ret = run_ext_api::<global_properties::Api>(context, &args);
+        match ret {
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
+            Err(e) => Ok((false, Some(format!("error: {e}")))),
+            Ok(global_properties::Retval::List(properties)) => Ok((
+                false,
+                Some(format!(
+                    "{} global properties registered:\n{}",
+                    properties.len(),
+                    properties.join("\n")
+                )),
+            )),
+            Ok(global_properties::Retval::Value(value)) => Ok((false, Some(value))),
         }
     }
 }
 
-/// Adds a new debugger breakpoint at t
 struct NextCommand;
-#[derive(Parser, Debug)]
-enum NextSubcommand {
-    /// Continue until the given time and then pause again
-    Next { next_time: f64 },
-}
+/// Adds a new debugger breakpoint at t
 impl DebuggerCommand for NextCommand {
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = NextSubcommand::from_arg_matches(matches).unwrap();
-        let NextSubcommand::Next { next_time } = args;
-        context.schedule_debugger(next_time);
-        Ok((true, None))
+        let args = next::Args::from_arg_matches(matches).unwrap();
+        match run_ext_api::<next::Api>(context, &args) {
+            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
+            Ok(_) => {
+                let next::Args::Next { next_time } = args;
+                context.schedule_debugger(next_time);
+                Ok((true, None))
+            }
+            _ => unimplemented!(),
+        }
     }
     fn extend(&self, command: Command) -> Command {
-        NextSubcommand::augment_subcommands(command)
+        next::Args::augment_subcommands(command)
     }
 }
 
@@ -359,10 +330,7 @@ mod tests {
     fn test_cli_debugger_global_get_unregistered_prop() {
         let context = &mut Context::new();
         let (_quits, output) = process_line("global get NotExist\n", context);
-        assert_eq!(
-            output.unwrap(),
-            "Error: IxaError(\"No global property: NotExist\")"
-        );
+        assert_eq!(output.unwrap(), "error: No global property: NotExist");
     }
 
     #[test]
@@ -380,7 +348,10 @@ mod tests {
         define_global_property!(EmptyGlobal, String);
         let context = &mut Context::new();
         let (_quits, output) = process_line("global get ixa.EmptyGlobal\n", context);
-        assert_eq!(output.unwrap(), "Property ixa.EmptyGlobal is not set");
+        assert_eq!(
+            output.unwrap(),
+            "error: Property ixa.EmptyGlobal is not set"
+        );
     }
 
     #[test]
