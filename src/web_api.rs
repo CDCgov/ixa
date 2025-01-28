@@ -4,9 +4,7 @@ use crate::error::IxaError;
 use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
-use rand::rngs::StdRng;
 use rand::RngCore;
-use rand::SeedableRng;
 use serde_json::json;
 use std::collections::HashMap;
 use std::thread;
@@ -189,9 +187,8 @@ impl ContextWebApiExt for Context {
         }
 
         // Start the API server
-        let mut rng = StdRng::from_rng(rand::rngs::OsRng).unwrap();
         let mut random: [u8; 16] = [0; 16];
-        rng.fill_bytes(&mut random);
+        rand::rngs::OsRng.fill_bytes(&mut random);
         let secret = uuid::Builder::from_random_bytes(random)
             .into_uuid()
             .to_string();
