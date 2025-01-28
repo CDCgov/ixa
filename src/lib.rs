@@ -47,6 +47,9 @@ pub mod plan;
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
 
+pub mod tabulator;
+pub use tabulator::Tabulator;
+
 pub mod report;
 pub use report::{ConfigReportOptions, ContextReportExt, Report};
 

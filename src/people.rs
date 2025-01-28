@@ -72,6 +72,7 @@ use crate::{
     define_data_plugin,
     error::IxaError,
     random::{ContextRandomExt, RngId},
+    Tabulator,
 };
 use ixa_derive::IxaEvent;
 use rand::Rng;
@@ -174,66 +175,6 @@ macro_rules! impl_query {
 
 seq!(Z in 1..20 {
     impl_query!(Z);
-});
-
-pub trait Tabulator {
-    fn setup(&self, context: &mut Context);
-    fn get_typelist(&self) -> Vec<TypeId>;
-    fn get_columns(&self) -> Vec<String>;
-}
-
-impl<T: PersonProperty + 'static> Tabulator for (T,) {
-    fn setup(&self, context: &mut Context) {
-        context.index_property(T::get_instance());
-    }
-    fn get_typelist(&self) -> Vec<TypeId> {
-        vec![std::any::TypeId::of::<T>()]
-    }
-    fn get_columns(&self) -> Vec<String> {
-        vec![String::from(T::name())]
-    }
-}
-
-macro_rules! impl_tabulator {
-    ($ct:expr) => {
-        seq!(N in 0..$ct {
-            impl<
-                #(
-                    T~N : PersonProperty + 'static,
-                )*
-            > Tabulator for (
-                #(
-                    T~N,
-                )*
-            )
-            {
-                fn setup(&self, context: &mut Context) {
-                    #(
-                        context.index_property(T~N::get_instance());
-                    )*
-                }
-                fn get_typelist(&self) -> Vec<TypeId> {
-                    vec![
-                    #(
-                        std::any::TypeId::of::<T~N>(),
-                    )*
-                    ]
-                }
-
-                fn get_columns(&self) -> Vec<String> {
-                    vec![
-                    #(
-                        String::from(T~N::name()),
-                    )*
-                    ]
-                }
-            }
-        });
-    }
-}
-
-seq!(Z in 2..20 {
-    impl_tabulator!(Z);
 });
 
 // Implementation of the Hasher interface for IndexValue, used
@@ -1422,9 +1363,7 @@ impl ContextPeopleExtInternal for Context {
 
 #[cfg(test)]
 mod test {
-    use super::{
-        ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent, Tabulator,
-    };
+    use super::{ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent};
     use crate::{
         context::Context,
         define_global_property,
@@ -1432,7 +1371,7 @@ mod test {
         people::{Index, IndexValue, PeoplePlugin, PersonPropertyHolder},
         ContextGlobalPropertiesExt,
     };
-    use std::{any::TypeId, cell::RefCell, collections::HashSet, hash::Hash, rc::Rc, vec};
+    use std::{any::TypeId, cell::RefCell, hash::Hash, rc::Rc, vec};
 
     define_person_property!(Age, u8);
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -2134,79 +2073,6 @@ mod test {
         let value1 = 42;
         let value2 = 43;
         assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
-    }
-
-    #[test]
-    fn test_tabulator() {
-        let cols = (Age, RiskCategory);
-        assert_eq!(
-            cols.get_typelist(),
-            vec![TypeId::of::<Age>(), TypeId::of::<RiskCategory>()]
-        );
-        assert_eq!(cols.get_columns(), vec!["Age", "RiskCategory"]);
-    }
-
-    fn tabulate_properties_test_setup<T: Tabulator>(
-        tabulator: &T,
-        setup: impl FnOnce(&mut Context),
-        expected_values: &HashSet<(Vec<String>, usize)>,
-    ) {
-        let mut context = Context::new();
-        setup(&mut context);
-        tabulator.setup(&mut context);
-
-        let results: RefCell<HashSet<(Vec<String>, usize)>> = RefCell::new(HashSet::new());
-        context.tabulate_person_properties(tabulator, |_context, values, count| {
-            results.borrow_mut().insert((values.to_vec(), count));
-        });
-
-        let results = &*results.borrow();
-        assert_eq!(results, expected_values);
-    }
-
-    #[test]
-    fn test_periodic_report() {
-        let tabulator = (IsRunner,);
-        let mut expected = HashSet::new();
-        expected.insert((vec!["true".to_string()], 1));
-        expected.insert((vec!["false".to_string()], 1));
-        tabulate_properties_test_setup(
-            &tabulator,
-            |context| {
-                let bob = context.add_person(()).unwrap();
-                context.add_person(()).unwrap();
-                context.set_person_property(bob, IsRunner, true);
-            },
-            &expected,
-        );
-    }
-
-    #[test]
-    fn test_get_counts_multi() {
-        let tabulator = (IsRunner, IsSwimmer);
-        let mut expected = HashSet::new();
-        expected.insert((vec!["false".to_string(), "false".to_string()], 3));
-        expected.insert((vec!["false".to_string(), "true".to_string()], 1));
-        expected.insert((vec!["true".to_string(), "false".to_string()], 1));
-        expected.insert((vec!["true".to_string(), "true".to_string()], 1));
-
-        tabulate_properties_test_setup(
-            &tabulator,
-            |context| {
-                context.add_person(()).unwrap();
-                context.add_person(()).unwrap();
-                context.add_person(()).unwrap();
-                let bob = context.add_person(()).unwrap();
-                let anne = context.add_person(()).unwrap();
-                let charlie = context.add_person(()).unwrap();
-
-                context.set_person_property(bob, IsRunner, true);
-                context.set_person_property(charlie, IsRunner, true);
-                context.set_person_property(anne, IsSwimmer, true);
-                context.set_person_property(charlie, IsSwimmer, true);
-            },
-            &expected,
-        );
     }
 
     use crate::random::{define_rng, ContextRandomExt};
