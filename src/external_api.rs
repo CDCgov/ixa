@@ -1,15 +1,15 @@
 use crate::context::Context;
 use crate::error::IxaError;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub(crate) trait ExtApi {
-    type Args;
-    type Retval;
+    type Args: DeserializeOwned;
+    type Retval: Serialize;
 
     fn run(context: &mut Context, args: &Self::Args) -> Result<Self::Retval, IxaError>;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct EmptyArgs {}
 
 pub(crate) fn run_ext_api<T: ExtApi>(

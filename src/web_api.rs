@@ -12,19 +12,23 @@ use tokio::sync::oneshot;
 
 type ApiHandler = dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
 
-macro_rules! register_api_handler {
-    ($dc:ident, $name:ident, $extension_type:ty, $args_type:ty, $retval_type:ty) => {
-        $dc.handlers.insert(
-            stringify!($name).to_string(),
-            Box::new(
-                |context, args_json| -> Result<serde_json::Value, IxaError> {
-                    let args: $args_type = serde_json::from_value(args_json)?;
-                    let retval = run_ext_api::<$extension_type>(context, &args)?;
-                    Ok(serde_json::to_value(retval)?)
-                },
-            ),
-        );
-    };
+fn register_api_handler<
+    T: crate::external_api::ExtApi<Args = A>,
+    A: serde::de::DeserializeOwned,
+>(
+    dc: &mut ApiData,
+    name: &str,
+) {
+    dc.handlers.insert(
+        name.to_string(),
+        Box::new(
+            |context, args_json| -> Result<serde_json::Value, IxaError> {
+                let args: A = serde_json::from_value(args_json)?;
+                let retval: T::Retval = run_ext_api::<T>(context, &args)?;
+                Ok(serde_json::to_value(retval)?)
+            },
+        ),
+    );
 }
 
 struct ApiData {
@@ -134,6 +138,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                         "error" : err.to_string()
                     }),
                 });
+                continue;
             }
             Ok(response) => {
                 let _ = req.rx.send(ApiResponse {
@@ -195,23 +200,12 @@ impl ContextWebApiExt for Context {
             handlers: HashMap::new(),
         };
 
-        register_api_handler!(
-            api_data,
-            global,
-            global_properties::Api,
-            global_properties::Args,
-            global_properties::Retval
+        register_api_handler::<global_properties::Api, global_properties::Args>(
+            &mut api_data,
+            "global",
         );
-
-        register_api_handler!(
-            api_data,
-            population,
-            population::Api,
-            EmptyArgs,
-            population::Retval
-        );
-
-        register_api_handler!(api_data, next, next::Api, next::Args, next::Retval);
+        register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
+        register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
 
         // Record the data container.
         *data_container = Some(api_data);
@@ -295,7 +289,7 @@ mod tests {
     // object to isolate the test cases.
 
     #[test]
-    fn web_api_get_population() {
+    fn web_api_test() {
         #[derive(Serialize)]
         struct PopulationResponse {
             population: usize,
@@ -365,7 +359,15 @@ mod tests {
         );
         assert_eq!(res, json!({}));
 
-        let res = send_request_text("next", String::from("{]")); // Invalid JSON
+        // Valid JSON but wrong type.
+        let res = send_request_text(
+            "next",
+            String::from("{\"Next\": {\"next_time\" : \"invalid\"}}"),
+        );
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // Invalid JSON.
+        let res = send_request_text("next", String::from("{]"));
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Test continue and make sure that the context
