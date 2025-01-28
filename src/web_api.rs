@@ -277,6 +277,18 @@ mod tests {
         response.json().unwrap()
     }
 
+    // Send a request and check the response.
+    fn send_request_text(cmd: &str, req: String) -> reqwest::blocking::Response {
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .post(format!("http://127.0.0.1:33339/cmd/{cmd}"))
+            .header("Content-Type", "application/json")
+            .body(req)
+            .send()
+            .unwrap();
+        response
+    }
+
     // We do all of the tests in one test block to avoid having to
     // start a lot of servers with different ports and having
     // to manage that. This may not be ideal, but we're doing it for now.
@@ -353,6 +365,9 @@ mod tests {
             }),
         );
         assert_eq!(res, json!({}));
+
+        let res = send_request_text("next", String::from("{]")); // Invalid JSON
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Test continue and make sure that the context
         // exits.
