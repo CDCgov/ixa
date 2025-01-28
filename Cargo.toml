@@ -30,6 +30,10 @@ tempfile = "^3.15.0"
 ordered-float = "^4.6.0"
 assert_cmd = "^2.0.16"
 
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module-name-repetitions = "allow"
+
 [[bin]]
 name = "runner_test_custom_args"
 path = "tests/bin/runner_test_custom_args.rs"
