@@ -1,4 +1,4 @@
-use crate::people::PersonPropertyHolder;
+use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
 use std::fmt::Debug;
 use std::hash::Hash;
