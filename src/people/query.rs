@@ -1,5 +1,5 @@
+use crate::people::context_extension::ContextPeopleExtInternal;
 use crate::people::index::IndexValue;
-use crate::people::ContextPeopleExtInternal;
 use crate::{Context, ContextPeopleExt, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
