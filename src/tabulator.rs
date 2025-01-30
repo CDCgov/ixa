@@ -1,9 +1,3 @@
-/*!
-
-A `Tabulator` is a mechanism by which reports know their columns.
-
-*/
-
 use crate::people::PersonProperty;
 use crate::{Context, ContextPeopleExt};
 use seq_macro::seq;
