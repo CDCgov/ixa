@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::people::{ContextPeopleExt, Tabulator};
+use crate::people::ContextPeopleExt;
+use crate::Tabulator;
 use csv::Writer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
