@@ -1,6 +1,19 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/universal:2",
-	"features": {
-		"ghcr.io/devcontainers/features/rust:1": {}
+	"dockerFile": "Dockerfile",
+	"name": "IXA Rust Codespaces",
+	"customizations": {
+		"vscode": {
+			"settings": { 
+				"editor.formatOnSave": true,
+				"terminal.integrated.defaultProfile.linux": "zsh",
+				"lldb.executable": "/usr/bin/lldb"
+			},
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"vadimcn.vscode-lldb",
+				"yzhang.markdown-all-in-one"
+			]
+		}
 	}
 }
