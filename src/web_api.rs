@@ -1,9 +1,9 @@
-use crate::context::{run_with_plugin, Context};
+use crate::context::{Context, run_with_plugin};
 use crate::define_data_plugin;
 use crate::error::IxaError;
-use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
+use crate::external_api::{EmptyArgs, global_properties, next, people, population, run_ext_api};
 use axum::extract::{Json, Path, State};
-use axum::{http::StatusCode, routing::post, Router};
+use axum::{Router, http::StatusCode, routing::post};
 use rand::RngCore;
 use serde_json::json;
 use std::collections::HashMap;
@@ -208,7 +208,7 @@ impl ContextWebApiExt for Context {
         );
         register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
         register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
-
+        register_api_handler::<people::Api, people::Args>(&mut api_data, "people");
         // Record the data container.
         *data_container = Some(api_data);
 
@@ -227,15 +227,16 @@ impl ContextWebApiExt for Context {
 #[cfg(test)]
 mod tests {
     use super::ContextWebApiExt;
-    use crate::{define_global_property, ContextGlobalPropertiesExt};
+    use crate::people::define_person_property;
     use crate::{Context, ContextPeopleExt};
+    use crate::{ContextGlobalPropertiesExt, define_global_property};
     use reqwest::StatusCode;
     use serde::Serialize;
     use serde_json::json;
     use std::thread;
 
     define_global_property!(WebApiTestGlobal, String);
-
+    define_person_property!(Age, u8);
     fn setup() -> (String, Context) {
         let mut context = Context::new();
         let url = context.setup_web_api(33339).unwrap();
@@ -243,8 +244,8 @@ mod tests {
         context
             .set_global_property_value(WebApiTestGlobal, "foobar".to_string())
             .unwrap();
-        context.add_person(()).unwrap();
-        context.add_person(()).unwrap();
+        context.add_person((Age, 1)).unwrap();
+        context.add_person((Age, 2)).unwrap();
         (url, context)
     }
 
@@ -268,8 +269,11 @@ mod tests {
             .json(req)
             .send()
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        response.json().unwrap()
+        let status = response.status();
+        let res = response.json().unwrap();
+        println!("{:?}", res);
+        assert_eq!(status, StatusCode::OK);
+        res
     }
 
     // Send a request and check the response.
@@ -366,6 +370,25 @@ mod tests {
         );
         assert_eq!(res, json!({}));
 
+        let res = send_request(
+            &url,
+            "people",
+            &json!({
+                "People" : {
+                    "Get" : {
+                        "id": 0,
+                        "property" : "Age"
+                    }
+                }
+            }),
+        );
+        assert_eq!(
+            res,
+            json!({"Properties" : [
+                ( "Age",  "1" )
+            ]}
+            )
+        );
         // Valid JSON but wrong type.
         let res = send_request_text(
             &url,

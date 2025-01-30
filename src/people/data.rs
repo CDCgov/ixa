@@ -1,6 +1,6 @@
+use crate::people::InitializationList;
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
 use crate::people::index::Index;
-use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
@@ -32,6 +32,7 @@ pub(super) struct PeopleData {
     pub(super) registered_derived_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
+    pub(super) people_types: RefCell<HashMap<String, TypeId>>,
 }
 
 // The purpose of this trait is to enable storing a Vec of different

@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::error::IxaError;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub(crate) trait ExtApi {
     type Args: DeserializeOwned;
@@ -20,10 +20,10 @@ pub(crate) fn run_ext_api<T: ExtApi>(
 }
 
 pub(crate) mod population {
+    use crate::IxaError;
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::people::ContextPeopleExt;
-    use crate::IxaError;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -51,9 +51,9 @@ pub(crate) mod population {
 }
 
 pub(crate) mod global_properties {
+    use crate::IxaError;
     use crate::context::Context;
     use crate::global_properties::ContextGlobalPropertiesExt;
-    use crate::IxaError;
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
 
@@ -103,8 +103,8 @@ pub(crate) mod global_properties {
 }
 
 pub(crate) mod next {
-    use crate::context::Context;
     use crate::IxaError;
+    use crate::context::Context;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -136,8 +136,8 @@ pub(crate) mod next {
 }
 
 pub(crate) mod r#continue {
-    use crate::context::Context;
     use crate::IxaError;
+    use crate::context::Context;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -154,6 +154,93 @@ pub(crate) mod r#continue {
         fn run(_context: &mut Context, _args: &Args) -> Result<Retval, IxaError> {
             // This is a no-op which allows for arg checking.
             Ok(Retval {})
+        }
+    }
+}
+
+pub(crate) mod people {
+    use crate::Context;
+    use crate::IxaError;
+    use crate::people::{ContextPeopleExt, PersonId, external_api::ContextPeopleExtCrate};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize)]
+    pub(crate) enum ArgsEnum {
+        Get { id: usize, property: String },
+        Query { properties: Vec<(String, String)> },
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) enum Args {
+        People(ArgsEnum),
+    }
+
+    #[derive(Serialize, Debug, Eq, PartialEq)]
+    pub(crate) enum Retval {
+        Properties(Vec<(String, String)>),
+    }
+    pub(crate) struct Api {}
+
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
+            let Args::People(args) = args;
+
+            match args {
+                ArgsEnum::Get { id, property } => {
+                    if *id >= context.get_current_population() {
+                        return Err(IxaError::IxaError(format!("No person with id {id}")));
+                    }
+
+                    let value = context.get_person_property_by_name(&property, PersonId(*id))?;
+                    Ok(Retval::Properties(vec![(property.to_string(), value)]))
+                }
+                ArgsEnum::Query {
+                    properties: _global_properties,
+                } => {
+                    unimplemented!();
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        use crate::Context;
+        use crate::external_api::run_ext_api;
+        #[test]
+        fn query_nonexistent_user() {
+            let mut context = Context::new();
+
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Get {
+                    id: 0,
+                    property: String::from("abc"),
+                }),
+            );
+
+            println!("{:?}", res);
+            assert!(matches!(res, Err(IxaError::IxaError(_))));
+        }
+
+        #[test]
+        fn query_nonexistent_property() {
+            let mut context = Context::new();
+            let _ = context.add_person(());
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Get {
+                    id: 0,
+                    property: String::from("abc"),
+                }),
+            );
+
+            println!("{:?}", res);
+            assert!(matches!(res, Err(IxaError::IxaError(_))));
         }
     }
 }

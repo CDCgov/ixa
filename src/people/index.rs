@@ -160,7 +160,7 @@ mod test {
     // Tests in `src/people/query.rs` also exercise indexing code.
 
     use crate::people::index::{Index, IndexValue};
-    use crate::{define_person_property, Context};
+    use crate::{Context, define_person_property};
 
     define_person_property!(Age, u8);
 

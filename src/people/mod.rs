@@ -71,19 +71,19 @@
 mod context_extension;
 mod data;
 mod event;
+pub(crate) mod external_api;
 mod index;
 mod property;
 mod query;
 
 use crate::{context::Context, define_data_plugin};
-
 pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
 pub use property::{
-    define_derived_property, define_person_property, define_person_property_with_default,
-    PersonProperty,
+    PersonProperty, define_derived_property, define_person_property,
+    define_person_property_with_default,
 };
 
 use seq_macro::seq;
@@ -96,18 +96,15 @@ use std::{
     hash::Hash,
 };
 
-define_data_plugin!(
-    PeoplePlugin,
-    PeopleData,
-    PeopleData {
-        is_initializing: false,
-        current_population: 0,
-        properties_map: RefCell::new(HashMap::new()),
-        registered_derived_properties: RefCell::new(HashSet::new()),
-        dependency_map: RefCell::new(HashMap::new()),
-        property_indexes: RefCell::new(HashMap::new())
-    }
-);
+define_data_plugin!(PeoplePlugin, PeopleData, PeopleData {
+    is_initializing: false,
+    current_population: 0,
+    properties_map: RefCell::new(HashMap::new()),
+    registered_derived_properties: RefCell::new(HashSet::new()),
+    dependency_map: RefCell::new(HashMap::new()),
+    property_indexes: RefCell::new(HashMap::new()),
+    people_types: RefCell::new(HashMap::new()),
+});
 
 /// Represents a unique person.
 //  the id refers to that person's index in the range 0 to population
