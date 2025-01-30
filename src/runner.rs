@@ -5,7 +5,7 @@ use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
-use crate::{enable_logging, info};
+use crate::{info, set_log_level, LevelFilter};
 
 use clap::{Args, Command, FromArgMatches as _};
 
@@ -34,17 +34,17 @@ pub struct BaseArgs {
 
     /// Enable logging
     #[arg(short, long)]
-    pub enable_logging: bool,
+    pub log_level: Option<LevelFilter>,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
     pub debugger: Option<Option<f64>>,
-}
 
     /// Enable the Web API at a given time. Defaults to t=0.0
     #[arg(short, long)]
     pub web: Option<Option<u16>>,
 }
+
 impl BaseArgs {
     fn new() -> Self {
         BaseArgs {
@@ -53,7 +53,7 @@ impl BaseArgs {
             output_dir: None,
             file_prefix: None,
             force_overwrite: false,
-            enable_logging: false,
+            log_level: None,
             debugger: None,
             web: None,
         }
@@ -104,7 +104,7 @@ where
 /// This function parses command line arguments allows you to define a setup function
 ///
 /// # Parameters
-/// - `setup_fn`: A function that takes a mutable reference to a `Context`and `BaseArgs` struct
+/// - `setup_fn`: A function that takes a mutable reference to a `Context` and `BaseArgs` struct
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
@@ -149,11 +149,10 @@ where
     if args.force_overwrite {
         report_config.overwrite(true);
     }
-    if args.enable_logging {
-        enable_logging();
-        info!("Logging enabled.");
+    if let Some(level) = args.log_level {
+        set_log_level(level);
+        info!("Logging enabled at level {level}");
     } else {
-        // Not emitted.
         info!("Logging disabled.");
     }
 
@@ -293,7 +292,7 @@ mod tests {
     #[test]
     fn test_run_with_logging_enabled() {
         let mut test_args = BaseArgs::new();
-        test_args.enable_logging = true;
+        test_args.log_level = Some(LevelFilter::Info);
         let result = run_with_args_internal(test_args, None, |_, _, _: Option<()>| Ok(()));
         assert!(result.is_ok());
     }

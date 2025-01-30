@@ -15,7 +15,9 @@
 //! }
 //! ```
 //!
-//! Logging is _disabled_ by default. Log messages are enabled/disabled using the functions:
+//! Logging is _disabled_ by default. Logging messages can be enabled by passing the command line
+//! option `--enable-logging`. Log messages can also be controlled programmatically. Logging can be
+//! enabled/disabled from code using the functions:
 //!
 //!  - `enable_logging()`: turns on all log messages
 //!  - `disable_logging()`: turns off all log messages
@@ -52,8 +54,8 @@ const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Off;
 const DEFAULT_LOG_STYLE: WriteStyle = WriteStyle::Auto;
 // Default module specific filters
 const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
+    // `rustyline` logs are noisy.
     ("rustyline", LevelFilter::Off),
-    // ("ixa", LevelFilter::Off),
 ];
 
 /// A global instance of the logging configuration.
@@ -107,6 +109,9 @@ impl LogConfiguration {
         for (module, filter) in &self.module_level {
             builder.filter(Some(module), *filter);
         }
+
+        #[cfg(test)]
+        builder.is_test(true);
 
         builder.build()
     }
@@ -205,10 +210,99 @@ fn set_logger() {
         }
 
         Some(handle) => {
-            // Replace the existing logger.
-            if let Err(error) = handle.replace(logger) {
+            // Replace the existing logger
+            let result = handle
+                .replace(logger)
+                .map(|()| log::set_max_level(log_configuration.global_log_level));
+            if let Err(error) = result {
                 error!("failed to set logger: {}", error);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::log::{get_log_configuration, remove_module_filter};
+    use crate::{set_log_level, set_module_filters};
+    use log::{error, trace, LevelFilter};
+    use std::collections::HashMap;
+
+    #[test]
+    fn command_line_args_sets_level() {
+        assert_cmd::Command::cargo_bin("runner_test_debug")
+            .unwrap()
+            .args(["--log-level=trace"])
+            .assert()
+            .success();
+    }
+
+    #[test]
+    fn test_set_log_level() {
+        set_log_level(LevelFilter::Error);
+        {
+            let config = get_log_configuration();
+            assert_eq!(config.global_log_level, LevelFilter::Error);
+            error!("test_set_log_level: global set to error");
+            assert_eq!(log::max_level(), LevelFilter::Error);
+        }
+        set_log_level(LevelFilter::Trace);
+        {
+            let config = get_log_configuration();
+            assert_eq!(config.global_log_level, LevelFilter::Trace);
+            trace!("test_set_log_level: global set to trace");
+        }
+    }
+
+    #[test]
+    fn test_set_remove_module_filters() {
+        // Initialize logging
+        set_log_level(LevelFilter::Trace);
+        {
+            let config = get_log_configuration();
+            // There is only one filer...
+            assert_eq!(config.module_level.len(), 1);
+            // ...and that filter is for `rustyline`
+            assert_eq!(
+                config.module_level.get("rustyline"),
+                Some(&LevelFilter::Off)
+            );
+        }
+
+        // Install new filters
+        let filters = [
+            ("rustyline", LevelFilter::Error),
+            ("ixa", LevelFilter::Debug),
+        ];
+        set_module_filters(&HashMap::from([
+            ("rustyline", LevelFilter::Error),
+            ("ixa", LevelFilter::Debug),
+        ]));
+
+        // The filters are now the set of filters we just installed
+        {
+            let config = get_log_configuration();
+            assert_eq!(config.module_level.len(), 2);
+            for (module_path, level) in &filters {
+                assert_eq!(
+                    config.module_level.get(&module_path.to_string()),
+                    Some(level)
+                );
+            }
+        }
+
+        // Remove one filter
+        remove_module_filter("rustyline");
+        // Check that it was removed
+        {
+            let config = get_log_configuration();
+            // There is only one filer...
+            assert_eq!(config.module_level.len(), 1);
+            // ...and that filter is for `ixa`
+            assert_eq!(
+                config.module_level.get(&"ixa".to_string()),
+                Some(&LevelFilter::Debug)
+            );
         }
     }
 }
