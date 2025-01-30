@@ -100,7 +100,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     );
 }
 
-pub fn init(context: &mut Context, initial_infections: Vec<PersonId>) {
+pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
     context.add_periodic_plan_with_phase(
         1.0,
         |context| {
@@ -144,9 +144,9 @@ pub fn init(context: &mut Context, initial_infections: Vec<PersonId>) {
         },
     );
 
-    // expose the first person to the disease
+    // expose the first people to the disease
     for ii in initial_infections {
-        context.set_person_property(ii, DiseaseStatus, DiseaseStatusValue::E);
+        context.set_person_property(*ii, DiseaseStatus, DiseaseStatusValue::E);
     }
 }
 
@@ -184,8 +184,14 @@ mod tests {
 
         let to_infect = context.query_people((Id, 71));
 
-        init(&mut context, to_infect);
+        init(&mut context, &to_infect);
 
         context.execute();
+
+        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::S)), 399);
+        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::E)), 0);
+        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::I)), 0);
+        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::R)), 1207);
+
     }
 }

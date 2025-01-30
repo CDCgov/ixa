@@ -83,4 +83,33 @@ mod tests {
         init(&mut context);
         assert_eq!(context.get_current_population(), EXPECTED_ROWS);
     }
+
+    #[test]
+    fn test_some_people_load_correctly() {
+
+        let mut context = Context::new();
+        context.init_random(42);
+
+        let people = init(&mut context);
+
+        let person = people[0];
+        assert!(context.match_person(person, (Id, 676)));
+        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::Age18to64)));
+        assert!(context.match_person(person, (Sex, SexValue::Female)));
+        assert!(context.match_person(person, (HouseholdId, 1)));
+
+        let person = people[246];
+        assert!(context.match_person(person, (Id, 213)));
+        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::AgeUnder5)));
+        assert!(context.match_person(person, (Sex, SexValue::Female)));
+        assert!(context.match_person(person, (HouseholdId, 162)));
+
+        let person = people[1591];
+        assert!(context.match_person(person, (Id, 1591)));
+        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::Age65Plus)));
+        assert!(context.match_person(person, (Sex, SexValue::Male)));
+        assert!(context.match_person(person, (HouseholdId, 496)));
+
+    }
+
 }

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
-use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
+use ixa::{define_rng, ContextGlobalPropertiesExt};
 mod loader;
 mod network;
 mod parameters;
@@ -24,10 +24,8 @@ fn main() {
     // Load network
     network::init(&mut context, &people);
 
-    let mut to_infect: Vec<PersonId> = Vec::new();
-    to_infect.push(context.sample_person(MainRng, ()).unwrap());
-    #[allow(clippy::vec_init_then_push)]
-    seir::init(&mut context, to_infect);
+    let to_infect = vec![context.sample_person(MainRng, ()).unwrap()];
+    seir::init(&mut context, &to_infect);
 
     context.execute();
 }
