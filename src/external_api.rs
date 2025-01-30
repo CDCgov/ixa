@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::error::IxaError;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub(crate) trait ExtApi {
     type Args: DeserializeOwned;
@@ -20,10 +20,10 @@ pub(crate) fn run_ext_api<T: ExtApi>(
 }
 
 pub(crate) mod population {
-    use crate::IxaError;
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::people::ContextPeopleExt;
+    use crate::IxaError;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -51,9 +51,9 @@ pub(crate) mod population {
 }
 
 pub(crate) mod global_properties {
-    use crate::IxaError;
     use crate::context::Context;
     use crate::global_properties::ContextGlobalPropertiesExt;
+    use crate::IxaError;
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
 
@@ -103,8 +103,8 @@ pub(crate) mod global_properties {
 }
 
 pub(crate) mod next {
-    use crate::IxaError;
     use crate::context::Context;
+    use crate::IxaError;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -136,8 +136,8 @@ pub(crate) mod next {
 }
 
 pub(crate) mod r#continue {
-    use crate::IxaError;
     use crate::context::Context;
+    use crate::IxaError;
     use clap::Parser;
     use serde::{Deserialize, Serialize};
 
@@ -159,9 +159,9 @@ pub(crate) mod r#continue {
 }
 
 pub(crate) mod people {
+    use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
     use crate::Context;
     use crate::IxaError;
-    use crate::people::{ContextPeopleExt, PersonId, external_api::ContextPeopleExtCrate};
     use serde::{Deserialize, Serialize};
 
     #[derive(Deserialize)]
@@ -209,8 +209,8 @@ pub(crate) mod people {
     #[cfg(test)]
     mod test {
         use super::*;
-        use crate::Context;
         use crate::external_api::run_ext_api;
+        use crate::Context;
         #[test]
         fn query_nonexistent_user() {
             let mut context = Context::new();

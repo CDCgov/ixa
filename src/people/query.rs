@@ -71,7 +71,7 @@ seq!(Z in 1..20 {
 #[cfg(test)]
 mod tests {
     use crate::people::PeoplePlugin;
-    use crate::{Context, ContextPeopleExt, define_derived_property, define_person_property};
+    use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
     use std::any::TypeId;
 
     define_person_property!(Age, u8);

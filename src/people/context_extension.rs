@@ -1,6 +1,6 @@
 use crate::people::index::{Index, IndexValue};
 use crate::people::query::Query;
-use crate::people::{InitializationList, PeoplePlugin, PersonPropertyHolder, index};
+use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
     Context, ContextRandomExt, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
     PersonPropertyChangeEvent, RngId, Tabulator,
@@ -568,11 +568,11 @@ impl ContextPeopleExtInternal for Context {
 #[cfg(test)]
 mod tests {
     use crate::people::{PeoplePlugin, PersonPropertyHolder};
-    use crate::random::{ContextRandomExt, define_rng};
+    use crate::random::{define_rng, ContextRandomExt};
     use crate::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, IxaError, PersonId,
-        PersonPropertyChangeEvent, define_derived_property, define_global_property,
-        define_person_property, define_person_property_with_default,
+        define_derived_property, define_global_property, define_person_property,
+        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use std::any::TypeId;
     use std::cell::RefCell;
@@ -607,7 +607,11 @@ mod tests {
     define_person_property_with_default!(IsRunner, bool, false);
     define_person_property!(RunningShoes, u8, |context: &Context, person: PersonId| {
         let is_runner = context.get_person_property(person, IsRunner);
-        if is_runner { 4 } else { 0 }
+        if is_runner {
+            4
+        } else {
+            0
+        }
     });
     define_derived_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
         is_runner && age >= 18
@@ -901,9 +905,7 @@ mod tests {
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         assert!(context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::High))));
-        assert!(
-            !context.match_person(person, ((Age, 43), (RiskCategory, RiskCategoryValue::High)))
-        );
+        assert!(!context.match_person(person, ((Age, 43), (RiskCategory, RiskCategoryValue::High))));
         assert!(!context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::Low))));
     }
 

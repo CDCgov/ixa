@@ -1,6 +1,6 @@
-use crate::people::InitializationList;
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
 use crate::people::index::Index;
+use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};

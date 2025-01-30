@@ -34,9 +34,9 @@ impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Context, ContextPeopleExt, PersonCreatedEvent, PersonId, PersonPropertyChangeEvent,
         define_derived_property, define_global_property, define_person_property,
-        define_person_property_with_default,
+        define_person_property_with_default, Context, ContextPeopleExt, PersonCreatedEvent,
+        PersonId, PersonPropertyChangeEvent,
     };
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -69,7 +69,11 @@ mod tests {
     define_person_property_with_default!(IsRunner, bool, false);
     define_person_property!(RunningShoes, u8, |context: &Context, person: PersonId| {
         let is_runner = context.get_person_property(person, IsRunner);
-        if is_runner { 4 } else { 0 }
+        if is_runner {
+            4
+        } else {
+            0
+        }
     });
 
     #[test]

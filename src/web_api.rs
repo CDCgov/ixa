@@ -1,9 +1,9 @@
-use crate::context::{Context, run_with_plugin};
+use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
-use crate::external_api::{EmptyArgs, global_properties, next, people, population, run_ext_api};
+use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
 use axum::extract::{Json, Path, State};
-use axum::{Router, http::StatusCode, routing::post};
+use axum::{http::StatusCode, routing::post, Router};
 use rand::RngCore;
 use serde_json::json;
 use std::collections::HashMap;
@@ -228,8 +228,8 @@ impl ContextWebApiExt for Context {
 mod tests {
     use super::ContextWebApiExt;
     use crate::people::define_person_property;
+    use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
-    use crate::{ContextGlobalPropertiesExt, define_global_property};
     use reqwest::StatusCode;
     use serde::Serialize;
     use serde_json::json;
