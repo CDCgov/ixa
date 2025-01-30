@@ -25,7 +25,6 @@ define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseS
 
 define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
 
-
 fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
     1.0 - (1.0 - sar).powf(1.0 / infectious_period)
 }

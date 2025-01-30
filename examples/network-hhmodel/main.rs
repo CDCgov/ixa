@@ -4,11 +4,11 @@ use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
 use loader::{AgeGroup, AgeGroupValue};
 use seir::InfectedBy;
 use std::path::Path;
+mod incidence_report;
 mod loader;
 mod network;
 mod parameters;
 mod seir;
-mod incidence_report;
 
 define_rng!(MainRng);
 
