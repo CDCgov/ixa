@@ -188,10 +188,21 @@ mod tests {
 
         context.execute();
 
-        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::S)), 399);
-        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::E)), 0);
-        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::I)), 0);
-        assert_eq!(context.query_people_count((DiseaseStatus, DiseaseStatusValue::R)), 1207);
-
+        assert_eq!(
+            context.query_people_count((DiseaseStatus, DiseaseStatusValue::S)),
+            399
+        );
+        assert_eq!(
+            context.query_people_count((DiseaseStatus, DiseaseStatusValue::E)),
+            0
+        );
+        assert_eq!(
+            context.query_people_count((DiseaseStatus, DiseaseStatusValue::I)),
+            0
+        );
+        assert_eq!(
+            context.query_people_count((DiseaseStatus, DiseaseStatusValue::R)),
+            1207
+        );
     }
 }

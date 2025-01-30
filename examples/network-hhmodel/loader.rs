@@ -86,7 +86,6 @@ mod tests {
 
     #[test]
     fn test_some_people_load_correctly() {
-
         let mut context = Context::new();
         context.init_random(42);
 
@@ -109,7 +108,5 @@ mod tests {
         assert!(context.match_person(person, (AgeGroup, AgeGroupValue::Age65Plus)));
         assert!(context.match_person(person, (Sex, SexValue::Male)));
         assert!(context.match_person(person, (HouseholdId, 496)));
-
     }
-
 }

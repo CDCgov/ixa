@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use ixa::define_global_property;
 use serde::{Deserialize, Serialize};
 
-
+#[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
     pub incubation_period: f64,
