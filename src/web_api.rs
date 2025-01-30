@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::thread;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tower_http::services::ServeDir;
 
 type ApiHandler = dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
 
@@ -97,6 +98,7 @@ async fn serve(
     // build our application with a route
     let app = Router::new()
         .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
+        .nest_service(&format!("/{prefix}/static/"), ServeDir::new("static"))
         .with_state(state);
 
     // Notify the caller that we are ready.
