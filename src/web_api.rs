@@ -1,9 +1,9 @@
-use crate::context::{run_with_plugin, Context};
+use crate::context::{Context, run_with_plugin};
 use crate::define_data_plugin;
 use crate::error::IxaError;
-use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
+use crate::external_api::{EmptyArgs, global_properties, next, population, run_ext_api};
 use axum::extract::{Json, Path, State};
-use axum::{http::StatusCode, routing::post, Router};
+use axum::{Router, http::StatusCode, routing::post};
 use rand::RngCore;
 use serde_json::json;
 use std::collections::HashMap;
@@ -98,7 +98,7 @@ async fn serve(
     // build our application with a route
     let app = Router::new()
         .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
-        .nest_service("/{prefix}/static/", ServeDir::new("static"))
+        .nest_service(&format!("/{prefix}/static/"), ServeDir::new("static"))
         .with_state(state);
 
     // Notify the caller that we are ready.
@@ -229,8 +229,8 @@ impl ContextWebApiExt for Context {
 #[cfg(test)]
 mod tests {
     use super::ContextWebApiExt;
-    use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
+    use crate::{ContextGlobalPropertiesExt, define_global_property};
     use reqwest::StatusCode;
     use serde::Serialize;
     use serde_json::json;
