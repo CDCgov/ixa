@@ -194,7 +194,7 @@ pub(crate) mod people {
                         return Err(IxaError::IxaError(format!("No person with id {id}")));
                     }
 
-                    let value = context.get_person_property_by_name(&property, PersonId(*id))?;
+                    let value = context.get_person_property_by_name(property, PersonId(*id))?;
                     Ok(Retval::Properties(vec![(property.to_string(), value)]))
                 }
                 ArgsEnum::Query {
@@ -223,7 +223,7 @@ pub(crate) mod people {
                 }),
             );
 
-            println!("{:?}", res);
+            println!("{res:?}");
             assert!(matches!(res, Err(IxaError::IxaError(_))));
         }
 
@@ -239,7 +239,7 @@ pub(crate) mod people {
                 }),
             );
 
-            println!("{:?}", res);
+            println!("{res:?}");
             assert!(matches!(res, Err(IxaError::IxaError(_))));
         }
     }

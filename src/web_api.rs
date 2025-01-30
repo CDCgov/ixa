@@ -270,10 +270,10 @@ mod tests {
             .send()
             .unwrap();
         let status = response.status();
-        let res = response.json().unwrap();
-        println!("{:?}", res);
+        let response = response.json().unwrap();
+        println!("{response:?}");
         assert_eq!(status, StatusCode::OK);
-        res
+        response
     }
 
     // Send a request and check the response.
