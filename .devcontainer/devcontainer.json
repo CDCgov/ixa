@@ -3,7 +3,7 @@
 	"name": "IXA Rust Codespaces",
 	"customizations": {
 		"vscode": {
-			"settings": { 
+			"settings": {
 				"editor.formatOnSave": true,
 				"terminal.integrated.defaultProfile.linux": "zsh",
 				"lldb.executable": "/usr/bin/lldb"
