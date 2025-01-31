@@ -35,6 +35,12 @@ function Api() {
     return response.population;
   }
 
+  async function getTime() {
+    let response = await makeApiCall("time", {});
+
+    return response.time;
+  }
+
   async function getGlobalSettingsList() {
     let response = await makeApiCall("global", {
       Global: "List",
@@ -55,6 +61,7 @@ function Api() {
 
   return {
     getPopulation,
+    getTime,
     getGlobalSettingsList,
     getGlobalSettingValue,
   };
