@@ -51,11 +51,9 @@ function GlobalSettings() {
   }, []);
 
   return html`<div>
+    <b>Global Properties</b>
     <ul>
-      <h1>Global Properties</h1>
-      <ul>
-        ${globals}
-      </ul>
+      ${globals}
     </ul>
   </div>`;
 }
