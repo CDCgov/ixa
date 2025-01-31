@@ -10,15 +10,27 @@ let currentTime;
 // For tagged string templating
 const html = htm.bind(React.createElement);
 
-function App() {
+function makeAppState() {
   let [generation, setGeneration] = useState(0);
-  let appState = { generation, setGeneration };
+
+  function update() {
+    console.log("Triggering app update");
+    setGeneration(generation + 1);
+  }
+
+  return {
+    update,
+  };
+}
+
+function App() {
+  let app = makeAppState();
 
   return html`
-    <div><${Time} app=${appState} /></div>
-    <div><${Population} app=${appState} /></div>
-    <div><${GlobalSettings} app=${appState} /></div>
-    <div><${NextButton} app=${appState} /></div>
+    <div><${Time} app=${app} /></div>
+    <div><${Population} app=${app} /></div>
+    <div><${GlobalSettings} app=${app} /></div>
+    <div><${NextButton} app=${app} /></div>
   `;
 }
 
@@ -91,7 +103,7 @@ function NextButton({ app }) {
       now = await api.getTime();
     }
 
-    app.setGeneration(app.generation + 1);
+    app.update();
     currentTime = now;
   }
 
