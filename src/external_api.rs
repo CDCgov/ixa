@@ -159,6 +159,7 @@ pub(crate) mod r#continue {
 }
 
 pub(crate) mod time {
+    #![allow(clippy::float_cmp)]
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::IxaError;
@@ -198,8 +199,8 @@ pub(crate) mod time {
             let result = crate::external_api::run_ext_api::<super::Api>(
                 &mut context,
                 &crate::external_api::EmptyArgs {},
-            )
-            .unwrap();
+            );
+
             assert_eq!(result.time, 0.0);
         }
     }
