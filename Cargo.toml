@@ -30,6 +30,7 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
 uuid = "1.12.1"
 tower-http = { version = "0.6.2", features = ["full"] }
+mime = "0.3.17"
 
 [dev-dependencies]
 rand_distr = "^0.4.3"
