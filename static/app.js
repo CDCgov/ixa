@@ -9,8 +9,25 @@ import { useEffect, useState } from "https://esm.sh/react@19/?dev";
 const html = htm.bind(React.createElement);
 
 function App() {
-  return html` <div><${MyPopulation} /></div>
+  return html` <div><${MyTime} /></div>
+    <div><${MyPopulation} /></div>
     <div><${GlobalSettings} /></div>`;
+}
+
+function MyTime() {
+  let [time, setTime] = useState(0);
+
+  useEffect(() => {
+    (async () => {
+      let api = await getApi();
+
+      const pop = await api.getTime();
+      console.log(pop);
+      setTime(pop);
+    })();
+  }, []);
+
+  return html` <div><b>Simulation Time: </b> ${time}</div> `;
 }
 
 function MyPopulation() {
