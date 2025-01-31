@@ -1,11 +1,8 @@
 {
-	"dockerFile": "Dockerfile",
-	"name": "IXA Rust Codespaces",
+	"image": "mcr.microsoft.com/devcontainers/rust:latest",
 	"customizations": {
 		"vscode": {
 			"settings": {
-				"editor.formatOnSave": true,
-				"terminal.integrated.defaultProfile.linux": "zsh",
 				"lldb.executable": "/usr/bin/lldb"
 			},
 			"extensions": [
@@ -14,6 +11,6 @@
 				"vadimcn.vscode-lldb",
 				"yzhang.markdown-all-in-one"
 			]
-		}
+	  	}
 	}
 }
