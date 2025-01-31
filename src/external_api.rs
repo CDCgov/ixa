@@ -399,7 +399,7 @@ pub(crate) mod time {
                 &crate::external_api::EmptyArgs {},
             );
 
-            assert_eq!(result.time, 0.0);
+            assert_eq!(result.unwrap().time, 0.0);
         }
     }
 }
