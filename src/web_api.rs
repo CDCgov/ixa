@@ -1,7 +1,9 @@
 use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
-use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
+use crate::external_api::{
+    global_properties, next, people, population, run_ext_api, time, EmptyArgs,
+};
 use axum::extract::{Json, Path, State};
 use axum::{http::StatusCode, routing::post, Router};
 use rand::RngCore;
@@ -211,6 +213,7 @@ impl ContextWebApiExt for Context {
         register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
         register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
         register_api_handler::<people::Api, people::Args>(&mut api_data, "people");
+        register_api_handler::<time::Api, EmptyArgs>(&mut api_data, "time");
         // Record the data container.
         *data_container = Some(api_data);
 
@@ -318,6 +321,15 @@ mod tests {
         // Test the population API point.
         let res = send_request(&url, "population", &json!({}));
         assert_eq!(json!(&PopulationResponse { population: 2 }), res);
+
+        // Test the time API point.
+        let res = send_request(&url, "time", &json!({}));
+        assert_eq!(
+            json!(
+                { "time": 0.0 }
+            ),
+            res
+        );
 
         // Test the global property list point. We can't do
         // exact match because the return is every defined

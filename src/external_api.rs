@@ -355,3 +355,50 @@ pub(crate) mod people {
         }
     }
 }
+
+pub(crate) mod time {
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
+    pub(crate) struct Api {}
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {
+        /// Get the time of the simulation.
+        Time,
+    }
+
+    #[derive(Serialize)]
+    pub(crate) struct Retval {
+        pub time: f64,
+    }
+    impl super::ExtApi for Api {
+        type Args = super::EmptyArgs;
+        type Retval = Retval;
+
+        fn run(context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
+            Ok(Retval {
+                time: context.get_current_time(),
+            })
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::Context;
+
+        #[test]
+        fn test() {
+            let mut context = Context::new();
+
+            let result = crate::external_api::run_ext_api::<super::Api>(
+                &mut context,
+                &crate::external_api::EmptyArgs {},
+            )
+            .unwrap();
+            assert_eq!(result.time, 0.0);
+        }
+    }
+}
