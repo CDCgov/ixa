@@ -9,7 +9,8 @@ import { useEffect, useState } from "https://esm.sh/react@19/?dev";
 const html = htm.bind(React.createElement);
 
 function App() {
-  return html` <${MyPopulation} /> `;
+  return html` <div><${MyPopulation} /></div>
+    <div><${GlobalSettings} /></div>`;
 }
 
 function MyPopulation() {
@@ -26,6 +27,37 @@ function MyPopulation() {
   }, []);
 
   return html` <div><b>Population: </b> ${population}</div> `;
+}
+
+function GlobalSettings() {
+  let [globals, setGlobals] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      let api = await getApi();
+
+      let globalProperties = await api.getGlobalSettingsList();
+      let listValues = [];
+      for (let propertyName of globalProperties) {
+        let value = await api.getGlobalSettingValue(propertyName);
+
+        listValues.push(
+          html`<li key="${propertyName}">${propertyName} = ${value}</li>`,
+        );
+      }
+
+      setGlobals(listValues);
+    })();
+  }, []);
+
+  return html`<div>
+    <ul>
+      <h1>Global Properties</h1>
+      <ul>
+        ${globals}
+      </ul>
+    </ul>
+  </div>`;
 }
 
 ReactDOMClient.createRoot(document.getElementById("root")).render(

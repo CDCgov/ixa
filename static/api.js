@@ -35,7 +35,7 @@ function Api() {
     return response.population;
   }
 
-  async function getGlobalSettings() {
+  async function getGlobalSettingsList() {
     let response = await makeApiCall("global", {
       Global: "List",
     });
@@ -43,10 +43,20 @@ function Api() {
     return response.List;
   }
 
+  async function getGlobalSettingValue(setting) {
+    let response = await makeApiCall("global", {
+      Global: { Get: { property: setting } },
+    });
+
+    return response.Value;
+  }
+
   const baseUrl = getBaseUrl();
 
   return {
     getPopulation,
+    getGlobalSettingsList,
+    getGlobalSettingValue,
   };
 }
 
