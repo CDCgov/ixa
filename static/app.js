@@ -11,31 +11,33 @@ let currentTime;
 const html = htm.bind(React.createElement);
 
 function App() {
+  let [generation, setGeneration] = useState(0);
+  let appState = { generation, setGeneration };
+
   return html`
-    <div><${MyTime} /></div>
-    <div><${MyPopulation} /></div>
-    <div><${GlobalSettings} /></div>
-    <div><${NextButton} /></div>
+    <div><${Time} app=${appState} /></div>
+    <div><${Population} app=${appState} /></div>
+    <div><${GlobalSettings} app=${appState} /></div>
+    <div><${NextButton} app=${appState} /></div>
   `;
 }
 
-function MyTime() {
+function Time({ app }) {
   let [time, setTime] = useState(0);
   useEffect(() => {
     (async () => {
       let api = await getApi();
 
       const now = await api.getTime();
-      console.log(now);
       setTime(now);
       currentTime = now;
     })();
-  }, []);
+  }, [app]);
 
   return html` <div><b>Simulation Time: </b> ${time}</div> `;
 }
 
-function MyPopulation() {
+function Population({ app }) {
   let [population, setPopulation] = useState(0);
 
   useEffect(() => {
@@ -43,15 +45,14 @@ function MyPopulation() {
       let api = await getApi();
 
       const pop = await api.getPopulation();
-      console.log(pop);
       setPopulation(pop);
     })();
-  }, []);
+  }, [app]);
 
   return html` <div><b>Population: </b> ${population}</div> `;
 }
 
-function GlobalSettings() {
+function GlobalSettings({ app }) {
   let [globals, setGlobals] = useState([]);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ function GlobalSettings() {
 
       setGlobals(listValues);
     })();
-  }, []);
+  }, [app]);
 
   return html`<div>
     <b>Global Properties</b>
@@ -80,7 +81,7 @@ function GlobalSettings() {
   </div>`;
 }
 
-function NextButton() {
+function NextButton({ app }) {
   async function goToNextTime(api, next) {
     let now = currentTime;
     await api.nextTime(next);
@@ -88,10 +89,9 @@ function NextButton() {
     // Busy wait on the API until time changes.
     while (now === currentTime) {
       now = await api.getTime();
-      console.log(now);
     }
 
-    console.log("Time changed");
+    app.setGeneration(app.generation + 1);
     currentTime = now;
   }
 
