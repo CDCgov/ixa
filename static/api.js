@@ -57,6 +57,14 @@ function Api() {
     return response.Value;
   }
 
+  async function nextTime(t) {
+    await makeApiCall("next", {
+      Next: {
+        next_time: t,
+      },
+    });
+  }
+
   const baseUrl = getBaseUrl();
 
   return {
@@ -64,6 +72,7 @@ function Api() {
     getTime,
     getGlobalSettingsList,
     getGlobalSettingValue,
+    nextTime,
   };
 }
 

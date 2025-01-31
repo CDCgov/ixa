@@ -5,25 +5,30 @@ import getApi from "./api.js";
 
 import { useEffect, useState } from "https://esm.sh/react@19/?dev";
 
+let currentTime;
+
 // For tagged string templating
 const html = htm.bind(React.createElement);
 
 function App() {
-  return html` <div><${MyTime} /></div>
+  return html`
+    <div><${MyTime} /></div>
     <div><${MyPopulation} /></div>
-    <div><${GlobalSettings} /></div>`;
+    <div><${GlobalSettings} /></div>
+    <div><${NextButton} /></div>
+  `;
 }
 
 function MyTime() {
   let [time, setTime] = useState(0);
-
   useEffect(() => {
     (async () => {
       let api = await getApi();
 
-      const pop = await api.getTime();
-      console.log(pop);
-      setTime(pop);
+      const now = await api.getTime();
+      console.log(now);
+      setTime(now);
+      currentTime = now;
     })();
   }, []);
 
@@ -75,6 +80,30 @@ function GlobalSettings() {
   </div>`;
 }
 
+function NextButton() {
+  async function goToNextTime(api, next) {
+    let now = currentTime;
+    await api.nextTime(next);
+
+    // Busy wait on the API until time changes.
+    while (now === currentTime) {
+      now = await api.getTime();
+      console.log(now);
+    }
+
+    console.log("Time changed");
+    currentTime = now;
+  }
+
+  function handleClick() {
+    (async () => {
+      let api = await getApi();
+      goToNextTime(api, currentTime + 1.0);
+    })();
+  }
+
+  return html`<button onClick="${handleClick}">Next</button>`;
+}
 ReactDOMClient.createRoot(document.getElementById("root")).render(
   React.createElement(App, {}, null),
 );
