@@ -1,1 +1,0 @@
-../../examples/basic-infection/people.rs

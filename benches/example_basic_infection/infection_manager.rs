@@ -1,1 +1,0 @@
-../../examples/basic-infection/infection_manager.rs

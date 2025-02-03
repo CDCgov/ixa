@@ -1,1 +1,0 @@
-../../examples/basic-infection/incidence_report.rs

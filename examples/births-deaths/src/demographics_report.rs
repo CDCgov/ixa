@@ -10,7 +10,6 @@ use ixa::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PersonReportItem {
@@ -72,9 +71,10 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .clone();
 
     let current_dir = Path::new(file!()).parent().unwrap();
+    let current_dir = current_dir.join(Path::new(".."));
     context
         .report_options()
-        .directory(PathBuf::from(current_dir))
+        .directory(current_dir)
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.
 
     context.add_report::<PersonReportItem>(&parameters.demographic_output_file)?;

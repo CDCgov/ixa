@@ -1,14 +1,11 @@
-use crate::parameters_loader::Parameters;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt};
 use std::path::Path;
 
-mod demographics_report;
-mod incidence_report;
-mod infection_manager;
-mod parameters_loader;
-mod population_manager;
-mod transmission_manager;
+use ixa_example_births_deaths::{
+    demographics_report, incidence_report, infection_manager, parameters_loader,
+    population_manager, transmission_manager,
+};
 
 fn births_deaths() -> Context {
     let mut context = Context::new();
@@ -19,7 +16,7 @@ fn births_deaths() -> Context {
         .expect("failed to load parameters");
 
     let parameters = context
-        .get_global_property_value(Parameters)
+        .get_global_property_value(parameters_loader::Parameters)
         .unwrap()
         .clone();
     context.init_random(parameters.seed);

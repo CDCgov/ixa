@@ -1,1 +1,0 @@
-../../examples/basic-infection/transmission_manager.rs

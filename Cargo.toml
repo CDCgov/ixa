@@ -36,6 +36,11 @@ rand_distr = "^0.4.3"
 tempfile = "^3.15.0"
 ordered-float = "^4.6.0"
 assert_cmd = "^2.0.16"
+criterion = "^0.5.1"
+
+# Example Libraries
+ixa_example_basic_infection = { path = "examples/basic-infection" }
+ixa_example_births_deaths = { path = "examples/births-deaths" }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -48,6 +53,11 @@ path = "tests/bin/runner_test_custom_args.rs"
 [[bin]]
 name = "runner_test_debug"
 path = "tests/bin/runner_test_debug.rs"
+
+[[bench]]
+name = "example_basic_infection"
+path = "benches/example_basic_infection/example_basic_infection.rs"
+harness = false
 
 [[bench]]
 name = "example_births_deaths"
