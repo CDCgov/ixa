@@ -376,7 +376,7 @@ mod tests {
             &json!({
                 "People" : {
                     "Get" : {
-                        "id": 0,
+                        "person_id": 0,
                         "property" : "Age"
                     }
                 }

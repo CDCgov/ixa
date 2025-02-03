@@ -166,8 +166,13 @@ pub(crate) mod people {
 
     #[derive(Deserialize)]
     pub(crate) enum ArgsEnum {
-        Get { id: usize, property: String },
-        Query { properties: Vec<(String, String)> },
+        Get {
+            person_id: PersonId,
+            property: String,
+        },
+        Query {
+            properties: Vec<(String, String)>,
+        },
     }
 
     #[derive(Deserialize)]
@@ -189,12 +194,15 @@ pub(crate) mod people {
             let Args::People(args) = args;
 
             match args {
-                ArgsEnum::Get { id, property } => {
-                    if *id >= context.get_current_population() {
-                        return Err(IxaError::IxaError(format!("No person with id {id}")));
+                ArgsEnum::Get {
+                    person_id,
+                    property,
+                } => {
+                    if person_id.0 >= context.get_current_population() {
+                        return Err(IxaError::IxaError(format!("No person with id {person_id}")));
                     }
 
-                    let value = context.get_person_property_by_name(property, PersonId(*id))?;
+                    let value = context.get_person_property_by_name(property, *person_id)?;
                     Ok(Retval::Properties(vec![(property.to_string(), value)]))
                 }
                 ArgsEnum::Query {
@@ -218,7 +226,7 @@ pub(crate) mod people {
             let res = run_ext_api::<super::Api>(
                 &mut context,
                 &Args::People(ArgsEnum::Get {
-                    id: 0,
+                    person_id: PersonId(0),
                     property: String::from("abc"),
                 }),
             );
@@ -234,7 +242,7 @@ pub(crate) mod people {
             let res = run_ext_api::<super::Api>(
                 &mut context,
                 &Args::People(ArgsEnum::Get {
-                    id: 0,
+                    person_id: PersonId(0),
                     property: String::from("abc"),
                 }),
             );
