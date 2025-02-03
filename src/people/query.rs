@@ -1,4 +1,3 @@
-use crate::people::context_extension::ContextPeopleExtInternal;
 use crate::people::index::IndexValue;
 use crate::{Context, ContextPeopleExt, PersonProperty};
 use seq_macro::seq;
@@ -26,7 +25,6 @@ impl Query for () {
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
     fn setup(context: &Context) {
         context.register_property::<T1>();
-        context.register_indexer::<T1>();
     }
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
@@ -51,7 +49,6 @@ macro_rules! impl_query {
                 fn setup(context: &Context) {
                     #(
                         context.register_property::<T~N>();
-                        context.register_indexer::<T~N>();
                     )*
                 }
 

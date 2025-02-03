@@ -138,6 +138,7 @@ impl ContextPeopleExt for Context {
     ) -> T::Value {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        self.register_property::<T>();
 
         if T::is_derived() {
             return T::compute(self, person_id);
@@ -162,6 +163,8 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
+        self.register_property::<T>();
+
         assert!(!T::is_derived(), "Cannot set a derived property");
 
         // This function can be called in two separate modes:
@@ -247,7 +250,6 @@ impl ContextPeopleExt for Context {
         }
 
         self.register_property::<T>();
-        self.register_indexer::<T>();
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut index = data_container
@@ -309,24 +311,32 @@ impl ContextPeopleExt for Context {
     }
 
     fn register_property<T: PersonProperty + 'static>(&self) {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        if !data_container
+        let data_container = self.get_data_container(PeoplePlugin).
+            expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        if data_container
             .registered_derived_properties
             .borrow()
             .contains(&TypeId::of::<T>())
         {
-            let instance = T::get_instance();
-            let dependencies = instance.non_derived_dependencies();
-            for dependency in dependencies {
-                let mut dependency_map = data_container.dependency_map.borrow_mut();
-                let derived_prop_list = dependency_map.entry(dependency).or_default();
-                derived_prop_list.push(Box::new(instance));
-            }
-            data_container
-                .registered_derived_properties
-                .borrow_mut()
-                .insert(TypeId::of::<T>());
+            return;
         }
+        let instance = T::get_instance();
+        let dependencies = instance.non_derived_dependencies();
+        for dependency in dependencies {
+            let mut dependency_map = data_container.dependency_map.borrow_mut();
+            let derived_prop_list = dependency_map.entry(dependency).or_default();
+            derived_prop_list.push(Box::new(instance));
+        }
+        data_container
+            .people_types
+            .borrow_mut()
+            .insert(T::name().to_string(), TypeId::of::<T>());
+        data_container
+            .registered_derived_properties
+            .borrow_mut()
+            .insert(TypeId::of::<T>());
+
+        self.register_indexer::<T>();
     }
 
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)

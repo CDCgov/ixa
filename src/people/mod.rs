@@ -71,12 +71,12 @@
 mod context_extension;
 mod data;
 mod event;
+pub(crate) mod external_api;
 mod index;
 mod property;
 mod query;
 
 use crate::{context::Context, define_data_plugin};
-
 pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
@@ -105,7 +105,8 @@ define_data_plugin!(
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),
-        property_indexes: RefCell::new(HashMap::new())
+        property_indexes: RefCell::new(HashMap::new()),
+        people_types: RefCell::new(HashMap::new()),
     }
 );
 

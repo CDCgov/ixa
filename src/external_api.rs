@@ -157,3 +157,98 @@ pub(crate) mod r#continue {
         }
     }
 }
+
+pub(crate) mod people {
+    use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
+    use crate::Context;
+    use crate::IxaError;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize)]
+    pub(crate) enum ArgsEnum {
+        Get {
+            person_id: PersonId,
+            property: String,
+        },
+        Query {
+            properties: Vec<(String, String)>,
+        },
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) enum Args {
+        People(ArgsEnum),
+    }
+
+    #[derive(Serialize, Debug, Eq, PartialEq)]
+    pub(crate) enum Retval {
+        Properties(Vec<(String, String)>),
+    }
+    pub(crate) struct Api {}
+
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
+            let Args::People(args) = args;
+
+            match args {
+                ArgsEnum::Get {
+                    person_id,
+                    property,
+                } => {
+                    if person_id.0 >= context.get_current_population() {
+                        return Err(IxaError::IxaError(format!("No person with id {person_id}")));
+                    }
+
+                    let value = context.get_person_property_by_name(property, *person_id)?;
+                    Ok(Retval::Properties(vec![(property.to_string(), value)]))
+                }
+                ArgsEnum::Query {
+                    properties: _global_properties,
+                } => {
+                    unimplemented!();
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        use crate::external_api::run_ext_api;
+        use crate::Context;
+        #[test]
+        fn query_nonexistent_user() {
+            let mut context = Context::new();
+
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Get {
+                    person_id: PersonId(0),
+                    property: String::from("abc"),
+                }),
+            );
+
+            println!("{res:?}");
+            assert!(matches!(res, Err(IxaError::IxaError(_))));
+        }
+
+        #[test]
+        fn query_nonexistent_property() {
+            let mut context = Context::new();
+            let _ = context.add_person(());
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Get {
+                    person_id: PersonId(0),
+                    property: String::from("abc"),
+                }),
+            );
+
+            println!("{res:?}");
+            assert!(matches!(res, Err(IxaError::IxaError(_))));
+        }
+    }
+}
