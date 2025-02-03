@@ -351,18 +351,23 @@ impl ContextPeopleExt for Context {
         F: Fn(&Context, &[String], usize),
     {
         let type_ids = tabulator.get_typelist();
+        tabulator.setup(self).unwrap();
 
-        // First, update indexes
-        {
-            let data_container = self.get_data_container(PeoplePlugin)
-                .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-
-            for t in &type_ids {
-                if let Some(mut index) = data_container.get_index_ref_mut(*t) {
-                    let methods = data_container.get_methods(*t);
-                    index.index_unindexed_people(self, &methods);
+        if let Some(data_container) = self.get_data_container(PeoplePlugin) {
+            for type_id in &type_ids {
+                let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
+                if index.lookup.is_none() {
+                    // Start indexing this property if it's not already
+                    // indexed.
+                    index.lookup = Some(HashMap::new());
                 }
+
+                let methods = data_container.get_methods(*type_id);
+                index.index_unindexed_people(self, &methods);
             }
+        } else {
+            // If there is no data container then there are no people.
+            return;
         }
 
         // Now process each index

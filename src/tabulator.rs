@@ -1,17 +1,20 @@
+use crate::people::external_api::ContextPeopleExtCrate;
 use crate::people::PersonProperty;
-use crate::{Context, ContextPeopleExt};
+use crate::{Context, ContextPeopleExt, IxaError};
 use seq_macro::seq;
 use std::any::TypeId;
-
 pub trait Tabulator {
-    fn setup(&self, context: &mut Context);
+    #[allow(clippy::missing_errors_doc)]
+    fn setup(&self, context: &Context) -> Result<(), IxaError>;
     fn get_typelist(&self) -> Vec<TypeId>;
     fn get_columns(&self) -> Vec<String>;
 }
 
 impl<T: PersonProperty + 'static> Tabulator for (T,) {
-    fn setup(&self, context: &mut Context) {
-        context.index_property(T::get_instance());
+    fn setup(&self, context: &Context) -> Result<(), IxaError> {
+        context.register_property::<T>();
+        context.index_property_by_id(std::any::TypeId::of::<T>());
+        Ok(())
     }
     fn get_typelist(&self) -> Vec<TypeId> {
         vec![std::any::TypeId::of::<T>()]
@@ -34,11 +37,14 @@ macro_rules! impl_tabulator {
                 )*
             )
             {
-                fn setup(&self, context: &mut Context) {
+                fn setup(&self, context: &Context) -> Result<(), IxaError> {
                     #(
-                        context.index_property(T~N::get_instance());
+                        context.register_property::<T~N>();
+                        context.index_property_by_id(std::any::TypeId::of::<T~N>());
                     )*
+                    Ok(())
                 }
+
                 fn get_typelist(&self) -> Vec<TypeId> {
                     vec![
                     #(
@@ -62,6 +68,26 @@ macro_rules! impl_tabulator {
 seq!(Z in 2..20 {
     impl_tabulator!(Z);
 });
+
+// Implement Tabulator for the special case where we have type ids and not
+// types. Note that we can't register properties here, so this may fail.
+impl Tabulator for Vec<(TypeId, String)> {
+    #[allow(clippy::missing_errors_doc)]
+    fn setup(&self, context: &Context) -> Result<(), IxaError> {
+        for (t, _) in self {
+            context.index_property_by_id(*t);
+        }
+        Ok(())
+    }
+
+    fn get_typelist(&self) -> Vec<TypeId> {
+        self.iter().map(|a| a.0).collect()
+    }
+
+    fn get_columns(&self) -> Vec<String> {
+        self.iter().map(|a| a.1.clone()).collect()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -100,7 +126,6 @@ mod tests {
     ) {
         let mut context = Context::new();
         setup(&mut context);
-        tabulator.setup(&mut context);
 
         let results: RefCell<HashSet<(Vec<String>, usize)>> = RefCell::new(HashSet::new());
         context.tabulate_person_properties(tabulator, |_context, values, count| {

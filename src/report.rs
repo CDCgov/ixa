@@ -202,8 +202,6 @@ impl ContextReportExt for Context {
                 .expect("Failed to write header");
         }
 
-        tabulator.setup(self);
-
         self.add_periodic_plan_with_phase(
             period,
             move |context: &mut Context| {

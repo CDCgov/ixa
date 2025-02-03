@@ -295,6 +295,7 @@ mod tests {
     // TODO(cym4@cdc.gov): Consider using some kind of static
     // object to isolate the test cases.
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn web_api_test() {
         #[derive(Serialize)]
@@ -360,7 +361,7 @@ mod tests {
             })
         );
 
-        // Test the global property get API point.
+        // Next time.
         let res = send_request(
             &url,
             "next",
@@ -372,6 +373,7 @@ mod tests {
         );
         assert_eq!(res, json!({}));
 
+        // Person properties API.
         let res = send_request(
             &url,
             "people",
@@ -391,6 +393,33 @@ mod tests {
             ]}
             )
         );
+
+        // Tabulate API.
+        let res = send_request(
+            &url,
+            "people",
+            &json!({
+                "People" : {
+                    "Tabulate" : {
+                        "properties": ["Age"]
+                    }
+                }
+            }),
+        );
+
+        // This is a hack to deal with these arriving in
+        // arbitrary order.
+        assert!(
+            (res == json!({"Tabulated" : [
+                [{ "Age" :  "1" }, 1],
+                [{ "Age" :  "2" }, 1]
+            ]})) || (res
+                == json!({"Tabulated" : [
+                    [{ "Age" :  "2" }, 1],
+                    [{ "Age" :  "1" }, 1]
+                ]})),
+        );
+
         // Valid JSON but wrong type.
         let res = send_request_text(
             &url,
