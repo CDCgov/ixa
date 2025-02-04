@@ -73,6 +73,7 @@ mod data;
 mod event;
 pub(crate) mod external_api;
 mod index;
+pub(crate) mod methods;
 mod property;
 mod query;
 
@@ -102,6 +103,7 @@ define_data_plugin!(
     PeopleData {
         is_initializing: false,
         current_population: 0,
+        methods: RefCell::new(HashMap::new()),
         properties_map: RefCell::new(HashMap::new()),
         registered_derived_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),

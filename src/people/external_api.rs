@@ -23,9 +23,8 @@ impl ContextPeopleExtCrate for Context {
             .borrow()
             .get(name)
             .ok_or(IxaError::IxaError(format!("No property '{name}'")))?;
-
-        let index = data_container.get_index_ref(type_id).unwrap(); // This should exist
-        Ok((index.get_display)(self, person_id))
+        let methods = data_container.get_methods(type_id);
+        Ok((methods.get_display)(self, person_id))
     }
 }
 
