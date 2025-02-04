@@ -5,6 +5,8 @@ use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
+use crate::{info, set_log_level, LevelFilter};
+
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Default cli arguments for ixa runner
@@ -22,13 +24,17 @@ pub struct BaseArgs {
     #[arg(short, long = "output")]
     pub output_dir: Option<PathBuf>,
 
-    // Optional prefix for report files
+    /// Optional prefix for report files
     #[arg(long = "prefix")]
     pub file_prefix: Option<String>,
 
-    // Overwrite existing report files?
+    /// Overwrite existing report files?
     #[arg(short, long)]
     pub force_overwrite: bool,
+
+    /// Enable logging
+    #[arg(short, long)]
+    pub log_level: Option<LevelFilter>,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
@@ -38,6 +44,7 @@ pub struct BaseArgs {
     #[arg(short, long)]
     pub web: Option<Option<u16>>,
 }
+
 impl BaseArgs {
     fn new() -> Self {
         BaseArgs {
@@ -46,6 +53,7 @@ impl BaseArgs {
             output_dir: None,
             file_prefix: None,
             force_overwrite: false,
+            log_level: None,
             debugger: None,
             web: None,
         }
@@ -96,7 +104,7 @@ where
 /// This function parses command line arguments allows you to define a setup function
 ///
 /// # Parameters
-/// - `setup_fn`: A function that takes a mutable reference to a `Context`and `BaseArgs` struct
+/// - `setup_fn`: A function that takes a mutable reference to a `Context` and `BaseArgs` struct
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
@@ -140,6 +148,12 @@ where
     }
     if args.force_overwrite {
         report_config.overwrite(true);
+    }
+    if let Some(level) = args.log_level {
+        set_log_level(level);
+        info!("Logging enabled at level {level}");
+    } else {
+        info!("Logging disabled.");
     }
 
     context.init_random(args.random_seed);
@@ -272,6 +286,14 @@ mod tests {
             assert_eq!(c.unwrap().a, 42);
             Ok(())
         });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_with_logging_enabled() {
+        let mut test_args = BaseArgs::new();
+        test_args.log_level = Some(LevelFilter::Info);
+        let result = run_with_args_internal(test_args, None, |_, _, _: Option<()>| Ok(()));
         assert!(result.is_ok());
     }
 }

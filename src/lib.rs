@@ -58,5 +58,11 @@ pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
 
 pub mod debugger;
 
+pub mod log;
+pub use log::{
+    debug, disable_logging, enable_logging, error, info, set_log_level, set_module_filter,
+    set_module_filters, trace, warn, LevelFilter,
+};
+
 pub mod external_api;
 pub mod web_api;

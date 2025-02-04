@@ -1,5 +1,6 @@
 use ixa::context::Context;
 use ixa::{define_person_property_with_default, ContextPeopleExt};
+use log::trace;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,7 @@ define_person_property_with_default!(
 
 /// Populates the "world" with the `POPULATION` number of people.
 pub fn init(context: &mut Context) {
+    trace!("Initializing people");
     for _ in 0..POPULATION {
         context.add_person(()).unwrap();
     }
