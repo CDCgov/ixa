@@ -40,7 +40,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     // examples.
     context
         .report_options()
-        .directory(PathBuf::from("./examples/basic-infection/"))
+        .directory(PathBuf::from("../"))
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence")?;
     context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
