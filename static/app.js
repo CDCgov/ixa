@@ -31,6 +31,7 @@ function App() {
     <div><${Time} app=${app} /></div>
     <div><${Population} app=${app} /></div>
     <div><${GlobalSettings} app=${app} /></div>
+    <div><${PeoplePropertiesList} app=${app} /></div>
     <div><${TabulatedPeople} app=${app} properties=${properties} /></div>
     <div><${PeopleGraph} app=${app} properties=${properties} /></div>
     <div><${NextButton} app=${app} /></div>
@@ -136,6 +137,31 @@ function TabulatedPeople({ app, properties }) {
         ${tabulated}
       </tbody>
     </table>
+  </div>`;
+}
+
+function PeoplePropertiesList({ app }) {
+  let [propertyList, setPropertyList] = useState();
+
+  useEffect(() => {
+    (async () => {
+      let api = await getApi();
+
+      let peopleProperties = await api.getPeoplePropertiesList();
+      let listValues = [];
+      for (let propertyName of peopleProperties) {
+        listValues.push(html`<li key="${propertyName}">${propertyName}</li>`);
+      }
+
+      setPropertyList(listValues);
+    })();
+  }, [app]);
+
+  return html`<div>
+    <b>People Properties</b>
+    <ul>
+      ${propertyList}
+    </ul>
   </div>`;
 }
 

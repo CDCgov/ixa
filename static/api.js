@@ -76,6 +76,14 @@ function Api() {
     return response.Tabulated;
   }
 
+  async function getPeoplePropertiesList() {
+    let response = await makeApiCall("people", {
+      People: "Properties",
+    });
+
+    return response.PropertyNames;
+  }
+
   const baseUrl = getBaseUrl();
 
   return {
@@ -85,6 +93,7 @@ function Api() {
     getGlobalSettingValue,
     nextTime,
     tabulateProperties,
+    getPeoplePropertiesList,
   };
 }
 
