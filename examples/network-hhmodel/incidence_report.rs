@@ -5,7 +5,7 @@ use ixa::people::PersonPropertyChangeEvent;
 use ixa::report::ContextReportExt;
 use ixa::ContextPeopleExt;
 use ixa::{create_report_trait, report::Report};
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
