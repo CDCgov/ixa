@@ -17,7 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use log::trace;
+use crate::trace;
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
@@ -58,32 +58,33 @@ where
 {
     trace!("Adding global property {}", name);
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    assert!(properties
-        .borrow_mut()
-        .insert(
-            name.to_string(),
-            Arc::new(PropertyAccessors {
-                setter: Box::new(
-                    |context: &mut Context, name, value| -> Result<(), IxaError> {
-                        let val: T::Value = serde_json::from_value(value)?;
-                        T::validate(&val)?;
-                        if context.get_global_property_value(T::new()).is_some() {
-                            return Err(IxaError::IxaError(format!("Duplicate property {name}")));
-                        }
-                        context.set_global_property_value(T::new(), val)?;
-                        Ok(())
+    let existing_property = properties.borrow_mut().insert(
+        name.to_string(),
+        Arc::new(PropertyAccessors {
+            setter: Box::new(
+                |context: &mut Context, name, value| -> Result<(), IxaError> {
+                    let val: T::Value = serde_json::from_value(value)?;
+                    T::validate(&val)?;
+                    if context.get_global_property_value(T::new()).is_some() {
+                        return Err(IxaError::IxaError(format!("Duplicate property {name}")));
                     }
-                ),
-                getter: Box::new(|context: &Context| -> Result<Option<String>, IxaError> {
-                    let value = context.get_global_property_value(T::new());
-                    match value {
-                        Some(val) => Ok(Some(serde_json::to_string(val)?)),
-                        None => Ok(None),
-                    }
-                }),
-            })
-        )
-        .is_none());
+                    context.set_global_property_value(T::new(), val)?;
+                    Ok(())
+                },
+            ),
+            getter: Box::new(|context: &Context| -> Result<Option<String>, IxaError> {
+                let value = context.get_global_property_value(T::new());
+                match value {
+                    Some(val) => Ok(Some(serde_json::to_string(val)?)),
+                    None => Ok(None),
+                }
+            }),
+        }),
+    );
+    // Check that an existing global property with that name does not already exist.
+    if let Some(_) = existing_property {
+        panic!("Duplicate global property {}", name);
+    }
 }
 
 fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
@@ -321,6 +322,7 @@ mod test {
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
     use tempfile::tempdir;
+
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ParamType {
         pub days: usize,
@@ -328,6 +330,12 @@ mod test {
     }
 
     define_global_property!(DiseaseParams, ParamType);
+
+    #[test]
+    #[should_panic(expected = "Duplicate global property")]
+    fn duplicate_global_property_panics() {
+        add_global_property::<DiseaseParams>("ixa.DiseaseParams");
+    }
 
     #[test]
     fn set_get_global_property() {
