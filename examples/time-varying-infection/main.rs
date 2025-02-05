@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 use ixa::report::ContextReportExt;
+use ixa::run_with_args;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 use population_loader::DiseaseStatus;
 
@@ -14,13 +15,11 @@ mod population_loader;
 
 use crate::parameters_loader::Parameters;
 
-fn initialize() -> Result<Context, IxaError> {
-    let mut context = Context::new();
-
+fn initialize(context: &mut Context) -> Result<(), IxaError> {
     let args: Vec<String> = std::env::args().collect();
     let file_path = PathBuf::from(&args[1]);
 
-    parameters_loader::init_parameters(&mut context, &file_path)?;
+    parameters_loader::init_parameters(context, &file_path)?;
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -28,10 +27,10 @@ fn initialize() -> Result<Context, IxaError> {
 
     context.init_random(parameters.seed);
 
-    exposure_manager::init(&mut context);
-    population_loader::init(&mut context);
-    infection_manager::init(&mut context);
-    incidence_report::init(&mut context)?;
+    exposure_manager::init(context);
+    population_loader::init(context);
+    infection_manager::init(context);
+    incidence_report::init(context)?;
     // add periodic report
     context.add_periodic_report("person_property_count", 1.0, (DiseaseStatus,))?;
 
@@ -39,10 +38,9 @@ fn initialize() -> Result<Context, IxaError> {
         context.shutdown();
     });
     println!("{parameters:?}");
-    Ok(context)
+    Ok(())
 }
 
 fn main() {
-    let mut context = initialize().expect("Could not initialize context.");
-    context.execute();
+    run_with_args(|context, _, _| initialize(context)).unwrap();
 }

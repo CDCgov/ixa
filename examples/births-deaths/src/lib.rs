@@ -11,12 +11,11 @@ pub mod transmission_manager;
 
 use crate::parameters_loader::Parameters;
 
-pub fn initialize() -> Context {
-    let mut context = Context::new();
+pub fn initialize(context: &mut Context) {
     let current_dir = Path::new(file!()).parent().unwrap();
     let parameters_path = current_dir.join("../input.json");
 
-    parameters_loader::init_parameters(&mut context, &parameters_path).unwrap_or_else(|e| {
+    parameters_loader::init_parameters(context, &parameters_path).unwrap_or_else(|e| {
         eprintln!("failed to init init_parameters: {}", e);
     });
 
@@ -26,19 +25,17 @@ pub fn initialize() -> Context {
         .clone();
     context.init_random(parameters.seed);
 
-    demographics_report::init(&mut context).unwrap_or_else(|e| {
+    demographics_report::init(context).unwrap_or_else(|e| {
         eprintln!("failed to init demographics_report: {}", e);
     });
-    incidence_report::init(&mut context).unwrap_or_else(|e| {
+    incidence_report::init(context).unwrap_or_else(|e| {
         eprintln!("failed to init incidence_report: {}", e);
     });
-    population_manager::init(&mut context);
-    transmission_manager::init(&mut context);
-    infection_manager::init(&mut context);
+    population_manager::init(context);
+    transmission_manager::init(context);
+    infection_manager::init(context);
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
-
-    context
 }
