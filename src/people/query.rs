@@ -68,6 +68,19 @@ seq!(Z in 1..20 {
     impl_query!(Z);
 });
 
+/// Helper utility for combining two queries, useful if you want
+/// to iteratively construct a query in multiple parts.
+///
+/// Example:
+/// ```
+/// use ixa::{define_person_property, people::QueryAnd, Context, ContextPeopleExt};
+/// define_person_property!(Age, u8);
+/// define_person_property!(Alive, bool);
+/// let context = Context::new();
+/// let q1 = (Age, 42);
+/// let q2 = (Alive, true);
+/// context.query_people(QueryAnd::new(q1, q2));
+/// ```
 pub struct QueryAnd<Q1, Q2>
 where
     Q1: Query,
@@ -76,25 +89,14 @@ where
     queries: (Q1, Q2),
 }
 
-/// Helper utility for combining two queries, useful if you want
-/// to iteratively construct a query in multiple parts.
-///
-/// Example:
-/// ```
-/// use ixa::{define_person_property, people::query_and, Context, ContextPeopleExt};
-/// define_person_property!(Age, u8);
-/// define_person_property!(Alive, bool);
-/// let context = Context::new();
-/// let q1 = (Age, 42);
-/// let q2 = (Alive, true);
-/// context.query_people(query_and(q1, q2));
-/// ```
-pub fn query_and<Q1, Q2>(q1: Q1, q2: Q2) -> QueryAnd<Q1, Q2>
+impl<Q1, Q2> QueryAnd<Q1, Q2>
 where
     Q1: Query,
     Q2: Query,
 {
-    QueryAnd { queries: (q1, q2) }
+    pub fn new(q1: Q1, q2: Q2) -> Self {
+        Self { queries: (q1, q2) }
+    }
 }
 
 impl<Q1, Q2> Query for QueryAnd<Q1, Q2>
@@ -117,8 +119,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::people::query_and;
     use crate::people::PeoplePlugin;
+    use crate::people::QueryAnd;
     use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
     use std::any::TypeId;
 
@@ -395,7 +397,7 @@ mod tests {
         let q1 = (Age, 42);
         let q2 = (RiskCategory, RiskCategoryValue::High);
 
-        let people = context.query_people(query_and(q1, q2));
+        let people = context.query_people(QueryAnd::new(q1, q2));
         assert_eq!(people.len(), 1);
     }
 
@@ -409,7 +411,7 @@ mod tests {
         let q1 = (Age, 42);
         let q2 = (Age, 64);
 
-        let people = context.query_people(query_and(q1, q2));
+        let people = context.query_people(QueryAnd::new(q1, q2));
         assert_eq!(people.len(), 0);
     }
 }
