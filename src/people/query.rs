@@ -9,12 +9,12 @@ use std::any::TypeId;
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
 pub trait Query {
-    fn setup(context: &Context);
+    fn setup(&self, context: &Context);
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
 
 impl Query for () {
-    fn setup(_: &Context) {}
+    fn setup(&self, _: &Context) {}
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
         vec![]
@@ -23,7 +23,7 @@ impl Query for () {
 
 // Implement the query version with one parameter.
 impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
-    fn setup(context: &Context) {
+    fn setup(&self, context: &Context) {
         context.register_property::<T1>();
     }
 
@@ -46,7 +46,7 @@ macro_rules! impl_query {
                 )*
             )
             {
-                fn setup(context: &Context) {
+                fn setup(&self, context: &Context) {
                     #(
                         context.register_property::<T~N>();
                     )*
@@ -68,9 +68,59 @@ seq!(Z in 1..20 {
     impl_query!(Z);
 });
 
+/// Helper utility for combining two queries, useful if you want
+/// to iteratively construct a query in multiple parts.
+///
+/// Example:
+/// ```
+/// use ixa::{define_person_property, people::QueryAnd, Context, ContextPeopleExt};
+/// define_person_property!(Age, u8);
+/// define_person_property!(Alive, bool);
+/// let context = Context::new();
+/// let q1 = (Age, 42);
+/// let q2 = (Alive, true);
+/// context.query_people(QueryAnd::new(q1, q2));
+/// ```
+pub struct QueryAnd<Q1, Q2>
+where
+    Q1: Query,
+    Q2: Query,
+{
+    queries: (Q1, Q2),
+}
+
+impl<Q1, Q2> QueryAnd<Q1, Q2>
+where
+    Q1: Query,
+    Q2: Query,
+{
+    pub fn new(q1: Q1, q2: Q2) -> Self {
+        Self { queries: (q1, q2) }
+    }
+}
+
+impl<Q1, Q2> Query for QueryAnd<Q1, Q2>
+where
+    Q1: Query,
+    Q2: Query,
+{
+    fn setup(&self, context: &Context) {
+        Q1::setup(&self.queries.0, context);
+        Q2::setup(&self.queries.1, context);
+    }
+
+    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+        let mut query = Vec::new();
+        query.extend_from_slice(&self.queries.0.get_query());
+        query.extend_from_slice(&self.queries.1.get_query());
+        query
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::people::PeoplePlugin;
+    use crate::people::QueryAnd;
     use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
     use std::any::TypeId;
 
@@ -335,5 +385,33 @@ mod tests {
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
+    }
+
+    #[test]
+    fn query_and_returns_people() {
+        let mut context = Context::new();
+        context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+
+        let q1 = (Age, 42);
+        let q2 = (RiskCategory, RiskCategoryValue::High);
+
+        let people = context.query_people(QueryAnd::new(q1, q2));
+        assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn query_and_conflicting() {
+        let mut context = Context::new();
+        context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+
+        let q1 = (Age, 42);
+        let q2 = (Age, 64);
+
+        let people = context.query_people(QueryAnd::new(q1, q2));
+        assert_eq!(people.len(), 0);
     }
 }

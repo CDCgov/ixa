@@ -268,7 +268,7 @@ impl ContextPeopleExt for Context {
             return Vec::new();
         }
 
-        T::setup(self);
+        T::setup(&q, self);
         let mut result = Vec::new();
         self.query_people_internal(
             |person| {
@@ -285,7 +285,7 @@ impl ContextPeopleExt for Context {
             return 0;
         }
 
-        T::setup(self);
+        T::setup(&q, self);
         let mut count: usize = 0;
         self.query_people_internal(
             |_person| {
@@ -297,7 +297,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
-        T::setup(self);
+        T::setup(&q, self);
         // This cannot fail because someone must have been made by now.
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
@@ -405,7 +405,7 @@ impl ContextPeopleExt for Context {
             return Ok(PersonId(result));
         }
 
-        T::setup(self);
+        T::setup(&query, self);
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
