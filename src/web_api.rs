@@ -394,6 +394,22 @@ mod tests {
             )
         );
 
+        // List properties.
+        let res = send_request(
+            &url,
+            "people",
+            &json!({
+                "People" : "Properties"
+            }),
+        );
+        assert_eq!(
+            res,
+            json!({"PropertyNames" : [
+                "Age"
+            ]}
+            )
+        );
+
         // Tabulate API.
         let res = send_request(
             &url,
