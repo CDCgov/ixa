@@ -103,7 +103,7 @@ function TabulatedPeople({ app, properties }) {
     (async () => {
       let api = await getApi();
 
-      let result = await api.tabulateProperties(["InfectionStatus"]);
+      let result = await api.tabulateProperties(properties);
       let tableRows = [];
       for (let row of result) {
         let columns = properties.map((prop) => row[0][prop]);
@@ -141,13 +141,37 @@ function TabulatedPeople({ app, properties }) {
 
 function PeopleGraph({ app, properties }) {
   const plotRef = useRef();
+  let history = useRef([]);
 
   useEffect(() => {
     (async () => {
-      const plot = Plot.rectY(
-        { length: 10000 },
-        Plot.binX({ y: "count" }, { x: Math.random }),
-      ).plot();
+      let api = await getApi();
+
+      let results = await api.tabulateProperties(properties);
+      for (let result of results) {
+        let label = [];
+        for (let prop of properties) {
+          label.push(`${prop}:${result[0][prop]}`);
+        }
+        history.current.push({
+          time: currentTime,
+          value: result[1],
+          series: label.join("|"),
+        });
+      }
+
+      console.log(history.current);
+      const plot = Plot.plot({
+        color: { legend: true },
+
+        marks: [
+          Plot.line(history.current, {
+            x: "time",
+            y: "value",
+            stroke: "series",
+          }),
+        ],
+      });
       plotRef.current?.replaceChildren(plot);
     })();
   }, [app, properties]);
