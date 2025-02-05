@@ -92,7 +92,10 @@ impl ContextPeopleExtCrate for Context {
         let data_container = data_container.unwrap();
         let people_types = data_container.people_types.borrow();
 
-        people_types.keys().map(|a| a.to_string()).collect()
+        people_types
+            .keys()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 }
 
