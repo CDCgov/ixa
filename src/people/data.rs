@@ -1,5 +1,6 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
 use crate::people::index::Index;
+use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use std::any::{Any, TypeId};
@@ -28,6 +29,7 @@ impl StoredPeopleProperties {
 pub(super) struct PeopleData {
     pub(super) is_initializing: bool,
     pub(super) current_population: usize,
+    pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     pub(super) registered_derived_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
@@ -223,6 +225,11 @@ impl PeopleData {
         }
 
         Ok(())
+    }
+
+    pub(super) fn get_methods(&self, t: TypeId) -> RefMut<'_, Methods> {
+        let x = self.methods.borrow_mut();
+        RefMut::map(x, |a| a.get_mut(&t).unwrap())
     }
 }
 
