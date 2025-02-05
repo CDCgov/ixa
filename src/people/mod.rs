@@ -76,7 +76,7 @@ mod index;
 pub(crate) mod methods;
 mod property;
 mod query;
-pub use query::{query_and, QueryAnd};
+pub use query::{query_and, Query, QueryAnd};
 
 use crate::{context::Context, define_data_plugin};
 pub use context_extension::ContextPeopleExt;
