@@ -127,6 +127,8 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    // Silence spurious unused import warnings.
+    #![allow(unused_imports)]
     use super::*;
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
     use ixa::context::Context;

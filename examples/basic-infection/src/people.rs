@@ -1,6 +1,6 @@
 use ixa::context::Context;
+use ixa::trace;
 use ixa::{define_person_property_with_default, ContextPeopleExt};
-use log::trace;
 
 use serde::{Deserialize, Serialize};
 

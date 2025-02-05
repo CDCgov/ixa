@@ -99,6 +99,8 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    // Silence spurious unused import warnings.
+    #![allow(unused_imports)]
     use super::*;
     use ixa::context::Context;
     use ixa::define_data_plugin;

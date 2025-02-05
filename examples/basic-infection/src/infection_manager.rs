@@ -1,7 +1,6 @@
 use ixa::context::Context;
-use log::trace;
-
 use ixa::random::ContextRandomExt;
+use ixa::trace;
 use ixa::{define_rng, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 
 use rand_distr::Exp;
