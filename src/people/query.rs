@@ -81,8 +81,12 @@ where
 ///
 /// Example:
 /// ```
+/// use ixa::{define_person_property, people::query_and, Context, ContextPeopleExt};
+/// define_person_property!(Age, u8);
+/// define_person_property!(Alive, bool);
+/// let context = Context::new();
 /// let q1 = (Age, 42);
-/// let q2 = (RiskCategory, RiskCategoryValue::High);
+/// let q2 = (Alive, true);
 /// context.query_people(query_and(q1, q2));
 /// ```
 pub fn query_and<Q1, Q2>(q1: Q1, q2: Q2) -> QueryAnd<Q1, Q2>
