@@ -65,6 +65,17 @@ function Api() {
     });
   }
 
+  async function tabulateProperties(props) {
+    let response = await makeApiCall("people", {
+      People: {
+        Tabulate: {
+          properties: props,
+        },
+      },
+    });
+    return response.Tabulated;
+  }
+
   const baseUrl = getBaseUrl();
 
   return {
@@ -73,6 +84,7 @@ function Api() {
     getGlobalSettingsList,
     getGlobalSettingValue,
     nextTime,
+    tabulateProperties,
   };
 }
 

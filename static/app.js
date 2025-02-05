@@ -30,6 +30,7 @@ function App() {
     <div><${Time} app=${app} /></div>
     <div><${Population} app=${app} /></div>
     <div><${GlobalSettings} app=${app} /></div>
+    <div><${TabulatedPeople} app=${app} /></div>
     <div><${NextButton} app=${app} /></div>
   `;
 }
@@ -89,6 +90,32 @@ function GlobalSettings({ app }) {
     <b>Global Properties</b>
     <ul>
       ${globals}
+    </ul>
+  </div>`;
+}
+
+function TabulatedPeople({ app }) {
+  let [tabulated, setTabulated] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      let api = await getApi();
+
+      let result = await api.tabulateProperties(["InfectionStatus"]);
+      let listValues = [];
+      for (let row of result) {
+        const status = row[0].InfectionStatus;
+        const count = row[1];
+        listValues.push(html`<li key="${status}">${status} = ${count}</li>`);
+      }
+      setTabulated(listValues);
+    })();
+  }, [app]);
+
+  return html`<div>
+    <b>People Status</b>
+    <ul>
+      ${tabulated}
     </ul>
   </div>`;
 }
