@@ -2,8 +2,8 @@ import React from "https://esm.sh/react@19/?dev";
 import ReactDOMClient from "https://esm.sh/react-dom@19/client?dev";
 import htm from "https://esm.sh/htm@3?dev";
 import getApi from "./api.js";
-
-import { useEffect, useState } from "https://esm.sh/react@19/?dev";
+import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm";
+import { useEffect, useState, useRef } from "https://esm.sh/react@19/?dev";
 
 let currentTime;
 
@@ -32,6 +32,7 @@ function App() {
     <div><${Population} app=${app} /></div>
     <div><${GlobalSettings} app=${app} /></div>
     <div><${TabulatedPeople} app=${app} properties=${properties} /></div>
+    <div><${PeopleGraph} app=${app} properties=${properties} /></div>
     <div><${NextButton} app=${app} /></div>
   `;
 }
@@ -103,7 +104,6 @@ function TabulatedPeople({ app, properties }) {
       let api = await getApi();
 
       let result = await api.tabulateProperties(["InfectionStatus"]);
-      let listValues = [];
       let tableRows = [];
       for (let row of result) {
         let columns = properties.map((prop) => row[0][prop]);
@@ -139,6 +139,24 @@ function TabulatedPeople({ app, properties }) {
   </div>`;
 }
 
+function PeopleGraph({ app, properties }) {
+  const plotRef = useRef();
+
+  useEffect(() => {
+    (async () => {
+      const plot = Plot.rectY(
+        { length: 10000 },
+        Plot.binX({ y: "count" }, { x: Math.random }),
+      ).plot();
+      plotRef.current?.replaceChildren(plot);
+    })();
+  }, [app, properties]);
+
+  return html`<div className="people-graph">
+    <b>Time Series</b>
+    <div ref=${plotRef}></div>
+  </div>`;
+}
 function NextButton({ app }) {
   async function goToNextTime(api, next) {
     let now = currentTime;
