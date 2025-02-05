@@ -35,6 +35,6 @@ fn initialize(context: &mut Context) {
 
     let to_infect = vec![context.sample_person(MainRng, ()).unwrap()];
     seir::init(&mut context, &to_infect);
-
+    seir::init(&mut context, &to_infect);
     context.execute();
 }
