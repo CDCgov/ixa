@@ -179,6 +179,7 @@ pub(crate) mod people {
         Tabulate {
             properties: Vec<String>,
         },
+        Properties,
     }
 
     #[derive(Deserialize)]
@@ -190,6 +191,7 @@ pub(crate) mod people {
     pub(crate) enum Retval {
         Properties(Vec<(String, String)>),
         Tabulated(Vec<(HashMap<String, String>, usize)>),
+        PropertyNames(Vec<String>),
     }
     pub(crate) struct Api {}
 
@@ -232,6 +234,9 @@ pub(crate) mod people {
                         },
                     )?;
                     Ok(Retval::Tabulated(results.take()))
+                }
+                ArgsEnum::Properties => {
+                    Ok(Retval::PropertyNames(context.get_person_property_names()))
                 }
             }
         }
@@ -328,6 +333,23 @@ pub(crate) mod people {
                     }
                     assert_eq!(expected.len(), 0);
                 }
+                _ => panic!("Unexpected result"),
+            }
+        }
+
+        #[test]
+        fn get_person_property_names() {
+            let mut context = Context::new();
+            let _ = context.add_person((Age, 10));
+            let _ = context.add_person((Age, 20));
+
+            let res = run_ext_api::<super::Api>(&mut context, &Args::People(ArgsEnum::Properties));
+            println!("{res:?}");
+            let res = res.unwrap();
+
+            #[allow(clippy::match_wildcard_for_single_variants)]
+            match res {
+                Retval::PropertyNames(names) => assert_eq!(names, vec!["Age"]),
                 _ => panic!("Unexpected result"),
             }
         }

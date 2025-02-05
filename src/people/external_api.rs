@@ -23,6 +23,8 @@ pub(crate) trait ContextPeopleExtCrate {
         F: Fn(&Context, &[String], usize);
 
     fn index_property_by_id(&self, type_id: TypeId);
+
+    fn get_person_property_names(&self) -> Vec<String>;
 }
 
 impl ContextPeopleExtCrate for Context {
@@ -31,7 +33,11 @@ impl ContextPeopleExtCrate for Context {
         name: &str,
         person_id: PersonId,
     ) -> Result<String, IxaError> {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let data_container = self.get_data_container(PeoplePlugin);
+        if data_container.is_none() {
+            return Err(IxaError::IxaError(String::from("No people exist")));
+        }
+        let data_container = data_container.unwrap();
         let type_id = *data_container
             .people_types
             .borrow()
@@ -76,6 +82,17 @@ impl ContextPeopleExtCrate for Context {
         if index.lookup.is_none() {
             index.lookup = Some(HashMap::new());
         }
+    }
+
+    fn get_person_property_names(&self) -> Vec<String> {
+        let data_container = self.get_data_container(PeoplePlugin);
+        if data_container.is_none() {
+            return vec![];
+        }
+        let data_container = data_container.unwrap();
+        let people_types = data_container.people_types.borrow();
+
+        people_types.keys().map(|a| a.to_string()).collect()
     }
 }
 
