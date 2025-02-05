@@ -42,9 +42,10 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
+    fs::create_dir_all("examples/network-hhmodel")?;
     context
         .report_options()
-        .directory(PathBuf::from("./examples/network-hhmodel/output"))
+        .directory(PathBuf::from("examples/network-hhmodel/output"))
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
     context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
