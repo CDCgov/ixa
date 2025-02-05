@@ -6,7 +6,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-
 ixa = { path = "../../../ixa" }
 ixa-derive = { path = "../../ixa-derive" }
 
