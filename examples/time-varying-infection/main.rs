@@ -1,9 +1,10 @@
+use clap::Args;
 use std::path::PathBuf;
 
 use ixa::error::IxaError;
 use ixa::random::ContextRandomExt;
 use ixa::report::ContextReportExt;
-use ixa::run_with_args;
+use ixa::run_with_custom_args;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 use population_loader::DiseaseStatus;
 
@@ -15,9 +16,13 @@ mod population_loader;
 
 use crate::parameters_loader::Parameters;
 
-fn initialize(context: &mut Context) -> Result<(), IxaError> {
-    let args: Vec<String> = std::env::args().collect();
-    let file_path = PathBuf::from(&args[1]);
+#[derive(Args, Debug)]
+struct CustomArgs {
+    config_file: String,
+}
+
+fn initialize(context: &mut Context, custom_args: Option<CustomArgs>) -> Result<(), IxaError> {
+    let file_path = PathBuf::from(custom_args.unwrap().config_file);
 
     parameters_loader::init_parameters(context, &file_path)?;
     let parameters = context
@@ -42,5 +47,8 @@ fn initialize(context: &mut Context) -> Result<(), IxaError> {
 }
 
 fn main() {
-    run_with_args(|context, _, _| initialize(context)).unwrap();
+    run_with_custom_args(|context, _, custom_args: Option<CustomArgs>| {
+        initialize(context, custom_args)
+    })
+    .unwrap();
 }
