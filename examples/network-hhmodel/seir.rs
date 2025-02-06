@@ -38,7 +38,6 @@ pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Va
     let infected = context.query_people((DiseaseStatus, DiseaseStatusValue::I));
     let mut edges = Vec::new();
 
-    //println!("n infected: {:?}", infected.len());
     for i in infected {
         edges.extend(context.get_matching_edges::<T>(i, |context, edge| {
             context.match_person(edge.neighbor, (DiseaseStatus, DiseaseStatusValue::S))
