@@ -32,7 +32,7 @@ function App() {
     <div><${Population} app=${app} /></div>
     <div><${GlobalSettings} app=${app} /></div>
     <div><${PeoplePropertiesList} app=${app} /></div>
-    <div><${TabulatedPeople} app=${app} properties=${properties} /></div>
+    <div><${PeopleTable} app=${app} properties=${properties} /></div>
     <div><${PeopleGraph} app=${app} properties=${properties} /></div>
     <div><${TrackingContainer} app=${app} /></div>
     <div><${NextButton} app=${app} /></div>
@@ -98,7 +98,7 @@ function GlobalSettings({ app }) {
   </div>`;
 }
 
-function TabulatedPeople({ app, properties }) {
+function PeopleTable({ app, properties }) {
   let [tabulated, setTabulated] = useState([]);
 
   useEffect(() => {
@@ -208,20 +208,27 @@ function PeopleGraph({ app, properties }) {
 }
 
 function GraphContainer({ app, graphs }) {
-  console.log(`GraphContainer len=${graphs.length}`);
-  console.log(graphs);
   let graphList = [];
 
   for (let i = 0; i < graphs.length; i++) {
-    console.log("XX");
     graphList.push(
       html`<div><${PeopleGraph} app=${app} properties=${graphs[i]} /></div>`,
     );
   }
 
-  console.log("Graphlist");
-  console.log(graphList);
   return html`<div>${graphList}</div>`;
+}
+
+function TableContainer({ app, tables }) {
+  let tableList = [];
+
+  for (let i = 0; i < tables.length; i++) {
+    tableList.push(
+      html`<div><${PeopleTable} app=${app} properties=${tables[i]} /></div>`,
+    );
+  }
+
+  return html`<div>${tableList}</div>`;
 }
 
 function TrackingContainer({ app }) {
@@ -232,7 +239,7 @@ function TrackingContainer({ app }) {
   console.log("Re-rendering tracking container");
   console.log(graphs);
 
-  function handleClick() {
+  function handleGraphClick() {
     let boxes = document.querySelectorAll(".tracking-container-checkbox");
     let properties = [];
 
@@ -244,6 +251,20 @@ function TrackingContainer({ app }) {
     }
 
     setGraphs([...graphs, properties]);
+  }
+
+  function handleTableClick() {
+    let boxes = document.querySelectorAll(".tracking-container-checkbox");
+    let properties = [];
+
+    for (let box of boxes) {
+      console.log(`${box.id} ${box.checked} ${box.value}`);
+      if (box.checked) {
+        properties.push(box.value);
+      }
+    }
+
+    setTables([...tables, properties]);
   }
 
   useEffect(() => {
@@ -272,9 +293,11 @@ function TrackingContainer({ app }) {
     <fieldset>
       <legend>Select properties to track</legend>
       ${properties}
-      <button onClick="${handleClick}">Track</button>
+      <button onClick="${handleGraphClick}">Add graph</button>
+      <button onClick="${handleTableClick}">Add table</button>
     </fieldset>
     <div><${GraphContainer} app=${app} graphs=${graphs} /></div>
+    <div><${TableContainer} app=${app} tables=${tables} /></div>
   </div>`;
 }
 
