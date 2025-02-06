@@ -10,6 +10,8 @@ use std::any::TypeId;
 use std::cell::Ref;
 use std::collections::{HashMap, HashSet};
 
+use crate::people::methods::Methods;
+
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
 pub trait ContextPeopleExt {
@@ -266,7 +268,7 @@ impl ContextPeopleExt for Context {
             return Vec::new();
         }
 
-        T::setup(self);
+        T::setup(&q, self);
         let mut result = Vec::new();
         self.query_people_internal(
             |person| {
@@ -283,7 +285,7 @@ impl ContextPeopleExt for Context {
             return 0;
         }
 
-        T::setup(self);
+        T::setup(&q, self);
         let mut count: usize = 0;
         self.query_people_internal(
             |_person| {
@@ -295,15 +297,15 @@ impl ContextPeopleExt for Context {
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
-        T::setup(self);
+        T::setup(&q, self);
         // This cannot fail because someone must have been made by now.
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
         let query = q.get_query();
 
         for (t, hash) in &query {
-            let index = data_container.get_index_ref(*t).unwrap();
-            if *hash != (*index.indexer)(self, person_id) {
+            let methods = data_container.get_methods(*t);
+            if *hash != (*methods.indexer)(self, person_id) {
                 return false;
             }
         }
@@ -320,6 +322,7 @@ impl ContextPeopleExt for Context {
         {
             return;
         }
+
         let instance = T::get_instance();
         let dependencies = instance.non_derived_dependencies();
         for dependency in dependencies {
@@ -327,6 +330,10 @@ impl ContextPeopleExt for Context {
             let derived_prop_list = dependency_map.entry(dependency).or_default();
             derived_prop_list.push(Box::new(instance));
         }
+        data_container
+            .methods
+            .borrow_mut()
+            .insert(TypeId::of::<T>(), Methods::new::<T>());
         data_container
             .people_types
             .borrow_mut()
@@ -344,16 +351,23 @@ impl ContextPeopleExt for Context {
         F: Fn(&Context, &[String], usize),
     {
         let type_ids = tabulator.get_typelist();
+        tabulator.setup(self).unwrap();
 
-        // First, update indexes
-        {
-            let data_container = self.get_data_container(PeoplePlugin)
-                .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-            for t in &type_ids {
-                if let Some(mut index) = data_container.get_index_ref_mut(*t) {
-                    index.index_unindexed_people(self);
+        if let Some(data_container) = self.get_data_container(PeoplePlugin) {
+            for type_id in &type_ids {
+                let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
+                if index.lookup.is_none() {
+                    // Start indexing this property if it's not already
+                    // indexed.
+                    index.lookup = Some(HashMap::new());
                 }
+
+                let methods = data_container.get_methods(*type_id);
+                index.index_unindexed_people(self, &methods);
             }
+        } else {
+            // If there is no data container then there are no people.
+            return;
         }
 
         // Now process each index
@@ -396,7 +410,7 @@ impl ContextPeopleExt for Context {
             return Ok(PersonId(result));
         }
 
-        T::setup(self);
+        T::setup(&query, self);
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -463,13 +477,12 @@ impl ContextPeopleExtInternal for Context {
         person_id: PersonId,
         property: T,
     ) {
-        if let Some(mut index) = self
-            .get_data_container(PeoplePlugin)
-            .unwrap()
-            .get_index_ref_mut_by_prop(property)
-        {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+
+        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
+            let methods = data_container.get_methods(TypeId::of::<T>());
             if index.lookup.is_some() {
-                index.add_person(self, person_id);
+                index.add_person(self, &methods, person_id);
             }
         }
     }
@@ -479,13 +492,12 @@ impl ContextPeopleExtInternal for Context {
         person_id: PersonId,
         property: T,
     ) {
-        if let Some(mut index) = self
-            .get_data_container(PeoplePlugin)
-            .unwrap()
-            .get_index_ref_mut_by_prop(property)
-        {
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+
+        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
+            let methods = data_container.get_methods(TypeId::of::<T>());
             if index.lookup.is_some() {
-                index.remove_person(self, person_id);
+                index.remove_person(self, &methods, person_id);
             }
         }
     }
@@ -503,7 +515,8 @@ impl ContextPeopleExtInternal for Context {
         // 1. Walk through each property and update the indexes.
         for (t, _) in &property_hashes {
             let mut index = data_container.get_index_ref_mut(*t).unwrap();
-            index.index_unindexed_people(self);
+            let methods = data_container.get_methods(*t);
+            index.index_unindexed_people(self, &methods);
         }
 
         // 2. Collect the index entry corresponding to the value.
@@ -553,8 +566,8 @@ impl ContextPeopleExtInternal for Context {
 
             // (2) check the unindexed properties
             for (t, hash) in &unindexed {
-                let index = data_container.get_index_ref(*t).unwrap();
-                if *hash != (*index.indexer)(self, person) {
+                let methods = data_container.get_methods(*t);
+                if *hash != (*methods.indexer)(self, person) {
                     continue 'outer;
                 }
             }

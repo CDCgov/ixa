@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use ixa::runner::run_with_args;
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
 use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
 use seir::InfectedBy;
@@ -12,19 +11,25 @@ mod seir;
 define_rng!(MainRng);
 
 fn main() {
-    let mut context = Context::new();
+    run_with_args(|context, _, _| {
+        initialize(context);
+        Ok(())
+    })
+    .unwrap();
+}
 
-    context.init_random(1);
+fn initialize(context: &mut Context) {
+    context.init_random(42);
 
     // Load people from csv and set up some base properties
-    let people = loader::init(&mut context);
+    let people = loader::init(context);
 
     // Load parameters from json
     let file_path = Path::new(file!()).parent().unwrap().join("config.json");
     context.load_global_properties(&file_path).unwrap();
 
     // Load network
-    network::init(&mut context, &people);
+    network::init(context, &people);
 
     // Initialize incidence report
     incidence_report::init(&mut context).unwrap();

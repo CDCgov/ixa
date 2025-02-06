@@ -47,6 +47,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .unwrap()
         .clone();
     let current_dir = Path::new(file!()).parent().unwrap();
+    let current_dir = current_dir.join(Path::new(".."));
     context
         .report_options()
         .directory(PathBuf::from(current_dir))
