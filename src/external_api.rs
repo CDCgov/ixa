@@ -159,6 +159,9 @@ pub(crate) mod r#continue {
 }
 
 pub(crate) mod people {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
     use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
     use crate::Context;
     use crate::IxaError;
@@ -173,6 +176,9 @@ pub(crate) mod people {
         Query {
             properties: Vec<(String, String)>,
         },
+        Tabulate {
+            properties: Vec<String>,
+        },
     }
 
     #[derive(Deserialize)]
@@ -183,6 +189,7 @@ pub(crate) mod people {
     #[derive(Serialize, Debug, Eq, PartialEq)]
     pub(crate) enum Retval {
         Properties(Vec<(String, String)>),
+        Tabulated(Vec<(HashMap<String, String>, usize)>),
     }
     pub(crate) struct Api {}
 
@@ -206,9 +213,25 @@ pub(crate) mod people {
                     Ok(Retval::Properties(vec![(property.to_string(), value)]))
                 }
                 ArgsEnum::Query {
-                    properties: _global_properties,
-                } => {
-                    unimplemented!();
+                    properties: _properties,
+                } => Err(IxaError::IxaError(String::from(
+                    "People querying not implemented",
+                ))),
+                ArgsEnum::Tabulate { properties } => {
+                    let results: RefCell<Vec<(HashMap<String, String>, usize)>> =
+                        RefCell::new(Vec::new());
+
+                    context.tabulate_person_properties_by_name(
+                        properties.clone(),
+                        |_context, values, count| {
+                            let mut hm = HashMap::new();
+                            for i in 0..properties.len() {
+                                hm.insert(properties[i].clone(), values[i].clone());
+                            }
+                            results.borrow_mut().push((hm, count));
+                        },
+                    )?;
+                    Ok(Retval::Tabulated(results.take()))
                 }
             }
         }
@@ -218,7 +241,8 @@ pub(crate) mod people {
     mod test {
         use super::*;
         use crate::external_api::run_ext_api;
-        use crate::Context;
+        use crate::{define_person_property, Context};
+        use std::collections::HashSet;
         #[test]
         fn query_nonexistent_user() {
             let mut context = Context::new();
@@ -249,6 +273,63 @@ pub(crate) mod people {
 
             println!("{res:?}");
             assert!(matches!(res, Err(IxaError::IxaError(_))));
+        }
+
+        define_person_property!(Age, u8);
+
+        #[test]
+        fn query_valid_property() {
+            let mut context = Context::new();
+            let _ = context.add_person((Age, 10));
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Get {
+                    person_id: PersonId(0),
+                    property: String::from("Age"),
+                }),
+            );
+
+            println!("{res:?}");
+            let res = res.unwrap();
+            #[allow(clippy::match_wildcard_for_single_variants)]
+            match res {
+                Retval::Properties(val) => {
+                    assert_eq!(val, vec![(String::from("Age"), String::from("10"))]);
+                }
+                _ => panic!("Unexpected result"),
+            }
+        }
+
+        #[test]
+        fn tabulate() {
+            let mut context = Context::new();
+            let _ = context.add_person((Age, 10));
+            let _ = context.add_person((Age, 20));
+
+            let res = run_ext_api::<super::Api>(
+                &mut context,
+                &Args::People(ArgsEnum::Tabulate {
+                    properties: vec![String::from("Age")],
+                }),
+            );
+            println!("{res:?}");
+            let res = res.unwrap();
+            let mut expected = HashSet::new();
+            expected.insert(String::from("10"));
+            expected.insert(String::from("20"));
+
+            #[allow(clippy::match_wildcard_for_single_variants)]
+            match res {
+                Retval::Tabulated(val) => {
+                    for (columns, ct) in val {
+                        assert_eq!(ct, 1);
+                        let age = columns.get("Age").unwrap();
+                        assert!(expected.remove(age));
+                    }
+                    assert_eq!(expected.len(), 0);
+                }
+                _ => panic!("Unexpected result"),
+            }
         }
     }
 }
