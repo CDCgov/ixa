@@ -8,7 +8,7 @@ mod loader;
 mod network;
 mod parameters;
 mod seir;
-
+use std::path::Path;
 define_rng!(MainRng);
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
 }
 
 fn initialize(context: &mut Context) {
-    context.init_random(42);
+    context.init_random(1);
 
     // Load people from csv and set up some base properties
     let people = loader::init(context);
@@ -30,14 +30,16 @@ fn initialize(context: &mut Context) {
     context.load_global_properties(&file_path).unwrap();
 
     // Load network
-    network::init(&mut context, &people);
-    incidence_report::init(&mut context).unwrap();
+    network::init(context, &people);
+
+    // Initialize incidence report
+    incidence_report::init(context).unwrap();
 
     let to_infect: Vec<PersonId> = vec![context
         .sample_person(MainRng, (AgeGroup, AgeGroupValue::Age18to64))
         .unwrap()];
     context.set_person_property(to_infect[0], InfectedBy, Some(to_infect[0]));
     #[allow(clippy::vec_init_then_push)]
-    seir::init(&mut context, &to_infect);
+    seir::init(context, &to_infect);
     context.execute();
 }
