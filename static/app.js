@@ -34,6 +34,7 @@ function App() {
     <div><${PeoplePropertiesList} app=${app} /></div>
     <div><${TabulatedPeople} app=${app} properties=${properties} /></div>
     <div><${PeopleGraph} app=${app} properties=${properties} /></div>
+    <div><${TrackingContainer} app=${app} /></div>
     <div><${NextButton} app=${app} /></div>
   `;
 }
@@ -116,7 +117,6 @@ function TabulatedPeople({ app, properties }) {
           </tr>`,
         );
       }
-      console.log(tableRows);
       setTabulated(tableRows);
     })();
   }, [app]);
@@ -186,7 +186,6 @@ function PeopleGraph({ app, properties }) {
         });
       }
 
-      console.log(history.current);
       const plot = Plot.plot({
         color: { legend: true },
 
@@ -207,6 +206,78 @@ function PeopleGraph({ app, properties }) {
     <div ref=${plotRef}></div>
   </div>`;
 }
+
+function GraphContainer({ app, graphs }) {
+  console.log(`GraphContainer len=${graphs.length}`);
+  console.log(graphs);
+  let graphList = [];
+
+  for (let i = 0; i < graphs.length; i++) {
+    console.log("XX");
+    graphList.push(
+      html`<div><${PeopleGraph} app=${app} properties=${graphs[i]} /></div>`,
+    );
+  }
+
+  console.log("Graphlist");
+  console.log(graphList);
+  return html`<div>${graphList}</div>`;
+}
+
+function TrackingContainer({ app }) {
+  let [graphs, setGraphs] = useState([]);
+  let [tables, setTables] = useState([]);
+  let [properties, setProperties] = useState([]);
+
+  console.log("Re-rendering tracking container");
+  console.log(graphs);
+
+  function handleClick() {
+    let boxes = document.querySelectorAll(".tracking-container-checkbox");
+    let properties = [];
+
+    for (let box of boxes) {
+      console.log(`${box.id} ${box.checked} ${box.value}`);
+      if (box.checked) {
+        properties.push(box.value);
+      }
+    }
+
+    setGraphs([...graphs, properties]);
+  }
+
+  useEffect(() => {
+    (async () => {
+      let api = await getApi();
+
+      let peopleProperties = await api.getPeoplePropertiesList();
+      let listValues = [];
+
+      for (let prop of peopleProperties) {
+        listValues.push(
+          html`<div>
+            <input
+              type="checkbox"
+              id="tracking-container-checkbox-${prop}"
+              class="tracking-container-checkbox"
+              value="${prop}"
+            /><label for="tracking-container-checkbox-${prop}">${prop}</label>
+          </div>`,
+        );
+      }
+      setProperties(listValues);
+    })();
+  }, [app]);
+  return html`<div class="tracking-container">
+    <fieldset>
+      <legend>Select properties to track</legend>
+      ${properties}
+      <button onClick="${handleClick}">Track</button>
+    </fieldset>
+    <div><${GraphContainer} app=${app} graphs=${graphs} /></div>
+  </div>`;
+}
+
 function NextButton({ app }) {
   async function goToNextTime(api, next) {
     let now = currentTime;
