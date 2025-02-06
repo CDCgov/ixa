@@ -37,6 +37,5 @@ fn main() {
 
     #[allow(clippy::vec_init_then_push)]
     seir::init(&mut context, &to_infect);
-    seir::init(&mut context, &to_infect);
     context.execute();
 }
