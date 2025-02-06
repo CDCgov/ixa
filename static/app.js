@@ -32,8 +32,6 @@ function App() {
     <div><${Population} app=${app} /></div>
     <div><${GlobalSettings} app=${app} /></div>
     <div><${PeoplePropertiesList} app=${app} /></div>
-    <div><${PeopleTable} app=${app} properties=${properties} /></div>
-    <div><${PeopleGraph} app=${app} properties=${properties} /></div>
     <div><${TrackingContainer} app=${app} /></div>
     <div><${NextButton} app=${app} /></div>
   `;
