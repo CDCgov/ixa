@@ -25,13 +25,17 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<DiseaseStatus>,
 ) {
+    if !(event.current==DiseaseStatusValue::E && event.previous==DiseaseStatusValue::S){
+        return;
+    }
+
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: event.person_id.to_string(),
         infection_status: event.current,
         infected_by: context
             .get_person_property(event.person_id, InfectedBy)
-            .unwrap()
+            .expect("Expected person to have infectedBy but none was found")
             .to_string(),
     });
 }
@@ -47,7 +51,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .directory(PathBuf::from("examples/network-hhmodel/output"))
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
-    context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
+    context.subscribe_to_event(|context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
         handle_infection_status_change(context, event);
     });
     Ok(())
