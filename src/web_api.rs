@@ -12,7 +12,8 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tower_http::services::ServeDir;
 
-type ApiHandler = dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
+pub type WebApiHandler =
+    dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
 
 fn register_api_handler<
     T: crate::external_api::ExtApi<Args = A>,
@@ -35,7 +36,7 @@ fn register_api_handler<
 
 struct ApiData {
     receiver: mpsc::UnboundedReceiver<ApiRequest>,
-    handlers: HashMap<String, Box<ApiHandler>>,
+    handlers: HashMap<String, Box<WebApiHandler>>,
 }
 
 define_data_plugin!(ApiPlugin, Option<ApiData>, None);
@@ -174,6 +175,14 @@ pub trait ContextWebApiExt {
     /// Schedule the simulation to pause at time t and listen for
     /// requests from the Web API.
     fn schedule_web_api(&mut self, t: f64);
+
+    /// Add an API point.
+    fn add_web_api_handler(
+        &mut self,
+        name: &str,
+        handler: impl Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>
+            + 'static,
+    ) -> Result<(), IxaError>;
 }
 
 impl ContextWebApiExt for Context {
@@ -224,6 +233,24 @@ impl ContextWebApiExt for Context {
             });
         });
     }
+
+    /// Add an API point.
+    fn add_web_api_handler(
+        &mut self,
+        name: &str,
+        handler: impl Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>
+            + 'static,
+    ) -> Result<(), IxaError> {
+        let data_container = self.get_data_container_mut(ApiPlugin);
+
+        match data_container {
+            Some(dc) => {
+                dc.handlers.insert(name.to_string(), Box::new(handler));
+                Ok(())
+            }
+            None => Err(IxaError::IxaError(String::from("Web API not yet set up"))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -248,6 +275,9 @@ mod tests {
             .unwrap();
         context.add_person((Age, 1)).unwrap();
         context.add_person((Age, 2)).unwrap();
+        context
+            .add_web_api_handler("external", |_context, args| Ok(args))
+            .unwrap();
         (url, context)
     }
 
@@ -294,7 +324,6 @@ mod tests {
     // to manage that. This may not be ideal, but we're doing it for now.
     // TODO(cym4@cdc.gov): Consider using some kind of static
     // object to isolate the test cases.
-
     #[allow(clippy::too_many_lines)]
     #[test]
     fn web_api_test() {
@@ -447,6 +476,10 @@ mod tests {
         // Invalid JSON.
         let res = send_request_text(&url, "next", String::from("{]"));
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // A generic externally added API handler
+        let res = send_request(&url, "external", &json!({"External": [1]}));
+        assert_eq!(res, json!({"External": [1]}));
 
         // Test continue and make sure that the context
         // exits.
