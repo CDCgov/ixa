@@ -39,6 +39,5 @@ fn initialize(context: &mut Context) {
     context.set_person_property(to_infect[0], InfectedBy, Some(to_infect[0]));
     #[allow(clippy::vec_init_then_push)]
     seir::init(&mut context, &to_infect);
-    seir::init(&mut context, &to_infect);
     context.execute();
 }
