@@ -6,7 +6,6 @@ use ixa::report::ContextReportExt;
 use ixa::ContextPeopleExt;
 use ixa::{create_report_trait, report::Report};
 use std::{fs, path::PathBuf};
-
 use serde::{Deserialize, Serialize};
 
 use crate::parameters::Parameters;
@@ -42,7 +41,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    fs::create_dir_all("examples/network-hhmodel")?;
+    fs::create_dir_all("examples/network-hhmodel/output")?;
     context
         .report_options()
         .directory(PathBuf::from("examples/network-hhmodel/output"))
@@ -53,3 +52,25 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     });
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+    use std::io::{self, BufRead};
+
+    #[test]
+    fn test_output_directory_created() {
+        let mut context = Context::new();
+        init(&mut context).unwrap();
+
+        let output_path = Path::new("examples/network-hhmodel/output");
+        assert!(output_path.exists());
+        assert!(output_path.is_dir());
+
+    }
+
+
+}
+
