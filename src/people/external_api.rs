@@ -87,7 +87,7 @@ impl ContextPeopleExtCrate for Context {
     fn get_person_property_names(&self) -> Vec<String> {
         let data_container = self.get_data_container(PeoplePlugin);
         if data_container.is_none() {
-            return vec![];
+            return Vec::new();
         }
         let data_container = data_container.unwrap();
         let people_types = data_container.people_types.borrow();
