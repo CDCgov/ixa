@@ -177,6 +177,8 @@ pub trait ContextWebApiExt {
     fn schedule_web_api(&mut self, t: f64);
 
     /// Add an API point.
+    /// # Errors
+    /// `IxaError` when the Web API has not been set up yet.
     fn add_web_api_handler(
         &mut self,
         name: &str,
