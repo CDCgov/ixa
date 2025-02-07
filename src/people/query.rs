@@ -8,7 +8,7 @@ use std::any::TypeId;
 /// [`Context::query_people`] actually takes an instance of [`Query`], but because
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
-pub trait Query {
+pub trait Query: Clone {
     fn setup(&self, context: &Context);
     fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
 }
@@ -89,6 +89,18 @@ where
     queries: (Q1, Q2),
 }
 
+impl<Q1, Q2> Clone for QueryAnd<Q1, Q2>
+where
+    Q1: Query,
+    Q2: Query,
+{
+    fn clone(&self) -> Self {
+        Self {
+            queries: self.queries.clone(),
+        }
+    }
+}
+
 impl<Q1, Q2> QueryAnd<Q1, Q2>
 where
     Q1: Query,
@@ -120,7 +132,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::people::PeoplePlugin;
-    use crate::people::QueryAnd;
+    use crate::people::{Query, QueryAnd};
     use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
     use std::any::TypeId;
 
@@ -413,5 +425,16 @@ mod tests {
 
         let people = context.query_people(QueryAnd::new(q1, q2));
         assert_eq!(people.len(), 0);
+    }
+
+    #[test]
+    fn query_and_clone() {
+        let q1 = (Age, 42);
+        let q2 = (RiskCategory, RiskCategoryValue::High);
+
+        let and = QueryAnd::new(q1, q2);
+        let and2 = and.clone();
+
+        assert_eq!(and.get_query(), and2.get_query());
     }
 }
