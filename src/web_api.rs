@@ -3,6 +3,8 @@ use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
 use axum::extract::{Json, Path, State};
+use axum::response::Redirect;
+use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Router};
 use rand::RngCore;
 use serde_json::json;
@@ -96,8 +98,13 @@ async fn serve(
     }
 
     // build our application with a route
+    let home_path = format!("/{prefix}/static/index.html");
     let app = Router::new()
         .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
+        .route(
+            &format!("/{prefix}/"),
+            get(|| async move { Redirect::temporary(&home_path) }),
+        )
         .nest_service(&format!("/{prefix}/static/"), ServeDir::new("static"))
         .with_state(state);
 
