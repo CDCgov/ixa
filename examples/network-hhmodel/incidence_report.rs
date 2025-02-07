@@ -61,6 +61,10 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::loader::Id;
+    use crate::parameters::ParametersValues;
+    use crate::{incidence_report, loader, network};
+    use ixa::context::Context;
     use std::fs;
     use std::io::{self, BufRead};
     use std::path::Path;
@@ -79,5 +83,32 @@ mod tests {
         assert!(path.exists());
         assert!(path.is_dir());
         Ok(())
+    }
+
+    #[test]
+    fn test_incidence_report() {
+        use std::io::{self, BufRead};
+
+        let parameters = ParametersValues {
+            incubation_period: 8.0,
+            infectious_period: 27.0,
+            sar: 1.0,
+            shape: 15.0,
+            infection_duration: 5.0,
+            between_hh_transmission_reduction: 1.0,
+        };
+        let mut context = Context::new();
+
+        context.init_random(1);
+
+        let people = loader::init(context);
+        network::init(context, &people);
+        incidence_report::init(context).unwrap();
+        let to_infect: Vec<PersonId> = vec![context.sample_person(MainRng, ()).unwrap()];
+        context.set_person_property(to_infect[0], InfectedBy, Some(to_infect[0]));
+
+        #[allow(clippy::vec_init_then_push)]
+        seir::init(context, &to_infect);
+        context.execute();
     }
 }
