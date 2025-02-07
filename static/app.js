@@ -313,11 +313,9 @@ function NextButton({ app, updateApp }) {
     currentTime = now;
   }
 
-  function handleClick() {
-    (async () => {
-      let api = await getApi();
-      goToNextTime(api, currentTime + 1.0);
-    })();
+  async function handleClick() {
+    let api = await getApi();
+    goToNextTime(api, currentTime + 1.0);
   }
 
   return html`<button onClick="${handleClick}">Next</button>`;
