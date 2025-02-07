@@ -52,7 +52,12 @@ fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
     for e in edges {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
             context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
-            println!("Person {} exposed person {} at time {}.", e.person, e.neighbor, context.get_current_time());
+            println!(
+                "Person {} exposed person {} at time {}.",
+                e.person,
+                e.neighbor,
+                context.get_current_time()
+            );
             context.set_person_property(e.neighbor, InfectedBy, Some(e.person));
         }
     }
@@ -107,7 +112,6 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
     context.add_periodic_plan_with_phase(
         1.0,
         |context| {
-
             let parameters = context
                 .get_global_property_value(Parameters)
                 .unwrap()

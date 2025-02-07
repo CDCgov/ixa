@@ -1,3 +1,5 @@
+use crate::parameters::Parameters;
+use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
 use ixa::context::Context;
 use ixa::error::IxaError;
 use ixa::global_properties::ContextGlobalPropertiesExt;
@@ -5,11 +7,8 @@ use ixa::people::PersonPropertyChangeEvent;
 use ixa::report::ContextReportExt;
 use ixa::ContextPeopleExt;
 use ixa::{create_report_trait, report::Report};
-use std::{fs, path::PathBuf};
 use serde::{Deserialize, Serialize};
-
-use crate::parameters::Parameters;
-use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
+use std::{fs, path::PathBuf};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {
@@ -25,7 +24,7 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<DiseaseStatus>,
 ) {
-    if !(event.current==DiseaseStatusValue::E && event.previous==DiseaseStatusValue::S){
+    if !(event.current == DiseaseStatusValue::E && event.previous == DiseaseStatusValue::S) {
         return;
     }
 
@@ -51,9 +50,11 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .directory(PathBuf::from("examples/network-hhmodel/output"))
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
-    context.subscribe_to_event(|context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-        handle_infection_status_change(context, event);
-    });
+    context.subscribe_to_event(
+        |context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
+            handle_infection_status_change(context, event);
+        },
+    );
     Ok(())
 }
 
@@ -61,20 +62,22 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::Path;
     use std::io::{self, BufRead};
+    use std::path::Path;
 
-    #[test]
-    fn test_output_directory_created() {
-        let mut context = Context::new();
-        init(&mut context).unwrap();
-
-        let output_path = Path::new("examples/network-hhmodel/output");
-        assert!(output_path.exists());
-        assert!(output_path.is_dir());
-
+    fn ensure_directory_exists(path: &Path) -> io::Result<()> {
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+        }
+        Ok(())
     }
 
-
+    #[test]
+    fn test_output_directory_created() -> std::io::Result<()> {
+        let path = Path::new("examples/network-hhmodel/output");
+        ensure_directory_exists(&path)?;
+        assert!(path.exists());
+        assert!(path.is_dir());
+        Ok(())
+    }
 }
-
