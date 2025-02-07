@@ -19,13 +19,13 @@ function makeAppState() {
   }
 
   return {
-    update,
+    app: generation,
+    updateApp: update,
   };
 }
 
 function App() {
-  let app = makeAppState();
-  let properties = ["InfectionStatus"];
+  let { app, updateApp } = makeAppState();
 
   return html`
     <div><${Time} app=${app} /></div>
@@ -33,7 +33,7 @@ function App() {
     <div><${GlobalSettings} app=${app} /></div>
     <div><${PeoplePropertiesList} app=${app} /></div>
     <div><${TrackingContainer} app=${app} /></div>
-    <div><${NextButton} app=${app} /></div>
+    <div><${NextButton} app=${app} updateApp=${updateApp} /></div>
   `;
 }
 
@@ -299,7 +299,7 @@ function TrackingContainer({ app }) {
   </div>`;
 }
 
-function NextButton({ app }) {
+function NextButton({ app, updateApp }) {
   async function goToNextTime(api, next) {
     let now = currentTime;
     await api.nextTime(next);
@@ -309,7 +309,7 @@ function NextButton({ app }) {
       now = await api.getTime();
     }
 
-    app.update();
+    updateApp();
     currentTime = now;
   }
 
