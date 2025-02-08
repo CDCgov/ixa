@@ -11,7 +11,7 @@ function Api() {
 
   async function makeApiCall(cmd, body) {
     const url = new URL(baseUrl);
-    url.pathname += `/cmd/${cmd}`;
+    url.pathname += `/cmd${cmd}`;
     console.log(`makeApiCall ${url.toString()}`);
 
     let response = await fetch(url.toString(), {

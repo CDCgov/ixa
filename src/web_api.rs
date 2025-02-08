@@ -11,10 +11,14 @@ use axum::{http::StatusCode, routing::post, Router};
 use rand::RngCore;
 use serde_json::json;
 use std::collections::HashMap;
+use std::process::{Command, Stdio};
 use std::thread;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
+
+const USE_VITE: bool = true;
 
 pub type WebApiHandler =
     dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
@@ -90,6 +94,7 @@ async fn serve(
     ready: oneshot::Sender<Result<String, IxaError>>,
 ) {
     let state = ApiEndpointServer { sender };
+    let prefix_string = prefix.to_string();
 
     // run our app with Axum, listening on `port`
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await;
@@ -100,26 +105,66 @@ async fn serve(
         return;
     }
 
+    // Run Vite in development mode
+    let vite_process = if USE_VITE && cfg!(debug_assertions) {
+        Some(
+            Command::new("npm") // or "npm" / "yarn" depending on your setup
+                .arg("run")
+                .arg("dev")
+                .current_dir("ixa-debugger-frontend")
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .expect("Failed to start Vite"),
+        )
+    } else {
+        None
+    };
+
     // build our application with a route
     let home_path = format!("/{prefix}/static/index.html");
-    let app = Router::new()
-        .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
+    let mut app = Router::new()
+        // For front end
+        .route(&format!("/api/{prefix}/cmd/{{command}}"), post(process_cmd))
         .route(
             &format!("/{prefix}/"),
             get(|| async move { Redirect::temporary(&home_path) }),
         )
-        .nest_service(&format!("/{prefix}/static/"), ServeDir::new("static"))
+        .nest_service(
+            &format!("/{prefix}/static/"),
+            ServeDir::new(if cfg!(debug_assertions) {
+                "ixa-debugger-frontend/dist" // Serve built frontend in debug mode
+            } else {
+                "static" // Serve from static in production mode
+            }),
+        )
         .nest_service(
             "/favicon.ico",
             ServeFile::new_with_mime("static/favicon.ico", &mime::IMAGE_PNG),
         )
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
+
+    // Only add `/config.json` in debug mode
+    #[cfg(debug_assertions)]
+    {
+        let prefix_clone = prefix_string.clone();
+        app = app.route(
+            "/config.json",
+            get(move || async move { Json(json!({ "apiPrefix": prefix_clone })) }),
+        );
+    }
 
     // Notify the caller that we are ready.
     ready
         .send(Ok(format!("http://127.0.0.1:{port}/{prefix}/")))
         .unwrap();
     axum::serve(listener.unwrap(), app).await.unwrap();
+
+    // Ensure Vite is cleaned up when the server exits
+    if let Some(mut vite) = vite_process {
+        let _ = vite.kill();
+    }
 }
 
 /// Starts the Web API, pausing execution until instructed
@@ -220,6 +265,7 @@ impl ContextWebApiExt for Context {
             .to_string();
 
         let (ready_tx, ready_rx) = oneshot::channel::<Result<String, IxaError>>();
+
         thread::spawn(move || serve(api_to_ctx_send, port, &secret, ready_tx));
         let url = ready_rx.blocking_recv().unwrap()?;
 

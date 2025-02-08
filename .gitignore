@@ -29,3 +29,12 @@ Cargo.lock
 # html
 examples/**/*.html
 examples/**/*.csv
+
+
+# Vite stuff
+**/package-lock.json
+**/npm-debug.log*
+**/node_modules
+**/dist
+**/dist-ssr
+**/*.local
