@@ -40,14 +40,14 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let _parameters = context
+    let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    fs::create_dir_all("examples/network-hhmodel/output")?;
+    fs::create_dir_all(parameters.output_dir.clone())?;
     context
         .report_options()
-        .directory(PathBuf::from("examples/network-hhmodel/output"))
+        .directory(PathBuf::from(parameters.output_dir))
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
     context.subscribe_to_event(
@@ -61,13 +61,13 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::loader::Id;
     use crate::parameters::ParametersValues;
-    use crate::{incidence_report, loader, network};
-    use ixa::context::Context;
-    use std::fs;
-    use std::io::{self, BufRead};
+    use crate::{incidence_report, loader, network, seir, MainRng, PersonId};
+    use csv::ReaderBuilder;
+    use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
+    use std::error::Error;
     use std::path::Path;
+    use std::{fs, io};
 
     fn ensure_directory_exists(path: &Path) -> io::Result<()> {
         if !path.exists() {
@@ -76,9 +76,19 @@ mod tests {
         Ok(())
     }
 
+    fn read_csv_column_names(path: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+        use std::fs::File;
+        let file = File::open(path)?;
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+        let headers = rdr.headers()?;
+        let column_names = headers.iter().map(|s| s.to_string()).collect();
+        Ok(column_names)
+    }
+
     #[test]
     fn test_output_directory_created() -> std::io::Result<()> {
-        let path = Path::new("examples/network-hhmodel/output");
+        let path: &Path = Path::new("examples/network-hhmodel/tests");
         ensure_directory_exists(&path)?;
         assert!(path.exists());
         assert!(path.is_dir());
@@ -86,9 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn test_incidence_report() {
-        use std::io::{self, BufRead};
-
+    fn test_incidence_report() -> Result<(), Box<dyn Error>> {
         let parameters = ParametersValues {
             incubation_period: 8.0,
             infectious_period: 27.0,
@@ -96,19 +104,38 @@ mod tests {
             shape: 15.0,
             infection_duration: 5.0,
             between_hh_transmission_reduction: 1.0,
+            data_dir: "examples/network-hhmodel/tests".to_owned(),
+            output_dir: "examples/network-hhmodel/tests".to_owned(),
         };
         let mut context = Context::new();
 
-        context.init_random(1);
+        context.init_random(2);
 
-        let people = loader::init(context);
-        network::init(context, &people);
-        incidence_report::init(context).unwrap();
+        context
+            .set_global_property_value(Parameters, parameters.clone())
+            .unwrap();
+
+        let people = loader::init(&mut context);
+        network::init(&mut context, &people);
+        incidence_report::init(&mut context).unwrap();
         let to_infect: Vec<PersonId> = vec![context.sample_person(MainRng, ()).unwrap()];
         context.set_person_property(to_infect[0], InfectedBy, Some(to_infect[0]));
 
         #[allow(clippy::vec_init_then_push)]
-        seir::init(context, &to_infect);
+        seir::init(&mut context, &to_infect);
         context.execute();
+
+        let path: &Path = Path::new(&parameters.output_dir);
+        assert!(path.exists());
+        let data_path = format!("{}/incidence.csv", parameters.output_dir);
+        println!("{}", data_path);
+
+        let column_names = read_csv_column_names(Path::new(&data_path))?;
+        assert_eq!(
+            column_names,
+            vec!["time", "person_id", "infection_status", "infected_by"]
+        );
+
+        Ok(())
     }
 }
