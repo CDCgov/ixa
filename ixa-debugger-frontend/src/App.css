@@ -55,7 +55,7 @@ header h1 {
 
 aside {
   background-color: var(--secondary-background-color);
-  width: 300px;
+  width: 400px;
 }
 
 .panel {
@@ -79,13 +79,28 @@ aside {
   margin: 0;
 }
 
-.panel ul {
+.panel .key {
   color: #ff725c;
+}
+.panel ul {
   margin: 0;
   padding-inline-start: 1.5em;
   list-style: none;
 }
+.panel li {
+  overflow-wrap: break-word;
+  margin-bottom: 3px;
+}
+
 
 main {
-  padding: 10px;
+  padding: 20px;
+  font-size: 14px;
+}
+main > div {
+  margin-bottom: 20px;
+}
+main h3 {
+  font-size: inherit;
+  margin: 0 0 5px 0;
 }

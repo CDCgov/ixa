@@ -4,10 +4,13 @@ import { useSimulation } from "./useGeneration";
 import { useEffect, useState } from "react";
 import {
     getGlobalSettingsList,
+    getGlobalSettingValue,
     getPeoplePropertiesList,
     getPopulation,
 } from "./api";
-import { PeopleGraph } from "./PeopleGraph";
+import { PeopleChartsContainer } from "./PeopleCharts";
+
+export type Serializable = string | number | boolean | null | undefined;
 
 function Population() {
     const { generation } = useSimulation();
@@ -24,19 +27,33 @@ function Population() {
     );
 }
 
+type GlobalSettingsData = Record<string, Serializable>;
 function GlobalSettings() {
-    const [settings, setSettings] = useState<string[]>([]);
+    const { generation } = useSimulation();
+    const [settings, setSettings] = useState<GlobalSettingsData>({});
 
     useEffect(() => {
-        getGlobalSettingsList().then((s) => setSettings(s));
-    }, []);
+        (async () => {
+            const newSettings: GlobalSettingsData = {};
+            const globalProperties = await getGlobalSettingsList();
+            for (const propertyName of globalProperties) {
+                const value = await getGlobalSettingValue(propertyName);
+                newSettings[propertyName] = value;
+            }
+            setSettings(newSettings);
+        })();
+    }, [generation]);
+
+    console.log(settings);
 
     return (
         <div className="settings">
             <h2>Global Settings</h2>
             <ul>
-                {settings.map((setting) => (
-                    <li key={setting}>{setting}</li>
+                {Object.entries(settings).map(([propertyName, value]) => (
+                    <li key={propertyName}>
+                        <span className="key">{propertyName}</span>: {value}
+                    </li>
                 ))}
             </ul>
         </div>
@@ -44,18 +61,21 @@ function GlobalSettings() {
 }
 
 function PersonProperties() {
+    const { generation } = useSimulation();
     const [properties, setProperties] = useState<string[]>([]);
 
     useEffect(() => {
         getPeoplePropertiesList().then((p) => setProperties(p));
-    }, []);
+    }, [generation]);
 
     return (
         <div className="settings">
             <h2>Person Properties</h2>
             <ul>
                 {properties.map((property) => (
-                    <li key={property}>{property}</li>
+                    <li key={property}>
+                        <span className="key">{property}</span>
+                    </li>
                 ))}
             </ul>
         </div>
@@ -100,7 +120,7 @@ function App() {
                     </div>
                 </aside>
                 <main>
-                    <PeopleGraph properties={["InfectionStatus"]} />
+                    <PeopleChartsContainer />
                 </main>
             </div>
         </>

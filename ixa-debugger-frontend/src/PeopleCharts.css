@@ -1,0 +1,12 @@
+.chart-container {
+    border: 1px solid var(--border-color);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.table th, td {
+    border: 1px solid var(--border-color);
+    padding: 4px;
+}

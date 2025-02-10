@@ -166,6 +166,7 @@ function PeoplePropertiesList({ app }) {
 function PeopleGraph({ app, properties }) {
   const plotRef = useRef();
   let history = useRef([]);
+  console.log(history);
 
   useEffect(() => {
     (async () => {
