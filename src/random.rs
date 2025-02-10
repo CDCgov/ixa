@@ -26,7 +26,7 @@ macro_rules! define_rng {
         }
 
         // This ensures that you can't define two RngIds with the same name
-        paste::paste! {
+        $crate::paste::paste! {
             #[doc(hidden)]
             #[no_mangle]
             #[allow(non_upper_case_globals)]
