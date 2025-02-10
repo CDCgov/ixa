@@ -5,7 +5,7 @@ import {
   getGlobalSettingValue,
   getPeoplePropertiesList,
   getPopulation,
-} from "../api.js";
+} from "./api.js";
 import { useAppState } from "./useAppState.js";
 import { PeopleChartsContainer } from "./PeopleCharts.js";
 

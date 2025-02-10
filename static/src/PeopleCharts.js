@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { html } from "htm/react";
 import { useAppState } from "./useAppState.js";
-import { getPeoplePropertiesList, tabulateProperties } from "../api.js";
+import { getPeoplePropertiesList, tabulateProperties } from "./api.js";
 import * as Plot from "@observablehq/plot";
 
 export function PeopleChartsContainer() {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { html } from "htm/react";
-import { getTime, nextTime } from "../api.js";
+import { getTime, nextTime } from "./api.js";
 
 const SimulationContext = createContext({
   generation: 0,
