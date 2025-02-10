@@ -1,16 +1,11 @@
-export let API_PREFIX = "";
-
-export async function fetchApiPrefix() {
-    const response = await fetch("/config.json");
-    const data = await response.json();
-    API_PREFIX = data.apiPrefix;
-}
-
 export async function makeApiCall<T>(endpoint: string, body: T) {
-    if (!API_PREFIX) {
-        await fetchApiPrefix();
+    const prefix = import.meta.env.VITE_API_PREFIX;
+    if (!prefix) {
+        throw new Error(
+            "Expected VITE_API_PREFIX to be set in the server environment"
+        );
     }
-    const url = `/api/${API_PREFIX}/cmd/${endpoint}`;
+    const url = `/api/${prefix}/cmd/${endpoint}`;
     const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

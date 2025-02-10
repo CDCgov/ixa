@@ -1,3 +1,4 @@
+import "./PeopleGraph.css";
 import * as Plot from "@observablehq/plot";
 import { useEffect, useRef, useState } from "react";
 import { tabulateProperties } from "./api";
@@ -48,6 +49,6 @@ export function PeopleGraph({ properties }: PeopleGraphProps) {
 
     return <div className="people-graph">
         <b>Time Series</b>
-        <div ref={plotRef}></div>
+        <div className="chart-container" ref={plotRef}></div>
     </div>;
 }

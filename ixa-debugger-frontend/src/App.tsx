@@ -18,9 +18,9 @@ function Population() {
     }, [generation]);
 
     return (
-        <div className="population">
-            <h2>Population: {population}</h2>
-        </div>
+        <dl>
+            <dt>Population:</dt> <dd>{population}</dd>
+        </dl>
     );
 }
 
@@ -63,7 +63,7 @@ function PersonProperties() {
 }
 
 function App() {
-    const { generation, currentTime, goNext } = useSimulation();
+    const { currentTime, goNext } = useSimulation();
 
     async function doApiCall() {
         goNext();
@@ -71,22 +71,38 @@ function App() {
 
     return (
         <>
-            <div>
-                <a href="https://github.com/cdcgov/ixa" target="_blank">
-                    <img src={logo} className="logo" alt="Vite logo" />
-                </a>
+            <header>
+                <div id="logo">
+                    <a href="https://github.com/cdcgov/ixa" target="_blank">
+                        <img src={logo} className="logo" alt="Vite logo" />
+                    </a>
+                </div>
+                <div>
+                    <h1>Ixa Debugger</h1>
+                </div>
+                <div>
+                    Current time: <strong>{currentTime.toFixed(1)}</strong>
+                </div>
+                <div>
+                    <button onClick={() => doApiCall()}>Advance time</button>
+                </div>
+            </header>
+            <div className="body-wrapper">
+                <aside>
+                    <div className="panel">
+                        <Population />
+                    </div>
+                    <div className="panel">
+                        <GlobalSettings />
+                    </div>
+                    <div className="panel">
+                        <PersonProperties />
+                    </div>
+                </aside>
+                <main>
+                    <PeopleGraph properties={["InfectionStatus"]} />
+                </main>
             </div>
-            <h1>Time: {currentTime}</h1>
-            <Population />
-            <GlobalSettings />
-            <PersonProperties />
-            <PeopleGraph properties={["InfectionStatus"]} />
-            <div className="card">
-                <button onClick={() => doApiCall()}>
-                    count is {generation}
-                </button>
-            </div>
-            <p className="read-the-docs">Click on the Ixa logo to learn more</p>
         </>
     );
 }

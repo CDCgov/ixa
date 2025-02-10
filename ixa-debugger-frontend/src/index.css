@@ -1,16 +1,21 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --background-color: #282a36;
+  --secondary-background-color: #21222c;
+  --border-color: rgba(255, 255, 255, 0.2);
+  /* font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif; */
+  font-family: "JetBrains Mono", menlo, monospace;
   line-height: 1.5;
-  font-weight: 400;
+  font-size: 14px;
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: var(--background-color);
 
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 a {
@@ -42,7 +47,8 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: white;
+  color: #0e0d11;
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -54,7 +60,7 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
+/* @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
     background-color: #ffffff;
@@ -65,4 +71,4 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
-}
+} */

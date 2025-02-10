@@ -112,6 +112,7 @@ async fn serve(
                 .arg("run")
                 .arg("dev")
                 .current_dir("ixa-debugger-frontend")
+                .env("VITE_API_PREFIX", prefix_string.clone())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .spawn()
@@ -123,7 +124,7 @@ async fn serve(
 
     // build our application with a route
     let home_path = format!("/{prefix}/static/index.html");
-    let mut app = Router::new()
+    let app = Router::new()
         // For front end
         .route(&format!("/api/{prefix}/cmd/{{command}}"), post(process_cmd))
         .route(
@@ -144,16 +145,6 @@ async fn serve(
         )
         .layer(TraceLayer::new_for_http())
         .with_state(state);
-
-    // Only add `/config.json` in debug mode
-    #[cfg(debug_assertions)]
-    {
-        let prefix_clone = prefix_string.clone();
-        app = app.route(
-            "/config.json",
-            get(move || async move { Json(json!({ "apiPrefix": prefix_clone })) }),
-        );
-    }
 
     // Notify the caller that we are ready.
     ready

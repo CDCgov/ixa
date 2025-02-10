@@ -10,10 +10,14 @@ interface SimulationContextData {
 const SimulationContext = createContext<SimulationContextData>({
     generation: 0,
     currentTime: 0,
-    goNext: () => {}
+    goNext: () => {},
 });
 
-export function SimulationContextProvider({ children }: { children: React.ReactNode }) {
+export function SimulationContextProvider({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     const [generation, setGeneration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
 
@@ -22,7 +26,7 @@ export function SimulationContextProvider({ children }: { children: React.ReactN
     }, [generation]);
 
     async function goNext() {
-        nextTime(currentTime + 1);
+        nextTime(currentTime + 1.0)
         setGeneration(generation + 1);
     }
 
