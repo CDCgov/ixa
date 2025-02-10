@@ -18,7 +18,7 @@ macro_rules! define_rng {
 
         impl $crate::random::RngId for $random_id {
             // TODO(ryl8@cdc.gov): This is hardcoded to StdRng; we should replace this
-            type RngType = rand::rngs::StdRng;
+            type RngType = $crate::rand::rngs::StdRng;
 
             fn get_name() -> &'static str {
                 stringify!($random_id)

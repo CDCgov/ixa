@@ -114,8 +114,8 @@ macro_rules! define_global_property {
             }
         }
 
-        paste::paste! {
-            #[ctor::ctor]
+        $crate::paste::paste! {
+            #[$crate::ctor::ctor]
             fn [<$global_property:snake _register>]() {
                 let module = module_path!();
                 let mut name = module.split("::").next().unwrap().to_string();
