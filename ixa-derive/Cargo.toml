@@ -2,7 +2,7 @@
 name = "ixa-derive"
 version = "0.1.0"
 edition = "2021"
-description = "Procedural macros for ixa"
+description = "Procedural macros for Ixa"
 repository = "https://github.com/CDCgov/ixa"
 license = "Apache-2.0"
 homepage = "https://github.com/CDCgov/ixa"
