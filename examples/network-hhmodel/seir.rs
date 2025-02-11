@@ -181,8 +181,8 @@ mod tests {
             shape: 15.0,
             infection_duration: 5.0,
             between_hh_transmission_reduction: 1.0,
-            data_dir: "examples/network-hhmodel/data".to_owned(),
-            output_dir: "examples/network-hhmodel/output".to_owned(),
+            data_dir: "examples/network-hhmodel/tests".to_owned(),
+            output_dir: "examples/network-hhmodel/tests".to_owned(),
         };
         context
             .set_global_property_value(Parameters, parameters)
