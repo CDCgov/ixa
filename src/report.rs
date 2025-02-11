@@ -652,7 +652,6 @@ mod test {
         assert_eq!(actual, expected, "CSV file should contain the correct data");
     }
 
-
     create_presicion_report!(
         SampleReportWithPresicion,
         ("serialize_f32::<_,2>", "serialize_f64::<_,3>"),
@@ -666,7 +665,7 @@ mod test {
         }
     );
 
-    #[test]   
+    #[test]
     fn add_and_send_sample_report_with_presicion() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
@@ -681,14 +680,16 @@ mod test {
             v1: None,
             v2: "Test Title".to_string(),
             v3: 10,
-            v4: 99.991234,
+            v4: 99.991_234,
             v5: false,
-            v6: 1.012345,
+            v6: 1.012_345,
         };
         let serialized = serde_json::to_string(&sample_report_with_presicion).unwrap();
-        println!("---- {}", serialized);
+        println!("---- {serialized}");
         // Add the report to the context and send it
-        context.add_report::<SampleReportWithPresicion>("sample_report_with_presicion").unwrap();
+        context
+            .add_report::<SampleReportWithPresicion>("sample_report_with_presicion")
+            .unwrap();
         context.send_report(sample_report_with_presicion);
 
         // Verify that the output file exists
@@ -698,12 +699,14 @@ mod test {
         // Read the output file and verify its contents
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         // Iterate over each line in the file
+        const V6: f32 = 1.013;
+        const V4: f64 = 99.993;
         for result in reader.deserialize() {
             let record: SampleReportWithPresicion = result.unwrap();
             assert_eq!(record.v2, "Test Title");
             assert_eq!(record.v3, 20);
-            assert_eq!(record.v4, 99.993);
-            assert_eq!(record.v6, 1.013);
-            }
+            assert_eq!(record.v4, V4);
+            assert_eq!(record.v6, V6);
+        }
     }
 }
