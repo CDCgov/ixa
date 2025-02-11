@@ -79,24 +79,27 @@ macro_rules! create_report_trait {
     };
 }
 
-fn serialize_f64<S: Serializer, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+#[allow(clippy::trivially_copy_pass_by_ref)]
+#[allow(dead_code)]
+fn serialize_f64<S, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let formatted = format!{"{:.1$}", value, N};
+    let formatted = format!("{value:.N$}");
     serializer.serialize_str(&formatted)
 }
 
-
-fn serialize_f32<S: Serializer, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+#[allow(clippy::trivially_copy_pass_by_ref)]
+#[allow(dead_code)]
+fn serialize_f32<S, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let formatted = format!("{:.1$}", value, N);
+    let formatted = format!("{value:.N$}");
     serializer.serialize_str(&formatted)
 }
 
-
+#[allow(unused_macros)]
 macro_rules! create_presicion_report {
     ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { } -> ($($result:tt)*) ) => (
         #[derive(Serialize, Deserialize, Debug)]
