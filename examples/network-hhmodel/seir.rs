@@ -1,5 +1,6 @@
 use crate::network::{Age5to17, AgeUnder5, Household};
 use crate::parameters::Parameters;
+use ixa::log::info;
 use ixa::{
     context::Context,
     define_person_property_with_default,
@@ -52,7 +53,7 @@ fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
     for e in edges {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
             context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
-            println!(
+            info!(
                 "Person {} exposed person {} at time {}.",
                 e.person,
                 e.neighbor,
