@@ -34,7 +34,7 @@ fn handle_infection_status_change(
         infection_status: event.current,
         infected_by: context
             .get_person_property(event.person_id, InfectedBy)
-            .expect("Expected person to have infectedBy but none was found")
+            .expect("Expected person to have infectedBy but `None` was found")
             .to_string(),
     });
 }
