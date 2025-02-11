@@ -153,7 +153,6 @@ macro_rules! create_presicion_report {
     );
 }
 
-
 struct ReportData {
     file_writers: RefCell<HashMap<TypeId, Writer<File>>>,
     config: ConfigReportOptions,
@@ -306,6 +305,7 @@ impl ContextReportExt for Context {
     fn send_report<T: Report>(&self, report: T) {
         let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
+        writer.flush().unwrap();
     }
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
@@ -667,6 +667,9 @@ mod test {
 
     #[test]
     fn add_and_send_sample_report_with_presicion() {
+        use std::fs::read_to_string;
+        let header = String::from("v2,v3,v4,v5,v6");
+        let line2 = String::from("Test Title,10,99.991,false,1.01");
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
@@ -696,17 +699,8 @@ mod test {
         let file_path = path.join("prefix1_sample_report_with_presicion.csv");
         assert!(file_path.exists(), "CSV file should exist");
 
-        // Read the output file and verify its contents
-        let mut reader = csv::Reader::from_path(file_path).unwrap();
-        // Iterate over each line in the file
-        const V6: f32 = 1.013;
-        const V4: f64 = 99.993;
-        for result in reader.deserialize() {
-            let record: SampleReportWithPresicion = result.unwrap();
-            assert_eq!(record.v2, "Test Title");
-            assert_eq!(record.v3, 20);
-            assert_eq!(record.v4, V4);
-            assert_eq!(record.v6, V6);
+        for line in read_to_string(file_path).unwrap().lines() {
+            assert!(line.to_string().eq(&header) | line.to_string().eq(&line2));
         }
     }
 }
