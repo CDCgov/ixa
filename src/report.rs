@@ -3,6 +3,7 @@ use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
 use crate::Tabulator;
 use csv::Writer;
+use serde::Serializer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -77,6 +78,78 @@ macro_rules! create_report_trait {
         }
     };
 }
+
+fn serialize_f64<S: Serializer, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = format!{"{:.1$}", value, N};
+    serializer.serialize_str(&formatted)
+}
+
+
+fn serialize_f32<S: Serializer, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = format!("{:.1$}", value, N);
+    serializer.serialize_str(&formatted)
+}
+
+
+macro_rules! create_presicion_report {
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { } -> ($($result:tt)*) ) => (
+        #[derive(Serialize, Deserialize, Debug)]
+        pub struct $name {
+            $($result)*
+        }
+        create_report_trait!($name);
+    );
+
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : Option<$type:ty>, $($rest:tt)* } -> ($($result:tt)*) ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
+            $($result)*
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub $param : Option<$type>,
+        ));
+    );
+
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : Vec<$type:ty>, $($rest:tt)* } -> ($($result:tt)*) ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
+            $($result)*
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            pub $param : Vec<$type>,
+        ));
+    );
+
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : f64, $($rest:tt)* } -> ($($result:tt)*) ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
+            $($result)*
+            #[serde(serialize_with = $ser_f64)]
+            pub $param : f64,
+        ));
+    );
+
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : f32, $($rest:tt)* } -> ($($result:tt)*) ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
+            $($result)*
+            #[serde(serialize_with = $ser_f32)]
+            pub $param : f32,
+        ));
+    );
+
+    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : $default:tt, $($rest:tt)* } -> ($($result:tt)*) ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
+            $($result)*
+            pub $param : $default,
+        ));
+    );
+
+    ( $name:ident, ($ser_f32:expr, $ser_f64:expr), { $( $param:ident  ($($type:tt)*) ),* $(,)? } ) => (
+        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($param : $($type)*,)* } -> ());
+    );
+}
+
 
 struct ReportData {
     file_writers: RefCell<HashMap<TypeId, Writer<File>>>,
@@ -574,5 +647,60 @@ mod test {
         expected.sort();
 
         assert_eq!(actual, expected, "CSV file should contain the correct data");
+    }
+
+
+    create_presicion_report!(
+        SampleReportWithPresicion,
+        ("serialize_f32::<_,2>", "serialize_f64::<_,3>"),
+        {
+            v1(Option<bool>),
+            v2(String),
+            v3(i32),
+            v4(f64),
+            v5(bool),
+            v6(f32)
+        }
+    );
+
+    #[test]   
+    fn add_and_send_sample_report_with_presicion() {
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config
+            .file_prefix("prefix1_".to_string())
+            .directory(path.clone());
+
+        // Create an instance of ComplexSampleReport
+        let sample_report_with_presicion = SampleReportWithPresicion {
+            v1: None,
+            v2: "Test Title".to_string(),
+            v3: 10,
+            v4: 99.991234,
+            v5: false,
+            v6: 1.012345,
+        };
+        let serialized = serde_json::to_string(&sample_report_with_presicion).unwrap();
+        println!("---- {}", serialized);
+        // Add the report to the context and send it
+        context.add_report::<SampleReportWithPresicion>("sample_report_with_presicion").unwrap();
+        context.send_report(sample_report_with_presicion);
+
+        // Verify that the output file exists
+        let file_path = path.join("prefix1_sample_report_with_presicion.csv");
+        assert!(file_path.exists(), "CSV file should exist");
+
+        // Read the output file and verify its contents
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        // Iterate over each line in the file
+        for result in reader.deserialize() {
+            let record: SampleReportWithPresicion = result.unwrap();
+            assert_eq!(record.v2, "Test Title");
+            assert_eq!(record.v3, 20);
+            assert_eq!(record.v4, 99.993);
+            assert_eq!(record.v6, 1.013);
+            }
     }
 }
