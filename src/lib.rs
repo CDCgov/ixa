@@ -66,3 +66,8 @@ pub use log::{
 
 pub mod external_api;
 pub mod web_api;
+
+// Re-export for macros
+pub use ctor;
+pub use paste;
+pub use rand;
