@@ -24,18 +24,32 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<DiseaseStatus>,
 ) {
+    // check event to make sure it's a new infection
     if !(event.current == DiseaseStatusValue::E && event.previous == DiseaseStatusValue::S) {
         return;
+    }
+
+    // figure out who infected whom
+    #[allow(unused_assignments)]
+    let mut infected_by_val = String::new();
+
+    if context
+        .get_person_property(event.person_id, InfectedBy)
+        .is_none()
+    {
+        infected_by_val = "NA".to_string();
+    } else {
+        infected_by_val = context
+            .get_person_property(event.person_id, InfectedBy)
+            .unwrap()
+            .to_string();
     }
 
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: event.person_id.to_string(),
         infection_status: event.current,
-        infected_by: context
-            .get_person_property(event.person_id, InfectedBy)
-            .expect("Expected person to have infectedBy but `None` was found")
-            .to_string(),
+        infected_by: infected_by_val,
     });
 }
 
