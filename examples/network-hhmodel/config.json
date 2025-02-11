@@ -6,7 +6,7 @@
     "shape": 15.0,
     "infection_duration": 5.0,
     "between_hh_transmission_reduction": 3.0,
-    "output_dir": "examples/network_hhmodel/output",
-    "data_dir": "examples/network_hhmodel/data"
+    "output_dir": "examples/network-hhmodel/output",
+    "data_dir": "examples/network-hhmodel/data"
 }
 }

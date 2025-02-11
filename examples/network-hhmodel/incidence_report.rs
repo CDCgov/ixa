@@ -40,14 +40,13 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .clone();
-    fs::create_dir_all(parameters.output_dir.clone())?;
+    let parameters = context.get_global_property_value(Parameters).unwrap();
+
+    let output_dir = PathBuf::from(parameters.output_dir.clone());
+    fs::create_dir_all(&output_dir)?;
     context
         .report_options()
-        .directory(PathBuf::from(parameters.output_dir))
+        .directory(output_dir)
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
     context.subscribe_to_event(
