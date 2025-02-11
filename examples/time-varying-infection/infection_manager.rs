@@ -33,7 +33,7 @@ fn evaluate_recovery(
 ) -> Option<f64> {
     // get time person has spent infected
     let time_spent_infected = context.get_current_time()
-        - *context
+        - context
             .get_person_property(person_id, InfectionTime)
             .unwrap();
     // evaluate whether recovery has happened by this time or not
@@ -88,7 +88,6 @@ mod test {
     use ixa::context::Context;
     use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
     use ixa::random::ContextRandomExt;
-    use ordered_float::OrderedFloat;
 
     use crate::parameters_loader::ParametersValues;
     use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
@@ -124,9 +123,7 @@ mod test {
         init(&mut context);
 
         for _ in 0..parameters.population {
-            let person_id = context
-                .add_person((InfectionTime, Some(OrderedFloat(0.0))))
-                .unwrap();
+            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
             context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
         }
 
@@ -212,9 +209,7 @@ mod test {
                 .unwrap();
             context.init_random(seed);
             init(&mut context);
-            let person_id = context
-                .add_person((InfectionTime, Some(OrderedFloat(0.0))))
-                .unwrap();
+            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
             context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
             // there should only be one infected person in the simulation
             assert_eq!(

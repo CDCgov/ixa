@@ -124,11 +124,12 @@ mod tests {
     use crate::people::PeoplePlugin;
     use crate::people::{Query, QueryAnd};
     use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
+    use serde_derive::Serialize;
     use std::any::TypeId;
 
     define_person_property!(Age, u8);
 
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+    #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategoryValue {
         High,
         Low,

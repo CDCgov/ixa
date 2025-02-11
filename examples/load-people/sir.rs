@@ -3,8 +3,9 @@ use ixa::{
     define_person_property_with_default,
     people::{ContextPeopleExt, PersonCreatedEvent},
 };
+use serde_derive::Serialize;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DiseaseStatusValue {
     S,
     I,

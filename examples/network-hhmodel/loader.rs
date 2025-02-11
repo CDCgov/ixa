@@ -5,11 +5,12 @@ use ixa::context::Context;
 use ixa::define_person_property;
 use ixa::{ContextPeopleExt, PersonId};
 use serde::Deserialize;
+use serde_derive::Serialize;
 use std::fs::File;
 
 define_person_property!(Id, u16);
 
-#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum AgeGroupValue {
     AgeUnder5,
     Age5to17,
@@ -18,7 +19,7 @@ pub enum AgeGroupValue {
 }
 define_person_property!(AgeGroup, AgeGroupValue);
 
-#[derive(Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum SexValue {
     Female,
     Male,
@@ -70,7 +71,6 @@ pub fn init(context: &mut Context) -> Vec<PersonId> {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use ixa::{context::Context, random::ContextRandomExt};
 
