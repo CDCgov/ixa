@@ -1,0 +1,28 @@
+name: Run examples
+
+on:
+  push:
+    branches: main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose
+
+  run_examples:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports,  reports-multi-threaded, runner, time-varying-infection]
+    steps:
+      run: cargo run --example ${{ matrix.example }}
+
+  
