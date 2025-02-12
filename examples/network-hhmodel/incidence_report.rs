@@ -122,9 +122,6 @@ mod test {
             incidence_report::init(&mut context).unwrap();
             let to_infect = context.sample_person(MainRng, ()).unwrap();
             context.set_person_property(to_infect, InfectedBy, Some(to_infect));
-            infected_by
-                .borrow_mut()
-                .insert(format!("{to_infect}"), format!("{to_infect}"));
             context.subscribe_to_event(
                 move |context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
                     infected_by_copy.borrow_mut().insert(
@@ -156,5 +153,7 @@ mod test {
 
         let report_results = check_values(&output_path);
         assert_eq!(report_results, infected_by.borrow().clone());
+        println!("{:?}", report_results);
+        println!("{:?}", infected_by.borrow());
     }
 }
