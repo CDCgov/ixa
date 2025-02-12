@@ -15,7 +15,13 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
-
+      uses: actions/cache@v4
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: ixa-12345
+        path: .
+        
   run_examples:
     needs: build
     runs-on: ubuntu-latest
@@ -23,5 +29,8 @@ jobs:
       matrix:
         example: [basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports,  reports-multi-threaded, runner, time-varying-infection]
     steps:
+    - Download the atifact
+      uses: actions/upload-artifact@v3
+        name: ixa-12345
     - name: Run the example
       run: cargo run --example ${{ matrix.example }}
