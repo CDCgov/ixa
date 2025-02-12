@@ -48,13 +48,20 @@ ixa_example_births_deaths = { path = "examples/births-deaths" }
 pedantic = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
 
+[lib]
+# Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
+# See https://github.com/CDCgov/ixa/issues/217
+bench = false
+
 [[bin]]
 name = "runner_test_custom_args"
 path = "tests/bin/runner_test_custom_args.rs"
+bench = false
 
 [[bin]]
 name = "runner_test_debug"
 path = "tests/bin/runner_test_debug.rs"
+bench = false
 
 [[bench]]
 name = "example_basic_infection"
