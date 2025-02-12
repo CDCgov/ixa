@@ -31,6 +31,7 @@ jobs:
     steps:
     - name: Download the artifact
       uses: actions/upload-artifact@v3
+      with:
         name: ixa-12345
     - name: Run the example
       run: cargo run --example ${{ matrix.example }}
