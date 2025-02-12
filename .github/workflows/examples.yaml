@@ -25,9 +25,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports,  reports-multi-threaded, runner, time-varying-infection]
-        fail-fast: false
     steps:
     - name: Download the artifact
       uses: actions/download-artifact@v4
