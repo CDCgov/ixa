@@ -24,5 +24,3 @@ jobs:
         example: [basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports,  reports-multi-threaded, runner, time-varying-infection]
     steps:
       run: cargo run --example ${{ matrix.example }}
-
-  
