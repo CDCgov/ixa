@@ -18,7 +18,7 @@ jobs:
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: ixa-12345
+        name: ixa-build-${{github.run-id}}
         path: .
         
   run_examples:
@@ -32,6 +32,6 @@ jobs:
     - name: Download the artifact
       uses: actions/download-artifact@v4
       with:
-        name: ixa-12345
+        name: ixa-build-${{github.run-id}}
     - name: Run the example
       run: cargo run --example ${{ matrix.example }}
