@@ -38,11 +38,12 @@ mod tests {
         define_person_property_with_default, Context, ContextPeopleExt, PersonCreatedEvent,
         PersonId, PersonPropertyChangeEvent,
     };
+    use serde_derive::Serialize;
     use std::cell::RefCell;
     use std::rc::Rc;
 
     define_person_property!(Age, u8);
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+    #[derive(Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub enum AgeGroupValue {
         Child,
         Adult,
@@ -60,7 +61,7 @@ mod tests {
         }
     });
 
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+    #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategoryValue {
         High,
         Low,

@@ -2,13 +2,12 @@ use ixa::define_rng;
 use ixa::people::{ContextPeopleExt, PersonCreatedEvent};
 use ixa::random::ContextRandomExt;
 use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
-use ordered_float::OrderedFloat;
 use std::rc::Rc;
 
 use crate::parameters_loader::Parameters;
 use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
-use rand_distr::Exp1;
 
+use rand_distr::Exp1;
 use reikna::func;
 use reikna::func::Function;
 use reikna::integral::integrate;
@@ -26,7 +25,7 @@ fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: Pe
         context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
         // For reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected.
-        context.set_person_property(person_id, InfectionTime, Some(OrderedFloat(t)));
+        context.set_person_property(person_id, InfectionTime, Some(t));
     });
 }
 

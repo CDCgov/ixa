@@ -9,8 +9,9 @@ use ixa::{
     ContextGlobalPropertiesExt, ExecutionPhase, PersonId,
 };
 use rand_distr::{Bernoulli, Gamma};
+use serde_derive::Serialize;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DiseaseStatusValue {
     S,
     E,

@@ -1,16 +1,16 @@
 use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
+use serde::Serialize;
 use std::fmt::Debug;
-use std::hash::Hash;
 
 /// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
-/// Person properties should defined with the [`define_person_property!()`],
+/// Person properties should be defined with the [`define_person_property!()`],
 /// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
 /// macros.
 pub trait PersonProperty: Copy {
-    type Value: Copy + Debug + PartialEq + Hash;
+    type Value: Copy + Debug + PartialEq + Serialize;
     #[must_use]
     fn is_derived() -> bool {
         false

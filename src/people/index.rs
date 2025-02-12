@@ -1,14 +1,13 @@
-use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-
 use super::methods::Methods;
+use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
+use bincode::serialize;
+use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-// The lookup key for entries in the index. This is a serialized
-// version of the value. If that serialization fits in 128 bits, we
-// store it in Fixed to avoid the allocation of the Vec. Otherwise it
-// goes in Variable.
+// The lookup key for entries in the index. This is a serialized version of the value.
+// If that serialization fits in 128 bits, we store it in `IndexValue::Fixed` to
+// avoid the allocation of the `Vec`. Otherwise, it goes in `IndexValue::Variable`.
 #[doc(hidden)]
 pub enum IndexValue {
     Fixed(u128),
@@ -16,38 +15,21 @@ pub enum IndexValue {
 }
 
 impl IndexValue {
-    pub fn compute<T: Hash>(val: &T) -> IndexValue {
-        let mut hasher = IndexValueHasher::new();
-        val.hash(&mut hasher);
-        if hasher.buf.len() <= 16 {
+    pub fn compute<T: Serialize>(val: &T) -> IndexValue {
+        // Serialize `val` to a `Vec<u8>` using `bincode`
+        let serialized_data = serialize(val).expect("Failed to serialize value");
+
+        // If serialized data fits within 16 bytes...
+        if serialized_data.len() <= 16 {
+            // ...store it as `IndexValue::Fixed`
             let mut tmp: [u8; 16] = [0; 16];
-            tmp[..hasher.buf.len()].copy_from_slice(&hasher.buf[..]);
-            return IndexValue::Fixed(u128::from_le_bytes(tmp));
+            tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
+
+            IndexValue::Fixed(u128::from_le_bytes(tmp))
+        } else {
+            // Otherwise, store it as `IndexValue::Variable`
+            IndexValue::Variable(serialized_data)
         }
-        IndexValue::Variable(hasher.buf)
-    }
-}
-
-// Implementation of the Hasher interface for IndexValue, used
-// for serialization. We're actually abusing this interface
-// because you can't call finish().
-struct IndexValueHasher {
-    buf: Vec<u8>,
-}
-
-impl IndexValueHasher {
-    fn new() -> Self {
-        IndexValueHasher { buf: Vec::new() }
-    }
-}
-
-impl Hasher for IndexValueHasher {
-    fn write(&mut self, bytes: &[u8]) {
-        self.buf.extend_from_slice(bytes);
-    }
-
-    fn finish(&self) -> u64 {
-        panic!("Unimplemented")
     }
 }
 
