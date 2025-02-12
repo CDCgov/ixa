@@ -113,7 +113,10 @@ async fn serve(
         .nest_service(&format!("/{prefix}/static/"), ServeDir::new(local_path))
         .nest_service(
             "/favicon.ico",
-            ServeFile::new_with_mime(local_path.join(std::path::Path::new("favicon.ico"))  , &mime::IMAGE_PNG),
+            ServeFile::new_with_mime(
+                local_path.join(std::path::Path::new("favicon.ico")),
+                &mime::IMAGE_PNG,
+            ),
         )
         .with_state(state);
 
