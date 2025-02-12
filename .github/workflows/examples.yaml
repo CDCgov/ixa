@@ -29,7 +29,7 @@ jobs:
       matrix:
         example: [basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports,  reports-multi-threaded, runner, time-varying-infection]
     steps:
-    - Download the atifact
+    - name: Download the artifact
       uses: actions/upload-artifact@v3
         name: ixa-12345
     - name: Run the example
