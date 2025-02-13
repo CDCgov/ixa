@@ -3,7 +3,6 @@
 	"features": {
 		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
 	},
-	//"postCreateCommand": "pre-commit install",
 	"customizations": {
 		"vscode": {
 			"settings": {
