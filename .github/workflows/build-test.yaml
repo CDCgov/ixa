@@ -61,8 +61,8 @@ jobs:
         with:
           path: ~/.cargo/registry
           key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-        
-        
+
+
 
   run_examples:
     needs: build
