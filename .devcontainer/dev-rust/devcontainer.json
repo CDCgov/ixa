@@ -1,0 +1,22 @@
+{
+	"image": "mcr.microsoft.com/devcontainers/rust:latest",
+	"features": {
+		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
+	},
+	"postCreateCommand": "pre-commit install",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"lldb.executable": "/usr/bin/lldb",
+				"editor.defaultFormatter": "rust-lang.rust-analyzer",
+				"editor.formatOnSave": true
+			},
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"vadimcn.vscode-lldb",
+				"yzhang.markdown-all-in-one"
+			]
+	  	}
+	}
+}
