@@ -21,4 +21,3 @@ jobs:
         run: cargo test --verbose
       - name: Test examples
         run: cargo test --examples
-

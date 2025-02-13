@@ -31,7 +31,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [ basic-infection, births-deaths, load-people, network-hhmodel, parameter-loading, random, reports, reports-multi-threaded, runner, time-varying-infection ]
+        include:
+          - example: basic-infection
+          - example: births-deaths
+          - example: load-people
+          - example: network-hhmodel
+          - example: parameter-loading
+          - example: random
+          - example: reports
+          - example: reports-multi-threaded
+          - example: runner
+          - example: time-varying-infection
+            args: ./examples/time-varying-infection/input.json
     steps:
       - uses: actions/checkout@v4
 
@@ -44,4 +55,4 @@ jobs:
             cargo-target-${{ runner.os }}-
 
       - name: Run the example
-        run: cargo run --example ${{ matrix.example }}
+        run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
