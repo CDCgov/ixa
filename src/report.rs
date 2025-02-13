@@ -79,9 +79,11 @@ macro_rules! create_report_trait {
     };
 }
 
+/// # Errors
+/// function will return Error if it fails to `serialize_str`
 #[allow(clippy::trivially_copy_pass_by_ref)]
 #[allow(dead_code)]
-fn serialize_f64<S, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+pub fn serialize_f64<S, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -89,68 +91,16 @@ where
     serializer.serialize_str(&formatted)
 }
 
+/// # Errors
+/// function will return Error if it fails to `serialize_str`
 #[allow(clippy::trivially_copy_pass_by_ref)]
 #[allow(dead_code)]
-fn serialize_f32<S, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+pub fn serialize_f32<S, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
     let formatted = format!("{value:.N$}");
     serializer.serialize_str(&formatted)
-}
-
-#[allow(unused_macros)]
-macro_rules! create_presicion_report {
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { } -> ($($result:tt)*) ) => (
-        #[derive(Serialize, Deserialize, Debug)]
-        pub struct $name {
-            $($result)*
-        }
-        create_report_trait!($name);
-    );
-
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : Option<$type:ty>, $($rest:tt)* } -> ($($result:tt)*) ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
-            $($result)*
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub $param : Option<$type>,
-        ));
-    );
-
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : Vec<$type:ty>, $($rest:tt)* } -> ($($result:tt)*) ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
-            $($result)*
-            #[serde(skip_serializing_if = "Vec::is_empty")]
-            pub $param : Vec<$type>,
-        ));
-    );
-
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : f64, $($rest:tt)* } -> ($($result:tt)*) ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
-            $($result)*
-            #[serde(serialize_with = $ser_f64)]
-            pub $param : f64,
-        ));
-    );
-
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : f32, $($rest:tt)* } -> ($($result:tt)*) ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
-            $($result)*
-            #[serde(serialize_with = $ser_f32)]
-            pub $param : f32,
-        ));
-    );
-
-    ( @ $name:ident, ($ser_f32:expr, $ser_f64:expr), { $param:ident : $default:tt, $($rest:tt)* } -> ($($result:tt)*) ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($rest)* } -> (
-            $($result)*
-            pub $param : $default,
-        ));
-    );
-
-    ( $name:ident, ($ser_f32:expr, $ser_f64:expr), { $( $param:ident  ($($type:tt)*) ),* $(,)? } ) => (
-        create_presicion_report!(@ $name, ($ser_f32, $ser_f64), { $($param : $($type)*,)* } -> ());
-    );
 }
 
 struct ReportData {
@@ -305,7 +255,6 @@ impl ContextReportExt for Context {
     fn send_report<T: Report>(&self, report: T) {
         let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
-        writer.flush().unwrap();
     }
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
@@ -650,57 +599,5 @@ mod test {
         expected.sort();
 
         assert_eq!(actual, expected, "CSV file should contain the correct data");
-    }
-
-    create_presicion_report!(
-        SampleReportWithPresicion,
-        ("serialize_f32::<_,2>", "serialize_f64::<_,3>"),
-        {
-            v1(Option<bool>),
-            v2(String),
-            v3(i32),
-            v4(f64),
-            v5(bool),
-            v6(f32)
-        }
-    );
-
-    #[test]
-    fn add_and_send_sample_report_with_presicion() {
-        use std::fs::read_to_string;
-        let header = String::from("v2,v3,v4,v5,v6");
-        let line2 = String::from("Test Title,10,99.991,false,1.01");
-        let mut context = Context::new();
-        let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("prefix1_".to_string())
-            .directory(path.clone());
-
-        // Create an instance of ComplexSampleReport
-        let sample_report_with_presicion = SampleReportWithPresicion {
-            v1: None,
-            v2: "Test Title".to_string(),
-            v3: 10,
-            v4: 99.991_234,
-            v5: false,
-            v6: 1.012_345,
-        };
-        let serialized = serde_json::to_string(&sample_report_with_presicion).unwrap();
-        println!("---- {serialized}");
-        // Add the report to the context and send it
-        context
-            .add_report::<SampleReportWithPresicion>("sample_report_with_presicion")
-            .unwrap();
-        context.send_report(sample_report_with_presicion);
-
-        // Verify that the output file exists
-        let file_path = path.join("prefix1_sample_report_with_presicion.csv");
-        assert!(file_path.exists(), "CSV file should exist");
-
-        for line in read_to_string(file_path).unwrap().lines() {
-            assert!(line.to_string().eq(&header) | line.to_string().eq(&line2));
-        }
     }
 }

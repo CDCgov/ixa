@@ -1,5 +1,6 @@
 use ixa::context::Context;
 use ixa::error::IxaError;
+use ixa::report::serialize_f64;
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use serde::{Deserialize, Serialize};
@@ -8,12 +9,14 @@ use std::path::PathBuf;
 #[derive(Serialize, Deserialize, Clone)]
 struct Incidence {
     person_id: String,
+    #[serde(serialize_with = "serialize_f64::<_,2>")]
     t: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Death {
     person_id: String,
+    #[serde(serialize_with = "serialize_f64::<_,2>")]
     t: f64,
 }
 
