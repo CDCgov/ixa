@@ -25,10 +25,6 @@ jobs:
           # To manually invalidate the cash, just bump the "version" `-v0-` substring in the key. Be sure to update
           # the other save/restore steps to keep them in sync with the new version.
           key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          # There is no harm in restoring mismatched downloaded dependencies, as cargo will fetch the specific
-          # versions it needs.
-          restore-keys: |
-            cargo-deps-v0-${{ runner.os }}-
 
       - name: Generate cargo lock file
         run: cargo fetch
@@ -65,7 +61,8 @@ jobs:
         with:
           path: ~/.cargo/registry
           key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
+        
+        
 
   run_examples:
     needs: build
