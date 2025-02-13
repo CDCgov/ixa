@@ -3,7 +3,7 @@
 	"features": {
 		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
 	},
-	"postCreateCommand": "pre-commit install",
+	//"postCreateCommand": "pre-commit install",
 	"customizations": {
 		"vscode": {
 			"settings": {
@@ -15,7 +15,8 @@
 				"rust-lang.rust-analyzer",
 				"tamasfe.even-better-toml",
 				"vadimcn.vscode-lldb",
-				"yzhang.markdown-all-in-one"
+				"yzhang.markdown-all-in-one",
+				"github.copilot"
 			]
 	  	}
 	}
