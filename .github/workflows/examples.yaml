@@ -53,6 +53,14 @@ jobs:
           restore-keys: |
             cargo-target-${{ runner.os }}-
 
+      - name: Debug target directory
+        run: ls -lhR target | head -n200
+
+      - name: Debug .cargo directory
+        run: |
+          ls -lhR ~/.cargo/registry | head -n200
+          ls -R ~/.cargo/git | head -n200
+
   run_examples:
     needs: build
     runs-on: ubuntu-latest
@@ -94,6 +102,14 @@ jobs:
 
       - name: Reset timestamps
         run: find target -type f -exec touch {} +
+
+      - name: Debug target directory
+        run: ls -lhR target | head -n200
+
+      - name: Debug .cargo directory
+        run: |
+          ls -lhR ~/.cargo/registry | head -n200
+          ls -R ~/.cargo/git | head -n200
 
       - name: Run the example
         run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
