@@ -54,5 +54,8 @@ jobs:
           restore-keys: |
             cargo-target-${{ runner.os }}-
 
+      - name: Reset timestamps
+        run: find target -type f -exec touch {} +
+
       - name: Run the example
         run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
