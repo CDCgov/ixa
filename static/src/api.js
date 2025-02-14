@@ -99,9 +99,9 @@ function Api() {
 
 let api = null;
 
-export default async function getApi() {
+export default function getApi() {
   if (!api) {
-    api = await new Api();
+    api = Api();
   }
   return api;
 }

@@ -4,10 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ixa Web Console</title>
+    <favicon href="favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@19/?dev",
+                "react-dom/client": "https://esm.sh/react-dom@19/client?dev",
+                "htm/react": "https://esm.sh/htm@3/react?dev",
+                "@observablehq/plot": "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm"
+            }
+        }
+    </script>
 </head>
 <body>
-    <script type="module" src="app.js"></script>
-    <div id="root"><App/>
-    </div>
+    <script type="module" src="src/main.js"></script>
+    <div id="root"></div>
 </body>
 </html>
