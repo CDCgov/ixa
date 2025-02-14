@@ -4,6 +4,7 @@ use crate::people::ContextPeopleExt;
 use crate::Tabulator;
 use crate::{error, trace};
 use csv::Writer;
+use serde::Serializer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -81,6 +82,30 @@ macro_rules! create_report_trait {
             }
         }
     };
+}
+
+/// # Errors
+/// function will return Error if it fails to `serialize_str`
+#[allow(clippy::trivially_copy_pass_by_ref)]
+#[allow(dead_code)]
+pub fn serialize_f64<S, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = format!("{value:.N$}");
+    serializer.serialize_str(&formatted)
+}
+
+/// # Errors
+/// function will return Error if it fails to `serialize_str`
+#[allow(clippy::trivially_copy_pass_by_ref)]
+#[allow(dead_code)]
+pub fn serialize_f32<S, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = format!("{value:.N$}");
+    serializer.serialize_str(&formatted)
 }
 
 struct ReportData {

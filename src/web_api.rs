@@ -101,6 +101,8 @@ async fn serve(
     }
 
     // build our application with a route
+    let path = format!("{}/{}", env!("CARGO_MANIFEST_DIR"), "static/");
+    let static_assets_path = std::path::Path::new(&path);
     let home_path = format!("/{prefix}/static/index.html");
     let app = Router::new()
         .route(&format!("/{prefix}/cmd/{{command}}"), post(process_cmd))
@@ -108,10 +110,16 @@ async fn serve(
             &format!("/{prefix}/"),
             get(|| async move { Redirect::temporary(&home_path) }),
         )
-        .nest_service(&format!("/{prefix}/static/"), ServeDir::new("static"))
+        .nest_service(
+            &format!("/{prefix}/static/"),
+            ServeDir::new(static_assets_path),
+        )
         .nest_service(
             "/favicon.ico",
-            ServeFile::new_with_mime("static/favicon.ico", &mime::IMAGE_PNG),
+            ServeFile::new_with_mime(
+                static_assets_path.join(std::path::Path::new("favicon.ico")),
+                &mime::IMAGE_PNG,
+            ),
         )
         .with_state(state);
 
