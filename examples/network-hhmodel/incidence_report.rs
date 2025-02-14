@@ -30,20 +30,17 @@ fn handle_infection_status_change(
     }
 
     // figure out who infected whom
-    #[allow(unused_assignments)]
-    let mut infected_by_val = String::new();
-
-    if context
+    let infected_by_val = if context
         .get_person_property(event.person_id, InfectedBy)
         .is_none()
     {
-        infected_by_val = "NA".to_string();
+        "NA".to_string()
     } else {
-        infected_by_val = context
+        context
             .get_person_property(event.person_id, InfectedBy)
             .unwrap()
-            .to_string();
-    }
+            .to_string()
+    };
 
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
@@ -79,49 +76,41 @@ mod test {
     use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
     use std::{cell::RefCell, path::Path, rc::Rc};
 
-    fn read_csv_column_names(path: &Path) -> Result<Vec<String>, IxaError> {
-        let mut rdr = csv::Reader::from_path(path)?;
-        let headers = rdr.headers()?;
-        let column_names = headers.iter().map(|s| s.to_string()).collect();
-        Ok(column_names)
-    }
-
-    fn check_values(path: &Path) -> Vec<IncidenceReportItem> {
+    fn check_values(path: &Path) -> (Vec<String>, Vec<IncidenceReportItem>) {
         let mut infected_by: Vec<IncidenceReportItem> = Vec::new();
 
         let mut rdr = csv::Reader::from_path(path).unwrap();
         let headers = rdr.headers().unwrap();
+        let column_names = headers.iter().map(|s| s.to_string()).collect();
         for result in rdr.deserialize() {
             let record: IncidenceReportItem = result.unwrap();
             infected_by.push(record);
         }
 
-        infected_by
+        (column_names, infected_by)
     }
 
     fn test_infected_by(
         context: &mut Context,
         event: PersonPropertyChangeEvent<DiseaseStatus>,
-        infected_by_map: &Rc<RefCell<Vec<IncidenceReportItem>>>,
+        infected_by_out: &Rc<RefCell<Vec<IncidenceReportItem>>>,
     ) {
         // check event to make sure it's a new infection
         if !(event.current == DiseaseStatusValue::E && event.previous == DiseaseStatusValue::S) {
             return;
         }
-        let mut infected_by_val = String::new();
 
-        // figure out who infected whom
-        if context
+        let infected_by_val = if context
             .get_person_property(event.person_id, InfectedBy)
             .is_none()
         {
-            infected_by_val = "NA".to_string();
+            "NA".to_string()
         } else {
-            infected_by_val = context
+            context
                 .get_person_property(event.person_id, InfectedBy)
                 .unwrap()
-                .to_string();
-        }
+                .to_string()
+        };
 
         // save to a reportItem
         let infected_by_entry = IncidenceReportItem {
@@ -132,7 +121,7 @@ mod test {
         };
 
         // add to the vec
-        infected_by_map.borrow_mut().push(infected_by_entry)
+        infected_by_out.borrow_mut().push(infected_by_entry)
     }
 
     #[test]
@@ -148,9 +137,9 @@ mod test {
             output_dir: "examples/network-hhmodel/tests".to_owned(),
         };
 
-        let infected_by_map: Rc<RefCell<Vec<IncidenceReportItem>>> =
+        let infected_by_out: Rc<RefCell<Vec<IncidenceReportItem>>> =
             Rc::new(RefCell::new(Vec::new()));
-        let infected_by_copy = Rc::clone(&infected_by_map);
+        let infected_by_copy = Rc::clone(&infected_by_out);
 
         // We need to put this code where we actually set up the model and write to the report in
         // its own scope so that the report flushes at scope close, allowing us to read the values
@@ -187,14 +176,13 @@ mod test {
         let output_path = path.join("incidence.csv");
         assert!(output_path.try_exists().unwrap());
 
-        let column_names = read_csv_column_names(&output_path).unwrap();
+        let (column_names, report_results) = check_values(&output_path);
+
         assert_eq!(
             column_names,
             vec!["time", "person_id", "infection_status", "infected_by"]
         );
-        let report_results = check_values(&output_path);
-        assert_eq!(report_results, infected_by_map.borrow().clone());
-        println!("{:?}", report_results);
-        println!("{:?}", infected_by_map.borrow());
+
+        assert_eq!(report_results, infected_by_out.borrow().clone());
     }
 }
