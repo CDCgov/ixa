@@ -20,24 +20,22 @@ jobs:
         id: restore-deps
         uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cargo/registry
+          path: ~/.cargo/registry
           # To manually invalidate the cash, just bump the "version" `-v0-` substring in the key. Be sure to update
           # the other save/restore steps to keep them in sync with the new version.
-          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
           # There is no harm in restoring mismatched downloaded dependencies, as cargo will fetch the specific
-          # versions it needs.
-          restore-keys: |
-            cargo-deps-v0-${{ runner.os }}-
+          # versions it needs. If `Cargo.toml` itself changes, the cache is invalidated.
+          restore-keys: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-
 
       - name: Generate cargo lock file
         run: cargo fetch
 
-      - name: Restore Cargo target directory cache
+      - name: Restore Cargo target deps directory cache
         id: restore-target
         uses: actions/cache/restore@v4
         with:
-          path: target
+          path: target/debug/deps
           key: cargo-target-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Build Ixa
@@ -47,16 +45,16 @@ jobs:
         run: cargo test --verbose
 
       - name: Test examples
-        run: cargo test --examples
+        run: cargo test --verbose --examples
 
       - name: Build Examples
         run: cargo build --verbose --examples
 
-      - name: Save Cargo target directory cache
+      - name: Save Cargo target deps directory cache
         id: save-target
         uses: actions/cache/save@v4
         with:
-          path: target
+          path: target/debug/deps
           key: cargo-target-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Save Cargo dependencies cache
@@ -64,7 +62,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.cargo/registry
-          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
 
 
   run_examples:
@@ -92,8 +90,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cargo/registry
-          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-deps-v0-${{ runner.os }}-
+          key: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-v0-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-
 
       - name: Generate cargo lock file
         run: cargo fetch
@@ -101,7 +99,7 @@ jobs:
       - name: Restore Cargo target directory cache
         uses: actions/cache/restore@v4
         with:
-          path: target
+          path: target/debug/deps
           key: cargo-target-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Run the example
