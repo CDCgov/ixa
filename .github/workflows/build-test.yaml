@@ -38,6 +38,9 @@ jobs:
           path: target/debug/deps
           key: cargo-target-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
+      - name: Update timestamps of target/debug/deps
+        run: find target/debug/deps -type f -exec touch {} +
+
       - name: Build Ixa
         run: cargo build --verbose
 
@@ -101,6 +104,9 @@ jobs:
         with:
           path: target/debug/deps
           key: cargo-target-v0-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Update timestamps of target/debug/deps
+        run: find target/debug/deps -type f -exec touch {} +
 
       - name: Run the example
         run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
