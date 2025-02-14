@@ -1,20 +1,13 @@
-import React, { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { html } from "htm/react";
-import {
-  getGlobalSettingsList,
-  getGlobalSettingValue,
-  getPeoplePropertiesList,
-  getPopulation,
-} from "./api.js";
 import { useAppState } from "./app-state.js";
 import { PeopleChartsContainer } from "./PeopleCharts.js";
 
 function Population() {
-  const { generation } = useAppState();
+  const { generation, api } = useAppState();
   const [population, setPopulation] = useState(0);
-
   useEffect(() => {
-    getPopulation().then((p) => setPopulation(p));
+    api.getPopulation().then((p) => setPopulation(p));
   }, [generation]);
 
   return html`
@@ -26,7 +19,7 @@ function Population() {
 }
 
 function GlobalSettings() {
-  const { generation } = useAppState();
+  const { generation, api } = useAppState();
   // This is an array of [propertyName, value] pairs because we want to
   // preserve the order of the chosen property names.
   const [settings, setSettings] = useState([]);
@@ -34,9 +27,9 @@ function GlobalSettings() {
   useEffect(() => {
     (async () => {
       const newSettings = [];
-      const globalProperties = await getGlobalSettingsList();
+      const globalProperties = await api.getGlobalSettingsList();
       for (const propertyName of globalProperties) {
-        const value = await getGlobalSettingValue(propertyName);
+        const value = await api.getGlobalSettingValue(propertyName);
         newSettings.push([propertyName, value]);
       }
       setSettings(newSettings);
@@ -58,11 +51,11 @@ function GlobalSettings() {
 }
 
 function PersonProperties() {
-  const { generation } = useAppState();
+  const { generation, api } = useAppState();
   const [properties, setProperties] = useState([]);
 
   useEffect(() => {
-    getPeoplePropertiesList().then((p) => setProperties(p));
+    api.getPeoplePropertiesList().then((p) => setProperties(p));
   }, [generation]);
 
   return html`
@@ -117,7 +110,5 @@ function App() {
     </${Fragment}>
   `;
 }
-
-
 
 export default App;

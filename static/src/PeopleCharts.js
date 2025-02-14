@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { html } from "htm/react";
 import { useAppState } from "./app-state.js";
-import { getPeoplePropertiesList, tabulateProperties } from "./api.js";
 import * as Plot from "@observablehq/plot";
 
 const CHART_TYPES = [
@@ -33,14 +32,14 @@ function useChartState() {
 }
 
 export function PeopleChartsContainer() {
-  const { generation } = useAppState();
+  const { generation, api } = useAppState();
   const [properties, setProperties] = useState([]);
   const [selectedChartType, setSelectedChartType] = useState("table");
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [charts, addChart, removeChart] = useChartState();
 
   useEffect(() => {
-    getPeoplePropertiesList().then((p) => setProperties(p));
+    api.getPeoplePropertiesList().then((p) => setProperties(p));
   }, [generation]);
 
   function handleCheck(p, isChecked) {
@@ -129,12 +128,12 @@ export function PeopleTimeseries({ properties, removeButton }) {
     property_key: "",
     data: [],
   });
-  const { currentTime, generation } = useAppState();
+  const { currentTime, generation, api } = useAppState();
   const property_key = properties.join("");
 
   useEffect(() => {
     (async () => {
-      const results = await tabulateProperties(properties);
+      const results = await api.tabulateProperties(properties);
       const newHistoryItems = results.map(([propMap, value]) => ({
         time: currentTime,
         value,
@@ -171,11 +170,11 @@ export function PeopleTimeseries({ properties, removeButton }) {
 }
 
 export function PeopleTable({ properties, removeButton }) {
-  const { generation, currentTime } = useAppState();
+  const { generation, currentTime, api } = useAppState();
   const [tabulated, setTabulated] = useState([]);
   useEffect(() => {
     (async () => {
-      const result = await tabulateProperties(properties);
+      const result = await api.tabulateProperties(properties);
       const tableRows = result.map(([propMap, count]) => ({
         key: properties.map((prop) => propMap[prop]).join("|"),
         data: [...properties.map((prop) => propMap[prop]), count],

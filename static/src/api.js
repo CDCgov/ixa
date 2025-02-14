@@ -1,81 +1,107 @@
-function Api() {}
-let prefix;
-function getPrefix() {
-  if (prefix) {
-    return prefix;
+function Api() {
+  function getBaseUrl() {
+    let url = new URL(window.location);
+    const prefix = url.pathname.split("/")[1];
+    if (prefix.length != 36) {
+      throw Error("Malformed URL");
+    }
+    url.pathname = `/${prefix}`;
+    return url;
   }
 
-  let url = new URL(window.location);
-  prefix = url.pathname.split("/")[1];
-  if (prefix?.length != 36) {
-    throw Error("Malformed URL; expected to contain ?token={TOKEN}");
-  }
-  console.log(prefix);
-  return prefix;
-}
+  async function makeApiCall(cmd, body) {
+    const url = new URL(baseUrl);
+    url.pathname += `/cmd/${cmd}`;
+    console.log(`makeApiCall ${url.toString()}`);
 
-export async function makeApiCall(endpoint, body) {
-  let prefix = getPrefix();
-  const url = `/${prefix}/cmd/${endpoint}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}`);
-  }
-  return res.json();
-}
-
-export async function getPopulation() {
-  const response = await makeApiCall("population", {});
-  return response.population;
-}
-
-export async function getTime() {
-  const response = await makeApiCall("time", {});
-  return response.time;
-}
-
-export async function getGlobalSettingsList() {
-  const response = await makeApiCall("global", {
-    Global: "List",
-  });
-
-  return response.List;
-}
-
-export async function getGlobalSettingValue(setting) {
-  const response = await makeApiCall("global", {
-    Global: { Get: { property: setting } },
-  });
-  return response.Value;
-}
-
-export async function nextTime(t) {
-  await makeApiCall("next", {
-    Next: {
-      next_time: t,
-    },
-  });
-}
-
-export async function tabulateProperties(props) {
-  const response = await makeApiCall("people", {
-    People: {
-      Tabulate: {
-        properties: props,
+    let response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    },
-  });
-  return response.Tabulated;
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error((await response.json()).error);
+    }
+
+    return await response.json();
+  }
+
+  async function getPopulation() {
+    let response = await makeApiCall("population", {});
+
+    return response.population;
+  }
+
+  async function getTime() {
+    let response = await makeApiCall("time", {});
+
+    return response.time;
+  }
+
+  async function getGlobalSettingsList() {
+    let response = await makeApiCall("global", {
+      Global: "List",
+    });
+
+    return response.List;
+  }
+
+  async function getGlobalSettingValue(setting) {
+    let response = await makeApiCall("global", {
+      Global: { Get: { property: setting } },
+    });
+
+    return response.Value;
+  }
+
+  async function nextTime(t) {
+    await makeApiCall("next", {
+      Next: {
+        next_time: t,
+      },
+    });
+  }
+
+  async function tabulateProperties(props) {
+    let response = await makeApiCall("people", {
+      People: {
+        Tabulate: {
+          properties: props,
+        },
+      },
+    });
+    return response.Tabulated;
+  }
+
+  async function getPeoplePropertiesList() {
+    let response = await makeApiCall("people", {
+      People: "Properties",
+    });
+
+    return response.PropertyNames;
+  }
+
+  const baseUrl = getBaseUrl();
+
+  return {
+    getPopulation,
+    getTime,
+    getGlobalSettingsList,
+    getGlobalSettingValue,
+    nextTime,
+    tabulateProperties,
+    getPeoplePropertiesList,
+  };
 }
 
-export async function getPeoplePropertiesList() {
-  const response = await makeApiCall("people", {
-    People: "Properties",
-  });
+let api = null;
 
-  return response.PropertyNames;
+export default function getApi() {
+  if (!api) {
+    api = Api();
+  }
+  return api;
 }
