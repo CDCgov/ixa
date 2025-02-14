@@ -14,10 +14,107 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Run examples
-      run: cargo test --examples
+      - uses: actions/checkout@v4
+
+      - name: Restore Cargo dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cargo/registry
+          # To manually invalidate the cash, just bump the "version" `-v0-` substring in the key. Be sure to update
+          # the other save/restore steps to keep them in sync with the new version.
+          key: cargo-deps-v00-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
+          # There is no harm in restoring mismatched downloaded dependencies, as cargo will fetch the specific
+          # versions it needs. If `Cargo.toml` itself changes, the cache is invalidated.
+          restore-keys: cargo-deps-v00-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-
+
+      - name: Generate cargo lock file
+        run: cargo fetch
+
+      - name: Restore Cargo target deps directory cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            target/debug/.fingerprint
+            target/debug/deps
+          key: cargo-target-v00-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      # Update the timestamps to avoid Cargo recompiling the artifacts, ignoring the error in the case the directory
+      # doesn't exist due to a cache miss.
+      - name: Update timestamps of deps
+        run: |
+          find target/debug/.fingerprint -type f -exec touch {} + || true
+          find target/debug/deps -type f -exec touch {} + || true
+
+      - name: Build Ixa
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Test examples
+        run: cargo test --verbose --examples
+
+      - name: Build Examples
+        run: cargo build --verbose --examples
+
+      - name: Save Cargo target deps directory cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target/debug/.fingerprint
+            target/debug/deps
+          key: cargo-target-v00-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Save Cargo dependencies cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cargo/registry
+          key: cargo-deps-v00-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
+
+
+  run_examples:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - example: basic-infection
+          - example: births-deaths
+          - example: load-people
+          - example: network-hhmodel
+          - example: parameter-loading
+          - example: random
+          - example: reports
+          - example: reports-multi-threaded
+          - example: runner
+          - example: time-varying-infection
+            args: ./examples/time-varying-infection/input.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Cargo dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cargo/registry
+          key: cargo-deps-v00-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-v00-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}-
+
+      - name: Generate cargo lock file
+        run: cargo fetch
+
+      - name: Restore Cargo target deps directory cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            target/debug/.fingerprint
+            target/debug/deps
+          key: cargo-target-v00-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Update timestamps of deps
+        run: |
+          find target/debug/.fingerprint -type f -exec touch {} + || true
+          find target/debug/deps -type f -exec touch {} + || true
+
+      - name: Run the example
+        run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
