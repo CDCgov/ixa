@@ -38,10 +38,12 @@ jobs:
             target/debug/deps
           key: cargo-target-v00-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
+      # Update the timestamps to avoid Cargo recompiling the artifacts, ignoring the error in the case the directory
+      # doesn't exist due to a cache miss.
       - name: Update timestamps of deps
         run: |
-          find target/debug/.fingerprint -type f -exec touch {} +
-          find target/debug/deps -type f -exec touch {} +
+          find target/debug/.fingerprint -type f -exec touch {} + || true
+          find target/debug/deps -type f -exec touch {} + || true
 
       - name: Build Ixa
         run: cargo build --verbose
@@ -111,8 +113,8 @@ jobs:
 
       - name: Update timestamps of deps
         run: |
-          find target/debug/.fingerprint -type f -exec touch {} +
-          find target/debug/deps -type f -exec touch {} +
+          find target/debug/.fingerprint -type f -exec touch {} + || true
+          find target/debug/deps -type f -exec touch {} + || true
 
       - name: Run the example
         run: cargo run --example ${{ matrix.example }} ${{ matrix.args }}
