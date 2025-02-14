@@ -1,5 +1,6 @@
 use crate::network::{Age5to17, AgeUnder5, Household};
 use crate::parameters::Parameters;
+use ixa::log::info;
 use ixa::{
     context::Context,
     define_person_property_with_default,
@@ -9,9 +10,9 @@ use ixa::{
     ContextGlobalPropertiesExt, ExecutionPhase, PersonId,
 };
 use rand_distr::{Bernoulli, Gamma};
-use serde_derive::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
 pub enum DiseaseStatusValue {
     S,
     E,
@@ -22,6 +23,8 @@ pub enum DiseaseStatusValue {
 define_rng!(SeirRng);
 
 define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatusValue::S);
+
+define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
 
 fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
     1.0 - (1.0 - sar).powf(1.0 / infectious_period)
@@ -36,7 +39,6 @@ pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Va
     let infected = context.query_people((DiseaseStatus, DiseaseStatusValue::I));
     let mut edges = Vec::new();
 
-    println!("n infected: {:?}", infected.len());
     for i in infected {
         edges.extend(context.get_matching_edges::<T>(i, |context, edge| {
             context.match_person(edge.neighbor, (DiseaseStatus, DiseaseStatusValue::S))
@@ -51,7 +53,13 @@ fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
     for e in edges {
         if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
             context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
-            println!("Person {} exposed person {}.", e.person, e.neighbor);
+            info!(
+                "Person {} exposed person {} at time {}.",
+                e.person,
+                e.neighbor,
+                context.get_current_time()
+            );
+            context.set_person_property(e.neighbor, InfectedBy, Some(e.person));
         }
     }
 }
@@ -105,8 +113,6 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
     context.add_periodic_plan_with_phase(
         1.0,
         |context| {
-            println!("Current time is {}.", context.get_current_time());
-
             let parameters = context
                 .get_global_property_value(Parameters)
                 .unwrap()
@@ -176,6 +182,8 @@ mod tests {
             shape: 15.0,
             infection_duration: 5.0,
             between_hh_transmission_reduction: 1.0,
+            data_dir: "examples/network-hhmodel/tests".to_owned(),
+            output_dir: "examples/network-hhmodel/tests".to_owned(),
         };
         context
             .set_global_property_value(Parameters, parameters)

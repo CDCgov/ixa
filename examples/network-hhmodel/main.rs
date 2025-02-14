@@ -1,12 +1,12 @@
 use ixa::runner::run_with_args;
 use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
-use ixa::{define_rng, ContextGlobalPropertiesExt};
-use std::path::Path;
+use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
+mod incidence_report;
 mod loader;
 mod network;
 mod parameters;
 mod seir;
-
+use std::path::Path;
 define_rng!(MainRng);
 
 fn main() {
@@ -18,7 +18,7 @@ fn main() {
 }
 
 fn initialize(context: &mut Context) {
-    context.init_random(42);
+    context.init_random(1);
 
     // Load people from csv and set up some base properties
     let people = loader::init(context);
@@ -30,6 +30,13 @@ fn initialize(context: &mut Context) {
     // Load network
     network::init(context, &people);
 
-    let to_infect = vec![context.sample_person(MainRng, ()).unwrap()];
+    // Initialize incidence report
+    incidence_report::init(context).unwrap();
+
+    // Initialize infected person with InfectedBy value equal to their own PersonId
+    let to_infect: Vec<PersonId> = vec![context.sample_person(MainRng, ()).unwrap()];
+
+    #[allow(clippy::vec_init_then_push)]
     seir::init(context, &to_infect);
+    context.execute();
 }

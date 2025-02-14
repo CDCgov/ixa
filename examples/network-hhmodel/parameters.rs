@@ -12,5 +12,7 @@ pub struct ParametersValues {
     pub shape: f64,
     pub infection_duration: f64,
     pub between_hh_transmission_reduction: f64,
+    pub output_dir: String,
+    pub data_dir: String,
 }
 define_global_property!(Parameters, ParametersValues);
