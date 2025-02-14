@@ -139,6 +139,16 @@ header h1 {
   }
 }
 
+.loading-cover {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  width: 100%;
+}
+
 aside {
   background-color: var(--secondary-background-color);
   width: 400px;

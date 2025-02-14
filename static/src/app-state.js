@@ -17,14 +17,20 @@ export function SimulationContextProvider({ children }) {
   let api = getApi();
 
   useEffect(() => {
-    api.getTime().then((t) => setCurrentTime(t));
-  }, [generation]);
+    api.getTime().then((time) => setCurrentTime(time));
+  }, []);
 
   async function goNext() {
+    let now = currentTime;
     setIsLoading(true);
-    await api.nextTime(currentTime + 1.0);
-    setIsLoading(false);
+    api.nextTime(currentTime + 1.0);
+    // Busy wait on the API until time changes.
+    while (now === currentTime) {
+      now = await api.getTime();
+    }
     setGeneration(generation + 1);
+    setCurrentTime(now);
+    setIsLoading(false);
   }
 
   let state = { generation, currentTime, goNext, isLoading, api };

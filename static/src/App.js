@@ -74,11 +74,7 @@ function PersonProperties() {
 
 function NextButton() {
   const { goNext, isLoading } = useAppState();
-  return html`
-    <button disabled=${isLoading} onClick=${() => goNext()}>
-      Advance time
-    </button>
-  `;
+  return html` <button onClick=${() => goNext()}>Advance time</button> `;
 }
 
 function App() {
@@ -107,6 +103,7 @@ function App() {
         </aside>
         <main>${html`<${PeopleChartsContainer} />`}</main>
       </div>
+      <div className=${isLoading ? "loading-cover" : ""}></div>
     </${Fragment}>
   `;
 }
