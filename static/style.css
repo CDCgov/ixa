@@ -61,19 +61,23 @@ button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* @media (prefers-color-scheme: light) {
-    :root {
-      color: #213547;
-      background-color: #ffffff;
-    }
-    a:hover {
-      color: #747bff;
-    }
-    button {
-      background-color: #f9f9f9;
-    }
-  } */
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+} */
 
 #root {
   position: absolute;
@@ -127,6 +131,11 @@ header h1 {
 @media (prefers-reduced-motion: no-preference) {
   .logo {
     animation: logo-spin infinite 20s linear;
+    animation-play-state: paused;
+  }
+  .logo.spin,
+  .logo:hover {
+    animation-play-state: running;
   }
 }
 
@@ -170,6 +179,7 @@ aside {
 }
 
 main {
+  flex-grow: 1;
   padding: 20px;
   font-size: 14px;
 }
@@ -180,7 +190,37 @@ main h3 {
   font-size: inherit;
   margin: 0 0 5px 0;
 }
-
+.properties-checkboxes {
+  margin-bottom: 10px;
+}
+.create-chart-form {
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+.create-chart-form select,
+.create-chart-form button {
+  background-color: #21222c;
+  color: white;
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 3px;
+}
+.create-chart-form button {
+  padding: 5px 12px;
+}
+.create-chart-form button:hover {
+  background-color: #646cff;
+}
+.remove-button {
+  visibility: hidden;
+}
+.chart-wrapper:hover .remove-button {
+  visibility: visible;
+}
 .chart-container {
   border: 1px solid var(--border-color);
 }

@@ -6,7 +6,7 @@ import {
   getPeoplePropertiesList,
   getPopulation,
 } from "./api.js";
-import { useAppState } from "./useAppState.js";
+import { useAppState } from "./app-state.js";
 import { PeopleChartsContainer } from "./PeopleCharts.js";
 
 function Population() {
@@ -27,15 +27,17 @@ function Population() {
 
 function GlobalSettings() {
   const { generation } = useAppState();
-  const [settings, setSettings] = useState({});
+  // This is an array of [propertyName, value] pairs because we want to
+  // preserve the order of the chosen property names.
+  const [settings, setSettings] = useState([]);
 
   useEffect(() => {
     (async () => {
-      const newSettings = {};
+      const newSettings = [];
       const globalProperties = await getGlobalSettingsList();
       for (const propertyName of globalProperties) {
         const value = await getGlobalSettingValue(propertyName);
-        newSettings[propertyName] = value;
+        newSettings.push([propertyName, value]);
       }
       setSettings(newSettings);
     })();
@@ -45,7 +47,7 @@ function GlobalSettings() {
     <div className="settings">
       <h2>Global Settings</h2>
       <ul>
-        ${Object.entries(settings).map(
+        ${settings.map(
           ([propertyName, value]) => html` <li key=${propertyName}>
             <span className="key">${propertyName}</span>: ${value}
           </li>`
@@ -77,41 +79,43 @@ function PersonProperties() {
   `;
 }
 
-function App() {
-  const { currentTime, goNext } = useAppState();
-
-  async function doApiCall() {
-    goNext();
-  }
-
+function NextButton() {
+  const { goNext, isLoading } = useAppState();
   return html`
-      <${Fragment}>
-        <header>
-          <div id="logo">
-            <a href="https://github.com/cdcgov/ixa" target="_blank">
-              <img src="ixa.png" className="logo" alt="Ixa logo" />
-            </a>
-          </div>
-          <div>
-            <h1>Ixa Debugger</h1>
-          </div>
-          <div>
-            Current time: <strong>${currentTime.toFixed(1)}</strong>
-          </div>
-          <div>
-            <button onClick=${doApiCall}>Advance time</button>
-          </div>
-        </header>
-        <div className="body-wrapper">
-          <aside>
-            <div className="panel">${html`<${Population} />`}</div>
-            <div className="panel">${html`<${GlobalSettings} />`}</div>
-            <div className="panel">${html`<${PersonProperties} />`}</div>
-          </aside>
-          <main>${html`<${PeopleChartsContainer} />`}</main>
+    <button disabled=${isLoading} onClick=${() => goNext()}>
+      Advance time
+    </button>
+  `;
+}
+
+function App() {
+  const { currentTime, isLoading } = useAppState();
+  return html`
+    <${Fragment}>
+      <header>
+        <div id="logo">
+          <a href="https://github.com/cdcgov/ixa" target="_blank">
+            <img src="ixa.png" className=${`logo${
+              isLoading ? " spin" : ""
+            }`} alt="Ixa logo" />
+          </a>
         </div>
-      </>
-    `;
+        <div>
+          <h1>Ixa Debugger</h1>
+        </div>
+        <div>Current time: <strong>${currentTime.toFixed(1)}</strong></div>
+        <div><${NextButton} /></div>
+      </header>
+      <div className="body-wrapper">
+        <aside>
+          <div className="panel">${html`<${Population} />`}</div>
+          <div className="panel">${html`<${GlobalSettings} />`}</div>
+          <div className="panel">${html`<${PersonProperties} />`}</div>
+        </aside>
+        <main>${html`<${PeopleChartsContainer} />`}</main>
+      </div>
+    </${Fragment}>
+  `;
 }
 
 

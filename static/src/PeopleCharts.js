@@ -1,21 +1,49 @@
 import { useEffect, useRef, useState, Fragment } from "react";
 import { html } from "htm/react";
-import { useAppState } from "./useAppState.js";
+import { useAppState } from "./app-state.js";
 import { getPeoplePropertiesList, tabulateProperties } from "./api.js";
 import * as Plot from "@observablehq/plot";
+
+const CHART_TYPES = [
+  { label: "Table", value: "table", component: PeopleTable },
+  { label: "Timeseries", value: "timeseries", component: PeopleTimeseries },
+];
+
+function chartConfig({ chartType, selectedProperties }) {
+  return { chartType, selectedProperties };
+}
+
+function getChartType(chartType) {
+  let c = CHART_TYPES.find((c) => c.value === chartType);
+  if (!c) {
+    console.error(`Unknown chart type: ${chartType}`);
+  }
+  return c?.component;
+}
+
+function useChartState() {
+  const [charts, setCharts] = useState([]);
+
+  const addChart = (chartType, selectedProperties) => {
+    setCharts([...charts, chartConfig({ chartType, selectedProperties })]);
+  };
+  const removeChart = (index) =>
+    setCharts(charts.filter((_, i) => i !== index));
+  return [charts, addChart, removeChart];
+}
 
 export function PeopleChartsContainer() {
   const { generation } = useAppState();
   const [properties, setProperties] = useState([]);
+  const [selectedChartType, setSelectedChartType] = useState("table");
   const [selectedProperties, setSelectedProperties] = useState([]);
+  const [charts, addChart, removeChart] = useChartState();
+
   useEffect(() => {
     getPeoplePropertiesList().then((p) => setProperties(p));
   }, [generation]);
 
-  if (!properties.length) {
-    return "Loading...";
-  }
-  const handleCheck = (p, isChecked) => {
+  function handleCheck(p, isChecked) {
     if (isChecked && !selectedProperties.includes(p)) {
       setSelectedProperties([...selectedProperties, p]);
     } else if (!isChecked) {
@@ -23,37 +51,79 @@ export function PeopleChartsContainer() {
         selectedProperties.filter((existing) => existing !== p)
       );
     }
-  };
+  }
+
+  function onSubmit(e) {
+    e.preventDefault();
+    if (selectedProperties.length === 0) {
+      return;
+    }
+    addChart(selectedChartType, selectedProperties);
+  }
+
   return html`
-    <${Fragment}>
+  <${Fragment}>
+    <form className="create-chart-form" onSubmit=${onSubmit}>
       <div className="properties-checkboxes">
-        ${properties.map(
-          (p) => html`
-            <label for="people-container-${p}">
-              <input
-                id="people-container-${p}"
-                type="checkbox"
-                value=${p}
-                onChange=${(e) => handleCheck(p, e.target.checked)}
-              />
-              ${p}
-            </label>
-          `
-        )}
+      ${properties.map(
+        (p) => html`
+          <label key=${p} htmlFor="people-container-${p}">
+            <input
+              id="people-container-${p}"
+              type="checkbox"
+              value=${p}
+              onChange=${(e) => handleCheck(p, e.target.checked)}
+            />
+            ${p} </label
+          >${" "}
+        `
+      )}
       </div>
-      ${
-        selectedProperties.length
-          ? html`
-              <${PeopleTable} properties=${selectedProperties} />
-              <${PeopleGraph} properties=${selectedProperties} />
+      <div>
+        <select
+          value=${selectedChartType}
+          onChange=${(e) => setSelectedChartType(e.target.value)}
+        >
+          ${CHART_TYPES.map(
+            (c) => html`
+              <option key=${c.value} value=${c.value}>${c.label}</option>
             `
-          : html`<p>Select at least one property to see a visualization.</p>`
-      }
-    </Fragment>
-  `;
+          )}</select
+        >${" "}
+        <button title=${
+          selectedProperties.length > 0
+            ? ""
+            : "Select at least one property to add a chart."
+        } disabled=${selectedProperties.length === 0}>Add chart</button>
+      </div>
+    </form>
+    ${
+      charts.length
+        ? charts.map(
+            ({ chartType, selectedProperties }, i) => html`
+              <div key=${i} className="chart-wrapper">
+                <${getChartType(chartType)}
+                  properties=${selectedProperties}
+                  removeButton=${html`<a
+                    href="#"
+                    className="remove-button"
+                    onClick=${(e) => {
+                      e.preventDefault();
+                      removeChart(i);
+                    }}
+                  >
+                    [ Remove ]
+                  </button>`}
+                />
+              </div>
+            `
+          )
+        : html`<p>Select at least one property to add a chart.</p>`
+    }
+  </${Fragment}>`;
 }
 
-export function PeopleGraph({ properties }) {
+export function PeopleTimeseries({ properties, removeButton }) {
   const plotRef = useRef(null);
   const [history, setHistory] = useState({
     property_key: "",
@@ -94,13 +164,13 @@ export function PeopleGraph({ properties }) {
 
   return html`
     <div className="people-graph">
-      <h3>Timeseries</h3>
+      <h3>Timeseries ${removeButton}</h3>
       <div className="chart-container" ref=${plotRef}></div>
     </div>
   `;
 }
 
-export function PeopleTable({ properties }) {
+export function PeopleTable({ properties, removeButton }) {
   const { generation, currentTime } = useAppState();
   const [tabulated, setTabulated] = useState([]);
   useEffect(() => {
@@ -118,7 +188,7 @@ export function PeopleTable({ properties }) {
 
   return html`
     <div>
-      <h3>People Status at t = ${currentTime.toFixed(1)}</h3>
+      <h3>People Status at t = ${currentTime.toFixed(1)} ${removeButton}</h3>
       <table className="table">
         <thead>
           <tr>

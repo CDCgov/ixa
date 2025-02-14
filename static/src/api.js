@@ -1,15 +1,21 @@
+function Api() {}
 let prefix;
 function getPrefix() {
+  if (prefix) {
+    return prefix;
+  }
+
   let url = new URL(window.location);
-  const prefix = url.pathname.split("/")[1];
+  prefix = url.pathname.split("/")[1];
   if (prefix?.length != 36) {
     throw Error("Malformed URL; expected to contain ?token={TOKEN}");
   }
+  console.log(prefix);
   return prefix;
 }
 
 export async function makeApiCall(endpoint, body) {
-  prefix = prefix || getPrefix();
+  let prefix = getPrefix();
   const url = `/${prefix}/cmd/${endpoint}`;
   const res = await fetch(url, {
     method: "POST",
