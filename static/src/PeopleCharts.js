@@ -54,6 +54,7 @@ export function PeopleChartsContainer() {
 
   function onSubmit(e) {
     e.preventDefault();
+    // TODO<ryl8@cdc.gov>: This should produce an error message
     if (selectedProperties.length === 0) {
       return;
     }
