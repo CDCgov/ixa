@@ -1,13 +1,32 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
-use crate::{info, set_log_level, LevelFilter};
+use crate::{info, set_log_level, set_module_filters, LevelFilter};
 
 use clap::{Args, Command, FromArgMatches as _};
+
+/// Custom parser for log levels
+fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
+    s.split(',')
+        .map(|pair| {
+            let mut iter = pair.split(':');
+            let key = iter
+                .next()
+                .ok_or_else(|| format!("Invalid key in pair: {pair}"))?;
+            let value = iter
+                .next()
+                .ok_or_else(|| format!("Invalid value in pair: {pair}"))?;
+            let level =
+                LevelFilter::from_str(value).map_err(|_| format!("Invalid log level: {value}"))?;
+            Ok((key.to_string(), level))
+        })
+        .collect()
+}
 
 /// Default cli arguments for ixa runner
 #[derive(Args, Debug)]
@@ -34,7 +53,7 @@ pub struct BaseArgs {
 
     /// Enable logging
     #[arg(short, long)]
-    pub log_level: Option<LevelFilter>,
+    pub log_level: Option<String>,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
@@ -149,9 +168,21 @@ where
     if args.force_overwrite {
         report_config.overwrite(true);
     }
-    if let Some(level) = args.log_level {
-        set_log_level(level);
-        info!("Logging enabled at level {level}");
+    if let Some(log_level) = args.log_level.clone() {
+        if let Ok(level) = LevelFilter::from_str(&log_level) {
+            set_log_level(level);
+            info!("Logging enabled at level {level}");
+        } else if let Ok(log_levels) = parse_log_levels(&log_level) {
+            let log_levels_slice: Vec<(&String, LevelFilter)> =
+                log_levels.iter().map(|(k, v)| (k, *v)).collect();
+            set_module_filters(log_levels_slice.as_slice());
+            for (key, value) in log_levels {
+                println!("Logging enabled for {key} at level {value}");
+                // Here you can set the log level for each key-value pair as needed
+            }
+        } else {
+            return Err(format!("Invalid log level format: {log_level}").into());
+        }
     } else {
         info!("Logging disabled.");
     }
@@ -292,7 +323,7 @@ mod tests {
     #[test]
     fn test_run_with_logging_enabled() {
         let mut test_args = BaseArgs::new();
-        test_args.log_level = Some(LevelFilter::Info);
+        test_args.log_level = Some(LevelFilter::Info.to_string());
         let result = run_with_args_internal(test_args, None, |_, _, _: Option<()>| Ok(()));
         assert!(result.is_ok());
     }
