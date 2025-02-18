@@ -13,3 +13,17 @@ In `network.rs`, three corresponding edge types are created using the
 In `seir.rs`, a SEIR model is implemented with different betas by network edge type.  Edge queries (`get_matching_edges`) allow us to identify the neighbors of the infected individuals and consider whether they become exposed.
 
 `loader.rs` reads in the `Household.csv` file and `parameters.rs` sets up global properties for the SEIR model.
+
+`incidence_report.rs` sets up a report with information on who became infected by whom during the simulation and saves the information to a csv in an `\output` folder.
+
+## How to run the model:
+
+`cargo run --example network-hhmodel`
+
+To run the model with logging turned on:
+
+`cargo run --example network-hhmodel -- --log-level info`
+
+To see all details of the plans being added:
+
+`cargo run --example network-hhmodel -- --log-level trace`
