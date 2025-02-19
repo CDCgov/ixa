@@ -293,23 +293,27 @@ mod test {
 
     #[test]
     fn add_and_send_report() {
-        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config
-            .file_prefix("prefix1_".to_string())
-            .directory(path.clone());
-        context.add_report::<SampleReport>("sample_report").unwrap();
-        let report = SampleReport {
-            id: 1,
-            value: "Test Value".to_string(),
-        };
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config
+                .file_prefix("prefix1_".to_string())
+                .directory(path.clone());
+            context.add_report::<SampleReport>("sample_report").unwrap();
+            let report = SampleReport {
+                id: 1,
+                value: "Test Value".to_string(),
+            };
 
-        context.send_report(report);
+            context.send_report(report);
+        }
 
         let file_path = path.join("prefix1_sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
+        assert!(file_path.metadata().unwrap().len() > 0);
 
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         for result in reader.deserialize() {
@@ -321,21 +325,24 @@ mod test {
 
     #[test]
     fn add_report_empty_prefix() {
-        let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
-        let config = context.report_options();
-        config.directory(path.clone());
-        context.add_report::<SampleReport>("sample_report").unwrap();
-        let report = SampleReport {
-            id: 1,
-            value: "Test Value".to_string(),
-        };
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config.directory(path.clone());
+            context.add_report::<SampleReport>("sample_report").unwrap();
+            let report = SampleReport {
+                id: 1,
+                value: "Test Value".to_string(),
+            };
 
-        context.send_report(report);
-
+            context.send_report(report);
+        }
         let file_path = path.join("sample_report.csv");
         assert!(file_path.exists(), "CSV file should exist");
+        assert!(file_path.metadata().unwrap().len() > 0);
 
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         for result in reader.deserialize() {
@@ -357,22 +364,26 @@ mod test {
 
     #[test]
     fn add_report_no_dir() {
-        let mut context = Context::new();
-        let config = context.report_options();
-        config.file_prefix("test_prefix_".to_string());
-        context.add_report::<SampleReport>("sample_report").unwrap();
-        let report = SampleReport {
-            id: 1,
-            value: "Test Value".to_string(),
-        };
+        // We need the writer to go out of scope so the file is flushed
+        {
+            let mut context = Context::new();
+            let config = context.report_options();
+            config.file_prefix("test_prefix_".to_string());
+            context.add_report::<SampleReport>("sample_report").unwrap();
+            let report = SampleReport {
+                id: 1,
+                value: "Test Value".to_string(),
+            };
 
-        context.send_report(report);
+            context.send_report(report);
+        }
 
         let path = env::current_dir().unwrap();
         let file_path = PathBufWithDrop {
             file: path.join("test_prefix_sample_report.csv"),
         };
         assert!(file_path.file.exists(), "CSV file should exist");
+        assert!(file_path.file.metadata().unwrap().len() > 0);
 
         let mut reader = csv::Reader::from_path(&file_path.file).unwrap();
         for result in reader.deserialize() {
