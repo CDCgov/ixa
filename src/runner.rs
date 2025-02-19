@@ -330,6 +330,11 @@ mod tests {
 
     #[test]
     fn test_run_with_logging_modules() {
+        assert_cmd::Command::new("cargo")
+            .args(["build", "--bin", "runner_test_debug"])
+            .ok()
+            .expect("Failed to build runner_test_debug");
+
         let output = assert_cmd::Command::cargo_bin("runner_test_debug")
             .unwrap()
             .args([
