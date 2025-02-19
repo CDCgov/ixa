@@ -271,6 +271,10 @@ mod tests {
     #[test]
     fn command_line_args_sets_level() {
         let _guard = TEST_MUTEX.lock().expect("Mutex poisoned");
+        assert_cmd::Command::new("cargo")
+            .args(["build", "--bin", "runner_test_debug"])
+            .ok()
+            .expect("Failed to build runner_test_debug");
         assert_cmd::Command::cargo_bin("runner_test_debug")
             .unwrap()
             .args(["--log-level=trace"])

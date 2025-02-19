@@ -205,6 +205,10 @@ mod tests {
     fn test_cli_invocation_with_custom_args() {
         // Note this target is defined in the bin section of Cargo.toml
         // and the entry point is in tests/bin/runner_test_custom_args
+        assert_cmd::Command::new("cargo")
+            .args(["build", "--bin", "runner_test_custom_args"])
+            .ok()
+            .expect("Failed to build runner_test_custom_args");
         assert_cmd::Command::cargo_bin("runner_test_custom_args")
             .unwrap()
             .args(["-a", "42"])

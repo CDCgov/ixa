@@ -273,6 +273,10 @@ mod tests {
 
     #[test]
     fn test_cli_debugger_integration() {
+        assert_cmd::Command::new("cargo")
+            .args(["build", "--bin", "runner_test_debug"])
+            .ok()
+            .expect("Failed to build runner_test_debug");
         assert_cmd::Command::cargo_bin("runner_test_debug")
             .unwrap()
             .args(["--debugger", "1.0"])
