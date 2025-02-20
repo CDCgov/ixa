@@ -168,11 +168,11 @@ where
     if args.force_overwrite {
         report_config.overwrite(true);
     }
-    if let Some(log_level) = args.log_level.clone() {
-        if let Ok(level) = LevelFilter::from_str(&log_level) {
+    if let Some(log_level) = args.log_level.as_ref() {
+        if let Ok(level) = LevelFilter::from_str(log_level) {
             set_log_level(level);
             info!("Logging enabled at level {level}");
-        } else if let Ok(log_levels) = parse_log_levels(&log_level) {
+        } else if let Ok(log_levels) = parse_log_levels(log_level) {
             let log_levels_slice: Vec<(&String, LevelFilter)> =
                 log_levels.iter().map(|(k, v)| (k, *v)).collect();
             set_module_filters(log_levels_slice.as_slice());
