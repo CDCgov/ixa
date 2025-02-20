@@ -71,3 +71,15 @@ pub mod web_api;
 pub use ctor;
 pub use paste;
 pub use rand;
+
+#[cfg(test)]
+mod tests {
+    use assert_cmd::cargo::CargoError;
+    pub fn run_external_runner(runner_name: &str) -> Result<assert_cmd::Command, CargoError> {
+        assert_cmd::Command::new("cargo")
+            .args(["build", "--bin", runner_name])
+            .ok()
+            .unwrap_or_else(|_| panic!("Failed to build {runner_name}"));
+        assert_cmd::Command::cargo_bin(runner_name)
+    }
+}

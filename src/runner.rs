@@ -217,6 +217,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::run_external_runner;
     use crate::{define_global_property, define_rng};
     use serde::{Deserialize, Serialize};
 
@@ -236,7 +237,7 @@ mod tests {
     fn test_cli_invocation_with_custom_args() {
         // Note this target is defined in the bin section of Cargo.toml
         // and the entry point is in tests/bin/runner_test_custom_args
-        assert_cmd::Command::cargo_bin("runner_test_custom_args")
+        run_external_runner("runner_test_custom_args")
             .unwrap()
             .args(["-a", "42"])
             .assert()
