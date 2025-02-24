@@ -17,8 +17,10 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
+use clap::Parser;
 use log::trace;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
@@ -310,6 +312,34 @@ impl ContextGlobalPropertiesExt for Context {
         }
 
         Ok(())
+    }
+}
+
+pub trait IxaParamsArgs<T> {
+    fn parse() -> Self;
+    fn merge_config(&self, other: T) -> Result<T, IxaError>;
+}
+pub trait IxaParams<T: IxaParamsArgs<Self>>: Sized + Serialize + DeserializeOwned {
+    fn name() -> &'static str;
+    fn parse_config(file_name: &Path) -> Result<Self, IxaError> {
+        let content = fs::read_to_string(file_name)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        let params = json.get("params").ok_or_else(|| {
+            IxaError::from(format!(
+                "Config file {:?} is missing params field",
+                file_name
+            ))
+        })?;
+        let config = serde_json::from_value(params.clone())?;
+        Ok(config)
+    }
+    fn parse_args() -> T {
+        T::parse()
+    }
+    fn parse_config_and_args(file_name: &Path) -> Result<Self, IxaError> {
+        let config = Self::parse_config(file_name)?;
+        let args = T::parse();
+        args.merge_config(config)
     }
 }
 
