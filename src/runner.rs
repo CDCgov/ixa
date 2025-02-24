@@ -14,7 +14,7 @@ use clap::{Args, Command, FromArgMatches as _};
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
     s.split(',')
         .map(|pair| {
-            let mut iter = pair.split(':');
+            let mut iter = pair.split('=');
             let key = iter
                 .next()
                 .ok_or_else(|| format!("Invalid key in pair: {pair}"))?;
@@ -342,7 +342,7 @@ mod tests {
                 "--debugger",
                 "1.0",
                 "--log-level",
-                "rustyline:Debug,ixa:Trace",
+                "rustyline=Debug,ixa=Trace",
             ])
             .write_stdin("population\n")
             .output();
