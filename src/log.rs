@@ -262,6 +262,7 @@ fn get_log_configuration() -> MutexGuard<'static, LogConfiguration> {
 #[cfg(test)]
 mod tests {
     use super::{get_log_configuration, remove_module_filter, set_log_level, set_module_filters};
+    use crate::tests::run_external_runner;
     use log::{error, trace, LevelFilter};
     use std::sync::{LazyLock, Mutex};
 
@@ -271,7 +272,7 @@ mod tests {
     #[test]
     fn command_line_args_sets_level() {
         let _guard = TEST_MUTEX.lock().expect("Mutex poisoned");
-        assert_cmd::Command::cargo_bin("runner_test_debug")
+        run_external_runner("runner_test_debug")
             .unwrap()
             .args(["--log-level=trace"])
             .assert()

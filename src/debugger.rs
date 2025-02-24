@@ -252,6 +252,7 @@ impl ContextDebugExt for Context {
 #[cfg(test)]
 mod tests {
     use super::{init, run_with_plugin, DebuggerPlugin};
+    use crate::tests::run_external_runner;
     use crate::{define_global_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
 
@@ -273,7 +274,7 @@ mod tests {
 
     #[test]
     fn test_cli_debugger_integration() {
-        assert_cmd::Command::cargo_bin("runner_test_debug")
+        run_external_runner("runner_test_debug")
             .unwrap()
             .args(["--debugger", "1.0"])
             .write_stdin("population\n")
