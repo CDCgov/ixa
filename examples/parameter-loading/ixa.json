@@ -1,0 +1,11 @@
+{
+    "params": {
+        "max_time": 200.0,
+        "seed": 123,
+        "rate_of_infection": 1.0,
+        "initial_infections": 1,
+        "infection_duration": 5.0,
+        "report_period": 1.0,
+        "synth_population_file": "input/people_test.csv"
+    }
+}
