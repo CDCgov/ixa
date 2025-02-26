@@ -92,16 +92,11 @@ pub trait ContextPeopleExt {
         F: Fn(&Context, &[String], usize);
 
     /// Randomly sample a person from the population of people who match the query.
+    /// Returns None if no people match the query.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     ///
-    /// # Errors
-    /// Returns `IxaError` if population is 0.
-    fn sample_person<R: RngId + 'static, T: Query>(
-        &self,
-        rng_id: R,
-        query: T,
-    ) -> Result<PersonId, IxaError>
+    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
     where
         R::RngType: Rng;
 }
@@ -392,22 +387,18 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_person<R: RngId + 'static, T: Query>(
-        &self,
-        rng_id: R,
-        query: T,
-    ) -> Result<PersonId, IxaError>
+    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
     where
         R::RngType: Rng,
     {
         if self.get_current_population() == 0 {
-            return Err(IxaError::IxaError(String::from("Empty population")));
+            return None;
         }
 
         // Special case the empty query because we can do it in O(1).
         if query.get_query().is_empty() {
             let result = self.sample_range(rng_id, 0..self.get_current_population());
-            return Ok(PersonId(result));
+            return Some(PersonId(result));
         }
 
         T::setup(&query, self);
@@ -435,7 +426,7 @@ impl ContextPeopleExt for Context {
             query.get_query(),
         );
 
-        selected.ok_or(IxaError::IxaError(String::from("No matching people")))
+        selected
     }
 }
 
@@ -937,10 +928,7 @@ mod tests {
         define_rng!(SampleRng1);
         let mut context = Context::new();
         context.init_random(42);
-        assert!(matches!(
-            context.sample_person(SampleRng1, ()),
-            Err(IxaError::IxaError(_))
-        ));
+        assert!(context.sample_person(SampleRng1, ()).is_none());
         let person = context.add_person(()).unwrap();
         assert_eq!(context.sample_person(SampleRng1, ()).unwrap(), person);
     }
@@ -953,20 +941,14 @@ mod tests {
         context.init_random(42);
 
         // Test an empty query.
-        assert!(matches!(
-            context.sample_person(SampleRng2, ()),
-            Err(IxaError::IxaError(_))
-        ));
+        assert!(context.sample_person(SampleRng2, ()).is_none());
         let person1 = context.add_person((Age, 10)).unwrap();
         let person2 = context.add_person((Age, 10)).unwrap();
         let person3 = context.add_person((Age, 10)).unwrap();
         let person4 = context.add_person((Age, 30)).unwrap();
 
         // Test a non-matching query.
-        assert!(matches!(
-            context.sample_person(SampleRng2, (Age, 50)),
-            Err(IxaError::IxaError(_))
-        ));
+        assert!(context.sample_person(SampleRng2, (Age, 50)).is_none());
 
         // See that the simple query always returns person3
         for _ in 0..10 {

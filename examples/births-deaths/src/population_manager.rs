@@ -85,7 +85,7 @@ fn schedule_death(context: &mut Context) {
         .unwrap()
         .clone();
 
-    if let Ok(person) = context.sample_person(PeopleRng, (Alive, true)) {
+    if let Some(person) = context.sample_person(PeopleRng, (Alive, true)) {
         context.set_person_property(person, Alive, false);
 
         let next_death_event = context.get_current_time()
