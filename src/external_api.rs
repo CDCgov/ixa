@@ -165,25 +165,39 @@ pub(crate) mod people {
     use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
     use crate::Context;
     use crate::IxaError;
+    use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
 
-    #[derive(Deserialize)]
+    fn person_id_from_str(s: &str) -> Result<PersonId, String> {
+        match s.parse::<usize>() {
+            Ok(id) => Ok(PersonId(id)),
+            Err(_) => Err("Person id must be an integer".to_string()),
+        }
+    }
+
+    #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
     pub(crate) enum ArgsEnum {
+        /// Get the value of a property for a person
         Get {
+            #[arg(value_parser = person_id_from_str)]
             person_id: PersonId,
             property: String,
         },
         Query {
+            #[clap(skip)]
             properties: Vec<(String, String)>,
         },
+        /// Tabulate the values of a set of properties
         Tabulate {
             properties: Vec<String>,
         },
         Properties,
     }
 
-    #[derive(Deserialize)]
+    #[derive(Parser, Debug, Serialize, Deserialize)]
     pub(crate) enum Args {
+        /// Access people properties
+        #[command(subcommand)]
         People(ArgsEnum),
     }
 
@@ -200,44 +214,42 @@ pub(crate) mod people {
         type Retval = Retval;
 
         fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
-            let Args::People(args) = args;
-
             match args {
-                ArgsEnum::Get {
-                    person_id,
-                    property,
-                } => {
-                    if person_id.0 >= context.get_current_population() {
-                        return Err(IxaError::IxaError(format!("No person with id {person_id}")));
+                Args::People(args_enum) => match args_enum {
+                    ArgsEnum::Get {
+                        person_id,
+                        property,
+                    } => {
+                        if person_id.0 >= context.get_current_population() {
+                            return Err(IxaError::IxaError(format!(
+                                "No person with id {person_id:?}"
+                            )));
+                        }
+                        let value = context.get_person_property_by_name(property, *person_id)?;
+                        Ok(Retval::Properties(vec![(property.clone(), value)]))
                     }
+                    ArgsEnum::Query { properties: _ } => Err(IxaError::IxaError(String::from(
+                        "People querying not implemented",
+                    ))),
+                    ArgsEnum::Tabulate { properties } => {
+                        let results = RefCell::new(Vec::new());
 
-                    let value = context.get_person_property_by_name(property, *person_id)?;
-                    Ok(Retval::Properties(vec![(property.to_string(), value)]))
-                }
-                ArgsEnum::Query {
-                    properties: _properties,
-                } => Err(IxaError::IxaError(String::from(
-                    "People querying not implemented",
-                ))),
-                ArgsEnum::Tabulate { properties } => {
-                    let results: RefCell<Vec<(HashMap<String, String>, usize)>> =
-                        RefCell::new(Vec::new());
-
-                    context.tabulate_person_properties_by_name(
-                        properties.clone(),
-                        |_context, values, count| {
-                            let mut hm = HashMap::new();
-                            for i in 0..properties.len() {
-                                hm.insert(properties[i].clone(), values[i].clone());
-                            }
-                            results.borrow_mut().push((hm, count));
-                        },
-                    )?;
-                    Ok(Retval::Tabulated(results.take()))
-                }
-                ArgsEnum::Properties => {
-                    Ok(Retval::PropertyNames(context.get_person_property_names()))
-                }
+                        context.tabulate_person_properties_by_name(
+                            properties.clone(),
+                            |_, values, count| {
+                                let mut hm = HashMap::new();
+                                for (key, value) in properties.iter().zip(values.iter()) {
+                                    hm.insert(key.clone(), value.clone());
+                                }
+                                results.borrow_mut().push((hm, count));
+                            },
+                        )?;
+                        Ok(Retval::Tabulated(results.take()))
+                    }
+                    ArgsEnum::Properties => {
+                        Ok(Retval::PropertyNames(context.get_person_property_names()))
+                    }
+                },
             }
         }
     }
