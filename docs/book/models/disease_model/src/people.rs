@@ -1,5 +1,5 @@
 use crate::POPULATION;
-use ixa::{Context, ContextPeopleExt, define_person_property_with_default, trace};
+use ixa::{define_person_property_with_default, trace, Context, ContextPeopleExt};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]

@@ -1,10 +1,10 @@
 use rand_distr::Exp;
 
-use ixa::{Context, ContextPeopleExt, ContextRandomExt, PersonId, define_rng, trace};
+use ixa::{define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 
+use crate::people::{InfectionStatus, InfectionStatusValue};
 use crate::FORCE_OF_INFECTION;
 use crate::MAX_TIME;
-use crate::people::{InfectionStatus, InfectionStatusValue};
 
 define_rng!(TransmissionRng);
 

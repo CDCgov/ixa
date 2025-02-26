@@ -54,4 +54,3 @@ Read through this implementation and make sure you understand how it accomplishe
 
 > [!INFO] Random Number Generators
 > Each module generally defines its own random number source with `define_rng!`, avoiding interfering with the random number sources used elsewhere in the simulation in order to preserve determinism. In Monte Carlo simulations, *deterministic* pseudorandom number sequences are desirable because they ensure reproducibility, improve efficiency, provide control over randomness, enable consistent statistical testing, and reduce the likelihood of bias or error. These qualities are critical in scientific computing, optimization problems, and simulations that require precise and *verifiable* results.
-

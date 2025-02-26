@@ -9,12 +9,12 @@ Modules can subscribe to events. The infection manager registers a function with
 This line isn't defining a new struct or even a new type. Rather, it defines an alias for `PersonPropertyChangeEvent\<T>` with the generic type  `T` instantiated with the property we want to monitor, `InfectionStatus`. This is effectively the name of the event we subscribe to in the module's `init()` function:
 ```rust
 // in infection_manager.rs
-{{#include ../../models/disease_model/src/infection_manager.rs:38:41}}
+{{#include ../../models/disease_model/src/infection_manager.rs:40:43}}
 ```
 The event handler is just a regular Rust function that takes a `Context` and an `InfectionStatusEvent`, the latter of which holds the `PersonId` of the person whose `InfectionStatus` changed, the current `InfectionStatusValue`, and the previous `InfectionStatusValue`.
 ```rust
 // in infection_manager.rs
-{{#include ../../models/disease_model/src/infection_manager.rs:28:36}}
+{{#include ../../models/disease_model/src/infection_manager.rs:28:38}}
 ```
 We only care about new infections in this model.
 
@@ -27,4 +27,3 @@ Notice that the plan is again just a Rust function, but this time it takes the f
 
 > [!INFO] Closures and Captured Variables
 >  The `move` keyword in Rust closures instructs the closure to take ownership of any variables it uses from its surrounding context—these are known as captured variables. Normally, when a closure refers to variables defined outside of its own body, it borrows them, which means it uses references to those values. However, with `move`, the closure takes full ownership by moving the variables into its own scope. This is especially useful when the closure must outlive the current scope or be passed to another thread, as it ensures that the closure has its own independent copy of the data without relying on references that might become invalid.
-

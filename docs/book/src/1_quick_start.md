@@ -8,23 +8,23 @@ cargo add ixa --git https://github.com/CDCgov/ixa --branch release
 
 Open `src/main.rs` in your favorite editor or IDE and modify it to look like the following:
 ```rust
-use ixa::{error, info, run_with_args, trace, Context};  
-  
-fn main() {  
-    let result =  
-        run_with_args(|_context: &mut Context, _args, _| {  
-            trace!("Initializing disease_model");  
-            Ok(())  
-        });  
-  
-    match result {  
-        Ok(_) => {  
-            info!("Simulation finished executing");  
-        }  
-        Err(e) => {  
-            error!("Simulation exited with error: {}", e);  
-        }  
-    }  
+use ixa::{error, info, run_with_args, trace, Context};
+
+fn main() {
+    let result =
+        run_with_args(|_context: &mut Context, _args, _| {
+            trace!("Initializing disease_model");
+            Ok(())
+        });
+
+    match result {
+        Ok(_) => {
+            info!("Simulation finished executing");
+        }
+        Err(e) => {
+            error!("Simulation exited with error: {}", e);
+        }
+    }
 }
 ```
 

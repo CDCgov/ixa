@@ -13,13 +13,13 @@ The fact that `IncidenceReportItem` derives `Serialize` is what makes this magic
 
 The way we listen to events is almost identical to how we did it in the `infection` module. First let's make the event handler, that is, the callback that will be called whenever an event is emitted.
 ```rust
-{{#include ../../models/disease_model/src/incidence_report.rs:16:26}}
+{{#include ../../models/disease_model/src/incidence_report.rs:16:28}}
 ```
 Just pass a `IncidenceReportItem` to `context.send_report()`! We also emit a trace log message so we can trace the execution of our model.
 
 In the `init()` function there is a little bit of setup needed. Also, we can't forget to register this callback to listen to `InfectionStatusEvent`s.
 ```rust
-{{#include ../../models/disease_model/src/incidence_report.rs:28:42}}
+{{#include ../../models/disease_model/src/incidence_report.rs:30:44}}
 ```
 Note that:
 - the configuration you do on `context.report_options()` applies to all reports attached to that context;
@@ -28,11 +28,10 @@ Note that:
 
 > [!INFO] `Result<U, V>` and Handling Errors
 > The Rust `Result<U, V>` type is an enum used for error handling. It represents a value that can either be a successful outcome (`Ok`) containing a value of type `U`, or an error (`Err`) containing a value of type `V`. Think of it as a built-in way to return and propagate errors without relying on exceptions, similar to using “`Either`” types or special error codes in other languages.
-> 
+>
 > The `?` operator works with `Result` to simplify error handling. When you append `?` to a function call that returns a `Result`, it automatically checks if the result is an `Ok` or an `Err`. If it’s `Ok`, the value is extracted; if it’s an `Err`, the error is immediately returned from the enclosing function. This helps keep your code concise and easy to read by reducing the need for explicit error-checking logic.
 
 If your IDE isn't capable of adding imports for you, the external symbols we need for this module are as follows.
 ```rust
 {{#include ../../models/disease_model/src/incidence_report.rs:1:5}}
 ```
-
