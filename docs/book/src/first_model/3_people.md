@@ -16,6 +16,7 @@ To each person we will associate a value of the enum (short for “enumeration�
  - **S**: Represents someone who is susceptible to infection.
  - **I**: Represents someone who is currently infected.
  - **R**: Represents someone who has recovered (or is otherwise no longer infectious).
+
 Each value in the enum corresponds to a stage in our simple SIR (Susceptible, Infected, Recovered) model. The enum value for a person's `InfectionStatus` property will refer to an individual’s health status in our simulation.
 
 The attributes written above the enum declaration, such as `#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]`, automatically add useful functionality to the enum:
@@ -23,9 +24,8 @@ The attributes written above the enum declaration, such as `#[derive(Debug, Hash
  - **`Hash, Eq, PartialEq`**: Enable the enum to be compared and used in data structures like hash maps.
  - **`Clone, Copy`**: Allow the values to be duplicated easily.
  - **`Serialize, Deserialize`**: Make it possible to convert the enum to and from a format that can be stored or transmitted (for example, when saving data to a CSV file).
-All of our "person properties" in our models will "derive" these attributes.
 
-It is not enough to define this enum. We have to tell Ixa that it will be a `PersonProperty`:
+All of our "person properties" in our models will "derive" these attributes. It is not enough to define this enum. We have to tell Ixa that it will be a `PersonProperty`:
 ```rust
 {{#include ../../models/disease_model/src/people.rs:12:16}}
 ```
@@ -70,11 +70,21 @@ use ixa::Context;
 static POPULATION: u64 = 1000;
 
 fn main() {
-	let mut context = Context::new();
-	people::init(&mut context);
-	context.execute();
+    let result =
+        run_with_args(|_context: &mut Context, _args, _| {
+            trace!("Initializing disease_model");
+            people::init(context);
+            Ok(())
+        });
 
-	println!("Simulation finished executing");
+    match result {
+        Ok(_) => {
+            info!("Simulation finished executing");
+        }
+        Err(e) => {
+            error!("Simulation exited with error: {}", e);
+        }
+    }
 }
 ```
 1. Your IDE might have added the `mod people;` line for you. If not, add it now. It tells the compiler that the `people` module is attached to the `main` module (that is, `main.rs`).
