@@ -12,7 +12,7 @@ pub enum InfectionStatusValue {
 define_person_property_with_default!(
     InfectionStatus,        // Property Name
     InfectionStatusValue,   // Type of the Property Values
-    InfectionStatusValue::S // The default value assigned to each person
+    InfectionStatusValue::S // Default value used when a person is added to the simulation
 );
 
 /// Populates the "world" with the `POPULATION` number of people.

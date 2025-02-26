@@ -8,4 +8,4 @@ Ixa is named after the [Ixa crab](https://www.crabdatabase.info/en/crabs/brachyu
 
 You are reading The Ixa Book, a tutorial introduction to Ixa. API documentation can be found at [https://ixa.rs/doc/ixa](https://ixa.rs/doc/ixa).
 
-This book assumes you have a basic familiarity with the command line and at least some experience with programming. 
+This book assumes you have a basic familiarity with the command line and at least some experience with programming.

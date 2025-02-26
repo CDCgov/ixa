@@ -1,12 +1,11 @@
 # Setting Up Your First Model
 
-Let's setup the bare bones skeleton of our first model. First decide where your Ixa-related code is going to live on your computer. It's probably easiest to just have your models in the same folder as the Ixa source repository if you are using the Ixa library from source. On my computer, that's the `Code` directory in my `home` folder (or `~` for short). I will use my directory structure for illustration purposes in this section. Just modify the commands for wherever you chose to store your models.
+Let's setup the bare bones skeleton of our first model. First decide where your Ixa-related code is going to live on your computer. On my computer, that's the `Code` directory in my `home` folder (or `~` for short). I will use my directory structure for illustration purposes in this section. Just modify the commands for wherever you chose to store your models.
 
 ```
 🏠 home/
 └── 🗂️ Code/
-    ├── 🗂️ ixa/           (Ixa source repository)
-    └── 🗂️ disease_model/ (Our first model)
+    └── 🗂️ disease_model/
 ```
 
 ## Create a new project with Cargo
@@ -21,7 +20,6 @@ Cargo creates a directory named `disease_model` with a project skeleton for us. 
 
 ```
 🗂️ disease_model/
-├── .git/
 ├── 🗂️ src/
 │   └── 📄 main.rs
 ├── .gitignore
@@ -33,18 +31,26 @@ Cargo creates a directory named `disease_model` with a project skeleton for us. 
 >
 > For simplicity I will suppress these hidden files and directories from now on.
 
-## Setup `Cargo.toml`
-The `Cargo.toml` file stores information about your project, including metadata used when publishing your project to Crates.io and which libraries your project depends on. Even though we won't be publishing the crate to Crates.io, it's a good idea to get into the habit of adding at least the author(s) and a brief description of the project.
+## Setup Dependencies and `Cargo.toml` 
+### Dependencies
+We will depend on a few external libraries, Ixa chief among them.  The `cargo add` command makes this easy.
+```bash
+cargo add ixa --git https://github.com/CDCgov/ixa --branch release
+cargo add rand_distr@0.4.3
+cargo add serde --features derive
+```
+Notice that:
+- we are using the latest version of Ixa from its release branch on GitHub;
+- a particular version can be specified with the `packagename@1.2.3` syntax;
+- we can compile a library with specific features turn on (or off).
+
+### `Cargo.toml`
+
+Cargo stores information about these dependencies in the `Cargo.toml` file. This file also stores metadata about your project used when publishing your project to Crates.io. Even though we won't be publishing the crate to Crates.io, it's a good idea to get into the habit of adding at least the author(s) and a brief description of the project. 
 ```toml
 # Cargo.toml
 {{#include ../../models/disease_model/Cargo.toml}}
 ```
-We also specify our dependencies. In this case, I am telling Cargo to use the version of the Ixa library located on my computer at a particular path. If you are using a version of Ixa from the Crates.io registry, which is recommended, you need only specify the version number:
-```toml
-[dependencies]
-ixa = "0.1.0"
-```
-We also depend on the `serde` library and it's "derive" feature and the `rand_distr` library. Your IDE might have a feature that adds dependencies for you automatically when you use an item from the library.
 ## Executing the Ixa model
 We are almost ready to execute our first model. Edit `src/main.rs` to look like this:
 ```rust
@@ -83,7 +89,7 @@ We can build and run our model from the command line using Cargo:
 ```bash
 cargo run
 ```
-## Command line arguments
+## Enabling Logging
 The model doesn't do anything yet—it doesn't even emit the log messages we included. We can turn those on to see what is happening inside our model during development with the following command line argument:
 ```bash
 cargo run -- --log-level=trace

@@ -1,12 +1,12 @@
 [package]
 name = "disease_model"
 description = "A basic SIR disease model using the Ixa agent-based modeling framework"
-authors = ["Robert Jacobson <rjacobson@cdc.gov>"]
+authors = ["John Doe <jdoe@example.com>"]
 version = "0.1.0"
 edition = "2024"
 publish = false # Do not publish to the Crates.io registry
 
 [dependencies]
-ixa = { path = "../../../ixa" }
-serde = { version = "1.0.217", features = ["derive"] }
+ixa = { git = "https://github.com/CDCgov/ixa", branch = "release", version = "0.0.1" }
 rand_distr = "0.4.3"
+serde = { version = "1.0.218", features = ["derive"] }

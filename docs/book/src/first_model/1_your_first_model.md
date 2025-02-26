@@ -17,8 +17,8 @@ This diagram gives a high-level view of how Ixa works:
 
 Don't expect to understand everything in this diagram straight away. The major concepts we need to understand about models in Ixa are:
 1. `Context`: A `Context` keeps track of the state of the world for our model and is the primary way code interacts with anything in the running model.
-2. Plan: A piece of logic scheduled to execute at a certain time on the timeline. Plans are added to the timeline through the `Context`.
-3. Timeline: A future event list of the simulation, the timeline is a queue of `Callback` objects -called *plans* - that will assume control of the `Context` at a future point in time and execute the logic in the plan.
+2. Timeline: A future event list of the simulation, the timeline is a queue of `Callback` objects -called *plans* - that will assume control of the `Context` at a future point in time and execute the logic in the plan.
+3. Plan: A piece of logic scheduled to execute at a certain time on the timeline. Plans are added to the timeline through the `Context`.
 4. Agents: Generally people in a disease model, agents are the entities which dynamically interact over the course of the simulation. Data can be associated to agents as properties—"people properties" in our case.
 5. Property: Data attached to an agent.
 6. Module: An organizational unit of functionality. Simulations are constructed out of a series of interacting modules that take turns manipulating the Context through a mutable reference. Modules store data in the simulation using the `DataPlugin` trait that allows them to retrieve data by type.
