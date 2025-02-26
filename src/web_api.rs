@@ -8,7 +8,7 @@ use axum::extract::{Json, Path, State};
 use axum::response::Redirect;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Router};
-use rand::RngCore;
+use rand::TryRngCore;
 use serde_json::json;
 use std::collections::HashMap;
 use std::thread;
@@ -222,7 +222,9 @@ impl ContextWebApiExt for Context {
 
         // Start the API server
         let mut random: [u8; 16] = [0; 16];
-        rand::rngs::OsRng.fill_bytes(&mut random);
+        rand::rngs::OsRng
+            .try_fill_bytes(&mut random)
+            .expect("Failed to generate random number");
         let secret = uuid::Builder::from_random_bytes(random)
             .into_uuid()
             .to_string();
