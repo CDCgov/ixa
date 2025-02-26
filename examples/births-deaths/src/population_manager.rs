@@ -106,7 +106,7 @@ pub fn init(context: &mut Context) {
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
         let person = context.add_person((Age, age)).unwrap();
-        let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0));
+        let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0).unwrap());
         context.add_plan(365.0 + birthday, move |context| {
             schedule_aging(context, person);
         });
