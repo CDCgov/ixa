@@ -1,12 +1,14 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
+use crate::external_api::{
+    breakpoint, global_properties, halt, next, population, run_ext_api, EmptyArgs,
+};
 use crate::Context;
 use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use log::trace;
+use log::{info, trace};
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -106,27 +108,63 @@ impl DebuggerCommand for GlobalPropertyCommand {
     }
 }
 
-struct NextCommand;
+/// Exits the debugger and ends the simulation.
+struct HaltCommand;
+impl DebuggerCommand for HaltCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        context.shutdown();
+        Ok((true, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        halt::Args::augment_subcommands(command)
+    }
+}
+
 /// Adds a new debugger breakpoint at t
+struct NextCommand;
 impl DebuggerCommand for NextCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        // We execute directly instead of setting `Context::break_requested` so as not to interfere
+        // with anything else that might be requesting a break, or in case debugger sessions become
+        // stateful.
+        context.execute_single_step();
+        Ok((false, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        next::Args::augment_subcommands(command)
+    }
+}
+
+struct BreakpointCommand;
+/// Adds a new debugger breakpoint at t
+impl DebuggerCommand for BreakpointCommand {
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = next::Args::from_arg_matches(matches).unwrap();
-        match run_ext_api::<next::Api>(context, &args) {
+        let args = breakpoint::Args::from_arg_matches(matches).unwrap();
+        match run_ext_api::<breakpoint::Api>(context, &args) {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
             Ok(_) => {
-                let next::Args::Next { next_time } = args;
-                context.schedule_debugger(next_time);
-                Ok((true, None))
+                let breakpoint::Args::Breakpoint { time } = args;
+                context.schedule_debugger(time, None);
+                info!("breakpoint set at t={:.4}", time);
+                Ok((false, None))
             }
             _ => unimplemented!(),
         }
     }
     fn extend(&self, command: Command) -> Command {
-        next::Args::augment_subcommands(command)
+        breakpoint::Args::augment_subcommands(command)
     }
 }
 
@@ -154,10 +192,13 @@ fn init(context: &mut Context) {
     let debugger = context.get_data_container_mut(DebuggerPlugin);
 
     if debugger.is_none() {
+        trace!("initializing debugger");
         let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
         commands.insert("population", Box::new(PopulationCommand));
         commands.insert("next", Box::new(NextCommand));
+        commands.insert("breakpoint", Box::new(BreakpointCommand));
         commands.insert("continue", Box::new(ContinueCommand));
+        commands.insert("halt", Box::new(HaltCommand));
         commands.insert("global", Box::new(GlobalPropertyCommand));
 
         let mut cli = Command::new("repl")
@@ -180,14 +221,23 @@ fn init(context: &mut Context) {
     }
 }
 
-/// Starts the debugger and pauses execution
-fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
+/// Starts a debugging session.
+pub fn enter_debugger(context: &mut Context) {
     init(context);
+    run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
+        start_debugger(context, data_container.as_mut().unwrap()).expect("Error in debugger");
+    });
+}
+
+/// Enters the debugger REPL, interrupting the normal simulation event loop. This private
+/// function is called from the public API `enter_debug()`.
+fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
+    context.cancel_debugger_request();
     let t = context.get_current_time();
 
-    println!("Debugging simulation at t={t}");
+    println!("Debugging simulation at t={t:.6}");
     loop {
-        let line = match debugger.rl.readline(&format!("t={t} $ ")) {
+        let line = match debugger.rl.readline(&format!("t={t:.6} $ ")) {
             Ok(line) => line,
             Err(
                 rustyline::error::ReadlineError::WindowResized
@@ -207,12 +257,12 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 
         match debugger.process_command(line, context) {
             Ok((quit, message)) => {
-                if quit {
-                    break;
-                }
                 if let Some(message) = message {
                     let _ = writeln!(std::io::stdout(), "{message}");
                     std::io::stdout().flush().unwrap();
+                }
+                if quit {
+                    break;
                 }
             }
             Err(err) => {
@@ -223,30 +273,6 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
     }
 
     Ok(())
-}
-
-pub trait ContextDebugExt {
-    /// Schedule the simulation to pause at time t and start the debugger.
-    /// This will give you a REPL which allows you to inspect the state of
-    /// the simulation (type help to see a list of commands)
-    ///
-    /// # Errors
-    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
-    /// errors in Ixa are printed to stdout
-    fn schedule_debugger(&mut self, t: f64);
-}
-
-impl ContextDebugExt for Context {
-    fn schedule_debugger(&mut self, t: f64) {
-        trace!("scheduling debugger");
-        self.add_plan(t, |context| {
-            init(context);
-            run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
-                start_debugger(context, data_container.as_mut().unwrap())
-                    .expect("Error in debugger");
-            });
-        });
-    }
 }
 
 #[cfg(test)]
