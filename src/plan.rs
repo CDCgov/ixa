@@ -51,7 +51,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
     pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> PlanId {
-        trace!("adding plan at {}", time);
+        trace!("adding plan at {:.6}", time);
         // Add plan to queue, store data, and increment counter
         let plan_id = self.plan_counter;
         self.queue.push(Entry {
@@ -82,6 +82,23 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
+    }
+
+    #[must_use]
+    pub fn next_time(&self) -> Option<f64> {
+        self.queue.peek().map(|e| e.time)
+    }
+
+    #[must_use]
+    pub(crate) fn peek(&self) -> Option<(&Entry<P>, &T)> {
+        // Iterate over queue until we find a plan with data or queue is empty
+        for entry in self.queue.iter() {
+            // Skip plans that have been cancelled and thus have no data
+            if let Some(data) = self.data_map.get(&entry.plan_id) {
+                return Some((entry, data));
+            }
+        }
+        None
     }
 
     /// Retrieve the earliest plan in the queue
@@ -125,10 +142,10 @@ impl<T, P: Eq + PartialEq + Ord> Default for Queue<T, P> {
 /// `Entry` objects are sorted in increasing order of time, priority and then
 /// plan id
 #[derive(PartialEq, Debug)]
-struct Entry<P: Eq + PartialEq + Ord> {
-    time: f64,
+pub(crate) struct Entry<P: Eq + PartialEq + Ord> {
+    pub(crate) time: f64,
     plan_id: u64,
-    priority: P,
+    pub(crate) priority: P,
 }
 
 impl<P: Eq + PartialEq + Ord> Eq for Entry<P> {}
