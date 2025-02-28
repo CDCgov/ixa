@@ -82,6 +82,23 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         self.queue.is_empty()
     }
 
+    #[must_use]
+    pub fn next_time(&self) -> Option<f64> {
+        self.queue.peek().map(|e| e.time)
+    }
+
+    #[must_use]
+    pub(crate) fn peek(&self) -> Option<(&Entry<P>, &T)> {
+        // Iterate over queue until we find a plan with data or queue is empty
+        for entry in self.queue.iter() {
+            // Skip plans that have been cancelled and thus have no data
+            if let Some(data) = self.data_map.get(&entry.plan_id) {
+                return Some((entry, data));
+            }
+        }
+        None
+    }
+
     /// Retrieve the earliest plan in the queue
     ///
     /// Returns the next plan if it exists or else `None` if the queue is empty

@@ -5,7 +5,7 @@ use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
+use crate::{context::Context, web_api::ContextWebApiExt};
 use crate::{info, set_log_level, set_module_filters, LevelFilter};
 
 use clap::{Args, Command, FromArgMatches as _};
@@ -195,7 +195,14 @@ where
             args.web.is_none(),
             "Cannot run with both the debugger and the Web API"
         );
-        context.schedule_debugger(t.unwrap_or(0.0));
+        match t {
+            None => {
+                context.request_debugger();
+            }
+            Some(time) => {
+                context.schedule_debugger(time, None);
+            }
+        }
     }
 
     // If the Web API is provided, stop there.

@@ -2,7 +2,7 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    global_properties, next, people, population, run_ext_api, time, EmptyArgs,
+    breakpoint, global_properties, people, population, run_ext_api, time, EmptyArgs,
 };
 use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
@@ -176,7 +176,8 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
         // the loop.
         if req.cmd == "next" {
             // This was already type checked in the handler so .unwrap() cannot fail.
-            let next::Args::Next { next_time } = serde_json::from_value(req.arguments).unwrap();
+            let breakpoint::Args::Breakpoint { time: next_time } =
+                serde_json::from_value(req.arguments).unwrap();
             context.schedule_web_api(next_time);
             return;
         }
@@ -241,7 +242,7 @@ impl ContextWebApiExt for Context {
             "global",
         );
         register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
-        register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
+        register_api_handler::<breakpoint::Api, breakpoint::Args>(&mut api_data, "next");
         register_api_handler::<people::Api, people::Args>(&mut api_data, "people");
         register_api_handler::<time::Api, EmptyArgs>(&mut api_data, "time");
         // Record the data container.

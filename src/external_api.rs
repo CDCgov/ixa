@@ -102,7 +102,7 @@ pub(crate) mod global_properties {
     }
 }
 
-pub(crate) mod next {
+pub(crate) mod breakpoint {
     use crate::context::Context;
     use crate::IxaError;
     use clap::Parser;
@@ -111,9 +111,9 @@ pub(crate) mod next {
     #[derive(Parser, Debug, Deserialize)]
     pub(crate) enum Args {
         /// Continue until the given time and then pause again
-        Next {
+        Breakpoint {
             /// The time to pause at
-            next_time: f64,
+            time: f64,
         },
     }
     #[derive(Serialize)]
@@ -124,12 +124,64 @@ pub(crate) mod next {
         type Retval = Retval;
 
         fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
-            let Args::Next { next_time } = args;
-            if *next_time < context.get_current_time() {
+            let Args::Breakpoint { time } = args;
+            if *time < context.get_current_time() {
                 return Err(IxaError::from(format!(
-                    "Breakpoint time {next_time} is in the past"
+                    "Breakpoint time {time} is in the past"
                 )));
             }
+            Ok(Retval {})
+        }
+    }
+}
+
+pub(crate) mod next {
+    use crate::context::Context;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {
+        /// Execute the next callback or scheduled plan and return to debugger
+        Next,
+    }
+    #[derive(Serialize)]
+    pub(crate) struct Retval {}
+    #[allow(unused)]
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(_context: &mut Context, _args: &Args) -> Result<Retval, IxaError> {
+            // This is a no-op which allows for arg checking.
+            Ok(Retval {})
+        }
+    }
+}
+
+pub(crate) mod halt {
+    use crate::context::Context;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Parser, Debug, Deserialize)]
+    pub(crate) enum Args {
+        /// Execute the next callback or scheduled plan and return to debugger
+        Halt,
+    }
+    #[derive(Serialize)]
+    pub(crate) struct Retval {}
+    #[allow(unused)]
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = Args;
+        type Retval = Retval;
+
+        fn run(_context: &mut Context, _args: &Args) -> Result<Retval, IxaError> {
+            // This is a no-op which allows for arg checking.
             Ok(Retval {})
         }
     }

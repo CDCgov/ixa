@@ -1,13 +1,17 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
+use crate::external_api::{
+    breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
+};
 use crate::Context;
 use crate::IxaError;
+use crate::{info, trace};
+use crate::{HashMap, HashMapExt};
+
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use crate::{HashMap, HashMapExt};
-use log::trace;
+use std::collections::HashMap;
 use std::io::Write;
 
 trait DebuggerCommand {

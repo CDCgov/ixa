@@ -3,14 +3,14 @@
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
 use crate::{HashMap, HashMapExt};
+use crate::debugger::enter_debugger;
+use crate::plan::{PlanId, Queue};
+use crate::trace;
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
     rc::Rc,
 };
-
-use crate::plan::{PlanId, Queue};
-use crate::trace;
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
