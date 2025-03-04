@@ -29,3 +29,7 @@ Cargo.lock
 # html
 examples/**/*.html
 examples/**/*.csv
+
+# docs
+website/book/
+website/doc/
