@@ -25,7 +25,7 @@ then
 fi
 
 # check if cargo.toml does not exists
-if ! [ -f "Cargo.toml" ]; then
+if [ ! -f "Cargo.toml" ]; then
     echo "Creating Cargo project"
     cargo init
 fi
