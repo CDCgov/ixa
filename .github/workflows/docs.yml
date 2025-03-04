@@ -28,15 +28,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
+
+      # Build the Rust docs
       - name: Build docs
         run: cargo doc --no-deps --target-dir docs/
+
+      # Install mdBook (using cargo install, or you could follow the binary download method)
+      - name: Install mdBook
+        run: cargo install mdbook
+
+      # Install mdBook plugins
+      - name: Install mdBook plugins
+        run: |
+          cargo install mdbook-callouts
+          cargo install mdbook-inline-highlighting
+
+      # Build the Ixa Book from the mdBook source at docs/book/
+      - name: Build Ixa Book
+        run: mdbook build docs/book -d ixa-book
+
+      # Upload both the Rust docs and the Ixa Book to be deployed to GitHub Pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs
+          path: |
+            ./docs
+            ./ixa-book
 
   # Deployment job
   deploy:
