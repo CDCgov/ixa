@@ -1,6 +1,6 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::external_api::{global_properties, next, population, run_ext_api, EmptyArgs};
+use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
 use crate::Context;
 use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
@@ -75,6 +75,56 @@ impl DebuggerCommand for PopulationCommand {
     }
     fn extend(&self, command: Command) -> Command {
         population::Args::augment_subcommands(command)
+    }
+}
+
+struct PeopleCommand;
+impl DebuggerCommand for PeopleCommand {
+    fn extend(&self, command: Command) -> Command {
+        people::Args::augment_subcommands(command)
+    }
+    fn handle(
+        &self,
+        context: &mut Context,
+        matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        let args = people::Args::from_arg_matches(matches).unwrap();
+        match run_ext_api::<people::Api>(context, &args) {
+            Ok(people::Retval::Properties(props)) => Ok((
+                false,
+                Some(
+                    props
+                        .into_iter()
+                        .map(|(k, v)| format!("{k}: {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+            )),
+            Ok(people::Retval::PropertyNames(names)) => Ok((
+                false,
+                Some(format!("Available properties:\n{}", names.join("\n"))),
+            )),
+            Ok(people::Retval::Tabulated(rows)) => Ok((
+                false,
+                Some(
+                    rows.into_iter()
+                        .map(|(props, count)| {
+                            format!(
+                                "{}: {}",
+                                count,
+                                props
+                                    .into_iter()
+                                    .map(|(k, v)| format!("{k}={v}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+            )),
+            Err(e) => Ok((false, Some(format!("error: {e}")))),
+        }
     }
 }
 
@@ -155,6 +205,7 @@ fn init(context: &mut Context) {
 
     if debugger.is_none() {
         let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
+        commands.insert("people", Box::new(PeopleCommand));
         commands.insert("population", Box::new(PopulationCommand));
         commands.insert("next", Box::new(NextCommand));
         commands.insert("continue", Box::new(ContinueCommand));
@@ -253,7 +304,7 @@ impl ContextDebugExt for Context {
 mod tests {
     use super::{init, run_with_plugin, DebuggerPlugin};
     use crate::tests::run_external_runner;
-    use crate::{define_global_property, ContextGlobalPropertiesExt};
+    use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt};
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
@@ -271,6 +322,8 @@ mod tests {
 
     define_global_property!(FooGlobal, String);
     define_global_property!(BarGlobal, u32);
+    define_person_property!(Age, u8);
+    define_person_property!(Smile, u32);
 
     #[test]
     fn test_cli_debugger_integration() {
@@ -294,6 +347,48 @@ mod tests {
 
         assert!(!quits, "should not exit");
         assert!(output.unwrap().contains('2'));
+    }
+
+    #[test]
+    fn test_cli_debugger_people_get() {
+        let context = &mut Context::new();
+        // Add 2 people
+        context.add_person((Age, 10)).unwrap();
+        context.add_person((Age, 5)).unwrap();
+        assert_eq!(context.remaining_plan_count(), 0);
+        let (_, output) = process_line("people get 0 Age", context);
+        assert_eq!(output.unwrap(), "Age: 10");
+        let (_, output) = process_line("people get 1 Age", context);
+        assert_eq!(output.unwrap(), "Age: 5");
+    }
+
+    #[test]
+    fn test_cli_debugger_people_properties() {
+        let context = &mut Context::new();
+        // Add 2 people
+        context.add_person(((Age, 10), (Smile, 50))).unwrap();
+        context.add_person(((Age, 5), (Smile, 60))).unwrap();
+        let (_, output) = process_line("people get 0 Smile", context);
+        assert_eq!(output.unwrap(), "Smile: 50");
+        let (_, output) = process_line("people properties", context);
+        let properties = output.unwrap();
+        assert!(properties.contains("Smile"));
+        assert!(properties.contains("Age"));
+    }
+
+    #[test]
+    fn test_cli_debugger_people_tabulate() {
+        let context = &mut Context::new();
+        // Add 3 people
+        context.add_person(((Age, 10), (Smile, 50))).unwrap();
+        context.add_person(((Age, 10), (Smile, 60))).unwrap();
+        context.add_person(((Age, 10), (Smile, 60))).unwrap();
+        let (_, output) = process_line("people tabulate Age", context);
+        assert_eq!(output.unwrap(), "3: Age=10");
+        let (_, output) = process_line("people tabulate Smile", context);
+        let results = output.unwrap();
+        assert!(results.contains("1: Smile=50"));
+        assert!(results.contains("2: Smile=60"));
     }
 
     #[test]
