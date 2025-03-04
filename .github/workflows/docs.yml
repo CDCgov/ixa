@@ -28,15 +28,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
       - name: Build api docs
         run: cargo doc --no-deps --target-dir website/
+      - name: Install mdBook
+        run: cargo install mdbook
+      - name: Install mdBook plugins
+        run: |
+          cargo install mdbook-callouts
+          cargo install mdbook-inline-highlighting
+      - name: Build Ixa Book
+        run: mdbook build docs/book -d ./website/book
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./website
+          path: |
+            ./website
 
   # Deployment job
   deploy:
