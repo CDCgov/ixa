@@ -17,8 +17,7 @@ check_success() {
 echo "Setting up new ixa project with branch $ixa_branch"
 
 # check if cargo is installed
-if ! command -v cargo &> /dev/null
-then
+if [ -z "$(command -v cargo)" ]; then
     echo "cargo could not be found, run:"
     echo "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
     exit
