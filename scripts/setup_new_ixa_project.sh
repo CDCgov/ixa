@@ -21,7 +21,6 @@ if ! [ -f "Cargo.toml" ]; then
 fi
 
 cargo add --git "https://github.com/CDCgov/ixa" ixa --branch $ixa_branch
-cargo add clap
 
 # add .gitignore from ixa
 curl -o .gitignore https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/.gitignore
@@ -34,5 +33,7 @@ mkdir -p .github/workflows
 curl -o .github/workflows/build-test.yaml https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/template/.github/workflows/build-test.yaml
 curl -o .github/workflows/pre-commit.yaml https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/template/.github/workflows/pre-commit.yaml
 
-# override main.rs with ixa runner example
-curl -o src/main.rs https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/examples/runner/main.rs
+# override main.rs with ixa basic example
+curl -o src/main.rs https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/examples/basic/main.rs
+
+echo "Project setup complete"
