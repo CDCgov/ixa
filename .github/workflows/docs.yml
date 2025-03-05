@@ -41,7 +41,7 @@ jobs:
           cargo install mdbook-callouts
           cargo install mdbook-inline-highlighting
       - name: Build Ixa Book
-        run: mdbook build docs/book -d ./website/book
+        run: mdbook build docs/book -d ../../website/book
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
