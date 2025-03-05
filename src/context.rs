@@ -72,6 +72,7 @@ pub struct Context {
     current_time: f64,
     shutdown_requested: bool,
     break_requested: bool,
+    breakpoints_enabled: bool,
 }
 
 impl Context {
@@ -87,6 +88,7 @@ impl Context {
             current_time: 0.0,
             shutdown_requested: false,
             break_requested: false,
+            breakpoints_enabled: true,
         }
     }
 
@@ -307,6 +309,16 @@ impl Context {
         self.break_requested = false
     }
 
+    /// Disable breakpoints
+    pub fn disable_breakpoints(&mut self) {
+        self.breakpoints_enabled = false
+    }
+
+    /// Enable breakpoints
+    pub fn enable_breakpoints(&mut self) {
+        self.breakpoints_enabled = true;
+    }
+
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         trace!("entering event loop");
@@ -323,33 +335,15 @@ impl Context {
     }
 
     /// Executes a single step of the simulation, prioritizing tasks as follows:
-    ///
-    /// 1. **Breakpoints**:
-    ///    - If there is a scheduled breakpoint, it will always be executed first, before any
-    ///      scheduled plans in the plan queue, regardless of the current `ExecutionPhase` of the
-    ///      breakpoint.
-    ///    - If the breakpoint has a priority of `ExecutionPhase::First`, it is executed if the
-    ///      breakpoint time is less than or equal to the next scheduled plan time, or if no plan
-    ///      is scheduled.
-    ///    - If the breakpoint has a priority of `ExecutionPhase::Last`, it is executed only if the
-    ///      breakpoint time is strictly less than the next scheduled plan time, or if no task is
-    ///      scheduled.
-    ///
-    /// 2. **Callbacks**:
-    ///    - If there are any callbacks scheduled, they are executed next. The first callback in
-    ///      the `callback_queue` is executed.
-    ///
-    /// 3. **Plans**:
-    ///    - If there are no breakpoints or callbacks, the first plan from the `plan_queue` is
-    ///      executed. The plan's associated function is called, and the current simulation time is
-    ///      updated to the plan's time.
-    ///
-    /// 4. **Shutdown**:
-    ///    - If there are no breakpoints, callbacks, or plans left to execute, the event loop exits,
-    ///      and the simulation shuts down.
+    ///   1. Breakpoints
+    ///   2. Callbacks
+    ///   3. Plans
+    ///   4. Shutdown
     pub fn execute_single_step(&mut self) {
         // This always runs the breakpoint before anything scheduled in the task queue regardless
-        // of the `ExecutionPhase` of the breakpoint.
+        // of the `ExecutionPhase` of the breakpoint. If breakpoints are disabled, they are still
+        // popped from the breakpoint queue at the time they are scheduled even though they are not
+        // executed.
         if let Some((bp, _)) = self.breakpoints_scheduled.peek() {
             // If the priority of bp is `ExecutionPhase::First`, and if the next scheduled plan
             // is scheduled at or after bp's time (or doesn't exist), run bp.
@@ -360,13 +354,17 @@ impl Context {
                     || (bp.priority == ExecutionPhase::Last && bp.time < plan_time)
                 {
                     self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
-                    self.break_requested = true;
-                    return;
+                    if self.breakpoints_enabled {
+                        self.break_requested = true;
+                        return;
+                    }
                 }
             } else {
                 self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
-                self.break_requested = true;
-                return;
+                if self.breakpoints_enabled {
+                    self.break_requested = true;
+                    return;
+                }
             }
         }
 

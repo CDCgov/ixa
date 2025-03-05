@@ -104,33 +104,102 @@ pub(crate) mod global_properties {
 
 pub(crate) mod breakpoint {
     use crate::context::Context;
+    use crate::external_api::breakpoint;
     use crate::IxaError;
-    use clap::Parser;
+    use clap::{Parser, Subcommand};
+    use log::info;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Parser, Debug, Deserialize)]
-    pub(crate) enum Args {
-        /// Continue until the given time and then pause again
-        Breakpoint {
-            /// The time to pause at
-            time: f64,
+    #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
+    /// Manipulate Debugger Breakpoints
+    pub(crate) enum ArgsEnum {
+        /// List all scheduled breakpoints
+        List,
+        /// Set a breakpoint at a given time
+        Set { time: f64 },
+        /// Delete the breakpoint with the specified id.
+        /// Providing the `--all` option removes all breakpoints.
+        #[group(multiple = false, required = true)]
+        Delete {
+            /// The ID of the breakpoint to delete
+            #[arg(value_name = "ID")]
+            id: Option<u32>,
+
+            /// Remove all breakpoints
+            #[arg(long)]
+            all: bool,
         },
+        /// Disables but does not delete breakpoints globally
+        Disable,
+        /// Enables breakpoints globally
+        Enable,
     }
-    #[derive(Serialize)]
-    pub(crate) struct Retval {}
+
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub(crate) enum Args {
+        #[command(subcommand)]
+        Breakpoint(ArgsEnum),
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub(crate) enum Retval {
+        List(Vec<String>),
+        Ok,
+    }
+
     pub(crate) struct Api {}
     impl super::ExtApi for Api {
         type Args = Args;
         type Retval = Retval;
 
         fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
-            let Args::Breakpoint { time } = args;
-            if *time < context.get_current_time() {
-                return Err(IxaError::from(format!(
-                    "Breakpoint time {time} is in the past"
-                )));
+            let Args::Breakpoint(breakpoint_args) = args;
+
+            match breakpoint_args {
+                ArgsEnum::List => {
+                    info!("Listing breakpoints");
+                    Ok(Retval::List(vec![
+                        "one".to_string(),
+                        "two".to_string(),
+                        "3".to_string(),
+                    ]))
+                }
+
+                ArgsEnum::Set { time } => {
+                    if *time < context.get_current_time() {
+                        return Err(IxaError::from(format!(
+                            "Breakpoint time {time} is in the past"
+                        )));
+                    }
+                    info!("Setting breakpoint at {time}");
+                    // let breakpoint::Args::Breakpoint { time } = args;
+                    // context.schedule_debugger(time, None);
+                    // info!("breakpoint set at t={:.4}", time);
+                    Ok(Retval::Ok)
+                }
+
+                ArgsEnum::Delete { id, all } => {
+                    if let Some(id) = id {
+                        assert!(!*all);
+                        info!("Deleting breakpoint {id}");
+                        Ok(Retval::Ok)
+                    } else {
+                        assert!(*all);
+                        info!("Deleting all breakpoints");
+                        Ok(Retval::Ok)
+                    }
+                }
+
+                ArgsEnum::Disable => {
+                    info!("Disabling all breakpoints");
+                    Ok(Retval::Ok)
+                }
+
+                ArgsEnum::Enable => {
+                    info!("Enabling all breakpoints");
+                    Ok(Retval::Ok)
+                }
             }
-            Ok(Retval {})
         }
     }
 }
