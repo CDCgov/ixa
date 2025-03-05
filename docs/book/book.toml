@@ -5,6 +5,9 @@ multilingual = false
 src = "src"
 title = "The Ixa Book"
 
+[output.html]
+site-url = "/book/"
+
 [preprocessor.callouts]
 # Callouts are the same as GitHub's admonitions.
 
