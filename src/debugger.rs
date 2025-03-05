@@ -231,7 +231,7 @@ fn init(context: &mut Context) {
     }
 }
 
-fn exit_debugger() -> String {
+fn exit_debugger() -> ! {
     println!("Got Ctrl-D, Exiting...");
     std::process::exit(0);
 }
@@ -249,7 +249,7 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
                 rustyline::error::ReadlineError::WindowResized
                 | rustyline::error::ReadlineError::Interrupted,
             ) => continue,
-            Err(rustyline::error::ReadlineError::Eof) => exit_debugger().to_string(),
+            Err(rustyline::error::ReadlineError::Eof) => exit_debugger(),
             Err(err) => return Err(IxaError::IxaError(format!("Read error: {err}"))),
         };
         debugger
