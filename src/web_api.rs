@@ -2,7 +2,7 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    breakpoint, global_properties, people, population, run_ext_api, time, EmptyArgs,
+    breakpoint, global_properties, people, population, run_ext_api, time, EmptyArgs, ExtApi,
 };
 use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
@@ -171,19 +171,6 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                 });
             }
         };
-
-        // Special case the functions which require exiting
-        // the loop.
-        if req.cmd == "next" {
-            // This was already type checked in the handler so .unwrap() cannot fail.
-            let breakpoint::Args::Breakpoint { time: next_time } =
-                serde_json::from_value(req.arguments).unwrap();
-            context.schedule_web_api(next_time);
-            return;
-        }
-        if req.cmd == "continue" {
-            return;
-        }
     }
 }
 

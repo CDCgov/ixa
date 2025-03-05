@@ -69,8 +69,10 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
+    breakpoints_scheduled: Queue<(), ExecutionPhase>,
     current_time: f64,
     shutdown_requested: bool,
+    break_requested: bool,
 }
 
 impl Context {
@@ -82,9 +84,24 @@ impl Context {
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
+            breakpoints_scheduled: Queue::new(),
             current_time: 0.0,
             shutdown_requested: false,
+            break_requested: false,
         }
+    }
+
+    /// Schedule the simulation to pause at time t and start the debugger.
+    /// This will give you a REPL which allows you to inspect the state of
+    /// the simulation (type help to see a list of commands)
+    ///
+    /// # Errors
+    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
+    /// errors in Ixa are printed to stdout
+    pub fn schedule_debugger(&mut self, time: f64, priority: Option<ExecutionPhase>) {
+        trace!("scheduling debugger");
+        let priority = priority.unwrap_or(ExecutionPhase::First);
+        self.breakpoints_scheduled.add_plan(time, (), priority);
     }
 
     /// Register to handle emission of events of type E
@@ -281,32 +298,89 @@ impl Context {
         self.current_time
     }
 
+    /// Request to enter a debugger session at next event loop
+    pub fn request_debugger(&mut self) {
+        self.break_requested = true
+    }
+
+    /// Request to enter a debugger session at next event loop
+    pub fn cancel_debugger_request(&mut self) {
+        self.break_requested = false
+    }
+
+    /// Disable breakpoints
+    pub fn disable_breakpoints(&mut self) {
+        self.breakpoints_enabled = false
+    }
+
+    /// Enable breakpoints
+    pub fn enable_breakpoints(&mut self) {
+        self.breakpoints_enabled = true;
+    }
+
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         trace!("entering event loop");
         // Start plan loop
         loop {
-            if self.shutdown_requested {
+            if self.break_requested {
+                enter_debugger(self);
+            } else if self.shutdown_requested {
                 break;
-            }
-
-            // If there is a callback, run it.
-            if let Some(callback) = self.callback_queue.pop_front() {
-                trace!("calling callback");
-                callback(self);
-                continue;
-            }
-
-            // There aren't any callbacks, so look at the first plan.
-            if let Some(plan) = self.plan_queue.get_next_plan() {
-                trace!("calling plan at {}", plan.time);
-                self.current_time = plan.time;
-                (plan.data)(self);
             } else {
-                trace!("No callbacks or plans; exiting event loop");
-                // OK, there aren't any plans, so we're done.
-                break;
+                self.execute_single_step();
             }
+        }
+    }
+
+    /// Executes a single step of the simulation, prioritizing tasks as follows:
+    ///   1. Breakpoints
+    ///   2. Callbacks
+    ///   3. Plans
+    ///   4. Shutdown
+    pub fn execute_single_step(&mut self) {
+        // This always runs the breakpoint before anything scheduled in the task queue regardless
+        // of the `ExecutionPhase` of the breakpoint. If breakpoints are disabled, they are still
+        // popped from the breakpoint queue at the time they are scheduled even though they are not
+        // executed.
+        if let Some((bp, _)) = self.breakpoints_scheduled.peek() {
+            // If the priority of bp is `ExecutionPhase::First`, and if the next scheduled plan
+            // is scheduled at or after bp's time (or doesn't exist), run bp.
+            // If the priority of bp is `ExecutionPhase::Last`, and if the next scheduled plan
+            // is scheduled strictly after bp's time (or doesn't exist), run bp.
+            if let Some(plan_time) = self.plan_queue.next_time() {
+                if (bp.priority == ExecutionPhase::First && bp.time <= plan_time)
+                    || (bp.priority == ExecutionPhase::Last && bp.time < plan_time)
+                {
+                    self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                    if self.breakpoints_enabled {
+                        self.break_requested = true;
+                        return;
+                    }
+                }
+            } else {
+                self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                if self.breakpoints_enabled {
+                    self.break_requested = true;
+                    return;
+                }
+            }
+        }
+
+        // If there is a callback, run it.
+        if let Some(callback) = self.callback_queue.pop_front() {
+            trace!("calling callback");
+            callback(self);
+        }
+        // There aren't any callbacks, so look at the first plan.
+        else if let Some(plan) = self.plan_queue.get_next_plan() {
+            trace!("calling plan at {:.6}", plan.time);
+            self.current_time = plan.time;
+            (plan.data)(self);
+        } else {
+            trace!("No callbacks or plans; exiting event loop");
+            // OK, there aren't any plans, so we're done.
+            self.shutdown_requested = true;
         }
     }
 }
