@@ -1,4 +1,4 @@
-# Quick Start
+# Get Started
 Execute the following commands to create a new Rust project called `disease_model` and add the Ixa library as a dependency.
 ```bash
 cargo new --bin disease_model
