@@ -199,6 +199,26 @@ impl DebuggerCommand for ContinueCommand {
     }
 }
 
+struct ExitCommand;
+#[derive(Parser, Debug)]
+enum ExitSubcommand {
+    /// Exits the debugger and shutsdown the simulation
+    Exit,
+}
+impl DebuggerCommand for ExitCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        context.shutdown();
+        Ok((true, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        ExitSubcommand::augment_subcommands(command)
+    }
+}
+
 // Build the debugger context.
 fn init(context: &mut Context) {
     let debugger = context.get_data_container_mut(DebuggerPlugin);
@@ -209,6 +229,7 @@ fn init(context: &mut Context) {
         commands.insert("population", Box::new(PopulationCommand));
         commands.insert("next", Box::new(NextCommand));
         commands.insert("continue", Box::new(ContinueCommand));
+        commands.insert("exit", Box::new(ExitCommand));
         commands.insert("global", Box::new(GlobalPropertyCommand));
 
         let mut cli = Command::new("repl")
