@@ -3,12 +3,8 @@ use crate::define_data_plugin;
 use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
 };
-use crate::Context;
-use crate::IxaError;
-use crate::{info, trace};
+use crate::{trace, Context, IxaError};
 use crate::{HashMap, HashMapExt};
-use crate::external_api::breakpoint::Retval;
-
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
@@ -207,10 +203,19 @@ impl DebuggerCommand for BreakpointCommand {
         let args = breakpoint::Args::from_arg_matches(matches).unwrap();
         match run_ext_api::<breakpoint::Api>(context, &args) {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
-            Ok(_) => {
-                let breakpoint::Args::Breakpoint { time } = args;
-                context.schedule_debugger(time, None);
-                info!("breakpoint set at t={:.4}", time);
+            Ok(return_value) => {
+                match return_value {
+                    Retval::List(bp_list) => {
+                        println!("Scheduled breakpoints:");
+                        for bp in bp_list {
+                            println!("\t{bp}");
+                        }
+                    }
+                    Retval::Ok => {
+                        info!("breakpointed breakpoints successfully");
+                    }
+                }
+
                 Ok((false, None))
             }
             _ => unimplemented!(),

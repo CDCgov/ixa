@@ -28,7 +28,7 @@ use std::{cmp::Ordering, collections::BinaryHeap};
 /// Plan cancellation occurs by removing the corresponding entry from the data
 /// hash map.
 pub struct Queue<T, P: Eq + PartialEq + Ord> {
-    queue: BinaryHeap<Entry<P>>,
+    queue: BinaryHeap<PlanSchedule<P>>,
     data_map: HashMap<u64, T>,
     plan_counter: u64,
 }
@@ -52,7 +52,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         trace!("adding plan at {time}");
         // Add plan to queue, store data, and increment counter
         let plan_id = self.plan_counter;
-        self.queue.push(Entry {
+        self.queue.push(PlanSchedule {
             time,
             plan_id,
             priority,
@@ -63,18 +63,11 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     }
 
     /// Cancel a plan that has been added to the queue
-    ///
-    /// # Panics
-    ///
-    /// This function panics if you cancel a plan which has already
-    /// been cancelled or executed.
-    pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("cancel plan {plan_id:?}");
+    pub fn cancel_plan(&mut self, plan_id: &PlanId) -> Option<T> {
+        trace!("cancel plan {:?}", plan_id);
         // Delete the plan from the map, but leave in the queue
         // It will be skipped when the plan is popped from the queue
-        self.data_map
-            .remove(&plan_id.0)
-            .expect("Plan does not exist");
+        self.data_map.remove(&plan_id.0)
     }
 
     #[must_use]
@@ -87,8 +80,14 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         self.queue.peek().map(|e| e.time)
     }
 
+    pub(crate) fn clear(&mut self) {
+        self.data_map.clear();
+        self.queue.clear();
+        self.plan_counter = 0;
+    }
+
     #[must_use]
-    pub(crate) fn peek(&self) -> Option<(&Entry<P>, &T)> {
+    pub(crate) fn peek(&self) -> Option<(&PlanSchedule<P>, &T)> {
         // Iterate over queue until we find a plan with data or queue is empty
         for entry in self.queue.iter() {
             // Skip plans that have been cancelled and thus have no data
@@ -123,6 +122,25 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         }
     }
 
+    /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
+    /// `PlanSchedule`s ordered as they are in the queue itself.
+    #[must_use]
+    pub fn list_schedules(&self, at_most: usize) -> Vec<&PlanSchedule<P>> {
+        let mut items = vec![];
+
+        // Iterate over queue until we find a plan with data or queue is empty
+        for entry in self.queue.iter() {
+            // Skip plans that have been cancelled and thus have no data
+            if let Some(_) = self.data_map.get(&entry.plan_id) {
+                items.push(entry);
+                if items.len() == at_most {
+                    break;
+                }
+            }
+        }
+        items
+    }
+
     #[doc(hidden)]
     pub(crate) fn remaining_plan_count(&self) -> usize {
         self.queue.len()
@@ -140,15 +158,26 @@ impl<T, P: Eq + PartialEq + Ord> Default for Queue<T, P> {
 /// `Entry` objects are sorted in increasing order of time, priority and then
 /// plan id
 #[derive(PartialEq, Debug)]
-struct Entry<P: Eq + PartialEq + Ord> {
-    time: f64,
-    plan_id: u64,
-    priority: P,
+pub struct PlanSchedule<P: Eq + PartialEq + Ord> {
+    pub plan_id: u64,
+    pub time: f64,
+    pub priority: P,
 }
 
-impl<P: Eq + PartialEq + Ord> Eq for Entry<P> {}
+impl<P: Eq + PartialEq + Ord + Clone> Clone for PlanSchedule<P> {
+    fn clone(&self) -> Self {
+        PlanSchedule {
+            priority: self.priority.clone(),
+            ..*self
+        }
+    }
+}
 
-impl<P: Eq + PartialEq + Ord> PartialOrd for Entry<P> {
+impl<P: Eq + PartialEq + Ord + Copy + Clone> Copy for PlanSchedule<P> {}
+
+impl<P: Eq + PartialEq + Ord> Eq for PlanSchedule<P> {}
+
+impl<P: Eq + PartialEq + Ord> PartialOrd for PlanSchedule<P> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -156,7 +185,7 @@ impl<P: Eq + PartialEq + Ord> PartialOrd for Entry<P> {
 
 /// Entry objects are ordered in increasing order by time, priority, and then
 /// plan id
-impl<P: Eq + PartialEq + Ord> Ord for Entry<P> {
+impl<P: Eq + PartialEq + Ord> Ord for PlanSchedule<P> {
     fn cmp(&self, other: &Self) -> Ordering {
         let time_ordering = self.time.partial_cmp(&other.time).unwrap().reverse();
         match time_ordering {

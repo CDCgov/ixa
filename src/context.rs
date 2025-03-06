@@ -4,8 +4,9 @@
 //! for storing and manipulating the state of a given simulation.
 use crate::{HashMap, HashMapExt};
 use crate::debugger::enter_debugger;
-use crate::plan::{PlanId, Queue};
-use crate::trace;
+use crate::plan::{PlanId, PlanSchedule, Queue};
+use crate::{error, trace};
+use std::fmt::{Display, Formatter};
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
@@ -30,11 +31,17 @@ pub trait IxaEvent {
 /// handled after all `Normal` plans. In all cases ties between plans at the
 /// same time and with the same phase are handled in the order of scheduling.
 ///
-#[derive(PartialEq, Eq, Ord, Clone, Copy, PartialOrd)]
+#[derive(PartialEq, Eq, Ord, Clone, Copy, PartialOrd, Hash, Debug)]
 pub enum ExecutionPhase {
     First,
     Normal,
     Last,
+}
+
+impl Display for ExecutionPhase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 /// A manager for the state of a discrete-event simulation
@@ -231,8 +238,11 @@ impl Context {
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("canceling plan {plan_id:?}");
-        self.plan_queue.cancel_plan(plan_id);
+        trace!("canceling plan {:?}", plan_id);
+        let result = self.plan_queue.cancel_plan(plan_id);
+        if result.is_none() {
+            error!("Tried to cancel nonexistent plan with ID = {:?}", plan_id);
+        }
     }
 
     #[doc(hidden)]
@@ -316,6 +326,29 @@ impl Context {
     /// Enable breakpoints
     pub fn enable_breakpoints(&mut self) {
         self.breakpoints_enabled = true;
+    }
+
+    /// Returns `true` if breakpoints are enabled.
+    pub fn breakpoints_are_enabled(&self) -> bool {
+        self.breakpoints_enabled
+    }
+
+    /// Delete the breakpoint with the given ID
+    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<()> {
+        self.breakpoints_scheduled
+            .cancel_plan(&PlanId(breakpoint_id))
+    }
+
+    /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
+    /// `PlanSchedule`s ordered as they are in the queue itself.
+    #[must_use]
+    pub fn list_breakpoints(&self, at_most: usize) -> Vec<&PlanSchedule<ExecutionPhase>> {
+        self.breakpoints_scheduled.list_schedules(at_most)
+    }
+
+    /// Deletes all breakpoints.
+    pub fn clear_breakpoints(&mut self) {
+        self.breakpoints_scheduled.clear()
     }
 
     /// Execute the simulation until the plan and callback queues are empty

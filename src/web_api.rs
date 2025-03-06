@@ -2,7 +2,7 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    breakpoint, global_properties, people, population, run_ext_api, time, EmptyArgs, ExtApi,
+    breakpoint, global_properties, people, population, run_ext_api, time, EmptyArgs,
 };
 use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
