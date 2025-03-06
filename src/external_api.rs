@@ -104,10 +104,8 @@ pub(crate) mod global_properties {
 
 pub(crate) mod breakpoint {
     use crate::context::Context;
-    use crate::external_api::breakpoint;
-    use crate::IxaError;
+    use crate::{info, trace, IxaError};
     use clap::{Parser, Subcommand};
-    use log::info;
     use serde::{Deserialize, Serialize};
 
     #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
@@ -157,12 +155,18 @@ pub(crate) mod breakpoint {
 
             match breakpoint_args {
                 ArgsEnum::List => {
-                    info!("Listing breakpoints");
-                    Ok(Retval::List(vec![
-                        "one".to_string(),
-                        "two".to_string(),
-                        "3".to_string(),
-                    ]))
+                    trace!("Listing breakpoints");
+                    let list = context.list_breakpoints(0);
+                    let list = list
+                        .iter()
+                        .map(|schedule| {
+                            format!(
+                                "{}: t={} ({})",
+                                schedule.plan_id, schedule.time, schedule.priority
+                            )
+                        })
+                        .collect::<Vec<String>>();
+                    Ok(Retval::List(list))
                 }
 
                 ArgsEnum::Set { time } => {
@@ -171,32 +175,40 @@ pub(crate) mod breakpoint {
                             "Breakpoint time {time} is in the past"
                         )));
                     }
-                    info!("Setting breakpoint at {time}");
-                    // let breakpoint::Args::Breakpoint { time } = args;
-                    // context.schedule_debugger(time, None);
-                    // info!("breakpoint set at t={:.4}", time);
+                    context.schedule_debugger(*time, None);
+                    info!("Breakpoint set at t={}", time);
                     Ok(Retval::Ok)
                 }
 
                 ArgsEnum::Delete { id, all } => {
                     if let Some(id) = id {
                         assert!(!*all);
-                        info!("Deleting breakpoint {id}");
-                        Ok(Retval::Ok)
+                        trace!("Deleting breakpoint {id}");
+                        let cancelled = context.delete_breakpoint(*id as u64);
+                        if cancelled.is_none() {
+                            Err(IxaError::from(format!(
+                                "Attempted to delete a nonexistent breakpoint {id}",
+                            )))
+                        } else {
+                            Ok(Retval::Ok)
+                        }
                     } else {
                         assert!(*all);
-                        info!("Deleting all breakpoints");
+                        trace!("Deleting all breakpoints");
+                        context.clear_breakpoints();
                         Ok(Retval::Ok)
                     }
                 }
 
                 ArgsEnum::Disable => {
-                    info!("Disabling all breakpoints");
+                    trace!("Disabling all breakpoints");
+                    context.disable_breakpoints();
                     Ok(Retval::Ok)
                 }
 
                 ArgsEnum::Enable => {
-                    info!("Enabling all breakpoints");
+                    trace!("Enabling all breakpoints");
+                    context.enable_breakpoints();
                     Ok(Retval::Ok)
                 }
             }
