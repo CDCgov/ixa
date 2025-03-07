@@ -2,7 +2,6 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
-use crate::debugger::enter_debugger;
 use crate::plan::{PlanId, PlanSchedule, Queue};
 use crate::{error, trace};
 use std::fmt::{Display, Formatter};
@@ -39,7 +38,7 @@ pub enum ExecutionPhase {
 
 impl Display for ExecutionPhase {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -75,7 +74,7 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
-    breakpoints_scheduled: Queue<(), ExecutionPhase>,
+    breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
     shutdown_requested: bool,
     break_requested: bool,
@@ -106,10 +105,16 @@ impl Context {
     /// # Errors
     /// Internal debugger errors e.g., reading or writing to stdin/stdout;
     /// errors in Ixa are printed to stdout
-    pub fn schedule_debugger(&mut self, time: f64, priority: Option<ExecutionPhase>) {
+    pub fn schedule_debugger(
+        &mut self,
+        time: f64,
+        priority: Option<ExecutionPhase>,
+        callback: Box<dyn FnOnce(&mut Context)>,
+    ) {
         trace!("scheduling debugger");
         let priority = priority.unwrap_or(ExecutionPhase::First);
-        self.breakpoints_scheduled.add_plan(time, (), priority);
+        self.breakpoints_scheduled
+            .add_plan(time, callback, priority);
     }
 
     /// Register to handle emission of events of type E
@@ -311,17 +316,17 @@ impl Context {
 
     /// Request to enter a debugger session at next event loop
     pub fn request_debugger(&mut self) {
-        self.break_requested = true
+        self.break_requested = true;
     }
 
     /// Request to enter a debugger session at next event loop
     pub fn cancel_debugger_request(&mut self) {
-        self.break_requested = false
+        self.break_requested = false;
     }
 
     /// Disable breakpoints
     pub fn disable_breakpoints(&mut self) {
-        self.breakpoints_enabled = false
+        self.breakpoints_enabled = false;
     }
 
     /// Enable breakpoints
@@ -330,12 +335,13 @@ impl Context {
     }
 
     /// Returns `true` if breakpoints are enabled.
+    #[must_use]
     pub fn breakpoints_are_enabled(&self) -> bool {
         self.breakpoints_enabled
     }
 
     /// Delete the breakpoint with the given ID
-    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<()> {
+    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<Box<Callback>> {
         self.breakpoints_scheduled
             .cancel_plan(&PlanId(breakpoint_id))
     }
@@ -349,7 +355,7 @@ impl Context {
 
     /// Deletes all breakpoints.
     pub fn clear_breakpoints(&mut self) {
-        self.breakpoints_scheduled.clear()
+        self.breakpoints_scheduled.clear();
     }
 
     /// Execute the simulation until the plan and callback queues are empty
@@ -358,6 +364,7 @@ impl Context {
         // Start plan loop
         loop {
             if self.break_requested {
+                self.break_requested = false;
                 enter_debugger(self);
             } else if self.shutdown_requested {
                 break;
@@ -386,16 +393,26 @@ impl Context {
                 if (bp.priority == ExecutionPhase::First && bp.time <= plan_time)
                     || (bp.priority == ExecutionPhase::Last && bp.time < plan_time)
                 {
-                    self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                    // Pop the breakpoint
+                    let plan = unsafe {
+                        self.breakpoints_scheduled
+                            .get_next_plan()
+                            .unwrap_unchecked()
+                    };
                     if self.breakpoints_enabled {
-                        self.break_requested = true;
+                        (plan.data)(self);
                         return;
                     }
                 }
             } else {
-                self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                // Pop the breakpoint
+                let plan = unsafe {
+                    self.breakpoints_scheduled
+                        .get_next_plan()
+                        .unwrap_unchecked()
+                };
                 if self.breakpoints_enabled {
-                    self.break_requested = true;
+                    (plan.data)(self);
                     return;
                 }
             }
@@ -472,6 +489,7 @@ macro_rules! define_data_plugin {
         }
     };
 }
+use crate::debugger::enter_debugger;
 pub use define_data_plugin;
 
 #[cfg(test)]
