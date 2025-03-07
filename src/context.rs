@@ -40,7 +40,7 @@ pub enum ExecutionPhase {
 
 impl Display for ExecutionPhase {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -80,6 +80,7 @@ pub struct Context {
     current_time: f64,
     shutdown_requested: bool,
     break_requested: bool,
+    breakpoints_enabled: bool,
 }
 
 impl Context {
@@ -95,6 +96,7 @@ impl Context {
             current_time: 0.0,
             shutdown_requested: false,
             break_requested: false,
+            breakpoints_enabled: true,
         }
     }
 

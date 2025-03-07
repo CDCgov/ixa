@@ -53,8 +53,8 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         // Add plan to queue, store data, and increment counter
         let plan_id = self.plan_counter;
         self.queue.push(PlanSchedule {
-            time,
             plan_id,
+            time,
             priority,
         });
         self.data_map.insert(plan_id, data);
@@ -89,7 +89,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     #[must_use]
     pub(crate) fn peek(&self) -> Option<(&PlanSchedule<P>, &T)> {
         // Iterate over queue until we find a plan with data or queue is empty
-        for entry in self.queue.iter() {
+        for entry in &self.queue {
             // Skip plans that have been cancelled and thus have no data
             if let Some(data) = self.data_map.get(&entry.plan_id) {
                 return Some((entry, data));
@@ -129,9 +129,9 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         let mut items = vec![];
 
         // Iterate over queue until we find a plan with data or queue is empty
-        for entry in self.queue.iter() {
+        for entry in &self.queue {
             // Skip plans that have been cancelled and thus have no data
-            if let Some(_) = self.data_map.get(&entry.plan_id) {
+            if self.data_map.contains_key(&entry.plan_id) {
                 items.push(entry);
                 if items.len() == at_most {
                     break;
@@ -164,6 +164,7 @@ pub struct PlanSchedule<P: Eq + PartialEq + Ord> {
     pub priority: P,
 }
 
+#[allow(clippy::expl_impl_clone_on_copy)] // Clippy false positive
 impl<P: Eq + PartialEq + Ord + Clone> Clone for PlanSchedule<P> {
     fn clone(&self) -> Self {
         PlanSchedule {
@@ -342,7 +343,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Plan does not exist")]
     fn cancel_invalid_plan() {
         let mut plan_queue = Queue::new();
         let plan_to_cancel = plan_queue.add_plan(1.0, (), ());
@@ -350,6 +350,7 @@ mod tests {
         assert!(!plan_queue.is_empty());
         plan_queue.get_next_plan();
         assert!(plan_queue.is_empty());
-        plan_queue.cancel_plan(&plan_to_cancel);
+        let result = plan_queue.cancel_plan(&plan_to_cancel);
+        assert!(result.is_none());
     }
 }

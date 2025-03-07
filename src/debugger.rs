@@ -205,15 +205,14 @@ impl DebuggerCommand for BreakpointCommand {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
             Ok(return_value) => {
                 match return_value {
-                    Retval::List(bp_list) => {
-                        println!("Scheduled breakpoints:");
+                    breakpoint::Retval::List(bp_list) => {
+                        let mut msg = format!("Scheduled breakpoints: {}", bp_list.len());
                         for bp in bp_list {
-                            println!("\t{bp}");
+                            _ = writeln!(&mut msg, "\t{bp}");
                         }
+                        return Ok((false, Some(msg)));
                     }
-                    Retval::Ok => {
-                        info!("breakpointed breakpoints successfully");
-                    }
+                    breakpoint::Retval::Ok => { /* pass */ }
                 }
 
                 Ok((false, None))
@@ -286,6 +285,7 @@ fn exit_debugger() -> ! {
 }
 
 /// Starts a debugging session.
+#[allow(clippy::missing_panics_doc)]
 pub fn enter_debugger(context: &mut Context) {
     init(context);
     run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
@@ -321,16 +321,14 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
         match debugger.process_command(line, context) {
             Ok((quit, message)) => {
                 if let Some(message) = message {
-                    let _ = writeln!(std::io::stdout(), "{message}");
-                    std::io::stdout().flush().unwrap();
+                    println!("{message}");
                 }
                 if quit {
                     break;
                 }
             }
             Err(err) => {
-                write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
-                std::io::stdout().flush().unwrap();
+                eprintln!("{err}");
             }
         }
     }
@@ -340,10 +338,11 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::{init, run_with_plugin, DebuggerPlugin};
+    use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
     use crate::tests::run_external_runner;
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
-    use crate::{Context, ContextPeopleExt};
+    use crate::{Context, ContextPeopleExt, ExecutionPhase};
+    use assert_approx_eq::assert_approx_eq;
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
@@ -362,6 +361,89 @@ mod tests {
     define_global_property!(BarGlobal, u32);
     define_person_property!(Age, u8);
     define_person_property!(Smile, u32);
+
+    #[test]
+    fn test_cli_debugger_breakpoint_set() {
+        let context = &mut Context::new();
+        let (quits, _output) = process_line("breakpoint set 4.0\n", context);
+
+        assert!(!quits, "should not exit");
+
+        let list = context.list_breakpoints(0);
+        assert_eq!(list.len(), 1);
+        if let Some(schedule) = list.first() {
+            assert_eq!(schedule.priority, ExecutionPhase::First);
+            assert_eq!(schedule.plan_id, 0u64);
+            assert_approx_eq!(schedule.time, 4.0f64);
+        }
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_list() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, Some(ExecutionPhase::First), Box::new(enter_debugger));
+        context.schedule_debugger(3.0, Some(ExecutionPhase::Normal), Box::new(enter_debugger));
+        context.schedule_debugger(4.0, Some(ExecutionPhase::Last), Box::new(enter_debugger));
+
+        let expected = r"Scheduled breakpoints: 4
+	0: t=1 (First)
+	1: t=2 (First)
+	2: t=3 (Normal)
+	3: t=4 (Last)";
+
+        let (quits, output) = process_line("breakpoint list\n", context);
+
+        assert!(!quits, "should not exit");
+        assert!(output.is_some());
+        assert_eq!(output.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_delete_id() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
+
+        let (quits, _output) = process_line("breakpoint delete 0\n", context);
+        assert!(!quits, "should not exit");
+        let list = context.list_breakpoints(0);
+
+        assert_eq!(list.len(), 1);
+        if let Some(schedule) = list.first() {
+            assert_eq!(schedule.priority, ExecutionPhase::First);
+            assert_eq!(schedule.plan_id, 1u64);
+            assert_approx_eq!(schedule.time, 2.0f64);
+        }
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_delete_all() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
+
+        let (quits, _output) = process_line("breakpoint delete --all\n", context);
+        assert!(!quits, "should not exit");
+        let list = context.list_breakpoints(0);
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_disable_enable() {
+        let context = &mut Context::new();
+
+        let (quits, _output) = process_line("breakpoint disable\n", context);
+        assert!(!quits, "should not exit");
+        assert!(!context.breakpoints_are_enabled());
+
+        let (quits, _output) = process_line("breakpoint enable\n", context);
+        assert!(!quits, "should not exit");
+        assert!(context.breakpoints_are_enabled());
+    }
 
     #[test]
     fn test_cli_debugger_integration() {

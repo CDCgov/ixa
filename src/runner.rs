@@ -8,6 +8,7 @@ use crate::report::ContextReportExt;
 use crate::{context::Context, web_api::ContextWebApiExt};
 use crate::{info, set_log_level, set_module_filters, LevelFilter};
 
+use crate::debugger::enter_debugger;
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Custom parser for log levels
@@ -200,7 +201,7 @@ where
                 context.request_debugger();
             }
             Some(time) => {
-                context.schedule_debugger(time, None);
+                context.schedule_debugger(time, None, Box::new(enter_debugger));
             }
         }
     }

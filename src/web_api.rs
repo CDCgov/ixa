@@ -44,6 +44,12 @@ struct ApiData {
     handlers: HashMap<String, Box<WebApiHandler>>,
 }
 
+pub(crate) fn enter_web_debugger(context: &mut Context) {
+    run_with_plugin::<ApiPlugin>(context, |context, data_container| {
+        handle_web_api(context, data_container.as_mut().unwrap());
+    });
+}
+
 define_data_plugin!(ApiPlugin, Option<ApiData>, None);
 
 // Input to the API handler.
