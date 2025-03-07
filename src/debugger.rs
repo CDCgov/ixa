@@ -252,13 +252,13 @@ fn init(context: &mut Context) {
     if debugger.is_none() {
         trace!("initializing debugger");
         let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
-        commands.insert("people", Box::new(PeopleCommand));
-        commands.insert("population", Box::new(PopulationCommand));
-        commands.insert("next", Box::new(NextCommand));
         commands.insert("breakpoint", Box::new(BreakpointCommand));
         commands.insert("continue", Box::new(ContinueCommand));
-        commands.insert("halt", Box::new(HaltCommand));
         commands.insert("global", Box::new(GlobalPropertyCommand));
+        commands.insert("halt", Box::new(HaltCommand));
+        commands.insert("next", Box::new(NextCommand));
+        commands.insert("people", Box::new(PeopleCommand));
+        commands.insert("population", Box::new(PopulationCommand));
 
         let mut cli = Command::new("repl")
             .multicall(true)

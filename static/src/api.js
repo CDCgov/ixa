@@ -57,11 +57,65 @@ function Api() {
     return response.Value;
   }
 
-  async function nextTime(t) {
-    await makeApiCall("next", {
-      Next: {
-        next_time: t,
-      },
+  async function next() {
+    await makeApiCall("next", {});
+  }
+
+  async function halt() {
+    await makeApiCall("halt", {});
+  }
+
+  async function continueSimulation() {
+    await makeApiCall("continue", {});
+  }
+
+  async function setBreakpoint(t) {
+    await makeApiCall("breaktpoint", {
+        Breakpoint: {
+            Set: {
+                time: t
+            }
+        }
+    });
+  }
+
+  async function listBreakpoints() {
+    let response = await makeApiCall("breaktpoint", {
+        Breakpoint: "List"
+    });
+
+    return response.List;
+  }
+
+  async function deleteBreakpoint(breakpoint_id) {
+    await makeApiCall("breaktpoint", {
+        Breakpoint: {
+            Delete: {
+                id: breakpoint_id
+            }
+        }
+    });
+  }
+
+  async function clearBreakpoints() {
+    await makeApiCall("breaktpoint", {
+        Breakpoint: {
+            Delete: {
+                all: true
+            }
+        }
+    });
+  }
+
+  async function enableBreakpoints() {
+    await makeApiCall("breakpoint", {
+        Breakpoint: "Enable"
+    });
+  }
+
+  async function disableBreakpoints() {
+    await makeApiCall("breakpoint", {
+        Breakpoint: "Disable"
     });
   }
 
@@ -91,7 +145,15 @@ function Api() {
     getTime,
     getGlobalSettingsList,
     getGlobalSettingValue,
-    nextTime,
+    next,
+    halt,
+    continueSimulation,
+    listBreakpoints,
+    setBreakpoint,
+    deleteBreakpoint,
+    clearBreakpoints,
+    enableBreakpoints,
+    disableBreakpoints,
     tabulateProperties,
     getPeoplePropertiesList,
   };
