@@ -1,7 +1,7 @@
 use crate::context::Context;
 use log::trace;
-use rand::distr::uniform::{SampleRange, SampleUniform};
-use rand::distr::weighted::{Weight, WeightedIndex};
+use rand::distributions::uniform::{SampleRange, SampleUniform};
+use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
@@ -146,12 +146,7 @@ pub trait ContextRandomExt {
     fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
-        T: Clone
-            + Default
-            + SampleUniform
-            + for<'a> std::ops::AddAssign<&'a T>
-            + PartialOrd
-            + Weight;
+        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
 }
 
 impl ContextRandomExt for Context {
@@ -194,25 +189,20 @@ impl ContextRandomExt for Context {
         S: SampleRange<T>,
         T: SampleUniform,
     {
-        self.sample(rng_id, |rng| rng.random_range(range))
+        self.sample(rng_id, |rng| rng.gen_range(range))
     }
 
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
         R::RngType: Rng,
     {
-        self.sample(rng_id, |rng| rng.random_bool(p))
+        self.sample(rng_id, |rng| rng.gen_bool(p))
     }
 
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
-        T: Clone
-            + Default
-            + SampleUniform
-            + for<'a> std::ops::AddAssign<&'a T>
-            + PartialOrd
-            + Weight,
+        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd,
     {
         let index = WeightedIndex::new(weights).unwrap();
         let mut rng = get_rng::<R>(self);
@@ -225,7 +215,8 @@ mod test {
     use crate::context::Context;
     use crate::define_data_plugin;
     use crate::random::ContextRandomExt;
-    use rand::{distr::weighted::WeightedIndex, prelude::Distribution, RngCore};
+    use rand::RngCore;
+    use rand::{distributions::WeightedIndex, prelude::Distribution};
 
     define_rng!(FooRng);
     define_rng!(BarRng);
