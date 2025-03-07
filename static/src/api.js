@@ -1,169 +1,170 @@
 function Api() {
-  function getBaseUrl() {
-    let url = new URL(window.location);
-    const prefix = url.pathname.split("/")[1];
-    if (prefix.length != 36) {
-      throw Error("Malformed URL");
-    }
-    url.pathname = `/${prefix}`;
-    return url;
-  }
-
-  async function makeApiCall(cmd, body) {
-    const url = new URL(baseUrl);
-    url.pathname += `/cmd/${cmd}`;
-    console.log(`makeApiCall ${url.toString()}`);
-
-    let response = await fetch(url.toString(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      throw new Error((await response.json()).error);
+    function getBaseUrl() {
+        let url = new URL(window.location);
+        const prefix = url.pathname.split("/")[1];
+        if (prefix.length != 36) {
+            throw Error("Malformed URL");
+        }
+        url.pathname = `/${prefix}`;
+        return url;
     }
 
-    return await response.json();
-  }
+    async function makeApiCall(cmd, body) {
+        const url = new URL(baseUrl);
+        url.pathname += `/cmd/${cmd}`;
+        console.log(`makeApiCall ${url.toString()}`);
 
-  async function getPopulation() {
-    let response = await makeApiCall("population", {});
+        let response = await fetch(url.toString(), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        });
 
-    return response.population;
-  }
-
-  async function getTime() {
-    let response = await makeApiCall("time", {});
-
-    return response.time;
-  }
-
-  async function getGlobalSettingsList() {
-    let response = await makeApiCall("global", {
-      Global: "List",
-    });
-
-    return response.List;
-  }
-
-  async function getGlobalSettingValue(setting) {
-    let response = await makeApiCall("global", {
-      Global: { Get: { property: setting } },
-    });
-
-    return response.Value;
-  }
-
-  async function next() {
-    await makeApiCall("next", {});
-  }
-
-  async function halt() {
-    await makeApiCall("halt", {});
-  }
-
-  async function continueSimulation() {
-    await makeApiCall("continue", {});
-  }
-
-  async function setBreakpoint(t) {
-    await makeApiCall("breaktpoint", {
-        Breakpoint: {
-            Set: {
-                time: t
-            }
+        if (!response.ok) {
+            throw new Error((await response.json()).error);
         }
-    });
-  }
 
-  async function listBreakpoints() {
-    let response = await makeApiCall("breaktpoint", {
-        Breakpoint: "List"
-    });
+        return await response.json();
+    }
 
-    return response.List;
-  }
+    async function getPopulation() {
+        let response = await makeApiCall("population", {});
 
-  async function deleteBreakpoint(breakpoint_id) {
-    await makeApiCall("breaktpoint", {
-        Breakpoint: {
-            Delete: {
-                id: breakpoint_id
+        return response.population;
+    }
+
+    async function getTime() {
+        let response = await makeApiCall("time", {});
+
+        return response.time;
+    }
+
+    async function getGlobalSettingsList() {
+        let response = await makeApiCall("global", {
+            Global: "List",
+        });
+
+        return response.List;
+    }
+
+    async function getGlobalSettingValue(setting) {
+        let response = await makeApiCall("global", {
+            Global: {Get: {property: setting}},
+        });
+
+        return response.Value;
+    }
+
+    async function next() {
+        await makeApiCall("next", {});
+    }
+
+    async function halt() {
+        await makeApiCall("halt", {});
+    }
+
+    async function continueSimulation() {
+        await makeApiCall("continue", {});
+    }
+
+    async function setBreakpoint(t) {
+        await makeApiCall("breakpoint", {
+            Breakpoint: {
+                Set: {
+                    time: t,
+                    console: false
+                }
             }
-        }
-    });
-  }
+        });
+    }
 
-  async function clearBreakpoints() {
-    await makeApiCall("breaktpoint", {
-        Breakpoint: {
-            Delete: {
-                all: true
+    async function listBreakpoints() {
+        let response = await makeApiCall("breakpoint", {
+            Breakpoint: "List"
+        });
+
+        return response.List;
+    }
+
+    async function deleteBreakpoint(breakpoint_id) {
+        await makeApiCall("breakpoint", {
+            Breakpoint: {
+                Delete: {
+                    id: breakpoint_id
+                }
             }
-        }
-    });
-  }
+        });
+    }
 
-  async function enableBreakpoints() {
-    await makeApiCall("breakpoint", {
-        Breakpoint: "Enable"
-    });
-  }
+    async function clearBreakpoints() {
+        await makeApiCall("breakpoint", {
+            Breakpoint: {
+                Delete: {
+                    all: true
+                }
+            }
+        });
+    }
 
-  async function disableBreakpoints() {
-    await makeApiCall("breakpoint", {
-        Breakpoint: "Disable"
-    });
-  }
+    async function enableBreakpoints() {
+        await makeApiCall("breakpoint", {
+            Breakpoint: "Enable"
+        });
+    }
 
-  async function tabulateProperties(props) {
-    let response = await makeApiCall("people", {
-      People: {
-        Tabulate: {
-          properties: props,
-        },
-      },
-    });
-    return response.Tabulated;
-  }
+    async function disableBreakpoints() {
+        await makeApiCall("breakpoint", {
+            Breakpoint: "Disable"
+        });
+    }
 
-  async function getPeoplePropertiesList() {
-    let response = await makeApiCall("people", {
-      People: "Properties",
-    });
+    async function tabulateProperties(props) {
+        let response = await makeApiCall("people", {
+            People: {
+                Tabulate: {
+                    properties: props,
+                },
+            },
+        });
+        return response.Tabulated;
+    }
 
-    return response.PropertyNames;
-  }
+    async function getPeoplePropertiesList() {
+        let response = await makeApiCall("people", {
+            People: "Properties",
+        });
 
-  const baseUrl = getBaseUrl();
+        return response.PropertyNames;
+    }
 
-  return {
-    getPopulation,
-    getTime,
-    getGlobalSettingsList,
-    getGlobalSettingValue,
-    next,
-    halt,
-    continueSimulation,
-    listBreakpoints,
-    setBreakpoint,
-    deleteBreakpoint,
-    clearBreakpoints,
-    enableBreakpoints,
-    disableBreakpoints,
-    tabulateProperties,
-    getPeoplePropertiesList,
-  };
+    const baseUrl = getBaseUrl();
+
+    return {
+        getPopulation,
+        getTime,
+        getGlobalSettingsList,
+        getGlobalSettingValue,
+        next,
+        halt,
+        continueSimulation,
+        listBreakpoints,
+        setBreakpoint,
+        deleteBreakpoint,
+        clearBreakpoints,
+        enableBreakpoints,
+        disableBreakpoints,
+        tabulateProperties,
+        getPeoplePropertiesList,
+    };
 }
 
 let api = null;
 
 export default function getApi() {
-  if (!api) {
-    api = Api();
-  }
-  return api;
+    if (!api) {
+        api = Api();
+    }
+    return api;
 }

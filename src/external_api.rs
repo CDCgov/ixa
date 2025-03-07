@@ -104,6 +104,8 @@ pub(crate) mod global_properties {
 
 pub(crate) mod breakpoint {
     use crate::context::Context;
+    use crate::debugger::enter_debugger;
+    use crate::web_api::enter_web_debugger;
     use crate::{info, trace, IxaError};
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
@@ -114,7 +116,12 @@ pub(crate) mod breakpoint {
         /// List all scheduled breakpoints
         List,
         /// Set a breakpoint at a given time
-        Set { time: f64 },
+        Set {
+            #[arg(required = true)]
+            time: f64,
+            #[arg(long, hide = true, default_value_t = true)]
+            console: bool,
+        },
         /// Delete the breakpoint with the specified id.
         /// Providing the `--all` option removes all breakpoints.
         #[group(multiple = false, required = true)]
@@ -169,13 +176,19 @@ pub(crate) mod breakpoint {
                     Ok(Retval::List(list))
                 }
 
-                ArgsEnum::Set { time } => {
+                ArgsEnum::Set { time, console } => {
                     if *time < context.get_current_time() {
                         return Err(IxaError::from(format!(
                             "Breakpoint time {time} is in the past"
                         )));
                     }
-                    context.schedule_debugger(*time, None);
+
+                    if *console {
+                        context.schedule_debugger(*time, None, Box::new(enter_debugger));
+                    } else {
+                        context.schedule_debugger(*time, None, Box::new(enter_web_debugger));
+                    }
+
                     info!("Breakpoint set at t={}", time);
                     Ok(Retval::Ok)
                 }
@@ -184,7 +197,7 @@ pub(crate) mod breakpoint {
                     if let Some(id) = id {
                         assert!(!*all);
                         trace!("Deleting breakpoint {id}");
-                        let cancelled = context.delete_breakpoint(*id as u64);
+                        let cancelled = context.delete_breakpoint(u64::from(*id));
                         if cancelled.is_none() {
                             Err(IxaError::from(format!(
                                 "Attempted to delete a nonexistent breakpoint {id}",
