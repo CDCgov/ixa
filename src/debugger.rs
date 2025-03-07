@@ -253,7 +253,7 @@ fn init(context: &mut Context) {
 }
 
 fn exit_debugger() -> ! {
-    println!("Got Ctrl-D, Exiting...");
+    println!("Got Ctrl-D, Terminating execution.");
     std::process::exit(0);
 }
 
