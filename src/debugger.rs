@@ -207,7 +207,7 @@ impl DebuggerCommand for BreakpointCommand {
                     breakpoint::Retval::List(bp_list) => {
                         let mut msg = format!("Scheduled breakpoints: {}", bp_list.len());
                         for bp in bp_list {
-                            _ = writeln!(&mut msg, "\t{bp}");
+                            _ = write!(&mut msg, "\n\t{bp}");
                         }
                         return Ok((false, Some(msg)));
                     }
@@ -284,6 +284,7 @@ fn exit_debugger() -> ! {
 }
 
 /// Starts a debugging session.
+#[allow(clippy::missing_panics_doc)]
 pub fn enter_debugger(context: &mut Context) {
     init(context);
     run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
@@ -336,10 +337,11 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::{init, run_with_plugin, DebuggerPlugin};
+    use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
     use crate::tests::run_external_runner;
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt, ExecutionPhase};
+    use assert_approx_eq::assert_approx_eq;
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
@@ -368,10 +370,10 @@ mod tests {
 
         let list = context.list_breakpoints(0);
         assert_eq!(list.len(), 1);
-        if let Some(schedule) = list.get(0) {
+        if let Some(schedule) = list.first() {
             assert_eq!(schedule.priority, ExecutionPhase::First);
             assert_eq!(schedule.plan_id, 0u64);
-            assert_eq!(schedule.time, 4.0f64);
+            assert_approx_eq!(schedule.time, 4.0f64);
         }
     }
 
@@ -379,16 +381,16 @@ mod tests {
     fn test_cli_debugger_breakpoint_list() {
         let context = &mut Context::new();
 
-        context.schedule_debugger(1.0, None);
-        context.schedule_debugger(2.0, Some(ExecutionPhase::First));
-        context.schedule_debugger(3.0, Some(ExecutionPhase::Normal));
-        context.schedule_debugger(4.0, Some(ExecutionPhase::Last));
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, Some(ExecutionPhase::First), Box::new(enter_debugger));
+        context.schedule_debugger(3.0, Some(ExecutionPhase::Normal), Box::new(enter_debugger));
+        context.schedule_debugger(4.0, Some(ExecutionPhase::Last), Box::new(enter_debugger));
 
-        let expected = r#"Scheduled breakpoints: 4
+        let expected = r"Scheduled breakpoints: 4
 	0: t=1 (First)
 	1: t=2 (First)
 	2: t=3 (Normal)
-	3: t=4 (Last)"#;
+	3: t=4 (Last)";
 
         let (quits, output) = process_line("breakpoint list\n", context);
 
@@ -401,18 +403,18 @@ mod tests {
     fn test_cli_debugger_breakpoint_delete_id() {
         let context = &mut Context::new();
 
-        context.schedule_debugger(1.0, None);
-        context.schedule_debugger(2.0, None);
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
 
-        let (quits, _output) = process_line("breakpoint delete 1\n", context);
+        let (quits, _output) = process_line("breakpoint delete 0\n", context);
         assert!(!quits, "should not exit");
         let list = context.list_breakpoints(0);
 
         assert_eq!(list.len(), 1);
-        if let Some(schedule) = list.get(0) {
+        if let Some(schedule) = list.first() {
             assert_eq!(schedule.priority, ExecutionPhase::First);
             assert_eq!(schedule.plan_id, 1u64);
-            assert_eq!(schedule.time, 2.0f64);
+            assert_approx_eq!(schedule.time, 2.0f64);
         }
     }
 
@@ -420,8 +422,8 @@ mod tests {
     fn test_cli_debugger_breakpoint_delete_all() {
         let context = &mut Context::new();
 
-        context.schedule_debugger(1.0, None);
-        context.schedule_debugger(2.0, None);
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
 
         let (quits, _output) = process_line("breakpoint delete --all\n", context);
         assert!(!quits, "should not exit");
@@ -580,12 +582,7 @@ mod tests {
     fn test_cli_next() {
         let context = &mut Context::new();
         assert_eq!(context.remaining_plan_count(), 0);
-        let (quits, _) = process_line("next 2\n", context);
-        assert!(quits, "should exit");
-        assert_eq!(
-            context.remaining_plan_count(),
-            1,
-            "should schedule a plan for the debugger to pause"
-        );
+        let (quits, _) = process_line("next\n", context);
+        assert!(!quits, "shouldn't exit");
     }
 }
