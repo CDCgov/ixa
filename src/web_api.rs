@@ -2,7 +2,8 @@ use crate::context::{run_with_plugin, Context};
 use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
-    global_properties, next, people, population, run_ext_api, time, EmptyArgs,
+    breakpoint, global_properties, halt, next, people, population, r#continue, run_ext_api, time,
+    EmptyArgs,
 };
 use axum::extract::{Json, Path, State};
 use axum::response::Redirect;
@@ -41,6 +42,12 @@ fn register_api_handler<
 struct ApiData {
     receiver: mpsc::UnboundedReceiver<ApiRequest>,
     handlers: HashMap<String, Box<WebApiHandler>>,
+}
+
+pub(crate) fn enter_web_debugger(context: &mut Context) {
+    run_with_plugin::<ApiPlugin>(context, |context, data_container| {
+        handle_web_api(context, data_container.as_mut().unwrap());
+    });
 }
 
 define_data_plugin!(ApiPlugin, Option<ApiData>, None);
@@ -171,18 +178,6 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                 });
             }
         };
-
-        // Special case the functions which require exiting
-        // the loop.
-        if req.cmd == "next" {
-            // This was already type checked in the handler so .unwrap() cannot fail.
-            let next::Args::Next { next_time } = serde_json::from_value(req.arguments).unwrap();
-            context.schedule_web_api(next_time);
-            return;
-        }
-        if req.cmd == "continue" {
-            return;
-        }
     }
 }
 
@@ -236,13 +231,16 @@ impl ContextWebApiExt for Context {
             handlers: HashMap::new(),
         };
 
+        register_api_handler::<breakpoint::Api, breakpoint::Args>(&mut api_data, "breakpoint");
+        register_api_handler::<r#continue::Api, r#continue::Args>(&mut api_data, "continue");
         register_api_handler::<global_properties::Api, global_properties::Args>(
             &mut api_data,
             "global",
         );
-        register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
+        register_api_handler::<halt::Api, halt::Args>(&mut api_data, "halt");
         register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
         register_api_handler::<people::Api, people::Args>(&mut api_data, "people");
+        register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
         register_api_handler::<time::Api, EmptyArgs>(&mut api_data, "time");
         // Record the data container.
         *data_container = Some(api_data);
@@ -423,17 +421,54 @@ mod tests {
             })
         );
 
-        // Next time.
-        let res = send_request(
-            &url,
-            "next",
-            &json!({
-                "Next": {
-                    "next_time" : 1.0
-                }
-            }),
-        );
+        // Next
+        let res = send_request(&url, "next", &json!({}));
         assert_eq!(res, json!({}));
+
+        // We test breakpoint commands as a group.
+        // Breakpoint set
+        _ = send_request(
+            &url,
+            "breakpoint",
+            &json!({ "Breakpoint" : { "Set" : { "time": 1.0, } } }),
+        );
+        _ = send_request(
+            &url,
+            "breakpoint",
+            &json!({ "Breakpoint" : { "Set" : { "time": 2.0, } } }),
+        );
+        // Breakpoint delete
+        _ = send_request(
+            &url,
+            "breakpoint",
+            &json!({ "Breakpoint" : { "Delete" : { "id": 0, } } }),
+        );
+        // Breakpoint list
+        let res = send_request(&url, "breakpoint", &json!({"Breakpoint": "List"}));
+        assert_eq!(
+            res,
+            json!({"List" : [
+                "1: t=2 (First)"
+            ]}
+            )
+        );
+        // Breakpoint clear
+        _ = send_request(
+            &url,
+            "breakpoint",
+            &json!({ "Breakpoint" : { "Delete" : { "all": true, } } }),
+        );
+        // Check list again
+        let res = send_request(&url, "breakpoint", &json!({"Breakpoint": "List"}));
+        assert_eq!(
+            res,
+            json!({"List" : [/* empty list */ ]}
+            )
+        );
+        // Breakpoint disable
+        _ = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "disable" }));
+        // Breakpoint enable
+        _ = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "enable" }));
 
         // Person properties API.
         let res = send_request(
