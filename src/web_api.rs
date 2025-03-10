@@ -178,6 +178,12 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                 });
             }
         };
+
+        // Special case the functions which require exiting
+        // the loop.
+        if req.cmd == "continue" {
+            return;
+        }
     }
 }
 
@@ -232,13 +238,13 @@ impl ContextWebApiExt for Context {
         };
 
         register_api_handler::<breakpoint::Api, breakpoint::Args>(&mut api_data, "breakpoint");
-        register_api_handler::<r#continue::Api, r#continue::Args>(&mut api_data, "continue");
+        register_api_handler::<r#continue::Api, EmptyArgs>(&mut api_data, "continue");
         register_api_handler::<global_properties::Api, global_properties::Args>(
             &mut api_data,
             "global",
         );
-        register_api_handler::<halt::Api, halt::Args>(&mut api_data, "halt");
-        register_api_handler::<next::Api, next::Args>(&mut api_data, "next");
+        register_api_handler::<halt::Api, EmptyArgs>(&mut api_data, "halt");
+        register_api_handler::<next::Api, EmptyArgs>(&mut api_data, "next");
         register_api_handler::<people::Api, people::Args>(&mut api_data, "people");
         register_api_handler::<population::Api, EmptyArgs>(&mut api_data, "population");
         register_api_handler::<time::Api, EmptyArgs>(&mut api_data, "time");
@@ -423,26 +429,31 @@ mod tests {
 
         // Next
         let res = send_request(&url, "next", &json!({}));
-        assert_eq!(res, json!({}));
+        assert_eq!(res, json!("Ok"));
 
         // We test breakpoint commands as a group.
         // Breakpoint set
-        _ = send_request(
+        let res = send_request(
             &url,
             "breakpoint",
-            &json!({ "Breakpoint" : { "Set" : { "time": 1.0, } } }),
+            &json!({ "Breakpoint" : { "Set" : { "time": 1.0, "console": false} } }),
         );
-        _ = send_request(
+        assert_eq!(res, json!("Ok"));
+
+        let res = send_request(
             &url,
             "breakpoint",
-            &json!({ "Breakpoint" : { "Set" : { "time": 2.0, } } }),
+            &json!({ "Breakpoint" : { "Set" : { "time": 2.0, "console": false} } }),
         );
-        // Breakpoint delete
-        _ = send_request(
+        assert_eq!(res, json!("Ok"));
+
+        let res = send_request(
             &url,
             "breakpoint",
-            &json!({ "Breakpoint" : { "Delete" : { "id": 0, } } }),
+            &json!({ "Breakpoint" : { "Delete" : { "id": 0, "all": false} } }),
         );
+        assert_eq!(res, json!("Ok"));
+
         // Breakpoint list
         let res = send_request(&url, "breakpoint", &json!({"Breakpoint": "List"}));
         assert_eq!(
@@ -452,12 +463,14 @@ mod tests {
             ]}
             )
         );
-        // Breakpoint clear
-        _ = send_request(
+
+        let res = send_request(
             &url,
             "breakpoint",
             &json!({ "Breakpoint" : { "Delete" : { "all": true, } } }),
         );
+        assert_eq!(res, json!("Ok"));
+
         // Check list again
         let res = send_request(&url, "breakpoint", &json!({"Breakpoint": "List"}));
         assert_eq!(
@@ -465,10 +478,12 @@ mod tests {
             json!({"List" : [/* empty list */ ]}
             )
         );
-        // Breakpoint disable
-        _ = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "disable" }));
-        // Breakpoint enable
-        _ = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "enable" }));
+
+        let res = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "Disable" }));
+        assert_eq!(res, json!("Ok"));
+
+        let res = send_request(&url, "breakpoint", &json!({ "Breakpoint" : "Enable" }));
+        assert_eq!(res, json!("Ok"));
 
         // Person properties API.
         let res = send_request(
@@ -536,8 +551,8 @@ mod tests {
         // Valid JSON but wrong type.
         let res = send_request_text(
             &url,
-            "next",
-            String::from("{\"Next\": {\"next_time\" : \"invalid\"}}"),
+            "breakpoint",
+            String::from("{\"Set\": {\"time\" : \"invalid\"}}"),
         );
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
