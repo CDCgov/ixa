@@ -41,7 +41,7 @@ assert_cmd = "^2.0.16"
 criterion = "^0.5.1"
 
 # Example Libraries
-ixa_example_basic_infection = { path = "examples/basic-infection" }
+disease_model = { path = "examples/disease_model" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
 
 [lints.clippy]
