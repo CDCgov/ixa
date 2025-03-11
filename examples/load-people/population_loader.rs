@@ -74,10 +74,12 @@ mod tests {
     fn test_creation_event_access_properties() {
         let flag = Rc::new(RefCell::new(false));
 
-        // Define expected computed values for each person
+        // Define expected computed values for each person. The value for dosage will change for
+        // any change in the deterministic RNG.
         let expected_computed = vec![
-            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 1),
-            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 2),
+            // (age, risk_category, vaccine_type, efficacy, doses)
+            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 3),
+            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 1),
         ];
 
         let mut context = Context::new();
@@ -117,6 +119,7 @@ mod tests {
                     context.get_person_property(person, VaccineEfficacy),
                     efficacy
                 );
+                // This assert will break for any change that affects the deterministic hasher.
                 assert_eq!(context.get_person_property(person, VaccineDoses), doses);
 
                 *counter.borrow_mut() += 1;

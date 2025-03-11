@@ -3,11 +3,11 @@ use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
 use crate::Tabulator;
 use crate::{error, trace};
+use crate::{HashMap, HashMapExt};
 use csv::Writer;
 use serde::Serializer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
@@ -273,7 +273,7 @@ impl ContextReportExt for Context {
 
 #[cfg(test)]
 mod test {
-    use crate::define_person_property_with_default;
+    use crate::{define_person_property_with_default, info};
 
     use super::*;
     use core::convert::TryInto;
@@ -525,6 +525,7 @@ mod test {
         let mut context2 = Context::new();
         let config = context2.report_options();
         config.file_prefix("prefix1_".to_string()).directory(path);
+        info!("The next 'file already exists' error is intended for a passing test.");
         let result = context2.add_report::<SampleReport>("sample_report");
         assert!(result.is_err());
         let error = result.err().unwrap();

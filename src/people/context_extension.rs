@@ -5,10 +5,10 @@ use crate::{
     Context, ContextRandomExt, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
     PersonPropertyChangeEvent, RngId, Tabulator,
 };
+use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand::Rng;
 use std::any::TypeId;
 use std::cell::Ref;
-use std::collections::{HashMap, HashSet};
 
 use crate::people::methods::Methods;
 

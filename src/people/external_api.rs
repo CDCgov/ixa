@@ -1,11 +1,10 @@
-use std::any::TypeId;
-use std::collections::HashMap;
-
 use crate::people::ContextPeopleExt;
 use crate::people::PeoplePlugin;
 use crate::Context;
 use crate::IxaError;
 use crate::PersonId;
+use crate::{HashMap, HashMapExt};
+use std::any::TypeId;
 
 pub(crate) trait ContextPeopleExtCrate {
     fn get_person_property_by_name(
