@@ -21,6 +21,7 @@ define_person_property_with_default!(
 );
 
 /// Populates the "world" with the `POPULATION` number of people.
+#[allow(clippy::missing_panics_doc)]
 pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
