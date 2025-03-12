@@ -23,7 +23,8 @@ export function SimulationContextProvider({ children }) {
   async function goNext() {
     let now = currentTime;
     setIsLoading(true);
-    api.nextTime(currentTime + 1.0);
+    api.setBreakpoint(currentTime + 1.0);
+    api.continueSimulation()
     // Busy wait on the API until time changes.
     while (now === currentTime) {
       now = await api.getTime();

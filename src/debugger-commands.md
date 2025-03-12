@@ -16,6 +16,7 @@ of a primary command, subcommands, and arguments:
 ```
 
 Where:
+
 - `<primary_command>` is the top-level command category (e.g., `breakpoint`, `global`, `query`, `people`).
 - `[<subcommand>]` specifies an action to perform (e.g., `set`, `get`, `list`, `delete`).
 - `[<positional_argument>]` may be used to provide necessary inputs (e.g., the name of a property)
@@ -26,16 +27,17 @@ command might require an `--id` argument but optionally take a set of properties
 
 ## Command Categories
 
-In addition to some control flow commands (`next`, `continue`, `help`), we
+In addition to some control flow commands (`next`, `continue`, `halt`, `help`), we
 might consider the following commands:
 
 ### 1. Breakpoints
+
 Commands related to setting, listing, and removing execution breakpoints.
 Note that this will require storing some internal state.
 
 - **`breakpoint set <t>]`**
 
-  Set a breakpoint a given time
+  Set a breakpoint at a given time
 
   Example: `breakpoint set 4.0`
 
@@ -43,14 +45,23 @@ Note that this will require storing some internal state.
 
   List all active breakpoints.
 
-- **`breakpoint delete <id> [--all]`**
+- **`breakpoint delete [<id> | --all]`**
 
   Delete the breakpoint with the specified id.
   Providing the `--all` option removes all breakpoints.
 
   Example: `breakpoint delete 1`
 
+- **`breakpoint disable`**
+
+  Disables all breakpoints globally but does not delete them.
+
+- **`breakpoint enable`**
+
+  Enables all breakpoints globally.
+
 ### 2. Globals
+
 Commands for managing global properties in the simulation.
 
 - **`global get <name>`**
@@ -81,8 +92,8 @@ Commands for managing global properties in the simulation.
 
   Example: `global list --prefix ixa.`
 
-
 ### 3. People
+
 Commands for retrieving and modifying information about entities in the simulation.
 
 - **`people get --id <person_id> [--property <property>]`**
@@ -179,7 +190,7 @@ impl DebuggerCommand for GlobalPropertyCommand {
         subcommand
             .subcommand_required(true)
             .subcommand(
-              Command::new("list").about("List all global properties"))
+                Command::new("list").about("List all global properties"))
             .subcommand(
                 Command::new("get")
                     .about("Get the value of a global property")
