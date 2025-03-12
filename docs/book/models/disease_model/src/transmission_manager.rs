@@ -5,6 +5,7 @@ use ixa::{define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, Person
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use crate::FORCE_OF_INFECTION;
 use crate::MAX_TIME;
+use crate::POPULATION;
 
 define_rng!(TransmissionRng);
 
@@ -23,12 +24,10 @@ fn attempt_infection(context: &mut Context) {
         );
     }
 
-    let population_size: usize = context.get_current_population();
-
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
         + context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap())
-            / population_size as f64;
+            / POPULATION as f64;
 
     if next_attempt_time <= MAX_TIME {
         context.add_plan(next_attempt_time, attempt_infection);
