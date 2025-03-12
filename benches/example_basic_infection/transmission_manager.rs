@@ -51,6 +51,8 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::all)] // False positives
+    #![allow(unused_imports)] // False positives
     use super::*;
     use crate::people::{InfectionStatus, InfectionStatusValue};
     use crate::SEED;
