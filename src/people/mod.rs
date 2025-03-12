@@ -88,15 +88,12 @@ pub use property::{
     PersonProperty,
 };
 
+use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
-use std::{
-    any::TypeId,
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::{any::TypeId, hash::Hash};
 
 define_data_plugin!(
     PeoplePlugin,

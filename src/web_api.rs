@@ -4,13 +4,13 @@ use crate::error::IxaError;
 use crate::external_api::{
     global_properties, next, people, population, run_ext_api, time, EmptyArgs,
 };
+use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
 use axum::response::Redirect;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Router};
 use rand::RngCore;
 use serde_json::json;
-use std::collections::HashMap;
 use std::thread;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;

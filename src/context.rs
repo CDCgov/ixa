@@ -2,9 +2,10 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use crate::{HashMap, HashMapExt};
 use std::{
     any::{Any, TypeId},
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     rc::Rc,
 };
 

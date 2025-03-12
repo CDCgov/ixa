@@ -9,11 +9,9 @@
 //! This queue is used by `Context` to store future events where some callback
 //! closure `FnOnce(&mut Context)` will be executed at a given point in time.
 
-use log::trace;
-use std::{
-    cmp::Ordering,
-    collections::{BinaryHeap, HashMap},
-};
+use crate::trace;
+use crate::{HashMap, HashMapExt};
+use std::{cmp::Ordering, collections::BinaryHeap};
 
 /// A priority queue that stores arbitrary data sorted by time
 ///

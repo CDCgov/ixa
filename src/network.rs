@@ -5,15 +5,13 @@
 //! arbitrary number of outgoing edges of a given type, with each edge
 //! having a weight. Edge types can also specify their own per-type
 //! data which will be stored along with the edge.
+use crate::HashMap;
 use crate::{
     context::Context, define_data_plugin, error::IxaError, people::PersonId,
     random::ContextRandomExt, random::RngId,
 };
 use rand::Rng;
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-};
+use std::any::{Any, TypeId};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 /// An edge in network graph. Edges are directed, so the

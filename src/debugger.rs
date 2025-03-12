@@ -6,8 +6,8 @@ use crate::IxaError;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
+use crate::{HashMap, HashMapExt};
 use log::trace;
-use std::collections::HashMap;
 use std::io::Write;
 
 trait DebuggerCommand {

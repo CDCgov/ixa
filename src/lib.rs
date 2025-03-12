@@ -65,12 +65,16 @@ pub use log::{
 };
 
 pub mod external_api;
+mod hashing;
 pub mod web_api;
 
 // Re-export for macros
 pub use ctor;
 pub use paste;
 pub use rand;
+
+// Deterministic hashing data structures
+pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 #[cfg(test)]
 mod tests {

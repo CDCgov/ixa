@@ -2,8 +2,8 @@ use ixa::context::Context;
 use ixa::define_global_property;
 use ixa::error::IxaError;
 use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
 

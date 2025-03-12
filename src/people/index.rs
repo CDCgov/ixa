@@ -1,8 +1,8 @@
 use super::methods::Methods;
 use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
+use crate::{HashMap, HashSet, HashSetExt};
 use bincode::serialize;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized version of the value.
