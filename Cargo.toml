@@ -1,3 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+  "ixa-derive",
+]
+
+
 [package]
 name = "ixa"
 version = "0.0.1"

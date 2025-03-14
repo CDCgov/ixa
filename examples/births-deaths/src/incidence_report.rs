@@ -5,7 +5,6 @@ use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
 use std::path::Path;
-use std::path::PathBuf;
 
 use crate::population_manager::{
     Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusValue,
@@ -50,7 +49,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let current_dir = current_dir.join(Path::new(".."));
     context
         .report_options()
-        .directory(PathBuf::from(current_dir))
+        .directory(current_dir)
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
 
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
