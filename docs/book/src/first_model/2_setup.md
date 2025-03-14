@@ -1,4 +1,5 @@
 # Setting Up Your First Model
+
 ## Create a new project with Cargo
 Let's setup the bare bones skeleton of our first model. First decide where your Ixa-related code is going to live on your computer. On my computer, that's the `Code` directory in my `home` folder (or `~` for short). I will use my directory structure for illustration purposes in this section. Just modify the commands for wherever you chose to store your models.
 
@@ -24,17 +25,33 @@ Cargo creates a directory named `disease_model` with a project skeleton for us. 
 > [!INFO] Source Control
 > The `.gitignore` file lists all the files and directories you don't want to include in source control. For a Rust project you should at least have `target` and `Cargo.lock` listed in the `.gitignore`. I also make a habit of listing `.vscode` and `.idea`, the directories VS Code and JetBrains respectively store IDE project settings.
 
+> [!INFO] Cargo
+> Cargo is Rust's package manager and build system. It is a single tool that plays the role of the multiple different tools you would use in other languages, such as `pip` and `poetry` in the Python ecosystem. We use Cargo to
+> - install tools like ripgrep (`cargo install`)
+> - initialize new projects (`cargo new` and `cargo init`)
+> - add new project dependencies (`cargo add serde`)
+> - update dependency versions (`cargo update`)
+> - check the project's code for errors (`cargo check`)
+> - download and build the correct dependencies with the correct feature flags (`cargo build`)
+> - build the project's targets, including examples and tests (`cargo build`)
+> - generate documentation (`cargo doc`)
+> - run tests and benchmarks (`cargo test`, `cargo bench`)
+
 ## Setup Dependencies and `Cargo.toml`
-### Dependencies
-We will depend on a few external libraries, Ixa chief among them.  The `cargo add` command makes this easy.
+Ixa comes with a convenience script for setting up new Ixa projects. Change directory to `disease_model/`, the project root, and run this command.
 ```bash
-cargo add ixa --git https://github.com/CDCgov/ixa --branch release
-cargo add rand_distr@0.5.1
+curl -s https://raw.githubusercontent.com/CDCgov/ixa/release/scripts/setup_new_ixa_project.sh | sh -s
+```
+The script adds the Ixa library as a project dependency and provides you with a minimal Ixa program in `src/main.rs`.
+
+### Dependencies
+We will depend on a few external libraries in addition to Ixa.  The `cargo add` command makes this easy.
+```bash
+cargo add rand_distr@0.4.3
 cargo add serde --features derive
 cargo add csv
 ```
 Notice that:
-- we are using the latest version of Ixa from its release branch on GitHub;
 - a particular version can be specified with the `packagename@1.2.3` syntax;
 - we can compile a library with specific features turn on or off.
 
@@ -45,30 +62,14 @@ Cargo stores information about these dependencies in the `Cargo.toml` file. This
 # Cargo.toml
 {{#include ../../models/disease_model/Cargo.toml}}
 ```
+
 ## Executing the Ixa model
 We are almost ready to execute our first model. Edit `src/main.rs` to look like this:
 ```rust
 // main.rs
-use ixa::{error, info, run_with_args, trace, Context};
-
-fn main() {
-    let result =
-        run_with_args(|_context: &mut Context, _args, _| {
-            trace!("Initializing disease_model");
-            Ok(())
-        });
-
-    match result {
-        Ok(_) => {
-            info!("Simulation finished executing");
-        }
-        Err(e) => {
-            error!("Simulation exited with error: {}", e);
-        }
-    }
-}
+{{#include ../models/basic/main.rs}}
 ```
-Don't let this code intimidate you—it's really quite simple. The first line says we want to use symbols from the `ixa` library in the code that follows.  In `main()`, the first thing we do is call  `run_with_args()`. The `run_with_args()` function takes as an argument a closure inside which we can do additional setup before the simulation is kicked off if necessary. The only "setup" we do is log a `trace!` message that we are initializing the model.
+Don't let this code intimidate you—it's really quite simple. The first line says we want to use symbols from the `ixa` library in the code that follows.  In `main()`, the first thing we do is call  `run_with_args()`. The `run_with_args()` function takes as an argument a closure inside which we can do additional setup before the simulation is kicked off if necessary. The only setup we do is schedule a plan at time 1.0. The plan is itself another closure that prints the current simulation time.
 
 > [!INFO] Closures
 >  A *closure* is a small, self-contained block of code that can be passed around and executed later. It can capture and use variables from its surrounding environment, which makes it useful for things like callbacks, event handlers, or any situation where you want to define some logic on the fly and run it at a later time. In simple terms, a closure is like a mini anonymous function.
@@ -84,6 +85,7 @@ We can build and run our model from the command line using Cargo:
 ```bash
 cargo run
 ```
+
 ## Enabling Logging
 The model doesn't do anything yet—it doesn't even emit the log messages we included. We can turn those on to see what is happening inside our model during development with the following command line argument:
 ```bash

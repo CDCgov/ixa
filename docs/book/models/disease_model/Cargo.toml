@@ -9,5 +9,5 @@ publish = false # Do not publish to the Crates.io registry
 [dependencies]
 csv = "1.3.1"
 ixa = { git = "https://github.com/CDCgov/ixa", branch = "release", version = "0.0.1" }
-rand_distr = "0.5.1"
+rand_distr = "0.4.3"
 serde = { version = "1.0.218", features = ["derive"] }
