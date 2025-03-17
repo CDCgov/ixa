@@ -48,6 +48,8 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::all)] // False positives
+    #![allow(unused_imports)] // False positives
     use crate::infection_manager::InfectionStatusEvent;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusValue;
@@ -57,6 +59,7 @@ mod test {
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
+    #[allow(dead_code)] // False positive
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
         if event.current == InfectionStatusValue::R {
             *context.get_data_container_mut(RecoveryPlugin) += 1;

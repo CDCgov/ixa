@@ -31,6 +31,7 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
     });
 }
 
+#[allow(clippy::missing_errors_doc)]
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     trace!("Initializing incidence_report");
 
