@@ -1,6 +1,6 @@
 [package]
 name = "ixa-derive"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 description = "Procedural macros for Ixa"
 repository = "https://github.com/CDCgov/ixa"
