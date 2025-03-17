@@ -9,8 +9,8 @@ use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 use ixa::plan::PlanId;
 use ixa::random::ContextRandomExt;
+use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
-use std::collections::{HashMap, HashSet};
 
 define_rng!(InfectionRng);
 define_data_plugin!(

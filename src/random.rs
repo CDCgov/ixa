@@ -1,4 +1,6 @@
 use crate::context::Context;
+use crate::hashing::hash_str;
+use crate::{HashMap, HashMapExt};
 use log::trace;
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
@@ -6,7 +8,6 @@ use rand::prelude::Distribution;
 use rand::{Rng, SeedableRng};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
 
 /// Use this to define a unique type which will be used as a key to retrieve
 /// an independent rng instance when calling `.get_rng`.
@@ -86,9 +87,11 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
                     TypeId::of::<R>()
                 );
                 let base_seed = data_container.base_seed;
-                let seed_offset = fxhash::hash64(R::get_name());
+                let seed_offset = hash_str(R::get_name());
                 RngHolder {
-                    rng: Box::new(R::RngType::seed_from_u64(base_seed + seed_offset)),
+                    rng: Box::new(R::RngType::seed_from_u64(
+                        base_seed.wrapping_add(seed_offset),
+                    )),
                 }
             })
             .rng
@@ -279,7 +282,9 @@ mod test {
     fn sampler_function_closure_capture() {
         let mut context = Context::new();
         context.init_random(42);
-        // Initialize weighted sampler
+
+        // Initialize weighted sampler. Zero is selected with probability 1/3, one with a
+        // probability of 2/3.
         *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
         let parameters = context.get_data_container(SamplerData).unwrap();
@@ -291,7 +296,8 @@ mod test {
                 zero_counter += 1;
             }
         }
-        assert!((zero_counter - 1000_i32).abs() < 30);
+        // The expected value of `zero_counter` is 1000.
+        assert!((zero_counter - 1000_i32).abs() < 100);
     }
 
     #[test]
@@ -299,7 +305,8 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
 
-        // Initialize weighted sampler
+        // Initialize weighted sampler. Zero is selected with probability 1/3, one with a
+        // probability of 2/3.
         *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
         let parameters = context.get_data_container(SamplerData).unwrap();
@@ -311,7 +318,8 @@ mod test {
                 zero_counter += 1;
             }
         }
-        assert!((zero_counter - 1000_i32).abs() < 30);
+        // The expected value of `zero_counter` is 1000.
+        assert!((zero_counter - 1000_i32).abs() < 100);
     }
 
     #[test]

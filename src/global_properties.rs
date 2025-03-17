@@ -17,11 +17,12 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use log::trace;
+use crate::trace;
+use crate::{HashMap, HashMapExt};
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;

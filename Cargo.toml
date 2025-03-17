@@ -8,7 +8,6 @@ license = "Apache-2.0"
 homepage = "https://github.com/CDCgov/ixa"
 
 [dependencies]
-fxhash = "^0.2.1"
 rand = "^0.8.5"
 csv = "^1.3.1"
 serde = { version = "^1.0.217", features = ["derive"] }
@@ -32,6 +31,7 @@ reqwest = { version = "0.12.12", features = ["blocking", "json"] }
 uuid = "1.12.1"
 tower-http = { version = "0.6.2", features = ["full"] }
 mime = "0.3.17"
+rustc-hash = "^2.1.1"
 
 [dev-dependencies]
 rand_distr = "^0.4.3"
@@ -47,6 +47,7 @@ ixa_example_births_deaths = { path = "examples/births-deaths" }
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
+implicit_hasher = "allow"
 
 [lib]
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.

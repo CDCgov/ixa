@@ -3,9 +3,9 @@ use crate::people::index::Index;
 use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
+use crate::{HashMap, HashSet, HashSetExt};
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
-use std::collections::{HashMap, HashSet};
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
