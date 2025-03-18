@@ -1,16 +1,18 @@
 use crate::people::index::{Index, IndexValue};
+use crate::people::methods::Methods;
 use crate::people::query::Query;
 use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
     Context, ContextRandomExt, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
     PersonPropertyChangeEvent, RngId, Tabulator,
 };
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
+use crate::{HashSet, HashSetExt};
 use rand::Rng;
 use std::any::TypeId;
 use std::cell::Ref;
-
-use crate::people::methods::Methods;
+use std::hash::{Hash, Hasher};
+use std::time::Duration;
+use tokio::time::Instant;
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -99,9 +101,18 @@ pub trait ContextPeopleExt {
     fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
     where
         R::RngType: Rng;
+
+    fn print_query_profile(&self);
 }
 
 impl ContextPeopleExt for Context {
+    fn print_query_profile(&self) {
+        let people_data = self.get_data_container(PeoplePlugin).unwrap();
+        people_data.print_query_profile();
+        println!("\n");
+        people_data.print_property_indexes();
+    }
+
     fn get_current_population(&self) -> usize {
         self.get_data_container(PeoplePlugin)
             .map_or(0, |data_container| data_container.current_population)
@@ -241,8 +252,8 @@ impl ContextPeopleExt for Context {
     }
 
     fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
-        // Ensure that the data container exists
         {
+            // Ensure that the data container exists
             let _ = self.get_data_container_mut(PeoplePlugin);
         }
 
@@ -252,9 +263,7 @@ impl ContextPeopleExt for Context {
         let mut index = data_container
             .get_index_ref_mut_by_prop(T::get_instance())
             .unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
-        }
+        index.enable_indexing();
     }
 
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
@@ -351,11 +360,8 @@ impl ContextPeopleExt for Context {
         if let Some(data_container) = self.get_data_container(PeoplePlugin) {
             for type_id in &type_ids {
                 let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
-                if index.lookup.is_none() {
-                    // Start indexing this property if it's not already
-                    // indexed.
-                    index.lookup = Some(HashMap::new());
-                }
+                // Start indexing this property if it's not already indexed.
+                index.enable_indexing();
 
                 let methods = data_container.get_methods(*type_id);
                 index.index_unindexed_people(self, &methods);
@@ -472,7 +478,7 @@ impl ContextPeopleExtInternal for Context {
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
             let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
+            if index.is_indexing_enabled() {
                 index.add_person(self, &methods, person_id);
             }
         }
@@ -487,7 +493,7 @@ impl ContextPeopleExtInternal for Context {
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
             let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
+            if index.is_indexing_enabled() {
                 index.remove_person(self, &methods, person_id);
             }
         }
@@ -496,12 +502,18 @@ impl ContextPeopleExtInternal for Context {
     fn query_people_internal(
         &self,
         mut accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
+        mut property_hashes: Vec<(TypeId, IndexValue)>,
     ) {
+        // These two are for profiling; see bottom of this method.
+        let start_time = Instant::now();
+        let query_hash = hash_of_query(&mut property_hashes);
+
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
+        let data_container = self.get_data_container(PeoplePlugin).expect(
+            "PeoplePlugin is not initialized; make sure you add a person \
+            before accessing properties",
+        );
 
         // 1. Walk through each property and update the indexes.
         for (t, _) in &property_hashes {
@@ -512,29 +524,39 @@ impl ContextPeopleExtInternal for Context {
 
         // 2. Collect the index entry corresponding to the value.
         for (t, hash) in property_hashes {
-            let index = data_container.get_index_ref(t).unwrap();
-            if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
-                if let Ok(matching_people) =
-                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
-                {
+            let index: Ref<Index> = data_container.get_index_ref(t).unwrap();
+
+            match index::lookup_ref(index, hash.clone()) {
+                Ok(Some(matching_people)) => {
+                    // println!("Found {} people", matching_people.len());
+                    // for p in matching_people.iter() {
+                    //     print!("{} ", p);
+                    // }
+                    // println!();
                     indexes.push(matching_people);
-                } else {
-                    // This is empty and so the intersection will
-                    // also be empty.
+                }
+
+                Ok(None) => {
+                    // No people with this value, so the intersection will be empty.
                     return;
                 }
-            } else {
-                // No index, so we'll get to this after.
-                unindexed.push((t, hash));
+
+                _ => {
+                    // This property is not indexing.
+                    // let name = data_container.get_property_name(t);
+                    // println!("No index found for ({}, {:?})", name, hash);
+                    // No index, so we'll get to this after.
+                    unindexed.push((t, hash));
+                }
             }
         }
 
         // 3. Create an iterator over people, based one either:
         //    (1) the smallest index if there is one.
         //    (2) the overall population if there are no indices.
-
         let holder: Ref<HashSet<PersonId>>;
         let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
+            // println!("No indexes, iterating over all people");
             Box::new(data_container.people_iterator())
         } else {
             indexes.sort_by_key(|x| x.len());
@@ -547,6 +569,9 @@ impl ContextPeopleExtInternal for Context {
         // iff:
         //    (1) they exist in all the indexes
         //    (2) they match the unindexed properties
+        // if !unindexed.is_empty() {
+        //     println!("Unindexed properties: {:?}", unindexed.len());
+        // }
         'outer: for person in to_check {
             // (1) check all the indexes
             for index in &indexes {
@@ -562,11 +587,29 @@ impl ContextPeopleExtInternal for Context {
                     continue 'outer;
                 }
             }
-
             // This matches.
             accumulator(person);
         }
+
+        // Collect profiling data for this query.
+        let mut query_profile = data_container.query_profile.borrow_mut();
+        let (count, time): &mut (usize, Duration) = query_profile
+            .entry(query_hash)
+            .or_insert((0usize, Duration::ZERO));
+        *count += 1;
+        *time += start_time.elapsed();
     }
+}
+
+/// Convenience function for computing the hash of a query. It's not clear if the value
+/// should also be hashed.
+fn hash_of_query(query: &mut Vec<(TypeId, IndexValue)>) -> u64 {
+    query.sort_by_key(|x| x.0);
+    let mut hasher = rustc_hash::FxHasher::default();
+    for clause in query {
+        clause.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 #[cfg(test)]
@@ -578,6 +621,7 @@ mod tests {
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         IxaError, PersonId, PersonPropertyChangeEvent,
     };
+    use rand::{thread_rng, Rng};
     use serde_derive::Serialize;
     use std::any::TypeId;
     use std::cell::RefCell;
@@ -646,6 +690,48 @@ mod tests {
         [AdultRunner, AdultSwimmer],
         |adult_runner, adult_swimmer| { adult_runner || adult_swimmer }
     );
+
+    #[test]
+    fn test_indexing_indexes() {
+        let mut context = Context::new();
+        let mut rng = thread_rng();
+
+        for _ in 0..20 {
+            // Generate a random age between 30 (inclusive) and 40 (exclusive)
+            let age: u8 = rng.gen_range(30..40);
+            // Randomly choose a bool value for IsRunner
+            let is_runner: bool = rng.gen_bool(0.5);
+            // Randomly choose a RiskCategoryValue (50/50 chance)
+            let risk_category = if rng.gen_bool(0.5) {
+                RiskCategoryValue::High
+            } else {
+                RiskCategoryValue::Low
+            };
+
+            // Add a person with the random properties to the context
+            context
+                .add_person((
+                    (Age, age),
+                    (RiskCategory, risk_category),
+                    (IsRunner, is_runner),
+                ))
+                .expect("failed to add person");
+        }
+
+        println!();
+        // Run the first query
+        let found_people =
+            context.query_people(((IsRunner, true), (RiskCategory, RiskCategoryValue::Low)));
+        println!("found {} people: {:?}\n", found_people.len(), found_people);
+
+        context.index_property(IsRunner);
+        context.index_property(RiskCategory);
+
+        // Run a second query
+        let found_people =
+            context.query_people(((IsRunner, false), (RiskCategory, RiskCategoryValue::Low)));
+        println!("found {} people: {:?}", found_people.len(), found_people);
+    }
 
     #[test]
     fn set_get_properties() {

@@ -107,6 +107,7 @@ define_data_plugin!(
         dependency_map: RefCell::new(HashMap::new()),
         property_indexes: RefCell::new(HashMap::new()),
         people_types: RefCell::new(HashMap::new()),
+        query_profile: RefCell::new(HashMap::default()),
     }
 );
 

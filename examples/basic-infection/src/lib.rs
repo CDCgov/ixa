@@ -1,5 +1,6 @@
 use ixa::context::Context;
 use ixa::random::ContextRandomExt;
+use ixa::ContextPeopleExt;
 
 pub mod incidence_report;
 pub mod infection_manager;
@@ -23,5 +24,6 @@ pub fn initialize(context: &mut Context) {
     });
     context.add_plan(MAX_TIME, |context| {
         context.shutdown();
+        context.print_query_profile();
     });
 }

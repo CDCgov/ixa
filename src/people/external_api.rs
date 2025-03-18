@@ -3,7 +3,6 @@ use crate::people::PeoplePlugin;
 use crate::Context;
 use crate::IxaError;
 use crate::PersonId;
-use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
 pub(crate) trait ContextPeopleExtCrate {
@@ -78,9 +77,7 @@ impl ContextPeopleExtCrate for Context {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
         let mut index = data_container.get_index_ref_mut(type_id).unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
-        }
+        index.enable_indexing();
     }
 
     fn get_person_property_names(&self) -> Vec<String> {

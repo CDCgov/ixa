@@ -1,5 +1,5 @@
 use ixa::random::ContextRandomExt;
-use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt, ContextPeopleExt};
 use std::path::Path;
 
 pub mod demographics_report;
@@ -10,6 +10,7 @@ pub mod population_manager;
 pub mod transmission_manager;
 
 use crate::parameters_loader::Parameters;
+use crate::population_manager::{AgeGroupFoi, Alive};
 
 pub fn initialize(context: &mut Context) {
     let current_dir = Path::new(file!()).parent().unwrap();
@@ -37,5 +38,11 @@ pub fn initialize(context: &mut Context) {
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
+        context.print_query_profile();
     });
+
+    // These two indexes reduce runtime by 90%.
+    // Indexing `InfectionStatus` also seems to have no effect.
+    context.index_property(Alive); // 3.26
+    context.index_property(AgeGroupFoi); // 0.5s
 }

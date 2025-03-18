@@ -6,6 +6,7 @@ use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEve
 use crate::{HashMap, HashSet, HashSetExt};
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
+use std::time::Duration;
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
@@ -35,6 +36,7 @@ pub(super) struct PeopleData {
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
     pub(super) people_types: RefCell<HashMap<String, TypeId>>,
+    pub(super) query_profile: RefCell<HashMap<u64, (usize, Duration)>>,
 }
 
 // The purpose of this trait is to enable storing a Vec of different
@@ -130,6 +132,136 @@ where
 }
 
 impl PeopleData {
+    /// Prints the accumulated query statistics in a nicely formatted table.
+    ///
+    /// The table displays:
+    /// - The query hash (in hexadecimal)
+    /// - The number of times the query was run
+    /// - The total time spent running the query (in seconds)
+    /// - The average time per query (in seconds)
+    pub fn print_query_profile(&self) {
+        let query_profile = self.query_profile.borrow();
+
+        // Column widths
+        let col1 = 18; // Query Hash
+        let col2 = 8; // Count
+        let col3 = 12; // Total Time
+        let col4 = 18; // Avg Time
+
+        // Top border with rounded corners
+        println!(
+            "╭{0:─^1$}┬{0:─^2$}┬{0:─^3$}┬{0:─^4$}╮",
+            "", col1, col2, col3, col4,
+        );
+
+        // Header row
+        println!(
+            "│{:>4$}│{:>5$}│{:>6$}│{:>7$}│",
+            "Query Hash", "Count", "Total Time", "Avg Time", col1, col2, col3, col4,
+        );
+
+        // Header separator
+        println!(
+            "├{0:─^1$}┼{0:─^2$}┼{0:─^3$}┼{0:─^4$}┤",
+            "", col1, col2, col3, col4,
+        );
+
+        // Data rows
+        for (hash, (count, duration)) in query_profile.iter() {
+            let total_secs = duration.as_secs_f64();
+            let avg_secs = if *count > 0 {
+                total_secs / (*count as f64)
+            } else {
+                0.0
+            };
+
+            println!(
+                "│{:018x}│{:>4$}│{:>5$.3}│{:>6$.9}│",
+                hash, count, total_secs, avg_secs, col2, col3, col4,
+            );
+        }
+
+        // Bottom border with rounded corners
+        println!(
+            "╰{0:─^1$}┴{0:─^2$}┴{0:─^3$}┴{0:─^4$}╯",
+            "", col1, col2, col3, col4,
+        );
+    }
+
+    /// Prints a table of property indexes.
+    ///
+    /// The table displays:
+    /// - The `TypeId` of each property (using `Debug` formatting)
+    /// - The number of times that property was accessed (`access_count`)
+    /// - The total time spent accessing the property (in seconds)
+    pub fn print_property_indexes(&self) {
+        let indexes = self.property_indexes.borrow();
+        // Define column widths
+        let col1 = 20; // Property name
+        let col2 = 12; // Access Count
+        let col3 = 19; // Indexing Time (s)
+        let col4 = 19; // Lookup Time (s)
+        let col5 = 10; // Hits
+        let col6 = 10; // Misses
+
+        // Top border with rounded corners
+        println!(
+            "╭{0:─^1$}┬{0:─^2$}┬{0:─^3$}┬{0:─^4$}┬{0:─^5$}┬{0:─^6$}╮",
+            "", col1, col2, col3, col4, col5, col6,
+        );
+
+        // Header row
+        println!(
+            "│{:<6$}│{:>7$}│{:>8$}│{:>9$}│{:>10$}│{:>11$}│",
+            "Property",
+            "Access Count",
+            "Indexing Time (s)",
+            "Lookup Time (s)",
+            "Hits",
+            "Misses",
+            col1,
+            col2,
+            col3,
+            col4,
+            col5,
+            col6,
+        );
+
+        // Header separator
+        println!(
+            "├{0:─^1$}┼{0:─^2$}┼{0:─^3$}┼{0:─^4$}┼{0:─^5$}┼{0:─^6$}┤",
+            "", col1, col2, col3, col4, col5, col6,
+        );
+
+        // Iterate over the entries in the HashMap and print each row
+        for (type_id, index) in indexes.iter() {
+            // Assume `get_property_name` returns a String from a TypeId
+            let name = self.get_property_name(*type_id);
+            let data = index.get_profile_data();
+            println!(
+                "│{:<6$}│{:>7$}│{:>8$.9}│{:>9$.9}│{:>10$}│{:>11$}│",
+                name,
+                data.access_count,
+                data.indexing_time,
+                data.lookup_time,
+                data.hits,
+                data.misses,
+                col1,
+                col2,
+                col3,
+                col4,
+                col5,
+                col6,
+            );
+        }
+
+        // Bottom border with rounded corners
+        println!(
+            "╰{0:─^1$}┴{0:─^2$}┴{0:─^3$}┴{0:─^4$}┴{0:─^5$}┴{0:─^6$}╯",
+            "", col1, col2, col3, col4, col5, col6,
+        );
+    }
+
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     /// This will increment the current population by 1.
     pub(super) fn add_person(&mut self) -> PersonId {
@@ -230,6 +362,15 @@ impl PeopleData {
     pub(super) fn get_methods(&self, t: TypeId) -> RefMut<'_, Methods> {
         let x = self.methods.borrow_mut();
         RefMut::map(x, |a| a.get_mut(&t).unwrap())
+    }
+
+    pub(crate) fn get_property_name(&self, type_id: TypeId) -> String {
+        for (name, tid) in self.people_types.borrow().iter() {
+            if *tid == type_id {
+                return name.clone();
+            }
+        }
+        "UNKNOWN".to_string()
     }
 }
 

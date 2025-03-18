@@ -197,8 +197,7 @@ mod tests {
             .unwrap()
             .get_index_ref(TypeId::of::<T>())
             .unwrap()
-            .lookup
-            .is_some()
+            .is_indexing_enabled()
     }
 
     #[test]
