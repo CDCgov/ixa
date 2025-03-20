@@ -1,4 +1,4 @@
-name: Release-plz
+name: Publish Release
 
 permissions:
   contents: write
