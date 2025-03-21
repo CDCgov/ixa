@@ -1,13 +1,11 @@
 [workspace]
 resolver = "2"
-members = [
-  "ixa-derive",
-]
+members = ["ixa-derive"]
 
 
 [package]
 name = "ixa"
-version = "0.0.2"
+version = "0.1.0"
 edition = "2021"
 description = "A framework for building agent-based models"
 repository = "https://github.com/CDCgov/ixa"
@@ -32,8 +30,8 @@ shlex = "^1.3.0"
 rustyline = "^15.0.0"
 log = "^0.4.22"
 log4rs = { version = "^1.3.0", features = [
-    "console_appender",
-    "pattern_encoder",
+  "console_appender",
+  "pattern_encoder",
 ] }
 axum = "0.8.1"
 tokio = { version = "1", features = ["full"] }
