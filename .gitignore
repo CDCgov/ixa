@@ -33,3 +33,10 @@ examples/**/*.csv
 # docs
 website/book/
 website/doc/
+
+#exceptions:
+!.vscode/settings.json
+!examples/load-people/people.csv
+!examples/network-hhmodel/Age5to17Edges.csv
+!examples/network-hhmodel/AgeUnder5Edges.csv
+!examples/network-hhmodel/Households.csv
