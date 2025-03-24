@@ -214,7 +214,7 @@ impl Context {
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("canceling plan {:?}", plan_id);
+        trace!("canceling plan {plan_id:?}");
         self.plan_queue.cancel_plan(plan_id);
     }
 
