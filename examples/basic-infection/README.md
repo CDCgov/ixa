@@ -1,4 +1,5 @@
 # Infection model: constant force of infection
+
 This example demonstrates a simple model which infects a homogeneous population
 assuming a constant force of infection. In other words, all individuals have the same
 characteristics, and infections are caused by something like a food-borne disease
@@ -14,11 +15,13 @@ The first infection attempt is scheduled at time 0. Infection attempts are sched
 Infected individuals schedule their recovery at time `t + infection_period`. The infection status of recovered individuals remains as recovered for the rest of the simulation.
 
 The global model parameters are as follows:
+
 * `population_size`: number of individuals to include in the simulation
 * `foi`: force of infection, rate at which susceptible individuals become infected
 * `infection_period`: time that an individual spends from infection to recovery
 
 ## Architecture
+
 As in other `ixa` models, the simulation is managed by a central `Context` object
 which loads parameters, initializes user-defined modules, and starts a callback
 execution loop:
@@ -71,6 +74,7 @@ from `ixa` that reads from a config file or command line arguments,
 and exposes values to modules as global properties.
 
 ### People and person properties
+
 When the `Population Loader` module initializes, a number of
 persons are created and given a unique person id (from `0` to `population_size`).
 This functionality is provided by an `create_person` method from `ixa`, which adds
@@ -105,6 +109,7 @@ Once the population has been created, all modules have been initialized, and eve
 to begin the execution loop.
 
 ### Scheduling infections and recoveries
+
 In this model, the `Transmission Manager` module begins the simulation by adding an
 infection attempt `plan`, which is just a callback scheduled to execute at
 `current_time = 0`. The callback randomly selects a person and transitions
@@ -186,17 +191,20 @@ infection status:
 2. The current state of person properties reported periodically.
 
 #### Instantaneous Reports
+
 For this report, we want to record a timestamp when a person is infected
 and when they recover. The output of the report will look something like this:
 
-```
+```csv
 person_id,infection_status,t
+
 0,Infected,0
 1,Infected,1.2
 0,Recovered,7.2
 1,Infected,8.5
 ...
 ```
+
 At initialization, a `Report` module registers a type for `Incidence`
 and subscribes change events on the `infection_status` of a person
 
@@ -229,13 +237,14 @@ One consideration here is that if the callback references context, it should
 provide the state of the context exactly at the time the event was released.
 
 #### Periodic Reports
+
 The second type of report records something about the current state of the
 simulation at the end of a period, such as after every day.
 
 For this example, we record a count of the number of individuals with each
 infection status (S,I,R) at the end of every day:
 
-```
+```csv
 day,infection_status,count
 0,Suceptible,92
 0,Infected,8
@@ -280,6 +289,7 @@ fn init(context){
     context::on_period_end(0, report_periodic_item);
 }
 ```
+
 Methods are implemented for the person property counter to increment and decrement
 the counters. Changes in the person properties are
 observed and the callback function `update_property_counter` updates the

@@ -20,11 +20,12 @@ mod people;
 pub struct ParametersValues {
     population: usize,
     max_time: f64,
-	seed: u64,
-	foi: f64,
-	infection_duration:f64,
+    seed: u64,
+    foi: f64,
+    infection_duration:f64,
 }
 ```
+
 Parameters are read using a `load-parameters.rs` module which implements the method `load_parameters_from_config` and sets the parameters as a global property, which can be accessed by the other modules.
 
 ```rust
@@ -32,9 +33,9 @@ fn main() {
     let mut context = Context::new();
 
     define_global_property!(Parameters, ParametersValues);
-	context.load_parameters_from_config(ParameterValues, "config.yaml");
+    context.load_parameters_from_config(ParameterValues, "config.yaml");
 
-	let parameters = context.get_global_property_value(Parameters);
+    let parameters = context.get_global_property_value(Parameters);
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();

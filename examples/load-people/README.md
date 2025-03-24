@@ -9,7 +9,7 @@ related properties:
 * Assigning person properties from an external module, including assigning initial (default) values
 * Handling person creation and change events
 
-### People
+## People
 
 At a high level, each person in an ixa simulation is represented by an integer in the
 range of `0` to `population - 1`, where `population` is the total number of people.
@@ -50,7 +50,6 @@ let person = context.add_person();
 context.set_person_property(person, Age, 69);
 assert!(context.get_person_property(person, Age), 69);
 ```
-
 
 ### Initializing person properties
 

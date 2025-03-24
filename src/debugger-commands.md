@@ -11,11 +11,12 @@ implementation of commands.
 Commands in the Ixa Debugger follow a hierarchical format composed
 of a primary command, subcommands, and arguments:
 
-```
+```bash
 <primary_command> [<subcommand>] [--<argument>[=][<value>] [<positional_argument>]]
 ```
 
 Where:
+
 - `<primary_command>` is the top-level command category (e.g., `breakpoint`, `global`, `query`, `people`).
 - `[<subcommand>]` specifies an action to perform (e.g., `set`, `get`, `list`, `delete`).
 - `[<positional_argument>]` may be used to provide necessary inputs (e.g., the name of a property)
@@ -30,6 +31,7 @@ In addition to some control flow commands (`next`, `continue`, `help`), we
 might consider the following commands:
 
 ### 1. Breakpoints
+
 Commands related to setting, listing, and removing execution breakpoints.
 Note that this will require storing some internal state.
 
@@ -51,6 +53,7 @@ Note that this will require storing some internal state.
   Example: `breakpoint delete 1`
 
 ### 2. Globals
+
 Commands for managing global properties in the simulation.
 
 - **`global get <name>`**
@@ -78,11 +81,10 @@ Commands for managing global properties in the simulation.
 - **`global list --prefix <prefix>`**
 
   List all global variables with the specified prefix.
-
   Example: `global list --prefix ixa.`
 
-
 ### 3. People
+
 Commands for retrieving and modifying information about entities in the simulation.
 
 - **`people get --id <person_id> [--property <property>]`**
@@ -121,7 +123,8 @@ Commands for retrieving and modifying information about entities in the simulati
   Define a saved query in the debugger with the specified property/value pairs.
 
   Example:
-  ```
+
+  ```bash
   query set Region=CA,RiskCategory=High
   > Created people query: 1
   ```
@@ -132,7 +135,7 @@ Commands for retrieving and modifying information about entities in the simulati
 
   Example:
 
-  ```
+  ```bash
   query get 1
   > Region=CA,Risk=High
   ```
@@ -141,11 +144,9 @@ Commands for retrieving and modifying information about entities in the simulati
 
   List all saved queries.
 
-
 - **`people query delete <id>`**
 
   Delete the query with the specified id.
-
   Example: `query delete 1`
 
 ## Implementation
@@ -155,7 +156,7 @@ program (the `DebuggerRepl`) given some name (e.g., `"global"`).
 
 Given the following structure:
 
-```
+```bash
 <primary_command> [<subcommand>] [--<argument>[=][<value>]] [<positional_argument>]
 ```
 

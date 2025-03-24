@@ -1,13 +1,13 @@
 # Ixa Profiling and Benchmarking
 
-For general Rust profiling information, see: https://nnethercote.github.io/perf-book/profiling.html.
+For general Rust profiling information, see: [https://nnethercote.github.io/perf-book/profiling.html](https://nnethercote.github.io/perf-book/profiling.html).
 
-# Generating Flamegraphs
+## Generating Flamegraphs
 
 You can use `samply` (Linux and macOS) to capture stack samples from your application and generate
 a flamegraph, helping you quickly identify and analyze performance hotspots.
 
-## Prerequisites
+### Prerequisites
 
 Install `samply`:
 
@@ -15,7 +15,7 @@ Install `samply`:
 cargo install samply
 ```
 
-## Running
+### Running
 
 First build in release mode.
 
@@ -37,7 +37,7 @@ cargo build --example basic-infection --release && samply record -- target/relea
 
 When it completes, `samply` will automatically open a browser with the generated report.
 
-## `flamegraph` Alternative
+### `flamegraph` Alternative
 
 You can use `flamegraph` if you prefer. It requires root privileges, but don't use
 `sudo cargo...`. Do this:
@@ -48,7 +48,7 @@ cargo flamegraph --root --example basic-infection
 
 This will generate an SVG of the flamegraph in the current directory.
 
-# Benchmarking Ixa
+## Benchmarking Ixa
 
 Ixa uses [Criterion.rs](https://bheisler.github.io/criterion.rs/book/index.html) for statistical
 benchmarking.
