@@ -189,7 +189,7 @@ pub(crate) mod breakpoint {
                         context.schedule_debugger(*time, None, Box::new(enter_web_debugger));
                     }
 
-                    info!("Breakpoint set at t={}", time);
+                    info!("Breakpoint set at t={time}");
                     Ok(Retval::Ok)
                 }
 

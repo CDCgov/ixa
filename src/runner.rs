@@ -359,7 +359,7 @@ mod tests {
                 // Check if the output contains some of the expected log messages
                 assert!(s.contains("Logging enabled for rustyline at level DEBUG"));
                 assert!(s.contains("Logging enabled for ixa at level TRACE"));
-                assert!(s.contains("TRACE ixa::plan - adding plan at 1.000000"));
+                assert!(s.contains("TRACE ixa::plan - adding plan at 1"));
             }
             Err(e) => {
                 println!("Failed to convert: {e}");

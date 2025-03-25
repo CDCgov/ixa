@@ -2,10 +2,10 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
-use crate::{HashMap, HashMapExt};
 use crate::debugger::enter_debugger;
 use crate::plan::{PlanId, PlanSchedule, Queue};
 use crate::{error, trace};
+use crate::{HashMap, HashMapExt};
 use std::fmt::{Display, Formatter};
 use std::{
     any::{Any, TypeId},
@@ -76,7 +76,7 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
-    breakpoints_scheduled: Queue<(), ExecutionPhase>,
+    breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
     shutdown_requested: bool,
     break_requested: bool,
@@ -107,10 +107,16 @@ impl Context {
     /// # Errors
     /// Internal debugger errors e.g., reading or writing to stdin/stdout;
     /// errors in Ixa are printed to stdout
-    pub fn schedule_debugger(&mut self, time: f64, priority: Option<ExecutionPhase>) {
+    pub fn schedule_debugger(
+        &mut self,
+        time: f64,
+        priority: Option<ExecutionPhase>,
+        callback: Box<Callback>,
+    ) {
         trace!("scheduling debugger");
         let priority = priority.unwrap_or(ExecutionPhase::First);
-        self.breakpoints_scheduled.add_plan(time, (), priority);
+        self.breakpoints_scheduled
+            .add_plan(time, callback, priority);
     }
 
     /// Register to handle emission of events of type E
@@ -240,10 +246,10 @@ impl Context {
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("canceling plan {:?}", plan_id);
+        trace!("canceling plan {plan_id:?}");
         let result = self.plan_queue.cancel_plan(plan_id);
         if result.is_none() {
-            error!("Tried to cancel nonexistent plan with ID = {:?}", plan_id);
+            error!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
         }
     }
 
@@ -312,17 +318,17 @@ impl Context {
 
     /// Request to enter a debugger session at next event loop
     pub fn request_debugger(&mut self) {
-        self.break_requested = true
+        self.break_requested = true;
     }
 
     /// Request to enter a debugger session at next event loop
     pub fn cancel_debugger_request(&mut self) {
-        self.break_requested = false
+        self.break_requested = false;
     }
 
     /// Disable breakpoints
     pub fn disable_breakpoints(&mut self) {
-        self.breakpoints_enabled = false
+        self.breakpoints_enabled = false;
     }
 
     /// Enable breakpoints
@@ -331,12 +337,13 @@ impl Context {
     }
 
     /// Returns `true` if breakpoints are enabled.
+    #[must_use]
     pub fn breakpoints_are_enabled(&self) -> bool {
         self.breakpoints_enabled
     }
 
     /// Delete the breakpoint with the given ID
-    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<()> {
+    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<Box<Callback>> {
         self.breakpoints_scheduled
             .cancel_plan(&PlanId(breakpoint_id))
     }
@@ -350,7 +357,7 @@ impl Context {
 
     /// Deletes all breakpoints.
     pub fn clear_breakpoints(&mut self) {
-        self.breakpoints_scheduled.clear()
+        self.breakpoints_scheduled.clear();
     }
 
     /// Execute the simulation until the plan and callback queues are empty

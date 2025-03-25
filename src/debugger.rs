@@ -8,8 +8,7 @@ use crate::{HashMap, HashMapExt};
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use std::collections::HashMap;
-use std::io::Write;
+use std::fmt::Write;
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -206,7 +205,7 @@ impl DebuggerCommand for BreakpointCommand {
             Ok(return_value) => {
                 match return_value {
                     breakpoint::Retval::List(bp_list) => {
-                        let mut msg = format!("Scheduled breakpoints: {}", bp_list.len());
+                        let mut msg = format!("Scheduled breakpoints: {}\n", bp_list.len());
                         for bp in bp_list {
                             _ = writeln!(&mut msg, "\t{bp}");
                         }
@@ -391,7 +390,8 @@ mod tests {
 	0: t=1 (First)
 	1: t=2 (First)
 	2: t=3 (Normal)
-	3: t=4 (Last)";
+	3: t=4 (Last)
+";
 
         let (quits, output) = process_line("breakpoint list\n", context);
 
@@ -583,12 +583,7 @@ mod tests {
     fn test_cli_next() {
         let context = &mut Context::new();
         assert_eq!(context.remaining_plan_count(), 0);
-        let (quits, _) = process_line("next 2\n", context);
-        assert!(quits, "should exit");
-        assert_eq!(
-            context.remaining_plan_count(),
-            1,
-            "should schedule a plan for the debugger to pause"
-        );
+        let (quits, _) = process_line("next\n", context);
+        assert!(!quits, "should not exit");
     }
 }

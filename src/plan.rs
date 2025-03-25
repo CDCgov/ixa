@@ -64,7 +64,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
 
     /// Cancel a plan that has been added to the queue
     pub fn cancel_plan(&mut self, plan_id: &PlanId) -> Option<T> {
-        trace!("cancel plan {:?}", plan_id);
+        trace!("cancel plan {plan_id:?}");
         // Delete the plan from the map, but leave in the queue
         // It will be skipped when the plan is popped from the queue
         self.data_map.remove(&plan_id.0)
