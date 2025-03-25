@@ -5,9 +5,10 @@ use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{context::Context, debugger::ContextDebugExt, web_api::ContextWebApiExt};
+use crate::{context::Context, web_api::ContextWebApiExt};
 use crate::{info, set_log_level, set_module_filters, LevelFilter};
 
+use crate::debugger::enter_debugger;
 use clap::{Args, Command, FromArgMatches as _};
 
 /// Custom parser for log levels
@@ -195,7 +196,14 @@ where
             args.web.is_none(),
             "Cannot run with both the debugger and the Web API"
         );
-        context.schedule_debugger(t.unwrap_or(0.0));
+        match t {
+            None => {
+                context.request_debugger();
+            }
+            Some(time) => {
+                context.schedule_debugger(time, None, Box::new(enter_debugger));
+            }
+        }
     }
 
     // If the Web API is provided, stop there.
@@ -351,7 +359,7 @@ mod tests {
                 // Check if the output contains some of the expected log messages
                 assert!(s.contains("Logging enabled for rustyline at level DEBUG"));
                 assert!(s.contains("Logging enabled for ixa at level TRACE"));
-                assert!(s.contains("TRACE ixa::debugger - scheduling debugger"));
+                assert!(s.contains("TRACE ixa::plan - adding plan at 1"));
             }
             Err(e) => {
                 println!("Failed to convert: {e}");

@@ -39,7 +39,7 @@ pub(crate) mod population {
         pub population: usize,
     }
     impl super::ExtApi for Api {
-        type Args = super::EmptyArgs;
+        type Args = EmptyArgs;
         type Retval = Retval;
 
         fn run(context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
@@ -102,58 +102,221 @@ pub(crate) mod global_properties {
     }
 }
 
-pub(crate) mod next {
+pub(crate) mod breakpoint {
     use crate::context::Context;
-    use crate::IxaError;
-    use clap::Parser;
+    use crate::debugger::enter_debugger;
+    use crate::web_api::enter_web_debugger;
+    use crate::{info, trace, IxaError};
+    use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
 
-    #[derive(Parser, Debug, Deserialize)]
-    pub(crate) enum Args {
-        /// Continue until the given time and then pause again
-        Next {
-            /// The time to pause at
-            next_time: f64,
+    #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
+    /// Manipulate Debugger Breakpoints
+    pub(crate) enum ArgsEnum {
+        /// List all scheduled breakpoints
+        List,
+        /// Set a breakpoint at a given time
+        Set {
+            #[arg(required = true)]
+            time: f64,
+            #[arg(long, hide = true, default_value_t = true)]
+            console: bool,
         },
+        /// Delete the breakpoint with the specified id.
+        /// Providing the `--all` option removes all breakpoints.
+        #[group(multiple = false, required = true)]
+        Delete {
+            /// The ID of the breakpoint to delete
+            #[arg(value_name = "ID")]
+            id: Option<u32>,
+
+            /// Remove all breakpoints
+            #[arg(long, action)]
+            all: bool,
+        },
+        /// Disables but does not delete breakpoints globally
+        Disable,
+        /// Enables breakpoints globally
+        Enable,
     }
-    #[derive(Serialize)]
-    pub(crate) struct Retval {}
+
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub(crate) enum Args {
+        #[command(subcommand)]
+        Breakpoint(ArgsEnum),
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub(crate) enum Retval {
+        List(Vec<String>),
+        Ok,
+    }
+
     pub(crate) struct Api {}
     impl super::ExtApi for Api {
         type Args = Args;
         type Retval = Retval;
 
         fn run(context: &mut Context, args: &Args) -> Result<Retval, IxaError> {
-            let Args::Next { next_time } = args;
-            if *next_time < context.get_current_time() {
-                return Err(IxaError::from(format!(
-                    "Breakpoint time {next_time} is in the past"
-                )));
+            let Args::Breakpoint(breakpoint_args) = args;
+
+            match breakpoint_args {
+                ArgsEnum::List => {
+                    trace!("Listing breakpoints");
+                    let list = context.list_breakpoints(0);
+                    let list = list
+                        .iter()
+                        .map(|schedule| {
+                            format!(
+                                "{}: t={} ({})",
+                                schedule.plan_id, schedule.time, schedule.priority
+                            )
+                        })
+                        .collect::<Vec<String>>();
+                    Ok(Retval::List(list))
+                }
+
+                ArgsEnum::Set { time, console } => {
+                    if *time < context.get_current_time() {
+                        return Err(IxaError::from(format!(
+                            "Breakpoint time {time} is in the past"
+                        )));
+                    }
+
+                    if *console {
+                        context.schedule_debugger(*time, None, Box::new(enter_debugger));
+                    } else {
+                        context.schedule_debugger(*time, None, Box::new(enter_web_debugger));
+                    }
+
+                    info!("Breakpoint set at t={time}");
+                    Ok(Retval::Ok)
+                }
+
+                ArgsEnum::Delete { id, all } => {
+                    if let Some(id) = id {
+                        assert!(!all);
+                        trace!("Deleting breakpoint {id}");
+                        let cancelled = context.delete_breakpoint(u64::from(*id));
+                        if cancelled.is_none() {
+                            Err(IxaError::from(format!(
+                                "Attempted to delete a nonexistent breakpoint {id}",
+                            )))
+                        } else {
+                            Ok(Retval::Ok)
+                        }
+                    } else {
+                        assert!(all);
+                        trace!("Deleting all breakpoints");
+                        context.clear_breakpoints();
+                        Ok(Retval::Ok)
+                    }
+                }
+
+                ArgsEnum::Disable => {
+                    trace!("Disabling all breakpoints");
+                    context.disable_breakpoints();
+                    Ok(Retval::Ok)
+                }
+
+                ArgsEnum::Enable => {
+                    trace!("Enabling all breakpoints");
+                    context.enable_breakpoints();
+                    Ok(Retval::Ok)
+                }
             }
-            Ok(Retval {})
+        }
+    }
+}
+
+pub(crate) mod next {
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::Serialize;
+    use serde_derive::Deserialize;
+
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub enum Args {
+        /// Execute the next item in the event loop
+        Next,
+    }
+
+    #[derive(Serialize)]
+    pub(crate) enum Retval {
+        Ok,
+    }
+    #[allow(unused)]
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = EmptyArgs;
+        type Retval = Retval;
+
+        fn run(_context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
+            // This is a no-op which allows for arg checking.
+            Ok(Retval::Ok)
+        }
+    }
+}
+
+pub(crate) mod halt {
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::IxaError;
+    use clap::Parser;
+    use serde::Serialize;
+    use serde_derive::Deserialize;
+
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub enum Args {
+        /// End the simulation
+        Halt,
+    }
+
+    #[derive(Serialize)]
+    pub(crate) enum Retval {
+        Ok,
+    }
+    #[allow(unused)]
+    pub(crate) struct Api {}
+    impl super::ExtApi for Api {
+        type Args = EmptyArgs;
+        type Retval = Retval;
+
+        fn run(_context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
+            // This is a no-op which allows for arg checking.
+            Ok(Retval::Ok)
         }
     }
 }
 
 pub(crate) mod r#continue {
     use crate::context::Context;
+    use crate::external_api::EmptyArgs;
     use crate::IxaError;
     use clap::Parser;
-    use serde::{Deserialize, Serialize};
+    use serde_derive::{Deserialize, Serialize};
 
-    #[derive(Parser, Debug, Deserialize)]
-    pub(crate) enum Args {}
+    #[derive(Parser, Debug, Serialize, Deserialize)]
+    pub enum Args {
+        /// Continue running the simulation
+        Continue,
+    }
+
     #[derive(Serialize)]
-    pub(crate) struct Retval {}
+    pub(crate) enum Retval {
+        Ok,
+    }
     #[allow(unused)]
     pub(crate) struct Api {}
     impl super::ExtApi for Api {
-        type Args = Args;
+        type Args = EmptyArgs;
         type Retval = Retval;
 
-        fn run(_context: &mut Context, _args: &Args) -> Result<Retval, IxaError> {
+        fn run(_context: &mut Context, _args: &EmptyArgs) -> Result<Retval, IxaError> {
             // This is a no-op which allows for arg checking.
-            Ok(Retval {})
+            Ok(Retval::Ok)
         }
     }
 }

@@ -1,14 +1,14 @@
 use crate::context::run_with_plugin;
 use crate::define_data_plugin;
-use crate::external_api::{global_properties, next, people, population, run_ext_api, EmptyArgs};
-use crate::Context;
-use crate::IxaError;
+use crate::external_api::{
+    breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
+};
+use crate::{trace, Context, IxaError};
+use crate::{HashMap, HashMapExt};
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use crate::{HashMap, HashMapExt};
-use log::trace;
-use std::io::Write;
+use std::fmt::Write;
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -156,27 +156,71 @@ impl DebuggerCommand for GlobalPropertyCommand {
     }
 }
 
-struct NextCommand;
+/// Exits the debugger and ends the simulation.
+struct HaltCommand;
+impl DebuggerCommand for HaltCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        context.shutdown();
+        Ok((true, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        halt::Args::augment_subcommands(command)
+    }
+}
+
 /// Adds a new debugger breakpoint at t
+struct NextCommand;
 impl DebuggerCommand for NextCommand {
+    fn handle(
+        &self,
+        context: &mut Context,
+        _matches: &ArgMatches,
+    ) -> Result<(bool, Option<String>), String> {
+        // We execute directly instead of setting `Context::break_requested` so as not to interfere
+        // with anything else that might be requesting a break, or in case debugger sessions become
+        // stateful.
+        context.execute_single_step();
+        Ok((false, None))
+    }
+    fn extend(&self, command: Command) -> Command {
+        next::Args::augment_subcommands(command)
+    }
+}
+
+struct BreakpointCommand;
+/// Adds a new debugger breakpoint at t
+impl DebuggerCommand for BreakpointCommand {
     fn handle(
         &self,
         context: &mut Context,
         matches: &ArgMatches,
     ) -> Result<(bool, Option<String>), String> {
-        let args = next::Args::from_arg_matches(matches).unwrap();
-        match run_ext_api::<next::Api>(context, &args) {
+        let args = breakpoint::Args::from_arg_matches(matches).unwrap();
+        match run_ext_api::<breakpoint::Api>(context, &args) {
             Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
-            Ok(_) => {
-                let next::Args::Next { next_time } = args;
-                context.schedule_debugger(next_time);
-                Ok((true, None))
+            Ok(return_value) => {
+                match return_value {
+                    breakpoint::Retval::List(bp_list) => {
+                        let mut msg = format!("Scheduled breakpoints: {}\n", bp_list.len());
+                        for bp in bp_list {
+                            _ = writeln!(&mut msg, "\t{bp}");
+                        }
+                        return Ok((false, Some(msg)));
+                    }
+                    breakpoint::Retval::Ok => { /* pass */ }
+                }
+
+                Ok((false, None))
             }
             _ => unimplemented!(),
         }
     }
     fn extend(&self, command: Command) -> Command {
-        next::Args::augment_subcommands(command)
+        breakpoint::Args::augment_subcommands(command)
     }
 }
 
@@ -204,12 +248,15 @@ fn init(context: &mut Context) {
     let debugger = context.get_data_container_mut(DebuggerPlugin);
 
     if debugger.is_none() {
+        trace!("initializing debugger");
         let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
-        commands.insert("people", Box::new(PeopleCommand));
-        commands.insert("population", Box::new(PopulationCommand));
-        commands.insert("next", Box::new(NextCommand));
+        commands.insert("breakpoint", Box::new(BreakpointCommand));
         commands.insert("continue", Box::new(ContinueCommand));
         commands.insert("global", Box::new(GlobalPropertyCommand));
+        commands.insert("halt", Box::new(HaltCommand));
+        commands.insert("next", Box::new(NextCommand));
+        commands.insert("people", Box::new(PeopleCommand));
+        commands.insert("population", Box::new(PopulationCommand));
 
         let mut cli = Command::new("repl")
             .multicall(true)
@@ -236,9 +283,18 @@ fn exit_debugger() -> ! {
     std::process::exit(0);
 }
 
-/// Starts the debugger and pauses execution
-fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
+/// Starts a debugging session.
+#[allow(clippy::missing_panics_doc)]
+pub fn enter_debugger(context: &mut Context) {
     init(context);
+    run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
+        start_debugger(context, data_container.as_mut().unwrap()).expect("Error in debugger");
+    });
+}
+
+/// Enters the debugger REPL, interrupting the normal simulation event loop. This private
+/// function is called from the public API `enter_debug()`.
+fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
     let t = context.get_current_time();
 
     println!("Debugging simulation at t={t}");
@@ -263,17 +319,15 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 
         match debugger.process_command(line, context) {
             Ok((quit, message)) => {
+                if let Some(message) = message {
+                    println!("{message}");
+                }
                 if quit {
                     break;
                 }
-                if let Some(message) = message {
-                    let _ = writeln!(std::io::stdout(), "{message}");
-                    std::io::stdout().flush().unwrap();
-                }
             }
             Err(err) => {
-                write!(std::io::stdout(), "{err}").map_err(|e| e.to_string())?;
-                std::io::stdout().flush().unwrap();
+                eprintln!("{err}");
             }
         }
     }
@@ -281,36 +335,13 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
     Ok(())
 }
 
-pub trait ContextDebugExt {
-    /// Schedule the simulation to pause at time t and start the debugger.
-    /// This will give you a REPL which allows you to inspect the state of
-    /// the simulation (type help to see a list of commands)
-    ///
-    /// # Errors
-    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
-    /// errors in Ixa are printed to stdout
-    fn schedule_debugger(&mut self, t: f64);
-}
-
-impl ContextDebugExt for Context {
-    fn schedule_debugger(&mut self, t: f64) {
-        trace!("scheduling debugger");
-        self.add_plan(t, |context| {
-            init(context);
-            run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
-                start_debugger(context, data_container.as_mut().unwrap())
-                    .expect("Error in debugger");
-            });
-        });
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{init, run_with_plugin, DebuggerPlugin};
+    use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
     use crate::tests::run_external_runner;
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
-    use crate::{Context, ContextPeopleExt};
+    use crate::{Context, ContextPeopleExt, ExecutionPhase};
+    use assert_approx_eq::assert_approx_eq;
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
@@ -329,6 +360,90 @@ mod tests {
     define_global_property!(BarGlobal, u32);
     define_person_property!(Age, u8);
     define_person_property!(Smile, u32);
+
+    #[test]
+    fn test_cli_debugger_breakpoint_set() {
+        let context = &mut Context::new();
+        let (quits, _output) = process_line("breakpoint set 4.0\n", context);
+
+        assert!(!quits, "should not exit");
+
+        let list = context.list_breakpoints(0);
+        assert_eq!(list.len(), 1);
+        if let Some(schedule) = list.first() {
+            assert_eq!(schedule.priority, ExecutionPhase::First);
+            assert_eq!(schedule.plan_id, 0u64);
+            assert_approx_eq!(schedule.time, 4.0f64);
+        }
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_list() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, Some(ExecutionPhase::First), Box::new(enter_debugger));
+        context.schedule_debugger(3.0, Some(ExecutionPhase::Normal), Box::new(enter_debugger));
+        context.schedule_debugger(4.0, Some(ExecutionPhase::Last), Box::new(enter_debugger));
+
+        let expected = r"Scheduled breakpoints: 4
+	0: t=1 (First)
+	1: t=2 (First)
+	2: t=3 (Normal)
+	3: t=4 (Last)
+";
+
+        let (quits, output) = process_line("breakpoint list\n", context);
+
+        assert!(!quits, "should not exit");
+        assert!(output.is_some());
+        assert_eq!(output.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_delete_id() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
+
+        let (quits, _output) = process_line("breakpoint delete 0\n", context);
+        assert!(!quits, "should not exit");
+        let list = context.list_breakpoints(0);
+
+        assert_eq!(list.len(), 1);
+        if let Some(schedule) = list.first() {
+            assert_eq!(schedule.priority, ExecutionPhase::First);
+            assert_eq!(schedule.plan_id, 1u64);
+            assert_approx_eq!(schedule.time, 2.0f64);
+        }
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_delete_all() {
+        let context = &mut Context::new();
+
+        context.schedule_debugger(1.0, None, Box::new(enter_debugger));
+        context.schedule_debugger(2.0, None, Box::new(enter_debugger));
+
+        let (quits, _output) = process_line("breakpoint delete --all\n", context);
+        assert!(!quits, "should not exit");
+        let list = context.list_breakpoints(0);
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_cli_debugger_breakpoint_disable_enable() {
+        let context = &mut Context::new();
+
+        let (quits, _output) = process_line("breakpoint disable\n", context);
+        assert!(!quits, "should not exit");
+        assert!(!context.breakpoints_are_enabled());
+
+        let (quits, _output) = process_line("breakpoint enable\n", context);
+        assert!(!quits, "should not exit");
+        assert!(context.breakpoints_are_enabled());
+    }
 
     #[test]
     fn test_cli_debugger_integration() {
@@ -468,12 +583,7 @@ mod tests {
     fn test_cli_next() {
         let context = &mut Context::new();
         assert_eq!(context.remaining_plan_count(), 0);
-        let (quits, _) = process_line("next 2\n", context);
-        assert!(quits, "should exit");
-        assert_eq!(
-            context.remaining_plan_count(),
-            1,
-            "should schedule a plan for the debugger to pause"
-        );
+        let (quits, _) = process_line("next\n", context);
+        assert!(!quits, "should not exit");
     }
 }

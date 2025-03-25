@@ -2,15 +2,16 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use crate::debugger::enter_debugger;
+use crate::plan::{PlanId, PlanSchedule, Queue};
+use crate::{error, trace};
 use crate::{HashMap, HashMapExt};
+use std::fmt::{Display, Formatter};
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
     rc::Rc,
 };
-
-use crate::plan::{PlanId, Queue};
-use crate::trace;
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -30,11 +31,17 @@ pub trait IxaEvent {
 /// handled after all `Normal` plans. In all cases ties between plans at the
 /// same time and with the same phase are handled in the order of scheduling.
 ///
-#[derive(PartialEq, Eq, Ord, Clone, Copy, PartialOrd)]
+#[derive(PartialEq, Eq, Ord, Clone, Copy, PartialOrd, Hash, Debug)]
 pub enum ExecutionPhase {
     First,
     Normal,
     Last,
+}
+
+impl Display for ExecutionPhase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 /// A manager for the state of a discrete-event simulation
@@ -69,8 +76,11 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
+    breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
     shutdown_requested: bool,
+    break_requested: bool,
+    breakpoints_enabled: bool,
 }
 
 impl Context {
@@ -82,9 +92,31 @@ impl Context {
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
+            breakpoints_scheduled: Queue::new(),
             current_time: 0.0,
             shutdown_requested: false,
+            break_requested: false,
+            breakpoints_enabled: true,
         }
+    }
+
+    /// Schedule the simulation to pause at time t and start the debugger.
+    /// This will give you a REPL which allows you to inspect the state of
+    /// the simulation (type help to see a list of commands)
+    ///
+    /// # Errors
+    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
+    /// errors in Ixa are printed to stdout
+    pub fn schedule_debugger(
+        &mut self,
+        time: f64,
+        priority: Option<ExecutionPhase>,
+        callback: Box<Callback>,
+    ) {
+        trace!("scheduling debugger");
+        let priority = priority.unwrap_or(ExecutionPhase::First);
+        self.breakpoints_scheduled
+            .add_plan(time, callback, priority);
     }
 
     /// Register to handle emission of events of type E
@@ -215,7 +247,10 @@ impl Context {
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
         trace!("canceling plan {plan_id:?}");
-        self.plan_queue.cancel_plan(plan_id);
+        let result = self.plan_queue.cancel_plan(plan_id);
+        if result.is_none() {
+            error!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
+        }
     }
 
     #[doc(hidden)]
@@ -281,32 +316,113 @@ impl Context {
         self.current_time
     }
 
+    /// Request to enter a debugger session at next event loop
+    pub fn request_debugger(&mut self) {
+        self.break_requested = true;
+    }
+
+    /// Request to enter a debugger session at next event loop
+    pub fn cancel_debugger_request(&mut self) {
+        self.break_requested = false;
+    }
+
+    /// Disable breakpoints
+    pub fn disable_breakpoints(&mut self) {
+        self.breakpoints_enabled = false;
+    }
+
+    /// Enable breakpoints
+    pub fn enable_breakpoints(&mut self) {
+        self.breakpoints_enabled = true;
+    }
+
+    /// Returns `true` if breakpoints are enabled.
+    #[must_use]
+    pub fn breakpoints_are_enabled(&self) -> bool {
+        self.breakpoints_enabled
+    }
+
+    /// Delete the breakpoint with the given ID
+    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<Box<Callback>> {
+        self.breakpoints_scheduled
+            .cancel_plan(&PlanId(breakpoint_id))
+    }
+
+    /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
+    /// `PlanSchedule`s ordered as they are in the queue itself.
+    #[must_use]
+    pub fn list_breakpoints(&self, at_most: usize) -> Vec<&PlanSchedule<ExecutionPhase>> {
+        self.breakpoints_scheduled.list_schedules(at_most)
+    }
+
+    /// Deletes all breakpoints.
+    pub fn clear_breakpoints(&mut self) {
+        self.breakpoints_scheduled.clear();
+    }
+
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         trace!("entering event loop");
         // Start plan loop
         loop {
-            if self.shutdown_requested {
+            if self.break_requested {
+                enter_debugger(self);
+            } else if self.shutdown_requested {
                 break;
-            }
-
-            // If there is a callback, run it.
-            if let Some(callback) = self.callback_queue.pop_front() {
-                trace!("calling callback");
-                callback(self);
-                continue;
-            }
-
-            // There aren't any callbacks, so look at the first plan.
-            if let Some(plan) = self.plan_queue.get_next_plan() {
-                trace!("calling plan at {}", plan.time);
-                self.current_time = plan.time;
-                (plan.data)(self);
             } else {
-                trace!("No callbacks or plans; exiting event loop");
-                // OK, there aren't any plans, so we're done.
-                break;
+                self.execute_single_step();
             }
+        }
+    }
+
+    /// Executes a single step of the simulation, prioritizing tasks as follows:
+    ///   1. Breakpoints
+    ///   2. Callbacks
+    ///   3. Plans
+    ///   4. Shutdown
+    pub fn execute_single_step(&mut self) {
+        // This always runs the breakpoint before anything scheduled in the task queue regardless
+        // of the `ExecutionPhase` of the breakpoint. If breakpoints are disabled, they are still
+        // popped from the breakpoint queue at the time they are scheduled even though they are not
+        // executed.
+        if let Some((bp, _)) = self.breakpoints_scheduled.peek() {
+            // If the priority of bp is `ExecutionPhase::First`, and if the next scheduled plan
+            // is scheduled at or after bp's time (or doesn't exist), run bp.
+            // If the priority of bp is `ExecutionPhase::Last`, and if the next scheduled plan
+            // is scheduled strictly after bp's time (or doesn't exist), run bp.
+            if let Some(plan_time) = self.plan_queue.next_time() {
+                if (bp.priority == ExecutionPhase::First && bp.time <= plan_time)
+                    || (bp.priority == ExecutionPhase::Last && bp.time < plan_time)
+                {
+                    self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                    if self.breakpoints_enabled {
+                        self.break_requested = true;
+                        return;
+                    }
+                }
+            } else {
+                self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
+                if self.breakpoints_enabled {
+                    self.break_requested = true;
+                    return;
+                }
+            }
+        }
+
+        // If there is a callback, run it.
+        if let Some(callback) = self.callback_queue.pop_front() {
+            trace!("calling callback");
+            callback(self);
+        }
+        // There aren't any callbacks, so look at the first plan.
+        else if let Some(plan) = self.plan_queue.get_next_plan() {
+            trace!("calling plan at {:.6}", plan.time);
+            self.current_time = plan.time;
+            (plan.data)(self);
+        } else {
+            trace!("No callbacks or plans; exiting event loop");
+            // OK, there aren't any plans, so we're done.
+            self.shutdown_requested = true;
         }
     }
 }
