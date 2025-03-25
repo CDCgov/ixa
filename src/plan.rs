@@ -49,7 +49,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
     /// if needed.
     pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> PlanId {
-        trace!("adding plan at {}", time);
+        trace!("adding plan at {time}");
         // Add plan to queue, store data, and increment counter
         let plan_id = self.plan_counter;
         self.queue.push(Entry {
@@ -69,7 +69,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     /// This function panics if you cancel a plan which has already
     /// been cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("cancel plan {:?}", plan_id);
+        trace!("cancel plan {plan_id:?}");
         // Delete the plan from the map, but leave in the queue
         // It will be skipped when the plan is popped from the queue
         self.data_map

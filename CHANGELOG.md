@@ -9,4 +9,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- This is the first pre-production release of ixa 0.1.0, see documentation at https://ixa.rs/book
+- This is the first pre-production release of ixa 0.1.0, see documentation at [https://ixa.rs/book](https://ixa.rs/book)

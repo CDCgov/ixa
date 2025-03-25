@@ -37,19 +37,19 @@ impl ConfigReportOptions {
     }
     /// Sets the file prefix option (e.g., "report_")
     pub fn file_prefix(&mut self, file_prefix: String) -> &mut ConfigReportOptions {
-        trace!("setting report prefix to {}", file_prefix);
+        trace!("setting report prefix to {file_prefix}");
         self.file_prefix = file_prefix;
         self
     }
     /// Sets the directory where reports will be output
     pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
-        trace!("setting report directory to {:?}", directory);
+        trace!("setting report directory to {directory:?}");
         self.output_dir = directory;
         self
     }
     /// Sets whether to overwrite existing reports of the same name if they exist
     pub fn overwrite(&mut self, overwrite: bool) -> &mut ConfigReportOptions {
-        trace!("setting report overwrite {}", overwrite);
+        trace!("setting report overwrite {overwrite}");
         self.overwrite = overwrite;
         self
     }
@@ -174,7 +174,7 @@ pub trait ContextReportExt {
 
 impl ContextReportExt for Context {
     fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
-        trace!("adding report {} by type_id {:?}", short_name, type_id);
+        trace!("adding report {short_name} by type_id {type_id:?}");
         let path = self.generate_filename(short_name);
 
         let data_container = self.get_data_container_mut(ReportPlugin);
@@ -202,7 +202,7 @@ impl ContextReportExt for Context {
         Ok(())
     }
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
-        trace!("Adding report {}", short_name);
+        trace!("Adding report {short_name}");
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
@@ -211,7 +211,7 @@ impl ContextReportExt for Context {
         period: f64,
         tabulator: T,
     ) -> Result<(), IxaError> {
-        trace!("Adding periodic report {}", short_name);
+        trace!("Adding periodic report {short_name}");
 
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
 

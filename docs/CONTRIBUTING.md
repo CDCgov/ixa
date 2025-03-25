@@ -26,7 +26,7 @@ Your message is going to show up the next version release changelog, so make it 
 
 In the body section of the commit, add `fix #xxx` where xxx is the number of a commit to auto-close it.
 
-See https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword
+See [GitHub documentation on linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword)
 
 ## Releasing Ixa
 

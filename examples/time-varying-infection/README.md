@@ -1,4 +1,5 @@
 # Infection model: time-varying force of infection and recovery
+
 This example is centered around demonstrating two of the classical
 ways of modeling a time-varying force in a continuous time simulation.
 The two approaches are inverse transform sampling and rejection sampling,
@@ -8,6 +9,7 @@ of infection that changes based on the season and rejection sampling to
 deal with a recovery rate that depends on the number of infected people.
 
 The goal of this example is two-fold:
+
 1. Explain the math and process behind properly modeling a time-varying rate.
     - Develop best practices for when model math should be done in `ixa` vs
     the pre-processing stages to best drive modularity.
@@ -19,6 +21,7 @@ or `global_properties` modules, so this example also updates to using the
 built-in functionality.
 
 Some aspects worth thinking about standardizing on time-varying rates:
+
 - Format of time-varying input data: as a function, or random samples from
 the distribution? If a function, how should it be discretized?
 - Library of curves needed to improve rejection sampling efficiency
@@ -43,11 +46,12 @@ and time of the simulation aka seasonality) while the technique I describe
 for dealing with a time-varying recovery rate may be more likely applied to
 force of infection in real-world models.
 
-# Running the example
+## Running the example
 
 `cargo run --example time-varying-infection -- ./examples/time-varying-infection/input.json`
 
 ## Why are time-varying rates special?
+
 The classic SIR compartmental ODE model assumes a constant recovery rate,
 $\gamma$, so that the infection period is exponentially distributed. In
 the real-world, infection periods are often not exponentially distributed.
@@ -82,19 +86,23 @@ This is the crux of the idea behind rejection sampling.
 Below, I go into greater detail about each of these two methods and their tradeoffs.
 The ultimate goal of this example is to demonstrate how modeling time-varying rates
 is really just a simple extension over time-constant rates within `ixa` and how
+
 we can use the ideas presented here to build up towards a time-varying infection
 rates when the infection is person-to-person rather than just environmental.
 
 ## Time-varying force of infection
+
 In a constant force of infection model (like the classic compartmental ODE SIR),
 a person experiences a constant hazard rate of infection. Therfore, we
 use the exponential distribution to plan for the time at which a person
 will fall sick. With time-varying infection, the hazard rate is not constant
+
 over time, so we must draw times from an alternate distribution, one that
 follows the time-varying hazard rate and therefore properly apportions people's
 sickness events at the right times.
 
 ### What is inverse-transform sampling?
+
 If $\textrm{foi}(t)$ describes the hazard rate for infection at a given time,
 $1 - e ^ {-\int_0^t \textrm{foi}(u)du}$ is the cumulative probability of
 infection by $t$ elapsed. In the case where $\textrm{foi}(t) = k$, we recover an
@@ -141,7 +149,7 @@ for a `MAX_TIME` after which infection attempts cannot be scheduled: instead,
 the simulation will just end once everyone has been infected (pre-scheduled
 at simulation beginning) and they all recover.
 
-### Implementation
+### Implementation (1)
 
 Let's look at some pseudo-code. In this pseudo example, we pick
 $\textrm{foi}(t) = \sin(t + c) + 1$ where $c$ is a user parameter.
@@ -202,12 +210,12 @@ fn inverse_sampling_infection(context: &mut Context, person_id: PersonID) {
         context.set_person_property(person_id, InfectionTime, t);
     });
 }
-
 ```
 
-### Caveats
+### Caveats (1)
 
 There are some constraints of vanilla inverse-transform sampling.
+
 1. We needed to be able to write down the way the force of infection varies with
 time as a hazard function (or, more generally, any type of distribution function).
 It is possible that we know, from data, the mean waiting time of illness and standard
@@ -315,7 +323,7 @@ by a selection of a parent distribution from which draws are taken and then
 compared to the candidate distribution to assess whether the draw is also
 one potentially from the candidate distribution
 
-### Implementation
+### Implementation (2)
 
 ```rust
 define_rng!(RecoveryRng);
@@ -372,7 +380,7 @@ fn evaluate_recovery(context: &mut Context, person_id: PersonId, resampling_rate
 }
 ```
 
-### Caveats
+### Caveats (2)
 
 1. Rejection sampling is inherently inefficient. It is effectively
 a guess and check method and requires scheduling events just to evaluate

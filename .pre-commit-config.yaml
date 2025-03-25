@@ -1,6 +1,6 @@
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
     -   id: check-added-large-files
     -   id: check-yaml
@@ -15,3 +15,8 @@ repos:
     -   id: clippy
         # Use 'all-targets' to run on all code, including tests and examples
         args: ["--all-targets", "--", "-D", "warnings"]
+-   repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.17.2
+    hooks:
+    -   id: markdownlint-cli2
+        args: ["**/*.md"]
