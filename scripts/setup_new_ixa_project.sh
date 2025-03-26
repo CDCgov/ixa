@@ -1,23 +1,23 @@
-# to be run in a new project directory
-# Usage: ./setup_new_ixa_project.sh <ixa-branch>
-# or directly from github:
-# curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/master/scripts/setup_new_ixa_project.sh | bash -s <ixa-branch>
-# ixa-branch: the branch of ixa to use, default is release
-ixa_branch="release"
+# To be run in a new project directory.
+# curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
+# or if you want to use a specific branch and not the cargo release
+# curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s <ixa-branch>
+# ixa-branch: the branch of ixa to use, default is main
+ixa_branch="main"
 
 urlencode() {
-    local string="${1}"
-    local length="${#string}"
+    local tmp="${1}"
     local encoded=""
 
-    for (( i = 0; i < length; i++ )); do
-        char="${string:i:1}"
-        case "$char" in
-            [a-zA-Z0-9.~_-]) encoded+="$char" ;;
-            *) encoded+=$(printf '%%%02X' "'$char") ;;
+    while [ -n "$tmp" ]; do
+        rest="${tmp#?}"    # All but the first character of the string
+        first="${tmp%"$rest"}"    # Remove $rest, and you're left with the first character
+        case "$first" in
+            [a-zA-Z0-9.~_-]) encoded="$encoded$first" ;;
+            *) encoded="$encoded$(printf '%%%02X' "'$first")" ;;
         esac
+        tmp="$rest"
     done
-
     echo "$encoded"
 }
 
@@ -48,7 +48,11 @@ if [ ! -f "Cargo.toml" ]; then
     cargo init
 fi
 
-cargo add --git "https://github.com/CDCgov/ixa" ixa --branch $ixa_branch
+if [ -z "$1" ]; then
+    cargo add ixa
+else
+    cargo add --git "https://github.com/CDCgov/ixa" ixa --branch $ixa_branch
+fi
 
 # add .gitignore from ixa
 curl -s -f -o .gitignore "https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/.gitignore"
