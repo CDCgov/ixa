@@ -1,4 +1,4 @@
-# to be run in a new project directory
+# To be run in a new project directory.
 # curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
 # or if you want to use a specific branch and not the cargo release
 # curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s <ixa-branch>
