@@ -23,7 +23,6 @@ urlencode() {
 
 if [ -n "$1" ]; then
     ixa_branch=$(urlencode $1)
-    echo "Using ixa branch $ixa_branch"
 fi
 
 # function to check if last shell command was successful, if not print input message and exit
