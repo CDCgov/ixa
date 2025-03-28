@@ -10,7 +10,7 @@ pub trait Tabulator {
     fn get_columns(&self) -> Vec<String>;
 }
 
-impl<T: PersonProperty + 'static> Tabulator for (T,) {
+impl<T: PersonProperty> Tabulator for (T,) {
     fn setup(&self, context: &Context) -> Result<(), IxaError> {
         context.register_property::<T>();
         context.index_property_by_id(std::any::TypeId::of::<T>());
@@ -29,7 +29,7 @@ macro_rules! impl_tabulator {
         seq!(N in 0..$ct {
             impl<
                 #(
-                    T~N : PersonProperty + 'static,
+                    T~N : PersonProperty,
                 )*
             > Tabulator for (
                 #(

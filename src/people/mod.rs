@@ -144,7 +144,7 @@ impl InitializationList for () {
     fn set_properties(&self, _context: &mut Context, _person_id: PersonId) {}
 }
 
-impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
+impl<T1: PersonProperty> InitializationList for (T1, T1::Value) {
     fn has_property(&self, t: TypeId) -> bool {
         t == TypeId::of::<T1>()
     }
@@ -160,7 +160,7 @@ macro_rules! impl_initialization_list {
         seq!(N in 0..$ct {
             impl<
                 #(
-                    T~N : PersonProperty + 'static,
+                    T~N : PersonProperty,
                 )*
             > InitializationList for (
                 #(

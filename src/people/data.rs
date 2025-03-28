@@ -18,7 +18,7 @@ pub(super) struct StoredPeopleProperties {
 }
 
 impl StoredPeopleProperties {
-    fn new<T: PersonProperty + 'static>() -> Self {
+    fn new<T: PersonProperty>() -> Self {
         StoredPeopleProperties {
             is_required: T::is_required(),
             values: Box::<Vec<Option<T::Value>>>::default(),
@@ -69,7 +69,7 @@ pub trait PersonPropertyHolder {
 
 impl<T> PersonPropertyHolder for T
 where
-    T: PersonProperty + 'static,
+    T: PersonProperty,
 {
     fn dependency_changed(
         &self,
@@ -143,7 +143,7 @@ impl PeopleData {
     /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
     /// or `None` if it doesn't.
     #[allow(clippy::needless_pass_by_value)]
-    pub(super) fn get_person_property_ref<T: PersonProperty + 'static>(
+    pub(super) fn get_person_property_ref<T: PersonProperty>(
         &self,
         person: PersonId,
         _property: T,
@@ -167,7 +167,7 @@ impl PeopleData {
 
     /// Sets the value of a property for a person
     #[allow(clippy::needless_pass_by_value)]
-    pub(super) fn set_person_property<T: PersonProperty + 'static>(
+    pub(super) fn set_person_property<T: PersonProperty>(
         &self,
         person_id: PersonId,
         property: T,
@@ -195,7 +195,7 @@ impl PeopleData {
         }
     }
 
-    pub(super) fn get_index_ref_mut_by_prop<T: PersonProperty + 'static>(
+    pub(super) fn get_index_ref_mut_by_prop<T: PersonProperty>(
         &self,
         _property: T,
     ) -> Option<RefMut<Index>> {

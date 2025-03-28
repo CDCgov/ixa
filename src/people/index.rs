@@ -49,7 +49,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub(super) fn new<T: PersonProperty + 'static>(_context: &Context, _property: T) -> Self {
+    pub(super) fn new<T: PersonProperty>(_context: &Context, _property: T) -> Self {
         Self {
             name: std::any::type_name::<T>(),
             lookup: None,
