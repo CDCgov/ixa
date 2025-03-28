@@ -131,26 +131,14 @@ impl ContextPeopleExt for Context {
     fn get_person_property<T: PersonProperty + 'static>(
         &self,
         person_id: PersonId,
-        property: T,
+        _property: T,
     ) -> T::Value {
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         self.register_property::<T>();
 
-        if T::is_derived() {
-            return T::compute(self, person_id);
-        }
-
-        // Attempt to retrieve the existing value
-        if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
-            return value;
-        }
-
-        // Initialize the property. This does not fire a change event
-        let initialized_value = T::compute(self, person_id);
-        data_container.set_person_property(person_id, property, initialized_value);
-
-        initialized_value
+        // ToDo(Robert): This `unwrap` is temporary until the new `option` semantics for missing
+        //               values can be propogated to the rest of the code. For now we assume
+        //               every property sets an initial value if there is no value yet.
+        T::compute(self, person_id).expect("Property not initialized when person created")
     }
 
     #[allow(clippy::single_match_else)]
@@ -430,7 +418,7 @@ impl ContextPeopleExt for Context {
     }
 }
 
-pub trait ContextPeopleExtInternal {
+pub(crate) trait ContextPeopleExtInternal {
     fn register_indexer<T: PersonProperty + 'static>(&self);
     fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty + 'static>(

@@ -1,4 +1,4 @@
-use crate::people::data::PersonPropertyHolder;
+use crate::people::{PeoplePlugin, PersonPropertyHolder};
 use crate::{Context, PersonId};
 use serde::Serialize;
 use std::fmt::Debug;
@@ -9,23 +9,66 @@ use std::fmt::Debug;
 /// Person properties should be defined with the [`define_person_property!()`],
 /// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
 /// macros.
-pub trait PersonProperty: Copy {
+pub trait PersonProperty: Copy + 'static {
     type Value: Copy + Debug + PartialEq + Serialize;
     #[must_use]
     fn is_derived() -> bool {
         false
     }
+
+    #[must_use]
+    fn name() -> &'static str;
+
     #[must_use]
     fn is_required() -> bool {
         false
     }
+
     #[must_use]
     fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
         panic!("Dependencies not implemented");
     }
-    fn compute(context: &Context, person_id: PersonId) -> Self::Value;
+
     fn get_instance() -> Self;
-    fn name() -> &'static str;
+
+    /// Computes the value of the property for the given person. For nonderived properties, this is just a lookup.
+    /// The default behavior is to assign an initial value to the entity's property if the lookup fails to return
+    /// a value.
+    fn compute(context: &Context, person_id: PersonId) -> Option<Self::Value> {
+        let value = context
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_person_property_ref(person_id, Self::get_instance())
+            .clone();
+
+        // Initialize the property. This does not fire a change event
+        if value.is_none() {
+            match Self::initial_value(context, person_id) {
+                None => None,
+
+                Some(value) => {
+                    // Insert the initial value for the person_id
+                    // ToDo(Robert): This unwrap is temporary until we remove RefCell.
+                    let data_container = context.get_data_container(PeoplePlugin).unwrap();
+                    data_container.set_person_property(
+                        person_id,
+                        Self::get_instance(),
+                        value.clone(),
+                    );
+                    Some(value)
+                }
+            }
+        } else {
+            value
+        }
+    }
+
+    /// Overload to compute an initial value for a value that has not been set. The default behavior of
+    /// `Property::compute` is to assign this initial value to the entity.
+    #[must_use]
+    fn initial_value(_context: &Context, _entity_id: PersonId) -> Option<Self::Value> {
+        None
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -41,17 +84,21 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $initialize(_context, _person)
-            }
+
             fn get_instance() -> Self {
                 $person_property
             }
+
             fn name() -> &'static str {
                 stringify!($person_property)
+            }
+
+            #[must_use]
+            fn initial_value(
+                context: &$crate::context::Context,
+                person_id: $crate::people::PersonId,
+            ) -> Option<Self::Value> {
+                Some($initialize(context, person_id))
             }
         }
     };
@@ -60,20 +107,17 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                panic!("Property not initialized when person created.");
-            }
+
             fn is_required() -> bool {
                 true
             }
-            fn get_instance() -> Self {
-                $person_property
-            }
+
             fn name() -> &'static str {
                 stringify!($person_property)
+            }
+
+            fn get_instance() -> Self {
+                $person_property
             }
         }
     };
@@ -114,7 +158,8 @@ macro_rules! define_derived_property {
 
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
-            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+
+            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Option<Self::Value> {
                 #[allow(unused_imports)]
                 use $crate::global_properties::ContextGlobalPropertiesExt;
                 #[allow(unused_parens)]
@@ -125,8 +170,9 @@ macro_rules! define_derived_property {
                             .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
                     ),*
                 );
-                (|$($param),+| $derive_fn)($($param),+)
+                Some((|$($param),+| $derive_fn)($($param),+))
             }
+
             fn is_derived() -> bool { true }
             fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
                 vec![$(Box::new($dependency)),+]

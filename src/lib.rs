@@ -76,6 +76,13 @@ pub use rand;
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 
+pub use std::any::TypeId;
+
+#[inline(always)]
+pub fn type_of<T: 'static>() -> TypeId {
+    TypeId::of::<T>()
+}
+
 #[cfg(test)]
 mod tests {
     use assert_cmd::cargo::CargoError;
