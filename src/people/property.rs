@@ -1,6 +1,9 @@
-use crate::people::{PeoplePlugin, PersonPropertyHolder};
-use crate::{Context, PersonId};
+use crate::{
+    people::context_extension::ContextPeopleExtInternal, people::PeoplePlugin, type_of, Context,
+    HashSet, PersonId,
+};
 use serde::Serialize;
+use std::any::TypeId;
 use std::fmt::Debug;
 
 /// An individual characteristic or state related to a person, such as age or
@@ -24,9 +27,19 @@ pub trait PersonProperty: Copy + 'static {
         false
     }
 
-    #[must_use]
-    fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
-        panic!("Dependencies not implemented");
+    /// Overridden by derived properties, because they also need to register dependencies.
+    #[inline]
+    fn register(context: &Context) {
+        if !context.is_registered::<Self>() {
+            context.register_nonderived_property::<Self>();
+        }
+    }
+
+    /// Adds all nonderived dependencies of `Self` to `dependencies`, ***including `Self`***
+    /// if `Self` is nonderived.
+    #[inline]
+    fn collect_dependencies(dependencies: &mut HashSet<TypeId>) {
+        dependencies.insert(type_of::<Self>());
     }
 
     fn get_instance() -> Self;
@@ -174,14 +187,26 @@ macro_rules! define_derived_property {
             }
 
             fn is_derived() -> bool { true }
-            fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
-                vec![$(Box::new($dependency)),+]
-            }
+
             fn get_instance() -> Self {
                 $derived_property
             }
+
             fn name() -> &'static str {
                 stringify!($derived_property)
+            }
+
+            fn register(context: &$crate::Context) {
+                use $crate::people::ContextPeopleExtInternal;
+                if !context.is_registered::<Self>(){
+                    context.register_derived_property::<$derived_property>();
+                }
+            }
+
+            fn collect_dependencies(dependencies: &mut $crate::HashSet<std::any::TypeId>) {
+                $(
+                    $dependency::collect_dependencies(dependencies);
+                )*
             }
         }
     };

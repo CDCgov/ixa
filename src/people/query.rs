@@ -1,5 +1,5 @@
 use crate::people::index::IndexValue;
-use crate::{Context, ContextPeopleExt, PersonProperty};
+use crate::{Context, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
 
@@ -24,7 +24,7 @@ impl Query for () {
 // Implement the query version with one parameter.
 impl<T1: PersonProperty> Query for (T1, T1::Value) {
     fn setup(&self, context: &Context) {
-        context.register_property::<T1>();
+        T1::register(context);
     }
 
     fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
@@ -48,7 +48,7 @@ macro_rules! impl_query {
             {
                 fn setup(&self, context: &Context) {
                     #(
-                        context.register_property::<T~N>();
+                        <T~N>::register(context);
                     )*
                 }
 

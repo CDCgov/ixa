@@ -3,7 +3,7 @@ use crate::people::index::Index;
 use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
-use crate::{HashMap, HashSet, HashSetExt};
+use crate::{HashMap, HashSet};
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 
@@ -61,9 +61,6 @@ pub trait PersonPropertyHolder {
         callback_vec: &mut Vec<Box<ContextCallback>>,
     );
     fn is_derived(&self) -> bool;
-    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>>;
-    fn non_derived_dependencies(&self) -> Vec<TypeId>;
-    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>);
     fn property_type_id(&self) -> TypeId;
 }
 
@@ -98,34 +95,8 @@ where
         T::is_derived()
     }
 
-    fn dependencies(&self) -> Vec<Box<dyn PersonPropertyHolder>> {
-        T::dependencies()
-    }
-
     fn property_type_id(&self) -> TypeId {
         TypeId::of::<T>()
-    }
-
-    /// Returns of dependencies, where any derived dependencies
-    /// are recursively expanded to their non-derived dependencies.
-    /// If the property is not derived, the Vec will be empty.
-    fn non_derived_dependencies(&self) -> Vec<TypeId> {
-        let mut result = HashSet::new();
-        self.collect_non_derived_dependencies(&mut result);
-        result.into_iter().collect()
-    }
-
-    fn collect_non_derived_dependencies(&self, result: &mut HashSet<TypeId>) {
-        if !self.is_derived() {
-            return;
-        }
-        for dependency in self.dependencies() {
-            if dependency.is_derived() {
-                dependency.collect_non_derived_dependencies(result);
-            } else {
-                result.insert(dependency.property_type_id());
-            }
-        }
     }
 }
 

@@ -80,6 +80,7 @@ pub use query::{Query, QueryAnd};
 
 use crate::{context::Context, define_data_plugin};
 pub use context_extension::ContextPeopleExt;
+pub use context_extension::ContextPeopleExtInternal;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};

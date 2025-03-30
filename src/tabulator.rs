@@ -1,6 +1,6 @@
 use crate::people::external_api::ContextPeopleExtCrate;
 use crate::people::PersonProperty;
-use crate::{Context, ContextPeopleExt, IxaError};
+use crate::{Context, IxaError};
 use seq_macro::seq;
 use std::any::TypeId;
 pub trait Tabulator {
@@ -12,7 +12,7 @@ pub trait Tabulator {
 
 impl<T: PersonProperty> Tabulator for (T,) {
     fn setup(&self, context: &Context) -> Result<(), IxaError> {
-        context.register_property::<T>();
+        T::register(context);
         context.index_property_by_id(std::any::TypeId::of::<T>());
         Ok(())
     }
@@ -39,7 +39,7 @@ macro_rules! impl_tabulator {
             {
                 fn setup(&self, context: &Context) -> Result<(), IxaError> {
                     #(
-                        context.register_property::<T~N>();
+                        <T~N>::register(context);
                         context.index_property_by_id(std::any::TypeId::of::<T~N>());
                     )*
                     Ok(())
