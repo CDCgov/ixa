@@ -465,12 +465,11 @@ pub trait DataPlugin: Any {
     fn create_data_container() -> Self::DataContainer;
 }
 
-/// Defines a new type for storing data in Context.
+/// Implements the `DataPlugin` trait for an existing type. Useful if you want to specify a
+/// particular visibility for the plugin.
 #[macro_export]
-macro_rules! define_data_plugin {
+macro_rules! impl_data_plugin {
     ($plugin:ident, $data_container:ty, $default: expr) => {
-        struct $plugin;
-
         impl $crate::context::DataPlugin for $plugin {
             type DataContainer = $data_container;
 
@@ -478,6 +477,17 @@ macro_rules! define_data_plugin {
                 $default
             }
         }
+    };
+}
+pub use impl_data_plugin;
+
+/// Defines a new type for storing data in Context.
+#[macro_export]
+macro_rules! define_data_plugin {
+    ($plugin:ident, $data_container:ty, $default: expr) => {
+        struct $plugin;
+
+        $crate::impl_data_plugin!($plugin, $data_container, $default);
     };
 }
 pub use define_data_plugin;

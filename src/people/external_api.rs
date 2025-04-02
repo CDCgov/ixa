@@ -3,7 +3,6 @@ use crate::people::PeoplePlugin;
 use crate::Context;
 use crate::IxaError;
 use crate::PersonId;
-use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
 pub(crate) trait ContextPeopleExtCrate {
@@ -14,14 +13,14 @@ pub(crate) trait ContextPeopleExtCrate {
     ) -> Result<String, IxaError>;
 
     fn tabulate_person_properties_by_name<F>(
-        &self,
+        &mut self,
         properties: Vec<String>,
         print_fn: F,
     ) -> Result<(), IxaError>
     where
         F: Fn(&Context, &[String], usize);
 
-    fn index_property_by_id(&self, type_id: TypeId);
+    fn index_property_by_id(&self, type_id: TypeId) -> Result<(), IxaError>;
 
     fn get_person_property_names(&self) -> Vec<String>;
 }
@@ -47,40 +46,40 @@ impl ContextPeopleExtCrate for Context {
     }
 
     fn tabulate_person_properties_by_name<F>(
-        &self,
+        &mut self,
         properties: Vec<String>,
         print_fn: F,
     ) -> Result<(), IxaError>
     where
         F: Fn(&Context, &[String], usize),
     {
-        let data_container = self.get_data_container(PeoplePlugin);
-        if data_container.is_none() {
-            return Ok(());
-        }
-        let data_container = data_container.unwrap();
-        let people_types = data_container.people_types.borrow();
-
         let mut query = Vec::new();
-        for name in properties {
-            let type_id = people_types
-                .get(&name.to_string())
-                .ok_or(IxaError::IxaError(format!("No property '{name}'")))?;
 
-            query.push((*type_id, name.to_string()));
+        {
+            let data_container = self.get_data_container(PeoplePlugin);
+            if data_container.is_none() {
+                return Ok(());
+            }
+            let data_container = data_container.unwrap();
+            let people_types = data_container.people_types.borrow();
+
+            for name in properties {
+                let type_id = people_types
+                    .get(name.as_str())
+                    .ok_or(IxaError::IxaError(format!("No property '{name}'")))?;
+
+                query.push((*type_id, name));
+            }
         }
 
         self.tabulate_person_properties(&query, print_fn);
         Ok(())
     }
 
-    fn index_property_by_id(&self, type_id: TypeId) {
+    fn index_property_by_id(&self, type_id: TypeId) -> Result<(), IxaError> {
+        // Only called from contexts in which `PeopleData` is initialized.
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-        let mut index = data_container.get_index_ref_mut(type_id).unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
-        }
+        data_container.index_property_by_id(type_id)
     }
 
     fn get_person_property_names(&self) -> Vec<String> {

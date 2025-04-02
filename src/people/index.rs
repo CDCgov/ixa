@@ -1,8 +1,10 @@
-use super::methods::Methods;
-use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
-use crate::{HashMap, HashSet, HashSetExt};
+use crate::people::methods::Methods;
+use crate::{type_of, Context, ContextPeopleExt, PersonId, PersonProperty};
+use crate::{HashMap, HashSet};
 use bincode::serialize;
 use serde::Serialize;
+use std::any::TypeId;
+use std::collections::hash_map::Entry;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized version of the value.
@@ -31,6 +33,13 @@ impl IndexValue {
             IndexValue::Variable(serialized_data)
         }
     }
+
+    pub fn to_le_bytes(&self) -> Vec<u8> {
+        match self {
+            IndexValue::Fixed(value) => Vec::from(value.to_le_bytes()),
+            IndexValue::Variable(data) => data.clone(),
+        }
+    }
 }
 
 // An index for a single property.
@@ -49,9 +58,13 @@ pub struct Index {
 }
 
 impl Index {
-    pub(super) fn new<T: PersonProperty>(_context: &Context, _property: T) -> Self {
+    pub(super) fn new<T: PersonProperty + 'static>(_property: T) -> Self {
+        Self::with_type_name(std::any::type_name::<T>())
+    }
+
+    pub(super) fn with_type_name(name: &'static str) -> Self {
         Self {
-            name: std::any::type_name::<T>(),
+            name,
             lookup: None,
             max_indexed: 0,
         }
@@ -63,7 +76,12 @@ impl Index {
             .as_mut()
             .unwrap()
             .entry(hash)
-            .or_insert_with(|| ((methods.get_display)(context, person_id), HashSet::new()))
+            .or_insert_with(|| {
+                (
+                    (methods.get_display)(context, person_id),
+                    HashSet::default(),
+                )
+            })
             .1
             .insert(person_id);
     }
@@ -97,38 +115,62 @@ impl Index {
     }
 }
 
-pub fn process_indices(
-    context: &Context,
-    remaining_indices: &[&Index],
-    property_names: &mut Vec<String>,
-    current_matches: &HashSet<PersonId>,
-    print_fn: &dyn Fn(&Context, &[String], usize),
-) {
-    if remaining_indices.is_empty() {
-        print_fn(context, property_names, current_matches.len());
-        return;
+pub struct IndexMap {
+    map: HashMap<TypeId, Index>,
+}
+
+impl Default for IndexMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IndexMap {
+    #[inline(always)]
+    pub fn new() -> IndexMap {
+        IndexMap {
+            map: HashMap::default(),
+        }
     }
 
-    let (next_index, rest_indices) = remaining_indices.split_first().unwrap();
-    let lookup = next_index.lookup.as_ref().unwrap();
-
-    // If there is nothing in the index, we don't need to process it
-    if lookup.is_empty() {
-        return;
+    /// Inserts an index if it doesn't already exist, and returns a mutable reference to the index.
+    #[inline(always)]
+    pub fn get_container_mut<T: PersonProperty + 'static>(&mut self) -> &mut Index {
+        self.map
+            .entry(type_of::<T>())
+            .or_insert_with(|| Index::new(T::get_instance()))
     }
 
-    for (display, people) in lookup.values() {
-        let intersect = !property_names.is_empty();
-        property_names.push(display.clone());
+    #[inline(always)]
+    pub fn get_container_by_id_mut(
+        &mut self,
+        type_id: TypeId,
+        type_name: &'static str,
+    ) -> &mut Index {
+        self.map
+            .entry(type_id)
+            .or_insert_with(|| Index::with_type_name(type_name))
+    }
 
-        let matches = if intersect {
-            &current_matches.intersection(people).copied().collect()
-        } else {
-            people
-        };
+    #[inline(always)]
+    pub fn get_container_by_id_ref(&self, type_id: TypeId) -> Option<&Index> {
+        self.map.get(&type_id)
+    }
 
-        process_indices(context, rest_indices, property_names, matches, print_fn);
-        property_names.pop();
+    #[inline(always)]
+    pub fn get_container_ref<T: PersonProperty + 'static>(&self) -> Option<&Index> {
+        self.map.get(&type_of::<T>())
+        // .map(|v| unsafe { v.downcast_ref().unwrap_unchecked() })
+    }
+
+    #[inline(always)]
+    pub fn contains_key(&self, type_of: &TypeId) -> bool {
+        self.map.contains_key(type_of)
+    }
+
+    #[inline(always)]
+    pub fn entry(&mut self, type_id: TypeId) -> Entry<'_, TypeId, Index> {
+        self.map.entry(type_id)
     }
 }
 
@@ -136,15 +178,15 @@ pub fn process_indices(
 mod test {
     // Tests in `src/people/query.rs` also exercise indexing code.
 
-    use crate::people::index::{Index, IndexValue};
-    use crate::{define_person_property, Context};
+    use crate::define_person_property;
+    use crate::people::index::Index;
+    use crate::people::index::IndexValue;
 
     define_person_property!(Age, u8);
 
     #[test]
     fn index_name() {
-        let context = Context::new();
-        let index = Index::new(&context, Age);
+        let index = Index::new(Age);
         assert!(index.name.contains("Age"));
     }
 

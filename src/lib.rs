@@ -47,8 +47,7 @@ pub mod plan;
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
 
-pub mod tabulator;
-pub use tabulator::Tabulator;
+pub use people::tabulator::Tabulator;
 
 pub mod report;
 pub use report::{ConfigReportOptions, ContextReportExt, Report};
@@ -72,6 +71,7 @@ pub mod web_api;
 pub use ctor;
 pub use paste;
 pub use rand;
+pub use seq_macro::seq;
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};

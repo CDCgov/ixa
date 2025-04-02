@@ -1,15 +1,14 @@
-use crate::people::index::{Index, IndexValue};
+use crate::people::index::Index;
 use crate::people::methods::Methods;
 use crate::people::query::Query;
-use crate::people::{index, InitializationList, PeoplePlugin};
+use crate::people::{InitializationList, PeoplePlugin};
 use crate::{
     type_of, Context, ContextRandomExt, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
     PersonPropertyChangeEvent, RngId, Tabulator,
 };
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
+use crate::{HashSet, HashSetExt};
 use rand::Rng;
 use std::any::TypeId;
-use std::cell::Ref;
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -54,6 +53,8 @@ pub trait ContextPeopleExt {
     /// that one is created.
     fn index_property<T: PersonProperty>(&mut self, property: T);
 
+    fn property_is_indexed<T: PersonProperty>(&self) -> bool;
+
     /// Query for all people matching a given set of criteria.
     ///
     /// [`Context::query_people()`] takes any type that implements [Query],
@@ -80,7 +81,7 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
-    fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    fn tabulate_person_properties<T: Tabulator, F>(&mut self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
 
@@ -222,115 +223,66 @@ impl ContextPeopleExt for Context {
     }
 
     fn index_property<T: PersonProperty>(&mut self, _property: T) {
-        // Ensure that the data container exists
         {
+            // Ensure PeopleData is initialized.
             let _ = self.get_data_container_mut(PeoplePlugin);
         }
 
         T::register(self);
 
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let mut index = data_container
-            .get_index_ref_mut_by_prop(T::get_instance())
-            .unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
+        data_container.index_property::<T>();
+    }
+
+    fn property_is_indexed<T: PersonProperty>(&self) -> bool {
+        if let Some(data_container) = self.get_data_container(PeoplePlugin) {
+            data_container.property_is_indexed::<T>()
+        } else {
+            false
         }
     }
 
-    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
+    fn query_people<T: Query>(&self, query: T) -> Vec<PersonId> {
         // Special case the situation where nobody exists.
         if self.get_data_container(PeoplePlugin).is_none() {
             return Vec::new();
         }
 
-        T::setup(&q, self);
+        query.setup(self);
+
         let mut result = Vec::new();
-        self.query_people_internal(
-            |person| {
-                result.push(person);
-            },
-            q.get_query(),
-        );
+        query.execute_query(self, |person| {
+            result.push(person);
+        });
+
         result
     }
 
-    fn query_people_count<T: Query>(&self, q: T) -> usize {
+    fn query_people_count<T: Query>(&self, query: T) -> usize {
         // Special case the situation where nobody exists.
         if self.get_data_container(PeoplePlugin).is_none() {
             return 0;
         }
 
-        T::setup(&q, self);
+        query.setup(self);
+
         let mut count: usize = 0;
-        self.query_people_internal(
-            |_person| {
-                count += 1;
-            },
-            q.get_query(),
-        );
+        query.execute_query(self, |_person| {
+            count += 1;
+        });
+
         count
     }
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
-        T::setup(&q, self);
-        // This cannot fail because someone must have been made by now.
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-        let query = q.get_query();
-
-        for (t, hash) in &query {
-            let methods = data_container.get_methods(*t);
-            if *hash != (*methods.indexer)(self, person_id) {
-                return false;
-            }
-        }
-        true
+        q.match_entity(self, person_id)
     }
 
-    fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
+    fn tabulate_person_properties<T: Tabulator, F>(&mut self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize),
     {
-        let type_ids = tabulator.get_typelist();
-        tabulator.setup(self).unwrap();
-
-        if let Some(data_container) = self.get_data_container(PeoplePlugin) {
-            for type_id in &type_ids {
-                let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
-                if index.lookup.is_none() {
-                    // Start indexing this property if it's not already
-                    // indexed.
-                    index.lookup = Some(HashMap::new());
-                }
-
-                let methods = data_container.get_methods(*type_id);
-                index.index_unindexed_people(self, &methods);
-            }
-        } else {
-            // If there is no data container then there are no people.
-            return;
-        }
-
-        // Now process each index
-        let index_container = self
-            .get_data_container(PeoplePlugin)
-            .unwrap()
-            .property_indexes
-            .borrow();
-
-        let indices = type_ids
-            .iter()
-            .filter_map(|t| index_container.get(t))
-            .collect::<Vec<&Index>>();
-
-        index::process_indices(
-            self,
-            indices.as_slice(),
-            &mut Vec::new(),
-            &HashSet::new(),
-            &print_fn,
-        );
+        tabulator.tabulate_person_properties(self, print_fn);
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -348,7 +300,7 @@ impl ContextPeopleExt for Context {
             return Some(PersonId(result));
         }
 
-        T::setup(&query, self);
+        query.setup(self);
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -359,19 +311,16 @@ impl ContextPeopleExt for Context {
         let mut ctr: usize = 0;
         let mut i: usize = 1;
 
-        self.query_people_internal(
-            |person| {
-                ctr += 1;
-                if i == ctr {
-                    selected = Some(person);
-                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
-                        as usize
-                        + 1;
-                    w *= self.sample_range(rng_id, 0.0..1.0);
-                }
-            },
-            query.get_query(),
-        );
+        query.execute_query(self, |person| {
+            ctr += 1;
+            if i == ctr {
+                selected = Some(person);
+                i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
+                    as usize
+                    + 1;
+                w *= self.sample_range(rng_id, 0.0..1.0);
+            }
+        });
 
         selected
     }
@@ -385,13 +334,13 @@ pub trait ContextPeopleExtInternal {
     fn register_derived_property<T: PersonProperty>(&self);
     fn register_nonderived_property<T: PersonProperty>(&self);
     fn register_indexer<T: PersonProperty>(&self);
-    fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
-    fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
-    fn query_people_internal(
-        &self,
-        accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
-    );
+    fn add_to_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T);
+    fn remove_from_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T);
+    // fn query_people_internal(
+    //     &self,
+    //     accumulator: impl FnMut(PersonId),
+    //     property_hashes: Vec<(TypeId, IndexValue)>,
+    // );
 }
 
 impl ContextPeopleExtInternal for Context {
@@ -439,7 +388,7 @@ impl ContextPeopleExtInternal for Context {
         data_container
             .people_types
             .borrow_mut()
-            .insert(T::name().to_string(), TypeId::of::<T>());
+            .insert(T::name(), TypeId::of::<T>());
 
         data_container
             .registered_derived_properties
@@ -450,117 +399,41 @@ impl ContextPeopleExtInternal for Context {
     }
 
     fn register_indexer<T: PersonProperty>(&self) {
-        {
-            let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-            let property_indexes = data_container.property_indexes.borrow_mut();
-            if property_indexes.contains_key(&TypeId::of::<T>()) {
-                return; // Index already exists, do nothing
-            }
-        }
-
-        // If it doesn't exist, insert the new index
-        let index = Index::new(self, T::get_instance());
+        // {
+        //     let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        //
+        //     let property_indexes = data_container.property_indexes.borrow_mut();
+        //     if property_indexes.contains_key(&TypeId::of::<T>()) {
+        //         return; // Index already exists, do nothing
+        //     }
+        // }
+        //
+        // // If it doesn't exist, insert the new index
+        // let index = Index::new(T::get_instance());
+        // let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        // let mut property_indexes = data_container.property_indexes.borrow_mut();
+        // property_indexes.insert::<T>(index);
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
         let mut property_indexes = data_container.property_indexes.borrow_mut();
-        property_indexes.insert(TypeId::of::<T>(), index);
+        property_indexes
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Index::new(T::get_instance()));
     }
 
-    fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
-            let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
-                index.add_person(self, &methods, person_id);
-            }
-        }
+    fn add_to_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T) {
+        self.get_data_container(PeoplePlugin)
+            .inspect(|data_container| {
+                // let index = data_container.get_index_mut::<T>();
+                let methods = data_container.get_methods(TypeId::of::<T>());
+                data_container.add_to_index_maybe(self, &methods, person_id, property);
+            });
     }
 
-    fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
-            let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
-                index.remove_person(self, &methods, person_id);
-            }
-        }
-    }
-
-    fn query_people_internal(
-        &self,
-        mut accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
-    ) {
-        let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
-        let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
-        let data_container = self.get_data_container(PeoplePlugin)
-            .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
-
-        // 1. Walk through each property and update the indexes.
-        for (t, _) in &property_hashes {
-            let mut index = data_container.get_index_ref_mut(*t).unwrap();
-            let methods = data_container.get_methods(*t);
-            index.index_unindexed_people(self, &methods);
-        }
-
-        // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashes {
-            let index = data_container.get_index_ref(t).unwrap();
-            if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
-                if let Ok(matching_people) =
-                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
-                {
-                    indexes.push(matching_people);
-                } else {
-                    // This is empty and so the intersection will
-                    // also be empty.
-                    return;
-                }
-            } else {
-                // No index, so we'll get to this after.
-                unindexed.push((t, hash));
-            }
-        }
-
-        // 3. Create an iterator over people, based one either:
-        //    (1) the smallest index if there is one.
-        //    (2) the overall population if there are no indices.
-
-        let holder: Ref<HashSet<PersonId>>;
-        let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
-            Box::new(data_container.people_iterator())
-        } else {
-            indexes.sort_by_key(|x| x.len());
-
-            holder = indexes.remove(0);
-            Box::new(holder.iter().copied())
-        };
-
-        // 4. Walk over the iterator and add people to the result
-        // iff:
-        //    (1) they exist in all the indexes
-        //    (2) they match the unindexed properties
-        'outer: for person in to_check {
-            // (1) check all the indexes
-            for index in &indexes {
-                if !index.contains(&person) {
-                    continue 'outer;
-                }
-            }
-
-            // (2) check the unindexed properties
-            for (t, hash) in &unindexed {
-                let methods = data_container.get_methods(*t);
-                if *hash != (*methods.indexer)(self, person) {
-                    continue 'outer;
-                }
-            }
-
-            // This matches.
-            accumulator(person);
-        }
+    fn remove_from_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T) {
+        self.get_data_container(PeoplePlugin)
+            .inspect(|data_container| {
+                data_container.remove_from_index_maybe(self, person_id, property);
+            });
     }
 }
 

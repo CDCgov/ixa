@@ -108,7 +108,7 @@ where
     serializer.serialize_str(&formatted)
 }
 
-struct ReportData {
+pub(crate) struct ReportData {
     file_writers: RefCell<HashMap<TypeId, Writer<File>>>,
     config: ConfigReportOptions,
 }

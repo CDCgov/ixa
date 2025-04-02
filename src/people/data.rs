@@ -1,11 +1,12 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
-use crate::people::index::Index;
+use crate::people::index::IndexMap;
 use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet};
 use std::any::{Any, TypeId};
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{RefCell, RefMut};
+use std::ops::Deref;
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
@@ -26,15 +27,15 @@ impl StoredPeopleProperties {
     }
 }
 
-pub(super) struct PeopleData {
+pub(crate) struct PeopleData {
     pub(super) is_initializing: bool,
     pub(super) current_population: usize,
     pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     pub(super) registered_derived_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
-    pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
-    pub(super) people_types: RefCell<HashMap<String, TypeId>>,
+    pub(super) property_indexes: RefCell<IndexMap>,
+    pub(super) people_types: RefCell<HashMap<&'static str, TypeId>>,
 }
 
 // The purpose of this trait is to enable storing a Vec of different
@@ -148,35 +149,104 @@ impl PeopleData {
         *property_ref = Some(value);
     }
 
-    pub(super) fn get_index_ref_mut(&self, t: TypeId) -> Option<RefMut<Index>> {
-        let index_map = self.property_indexes.borrow_mut();
-        if index_map.contains_key(&t) {
-            Some(RefMut::map(index_map, |map| map.get_mut(&t).unwrap()))
-        } else {
-            None
-        }
-    }
+    // pub(super) fn get_index_ref<T: PersonProperty>(&self) -> Option<&Index> {
+    //     self.property_indexes.get_mut().get_container_ref::<T>()
+    // }
 
-    pub(super) fn get_index_ref(&self, t: TypeId) -> Option<Ref<Index>> {
-        let index_map = self.property_indexes.borrow();
-        if index_map.contains_key(&t) {
-            Some(Ref::map(index_map, |map| map.get(&t).unwrap()))
-        } else {
-            None
-        }
-    }
-
-    pub(super) fn get_index_ref_mut_by_prop<T: PersonProperty>(
+    pub(super) fn add_to_index_maybe<T: PersonProperty>(
         &self,
+        context: &Context,
+        methods: &Methods,
+        person_id: PersonId,
         _property: T,
-    ) -> Option<RefMut<Index>> {
-        let type_id = TypeId::of::<T>();
-        self.get_index_ref_mut(type_id)
+    ) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        let index = indexes.get_container_mut::<T>();
+        if index.lookup.is_some() {
+            index.add_person(context, methods, person_id);
+        }
     }
 
-    // Convenience function to iterate over the current population.
-    // Note that this doesn't hold a reference to PeopleData, so if
-    // you change the population while using it, it won't notice.
+    pub(super) fn remove_from_index_maybe<T: PersonProperty>(
+        &self,
+        context: &Context,
+        person_id: PersonId,
+        _property: T,
+    ) {
+        let methods = self.get_methods(TypeId::of::<T>());
+        let mut indexes = self.property_indexes.borrow_mut();
+        let index = indexes.get_container_mut::<T>();
+        if index.lookup.is_some() {
+            index.remove_person(context, methods.deref(), person_id);
+        }
+    }
+
+    pub(super) fn index_property<T: PersonProperty>(&self) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        let index = indexes.get_container_mut::<T>();
+        index.lookup.get_or_insert_with(HashMap::default);
+    }
+
+    pub(super) fn index_property_by_id(&self, type_id: TypeId) -> Result<(), IxaError> {
+        let mut indexes = self.property_indexes.borrow_mut();
+        let type_name = self
+            .lookup_type_name(type_id)
+            .ok_or_else(|| IxaError::IxaError("Unknown type".to_string()))?;
+
+        let index = indexes.get_container_by_id_mut(type_id, type_name);
+        index.lookup.get_or_insert_with(HashMap::default);
+        Ok(())
+    }
+
+    pub(super) fn index_unindexed_people<T: PersonProperty>(&self, context: &Context) {
+        let mut index_map = self.property_indexes.borrow_mut();
+        let methods_map = self.methods.borrow();
+        // Only called from contexts in which `T` has been registered, thus methods exist.
+        let methods = methods_map.get(&TypeId::of::<T>()).unwrap();
+        index_map
+            .get_container_mut::<T>()
+            .index_unindexed_people(context, methods);
+    }
+
+    pub(super) fn index_unindexed_people_by_id(
+        &self,
+        context: &Context,
+        type_id: TypeId,
+    ) -> Result<(), IxaError> {
+        let mut index_map = self.property_indexes.borrow_mut();
+        let methods_map = self.methods.borrow();
+        let type_name = self
+            .lookup_type_name(type_id)
+            .ok_or_else(|| IxaError::IxaError("unknown type".to_string()))?;
+        let methods = methods_map
+            .get(&type_id)
+            .ok_or_else(|| IxaError::IxaError("unregistered type".to_string()))?;
+
+        index_map
+            .get_container_by_id_mut(type_id, type_name)
+            .index_unindexed_people(context, methods);
+        Ok(())
+    }
+
+    pub(super) fn property_is_indexed<T: PersonProperty>(&self) -> bool {
+        let indexes = self.property_indexes.borrow();
+        if let Some(index) = indexes.get_container_ref::<T>() {
+            index.lookup.is_some()
+        } else {
+            false
+        }
+    }
+
+    fn lookup_type_name(&self, type_id: TypeId) -> Option<&'static str> {
+        self.people_types
+            .borrow()
+            .iter()
+            .find_map(|(&s, t)| if *t == type_id { Some(s) } else { None })
+    }
+
+    /// Convenience function to iterate over the current population.
+    /// Note that this doesn't hold a reference to PeopleData, so if
+    /// you change the population while using it, it won't notice.
     pub(super) fn people_iterator(&self) -> PeopleIterator {
         PeopleIterator {
             population: self.current_population,
