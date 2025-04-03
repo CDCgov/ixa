@@ -5,11 +5,11 @@
 //! arbitrary number of outgoing edges of a given type, with each edge
 //! having a weight. Edge types can also specify their own per-type
 //! data which will be stored along with the edge.
-use crate::HashMap;
 use crate::{
     context::Context, define_data_plugin, error::IxaError, people::PersonId,
     random::ContextRandomExt, random::RngId,
 };
+use crate::{type_of, HashMap};
 use rand::Rng;
 use std::any::{Any, TypeId};
 
@@ -70,7 +70,7 @@ impl NetworkData {
 
         let entry = self.network[person.0]
             .neighbors
-            .entry(TypeId::of::<T>())
+            .entry(type_of::<T>())
             .or_insert_with(|| Box::new(Vec::<Edge<T::Value>>::new()));
         let edges: &mut Vec<Edge<T::Value>> = entry.downcast_mut().expect("Type mismatch");
 
@@ -98,7 +98,7 @@ impl NetworkData {
             return Err(IxaError::IxaError(String::from("Edge does not exist")));
         }
 
-        let entry = match self.network[person.0].neighbors.get_mut(&TypeId::of::<T>()) {
+        let entry = match self.network[person.0].neighbors.get_mut(&type_of::<T>()) {
             None => {
                 return Err(IxaError::IxaError(String::from("Edge does not exist")));
             }
@@ -125,7 +125,7 @@ impl NetworkData {
             return None;
         }
 
-        let entry = self.network[person.0].neighbors.get(&TypeId::of::<T>())?;
+        let entry = self.network[person.0].neighbors.get(&type_of::<T>())?;
         let edges: &Vec<Edge<T::Value>> = entry.downcast_ref().expect("Type mismatch");
         edges.iter().find(|&edge| edge.neighbor == neighbor)
     }
@@ -135,7 +135,7 @@ impl NetworkData {
             return Vec::new();
         }
 
-        let entry = self.network[person.0].neighbors.get(&TypeId::of::<T>());
+        let entry = self.network[person.0].neighbors.get(&type_of::<T>());
         if entry.is_none() {
             return Vec::new();
         }
@@ -148,7 +148,7 @@ impl NetworkData {
         let mut result = Vec::new();
 
         for person_id in 0..self.network.len() {
-            let entry = self.network[person_id].neighbors.get(&TypeId::of::<T>());
+            let entry = self.network[person_id].neighbors.get(&type_of::<T>());
             if entry.is_none() {
                 continue;
             }

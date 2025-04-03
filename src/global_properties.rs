@@ -17,7 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::trace;
+use crate::{trace, type_of};
 use crate::{HashMap, HashMapExt};
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
@@ -226,7 +226,7 @@ impl GlobalPropertiesDataContainer {
         _property: &T,
         value: T::Value,
     ) -> Result<(), IxaError> {
-        match self.global_property_container.entry(TypeId::of::<T>()) {
+        match self.global_property_container.entry(type_of::<T>()) {
             Entry::Vacant(entry) => {
                 entry.insert(Box::new(value));
                 Ok(())
@@ -240,7 +240,7 @@ impl GlobalPropertiesDataContainer {
 
     #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(&self) -> Option<&T::Value> {
-        let data_container = self.global_property_container.get(&TypeId::of::<T>());
+        let data_container = self.global_property_container.get(&type_of::<T>());
 
         match data_container {
             Some(property) => Some(property.downcast_ref::<T::Value>().unwrap()),

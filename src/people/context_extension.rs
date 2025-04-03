@@ -1,4 +1,3 @@
-use crate::people::index::Index;
 use crate::people::methods::Methods;
 use crate::people::query::Query;
 use crate::people::{InitializationList, PeoplePlugin};
@@ -8,7 +7,6 @@ use crate::{
 };
 use crate::{HashSet, HashSetExt};
 use rand::Rng;
-use std::any::TypeId;
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -181,7 +179,7 @@ impl ContextPeopleExt for Context {
                     .unwrap()
                     .dependency_map
                     .borrow_mut()
-                    .get_mut(&TypeId::of::<T>())
+                    .get_mut(&type_of::<T>())
                     .map(std::mem::take),
             )
         };
@@ -197,7 +195,7 @@ impl ContextPeopleExt for Context {
             // Put the dependency list back in
             let data_container = self.get_data_container(PeoplePlugin).unwrap();
             let mut dependencies = data_container.dependency_map.borrow_mut();
-            dependencies.insert(TypeId::of::<T>(), deps);
+            dependencies.insert(type_of::<T>(), deps);
         }
 
         // Update the main property and send a change event
@@ -383,12 +381,12 @@ impl ContextPeopleExtInternal for Context {
         data_container
             .methods
             .borrow_mut()
-            .insert(TypeId::of::<T>(), Methods::new::<T>());
+            .insert(type_of::<T>(), Methods::new::<T>());
 
         data_container
             .people_types
             .borrow_mut()
-            .insert(T::name(), TypeId::of::<T>());
+            .insert(T::name(), type_of::<T>());
 
         data_container
             .registered_derived_properties
@@ -424,7 +422,7 @@ impl ContextPeopleExtInternal for Context {
         self.get_data_container(PeoplePlugin)
             .inspect(|data_container| {
                 // let index = data_container.get_index_mut::<T>();
-                let methods = data_container.get_methods(TypeId::of::<T>());
+                let methods = data_container.get_methods(type_of::<T>());
                 data_container.add_to_index_maybe(self, &methods, person_id, property);
             });
     }

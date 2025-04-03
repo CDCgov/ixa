@@ -1,8 +1,8 @@
 use crate::context::Context;
 use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
-use crate::Tabulator;
 use crate::{error, trace};
+use crate::{type_of, Tabulator};
 use crate::{HashMap, HashMapExt};
 use csv::Writer;
 use serde::Serializer;
@@ -203,7 +203,7 @@ impl ContextReportExt for Context {
     }
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
         trace!("Adding report {short_name}");
-        self.add_report_by_type_id(TypeId::of::<T>(), short_name)
+        self.add_report_by_type_id(type_of::<T>(), short_name)
     }
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
         &mut self,
@@ -213,11 +213,11 @@ impl ContextReportExt for Context {
     ) -> Result<(), IxaError> {
         trace!("Adding periodic report {short_name}");
 
-        self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
+        self.add_report_by_type_id(type_of::<T>(), short_name)?;
 
         {
             // Write the header
-            let mut writer = self.get_writer(TypeId::of::<T>());
+            let mut writer = self.get_writer(type_of::<T>());
             let columns = tabulator.get_columns();
             let mut header = vec!["t".to_string()];
             header.extend(columns);
@@ -231,7 +231,7 @@ impl ContextReportExt for Context {
             period,
             move |context: &mut Context| {
                 context.tabulate_person_properties(&tabulator, move |context, values, count| {
-                    let mut writer = context.get_writer(TypeId::of::<T>());
+                    let mut writer = context.get_writer(type_of::<T>());
                     let mut row = vec![context.get_current_time().to_string()];
                     row.extend(values.to_owned());
                     row.push(count.to_string());

@@ -4,7 +4,7 @@
 //! for storing and manipulating the state of a given simulation.
 use crate::debugger::enter_debugger;
 use crate::plan::{PlanId, PlanSchedule, Queue};
-use crate::{error, trace};
+use crate::{error, trace, type_of};
 use crate::{HashMap, HashMapExt};
 use std::fmt::{Display, Formatter};
 use std::{
@@ -281,7 +281,7 @@ impl Context {
         _data_plugin: T,
     ) -> &mut T::DataContainer {
         self.data_plugins
-            .entry(TypeId::of::<T>())
+            .entry(type_of::<T>())
             .or_insert_with(|| Box::new(T::create_data_container()))
             .downcast_mut::<T::DataContainer>()
             .unwrap() // Will never panic as data container has the matching type
@@ -294,7 +294,7 @@ impl Context {
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_container<T: DataPlugin>(&self, _data_plugin: T) -> Option<&T::DataContainer> {
-        if let Some(data) = self.data_plugins.get(&TypeId::of::<T>()) {
+        if let Some(data) = self.data_plugins.get(&type_of::<T>()) {
             data.downcast_ref::<T::DataContainer>()
         } else {
             None
@@ -438,7 +438,7 @@ pub(crate) fn run_with_plugin<T: DataPlugin>(
 ) {
     // Temporarily take the data container out of context so that
     // we can operate on context.
-    let mut data_container_box = context.data_plugins.remove(&TypeId::of::<T>()).unwrap();
+    let mut data_container_box = context.data_plugins.remove(&type_of::<T>()).unwrap();
     let data_container = data_container_box
         .downcast_mut::<T::DataContainer>()
         .unwrap();
@@ -449,7 +449,7 @@ pub(crate) fn run_with_plugin<T: DataPlugin>(
     // Put the data container back into context.
     context
         .data_plugins
-        .insert(TypeId::of::<T>(), data_container_box);
+        .insert(type_of::<T>(), data_container_box);
 }
 
 impl Default for Context {

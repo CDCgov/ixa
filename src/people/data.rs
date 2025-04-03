@@ -1,8 +1,8 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
-use crate::people::index::IndexMap;
+use crate::people::index::{Index, IndexMap};
 use crate::people::methods::Methods;
 use crate::people::InitializationList;
-use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
+use crate::{type_of, Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
@@ -97,7 +97,7 @@ where
     }
 
     fn property_type_id(&self) -> TypeId {
-        TypeId::of::<T>()
+        type_of::<T>()
     }
 }
 
@@ -124,7 +124,7 @@ impl PeopleData {
         let index = person.0;
         RefMut::map(properties_map, |properties_map| {
             let properties = properties_map
-                .entry(TypeId::of::<T>())
+                .entry(type_of::<T>())
                 .or_insert_with(|| StoredPeopleProperties::new::<T>());
             let values: &mut Vec<Option<T::Value>> = properties
                 .values
@@ -173,7 +173,7 @@ impl PeopleData {
         person_id: PersonId,
         _property: T,
     ) {
-        let methods = self.get_methods(TypeId::of::<T>());
+        let methods = self.get_methods(type_of::<T>());
         let mut indexes = self.property_indexes.borrow_mut();
         let index = indexes.get_container_mut::<T>();
         if index.lookup.is_some() {
@@ -202,7 +202,7 @@ impl PeopleData {
         let mut index_map = self.property_indexes.borrow_mut();
         let methods_map = self.methods.borrow();
         // Only called from contexts in which `T` has been registered, thus methods exist.
-        let methods = methods_map.get(&TypeId::of::<T>()).unwrap();
+        let methods = methods_map.get(&type_of::<T>()).unwrap();
         index_map
             .get_container_mut::<T>()
             .index_unindexed_people(context, methods);
