@@ -51,8 +51,7 @@ pub trait PersonProperty: Copy + 'static {
         let value = context
             .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_person_property_ref(person_id, Self::get_instance())
-            .clone();
+            .get_person_property(person_id, Self::get_instance());
 
         // Initialize the property. This does not fire a change event
         if value.is_none() {

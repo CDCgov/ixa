@@ -1,12 +1,11 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
-use crate::people::index::{Index, IndexMap};
+use crate::people::index::IndexMap;
 use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{type_of, Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet};
 use std::any::{Any, TypeId};
 use std::cell::{RefCell, RefMut};
-use std::ops::Deref;
 
 type ContextCallback = dyn FnOnce(&mut Context);
 
@@ -110,31 +109,33 @@ impl PeopleData {
         PersonId(id)
     }
 
-    /// Retrieves a specific property of a person by their `PersonId`.
-    ///
-    /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
-    /// or `None` if it doesn't.
+    /// Retrieves a specific property of a person by their `PersonId`. If the value has not yet been
+    /// set, returns `None`.
     #[allow(clippy::needless_pass_by_value)]
-    pub(super) fn get_person_property_ref<T: PersonProperty>(
+    pub(super) fn get_person_property<T: PersonProperty>(
         &self,
-        person: PersonId,
+        person_id: PersonId,
         _property: T,
-    ) -> RefMut<Option<T::Value>> {
-        let properties_map = self.properties_map.borrow_mut();
-        let index = person.0;
-        RefMut::map(properties_map, |properties_map| {
-            let properties = properties_map
-                .entry(type_of::<T>())
-                .or_insert_with(|| StoredPeopleProperties::new::<T>());
-            let values: &mut Vec<Option<T::Value>> = properties
-                .values
-                .downcast_mut()
-                .expect("Type mismatch in properties_map");
-            if index >= values.len() {
-                values.resize(index + 1, None);
+    ) -> Option<T::Value> {
+        let properties_map = self.properties_map.borrow();
+        let index = person_id.0;
+
+        match properties_map.get(&type_of::<T>()) {
+            Some(properties) => {
+                let values: &Vec<Option<T::Value>> = properties
+                    .values
+                    .downcast_ref()
+                    .expect("Type mismatch in properties_map");
+
+                if index >= values.len() {
+                    None
+                } else {
+                    values[index]
+                }
             }
-            &mut values[index]
-        })
+
+            None => None,
+        }
     }
 
     /// Sets the value of a property for a person
@@ -142,24 +143,48 @@ impl PeopleData {
     pub(super) fn set_person_property<T: PersonProperty>(
         &self,
         person_id: PersonId,
-        property: T,
+        _property: T,
         value: T::Value,
     ) {
-        let mut property_ref = self.get_person_property_ref(person_id, property);
-        *property_ref = Some(value);
+        let mut properties_map = self.properties_map.borrow_mut();
+        let index = person_id.0;
+        let properties = properties_map
+            .entry(type_of::<T>())
+            .or_insert_with(|| StoredPeopleProperties::new::<T>());
+
+        let values: &mut Vec<Option<T::Value>> = properties
+            .values
+            .downcast_mut()
+            .expect("Type mismatch in properties_map");
+        if index >= values.len() {
+            values.resize(index + 1, None);
+        }
+
+        values[index] = Some(value);
     }
 
-    // pub(super) fn get_index_ref<T: PersonProperty>(&self) -> Option<&Index> {
-    //     self.property_indexes.get_mut().get_container_ref::<T>()
-    // }
+    pub(super) fn register_nonderived_property<T: PersonProperty>(&self) {
+        self.methods
+            .borrow_mut()
+            .insert(type_of::<T>(), Methods::new::<T>());
+
+        self.people_types
+            .borrow_mut()
+            .insert(T::name(), type_of::<T>());
+
+        self.registered_derived_properties
+            .borrow_mut()
+            .insert(type_of::<T>());
+    }
 
     pub(super) fn add_to_index_maybe<T: PersonProperty>(
         &self,
         context: &Context,
-        methods: &Methods,
         person_id: PersonId,
         _property: T,
     ) {
+        let method_map = self.methods.borrow();
+        let methods = method_map.get(&type_of::<T>()).unwrap();
         let mut indexes = self.property_indexes.borrow_mut();
         let index = indexes.get_container_mut::<T>();
         if index.lookup.is_some() {
@@ -173,11 +198,12 @@ impl PeopleData {
         person_id: PersonId,
         _property: T,
     ) {
-        let methods = self.get_methods(type_of::<T>());
+        let method_map = self.methods.borrow();
+        let methods = method_map.get(&type_of::<T>()).unwrap();
         let mut indexes = self.property_indexes.borrow_mut();
         let index = indexes.get_container_mut::<T>();
         if index.lookup.is_some() {
-            index.remove_person(context, methods.deref(), person_id);
+            index.remove_person(context, methods, person_id);
         }
     }
 
@@ -245,7 +271,7 @@ impl PeopleData {
     }
 
     /// Convenience function to iterate over the current population.
-    /// Note that this doesn't hold a reference to PeopleData, so if
+    /// Note that this doesn't hold a reference to `PeopleData`, so if
     /// you change the population while using it, it won't notice.
     pub(super) fn people_iterator(&self) -> PeopleIterator {
         PeopleIterator {

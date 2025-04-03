@@ -1,4 +1,3 @@
-use crate::people::methods::Methods;
 use crate::people::query::Query;
 use crate::people::{InitializationList, PeoplePlugin};
 use crate::{
@@ -128,7 +127,7 @@ impl ContextPeopleExt for Context {
         T::register(self);
 
         // ToDo(Robert): This `unwrap` is temporary until the new `option` semantics for missing
-        //               values can be propogated to the rest of the code. For now we assume
+        //               values can be propagated to the rest of the code. For now we assume
         //               every property sets an initial value if there is no value yet.
         T::compute(self, person_id).expect("Property not initialized when person created")
     }
@@ -331,14 +330,8 @@ pub trait ContextPeopleExtInternal {
     /// Registers the type with all of its dependencies and then registers an index for the type.
     fn register_derived_property<T: PersonProperty>(&self);
     fn register_nonderived_property<T: PersonProperty>(&self);
-    fn register_indexer<T: PersonProperty>(&self);
     fn add_to_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T);
-    // fn query_people_internal(
-    //     &self,
-    //     accumulator: impl FnMut(PersonId),
-    //     property_hashes: Vec<(TypeId, IndexValue)>,
-    // );
 }
 
 impl ContextPeopleExtInternal for Context {
@@ -377,53 +370,13 @@ impl ContextPeopleExtInternal for Context {
 
     fn register_nonderived_property<T: PersonProperty>(&self) {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
-
-        data_container
-            .methods
-            .borrow_mut()
-            .insert(type_of::<T>(), Methods::new::<T>());
-
-        data_container
-            .people_types
-            .borrow_mut()
-            .insert(T::name(), type_of::<T>());
-
-        data_container
-            .registered_derived_properties
-            .borrow_mut()
-            .insert(type_of::<T>());
-
-        self.register_indexer::<T>();
-    }
-
-    fn register_indexer<T: PersonProperty>(&self) {
-        // {
-        //     let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        //
-        //     let property_indexes = data_container.property_indexes.borrow_mut();
-        //     if property_indexes.contains_key(&TypeId::of::<T>()) {
-        //         return; // Index already exists, do nothing
-        //     }
-        // }
-        //
-        // // If it doesn't exist, insert the new index
-        // let index = Index::new(T::get_instance());
-        // let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        // let mut property_indexes = data_container.property_indexes.borrow_mut();
-        // property_indexes.insert::<T>(index);
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
-        let mut property_indexes = data_container.property_indexes.borrow_mut();
-        property_indexes
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Index::new(T::get_instance()));
+        data_container.register_nonderived_property::<T>();
     }
 
     fn add_to_index_maybe<T: PersonProperty>(&self, person_id: PersonId, property: T) {
         self.get_data_container(PeoplePlugin)
             .inspect(|data_container| {
-                // let index = data_container.get_index_mut::<T>();
-                let methods = data_container.get_methods(type_of::<T>());
-                data_container.add_to_index_maybe(self, &methods, person_id, property);
+                data_container.add_to_index_maybe(self, person_id, property);
             });
     }
 
@@ -620,8 +573,8 @@ mod tests {
         let people_data = context.get_data_container_mut(PeoplePlugin);
 
         // Verify we haven't initialized the property yet
-        let has_value = *people_data.get_person_property_ref(person, RunningShoes);
-        assert!(has_value.is_none());
+        let indexes = people_data.property_indexes.get_mut();
+        assert!(indexes.get_container_ref::<RunningShoes>().is_none());
 
         // This should initialize it
         let value = context.get_person_property(person, RunningShoes);

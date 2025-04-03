@@ -4,7 +4,6 @@ use crate::{HashMap, HashSet};
 use bincode::serialize;
 use serde::Serialize;
 use std::any::TypeId;
-use std::collections::hash_map::Entry;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized version of the value.
@@ -126,7 +125,6 @@ impl Default for IndexMap {
 }
 
 impl IndexMap {
-    #[inline(always)]
     pub fn new() -> IndexMap {
         IndexMap {
             map: HashMap::default(),
@@ -160,17 +158,11 @@ impl IndexMap {
     #[inline(always)]
     pub fn get_container_ref<T: PersonProperty + 'static>(&self) -> Option<&Index> {
         self.map.get(&type_of::<T>())
-        // .map(|v| unsafe { v.downcast_ref().unwrap_unchecked() })
     }
 
     #[inline(always)]
     pub fn contains_key(&self, type_of: &TypeId) -> bool {
         self.map.contains_key(type_of)
-    }
-
-    #[inline(always)]
-    pub fn entry(&mut self, type_id: TypeId) -> Entry<'_, TypeId, Index> {
-        self.map.entry(type_id)
     }
 }
 
