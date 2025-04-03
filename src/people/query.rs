@@ -1,4 +1,3 @@
-use crate::people::data::PeopleData;
 use crate::people::index::IndexValue;
 use crate::people::PeoplePlugin;
 use crate::{type_of, Context, ContextPeopleExt, HashSet, PersonId, PersonProperty};
@@ -44,7 +43,7 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
 
     fn execute_query(&self, context: &Context, mut accumulator: impl FnMut(PersonId)) {
         let people_data = context.get_data_container(PeoplePlugin).unwrap();
-        let index_map = people_data.property_indexes.borrow_mut();
+        let index_map = people_data.property_indexes.borrow();
         let mut indexes: Vec<&HashSet<PersonId>> = Vec::new();
         // A vector of closures that look up a property for an `people_id`
         let mut unindexed: Vec<Box<dyn Fn(PersonId) -> bool>> = Vec::new();
@@ -89,7 +88,7 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
                     min_len = index_iter.len();
                 }
             }
-            Box::new(indexes.remove(shortest_idx).iter().cloned())
+            Box::new(indexes.remove(shortest_idx).iter().copied())
         };
 
         // 4. Walk over the iterator and add entities to the result iff:
@@ -138,24 +137,24 @@ macro_rules! impl_query {
                 )*
             )
             {
-                fn setup(&self, context: &Context) {
+                fn setup(&self, context: &$crate::Context) {
                 #(
                     <T~N>::register(context);
                 )*
                     // 1. Refresh the indexes for each property in the query.
-                    let data_container = context.get_data_container(PeoplePlugin).unwrap();
+                    let data_container = context.get_data_container($crate::people::PeoplePlugin).unwrap();
                 #(
                     data_container.index_unindexed_people::<T~N>(context);
                 )*
                 }
 
 
-                fn execute_query(&self, context: &Context, mut accumulator: impl FnMut(PersonId)) {
-                    let people_data = context.get_data_container(PeoplePlugin).unwrap();
-                    let index_map = people_data.property_indexes.borrow_mut();
-                    let mut indexes: Vec<&HashSet<PersonId>> = Vec::new();
+                fn execute_query(&self, context: &$crate::Context, mut accumulator: impl FnMut($crate::PersonId)) {
+                    let people_data = context.get_data_container($crate::people::PeoplePlugin).unwrap();
+                    let index_map = people_data.property_indexes.borrow();
+                    let mut indexes: Vec<&HashSet<$crate::PersonId>> = Vec::new();
                     // A vector of closures that look up a property for an `people_id`
-                    let mut unindexed: Vec<Box<dyn Fn(&PeopleData, PersonId) -> bool>> = Vec::new();
+                    let mut unindexed: Vec<Box<dyn Fn(PersonId) -> bool>> = Vec::new();
 
                     // 1. Refresh the indexes for each property in the query.
                     //    Done in setup.
@@ -163,7 +162,7 @@ macro_rules! impl_query {
                     {
                         // 2. Collect the index entry corresponding to the value.
                         let index = index_map.get_container_ref::<T~N>().unwrap();
-                        let hash_value = IndexValue::compute(&self.N.1);
+                        let hash_value = $crate::people::index::IndexValue::compute(&self.N.1);
                         if let Some(lookup) = &index.lookup {
                             if let Some((_, people)) = lookup.get(&hash_value) {
                                 indexes.push(people);
@@ -176,10 +175,10 @@ macro_rules! impl_query {
                             unindexed.push(
                                 Box::new(
                                     move
-                                    |people_data: &PeopleData, people_id: PersonId| {
-                                        match people_data.get_person_property_ref(people_id, <T~N>::get_instance()).as_ref() {
+                                    |people_id: $crate::PersonId| {
+                                        match <T~N>::compute(context, people_id) {
                                             Some(value) => {
-                                                hash_value == IndexValue::compute(value)
+                                                hash_value == $crate::people::index::IndexValue::compute(&value)
                                             }
                                             _ => { false }
                                         }
@@ -192,7 +191,7 @@ macro_rules! impl_query {
                     // 3. Create an iterator over entities, based on either:
                     //    (1) the smallest index if there is one.
                     //    (2) the overall population if there are no indices.
-                    let to_check: Box<dyn Iterator<Item = PersonId>> =
+                    let to_check: Box<dyn Iterator<Item = $crate::PersonId>> =
                         if indexes.is_empty() {
                             Box::new(people_data.people_iterator())
                         } else {
@@ -220,7 +219,7 @@ macro_rules! impl_query {
 
                         // (2) check the unindexed properties
                         for hash_lookup in &unindexed {
-                            if !hash_lookup(people_data, people_id) {
+                            if !hash_lookup(people_id) {
                                 continue 'outer;
                             }
                         }
@@ -230,7 +229,7 @@ macro_rules! impl_query {
                     }
                 }
 
-                fn match_entity(&self, context: &Context, person_id: PersonId) -> bool {
+                fn match_entity(&self, context: &$crate::Context, person_id: $crate::PersonId) -> bool {
                     #(
                         if context.get_person_property(person_id, <T~N>::get_instance()) != self.N.1
                         {
@@ -241,10 +240,10 @@ macro_rules! impl_query {
                     true
                 }
 
-                fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+                fn get_query(&self) -> Vec<($crate::TypeId, $crate::people::index::IndexValue)> {
                     vec![
                     #(
-                        ($crate::type_of::<T~N>(), IndexValue::compute(&self.N.1)),
+                        ($crate::type_of::<T~N>(), $crate::people::index::IndexValue::compute(&self.N.1)),
                     )*
                     ]
                 }
@@ -313,9 +312,10 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        define_derived_property, define_person_property, Context, ContextPeopleExt, PersonProperty,
+        define_derived_property, define_person_property, define_person_property_with_default,
+        define_rng, Context, ContextPeopleExt, ContextRandomExt, HashSet, PersonId, PersonProperty,
     };
-    use serde_derive::Serialize;
+    use serde_derive::{Deserialize, Serialize};
 
     define_person_property!(Age, u8);
 
@@ -572,6 +572,82 @@ mod tests {
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
+    }
+
+    define_rng!(QueryTestRng);
+    #[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+    pub enum QueryTestAgeGroupRisk {
+        NewBorn,
+        General,
+        OldAdult,
+    }
+    define_person_property_with_default!(QueryTestAlive, bool, true);
+    define_derived_property!(QueryTestAgeGroupFoi, QueryTestAgeGroupRisk, [Age], |age| {
+        if age <= 1 {
+            QueryTestAgeGroupRisk::NewBorn
+        } else if age <= 65 {
+            QueryTestAgeGroupRisk::General
+        } else {
+            QueryTestAgeGroupRisk::OldAdult
+        }
+    });
+
+    #[test]
+    fn test_derived_nonderived_query() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        for _ in 0..100 {
+            let age: u8 = context.sample_range(QueryTestRng, 0..100);
+            let person = context.add_person((Age, age)).unwrap();
+
+            // Demonstrate that people exist with the properties we expect
+            let _ = context.get_person_property(person, Age);
+            let checked_alive = context.get_person_property(person, QueryTestAlive);
+            assert!(checked_alive);
+        }
+        // Make sure both single property and tuple singelton queries retrieve the same people.
+        // Tuple with single item
+        let alive_query_result_tuple = context.query_people(((QueryTestAlive, true),));
+        assert_eq!(alive_query_result_tuple.len(), 100);
+        // Nontuple query.
+        let alive_query_result = context.query_people((QueryTestAlive, true));
+        assert_eq!(alive_query_result.len(), 100);
+        assert_eq!(alive_query_result_tuple, alive_query_result);
+
+        // Do the same as previous but with the other property.
+        // Tuple with single item
+        let age_group_tuple_query_result = context.query_people((
+            // (QueryTestAlive, true),
+            (QueryTestAgeGroupFoi, QueryTestAgeGroupRisk::General),
+        ));
+        assert!(!age_group_tuple_query_result.is_empty());
+        // Nontuple query.
+        let age_group_query_result =
+            context.query_people((QueryTestAgeGroupFoi, QueryTestAgeGroupRisk::General));
+        assert!(!age_group_query_result.is_empty());
+        assert_eq!(age_group_tuple_query_result, age_group_query_result);
+
+        // Now do multi-property query
+        let multi_property_query = context.query_people((
+            (QueryTestAlive, true),
+            (QueryTestAgeGroupFoi, QueryTestAgeGroupRisk::General),
+        ));
+        assert!(!multi_property_query.is_empty());
+
+        // For good measure, check that the intersection of the first two single-property queries
+        // gives the third query.
+        let intersection: HashSet<PersonId> = alive_query_result
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .intersection(&age_group_query_result.into_iter().collect::<HashSet<_>>())
+            .copied()
+            .collect();
+        let expected: HashSet<PersonId> = multi_property_query.into_iter().collect();
+        assert_eq!(
+            intersection, expected,
+            "The intersection of the first two vectors does not match the third vector"
+        );
     }
     /*
     #[test]

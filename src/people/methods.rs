@@ -9,7 +9,6 @@
 use crate::people::index::IndexValue;
 use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
 
-
 type PersonCallback<T> = dyn Fn(&Context, PersonId) -> T;
 
 pub(crate) struct Methods {

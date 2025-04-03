@@ -78,6 +78,7 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 pub use std::any::TypeId;
 
+#[must_use]
 #[inline(always)]
 pub fn type_of<T: 'static>() -> TypeId {
     TypeId::of::<T>()

@@ -44,33 +44,20 @@ pub trait PersonProperty: Copy + 'static {
 
     fn get_instance() -> Self;
 
-    /// Computes the value of the property for the given person. For nonderived properties, this is just a lookup.
-    /// The default behavior is to assign an initial value to the entity's property if the lookup fails to return
-    /// a value.
+    /// Computes the value of the property for the given person. For nonderived properties, this is
+    /// just a lookup. If the value has never been set, we compute its initial value and return
+    /// that. The property value is not set to this initial value--it is computed anew each time
+    /// until client code sets the person property.
+    #[must_use]
     fn compute(context: &Context, person_id: PersonId) -> Option<Self::Value> {
         let value = context
             .get_data_container(PeoplePlugin)
             .unwrap()
-            .get_person_property_ref(person_id, Self::get_instance())
-            .clone();
+            .get_person_property(person_id, Self::get_instance());
 
         // Initialize the property. This does not fire a change event
         if value.is_none() {
-            match Self::initial_value(context, person_id) {
-                None => None,
-
-                Some(value) => {
-                    // Insert the initial value for the person_id
-                    // ToDo(Robert): This unwrap is temporary until we remove RefCell.
-                    let data_container = context.get_data_container(PeoplePlugin).unwrap();
-                    data_container.set_person_property(
-                        person_id,
-                        Self::get_instance(),
-                        value.clone(),
-                    );
-                    Some(value)
-                }
-            }
+            Self::initial_value(context, person_id)
         } else {
             value
         }

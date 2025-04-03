@@ -48,16 +48,15 @@ impl<T1: PersonProperty> Tabulator for (T1,) {
 
         let data_container = context.get_data_container(PeoplePlugin).unwrap();
         let indexes = data_container.property_indexes.borrow();
-        let mut index_list: Vec<&HashMap<IndexValue, (String, HashSet<PersonId>)>> = vec![];
-        // Both unwraps guaranteed to succeed because we called `Tabulator::setup`.
-        index_list.push(
+        let index_list: Vec<&HashMap<IndexValue, (String, HashSet<PersonId>)>> = vec![
+            // Both unwraps guaranteed to succeed because we called `Tabulator::setup`.
             indexes
                 .get_container_ref::<T1>()
                 .unwrap()
                 .lookup
                 .as_ref()
                 .unwrap(),
-        );
+        ];
 
         let mut property_value_names = vec![];
         let current_matches: HashSet<PersonId> = HashSet::default(); //dummy
@@ -114,18 +113,16 @@ macro_rules! impl_tabulator {
 
                     let data_container = context.get_data_container($crate::people::PeoplePlugin).unwrap();
                     let indexes = data_container.property_indexes.borrow();
-                    let mut index_list: Vec<&HashMap<$crate::people::index::IndexValue, (String, HashSet<PersonId>)>> = vec![];
+                    let index_list: Vec<&HashMap<$crate::people::index::IndexValue, (String, HashSet<PersonId>)>> = vec![
                     #(
                         // Both unwraps guaranteed to succeed because we called `Tabulator::setup`.
-                        index_list.push(
-                            indexes
-                                .get_container_ref::<T~N>()
-                                .unwrap()
-                                .lookup
-                                .as_ref()
-                                .unwrap(),
-                        );
+                        indexes.get_container_ref::<T~N>()
+                               .unwrap()
+                               .lookup
+                               .as_ref()
+                               .unwrap(),
                     )*
+                    ];
 
                     let mut property_value_names = vec![];
                     let current_matches: HashSet<$crate::PersonId> = HashSet::default(); //dummy
@@ -179,19 +176,17 @@ impl Tabulator for Vec<(TypeId, String)> {
         let data_container = context.get_data_container(PeoplePlugin).unwrap();
         let indexes = data_container.property_indexes.borrow();
 
-        let mut index_list: Vec<&HashMap<IndexValue, (String, HashSet<PersonId>)>> = vec![];
-
-        for (type_id, _) in self {
-            // Both unwraps guaranteed to succeed because we called `Tabulator::setup`.
-            index_list.push(
+        let index_list: Vec<&HashMap<IndexValue, (String, HashSet<PersonId>)>> = self
+            .iter()
+            .map(|(type_id, _)| {
                 indexes
                     .get_container_by_id_ref(*type_id)
                     .unwrap()
                     .lookup
                     .as_ref()
-                    .unwrap(),
-            );
-        }
+                    .unwrap()
+            })
+            .collect();
 
         let mut property_value_names = vec![];
         let current_matches: HashSet<PersonId> = HashSet::default(); //dummy
@@ -234,7 +229,7 @@ pub fn process_indices(
         property_value_names.push(value_name.clone());
 
         let matches = if intersect {
-            &current_matches.intersection(people).cloned().collect()
+            &current_matches.intersection(people).copied().collect()
         } else {
             people
         };
