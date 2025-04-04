@@ -72,14 +72,16 @@ mod context_extension;
 mod data;
 mod event;
 pub(crate) mod external_api;
-mod index;
+pub(crate) mod index;
 pub(crate) mod methods;
 mod property;
 mod query;
-pub use query::{Query, QueryAnd};
+pub use query::Query;
+pub mod tabulator;
 
-use crate::{context::Context, define_data_plugin};
+use crate::{context::Context, impl_data_plugin};
 pub use context_extension::ContextPeopleExt;
+pub use context_extension::ContextPeopleExtInternal;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
@@ -88,25 +90,27 @@ pub use property::{
     PersonProperty,
 };
 
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
+use crate::people::index::IndexMap;
+use crate::{HashMap, HashSet};
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
 use std::{any::TypeId, hash::Hash};
 
-define_data_plugin!(
+pub(crate) struct PeoplePlugin;
+impl_data_plugin!(
     PeoplePlugin,
     PeopleData,
     PeopleData {
         is_initializing: false,
         current_population: 0,
-        methods: RefCell::new(HashMap::new()),
-        properties_map: RefCell::new(HashMap::new()),
-        registered_derived_properties: RefCell::new(HashSet::new()),
-        dependency_map: RefCell::new(HashMap::new()),
-        property_indexes: RefCell::new(HashMap::new()),
-        people_types: RefCell::new(HashMap::new()),
+        methods: RefCell::new(HashMap::default()),
+        properties_map: RefCell::new(HashMap::default()),
+        registered_derived_properties: RefCell::new(HashSet::default()),
+        dependency_map: RefCell::new(HashMap::default()),
+        property_indexes: RefCell::new(IndexMap::default()),
+        people_types: RefCell::new(HashMap::default()),
     }
 );
 
@@ -144,7 +148,7 @@ impl InitializationList for () {
     fn set_properties(&self, _context: &mut Context, _person_id: PersonId) {}
 }
 
-impl<T1: PersonProperty + 'static> InitializationList for (T1, T1::Value) {
+impl<T1: PersonProperty> InitializationList for (T1, T1::Value) {
     fn has_property(&self, t: TypeId) -> bool {
         t == TypeId::of::<T1>()
     }
@@ -160,7 +164,7 @@ macro_rules! impl_initialization_list {
         seq!(N in 0..$ct {
             impl<
                 #(
-                    T~N : PersonProperty + 'static,
+                    T~N : PersonProperty,
                 )*
             > InitializationList for (
                 #(

@@ -1,6 +1,9 @@
-use crate::people::data::PersonPropertyHolder;
-use crate::{Context, PersonId};
+use crate::{
+    people::context_extension::ContextPeopleExtInternal, people::PeoplePlugin, type_of, Context,
+    HashSet, PersonId,
+};
 use serde::Serialize;
+use std::any::TypeId;
 use std::fmt::Debug;
 
 /// An individual characteristic or state related to a person, such as age or
@@ -9,23 +12,63 @@ use std::fmt::Debug;
 /// Person properties should be defined with the [`define_person_property!()`],
 /// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
 /// macros.
-pub trait PersonProperty: Copy {
+pub trait PersonProperty: Copy + 'static {
     type Value: Copy + Debug + PartialEq + Serialize;
     #[must_use]
     fn is_derived() -> bool {
         false
     }
+
+    #[must_use]
+    fn name() -> &'static str;
+
     #[must_use]
     fn is_required() -> bool {
         false
     }
-    #[must_use]
-    fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
-        panic!("Dependencies not implemented");
+
+    /// Overridden by derived properties, because they also need to register dependencies.
+    #[inline]
+    fn register(context: &Context) {
+        if !context.is_registered::<Self>() {
+            context.register_nonderived_property::<Self>();
+        }
     }
-    fn compute(context: &Context, person_id: PersonId) -> Self::Value;
+
+    /// Adds all nonderived dependencies of `Self` to `dependencies`, ***including `Self`***
+    /// if `Self` is nonderived.
+    #[inline]
+    fn collect_dependencies(dependencies: &mut HashSet<TypeId>) {
+        dependencies.insert(type_of::<Self>());
+    }
+
     fn get_instance() -> Self;
-    fn name() -> &'static str;
+
+    /// Computes the value of the property for the given person. For nonderived properties, this is
+    /// just a lookup. If the value has never been set, we compute its initial value and return
+    /// that. The property value is not set to this initial value--it is computed anew each time
+    /// until client code sets the person property.
+    #[must_use]
+    fn compute(context: &Context, person_id: PersonId) -> Option<Self::Value> {
+        let value = context
+            .get_data_container(PeoplePlugin)
+            .unwrap()
+            .get_person_property(person_id, Self::get_instance());
+
+        // Initialize the property. This does not fire a change event
+        if value.is_none() {
+            Self::initial_value(context, person_id)
+        } else {
+            value
+        }
+    }
+
+    /// Overload to compute an initial value for a value that has not been set. The default behavior of
+    /// `Property::compute` is to assign this initial value to the entity.
+    #[must_use]
+    fn initial_value(_context: &Context, _entity_id: PersonId) -> Option<Self::Value> {
+        None
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -41,17 +84,21 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $initialize(_context, _person)
-            }
+
             fn get_instance() -> Self {
                 $person_property
             }
+
             fn name() -> &'static str {
                 stringify!($person_property)
+            }
+
+            #[must_use]
+            fn initial_value(
+                context: &$crate::context::Context,
+                person_id: $crate::people::PersonId,
+            ) -> Option<Self::Value> {
+                Some($initialize(context, person_id))
             }
         }
     };
@@ -60,20 +107,17 @@ macro_rules! define_person_property {
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                panic!("Property not initialized when person created.");
-            }
+
             fn is_required() -> bool {
                 true
             }
-            fn get_instance() -> Self {
-                $person_property
-            }
+
             fn name() -> &'static str {
                 stringify!($person_property)
+            }
+
+            fn get_instance() -> Self {
+                $person_property
             }
         }
     };
@@ -114,7 +158,8 @@ macro_rules! define_derived_property {
 
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
-            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
+
+            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Option<Self::Value> {
                 #[allow(unused_imports)]
                 use $crate::global_properties::ContextGlobalPropertiesExt;
                 #[allow(unused_parens)]
@@ -125,17 +170,30 @@ macro_rules! define_derived_property {
                             .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
                     ),*
                 );
-                (|$($param),+| $derive_fn)($($param),+)
+                Some((|$($param),+| $derive_fn)($($param),+))
             }
+
             fn is_derived() -> bool { true }
-            fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
-                vec![$(Box::new($dependency)),+]
-            }
+
             fn get_instance() -> Self {
                 $derived_property
             }
+
             fn name() -> &'static str {
                 stringify!($derived_property)
+            }
+
+            fn register(context: &$crate::Context) {
+                use $crate::people::ContextPeopleExtInternal;
+                if !context.is_registered::<Self>(){
+                    context.register_derived_property::<$derived_property>();
+                }
+            }
+
+            fn collect_dependencies(dependencies: &mut $crate::HashSet<std::any::TypeId>) {
+                $(
+                    $dependency::collect_dependencies(dependencies);
+                )*
             }
         }
     };

@@ -39,7 +39,7 @@ fn register_api_handler<
     );
 }
 
-struct ApiData {
+pub(crate) struct ApiData {
     receiver: mpsc::UnboundedReceiver<ApiRequest>,
     handlers: HashMap<String, Box<WebApiHandler>>,
 }

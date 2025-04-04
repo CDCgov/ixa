@@ -1,4 +1,4 @@
-use crate::{Context, ContextPeopleExt, IxaEvent, PersonId, PersonProperty};
+use crate::{Context, IxaEvent, PersonId, PersonProperty};
 use ixa_derive::IxaEvent;
 
 /// Emitted when a new person is created
@@ -23,10 +23,10 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
     pub previous: T::Value,
 }
 
-impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
+impl<T: PersonProperty> IxaEvent for PersonPropertyChangeEvent<T> {
     fn on_subscribe(context: &mut Context) {
         if T::is_derived() {
-            context.register_property::<T>();
+            T::register(context);
         }
     }
 }
