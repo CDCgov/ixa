@@ -190,7 +190,7 @@ pub trait ContextNetworkExt {
     /// Returns `IxaError` if:
     ///
     /// * `person` and `neighbor` are the same or an edge already
-    ///    exists between them.
+    ///   exists between them.
     /// * `weight` is invalid
     fn add_edge<T: EdgeType + 'static>(
         &mut self,

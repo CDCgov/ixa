@@ -266,9 +266,10 @@ impl ContextGlobalPropertiesExt for Context {
         _property: T,
     ) -> Option<&T::Value> {
         if let Some(data_container) = self.get_data_container(GlobalPropertiesPlugin) {
-            return data_container.get_global_property_value::<T>();
-        };
-        None
+            data_container.get_global_property_value::<T>()
+        } else {
+            None
+        }
     }
 
     fn list_registered_global_properties(&self) -> Vec<String> {

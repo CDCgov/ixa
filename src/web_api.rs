@@ -177,7 +177,7 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
                     response,
                 });
             }
-        };
+        }
 
         // Special case the functions which require exiting
         // the loop.
