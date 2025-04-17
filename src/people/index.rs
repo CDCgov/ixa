@@ -1,17 +1,21 @@
 use super::methods::Methods;
 use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
-use crate::{HashMap, HashSet, HashSetExt};
+use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use bincode::serialize;
 use serde::Serialize;
+use std::any::TypeId;
+use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::LazyLock;
+use std::sync::Mutex;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize)]
 // The lookup key for entries in the index. This is a serialized version of the value.
-// If that serialization fits in 128 bits, we store it in `IndexValue::Fixed` to
-// avoid the allocation of the `Vec`. Otherwise, it goes in `IndexValue::Variable`.
+// a hash is calculated and stored in a Fixed(u64).
 #[doc(hidden)]
 pub enum IndexValue {
-    Fixed(u128),
-    Variable(Vec<u8>),
+    Fixed(u64),
 }
 
 impl IndexValue {
@@ -19,17 +23,10 @@ impl IndexValue {
         // Serialize `val` to a `Vec<u8>` using `bincode`
         let serialized_data = serialize(val).expect("Failed to serialize value");
 
-        // If serialized data fits within 16 bytes...
-        if serialized_data.len() <= 16 {
-            // ...store it as `IndexValue::Fixed`
-            let mut tmp: [u8; 16] = [0; 16];
-            tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
-
-            IndexValue::Fixed(u128::from_le_bytes(tmp))
-        } else {
-            // Otherwise, store it as `IndexValue::Variable`
-            IndexValue::Variable(serialized_data)
-        }
+        let mut hasher = DefaultHasher::new();
+        serialized_data.hash(&mut hasher);
+        let hash = hasher.finish(); // Produces a 64-bit hash
+        IndexValue::Fixed(hash)
     }
 }
 
@@ -97,6 +94,37 @@ impl Index {
     }
 }
 
+// explain...
+#[doc(hidden)]
+#[allow(clippy::type_complexity)]
+pub static MULTI_PROPERTY_INDEX_MAP: LazyLock<Mutex<RefCell<HashMap<Vec<TypeId>, TypeId>>>> =
+    LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
+
+#[allow(dead_code)]
+pub fn add_multi_property_index(property_ids: &[TypeId], index_type: TypeId) {
+    let current_map = MULTI_PROPERTY_INDEX_MAP.lock().unwrap();
+    let mut map = current_map.borrow_mut();
+    let mut ordered_property_ids = property_ids.to_owned();
+    ordered_property_ids.sort();
+    map.entry(ordered_property_ids).or_insert(index_type);
+}
+
+pub fn get_multi_property_index(query: &[(TypeId, IndexValue)]) -> Option<TypeId> {
+    let map = MULTI_PROPERTY_INDEX_MAP.lock().unwrap();
+    let map = map.borrow();
+    let mut sorted_query = query.to_owned();
+    sorted_query.sort_by(|a, b| a.0.cmp(&b.0));
+    let items = query.iter().map(|(t, _)| *t).collect::<Vec<_>>();
+    map.get(&items).copied()
+}
+
+pub fn get_multi_property_hash(query: &[(TypeId, IndexValue)]) -> IndexValue {
+    let mut sorted_query = query.to_owned();
+    sorted_query.sort_by(|a, b| a.0.cmp(&b.0));
+    let items = query.iter().map(|(_, i)| *i).collect::<Vec<_>>();
+    IndexValue::compute(&IndexValue::compute(&items))
+}
+
 pub fn process_indices(
     context: &Context,
     remaining_indices: &[&Index],
@@ -159,7 +187,7 @@ mod test {
     fn test_index_value_hasher_finish2_long() {
         let value = "this is a longer string that exceeds 16 bytes";
         let index = IndexValue::compute(&value);
-        assert!(matches!(index, IndexValue::Variable(_)));
+        assert!(matches!(index, IndexValue::Fixed(_)));
     }
 
     #[test]

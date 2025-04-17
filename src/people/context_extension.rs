@@ -1,4 +1,4 @@
-use crate::people::index::{Index, IndexValue};
+use crate::people::index::{get_multi_property_hash, get_multi_property_index, Index, IndexValue};
 use crate::people::query::Query;
 use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
@@ -510,8 +510,21 @@ impl ContextPeopleExtInternal for Context {
             index.index_unindexed_people(self, &methods);
         }
 
+        // TODO: explain...
+        let mut property_hashs_working_set = property_hashes.clone();
+        if property_hashs_working_set.len() > 1 {
+            if let Some(combined_index) = get_multi_property_index(&property_hashes) {
+                let combined_hash = get_multi_property_hash(&property_hashes);
+                property_hashs_working_set = vec![(combined_index, combined_hash)];
+                let mut index = data_container.get_index_ref_mut(combined_index)
+                .expect("Multi-property index must be registered, call context.index_property() before calling a query.");
+                let methods = data_container.get_methods(combined_index);
+                index.index_unindexed_people(self, &methods);
+            }
+        }
+
         // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashes {
+        for (t, hash) in property_hashs_working_set {
             let index = data_container.get_index_ref(t).unwrap();
             if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
                 if let Ok(matching_people) =
