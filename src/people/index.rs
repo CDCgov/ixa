@@ -7,6 +7,7 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
@@ -94,28 +95,56 @@ impl Index {
     }
 }
 
-// explain...
+/// The common callback used by multiple `Context` methods for future events
+type IndexCallback = dyn Fn(&Context) + Send + Sync;
+
+pub struct MultiIndex {
+    register: Box<IndexCallback>,
+    type_id: TypeId,
+}
+
+// / A static map of multi-property indices. This is used to register multi-property property indices
+// / when they are first created. The map is keyed by the property IDs of the properties that are
+// / indexed. The values are the `MultiIndex` objects that contain the registration function and
+// / the type ID of the index.
 #[doc(hidden)]
 #[allow(clippy::type_complexity)]
-pub static MULTI_PROPERTY_INDEX_MAP: LazyLock<Mutex<RefCell<HashMap<Vec<TypeId>, TypeId>>>> =
-    LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
+pub static MULTI_PROPERTY_INDEX_MAP: LazyLock<
+    Mutex<RefCell<HashMap<Vec<TypeId>, Arc<MultiIndex>>>>,
+> = LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
 #[allow(dead_code)]
-pub fn add_multi_property_index(property_ids: &[TypeId], index_type: TypeId) {
+pub fn add_multi_property_index<T: PersonProperty + 'static>(
+    property_ids: &[TypeId],
+    index_type: TypeId,
+) {
     let current_map = MULTI_PROPERTY_INDEX_MAP.lock().unwrap();
     let mut map = current_map.borrow_mut();
     let mut ordered_property_ids = property_ids.to_owned();
     ordered_property_ids.sort();
-    map.entry(ordered_property_ids).or_insert(index_type);
+    map.entry(ordered_property_ids)
+        .or_insert(Arc::new(MultiIndex {
+            register: Box::new(|context| {
+                context.register_property::<T>();
+            }),
+            type_id: index_type,
+        }));
 }
 
-pub fn get_multi_property_index(query: &[(TypeId, IndexValue)]) -> Option<TypeId> {
+pub fn get_and_register_multi_property_index(
+    query: &[(TypeId, IndexValue)],
+    context: &Context,
+) -> Option<TypeId> {
     let map = MULTI_PROPERTY_INDEX_MAP.lock().unwrap();
     let map = map.borrow();
     let mut sorted_query = query.to_owned();
     sorted_query.sort_by(|a, b| a.0.cmp(&b.0));
     let items = query.iter().map(|(t, _)| *t).collect::<Vec<_>>();
-    map.get(&items).copied()
+    if let Some(multi_index) = map.get(&items) {
+        (multi_index.register)(context);
+        return Some(multi_index.type_id);
+    }
+    None
 }
 
 pub fn get_multi_property_hash(query: &[(TypeId, IndexValue)]) -> IndexValue {
@@ -165,7 +194,8 @@ mod test {
     // Tests in `src/people/query.rs` also exercise indexing code.
 
     use crate::people::index::{Index, IndexValue};
-    use crate::{define_person_property, Context};
+    use crate::{define_person_property, Context, ContextPeopleExt};
+    use std::any::TypeId;
 
     define_person_property!(Age, u8);
 
@@ -202,5 +232,19 @@ mod test {
         let value1 = 42;
         let value2 = 43;
         assert_ne!(IndexValue::compute(&value1), IndexValue::compute(&value2));
+    }
+
+    #[test]
+    fn test_multi_property_index_map_add_get_and_hash() {
+        let mut context = Context::new();
+        let _person = context.add_person((Age, 64)).unwrap();
+        let property_ids = vec![TypeId::of::<Age>()];
+        let index_type = TypeId::of::<IndexValue>();
+        super::add_multi_property_index::<Age>(&property_ids, index_type);
+        let query = vec![(TypeId::of::<Age>(), IndexValue::Fixed(42))];
+        let hash = super::get_multi_property_hash(&query);
+        assert!(matches!(hash, IndexValue::Fixed(_)));
+        let registered_index = super::get_and_register_multi_property_index(&query, &context);
+        assert!(registered_index.is_some());
     }
 }

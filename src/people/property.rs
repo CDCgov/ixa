@@ -157,29 +157,27 @@ macro_rules! define_derived_property {
 pub use define_derived_property;
 
 #[macro_export]
-macro_rules! define_multi_index_property {
+macro_rules! multi_index_property {
     (
         $derived_property:ident,
         [$($dependency:ident),+],
         |$($param:ident),+|
     ) => {
-
-        define_derived_property!($derived_property, IndexValue, [$($dependency),*],
+        define_derived_property!($derived_property, $crate::people::index::IndexValue, [$($dependency),*],
             | $(
                 $param
             ),+ | {
             let mut combined = vec!(
                 $(
                     (std::any::TypeId::of::<$dependency>(),
-                    IndexValue::compute(&$param))
+                    $crate::people::index::IndexValue::compute(&$param))
                 ),*
             );
             combined.sort_by(|a, b| a.0.cmp(&b.0));
             let values = combined.iter().map(|x| x.1).collect::<Vec<_>>();
-            IndexValue::compute(&values)
+            $crate::people::index::IndexValue::compute(&values)
         });
-        use $crate::people::index::add_multi_property_index;
-        add_multi_property_index(
+        $crate::people::index::add_multi_property_index::<$derived_property>(
             &vec![
                 $(
                     std::any::TypeId::of::<$dependency>(),
@@ -191,52 +189,45 @@ macro_rules! define_multi_index_property {
 }
 
 #[macro_export]
-macro_rules! define_xyz {
-    ($derived_property:ident, [$d1:ident, $d2:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2], |d1, d2|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3], |d1, d2, d3|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4], |d1, d2, d3, d4|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5], |d1, d2, d3, d4, d5|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6], |d1, d2, d3, d4, d5, d6|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7], |d1, d2, d3, d4, d5, d6, d7|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8], |d1, d2, d3, d4, d5, d6, d7, d8|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9], |d1, d2, d3, d4, d5, d6, d7, d8, d9|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident, $d19:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18, d19|); };
-    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident, $d19:ident, $d20:ident])  => { define_multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18, $d19, $d20] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18, d19, d20|); };
+macro_rules! define_multi_property_index {
+    ($derived_property:ident, [$d1:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1], |d1|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2], |d1, d2|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3], |d1, d2, d3|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4], |d1, d2, d3, d4|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5], |d1, d2, d3, d4, d5|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6], |d1, d2, d3, d4, d5, d6|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7], |d1, d2, d3, d4, d5, d6, d7|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8], |d1, d2, d3, d4, d5, d6, d7, d8|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9], |d1, d2, d3, d4, d5, d6, d7, d8, d9|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14], |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident, $d19:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18, $d19] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18, d19|); };
+    ($derived_property:ident, [$d1:ident, $d2:ident, $d3:ident, $d4:ident, $d5:ident, $d6:ident, $d7:ident, $d8:ident, $d9:ident, $d10:ident, $d11:ident, $d12:ident, $d13:ident, $d14:ident, $d15:ident, $d16:ident, $d17:ident, $d18:ident, $d19:ident, $d20:ident]) =>
+        { $crate::multi_index_property!($derived_property, [$d1, $d2, $d3, $d4, $d5, $d6, $d7, $d8, $d9, $d10, $d11, $d12, $d13, $d14, $d15, $d16, $d17, $d18, $d19, $d20] |d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, d17, d18, d19, d20|); };
 }
-/*
-use seq_macro::seq;
-
-
-seq!(N in 1..=10 {
-    #[macro_export]
-    macro_rules! define_xyz {
-        ( $derived_property:ident, $( $param:expr ),{N} ) => {
-            $func($( $param ),*);
-        };
-    }
-});
-
-#[macro_export]
-macro_rules! define_xyz {
-    ($derived_property:ident, [$($d:ident),*]) => {
-        seq!(N in 1..=20 {
-            match ($($d),*) {
-                ($d~N),*) => {
-                    define_multi_index_property!(
-                        $derived_property,
-                        [$( $d ),*],
-                        |$( $d ),*|
-                    );
-                }
-            }
-}
-*/
