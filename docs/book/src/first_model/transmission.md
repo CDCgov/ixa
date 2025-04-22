@@ -41,7 +41,7 @@ We need to import these constants into `transmission_manager`. To define a new r
 
 ```rust
 // transmission_manager.rs
-{{#include ../../models/disease_model/src/transmission_manager.rs:1:9}}
+{{#include ../../models/disease_model/src/transmission_manager.rs:1:10}}
 // ...the rest of the file...
 ```
 
