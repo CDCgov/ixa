@@ -1,11 +1,23 @@
-[package]
-name = "ixa"
-version = "0.0.1"
+[workspace]
+resolver = "2"
+members = [
+  "ixa-bench",
+  "ixa-derive",
+]
+
+[workspace.package]
 edition = "2021"
-description = "A framework for building agent-based models"
 repository = "https://github.com/CDCgov/ixa"
 license = "Apache-2.0"
 homepage = "https://github.com/CDCgov/ixa"
+
+[package]
+name = "ixa"
+version = "0.0.1"
+description = "A framework for building agent-based models"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
 
 [dependencies]
 rand = "^0.8.5"
@@ -44,7 +56,7 @@ assert_approx_eq = "1.1.0"
 ixa_example_basic_infection = { path = "examples/basic-infection" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
 implicit_hasher = "allow"
@@ -63,13 +75,3 @@ bench = false
 name = "runner_test_debug"
 path = "tests/bin/runner_test_debug.rs"
 bench = false
-
-[[bench]]
-name = "example_basic_infection"
-path = "benches/example_basic_infection/example_basic_infection.rs"
-harness = false
-
-[[bench]]
-name = "example_births_deaths"
-path = "benches/example_births_deaths/example_births_deaths.rs"
-harness = false
