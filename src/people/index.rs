@@ -1,4 +1,5 @@
 use super::methods::Methods;
+use crate::people::external_api::ContextPeopleExtCrate;
 use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
 use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use bincode::serialize;
@@ -16,7 +17,8 @@ use std::sync::Mutex;
 // a hash is calculated and stored in a Fixed(u64).
 #[doc(hidden)]
 pub enum IndexValue {
-    Fixed(u64),
+    Fixed(u128),
+    Hashed(u64),
 }
 
 impl IndexValue {
@@ -24,10 +26,19 @@ impl IndexValue {
         // Serialize `val` to a `Vec<u8>` using `bincode`
         let serialized_data = serialize(val).expect("Failed to serialize value");
 
-        let mut hasher = DefaultHasher::new();
-        serialized_data.hash(&mut hasher);
-        let hash = hasher.finish(); // Produces a 64-bit hash
-        IndexValue::Fixed(hash)
+        // If serialized data fits within 16 bytes...
+        if serialized_data.len() <= 16 {
+            // ...store it as `IndexValue::Fixed`
+            let mut tmp: [u8; 16] = [0; 16];
+            tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
+
+            IndexValue::Fixed(u128::from_le_bytes(tmp))
+        } else {
+            let mut hasher = DefaultHasher::new();
+            serialized_data.hash(&mut hasher);
+            let hash = hasher.finish(); // Produces a 64-bit hash
+            IndexValue::Hashed(hash)
+        }
     }
 }
 
@@ -126,6 +137,7 @@ pub fn add_multi_property_index<T: PersonProperty + 'static>(
         .or_insert(Arc::new(MultiIndex {
             register: Box::new(|context| {
                 context.register_property::<T>();
+                context.index_property_by_id(TypeId::of::<T>());
             }),
             type_id: index_type,
         }));
@@ -217,7 +229,7 @@ mod test {
     fn test_index_value_hasher_finish2_long() {
         let value = "this is a longer string that exceeds 16 bytes";
         let index = IndexValue::compute(&value);
-        assert!(matches!(index, IndexValue::Fixed(_)));
+        assert!(matches!(index, IndexValue::Hashed(_)));
     }
 
     #[test]
