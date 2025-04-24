@@ -411,7 +411,8 @@ mod tests {
         );
 
         // create a multi-property index
-        define_multi_property_index!(AgeCountyHeight, [Age, County, Height]);
+        define_multi_property_index!(Age, County, Height);
+        define_multi_property_index!(County, Height);
 
         // add some people
         let _person = context
@@ -465,6 +466,11 @@ mod tests {
         context.set_person_property(p2, Age, 28);
         // multi-property index again after changing the value
         let age_county_height5 = context.query_people(((Height, 140), (County, 1), (Age, 28)));
+        assert_eq!(age_county_height5.len(), 2, "Should have 2 matches");
+        assert!(age_county_height5.contains(&p2));
+        assert!(age_county_height5.contains(&p3));
+
+        let age_county_height5 = context.query_people(((Height, 140), (County, 1)));
         assert_eq!(age_county_height5.len(), 2, "Should have 2 matches");
         assert!(age_county_height5.contains(&p2));
         assert!(age_county_height5.contains(&p3));

@@ -3,7 +3,7 @@ use crate::people::external_api::ContextPeopleExtCrate;
 use crate::{Context, ContextPeopleExt, PersonId, PersonProperty};
 use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use bincode::serialize;
-use serde::Serialize;
+use serde::ser::{Serialize, Serializer};
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -12,13 +12,31 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 // The lookup key for entries in the index. This is a serialized version of the value.
-// a hash is calculated and stored in a Fixed(u64).
+// If that serialization fits in 128 bits, we store it in `IndexValue::Fixed` to
+// avoid the allocation of the `Vec`.
+// Otherwise, we try to fit it in [u8; 64] or [u8; 256] or a 64 bit hash.
 #[doc(hidden)]
 pub enum IndexValue {
     Fixed(u128),
+    Med64([u8; 64]),
+    Med256([u8; 256]),
     Hashed(u64),
+}
+
+impl Serialize for IndexValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            IndexValue::Fixed(value) => serializer.serialize_u128(*value),
+            IndexValue::Med64(array) => serializer.serialize_bytes(array),
+            IndexValue::Med256(array) => serializer.serialize_bytes(array),
+            IndexValue::Hashed(value) => serializer.serialize_u64(*value),
+        }
+    }
 }
 
 impl IndexValue {
@@ -33,7 +51,20 @@ impl IndexValue {
             tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
 
             IndexValue::Fixed(u128::from_le_bytes(tmp))
+        } else if serialized_data.len() <= 64 {
+            // If serialized data fits within 64 bytes...
+            let mut tmp: [u8; 64] = [0; 64];
+            tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
+
+            IndexValue::Med64(tmp)
+        } else if serialized_data.len() <= 256 {
+            // If serialized data fits within 256 bytes...
+            let mut tmp: [u8; 256] = [0; 256];
+            tmp[..serialized_data.len()].copy_from_slice(&serialized_data[..]);
+
+            IndexValue::Med256(tmp)
         } else {
+            // Otherwise, hash the data and store it as `IndexValue::Hashed`
             let mut hasher = DefaultHasher::new();
             serialized_data.hash(&mut hasher);
             let hash = hasher.finish(); // Produces a 64-bit hash
@@ -229,7 +260,7 @@ mod test {
     fn test_index_value_hasher_finish2_long() {
         let value = "this is a longer string that exceeds 16 bytes";
         let index = IndexValue::compute(&value);
-        assert!(matches!(index, IndexValue::Hashed(_)));
+        assert!(matches!(index, IndexValue::Med64(_)));
     }
 
     #[test]
@@ -255,7 +286,7 @@ mod test {
         super::add_multi_property_index::<Age>(&property_ids, index_type);
         let query = vec![(TypeId::of::<Age>(), IndexValue::Fixed(42))];
         let hash = super::get_multi_property_hash(&query);
-        assert!(matches!(hash, IndexValue::Fixed(_)));
+        assert!(matches!(hash, IndexValue::Med256(_)));
         let registered_index = super::get_and_register_multi_property_index(&query, &context);
         assert!(registered_index.is_some());
     }
