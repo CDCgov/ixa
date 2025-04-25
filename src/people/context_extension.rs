@@ -311,7 +311,7 @@ impl ContextPeopleExt for Context {
         let data_container = self.get_data_container(PeoplePlugin).
             expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         if data_container
-            .registered_derived_properties
+            .registered_properties
             .borrow()
             .contains(&TypeId::of::<T>())
         {
@@ -319,12 +319,22 @@ impl ContextPeopleExt for Context {
         }
 
         let instance = T::get_instance();
-        let dependencies = instance.non_derived_dependencies();
-        for dependency in dependencies {
-            let mut dependency_map = data_container.dependency_map.borrow_mut();
-            let derived_prop_list = dependency_map.entry(dependency).or_default();
-            derived_prop_list.push(Box::new(instance));
+
+        // In order to avoid borrowing recursively, we must register dependencies first.
+        if instance.is_derived() {
+            T::register_dependencies(self);
+
+            let dependencies = instance.non_derived_dependencies();
+            for dependency in dependencies {
+                let mut dependency_map = data_container.dependency_map.borrow_mut();
+                let derived_prop_list = dependency_map.entry(dependency).or_default();
+                derived_prop_list.push(Box::new(instance));
+            }
         }
+
+        // TODO<ryl8@cdc.gov>: We create an index for every property in order to
+        // support the get_person_property_by_name() function used in external_api.rs,
+        // but ideally this shouldn't be necessary.
         data_container
             .methods
             .borrow_mut()
@@ -334,7 +344,7 @@ impl ContextPeopleExt for Context {
             .borrow_mut()
             .insert(T::name().to_string(), TypeId::of::<T>());
         data_container
-            .registered_derived_properties
+            .registered_properties
             .borrow_mut()
             .insert(TypeId::of::<T>());
 
@@ -978,5 +988,40 @@ mod tests {
         assert!(count_p1 >= 8700);
         assert!(count_p2 >= 8700);
         assert!(count_p3 >= 8700);
+    }
+
+    mod property_initialization_queries {
+        use super::*;
+
+        define_rng!(PropertyInitRng);
+        define_person_property_with_default!(SimplePropWithDefault, u8, 1);
+        define_derived_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
+        define_derived_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
+
+        #[test]
+        fn test_query_derived_property_not_initialized() {
+            let mut context = Context::new();
+            context.init_random(42);
+            let person = context.add_person(()).unwrap();
+            assert_eq!(
+                context
+                    .sample_person(PropertyInitRng, (DerivedOnce, 2))
+                    .unwrap(),
+                person
+            );
+        }
+
+        #[test]
+        fn test_query_derived_property_not_initialized_two_levels() {
+            let mut context = Context::new();
+            context.init_random(42);
+            let person = context.add_person(()).unwrap();
+            assert_eq!(
+                context
+                    .sample_person(PropertyInitRng, (DerivedTwice, true))
+                    .unwrap(),
+                person
+            );
+        }
     }
 }

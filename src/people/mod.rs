@@ -103,7 +103,7 @@ define_data_plugin!(
         current_population: 0,
         methods: RefCell::new(HashMap::new()),
         properties_map: RefCell::new(HashMap::new()),
-        registered_derived_properties: RefCell::new(HashSet::new()),
+        registered_properties: RefCell::new(HashSet::new()),
         dependency_map: RefCell::new(HashMap::new()),
         property_indexes: RefCell::new(HashMap::new()),
         people_types: RefCell::new(HashMap::new()),
