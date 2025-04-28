@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "ixa-bench",
   "ixa-derive",
+  "ixa-integration-tests",
 ]
 
 [workspace.package]
@@ -51,6 +52,8 @@ assert_cmd = "^2.0.16"
 criterion = "^0.5.1"
 roots = "0.0.8"
 assert_approx_eq = "1.1.0"
+ixa-integration-tests = { path = "./ixa-integration-tests" }
+
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }
@@ -64,14 +67,4 @@ implicit_hasher = "allow"
 [lib]
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
 # See https://github.com/CDCgov/ixa/issues/217
-bench = false
-
-[[bin]]
-name = "runner_test_custom_args"
-path = "tests/bin/runner_test_custom_args.rs"
-bench = false
-
-[[bin]]
-name = "runner_test_debug"
-path = "tests/bin/runner_test_debug.rs"
 bench = false

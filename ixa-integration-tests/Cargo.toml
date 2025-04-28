@@ -1,0 +1,26 @@
+[package]
+name = "ixa-integration-tests"
+version = "0.0.1"
+edition = "2021"
+description = "integration-tests for Ixa"
+repository = "https://github.com/CDCgov/ixa"
+license = "Apache-2.0"
+homepage = "https://github.com/CDCgov/ixa"
+
+[dependencies]
+ixa = { path = "../" }
+clap = { version = "^4.5.26", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "^2.0.16"
+
+
+[[bin]]
+name = "runner_test_custom_args"
+path = "bin/runner_test_custom_args.rs"
+bench = false
+
+[[bin]]
+name = "runner_test_debug"
+path = "bin/runner_test_debug.rs"
+bench = false
