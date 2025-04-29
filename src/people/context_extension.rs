@@ -800,4 +800,39 @@ mod tests {
         assert!(count_p2 >= 8700);
         assert!(count_p3 >= 8700);
     }
+
+    mod property_initialization_queries {
+        use super::*;
+
+        define_rng!(PropertyInitRng);
+        define_person_property_with_default!(SimplePropWithDefault, u8, 1);
+        define_derived_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
+        define_derived_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
+
+        #[test]
+        fn test_query_derived_property_not_initialized() {
+            let mut context = Context::new();
+            context.init_random(42);
+            let person = context.add_person(()).unwrap();
+            assert_eq!(
+                context
+                    .sample_person(PropertyInitRng, (DerivedOnce, 2))
+                    .unwrap(),
+                person
+            );
+        }
+
+        #[test]
+        fn test_query_derived_property_not_initialized_two_levels() {
+            let mut context = Context::new();
+            context.init_random(42);
+            let person = context.add_person(()).unwrap();
+            assert_eq!(
+                context
+                    .sample_person(PropertyInitRng, (DerivedTwice, true))
+                    .unwrap(),
+                person
+            );
+        }
+    }
 }
