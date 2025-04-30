@@ -4,7 +4,7 @@ members = ["ixa-derive"]
 
 [package]
 name = "ixa"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A framework for building agent-based models"
 repository = "https://github.com/CDCgov/ixa"
