@@ -31,7 +31,7 @@ pub(super) struct PeopleData {
     pub(super) current_population: usize,
     pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
-    pub(super) registered_derived_properties: RefCell<HashSet<TypeId>>,
+    pub(super) registered_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
     pub(super) people_types: RefCell<HashMap<String, TypeId>>,

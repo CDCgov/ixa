@@ -142,12 +142,10 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
     );
 
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-            match event.current {
-                DiseaseStatusValue::E => schedule_infection(context, event.person_id),
-                DiseaseStatusValue::I => schedule_recovery(context, event.person_id),
-                _ => (),
-            };
+        move |context, event: PersonPropertyChangeEvent<DiseaseStatus>| match event.current {
+            DiseaseStatusValue::E => schedule_infection(context, event.person_id),
+            DiseaseStatusValue::I => schedule_recovery(context, event.person_id),
+            _ => (),
         },
     );
 

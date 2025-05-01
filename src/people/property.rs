@@ -23,6 +23,9 @@ pub trait PersonProperty: Copy {
     fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
         panic!("Dependencies not implemented");
     }
+    fn register_dependencies(_: &Context) {
+        panic!("Dependencies not implemented");
+    }
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
     fn get_instance() -> Self;
     fn name() -> &'static str;
@@ -130,6 +133,9 @@ macro_rules! define_derived_property {
             fn is_derived() -> bool { true }
             fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
                 vec![$(Box::new($dependency)),+]
+            }
+            fn register_dependencies(context: &$crate::context::Context) {
+                $(context.register_property::<$dependency>();)+
             }
             fn get_instance() -> Self {
                 $derived_property
