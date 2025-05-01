@@ -12,12 +12,14 @@ release = false
 
 [dev-dependencies]
 criterion = "^0.5.1"
+tempfile = "^3.15.0"
 ixa = { path = "../" }
-#ixa-derive = { path = "../ixa-derive" }
 
 ixa_example_basic_infection = { path = "../examples/basic-infection" }
 ixa_example_births_deaths = { path = "../examples/births-deaths" }
 
+[lib]
+# nothing here
 
 [lints]
 workspace = true
