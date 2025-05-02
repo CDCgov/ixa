@@ -20,6 +20,6 @@ jobs:
       - name: Build benchmarks
         run: cargo bench --no-run
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --workspace --verbose
       - name: Run examples
         run: cargo test --examples
