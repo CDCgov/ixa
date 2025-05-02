@@ -1,11 +1,11 @@
 [package]
 name = "ixa-integration-tests"
 version = "0.0.1"
-edition = "2021"
-description = "integration-tests for Ixa"
-repository = "https://github.com/CDCgov/ixa"
-license = "Apache-2.0"
-homepage = "https://github.com/CDCgov/ixa"
+description = "Integration tests for ixa"
+publish = false
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
 
 [dependencies]
 ixa = { path = "../" }
