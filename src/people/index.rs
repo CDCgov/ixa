@@ -128,10 +128,10 @@ pub struct MultiIndex {
     type_id: TypeId,
 }
 
-// / A static map of multi-property indices. This is used to register multi-property property indices
-// / when they are first created. The map is keyed by the property IDs of the properties that are
-// / indexed. The values are the `MultiIndex` objects that contain the registration function and
-// / the type ID of the index.
+// A static map of multi-property indices. This is used to register multi-property property indices
+// when they are first created. The map is keyed by the property IDs of the properties that are
+// indexed. The values are the `MultiIndex` objects that contain the registration function and
+// the type ID of the index.
 #[doc(hidden)]
 #[allow(clippy::type_complexity)]
 pub static MULTI_PROPERTY_INDEX_MAP: LazyLock<
