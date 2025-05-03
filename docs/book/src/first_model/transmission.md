@@ -41,7 +41,7 @@ We need to import these constants into `transmission_manager`. To define a new r
 
 ```rust
 // transmission_manager.rs
-{{#include ../../models/disease_model/src/transmission_manager.rs:1:10}}
+{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:1:10}}
 // ...the rest of the file...
 ```
 
@@ -52,7 +52,7 @@ The function `attempt_infection()` needs to do the following:
 3. Schedule the next infection attempt by inserting a plan into the timeline that will run `attempt_infection()` again.
 
 ```rust
-{{#include ../../models/disease_model/src/transmission_manager.rs:12:41}}
+{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:12:41}}
 ```
 
 Read through this implementation and make sure you understand how it accomplishes the three tasks above. A few observations:

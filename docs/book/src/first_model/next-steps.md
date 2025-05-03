@@ -4,7 +4,7 @@ We have created several new modules. We need to make sure they are each initiali
 
 ```rust
 // main.rs
-{{#include ../../models/disease_model/src/main.rs}}
+{{#rustdoc_include ../../models/disease_model/src/main.rs}}
 ```
 
 Exercises:
