@@ -81,7 +81,7 @@ a good idea to get into the habit of adding at least the author(s) and a brief d
 
 ```toml
 # Cargo.toml
-{{ #include ../../models/disease_model/Cargo.toml}}
+{{ #rustdoc_include ../../models/disease_model/Cargo.toml}}
 ```
 
 ## Executing the Ixa model
@@ -90,7 +90,7 @@ We are almost ready to execute our first model. Edit `src/main.rs` to look like 
 
 ```rust
 // main.rs
-{{ #include ../../models/basic/main.rs}}
+{{ #rustdoc_include ../../models/basic/main.rs}}
 ```
 
 Don't let this code intimidate you—it's really quite simple. The first line says we want to use symbols from the `ixa`

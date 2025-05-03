@@ -19,7 +19,7 @@ curl -s https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_
 Open `src/main.rs` in your favorite editor or IDE to verify the model looks like the following:
 
 ```rust
-{{#include ../models/basic/main.rs}}
+{{#rustdoc_include ../models/basic/main.rs}}
 ```
 
 To run the model:
