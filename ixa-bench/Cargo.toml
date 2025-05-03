@@ -1,0 +1,35 @@
+[package]
+name = "ixa-bench"
+version = "0.0.1"
+description = "Benchmarks for ixa"
+publish = false
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[package.metadata.release]
+release = false
+
+[dev-dependencies]
+criterion = "^0.5.1"
+tempfile = "^3.15.0"
+ixa = { path = "../" }
+
+ixa_example_basic_infection = { path = "../examples/basic-infection" }
+ixa_example_births_deaths = { path = "../examples/births-deaths" }
+
+[lib]
+# nothing here
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "example_basic_infection"
+path = "example_basic_infection/example_basic_infection.rs"
+harness = false
+
+[[bench]]
+name = "example_births_deaths"
+path = "example_births_deaths/example_births_deaths.rs"
+harness = false

@@ -1,15 +1,24 @@
 [workspace]
 resolver = "2"
-members = ["ixa-derive"]
+members = [
+  "ixa-bench",
+  "ixa-derive",
+  "ixa-integration-tests",
+]
+
+[workspace.package]
+edition = "2021"
+repository = "https://github.com/CDCgov/ixa"
+license = "Apache-2.0"
+homepage = "https://github.com/CDCgov/ixa"
 
 [package]
 name = "ixa"
 version = "0.1.1"
-edition = "2021"
 description = "A framework for building agent-based models"
-repository = "https://github.com/CDCgov/ixa"
-license = "Apache-2.0"
-homepage = "https://github.com/CDCgov/ixa"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
 
 [dependencies]
 rand = "^0.8.5"
@@ -45,12 +54,14 @@ assert_cmd = "^2.0.16"
 criterion = "^0.5.1"
 roots = "0.0.8"
 assert_approx_eq = "1.1.0"
+ixa-integration-tests = { path = "./ixa-integration-tests" }
+
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
 implicit_hasher = "allow"
@@ -59,23 +70,3 @@ implicit_hasher = "allow"
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
 # See https://github.com/CDCgov/ixa/issues/217
 bench = false
-
-[[bin]]
-name = "runner_test_custom_args"
-path = "tests/bin/runner_test_custom_args.rs"
-bench = false
-
-[[bin]]
-name = "runner_test_debug"
-path = "tests/bin/runner_test_debug.rs"
-bench = false
-
-[[bench]]
-name = "example_basic_infection"
-path = "benches/example_basic_infection/example_basic_infection.rs"
-harness = false
-
-[[bench]]
-name = "example_births_deaths"
-path = "benches/example_births_deaths/example_births_deaths.rs"
-harness = false

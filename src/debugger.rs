@@ -338,7 +338,6 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
-    use crate::tests::run_external_runner;
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt, ExecutionPhase};
     use assert_approx_eq::assert_approx_eq;
@@ -443,17 +442,6 @@ mod tests {
         let (quits, _output) = process_line("breakpoint enable\n", context);
         assert!(!quits, "should not exit");
         assert!(context.breakpoints_are_enabled());
-    }
-
-    #[test]
-    fn test_cli_debugger_integration() {
-        run_external_runner("runner_test_debug")
-            .unwrap()
-            .args(["--debugger", "1.0"])
-            .write_stdin("population\n")
-            .write_stdin("continue\n")
-            .assert()
-            .success();
     }
 
     #[test]

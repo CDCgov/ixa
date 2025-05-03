@@ -40,13 +40,12 @@ fn handle_infection_status_change(
     });
 }
 
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
+pub fn init(context: &mut Context, output_path: &Path) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    let current_dir = Path::new(file!()).parent().unwrap();
-    let current_dir = current_dir.join(Path::new(".."));
+    let current_dir = output_path.to_path_buf();
     context
         .report_options()
         .directory(current_dir)
