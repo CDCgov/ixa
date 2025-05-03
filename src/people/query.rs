@@ -53,11 +53,13 @@ macro_rules! impl_query {
                 }
 
                 fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-                    vec![
+                    let mut ordered_items = vec![
                     #(
                         (std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)),
                     )*
-                    ]
+                    ];
+                    ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
+                    ordered_items
                 }
             }
         });
@@ -115,6 +117,7 @@ where
         let mut query = Vec::new();
         query.extend_from_slice(&self.queries.0.get_query());
         query.extend_from_slice(&self.queries.1.get_query());
+        query.sort_by(|a, b| a.0.cmp(&b.0));
         query
     }
 }
@@ -123,11 +126,17 @@ where
 mod tests {
     use crate::people::PeoplePlugin;
     use crate::people::{Query, QueryAnd};
-    use crate::{define_derived_property, define_person_property, Context, ContextPeopleExt};
+    use crate::{
+        define_derived_property, define_multi_property_index, define_person_property, Context,
+        ContextPeopleExt,
+    };
     use serde_derive::Serialize;
     use std::any::TypeId;
 
     define_person_property!(Age, u8);
+    define_person_property!(County, u32);
+    define_person_property!(Height, u32);
+    define_derived_property!(AgeGroup, u8, [Age], |age| (age / 5));
 
     #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategoryValue {
@@ -388,6 +397,83 @@ mod tests {
 
         assert_eq!(seniors.len(), 2, "Two seniors");
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
+    }
+
+    #[test]
+    fn query_derived_prop_with_optimized_index() {
+        let mut context = Context::new();
+        // create a 'regular' derived property
+        define_derived_property!(
+            Ach,
+            (u8, u32, u32),
+            [Age, County, Height],
+            |age, county, height| { (age, county, height) }
+        );
+
+        // create a multi-property index
+        define_multi_property_index!(Age, County, Height);
+        define_multi_property_index!(County, Height);
+
+        // add some people
+        let _person = context
+            .add_person(((Age, 64), (County, 2), (Height, 120)))
+            .unwrap();
+        let _ = context
+            .add_person(((Age, 88), (County, 2), (Height, 130)))
+            .unwrap();
+        let p2 = context
+            .add_person(((Age, 8), (County, 1), (Height, 140)))
+            .unwrap();
+        let p3 = context
+            .add_person(((Age, 28), (County, 1), (Height, 140)))
+            .unwrap();
+        let p4 = context
+            .add_person(((Age, 28), (County, 2), (Height, 160)))
+            .unwrap();
+        let p5 = context
+            .add_person(((Age, 28), (County, 2), (Height, 160)))
+            .unwrap();
+
+        // 'regular' derived property
+        let ach_people = context.query_people((Ach, (28, 2, 160)));
+        assert_eq!(ach_people.len(), 2, "Should have 2 matches");
+        assert!(ach_people.contains(&p4));
+        assert!(ach_people.contains(&p5));
+
+        // multi-property index
+        let age_county_height2 = context.query_people(((Age, 28), (County, 2), (Height, 160)));
+        assert_eq!(age_county_height2.len(), 2, "Should have 2 matches");
+        assert!(age_county_height2.contains(&p4));
+        assert!(age_county_height2.contains(&p5));
+
+        // multi-property index with different order
+        let age_county_height3 = context.query_people(((County, 2), (Height, 160), (Age, 28)));
+        assert_eq!(age_county_height3.len(), 2, "Should have 2 matches");
+        assert!(age_county_height3.contains(&p4));
+        assert!(age_county_height3.contains(&p5));
+
+        // multi-property index with different order
+        let age_county_height4 = context.query_people(((Height, 160), (County, 2), (Age, 28)));
+        assert_eq!(age_county_height4.len(), 2, "Should have 2 matches");
+        assert!(age_county_height4.contains(&p4));
+        assert!(age_county_height4.contains(&p5));
+
+        // multi-property index with different order and different value
+        let age_county_height5 = context.query_people(((Height, 140), (County, 1), (Age, 28)));
+        assert_eq!(age_county_height5.len(), 1, "Should have 1 matches");
+        assert!(age_county_height5.contains(&p3));
+
+        context.set_person_property(p2, Age, 28);
+        // multi-property index again after changing the value
+        let age_county_height5 = context.query_people(((Height, 140), (County, 1), (Age, 28)));
+        assert_eq!(age_county_height5.len(), 2, "Should have 2 matches");
+        assert!(age_county_height5.contains(&p2));
+        assert!(age_county_height5.contains(&p3));
+
+        let age_county_height5 = context.query_people(((Height, 140), (County, 1)));
+        assert_eq!(age_county_height5.len(), 2, "Should have 2 matches");
+        assert!(age_county_height5.contains(&p2));
+        assert!(age_county_height5.contains(&p3));
     }
 
     #[test]

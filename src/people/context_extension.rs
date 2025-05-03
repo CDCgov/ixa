@@ -1,4 +1,6 @@
-use crate::people::index::{Index, IndexValue};
+use crate::people::index::{
+    get_and_register_multi_property_index, get_multi_property_hash, Index, IndexValue,
+};
 use crate::people::query::Query;
 use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
@@ -513,15 +515,26 @@ impl ContextPeopleExtInternal for Context {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
 
+        let mut property_hashs_working_set = property_hashes.clone();
+        // intercept multi-property queries
+        if property_hashs_working_set.len() > 1 {
+            if let Some(combined_index) =
+                get_and_register_multi_property_index(&property_hashes, self)
+            {
+                let combined_hash = get_multi_property_hash(&property_hashes);
+                property_hashs_working_set = vec![(combined_index, combined_hash)];
+            }
+        }
+
         // 1. Walk through each property and update the indexes.
-        for (t, _) in &property_hashes {
+        for (t, _) in &property_hashs_working_set {
             let mut index = data_container.get_index_ref_mut(*t).unwrap();
             let methods = data_container.get_methods(*t);
             index.index_unindexed_people(self, &methods);
         }
 
         // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashes {
+        for (t, hash) in property_hashs_working_set {
             let index = data_container.get_index_ref(t).unwrap();
             if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
                 if let Ok(matching_people) =
