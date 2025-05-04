@@ -72,19 +72,19 @@ cargo install cargo-criterion
 To run all benchmarks:
 
 ```bash
-cargo bench
+cargo bench --workspace
 ```
 
 To run a specific benchmark called `example_births_deaths`:
 
 ```bash
-cargo bench --bench example_births_deaths
+cargo bench --workspace --bench example_births_deaths
 ```
 
 To run a specific named benchmark group named `example_benches`:
 
 ```bash
-cargo bench -- example_benches
+cargo bench --workspace -- example_benches
 ```
 
 ### Using `cargo criterion`

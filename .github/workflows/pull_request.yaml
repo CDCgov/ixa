@@ -1,5 +1,5 @@
 name: Benchmark Pull Requests
-on: [ pull_request ]
+on: [pull_request]
 jobs:
   runBenchmark:
     name: run benchmark
@@ -8,5 +8,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: boa-dev/criterion-compare-action@v3
         with:
+          package: ixa-bench
           # Needed. The name of the branch to compare with, uses the branch which is being pulled against
           branchName: ${{ github.base_ref }}

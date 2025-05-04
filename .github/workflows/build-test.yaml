@@ -10,7 +10,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +17,7 @@ jobs:
       - name: Build
         run: cargo build --verbose
       - name: Build benchmarks
-        run: cargo bench --no-run
+        run: cargo bench --workspace --no-run
       - name: Run tests
         run: cargo test --workspace --verbose
       - name: Run examples
