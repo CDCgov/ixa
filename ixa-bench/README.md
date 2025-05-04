@@ -72,19 +72,19 @@ cargo install cargo-criterion
 To run all benchmarks:
 
 ```bash
-cargo bench
+cargo bench -p ixa-bench
 ```
 
 To run a specific benchmark called `example_births_deaths`:
 
 ```bash
-cargo bench --bench example_births_deaths
+cargo bench -p ixa-bench --bench example_births_deaths
 ```
 
 To run a specific named benchmark group named `example_benches`:
 
 ```bash
-cargo bench -- example_benches
+cargo bench -p ixa-bench -- example_benches
 ```
 
 ### Using `cargo criterion`
