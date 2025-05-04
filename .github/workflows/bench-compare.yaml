@@ -1,0 +1,39 @@
+name: Benchmark Pull Requests
+
+on:
+  pull_request:
+
+jobs:
+  compare-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          # This fetches all branches so we can compare the PR branch with the base branch
+          fetch-depth: 0
+
+      - name: Run cargo bench on base branch
+        run: cargo bench -p ixa-bench -- --save-baseline base
+
+      - name: Checkout PR branch
+        # The checkout is done manually to avoid cleaning up the baseline benchmark
+        run: git checkout ${{ github.event.pull_request.head.ref }}
+
+      - name: Run cargo bench on head branch and format output
+        run: |
+          echo '### Benchmark Results' > criterion.md
+          echo '```' >> criterion.md
+          cargo bench -p ixa-bench -- --baseline base >> criterion.md
+          echo '```' >> criterion.md
+
+      - name: Add comment to PR
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body-file criterion.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
