@@ -9,5 +9,6 @@ jobs:
       - uses: boa-dev/criterion-compare-action@v3
         with:
           package: ixa-bench
-          # Needed. The name of the branch to compare with, uses the branch which is being pulled against
-          branchName: ${{ github.base_ref }}
+          # DO NOT MERGE THIS: Work-around for testing in CI
+          branchName: k88-fix-bench-ci-comparison
+          # branchName: ${{ github.base_ref }}
