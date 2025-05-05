@@ -19,7 +19,7 @@ ixa_example_basic_infection = { path = "../examples/basic-infection" }
 ixa_example_births_deaths = { path = "../examples/births-deaths" }
 
 [lib]
-# nothing here
+bench = false
 
 [lints]
 workspace = true
