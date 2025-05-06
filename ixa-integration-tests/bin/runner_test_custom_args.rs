@@ -1,5 +1,5 @@
 use clap::Args;
-use ixa::runner::run_with_custom_args;
+use ixa::prelude::*;
 
 #[derive(Args, Debug)]
 struct Extra {

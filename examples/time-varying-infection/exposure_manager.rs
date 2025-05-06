@@ -1,7 +1,4 @@
-use ixa::define_rng;
-use ixa::people::{ContextPeopleExt, PersonCreatedEvent};
-use ixa::random::ContextRandomExt;
-use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
+use ixa::prelude::*;
 use std::rc::Rc;
 
 use crate::parameters_loader::Parameters;
@@ -71,10 +68,6 @@ mod test {
     use super::*;
 
     use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
-    use ixa::context::Context;
-    use ixa::global_properties::ContextGlobalPropertiesExt;
-    use ixa::people::ContextPeopleExt;
-    use ixa::random::ContextRandomExt;
     use reikna::integral::integrate;
 
     use crate::parameters_loader::ParametersValues;

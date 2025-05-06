@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
 use crate::loader::{open_csv, HouseholdId, Id};
-use ixa::context::Context;
-use ixa::{define_edge_type, EdgeType};
-use ixa::{ContextNetworkExt, ContextPeopleExt, PersonId};
+use ixa::prelude::*;
 use serde::Deserialize;
 
 define_edge_type!(Household, ());
@@ -66,7 +64,7 @@ mod tests {
     use super::*;
     use crate::loader;
     use crate::network;
-    use ixa::{context::Context, random::ContextRandomExt, ContextNetworkExt};
+    use ixa::prelude::*;
 
     const N_SIZE_12: usize = 1;
     const N_SIZE_11: usize = 1;

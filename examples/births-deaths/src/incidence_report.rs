@@ -1,9 +1,4 @@
-use ixa::context::Context;
-use ixa::error::IxaError;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
-use ixa::report::ContextReportExt;
-use ixa::{create_report_trait, report::Report};
+use ixa::prelude::*;
 use std::path::Path;
 
 use crate::population_manager::{

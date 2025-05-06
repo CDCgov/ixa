@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
-use ixa::context::Context;
-use ixa::define_person_property;
-use ixa::{ContextPeopleExt, PersonId};
+use ixa::prelude::*;
 use serde::Deserialize;
 use serde_derive::Serialize;
 
@@ -54,11 +52,7 @@ mod tests {
         population_loader::Age,
         vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
-    use ixa::{
-        context::Context,
-        people::{PersonCreatedEvent, PersonPropertyChangeEvent},
-        random::ContextRandomExt,
-    };
+    use ixa::prelude::*;
 
     const EXPECTED_ROWS: usize = 5;
 

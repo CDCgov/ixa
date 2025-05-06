@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use csv::Reader;
-use ixa::context::Context;
-use ixa::define_person_property;
-use ixa::{ContextPeopleExt, PersonId};
+use ixa::prelude::*;
 use serde::Deserialize;
 use serde_derive::Serialize;
 use std::fs::File;

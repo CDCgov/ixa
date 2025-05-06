@@ -1,8 +1,4 @@
-use ixa::context::Context;
-use ixa::define_rng;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
-use ixa::random::ContextRandomExt;
+use ixa::prelude::*;
 use rand_distr::Exp;
 
 use crate::InfectionStatus;
@@ -44,11 +40,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::context::Context;
-    use ixa::define_data_plugin;
-    use ixa::global_properties::ContextGlobalPropertiesExt;
-    use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
-    use ixa::random::ContextRandomExt;
+    use ixa::prelude::*;
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     use crate::parameters_loader::ParametersValues;

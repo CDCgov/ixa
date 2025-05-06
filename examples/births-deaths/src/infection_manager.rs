@@ -2,14 +2,7 @@ use crate::population_manager::Alive;
 use crate::population_manager::InfectionStatus;
 use crate::population_manager::InfectionStatusValue;
 use crate::Parameters;
-use ixa::context::Context;
-use ixa::define_data_plugin;
-use ixa::define_rng;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
-use ixa::plan::PlanId;
-use ixa::random::ContextRandomExt;
-use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
+use ixa::prelude::*;
 use rand_distr::Exp;
 
 define_rng!(InfectionRng);
@@ -102,11 +95,7 @@ mod test {
     // Silence spurious unused import warnings.
     #![allow(unused_imports)]
     use super::*;
-    use ixa::context::Context;
-    use ixa::define_data_plugin;
-    use ixa::global_properties::ContextGlobalPropertiesExt;
-    use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
-    use ixa::random::ContextRandomExt;
+    use ixa::prelude::*;
 
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
     use crate::population_manager::Age;

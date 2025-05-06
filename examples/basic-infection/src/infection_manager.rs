@@ -1,8 +1,4 @@
-use ixa::context::Context;
-use ixa::random::ContextRandomExt;
-use ixa::trace;
-use ixa::{define_rng, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
-
+use ixa::prelude::*;
 use rand_distr::Exp;
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
@@ -51,9 +47,7 @@ mod test {
     use crate::infection_manager::InfectionStatusEvent;
     use crate::people::InfectionStatus;
     use crate::people::InfectionStatusValue;
-    use ixa::context::Context;
-    use ixa::random::ContextRandomExt;
-    use ixa::{define_data_plugin, ContextPeopleExt};
+    use ixa::prelude::*;
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 

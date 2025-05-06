@@ -1,8 +1,4 @@
-use ixa::context::Context;
-use ixa::define_rng;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::ContextPeopleExt;
-use ixa::random::ContextRandomExt;
+use ixa::prelude::*;
 
 use crate::parameters_loader::Foi;
 use crate::population_manager::InfectionStatus;

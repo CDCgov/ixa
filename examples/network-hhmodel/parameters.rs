@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use ixa::define_global_property;
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[allow(clippy::module_name_repetitions)]

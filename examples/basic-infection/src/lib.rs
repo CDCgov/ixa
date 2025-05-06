@@ -1,5 +1,4 @@
-use ixa::context::Context;
-use ixa::random::ContextRandomExt;
+use ixa::prelude::*;
 
 pub mod incidence_report;
 pub mod infection_manager;

@@ -1,9 +1,4 @@
-use ixa::context::Context;
-use ixa::error::IxaError;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::PersonPropertyChangeEvent;
-use ixa::report::ContextReportExt;
-use ixa::{create_report_trait, report::Report};
+use ixa::prelude::*;
 use std::path::PathBuf;
 
 use crate::InfectionStatus;

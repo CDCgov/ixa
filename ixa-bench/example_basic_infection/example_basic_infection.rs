@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ixa::Context;
+use ixa::prelude::*;
 use ixa_example_basic_infection::initialize;
 
 pub fn criterion_benchmark(c: &mut Criterion) {

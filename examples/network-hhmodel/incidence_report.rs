@@ -1,12 +1,6 @@
 use crate::parameters::Parameters;
 use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
-use ixa::context::Context;
-use ixa::error::IxaError;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::PersonPropertyChangeEvent;
-use ixa::report::ContextReportExt;
-use ixa::ContextPeopleExt;
-use ixa::{create_report_trait, report::Report};
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
@@ -73,7 +67,7 @@ mod test {
     use super::*;
     use crate::parameters::ParametersValues;
     use crate::{incidence_report, loader, network, seir, MainRng, PersonId};
-    use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
+    use ixa::prelude::*;
     use std::{cell::RefCell, path::Path, rc::Rc};
 
     fn check_values(path: &Path) -> (Vec<String>, Vec<IncidenceReportItem>) {
