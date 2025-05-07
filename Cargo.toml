@@ -40,6 +40,7 @@ uuid = "^1.12.1"
 tower-http = { version = "^0.6.2", features = ["full"] }
 mime = "^0.3.17"
 rustc-hash = "^2.1.1"
+fips = { path = "../fips" }
 
 rand_distr = "^0.4.3"
 tempfile = "^3.15.0"

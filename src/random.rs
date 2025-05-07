@@ -100,7 +100,7 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
     })
 }
 
-// This is a trait exension on Context
+// This is a trait extension on Context
 pub trait ContextRandomExt {
     fn init_random(&mut self, base_seed: u64);
 
