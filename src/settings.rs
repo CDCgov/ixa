@@ -9,139 +9,242 @@
 //!
 
 use crate::people::PersonId;
-use crate::{
-    define_data_plugin, define_rng, Context, ContextRandomExt, HashMap, HashSet, IxaError,
-};
-use std::any::TypeId;
-use std::marker::PhantomData;
+use crate::{define_data_plugin, define_rng, Context, ContextRandomExt, HashMap, IxaError};
+use fips::aspr::SettingCategory;
+use fips::FIPSCode;
+use rand::distributions::Distribution;
+use rand::distributions::WeightedIndex;
+use rand::Rng;
+use std::collections::hash_map::Entry;
+use std::ops::Index;
 
 define_rng!(SettingsRng);
 
-/// In a setting with `n` people (including the source of infection), the rate of the total infectiousness process
-/// is computed as
+/// In a setting with `n` people (including the source of infection), the rate of the total
+/// infectiousness process is computed as
 ///      (intrinsic infectiousness) × (n - 1)ᵅ
-/// where 0 ≤ 𝛼 ≤ 1. This interpolates between having the total hazard _distributed_ equally and the total hazard
-/// applying equally to the nonsources.
-#[derive(Debug, Clone, Copy)]
-pub struct SettingProperties {
-    alpha: f64,
+/// where 0 ≤ 𝛼 ≤ 1. This interpolates between having the total hazard _distributed_ equally and
+/// the total hazard applying equally to the nonsources.
+#[derive(Debug, Clone)]
+pub struct Setting {
+    // Since the `Setting`
+    // id: FIPSCode,
+    members: Vec<PersonId>,
 }
 
-pub trait SettingType {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64;
-}
+pub type SettingId = FIPSCode;
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct SettingId<T: SettingType + 'static> {
-    pub id: usize,
-
-    phantom: PhantomData<*const T>,
-}
-
-#[allow(dead_code)]
-impl<T: SettingType + 'static> SettingId<T> {
-    pub fn new(id: usize) -> SettingId<T> {
-        SettingId {
-            id,
-            phantom: PhantomData,
-        }
-    }
-}
-
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
-    setting_type: TypeId,
-    setting_id: usize,
+    setting_id: SettingId,
     ratio: f64,
 }
 
 #[allow(dead_code)]
 impl ItineraryEntry {
-    fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
-        ItineraryEntry {
-            setting_type: TypeId::of::<T>(),
-            setting_id: setting_id.id,
-            ratio,
-        }
+    fn new(setting_id: SettingId, ratio: f64) -> ItineraryEntry {
+        ItineraryEntry { setting_id, ratio }
     }
 }
 
+/// A convenience wrapper for a vector of `ItineraryEntry`s that enforces the constraint that there
+/// is at most one instance of any given `SettingCategory` represented in the `Itinerary`.
+// ToDo(ap59): This should be a small_vec or equivalent, as many of these will have a single entry.
+pub struct Itinerary(Vec<ItineraryEntry>);
+
+impl Itinerary {
+    pub fn add(&mut self, setting_id: SettingId, ratio: f64) -> Result<(), IxaError> {
+        self.add_itinerary_entry(ItineraryEntry::new(setting_id, ratio))
+    }
+
+    pub fn add_itinerary_entry(&mut self, entry: ItineraryEntry) -> Result<(), IxaError> {
+        // Check if there is already an entry for this category
+        let category = entry.setting_id.category();
+        if self
+            .0
+            .iter()
+            .any(|other| other.setting_id.category() == category)
+        {
+            return Err(IxaError::IxaError(format!(
+                "Duplicated setting in itinerary when adding setting_id {:?}",
+                entry.setting_id
+            )));
+        }
+
+        self.0.push(entry);
+        Ok(())
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<ItineraryEntry> {
+        self.0.iter()
+    }
+}
+
+impl Index<usize> for Itinerary {
+    type Output = ItineraryEntry;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+#[derive(Default)]
 pub struct SettingsDataContainer {
-    setting_types: HashMap<TypeId, Box<dyn SettingType>>,
-    // For each setting type (e.g., Home) store the properties (e.g., alpha)
-    setting_properties: HashMap<TypeId, SettingProperties>,
-    // For each setting type, have a map of each setting id and a list of members
-    // Maps `T: SettingType` -> `Map<SettingId<T>, People>`
-    members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
-    itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
+    // Each `SettingCategory` has an alpha of type `f64`
+    alpha_for_setting_category: HashMap<SettingCategory, f64>,
+    // Each `PersonId` has an `Itinerary` of `SettingId`s
+    itineraries: HashMap<PersonId, Itinerary>,
+    // Each `SettingId` has a list of members
+    members: HashMap<SettingId, Vec<PersonId>>,
 }
 
 impl SettingsDataContainer {
     fn new() -> Self {
-        SettingsDataContainer {
-            setting_types: HashMap::default(),
-            setting_properties: HashMap::default(),
-            members: HashMap::default(),
-            itineraries: HashMap::default(),
-        }
+        SettingsDataContainer::default()
     }
-    fn get_setting_members(
-        &self,
-        setting_type: &TypeId,
-        setting_id: usize,
-    ) -> Option<&Vec<PersonId>> {
-        self.members.get(setting_type)?.get(&setting_id)
-    }
-    fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
-    where
-        F: FnMut(&dyn SettingType, &SettingProperties, &Vec<PersonId>, f64),
-    {
-        if let Some(itinerary) = self.itineraries.get(&person_id) {
-            for entry in itinerary {
-                let setting_type = self.setting_types.get(&entry.setting_type).unwrap();
-                let setting_props = self.setting_properties.get(&entry.setting_type).unwrap();
-                let members = self
-                    .get_setting_members(&entry.setting_type, entry.setting_id)
-                    .unwrap();
-                callback(setting_type.as_ref(), setting_props, members, entry.ratio);
+
+    /// Adds an `Itinerary` for the given person, inserting the person as a member of the settings
+    /// in the given `Itinerary`. Returns `true` if the method modified an existing itinerary (i.e.
+    /// an itinerary was already set for this person), `false` otherwise.
+    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool {
+        match self.itineraries.entry(person_id) {
+            Entry::Vacant(vacant_entry) => {
+                // An itinerary was not previously set for this person.
+                let new_it = vacant_entry.insert(itinerary);
+                // Add the person to each setting in the *new* itinerary:
+                for entry in new_it.iter() {
+                    let setting = entry.setting_id;
+                    self.members
+                        .entry(setting)
+                        .and_modify(|members| members.push(person_id))
+                        .or_insert_with(|| vec![person_id]);
+                }
+                false
+            }
+            Entry::Occupied(mut occupied_entry) => {
+                // Replace the old itinerary, taking ownership of it
+                let old_it = occupied_entry.insert(itinerary);
+                // Remove the person from each setting in the old itinerary
+                for entry in old_it.iter() {
+                    let setting = entry.setting_id;
+                    self.members.entry(setting).and_modify(|members| {
+                        if let Some(idx) = members.iter().position(|&pid| pid == person_id) {
+                            members.swap_remove(idx);
+                        }
+                    });
+                }
+                // Now add the person to each setting in the new itinerary
+                let new_it = occupied_entry.get();
+                for entry in new_it.iter() {
+                    let setting = entry.setting_id;
+                    self.members
+                        .entry(setting)
+                        .and_modify(|members| members.push(person_id))
+                        .or_insert_with(|| vec![person_id]);
+                }
+                true
             }
         }
     }
-}
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Home {}
+    /// Looks up the itinerary for the given person and for each of its `ItineraryEntry`s calls
+    /// `callback` with
+    ///     - the `ItineraryEntry` (contains `SettingId` and `ratio`)
+    ///     - alpha - the alpha value for the `SettingCategory` associated to the `SettingId` in
+    ///       the `ItineraryEntry`
+    ///     - member_count: the length of the list of members of the setting
+    ///
+    /// If there is no itinerary for the person, this method is a no-op.
+    fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
+    where
+        // f(entry: ItineraryEntry, alpha_for_setting: f64, member_count: usize)
+        F: FnMut(ItineraryEntry, f64, usize),
+    {
+        if let Some(itinerary) = self.itineraries.get(&person_id) {
+            for entry in itinerary.iter() {
+                let alpha = match self
+                    .alpha_for_setting_category
+                    .get(&entry.setting_id.category())
+                {
+                    Some(alpha) => *alpha,
+                    None => {
+                        panic!(
+                            "setting category {} was not assigned an alpha value",
+                            entry.setting_id.category()
+                        );
+                    }
+                };
 
-impl SettingType for Home {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
+                // Unwrap guaranteed to succeed since `itinerary` above succeeded.
+                let members = self.members.get(&entry.setting_id).unwrap();
+                callback(*entry, alpha, members.len());
+            }
+        }
+    }
+
+    /// For a given person, compute the element-wise product `R ⊗ M` where `R` is the vector of
+    /// ratios for each setting and `M` is the vector of multipliers for each setting.
+    pub(crate) fn calculate_infectiousness_multiplier_vector_for_person(
         &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
+        person_id: PersonId,
+    ) -> Option<Vec<f64>> {
+        let mut multiplier_vector = vec![];
+        self.with_itinerary(person_id, |entry, alpha, member_count| {
+            // let multiplier = setting_type.calculate_multiplier(members, *setting_props);
+            let multiplier = ((member_count - 1) as f64).powf(alpha);
+            multiplier_vector.push(entry.ratio * multiplier);
+        });
+
+        if multiplier_vector.is_empty() {
+            None
+        } else {
+            Some(multiplier_vector)
+        }
+    }
+
+    /// For a given person, use the person's itinerary and associated setting properties to
+    /// sample a contact from one of the person's settings.
+    pub(crate) fn draw_contact_from_itinerary<R: Rng + ?Sized>(
+        &self,
+        person_id: PersonId,
+        rng: &mut R,
+    ) -> Option<PersonId> {
+        // Compute the element-wise product `R ⊗ M` where `R` is the vector of ratios for each
+        // setting and `M` is the vector of multipliers for each setting.
+        let itinerary_multiplier =
+            self.calculate_infectiousness_multiplier_vector_for_person(person_id)?;
+
+        // Use the resulting vector as weights to sample a setting index.
+        let index = WeightedIndex::new(&itinerary_multiplier).unwrap();
+        let setting_index = index.sample(rng);
+
+        // Unwrap guaranteed to succeed since `itinerary_multiplier` succeeded.
+        let itinerary = self.itineraries.get(&person_id).unwrap();
+        let itinerary_entry = itinerary[setting_index];
+
+        // Unwrap guaranteed to succeed since `itinerary_multiplier` succeeded.
+        let members = self.members.get(&itinerary_entry.setting_id).unwrap();
+        if members.len() == 1 {
+            // The person is isolated alone in this setting; there is no other contact.
+            return None;
+        }
+
+        // Sample a contact from the setting different from `person_id`.
+        let mut contact_id = person_id;
+        while contact_id == person_id {
+            contact_id = members[rng.gen_range(0..members.len())];
+        }
+        Some(contact_id)
     }
 }
 
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct CensusTract {}
-impl SettingType for CensusTract {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
+// fn calculate_multiplier(
+//     members: &[PersonId],
+//     setting_properties: SettingProperties,
+// ) -> f64 {
+//     let n_members = members.len();
+//     #[allow(clippy::cast_precision_loss)]
+//     ((n_members - 1) as f64).powf(setting_properties.alpha)
+// }
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -151,203 +254,62 @@ define_data_plugin!(
 
 #[allow(dead_code)]
 pub trait ContextSettingExt {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties;
-    fn register_setting_type<T: SettingType + 'static>(
+    /// Associates an alpha value to a `SettingCategory`. If a value of alpha was already set for
+    /// the given category, returns the previous value.
+    fn set_alpha_for_setting_category(
         &mut self,
-        setting: T,
-        setting_props: SettingProperties,
-    );
-    fn add_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: Vec<ItineraryEntry>,
-    ) -> Result<(), IxaError>;
-    fn get_setting_members<T: SettingType + 'static>(
-        &self,
-        setting_id: SettingId<T>,
-    ) -> Option<&Vec<PersonId>>;
+        setting_category: SettingCategory,
+        alpha: f64,
+    ) -> Option<f64>;
+
+    /// Adds an `Itinerary` for the given person, inserting the person as a member of the settings
+    /// in the given `Itinerary`. Returns `true` if the method modified an existing itinerary (i.e.
+    /// an itinerary was already set for this person), `false` otherwise.
+    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool;
+
+    /// For the given person, computes the inner product $<R, M>$ where $R$ is the vector of ratios
+    /// for each setting and $M$ is the vector of multipliers for each setting.
+    ///
+    /// Recall that the "multiplier" for a setting is computed as
+    ///     $((n_members - 1) as f64).powf(alpha).$
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
-    fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
-    fn get_contact<T: SettingType + 'static>(
-        &self,
-        person_id: PersonId,
-        setting_id: SettingId<T>,
-    ) -> Option<PersonId>;
+
+    /// For a given person, use the person's itinerary and associated setting properties to
+    /// sample a contact from one of the person's settings.
     fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId>;
 }
 
-trait ContextSettingInternalExt {
-    fn get_contact_internal(
-        &self,
-        person_id: PersonId,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<PersonId>;
-    fn get_setting_members_internal(
-        &self,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<&Vec<PersonId>>;
-}
-
-impl ContextSettingInternalExt for Context {
-    fn get_contact_internal(
-        &self,
-        person_id: PersonId,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members_internal(setting_type, setting_id) {
-            if members.len() == 1 {
-                return None;
-            }
-            let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-            }
-            Some(contact_id)
-        } else {
-            None
-        }
-    }
-    fn get_setting_members_internal(
-        &self,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<&Vec<PersonId>> {
-        self.get_data_container(SettingDataPlugin)?
-            .get_setting_members(&setting_type, setting_id)
-    }
-}
-
 impl ContextSettingExt for Context {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties {
-        let data_container = self
-            .get_data_container(SettingDataPlugin)
-            .unwrap()
-            .setting_properties
-            .get(&TypeId::of::<T>())
-            .unwrap();
-        *data_container
-    }
-    fn register_setting_type<T: SettingType + 'static>(
+    fn set_alpha_for_setting_category(
         &mut self,
-        setting_type: T,
-        setting_props: SettingProperties,
-    ) {
+        setting_category: SettingCategory,
+        alpha: f64,
+    ) -> Option<f64> {
         let container = self.get_data_container_mut(SettingDataPlugin);
-
-        // Add the setting
         container
-            .setting_types
-            .insert(TypeId::of::<T>(), Box::new(setting_type));
-
-        // Add properties
-        container
-            .setting_properties
-            .insert(TypeId::of::<T>(), setting_props);
-    }
-    fn add_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: Vec<ItineraryEntry>,
-    ) -> Result<(), IxaError> {
-        let container = self.get_data_container_mut(SettingDataPlugin);
-        // `setting_counts` maps `T: SettingType` to set of `SettingId<T>`,
-        // its list of setting instances for this person.
-        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::default();
-        for itinerary_entry in &itinerary {
-            let setting_id = itinerary_entry.setting_id;
-            let setting_type = itinerary_entry.setting_type;
-            if let Some(setting_count_set) = setting_counts.get(&setting_type) {
-                if setting_count_set.contains(&setting_id) {
-                    return Err(IxaError::from("Duplicated setting".to_string()));
-                }
-            }
-            #[allow(clippy::redundant_closure)]
-            setting_counts
-                .entry(setting_type)
-                .or_insert_with(|| HashSet::default())
-                .insert(setting_id);
-            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
-            // This isn't the same as the concept of being present or not.
-            #[allow(clippy::redundant_closure)]
-            container
-                .members
-                .entry(itinerary_entry.setting_type)
-                .or_insert_with(|| HashMap::default())
-                .entry(setting_id)
-                .or_insert_with(|| Vec::new())
-                .push(person_id);
-        }
-        container.itineraries.insert(person_id, itinerary);
-        Ok(())
+            .alpha_for_setting_category
+            .insert(setting_category, alpha)
     }
 
-    fn get_setting_members<T: SettingType + 'static>(
-        &self,
-        setting_id: SettingId<T>,
-    ) -> Option<&Vec<PersonId>> {
-        self.get_data_container(SettingDataPlugin)?
-            .get_setting_members(&TypeId::of::<T>(), setting_id.id)
+    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        container.add_itinerary_for_person(person_id, itinerary)
     }
 
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
-        let mut collector = 0.0;
-        container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
-            let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            collector += ratio * multiplier;
-        });
-        collector
-    }
-
-    // Perhaps setting ids should include type and id so that one can have a vector of setting ids
-    fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
-        self.get_data_container(SettingDataPlugin)
-            .expect("Person should be added to settings")
-            .itineraries
-            .get(&person_id)
-    }
-
-    fn get_contact<T: SettingType + 'static>(
-        &self,
-        person_id: PersonId,
-        setting_id: SettingId<T>,
-    ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members::<T>(setting_id) {
-            if members.len() == 1 {
-                return None;
-            }
-            let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-            }
-            Some(contact_id)
-        } else {
-            None
+        // ToDo(ap59): What should happen if the person doesn't have an itinerary?
+        match container.calculate_infectiousness_multiplier_vector_for_person(person_id) {
+            Some(v) => v.iter().sum(),
+            None => 0.0,
         }
     }
+
     fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
-        let mut itinerary_multiplier = Vec::new();
-        container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
-            let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            itinerary_multiplier.push(ratio * multiplier);
-        });
-
-        let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
-
-        if let Some(itinerary) = self.get_itinerary(person_id) {
-            let itinerary_entry = &itinerary[setting_index];
-            self.get_contact_internal(
-                person_id,
-                itinerary_entry.setting_type,
-                itinerary_entry.setting_id,
-            )
-        } else {
-            None
-        }
+        self.sample(SettingsRng, |rng| {
+            container.draw_contact_from_itinerary(person_id, rng)
+        })
     }
 }
 
@@ -360,8 +322,9 @@ mod test {
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 });
+        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.001);
+
         let home_props = context.get_setting_properties::<Home>();
         let tract_props = context.get_setting_properties::<CensusTract>();
 
