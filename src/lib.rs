@@ -66,6 +66,7 @@ pub use log::{
 
 pub mod external_api;
 mod hashing;
+pub mod numeric;
 pub mod web_api;
 
 // Re-export for macros
