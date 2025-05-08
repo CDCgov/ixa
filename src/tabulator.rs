@@ -96,9 +96,9 @@ mod tests {
         define_derived_property, define_person_property, define_person_property_with_default,
         Context, ContextPeopleExt,
     };
+    use crate::{HashSet, HashSetExt};
     use std::any::TypeId;
     use std::cell::RefCell;
-    use std::collections::HashSet;
 
     define_person_property!(Age, u8);
     type RiskCategoryValue = u8;
