@@ -1,8 +1,5 @@
 use crate::population_loader::{Age, RiskCategoryValue};
-use ixa::{
-    context::Context, define_person_property, define_rng, people::ContextPeopleExt,
-    random::ContextRandomExt,
-};
+use ixa::prelude::*;
 use serde_derive::Serialize;
 
 define_rng!(VaccineRng);

@@ -1,6 +1,4 @@
-use ixa::context::Context;
-use ixa::define_rng;
-use ixa::random::ContextRandomExt;
+use ixa::prelude::*;
 use rand::distributions::Uniform;
 use rand::Rng;
 

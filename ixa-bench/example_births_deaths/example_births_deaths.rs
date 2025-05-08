@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ixa::Context;
+use ixa::prelude::*;
 use ixa_example_births_deaths::initialize;
 use std::fs;
 use std::path::Path;

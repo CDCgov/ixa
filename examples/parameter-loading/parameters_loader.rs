@@ -1,10 +1,7 @@
-use ixa::context::Context;
-use ixa::global_properties::ContextGlobalPropertiesExt;
+use ixa::prelude::*;
 use std::fmt::Debug;
 use std::path::Path;
 
-use ixa::define_global_property;
-use ixa::error::IxaError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

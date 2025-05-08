@@ -68,6 +68,8 @@ pub mod external_api;
 mod hashing;
 pub mod web_api;
 
+pub mod prelude;
+
 // Re-export for macros
 pub use ctor;
 pub use paste;
