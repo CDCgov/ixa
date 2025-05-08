@@ -80,7 +80,7 @@ Let's revisit `src/main.rs`:
 // main.rs
 mod people;
 
-use ixa::Context;
+use ixa::prelude::*;
 
 static POPULATION: u64 = 1000;
 
