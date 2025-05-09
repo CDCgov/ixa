@@ -4,7 +4,7 @@ This module is enabled with the `aspr_archive` feature and provides facilities t
 Set and get the ASPR data path with the `set_aspr_data_path` and `get_aspr_data_path` functions:
 
 ```rust
-# use fips::aspr::archive::{get_aspr_data_path, set_aspr_data_path};
+# use ixa_fips::aspr::archive::{get_aspr_data_path, set_aspr_data_path};
 # use std::path::PathBuf;
 let current_path = get_aspr_data_path();
 println!("The current ASPR data path: {:?}", current_path);
@@ -22,8 +22,8 @@ You can iterate over the records in a CSV file under the ASPR data path with the
 struct transparently handles the case that the ASPR data path is a zip archive or a directory for you. Just provide the
 path to the CSV file relative to the ASPR data path:
 
-```rust
-# use fips::aspr::archive::{CBSA_ALL_DIR, ASPRRecordIterator};
+```ignore
+# use ixa_fips::aspr::archive::{CBSA_ALL_DIR, ASPRRecordIterator};
 # use std::path::PathBuf;
 let subdirectory = PathBuf::from(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
 let records = ASPRRecordIterator::from_path(subdirectory);
@@ -33,9 +33,9 @@ let records = ASPRRecordIterator::from_path(subdirectory);
 The `ASPRRecordIterator::state_population()` function is a convenience function that returns an iterator over the
 records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`.
 
-```rust
-# use fips::aspr::archive::{ASPRRecordIterator};
-# use fips::USState;
+```ignore
+# use ixa_fips::aspr::archive::{ASPRRecordIterator};
+# use ixa_fips::USState;
 let records = ASPRRecordIterator::state_population(USState::AK);
 // Do something with the records...
 ```
@@ -43,8 +43,8 @@ let records = ASPRRecordIterator::state_population(USState::AK);
 You can get a list of CSV files in a given subdirectory of the ASPR data path with the `iter_csv_files` function. This
 is useful for chaining record iterators using the `from_file_iterator` constructor method:
 
-```rust
-# use fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+```ignore
+# use ixa_fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
 let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
 // Do something with the records...
 ```
@@ -281,8 +281,8 @@ impl ASPRRecordIterator {
     /// Returns an iterator over all the rows of all the files in the iterator. This function is intended to be used with
     /// the `iter_csv_files` function:
     ///
-    /// ```rust
-    /// # use fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+    /// ```ignore
+    /// # use ixa_fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
     /// let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
     /// ```
     pub fn from_file_iterator(
