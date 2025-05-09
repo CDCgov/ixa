@@ -28,12 +28,12 @@ ASPR synthetic-population files.***
 ### 1. Building a code "by hand"
 
 ```rust
-use fips::{FIPSCode, USState};
+use ixa_fips::{FIPSCode, USState};
 
 let code  = FIPSCode::with_tract(
-USState::TX,
-201,        // county
-1234,                // census tract
+    USState::TX,
+    201,  // county
+    1234, // census tract
 );
 
 // Pattern-match the components later:
@@ -46,7 +46,6 @@ Example parsing a complete FIPS code (state + county + tract):
 
 ```rust
 // Example: "01001020100" = Alabama (01), Autauga County (001), Tract 020100
-
 let input = "01001020100";
 
 // First parse the state
@@ -72,16 +71,16 @@ assert_eq!(tract, 20100);
 ### 3. Streaming a synthetic population
 
 ```rust
-use fips::aspr::archive::{ASPRRecordIterator, set_aspr_data_path};
-use fips::USState;
+use ixa_fips::aspr::archive::{ASPRRecordIterator, set_aspr_data_path};
+use ixa_fips::USState;
 
 set_aspr_data_path(PathBuf::from("../CDC/data/ASPR_Synthetic_Population.zip"));
 
 for person in ASPRRecordIterator::state_population(USState::AK) {
-if let Ok(record) = person {
-// record.age, record.home_id, record.school_id, record.work_id …
-println ! ("{}", record);
-}
+    if let Ok(record) = person {
+        // record.age, record.home_id, record.school_id, record.work_id …
+        println ! ("{}", record);
+    }
 }
 ```
 
