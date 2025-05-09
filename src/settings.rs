@@ -20,18 +20,6 @@ use std::ops::Index;
 
 define_rng!(SettingsRng);
 
-/// In a setting with `n` people (including the source of infection), the rate of the total
-/// infectiousness process is computed as
-///      (intrinsic infectiousness) × (n - 1)ᵅ
-/// where 0 ≤ 𝛼 ≤ 1. This interpolates between having the total hazard _distributed_ equally and
-/// the total hazard applying equally to the nonsources.
-#[derive(Debug, Clone)]
-pub struct Setting {
-    // Since the `Setting`
-    // id: FIPSCode,
-    members: Vec<PersonId>,
-}
-
 pub type SettingId = FIPSCode;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -50,21 +38,41 @@ impl ItineraryEntry {
 /// A convenience wrapper for a vector of `ItineraryEntry`s that enforces the constraint that there
 /// is at most one instance of any given `SettingCategory` represented in the `Itinerary`.
 // ToDo(ap59): This should be a small_vec or equivalent, as many of these will have a single entry.
+#[derive(Debug, Clone, Default)]
 pub struct Itinerary(Vec<ItineraryEntry>);
 
 impl Itinerary {
+    /// Creates an empty `Itinerary`.
+    #[must_use]
+    pub fn new() -> Itinerary {
+        Itinerary::default()
+    }
+
+    /// Creates an `Itinerary` from a vector of `ItineraryEntry`'s. Returns an `IxaError` if there
+    /// are two `ItineraryEntry`s with the same `SettingId`.
+    pub fn from_vec(entries: Vec<ItineraryEntry>) -> Result<Self, IxaError> {
+        let mut itinerary = Itinerary::default();
+
+        for entry in entries {
+            itinerary.add(entry.setting_id, entry.ratio)?;
+        }
+
+        Ok(itinerary)
+    }
+
+    /// Convenience wrapper over `add_itinerary_entry` that creates the `ItineraryEntry` for you.
     pub fn add(&mut self, setting_id: SettingId, ratio: f64) -> Result<(), IxaError> {
         self.add_itinerary_entry(ItineraryEntry::new(setting_id, ratio))
     }
 
+    /// Adds the `ItineraryEntry` to the `Itinerary`. Returns an `IxaError` if an `ItineraryEntry`
+    /// with the same setting already exists in the `Itinerary`.
     pub fn add_itinerary_entry(&mut self, entry: ItineraryEntry) -> Result<(), IxaError> {
-        // Check if there is already an entry for this category
-        let category = entry.setting_id.category();
-        if self
-            .0
-            .iter()
-            .any(|other| other.setting_id.category() == category)
-        {
+        // Check if there is already an entry for this setting
+        if self.0.iter().any(
+            // ToDo(ap59): Should the "data" field be included in the comparison?
+            |other| other.setting_id.compare_non_data(entry.setting_id).is_eq(),
+        ) {
             return Err(IxaError::IxaError(format!(
                 "Duplicated setting in itinerary when adding setting_id {:?}",
                 entry.setting_id
@@ -75,8 +83,17 @@ impl Itinerary {
         Ok(())
     }
 
+    /// Returns an iterator over the `ItineraryEntry`s in this `Itinerary`.
     pub fn iter(&self) -> std::slice::Iter<ItineraryEntry> {
         self.0.iter()
+    }
+}
+
+impl<'this> IntoIterator for &'this Itinerary {
+    type Item = &'this ItineraryEntry;
+    type IntoIter = std::slice::Iter<'this, ItineraryEntry>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -89,11 +106,17 @@ impl Index<usize> for Itinerary {
 
 #[derive(Default)]
 pub struct SettingsDataContainer {
-    // Each `SettingCategory` has an alpha of type `f64`
+    /// Each `SettingCategory` has an alpha of type `f64`
+    ///
+    /// In a setting with `n` people (including the source of infection), the rate of the total
+    /// infectiousness process is computed as
+    ///      (intrinsic infectiousness) × (n - 1)ᵅ
+    /// where 0 ≤ 𝛼 ≤ 1. This interpolates between having the total hazard _distributed_ equally and
+    /// the total hazard applying equally to the nonsources.
     alpha_for_setting_category: HashMap<SettingCategory, f64>,
-    // Each `PersonId` has an `Itinerary` of `SettingId`s
+    /// Each `PersonId` has an `Itinerary` of `SettingId`s
     itineraries: HashMap<PersonId, Itinerary>,
-    // Each `SettingId` has a list of members
+    /// Each `SettingId` has a list of members
     members: HashMap<SettingId, Vec<PersonId>>,
 }
 
@@ -103,9 +126,13 @@ impl SettingsDataContainer {
     }
 
     /// Adds an `Itinerary` for the given person, inserting the person as a member of the settings
-    /// in the given `Itinerary`. Returns `true` if the method modified an existing itinerary (i.e.
-    /// an itinerary was already set for this person), `false` otherwise.
-    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool {
+    /// in the given `Itinerary`. Returns the old `Itinerary` if the method replaced an existing
+    /// itinerary (i.e. an itinerary was already set for this person), `None` otherwise.
+    fn add_itinerary_for_person(
+        &mut self,
+        person_id: PersonId,
+        itinerary: Itinerary,
+    ) -> Option<Itinerary> {
         match self.itineraries.entry(person_id) {
             Entry::Vacant(vacant_entry) => {
                 // An itinerary was not previously set for this person.
@@ -118,13 +145,13 @@ impl SettingsDataContainer {
                         .and_modify(|members| members.push(person_id))
                         .or_insert_with(|| vec![person_id]);
                 }
-                false
+                None
             }
             Entry::Occupied(mut occupied_entry) => {
                 // Replace the old itinerary, taking ownership of it
                 let old_it = occupied_entry.insert(itinerary);
                 // Remove the person from each setting in the old itinerary
-                for entry in old_it.iter() {
+                for entry in &old_it {
                     let setting = entry.setting_id;
                     self.members.entry(setting).and_modify(|members| {
                         if let Some(idx) = members.iter().position(|&pid| pid == person_id) {
@@ -134,14 +161,14 @@ impl SettingsDataContainer {
                 }
                 // Now add the person to each setting in the new itinerary
                 let new_it = occupied_entry.get();
-                for entry in new_it.iter() {
+                for entry in new_it {
                     let setting = entry.setting_id;
                     self.members
                         .entry(setting)
                         .and_modify(|members| members.push(person_id))
                         .or_insert_with(|| vec![person_id]);
                 }
-                true
+                Some(old_it)
             }
         }
     }
@@ -151,7 +178,7 @@ impl SettingsDataContainer {
     ///     - the `ItineraryEntry` (contains `SettingId` and `ratio`)
     ///     - alpha - the alpha value for the `SettingCategory` associated to the `SettingId` in
     ///       the `ItineraryEntry`
-    ///     - member_count: the length of the list of members of the setting
+    ///     - `member_count`: the length of the list of members of the setting
     ///
     /// If there is no itinerary for the person, this method is a no-op.
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
@@ -160,7 +187,7 @@ impl SettingsDataContainer {
         F: FnMut(ItineraryEntry, f64, usize),
     {
         if let Some(itinerary) = self.itineraries.get(&person_id) {
-            for entry in itinerary.iter() {
+            for entry in itinerary {
                 let alpha = match self
                     .alpha_for_setting_category
                     .get(&entry.setting_id.category())
@@ -189,7 +216,7 @@ impl SettingsDataContainer {
     ) -> Option<Vec<f64>> {
         let mut multiplier_vector = vec![];
         self.with_itinerary(person_id, |entry, alpha, member_count| {
-            // let multiplier = setting_type.calculate_multiplier(members, *setting_props);
+            #[allow(clippy::cast_precision_loss)]
             let multiplier = ((member_count - 1) as f64).powf(alpha);
             multiplier_vector.push(entry.ratio * multiplier);
         });
@@ -237,15 +264,6 @@ impl SettingsDataContainer {
     }
 }
 
-// fn calculate_multiplier(
-//     members: &[PersonId],
-//     setting_properties: SettingProperties,
-// ) -> f64 {
-//     let n_members = members.len();
-//     #[allow(clippy::cast_precision_loss)]
-//     ((n_members - 1) as f64).powf(setting_properties.alpha)
-// }
-
 define_data_plugin!(
     SettingDataPlugin,
     SettingsDataContainer,
@@ -263,15 +281,19 @@ pub trait ContextSettingExt {
     ) -> Option<f64>;
 
     /// Adds an `Itinerary` for the given person, inserting the person as a member of the settings
-    /// in the given `Itinerary`. Returns `true` if the method modified an existing itinerary (i.e.
-    /// an itinerary was already set for this person), `false` otherwise.
-    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool;
+    /// in the given `Itinerary`. Returns the old `Itinerary` if the method replaced an existing
+    /// itinerary (i.e. an itinerary was already set for this person), `None` otherwise.
+    fn add_itinerary_for_person(
+        &mut self,
+        person_id: PersonId,
+        itinerary: Itinerary,
+    ) -> Option<Itinerary>;
 
     /// For the given person, computes the inner product $<R, M>$ where $R$ is the vector of ratios
     /// for each setting and $M$ is the vector of multipliers for each setting.
     ///
     /// Recall that the "multiplier" for a setting is computed as
-    ///     $((n_members - 1) as f64).powf(alpha).$
+    ///     `((n_members - 1) as f64).powf(alpha)`.
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
 
     /// For a given person, use the person's itinerary and associated setting properties to
@@ -291,7 +313,11 @@ impl ContextSettingExt for Context {
             .insert(setting_category, alpha)
     }
 
-    fn add_itinerary_for_person(&mut self, person_id: PersonId, itinerary: Itinerary) -> bool {
+    fn add_itinerary_for_person(
+        &mut self,
+        person_id: PersonId,
+        itinerary: Itinerary,
+    ) -> Option<Itinerary> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         container.add_itinerary_for_person(person_id, itinerary)
     }
@@ -319,168 +345,168 @@ mod test {
     use crate::assert_almost_eq;
     use crate::settings::ContextSettingExt;
     use crate::ContextPeopleExt;
+    use fips::{FIPSCode, USState};
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
-        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
-        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.001);
+        // Set new values
+        assert!(context
+            .set_alpha_for_setting_category(SettingCategory::Home, 0.1)
+            .is_none());
+        assert!(context
+            .set_alpha_for_setting_category(SettingCategory::CensusTract, 0.001)
+            .is_none());
 
-        let home_props = context.get_setting_properties::<Home>();
-        let tract_props = context.get_setting_properties::<CensusTract>();
-
-        assert_almost_eq!(0.1, home_props.alpha, 0.0);
-        assert_almost_eq!(0.001, tract_props.alpha, 0.0);
+        // Assert that:
+        //   1) the old value is returned when a new value is set
+        //   2) the original value was inserted correctly to begin with
+        assert_almost_eq!(
+            context
+                .set_alpha_for_setting_category(SettingCategory::Home, 0.9)
+                .unwrap(),
+            0.1,
+            0.0
+        );
+        assert_almost_eq!(
+            context
+                .set_alpha_for_setting_category(SettingCategory::CensusTract, 0.5)
+                .unwrap(),
+            0.001,
+            0.0
+        );
     }
 
     #[test]
     fn test_duplicated_itinerary() {
-        let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 1.0 });
+        // Different homes is ok. (Also, different person from person1 with same home is ok.)
+        let itinerary0 = Itinerary::from_vec(vec![
+            ItineraryEntry::new(
+                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home),
+                0.5,
+            ),
+            ItineraryEntry::new(
+                FIPSCode::with_category(USState::TN, 0, 0, SettingCategory::Home),
+                0.5,
+            ),
+        ]);
+        assert!(itinerary0.is_ok());
 
-        // Different homes is ok. (Different person from person1 with same home is ok.)
-        let person0 = context.add_person(()).unwrap();
-        let itinerary0 = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(2), 0.5),
-            ItineraryEntry::new(&SettingId::<Home>::new(3), 0.5),
-        ];
+        // Same value in "id" field but different setting type is ok.
+        let itinerary1 = Itinerary::from_vec(vec![
+            ItineraryEntry::new(
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 0),
+                0.5,
+            ),
+            ItineraryEntry::new(
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::CensusTract, 314, 0),
+                0.5,
+            ),
+        ]);
+        assert!(itinerary1.is_ok());
 
-        // Same id but different setting type is ok.
-        let person1 = context.add_person(()).unwrap();
-        let itinerary1 = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(3), 0.5),
-            ItineraryEntry::new(&SettingId::<CensusTract>::new(3), 0.5),
-        ];
-
-        // Same ID and same setting type should be an error.
-        let person2 = context.add_person(()).unwrap();
-        let itinerary2 = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(2), 0.25),
-            ItineraryEntry::new(&SettingId::<Home>::new(2), 0.75),
-        ];
-
-        context
-            .add_itinerary(person0, itinerary0)
-            .expect("Failed to add itinerary");
-
-        context
-            .add_itinerary(person1, itinerary1)
-            .expect("Failed to add itinerary");
-
-        match context.add_itinerary(person2, itinerary2) {
-            Err(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Duplicated setting");
-            }
-            Err(e) => panic!("Unexpected error in itinerary: {}", e),
-            Ok(_) => panic!("itinerary should be error"),
-        }
+        // Differing only in "data field" should be an error.
+        let itinerary2 = Itinerary::from_vec(vec![
+            ItineraryEntry::new(
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 1),
+                0.5,
+            ),
+            ItineraryEntry::new(
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 0),
+                0.5,
+            ),
+        ]);
+        assert!(itinerary2.is_err());
     }
 
     #[test]
     fn test_add_itinerary() {
+        // Put two people into the same setting and sample one from the other's settings.
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context.init_random(42);
+        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+
+        let common_setting = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
 
         let person = context.add_person(()).unwrap();
-        let itinerary = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(1), 0.5),
-            ItineraryEntry::new(&SettingId::<Home>::new(2), 0.5),
-        ];
-        let _ = context.add_itinerary(person, itinerary);
-        let members = context
-            .get_setting_members::<Home>(SettingId::<Home>::new(2))
-            .unwrap();
-        assert_eq!(members.len(), 1);
+        let itinerary =
+            Itinerary::from_vec(vec![ItineraryEntry::new(common_setting, 1.0)]).unwrap();
+        assert!(context
+            .add_itinerary_for_person(person, itinerary)
+            .is_none());
 
         let person2 = context.add_person(()).unwrap();
-        let itinerary2 = vec![ItineraryEntry::new(&SettingId::<Home>::new(2), 1.0)];
-        let _ = context.add_itinerary(person2, itinerary2);
+        let itinerary2 =
+            Itinerary::from_vec(vec![ItineraryEntry::new(common_setting, 1.0)]).unwrap();
+        assert!(context
+            .add_itinerary_for_person(person2, itinerary2)
+            .is_none());
 
-        let members2 = context
-            .get_setting_members::<Home>(SettingId::<Home>::new(2))
-            .unwrap();
-        assert_eq!(members2.len(), 2);
-    }
-
-    #[test]
-    fn test_setting_registration() {
-        let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
-        for s in 0..5 {
-            // Create 5 people
-            for _ in 0..5 {
-                let person = context.add_person(()).unwrap();
-                let itinerary = vec![
-                    ItineraryEntry::new(&SettingId::<Home>::new(s), 0.5),
-                    ItineraryEntry::new(&SettingId::<CensusTract>::new(s), 0.5),
-                ];
-                let _ = context.add_itinerary(person, itinerary);
-            }
-            let members = context
-                .get_setting_members::<Home>(SettingId::<Home>::new(s))
-                .unwrap();
-            let tract_members = context
-                .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(s))
-                .unwrap();
-            // Get the number of people for these settings and should be 5
-            assert_eq!(members.len(), 5);
-            assert_eq!(tract_members.len(), 5);
-        }
+        let sampled_person = context.draw_contact_from_itinerary(person);
+        let sampled_person = sampled_person.unwrap();
+        assert_eq!(sampled_person, person2);
     }
 
     #[test]
     fn test_setting_multiplier() {
         // TODO: if setting not registered, shouldn't be able to register people to setting
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        context.init_random(42);
+        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+
+        let setting_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+
         for s in 0..5 {
+            let itinerary_prototype =
+                Itinerary::from_vec(vec![ItineraryEntry::new(setting_prototype.set_id(s), 0.5)])
+                    .unwrap();
             // Create 5 people
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
-                let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(s), 0.5)];
-                let _ = context.add_itinerary(person, itinerary);
+                let _ = context.add_itinerary_for_person(person, itinerary_prototype.clone());
             }
         }
 
-        let home_id = 0;
+        // Has id = 0.
+        let itinerary =
+            Itinerary::from_vec(vec![ItineraryEntry::new(setting_prototype, 0.5)]).unwrap();
         let person = context.add_person(()).unwrap();
-        let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(home_id), 0.5)];
-        let _ = context.add_itinerary(person, itinerary);
-        let members = context
-            .get_setting_members::<Home>(SettingId::<Home>::new(home_id))
-            .unwrap();
+        let _ = context.add_itinerary_for_person(person, itinerary);
 
-        let setting_type = Home {};
-
-        let inf_multiplier =
-            setting_type.calculate_multiplier(members, SettingProperties { alpha: 0.1 });
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
 
         // This is assuming we know what the function for Home is (N - 1) ^ alpha
-        assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
+        assert_almost_eq!(inf_multiplier, 0.5 * f64::from(6 - 1).powf(0.1), 0.0);
     }
 
     #[test]
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
 
+        let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let tract_prototype =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+
+        // Create 5 homes and census tracts with 5 people each.
         for s in 0..5 {
+            let itinerary_prototype = Itinerary::from_vec(vec![
+                ItineraryEntry::new(home_prototype.set_id(s), 0.5),
+                ItineraryEntry::new(tract_prototype.set_id(s), 0.5),
+            ])
+            .unwrap();
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
-                let itinerary = vec![
-                    ItineraryEntry::new(&SettingId::<Home>::new(s), 0.5),
-                    ItineraryEntry::new(&SettingId::<CensusTract>::new(s), 0.5),
-                ];
-                let _ = context.add_itinerary(person, itinerary);
+                let _ = context.add_itinerary_for_person(person, itinerary_prototype.clone());
             }
         }
+
         // Create a new person and register to home 0
-        let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
+        let itinerary =
+            Itinerary::from_vec(vec![ItineraryEntry::new(home_prototype.set_id(0), 1.0)]).unwrap();
         let person = context.add_person(()).unwrap();
-        let _ = context.add_itinerary(person, itinerary);
+        let _ = context.add_itinerary_for_person(person, itinerary);
 
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
@@ -490,20 +516,13 @@ mod test {
         // CensusTract 0 should have 6 members, Home 0 should have 7 members
         // the total infectiousness should be the sum of infs * proportion
         let person = context.add_person(()).unwrap();
-        let itinerary_complete = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(0), 0.5),
-            ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5),
-        ];
-        let _ = context.add_itinerary(person, itinerary_complete);
-        let members_home = context
-            .get_setting_members::<Home>(SettingId::<Home>::new(0))
-            .unwrap();
-        let members_tract = context
-            .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(0))
-            .unwrap();
-        assert_eq!(members_home.len(), 7);
-        assert_eq!(members_tract.len(), 6);
+        let itinerary_complete = Itinerary::from_vec(vec![
+            ItineraryEntry::new(home_prototype.set_id(0), 0.5),
+            ItineraryEntry::new(tract_prototype.set_id(0), 0.5),
+        ])
+        .unwrap();
 
+        let _ = context.add_itinerary_for_person(person, itinerary_complete);
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
 
@@ -516,33 +535,40 @@ mod test {
 
     #[test]
     fn test_get_contact_from_setting() {
-        // Register two people to a setting and make sure that the person chosen is the other one
+        // Register two people to a setting and make sure that the person chosen is the other one.
         // Attempt to draw a contact from a setting with only the person trying to get a contact
-        // TODO: What happens if the person isn't registered in the setting?
         let mut context = Context::new();
         context.init_random(42);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
 
         let person_a = context.add_person(()).unwrap();
         let person_b = context.add_person(()).unwrap();
-        let itinerary_a = vec![
-            ItineraryEntry::new(&SettingId::<Home>::new(0), 0.5),
-            ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5),
-        ];
-        let itinerary_b = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
-        let _ = context.add_itinerary(person_a, itinerary_a);
-        let _ = context.add_itinerary(person_b, itinerary_b);
+
+        let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let tract_prototype =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+
+        let itinerary_a = Itinerary::from_vec(vec![
+            ItineraryEntry::new(home_prototype, 0.5),
+            ItineraryEntry::new(tract_prototype, 0.5),
+        ])
+        .unwrap();
+
+        let itinerary_b =
+            Itinerary::from_vec(vec![ItineraryEntry::new(home_prototype, 1.0)]).unwrap();
+
+        let _ = context.add_itinerary_for_person(person_a, itinerary_a);
+        let _ = context.add_itinerary_for_person(person_b, itinerary_b);
 
         assert_eq!(
             person_b,
-            context
-                .get_contact::<Home>(person_a, SettingId::<Home>::new(0))
-                .unwrap()
+            context.draw_contact_from_itinerary(person_a).unwrap()
         );
-        assert!(context
-            .get_contact::<CensusTract>(person_a, SettingId::<CensusTract>::new(0))
-            .is_none());
+        assert_eq!(
+            person_a,
+            context.draw_contact_from_itinerary(person_b).unwrap()
+        );
     }
 
     #[test]
@@ -558,54 +584,68 @@ mod test {
          - Test 1 Itinerary with 0 proportion at census tract, contacts drawn should be from home (0-2)
          - Test 2 Itinerary with 0 proportion at home, contacts should be drawn from census tract (3-6)
         */
+        // We keep track of the people at home and at census tract
+        let mut people_at_home = vec![];
+        let mut people_at_tract = vec![];
+
         for seed in 0..100 {
             let mut context = Context::new();
             context.init_random(seed);
-            context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-            context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+            context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+            context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
 
-            for _ in 0..3 {
-                let person = context.add_person(()).unwrap();
-                let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
-                let _ = context.add_itinerary(person, itinerary);
+            let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+            let tract_prototype =
+                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+
+            {
+                let itinerary_home =
+                    Itinerary::from_vec(vec![ItineraryEntry::new(home_prototype, 1.0)]).unwrap();
+                for _ in 0..3 {
+                    let person = context.add_person(()).unwrap();
+                    people_at_home.push(person);
+                    let _ = context.add_itinerary_for_person(person, itinerary_home.clone());
+                }
             }
 
-            for _ in 0..3 {
-                let person = context.add_person(()).unwrap();
-                let itinerary = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 1.0)];
-                let _ = context.add_itinerary(person, itinerary);
+            {
+                let itinerary_tract =
+                    Itinerary::from_vec(vec![ItineraryEntry::new(tract_prototype, 1.0)]).unwrap();
+                for _ in 0..3 {
+                    let person = context.add_person(()).unwrap();
+                    people_at_tract.push(person);
+                    let _ = context.add_itinerary_for_person(person, itinerary_tract.clone());
+                }
             }
 
+            // The 7th person whose contact we shall draw
             let person = context.add_person(()).unwrap();
-            let itinerary_home = vec![
-                ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0),
-                ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.0),
-            ];
-            let itinerary_censustract = vec![
-                ItineraryEntry::new(&SettingId::<Home>::new(0), 0.0),
-                ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 1.0),
-            ];
-            let home_members = context
-                .get_setting_members::<Home>(SettingId::<Home>::new(0))
-                .unwrap()
-                .clone();
-            let tract_members = context
-                .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(0))
-                .unwrap()
-                .clone();
 
-            let _ = context.add_itinerary(person, itinerary_home);
-            let contact_id_home = context.draw_contact_from_itinerary(person);
-            assert!(home_members.contains(&contact_id_home.unwrap()));
+            // An itinerary with proportion 1 at home and 0 at census tract
+            let itinerary_home = Itinerary::from_vec(vec![
+                ItineraryEntry::new(home_prototype, 1.0),
+                ItineraryEntry::new(tract_prototype, 0.0),
+            ])
+            .unwrap();
+            // An itinerary with proportion 0 at home and 1 at census tract
+            let itinerary_tract = Itinerary::from_vec(vec![
+                ItineraryEntry::new(home_prototype, 0.0),
+                ItineraryEntry::new(tract_prototype, 1.0),
+            ])
+            .unwrap();
 
-            let _ = context.add_itinerary(person, itinerary_censustract);
-            let contact_id_tract = context.draw_contact_from_itinerary(person);
-            assert!(tract_members.contains(&contact_id_tract.unwrap()));
+            // First draw a contact from the itinerary with 1 at home and 0 at census tract
+            let _ = context.add_itinerary_for_person(person, itinerary_home);
+            let contact_id_home = context.draw_contact_from_itinerary(person).unwrap();
+            assert!(people_at_home.contains(&contact_id_home));
+
+            // Now draw a contact from the itinerary with 0 at home and 1 at census tract
+            let _ = context.add_itinerary_for_person(person, itinerary_tract);
+            let contact_id_tract = context.draw_contact_from_itinerary(person).unwrap();
+            assert!(people_at_tract.contains(&contact_id_tract));
         }
     }
-    /*TODO:
-    Test failure of getting properties if not initialized
-    Test failure if a setting is registered more than once?
-    Test that proportions either add to 1 or that they are weighted based on proportion
-    */
+
+    // TODO: Test failure of getting properties if not initialized
+    // TODO: Test that proportions either add to 1 or that they are weighted based on proportion
 }
