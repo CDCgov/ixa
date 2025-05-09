@@ -4,6 +4,7 @@ members = [
   "ixa-bench",
   "ixa-derive",
   "ixa-integration-tests",
+  "ixa-fips"
 ]
 
 [workspace.package]
