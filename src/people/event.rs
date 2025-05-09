@@ -161,4 +161,18 @@ mod tests {
         context.execute();
         assert!(*flag.borrow());
     }
+
+    #[test]
+    fn test_person_property_change_event_no_people() {
+        let mut context = Context::new();
+        // Non derived person property -- no problems
+        context.subscribe_to_event(|_context, _event: PersonPropertyChangeEvent<IsRunner>| {
+            unreachable!();
+        });
+
+        // Derived person property -- can't add an event without people being present
+        context.subscribe_to_event(|_context, _event: PersonPropertyChangeEvent<AgeGroup>| {
+            unreachable!();
+        });
+    }
 }
