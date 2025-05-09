@@ -63,7 +63,7 @@ curl -s -f -o .pre-commit-config.yaml https://raw.githubusercontent.com/CDCgov/i
 check_success "Failed to download pre-commit-config.yaml from ixa"
 
 # add the clippy.toml from ixa
-curl -s -f -o .clippy.toml https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/.clippy.toml
+curl -s -f -o clippy.toml https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/clippy.toml
 check_success "Failed to download clippy.toml from ixa"
 
 # add github action from ixa
