@@ -2,7 +2,9 @@
 
 Simple parsing utilities for parsing text representations of FIPS codes and variations thereupon.
 
-The concatenative structure of hierarchical FIPS geographic region codes, the (decimal) digit count of code fragments, and the bit count (defined by this implementation) allowed for each code fragment, are described in detail in the library level documentation
+The concatenative structure of hierarchical FIPS geographic region codes, the (decimal)
+digit count of code fragments, and the bit count (defined by this implementation) allowed
+for each code fragment, are described in detail in the library level documentation
 
 */
 
