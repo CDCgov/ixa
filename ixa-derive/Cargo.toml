@@ -11,5 +11,8 @@ homepage = "https://github.com/CDCgov/ixa"
 quote = "^1.0.38"
 syn = "^2.0.95"
 
+[lints]
+workspace = true
+
 [lib]
 proc-macro = true
