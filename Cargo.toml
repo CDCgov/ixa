@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "ixa-bench",
-    "ixa-derive",
-    "ixa-integration-tests",
-]
+members = ["ixa-*"]
 
 [workspace.package]
 edition = "2021"
