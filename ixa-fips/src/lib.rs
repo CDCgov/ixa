@@ -30,7 +30,7 @@ const FOUR_BIT_MASK: u8 = 15; // 2^4-1
 const SIX_BIT_MASK: u8 = 63; // 2^6-1
 const TEN_BIT_MASK: u16 = 1023; // 2^10-1
 const FOURTEEN_BIT_MASK: u16 = 16383; // 2^14-1
-const TWENTY_BIT_MASK: u32 = 1048575; // 2^20-1
+const TWENTY_BIT_MASK: u32 = 1_048_575; // 2^20-1
 
 // Offsets of the bit fields in the encoded FIPS code
 const STATE_OFFSET: usize = 58;

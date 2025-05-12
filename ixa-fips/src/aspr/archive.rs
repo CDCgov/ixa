@@ -50,6 +50,8 @@ let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_D
 ```
 
 */
+// Silence Clippy lint within `self_referencing` macro
+#![allow(clippy::ref_option)]
 
 use crate::{
     aspr::{
@@ -59,14 +61,12 @@ use crate::{
     },
     states::USState,
 };
-use once_cell::sync::Lazy;
 use ouroboros::self_referencing;
 use std::{
     fs::File,
-    io::Lines,
-    io::{BufRead, BufReader},
-    path::PathBuf,
-    sync::RwLock,
+    io::{BufRead, BufReader, Lines},
+    path::{Path, PathBuf},
+    sync::{LazyLock, RwLock},
 };
 use zip::{read::ZipFile, ZipArchive};
 
@@ -81,8 +81,8 @@ pub const MULTI_STATE_DIR: &str = "Multi-state";
 // Path to the ASPR data directory
 const DEFAULT_ASPR_DATA_PATH: &str = "../CDC/data/ASPR_Synthetic_Population";
 // ToDo: Get the ASPR data path from an environment variable.
-static ASPR_DATA_PATH: Lazy<RwLock<PathBuf>> =
-    Lazy::new(|| RwLock::new(PathBuf::from(DEFAULT_ASPR_DATA_PATH)));
+static ASPR_DATA_PATH: LazyLock<RwLock<PathBuf>> =
+    LazyLock::new(|| RwLock::new(PathBuf::from(DEFAULT_ASPR_DATA_PATH)));
 
 /// Setter for the ASPR data directory path.
 pub fn set_aspr_data_path(path: PathBuf) {
@@ -99,17 +99,17 @@ pub fn get_aspr_data_path() -> PathBuf {
 /// Iterator over lines in a particular ASPR data file within a zip archive.
 #[self_referencing]
 struct ZipLineIterator {
-    _archive: ZipArchive<BufReader<File>>,
+    archive: ZipArchive<BufReader<File>>,
 
     // This option is always `Some` after successful construction.
-    #[borrows(mut _archive)]
+    #[borrows(mut archive)]
     #[covariant]
     line_iter: Option<Lines<BufReader<ZipFile<'this, BufReader<File>>>>>,
 }
 
 impl ZipLineIterator {
-    /// Constructs a ZipLineIterator over the lines of the file `path` zipped inside the archive at `archive_path`.
-    pub fn from_path(archive_path: PathBuf, path: PathBuf) -> Result<Self, ASPRError> {
+    /// Constructs a `ZipLineIterator` over the lines of the file `path` zipped inside the archive at `archive_path`.
+    pub fn from_path(archive_path: PathBuf, path: &Path) -> Result<Self, ASPRError> {
         // Open the file with a buffer. These values are consumed.
         let file = File::open(archive_path).map_err(ASPRError::Io)?;
         let reader = BufReader::new(file);
@@ -117,7 +117,7 @@ impl ZipLineIterator {
         let mut maybe_error: Option<ASPRError> = None;
 
         let zip_line_iter = ZipLineIteratorBuilder {
-            _archive: ZipArchive::new(reader).map_err(ASPRError::ZipError)?,
+            archive: ZipArchive::new(reader).map_err(ASPRError::ZipError)?,
 
             line_iter_builder: |archive: &mut ZipArchive<BufReader<File>>| match archive
                 .by_name(path.to_str().unwrap())
@@ -158,6 +158,7 @@ impl Iterator for ZipLineIterator {
 // endregion ZipLineIterator
 
 /// Interface abstracting over the different ways to iterate over lines in an ASPR data file.
+#[allow(clippy::large_enum_variant)]
 enum LineIterator {
     File(Lines<BufReader<File>>),
     Zip(ZipLineIterator),
@@ -171,12 +172,11 @@ impl LineIterator {
         if path
             .extension()
             .and_then(|ext| ext.to_str())
-            .map(|s| s.eq_ignore_ascii_case("zip"))
-            .unwrap_or(false)
+            .is_some_and(|s| s.eq_ignore_ascii_case("zip"))
         {
             // The path is a zip archive.
             Ok(LineIterator::Zip(ZipLineIterator::from_path(
-                path, file_path,
+                path, &file_path,
             )?))
         } else {
             // The path is a directory.
@@ -210,8 +210,7 @@ pub fn iter_csv_files(
     if path
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|s| s.eq_ignore_ascii_case("zip"))
-        .unwrap_or(false)
+        .is_some_and(|s| s.eq_ignore_ascii_case("zip"))
     {
         // Iterator through files within the zip archive.
         let file = File::open(path).map_err(ASPRError::Io)?;

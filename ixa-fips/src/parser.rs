@@ -7,6 +7,8 @@ digit count of code fragments, and the bit count (defined by this implementation
 for each code fragment, are described in detail in the library level documentation
 
 */
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_lossless)]
 
 use std::fmt::{Debug, Display};
 

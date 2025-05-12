@@ -2,7 +2,7 @@
 
 This module provides routines to make it easier to work with the ASPR synthetic population dataset. It provides basic
 parsing functionality for parsing the codes found in the dataset.  The `archive` submodule, enabled with the
-"aspr_archive" feature, additionally allows for reading ASPR data from CSV files in the dataset, including files within
+`aspr_archive` feature, additionally allows for reading ASPR data from CSV files in the dataset, including files within
 zipped archives.
 
 This dataset encodes `homeId`, `schoolId`, and `workplaceId` using a FIPS geographic region code prefix. In particular,
@@ -70,12 +70,15 @@ pub enum SettingCategory {
 }
 
 impl SettingCategory {
+    #![allow(clippy::inline_always)]
+
     /// Decode a numeric value to a `SettingCategory`
     #[inline(always)]
+    #[must_use]
     pub fn decode(value: u8) -> Option<Self> {
         // ToDo: This isn't great, as we need to keep this limit updated with the number of variants in `SettingCategory`.
         if value <= 5 {
-            Some(unsafe { std::mem::transmute(value) })
+            Some(unsafe { std::mem::transmute::<u8, SettingCategory>(value) })
         } else {
             None
         }
@@ -83,6 +86,7 @@ impl SettingCategory {
 
     /// Encode a `SettingCategory` as a `u8`
     #[inline(always)]
+    #[must_use]
     pub fn encode(self) -> u8 {
         self as u8
     }

@@ -26,7 +26,7 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
     let (rest, state): (&str, USState) = parse_state_code(input)?;
     let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
 
-    if rest.starts_with("x") {
+    if rest.starts_with('x') {
         // Private school id
         let (rest, school_id): (&str, IdCode) = parse_private_school_id(rest)?;
         let fips_code = FIPSCode::new(
@@ -78,6 +78,7 @@ pub fn parse_fips_workplace_id(input: &str) -> FIPSParseResult<FIPSCode> {
 /// code. Enforces the requirement that the value is representable using 10
 /// bits (which is tautologically always true).
 pub fn parse_county_code(input: &str) -> FIPSParseResult<CountyCode> {
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(3, 10, input).map(|(rest, value)| (rest, value as CountyCode))
 }
 
@@ -85,6 +86,7 @@ pub fn parse_county_code(input: &str) -> FIPSParseResult<CountyCode> {
 /// code. Enforces the requirement that the value is representable using 20
 /// bits (which is tautologically always true).
 pub fn parse_tract_code(input: &str) -> FIPSParseResult<TractCode> {
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(6, 20, input).map(|(rest, value)| (rest, value as TractCode))
 }
 
@@ -92,6 +94,7 @@ pub fn parse_tract_code(input: &str) -> FIPSParseResult<TractCode> {
 /// number. Enforces the requirement that the value is representable using 14
 /// bits (which is tautologically always true).
 pub fn parse_home_id(input: &str) -> FIPSParseResult<IdCode> {
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(4, 14, input).map(|(rest, value)| (rest, value as IdCode))
 }
 
@@ -100,6 +103,7 @@ pub fn parse_home_id(input: &str) -> FIPSParseResult<IdCode> {
 /// requirement that the value is representable using 11 bits.
 pub fn parse_private_school_id(input: &str) -> FIPSParseResult<IdCode> {
     let input = input.strip_prefix("xprvx").unwrap_or(input);
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(4, 11, input).map(|(rest, value)| (rest, value as IdCode))
 }
 
@@ -107,6 +111,7 @@ pub fn parse_private_school_id(input: &str) -> FIPSParseResult<IdCode> {
 /// id number. Enforces the requirement that the value is representable using
 /// 10 bits (a tautology in this case).
 pub fn parse_public_school_id(input: &str) -> FIPSParseResult<IdCode> {
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(3, 10, input).map(|(rest, value)| (rest, value as IdCode))
 }
 
@@ -114,6 +119,7 @@ pub fn parse_public_school_id(input: &str) -> FIPSParseResult<IdCode> {
 /// id number. Enforces the requirement that the value is representable using
 /// 14 bits.
 pub fn parse_workplace_id(input: &str) -> FIPSParseResult<IdCode> {
+    #[allow(clippy::cast_possible_truncation)]
     parse_decimal_digits_to_bits(5, 14, input).map(|(rest, value)| (rest, value as IdCode))
 }
 

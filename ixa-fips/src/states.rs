@@ -115,17 +115,20 @@ pub enum USState {
 
 impl USState {
     /// Returns true is `self` is a state or District of Columbia
+    #[must_use]
     pub fn is_state(&self) -> bool {
         let v = *self as StateCode;
         v <= 56u8 && ![3u8, 7, 14, 43, 52].contains(&v)
     }
 
     /// Returns true if `self` is a state (not including District of Columbia)
+    #[must_use]
     pub fn is_proper_state(&self) -> bool {
         self.is_state() && *self as StateCode != 11
     }
 
     /// Returns true if `self` is one of the EAS maritime region codes.
+    #[must_use]
     pub fn is_eas_maritime(&self) -> bool {
         [57u8, 58, 59, 61, 65, 73, 75, 77, 91, 92, 93, 94, 96, 97, 98]
             .contains(&(*self as StateCode))
@@ -134,17 +137,20 @@ impl USState {
     /// Returns the numeric FIPS code for this state.
     ///
     /// This representation only requires 6 bits if `self.is_state()`.
+    #[must_use]
     pub fn encode(&self) -> StateCode {
         *self as StateCode
     }
 
+    #[allow(clippy::result_unit_err)]
     pub fn decode(value: StateCode) -> Result<USState, ()> {
         if !Self::valid_code(value) {
             return Err(());
         }
-        Ok(unsafe { std::mem::transmute(value) })
+        Ok(unsafe { std::mem::transmute::<StateCode, USState>(value) })
     }
 
+    #[must_use]
     pub fn valid_code(code: StateCode) -> bool {
         // The list in this next line contains all values between 1 and 98 that are not assigned to a valid region.
         // Note that there are codes that are neither states nor EAS maritime region codes nor FIPS 5-1 reserved codes,
@@ -152,6 +158,7 @@ impl USState {
         code != 0 && code <= 98 && ![62u8, 63, 80, 82, 83, 85, 87, 88, 90].contains(&code)
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             USState::AL => "AL",
