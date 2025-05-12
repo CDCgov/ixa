@@ -15,6 +15,9 @@ rand = "^0.8.5"
 rand_distr = "^0.4.3"
 paste = "^1.0.15"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "basic_infection"
 path = "main.rs"
