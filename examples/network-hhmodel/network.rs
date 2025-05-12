@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-
 use crate::loader::{open_csv, HouseholdId, Id};
 use ixa::prelude::*;
+use ixa::{define_edge_type, EdgeType, HashSet, HashSetExt, PersonId};
 use serde::Deserialize;
 
 define_edge_type!(Household, ());

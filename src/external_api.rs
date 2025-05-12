@@ -322,8 +322,8 @@ pub(crate) mod r#continue {
 }
 
 pub(crate) mod people {
+    use crate::{HashMap, HashMapExt};
     use std::cell::RefCell;
-    use std::collections::HashMap;
 
     use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
     use crate::Context;
@@ -422,7 +422,7 @@ pub(crate) mod people {
         use super::*;
         use crate::external_api::run_ext_api;
         use crate::{define_person_property, Context};
-        use std::collections::HashSet;
+        use crate::{HashSet, HashSetExt};
         #[test]
         fn query_nonexistent_user() {
             let mut context = Context::new();

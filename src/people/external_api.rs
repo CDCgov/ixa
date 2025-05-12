@@ -100,8 +100,8 @@ impl ContextPeopleExtCrate for Context {
 
 #[cfg(test)]
 mod test {
+    use crate::{HashSet, HashSetExt};
     use std::cell::RefCell;
-    use std::collections::HashSet;
 
     use super::ContextPeopleExtCrate;
     use crate::people::{define_person_property, ContextPeopleExt};
