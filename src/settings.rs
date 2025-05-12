@@ -10,8 +10,8 @@
 
 use crate::people::PersonId;
 use crate::{define_data_plugin, define_rng, Context, ContextRandomExt, HashMap, IxaError};
-use fips::aspr::SettingCategory;
-use fips::FIPSCode;
+use ixa_fips::aspr::SettingCategory;
+use ixa_fips::FIPSCode;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
@@ -345,7 +345,7 @@ mod test {
     use crate::assert_almost_eq;
     use crate::settings::ContextSettingExt;
     use crate::ContextPeopleExt;
-    use fips::{FIPSCode, USState};
+    use ixa_fips::{FIPSCode, USState};
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
