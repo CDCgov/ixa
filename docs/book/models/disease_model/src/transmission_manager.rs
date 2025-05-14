@@ -1,6 +1,6 @@
 use rand_distr::Exp;
 
-use ixa::prelude::*;
+use ixa::{prelude::*, trace, PersonId};
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use crate::FORCE_OF_INFECTION;

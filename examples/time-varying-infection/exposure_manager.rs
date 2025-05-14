@@ -1,3 +1,4 @@
+use ixa::people::PersonCreatedEvent;
 use ixa::prelude::*;
 use std::rc::Rc;
 

@@ -1,4 +1,6 @@
 use ixa::prelude::*;
+use ixa::runner::run_with_args;
+use ixa::PersonId;
 mod incidence_report;
 mod loader;
 mod network;

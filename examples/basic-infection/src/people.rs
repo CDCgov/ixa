@@ -1,4 +1,5 @@
 use ixa::prelude::*;
+use ixa::trace;
 
 use serde::{Deserialize, Serialize};
 

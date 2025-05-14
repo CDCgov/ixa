@@ -1,8 +1,8 @@
 use clap::Args;
-use std::path::PathBuf;
-
 use ixa::prelude::*;
+use ixa::run_with_custom_args;
 use population_loader::DiseaseStatus;
+use std::path::PathBuf;
 
 mod exposure_manager;
 mod incidence_report;

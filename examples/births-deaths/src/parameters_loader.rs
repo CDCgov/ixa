@@ -1,4 +1,5 @@
 use ixa::prelude::*;
+use ixa::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::Path;

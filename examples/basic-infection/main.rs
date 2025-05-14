@@ -1,4 +1,4 @@
-use ixa::prelude::*;
+use ixa::runner::run_with_args;
 use ixa_example_basic_infection::initialize;
 
 fn main() {

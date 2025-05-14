@@ -2,7 +2,10 @@ use crate::population_manager::Alive;
 use crate::population_manager::InfectionStatus;
 use crate::population_manager::InfectionStatusValue;
 use crate::Parameters;
+use ixa::people::{PersonId, PersonPropertyChangeEvent};
+use ixa::plan::PlanId;
 use ixa::prelude::*;
+use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
 
 define_rng!(InfectionRng);

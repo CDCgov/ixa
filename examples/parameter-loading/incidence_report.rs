@@ -1,4 +1,6 @@
+use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
+use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
 
 use crate::InfectionStatus;

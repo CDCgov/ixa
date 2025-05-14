@@ -1,3 +1,4 @@
+use ixa::people::{PersonId, PersonPropertyChangeEvent};
 use ixa::prelude::*;
 
 use rand_distr::Exp;

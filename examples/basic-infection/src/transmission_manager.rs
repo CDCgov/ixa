@@ -1,4 +1,5 @@
 use ixa::prelude::*;
+use ixa::{trace, PersonId};
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use rand_distr::Exp;

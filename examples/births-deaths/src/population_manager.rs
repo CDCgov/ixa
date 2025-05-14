@@ -1,5 +1,7 @@
 use crate::parameters_loader::Parameters;
+use ixa::people::PersonId;
 use ixa::prelude::*;
+
 use rand_distr::{Exp, Uniform};
 use serde::{Deserialize, Serialize};
 use std::fmt;

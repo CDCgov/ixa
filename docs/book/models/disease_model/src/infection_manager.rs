@@ -1,4 +1,4 @@
-use ixa::prelude::*;
+use ixa::{prelude::*, PersonId, PersonPropertyChangeEvent};
 
 use rand_distr::Exp;
 

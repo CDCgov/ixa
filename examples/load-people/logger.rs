@@ -3,6 +3,7 @@ use crate::{
     sir::DiseaseStatus,
     vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
 };
+use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
 use ixa::prelude::*;
 
 pub fn init(context: &mut Context) {

@@ -1,5 +1,6 @@
 use ixa::prelude::*;
 use ixa::report::serialize_f64;
+use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::prelude::*;
+use ixa::PersonId;
 use serde::Deserialize;
 use serde_derive::Serialize;
 

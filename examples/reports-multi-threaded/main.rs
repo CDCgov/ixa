@@ -1,4 +1,5 @@
 use ixa::prelude::*;
+use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::thread;

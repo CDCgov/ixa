@@ -1,5 +1,5 @@
 use crate::POPULATION;
-use ixa::prelude::*;
+use ixa::{prelude::*, trace};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]

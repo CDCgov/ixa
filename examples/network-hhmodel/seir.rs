@@ -2,6 +2,11 @@ use crate::network::{Age5to17, AgeUnder5, Household};
 use crate::parameters::Parameters;
 use ixa::log::info;
 use ixa::prelude::*;
+use ixa::{
+    network::{Edge, EdgeType},
+    people::{PersonId, PersonPropertyChangeEvent},
+    ExecutionPhase,
+};
 use rand_distr::{Bernoulli, Gamma};
 use serde::{Deserialize, Serialize};
 

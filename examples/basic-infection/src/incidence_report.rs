@@ -1,6 +1,8 @@
 use crate::infection_manager::InfectionStatusEvent;
 use crate::people::InfectionStatusValue;
 use ixa::prelude::*;
+use ixa::report::Report;
+use ixa::{trace, PersonId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

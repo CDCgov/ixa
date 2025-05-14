@@ -1,4 +1,6 @@
+use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
+use ixa::report::Report;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

@@ -1,4 +1,4 @@
-use ixa::prelude::*;
+use ixa::run_with_args;
 
 fn main() {
     run_with_args(|context, _, _| {

@@ -1,6 +1,8 @@
 use crate::parameters::Parameters;
 use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
+use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
+use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 

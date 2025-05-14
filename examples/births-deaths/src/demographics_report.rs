@@ -1,7 +1,10 @@
 use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::Parameters;
-use ixa::error::IxaError;
 use ixa::prelude::*;
+use ixa::{
+    people::{PersonCreatedEvent, PersonPropertyChangeEvent},
+    report::Report,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
