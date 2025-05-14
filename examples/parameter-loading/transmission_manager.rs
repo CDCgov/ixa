@@ -1,8 +1,4 @@
-use ixa::context::Context;
-use ixa::define_rng;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::ContextPeopleExt;
-use ixa::random::ContextRandomExt;
+use ixa::prelude::*;
 
 use crate::InfectionStatus;
 use crate::InfectionStatusValue;
@@ -55,7 +51,6 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
     use crate::parameters_loader::ParametersValues;
-    use ixa::context::Context;
 
     #[test]
     fn test_attempt_infection() {

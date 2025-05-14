@@ -1,8 +1,5 @@
-use ixa::context::Context;
-use ixa::error::IxaError;
-use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::PersonPropertyChangeEvent;
-use ixa::report::ContextReportExt;
+use ixa::prelude::*;
 use ixa::{create_report_trait, report::Report};
 use std::path::PathBuf;
 

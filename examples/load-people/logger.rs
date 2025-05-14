@@ -3,10 +3,8 @@ use crate::{
     sir::DiseaseStatus,
     vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
 };
-use ixa::{
-    context::Context,
-    people::{ContextPeopleExt, PersonCreatedEvent, PersonPropertyChangeEvent},
-};
+use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
+use ixa::prelude::*;
 
 pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events

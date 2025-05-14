@@ -1,7 +1,5 @@
-use ixa::context::Context;
-use ixa::random::ContextRandomExt;
-use ixa::trace;
-use ixa::{define_rng, ContextPeopleExt, PersonId};
+use ixa::prelude::*;
+use ixa::{trace, PersonId};
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
 use rand_distr::Exp;

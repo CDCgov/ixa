@@ -8,21 +8,21 @@ Modules can subscribe to events. The infection manager registers a function with
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:11}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:8}}
 ```
 
 This line isn't defining a new struct or even a new type. Rather, it defines an alias for `PersonPropertyChangeEvent\<T>` with the generic type  `T` instantiated with the property we want to monitor, `InfectionStatus`. This is effectively the name of the event we subscribe to in the module's `init()` function:
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:40:43}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:37:40}}
 ```
 
 The event handler is just a regular Rust function that takes a `Context` and an `InfectionStatusEvent`, the latter of which holds the `PersonId` of the person whose `InfectionStatus` changed, the current `InfectionStatusValue`, and the previous `InfectionStatusValue`.
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:28:38}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:25:35}}
 ```
 
 We only care about new infections in this model.
@@ -32,7 +32,7 @@ We only care about new infections in this model.
 As in `attempt_infection()`, we sample the recovery time from the exponential distribution with mean `INFECTION_DURATION`. We define a random number source for this module's exclusive use with `define_rng!(InfectionRng)`.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:15:26}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:12:23}}
 ```
 
 Notice that the plan is again just a Rust function, but this time it takes the form of a closure rather than a traditionally define function. This is convenient when the function is only a line or two.

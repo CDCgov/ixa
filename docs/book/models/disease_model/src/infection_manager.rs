@@ -1,7 +1,4 @@
-use ixa::{
-    define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, PersonId,
-    PersonPropertyChangeEvent,
-};
+use ixa::{prelude::*, PersonId, PersonPropertyChangeEvent};
 
 use rand_distr::Exp;
 

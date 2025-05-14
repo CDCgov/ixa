@@ -1,4 +1,4 @@
-use ixa::{context::Context, random::ContextRandomExt};
+use ixa::prelude::*;
 mod logger;
 mod population_loader;
 mod sir;

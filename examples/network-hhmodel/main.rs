@@ -1,6 +1,6 @@
+use ixa::prelude::*;
 use ixa::runner::run_with_args;
-use ixa::{context::Context, random::ContextRandomExt, ContextPeopleExt};
-use ixa::{define_rng, ContextGlobalPropertiesExt, PersonId};
+use ixa::PersonId;
 mod incidence_report;
 mod loader;
 mod network;

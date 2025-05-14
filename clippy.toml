@@ -1,4 +1,4 @@
 disallowed-methods = [
-    { path = "std::collections::HashMap::new", reason = "Consider using ixa::HashMap for deterministic iteration order. (use ixa::prelude::*)"},
-    { path = "std::collections::HashSet::new", reason = "Consider using ixa::HashSet for deterministic iteration order. (use ixa::prelude::*)"},
+    { path = "std::collections::HashMap::new", reason = "Consider using ixa::HashMap for deterministic iteration order. (use ixa::{HashMap, HashMapExt})"},
+    { path = "std::collections::HashSet::new", reason = "Consider using ixa::HashSet for deterministic iteration order. (use ixa::{HashSet, HashSetExt})"},
 ]

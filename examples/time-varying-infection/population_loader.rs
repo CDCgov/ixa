@@ -1,7 +1,4 @@
-use ixa::context::Context;
-use ixa::define_person_property_with_default;
-use ixa::global_properties::ContextGlobalPropertiesExt;
-use ixa::people::ContextPeopleExt;
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::parameters_loader::Parameters;

@@ -1,12 +1,8 @@
 use clap::Args;
-use std::path::PathBuf;
-
-use ixa::error::IxaError;
-use ixa::random::ContextRandomExt;
-use ixa::report::ContextReportExt;
+use ixa::prelude::*;
 use ixa::run_with_custom_args;
-use ixa::{context::Context, global_properties::ContextGlobalPropertiesExt};
 use population_loader::DiseaseStatus;
+use std::path::PathBuf;
 
 mod exposure_manager;
 mod incidence_report;

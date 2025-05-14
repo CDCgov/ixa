@@ -1,8 +1,5 @@
-use ixa::{
-    context::Context,
-    define_person_property_with_default,
-    people::{ContextPeopleExt, PersonCreatedEvent},
-};
+use ixa::prelude::*;
+use ixa::PersonCreatedEvent;
 use serde_derive::Serialize;
 
 #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
@@ -29,7 +26,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ixa::{context::Context, people::PersonPropertyChangeEvent};
+    use ixa::PersonPropertyChangeEvent;
 
     #[test]
     fn test_disease_status() {

@@ -1,6 +1,6 @@
 use clap::Args;
+use ixa::prelude::*;
 use ixa::runner::run_with_custom_args;
-use ixa::{define_global_property, ContextGlobalPropertiesExt, ContextPeopleExt};
 
 #[derive(Args, Debug)]
 struct CustomArgs {

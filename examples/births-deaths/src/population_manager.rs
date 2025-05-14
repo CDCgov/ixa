@@ -1,11 +1,7 @@
 use crate::parameters_loader::Parameters;
-use ixa::{
-    context::Context,
-    define_derived_property, define_person_property, define_person_property_with_default,
-    global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId},
-    random::{define_rng, ContextRandomExt},
-};
+use ixa::people::PersonId;
+use ixa::prelude::*;
+
 use rand_distr::{Exp, Uniform};
 use serde::{Deserialize, Serialize};
 use std::fmt;

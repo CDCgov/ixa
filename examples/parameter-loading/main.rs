@@ -1,10 +1,4 @@
-use ixa::error::IxaError;
-use ixa::people::ContextPeopleExt;
-use ixa::random::ContextRandomExt;
-use ixa::{
-    context::Context, define_person_property_with_default,
-    global_properties::ContextGlobalPropertiesExt,
-};
+use ixa::prelude::*;
 use std::path::Path;
 
 mod incidence_report;

@@ -77,30 +77,7 @@ Having "magic numbers" embedded in your code, such as the constant `1000` here r
 Let's revisit `src/main.rs`:
 
 ```rust
-// main.rs
-mod people;
-
-use ixa::Context;
-
-static POPULATION: u64 = 1000;
-
-fn main() {
-    let result =
-        run_with_args(|_context: &mut Context, _args, _| {
-            trace!("Initializing disease_model");
-            people::init(context);
-            Ok(())
-        });
-
-    match result {
-        Ok(_) => {
-            info!("Simulation finished executing");
-        }
-        Err(e) => {
-            error!("Simulation exited with error: {}", e);
-        }
-    }
-}
+{{#rustdoc_include ../../models/disease_model/src/main.rs}}
 ```
 
 1. Your IDE might have added the `mod people;` line for you. If not, add it now. It tells the compiler that the `people` module is attached to the `main` module (that is, `main.rs`).
