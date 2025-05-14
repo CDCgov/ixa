@@ -53,7 +53,8 @@ mod tests {
         population_loader::Age,
         vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
     };
-    use ixa::prelude::*;
+    use ixa::PersonCreatedEvent;
+    use ixa::PersonPropertyChangeEvent;
 
     const EXPECTED_ROWS: usize = 5;
 

@@ -63,7 +63,6 @@ mod tests {
     use super::*;
     use crate::loader;
     use crate::network;
-    use ixa::prelude::*;
 
     const N_SIZE_12: usize = 1;
     const N_SIZE_11: usize = 1;

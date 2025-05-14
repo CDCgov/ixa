@@ -82,7 +82,6 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::prelude::*;
 
     use crate::parameters_loader::ParametersValues;
     use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};

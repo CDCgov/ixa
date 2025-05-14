@@ -26,6 +26,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ixa::PersonPropertyChangeEvent;
 
     #[test]
     fn test_disease_status() {

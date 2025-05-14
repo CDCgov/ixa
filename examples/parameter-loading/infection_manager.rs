@@ -41,7 +41,6 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::prelude::*;
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     use crate::parameters_loader::ParametersValues;

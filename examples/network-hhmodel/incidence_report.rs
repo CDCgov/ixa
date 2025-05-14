@@ -69,7 +69,6 @@ mod test {
     use super::*;
     use crate::parameters::ParametersValues;
     use crate::{incidence_report, loader, network, seir, MainRng, PersonId};
-    use ixa::prelude::*;
     use std::{cell::RefCell, path::Path, rc::Rc};
 
     fn check_values(path: &Path) -> (Vec<String>, Vec<IncidenceReportItem>) {
