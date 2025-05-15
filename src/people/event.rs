@@ -1,3 +1,4 @@
+use crate::people::PeoplePlugin;
 use crate::{Context, ContextPeopleExt, IxaEvent, PersonId, PersonProperty};
 use ixa_derive::IxaEvent;
 
@@ -26,6 +27,7 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
 impl<T: PersonProperty + 'static> IxaEvent for PersonPropertyChangeEvent<T> {
     fn on_subscribe(context: &mut Context) {
         if T::is_derived() {
+            let _ = context.get_data_container_mut(PeoplePlugin); // make sure the plugin is initialized
             context.register_property::<T>();
         }
     }
@@ -160,5 +162,19 @@ mod tests {
         context.set_person_property(person, Age, 18);
         context.execute();
         assert!(*flag.borrow());
+    }
+
+    #[test]
+    fn test_person_property_change_event_no_people() {
+        let mut context = Context::new();
+        // Non derived person property -- no problems
+        context.subscribe_to_event(|_context, _event: PersonPropertyChangeEvent<IsRunner>| {
+            unreachable!();
+        });
+
+        // Derived person property -- can't add an event without people being present
+        context.subscribe_to_event(|_context, _event: PersonPropertyChangeEvent<AgeGroup>| {
+            unreachable!();
+        });
     }
 }
