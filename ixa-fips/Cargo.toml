@@ -6,18 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[features]
-default = ["aspr_archive"]
-
-## Support for working with the ASPR Synthetic Population dataset # Parsing ASPR codes
-aspr_archive = ["zip", "once_cell", "ouroboros"] # Reading ASPR Synthetic Population files from ZIP archives
-aspr_tests = [] # Runs tests that assume the existence of ASPR Synthetic Population files from ZIP archives
-
 [dependencies]
-## Dependencies for "aspr_archive"
-zip = { version = "2.6.1", optional = true }
-once_cell = { version = "1", optional = true }
-ouroboros = { version = "0.18.5", optional = true }
+strum = { version = "0.27", features = ["derive"] }
 
 [lints]
 workspace = true
