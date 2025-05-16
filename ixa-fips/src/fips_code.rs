@@ -105,14 +105,13 @@ We leave them unspecified until we have a use case for them.
 */
 
 use crate::{
-    aspr::SettingCategory, states::USState, CountyCode, DataCode, IdCode, TractCode,
+    states::USState, CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode,
     CATEGORY_OFFSET, COUNTY_OFFSET, FOURTEEN_BIT_MASK, FOUR_BIT_MASK, ID_OFFSET, SIX_BIT_MASK,
     STATE_OFFSET, TEN_BIT_MASK, TRACT_OFFSET, TWENTY_BIT_MASK,
 };
-use std::fmt::Debug;
 use std::{
     cmp::Ordering,
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     num::NonZero,
 };
 
@@ -125,19 +124,19 @@ pub struct FIPSCode(NonZero<u64>);
 impl FIPSCode {
     // region Constructors
     pub fn with_state(state: USState) -> Self {
-        Self::new(state, 0, 0, SettingCategory::default(), 0, 0)
+        Self::new(state, 0, 0, SettingCategoryCode::default(), 0, 0)
     }
     pub fn with_county(state: USState, county: CountyCode) -> Self {
-        Self::new(state, county, 0, SettingCategory::default(), 0, 0)
+        Self::new(state, county, 0, SettingCategoryCode::default(), 0, 0)
     }
     pub fn with_tract(state: USState, county: CountyCode, tract: TractCode) -> Self {
-        Self::new(state, county, tract, SettingCategory::default(), 0, 0)
+        Self::new(state, county, tract, SettingCategoryCode::default(), 0, 0)
     }
     pub fn with_category(
         state: USState,
         county: CountyCode,
         tract: TractCode,
-        category: SettingCategory,
+        category: SettingCategoryCode,
     ) -> Self {
         Self::new(state, county, tract, category, 0, 0)
     }
@@ -146,14 +145,14 @@ impl FIPSCode {
         state: USState,
         county: CountyCode,
         tract: TractCode,
-        category: SettingCategory,
+        category: SettingCategoryCode,
         id: IdCode,
         data: DataCode,
     ) -> Self {
         let encoded: u64 = Self::encode_state(state.encode())
             | Self::encode_county(county)
             | Self::encode_tract(tract)
-            | Self::encode_category(category.encode())
+            | Self::encode_category(category)
             | Self::encode_id(id)
             | Self::encode_data(data);
         // At the very least, `USState.encode()` will return a non-zero value, so this unwrapping is safe.
@@ -199,13 +198,6 @@ impl FIPSCode {
         ((self.0.get() >> CATEGORY_OFFSET) as u8) & FOUR_BIT_MASK
     }
 
-    /// Returns the setting category as a `SettingCategory`
-    #[inline(always)]
-    pub fn category(&self) -> SettingCategory {
-        // We are guaranteed to have a valid SettingCategory if this `FIPSCode` was constructed safely
-        unsafe { SettingCategory::decode(self.category_code()).unwrap_unchecked() }
-    }
-
     /// Returns the monotonically increasing ID number as a `u16`
     #[inline(always)]
     pub fn id(&self) -> u16 {
@@ -244,7 +236,7 @@ impl FIPSCode {
     }
 
     /// Creates a copy of `self` with the setting category set to `category`.
-    pub fn set_category(&self, category: SettingCategory) -> Self {
+    pub fn set_category(&self, category: SettingCategoryCode) -> Self {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.category = category;
         expanded.to_fips_code()
@@ -297,7 +289,7 @@ impl FIPSCode {
     // enum variants, call the `encode` function on the enum variant.
 
     #[inline(always)]
-    fn encode_state(state: u8) -> u64 {
+    fn encode_state(state: StateCode) -> u64 {
         // Validate
         assert!(USState::valid_code(state));
         // Only 6 bits are available for the state code.
@@ -306,35 +298,35 @@ impl FIPSCode {
     }
 
     #[inline(always)]
-    fn encode_county(county: u16) -> u64 {
+    fn encode_county(county: CountyCode) -> u64 {
         // Validate
         assert!(county <= TEN_BIT_MASK);
         (county as u64) << COUNTY_OFFSET
     }
 
     #[inline(always)]
-    fn encode_tract(tract: u32) -> u64 {
+    fn encode_tract(tract: TractCode) -> u64 {
         // Validate
         assert!(tract <= TWENTY_BIT_MASK);
         (tract as u64) << TRACT_OFFSET
     }
 
     #[inline(always)]
-    fn encode_category(setting_category: u8) -> u64 {
+    fn encode_category(setting_category: SettingCategoryCode) -> u64 {
         // Validate
         assert!(setting_category <= FOUR_BIT_MASK);
         (setting_category as u64) << CATEGORY_OFFSET
     }
 
     #[inline(always)]
-    fn encode_id(id: u16) -> u64 {
+    fn encode_id(id: IdCode) -> u64 {
         // Validate
         assert!(id <= FOURTEEN_BIT_MASK);
         (id as u64) << ID_OFFSET
     }
 
     #[inline(always)]
-    fn encode_data(data: u16) -> u64 {
+    fn encode_data(data: DataCode) -> u64 {
         // Validate
         assert!(data <= TEN_BIT_MASK);
         data as u64
@@ -368,7 +360,7 @@ pub struct ExpandedFIPSCode {
     pub state: USState,
     pub county: CountyCode,
     pub tract: TractCode,
-    pub category: SettingCategory,
+    pub category: SettingCategoryCode,
     pub id: IdCode,
     pub data: DataCode,
 }
@@ -379,7 +371,7 @@ impl ExpandedFIPSCode {
             state: fips_code.state(),
             county: fips_code.county_code(),
             tract: fips_code.census_tract_code(),
-            category: fips_code.category(),
+            category: fips_code.category_code(),
             id: fips_code.id(),
             data: fips_code.data(),
         }
@@ -399,7 +391,7 @@ impl ExpandedFIPSCode {
 
 impl Display for ExpandedFIPSCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "state: {}", self.state)?;
+        write!(f, "state: {}", self.state.as_ref())?;
 
         if self.county != 0 {
             write!(f, ", county: {}", self.county)?;
@@ -407,7 +399,7 @@ impl Display for ExpandedFIPSCode {
         if self.tract != 0 {
             write!(f, ", tract: {}", self.tract)?;
         }
-        if self.category != SettingCategory::Unspecified {
+        if self.category != 0 {
             write!(f, ", setting: {}", self.category)?;
         }
         if self.id != 0 {
@@ -425,33 +417,37 @@ impl Display for ExpandedFIPSCode {
 mod tests {
     use super::*;
 
+    #[repr(u8)]
+    enum SettingCategory {
+        Unspecified = 0,
+        Home,
+        School,
+        Work,
+        CensusTract,
+    }
+
+    impl From<SettingCategory> for SettingCategoryCode {
+        fn from(value: SettingCategory) -> Self {
+            unsafe { std::mem::transmute::<SettingCategory, SettingCategoryCode>(value) }
+        }
+    }
+
     #[test]
     fn fields_round_trip() {
         let fips_code = FIPSCode::new(
             USState::TX,
             123,
             990101,
-            SettingCategory::Home,
+            SettingCategory::Home.into(),
             14938,
             0x3ff,
         );
         assert_eq!(fips_code.state(), USState::TX);
         assert_eq!(fips_code.county_code(), 123);
         assert_eq!(fips_code.census_tract_code(), 990101);
-        assert_eq!(fips_code.category(), SettingCategory::Home);
+        assert_eq!(fips_code.category_code(), SettingCategory::Home.into());
         assert_eq!(fips_code.id(), 14938);
         assert_eq!(fips_code.data(), 0x3ff);
-    }
-
-    #[test]
-    fn nonstate_round_trip() {
-        let fips_code = FIPSCode::with_state(USState::VirginIslandsOfTheUS);
-        assert_eq!(fips_code.state(), USState::VirginIslandsOfTheUS);
-        assert_eq!(fips_code.state_code(), 52);
-
-        let fips_code = FIPSCode::with_state(USState::HawaiianCoast);
-        assert_eq!(fips_code.state(), USState::HawaiianCoast);
-        assert_eq!(fips_code.state_code(), 59);
     }
 
     #[test]
@@ -460,7 +456,7 @@ mod tests {
             USState::TX,
             123,
             990101,
-            SettingCategory::Home,
+            SettingCategory::Home.into(),
             14938,
             0x01ff,
         );
@@ -474,7 +470,7 @@ mod tests {
             USState::TX,
             123,
             990101,
-            SettingCategory::Home,
+            SettingCategory::Home.into(),
             14938,
             0x01ff,
         );
@@ -482,7 +478,7 @@ mod tests {
             USState::TX,
             123,
             990101,
-            SettingCategory::Home,
+            SettingCategory::Home.into(),
             14938,
             0x00ff,
         );
@@ -494,7 +490,8 @@ mod tests {
     #[test]
     fn test_set_id() {
         // Exercises case that triggered a bug that causes a panic.
-        let fips_code = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+        let fips_code =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract.into());
 
         let other_fips_code = fips_code.set_id(0);
         assert_eq!(fips_code, other_fips_code);

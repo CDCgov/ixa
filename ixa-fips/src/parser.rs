@@ -59,7 +59,7 @@ pub type FIPSParseResult<'a, T> = IResult<&'a str, T>;
 /// with the `FIPSParserError` variant describing the error.
 ///
 /// This function assumes ASCII decimal digits. (The rest of the string can by any  valid UTF-8.)
-pub(crate) fn parse_decimal_digits_to_bits(
+pub fn parse_decimal_digits_to_bits(
     digit_count: u32,
     bit_count: u8,
     input: &str,
