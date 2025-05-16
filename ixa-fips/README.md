@@ -1,27 +1,20 @@
-# fips — High-performance FIPS geographic codes & ASPR dataset utilities
+# fips — FIPS geographic codes & utilities
 
-***Represent, parse, and manipulate hierarchical FIPS region codes in just 64 bits ― with first-class support for the
-ASPR synthetic-population files.***
+***Represent, parse, and manipulate hierarchical FIPS region codes in just 64 bits***
 
 ## Why this crate?
 
 * **Compact & cache-friendly.** A complete state → county → census-tract hierarchy (plus category, id, and extra data)
   is packed into a single `u64`, minimizing memory use and hash-map overhead.
 * **Zero-copy parsing.** Fast lexical routines turn text into `FIPSCode` values without intermediate heap allocations.
-* **Batteries included for the ASPR dataset.** Transparent iterators load ASPR CSVs whether they live in a directory
-  tree *or* a ZIP archive, so large synthetic populations stream in record-by-record.
-* **Ergonomic, strongly-typed API.** Rich enums (`USState`, `SettingCategory`, …) prevent illegal states at compile time
-  and make downstream code self-documenting.
 
 ## Core primitives
 
-| Type / Module   | Purpose                                                                                                     |
-|-----------------|-------------------------------------------------------------------------------------------------------------|
-| `FIPSCode`      | 64-bit value encoding state + county + tract + category + id *(10 spare bits for you)*                      |
-| `parser`        | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments                                            |
-| `USState`       | Exhaustive enum of valid state codes (fits in the 6 bits allocated by `FIPSCode`)                           |
-| `aspr`          | Helpers for the **ASPR synthetic-population** files <br/>`ASPRPersonRecord`, parsers                        |
-| `aspr::archive` | (With feature `aspr_archive`) <br/>Reads ASPR CSVs inside a directory *or* a ZIP without changing your code |
+| Type / Module | Purpose                                                      |
+| ------------- | ------------------------------------------------------------ |
+| `FIPSCode`    | 64-bit value encoding state + county + tract + category + id *(10 spare bits for you)* |
+| `parser`      | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments |
+| `USState`     | Exhaustive enum of valid state codes (fits in the 6 bits allocated by `FIPSCode`) |
 
 ## Quick tour
 
@@ -66,28 +59,4 @@ assert_eq!(county, 1);
 assert_eq!(tract, 20100);
 ```
 
-(The grammar understands plain hierarchical strings as well as extended from the ASPR synthetic population dataset.)
-
-### 3. Streaming a synthetic population
-
-```rust
-use ixa_fips::aspr::archive::{ASPRRecordIterator, set_aspr_data_path};
-use ixa_fips::USState;
-
-set_aspr_data_path(PathBuf::from("../CDC/data/ASPR_Synthetic_Population.zip"));
-
-for person in ASPRRecordIterator::state_population(USState::AK) {
-    if let Ok(record) = person {
-        // record.age, record.home_id, record.school_id, record.work_id …
-        println ! ("{}", record);
-    }
-}
-```
-
-The iterator automatically detects whether the `ASPR_DATA_PATH` you configured is a directory tree or a zipped archive.
-
-## Feature flags
-
-| **Feature**    | **Default?** | **Adds…**                                            |
-|----------------|--------------|------------------------------------------------------|
-| `aspr_archive` | Yes          | `aspr::archive` — seamless ZIP/dir record iterators. |
+##

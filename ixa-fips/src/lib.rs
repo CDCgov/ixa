@@ -17,7 +17,6 @@ for ASPR synthetic population data files, including files that are within a zip 
 
 #![allow(dead_code)]
 
-pub mod aspr;
 pub mod fips_code;
 pub mod parser;
 pub mod states;
@@ -40,12 +39,16 @@ const CATEGORY_OFFSET: usize = 24;
 const ID_OFFSET: usize = 10;
 // const DATA_OFFSET: usize = 0;
 
+// Numeric types used for code fragments. By convention, zero values are reserved for "no data."
+
 /// The numeric type used for the state code fragment; `u8`
 pub type StateCode = u8;
 /// The numeric type used for the county code fragment; `u16`
 pub type CountyCode = u16;
 /// The numeric type used for the tract code fragment; `u32`
 pub type TractCode = u32;
+/// The numeric type used for the setting category code fragment; `u8`
+pub type SettingCategoryCode = u8;
 /// The numeric type used for the id code fragment; `u16`
 pub type IdCode = u16;
 /// The numeric type used for the data code fragment; `u16`
