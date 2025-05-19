@@ -22,7 +22,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{GITHUB_REF##*/}}
+          key: ${{ runner.os }}-cargo-${{ github.head_ref }}
 
       - name: Build
         run: cargo build --verbose
