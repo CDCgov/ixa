@@ -9,6 +9,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let parameters_path =
         fs::canonicalize(Path::new(".").join("../examples/births-deaths/input.json")).unwrap();
     let output_dir = tempdir().unwrap();
+    println!("nothing...");
 
     c.bench_function("example births-deaths", |bencher| {
         bencher.iter_with_large_drop(|| {
