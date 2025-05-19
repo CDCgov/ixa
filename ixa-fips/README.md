@@ -1,12 +1,29 @@
-# fips — FIPS geographic codes & utilities
+# ixa-fips — FIPS geographic codes & utilities
 
-***Represent, parse, and manipulate hierarchical FIPS region codes in just 64 bits***
+***Represent, parse, and manipulate hierarchical FIPS region codes in just 64 bits.***
+
+[Federal Information Processing Series (FIPS)](https://www.census.gov/library/reference/code-lists/ansi.html) is a
+standardized set of geographic codes useful for identifying places and regions like counties and voting districts.
+This library provides an efficient representation of a subset of these codes, in particular hierarchical region codes
+suitable for identifying schools, workplaces, and homes. The primary data type `FIPSCode` has explicit fields for
+state, county, and census tract, and has additional fields convenient for user-defined specificity and even additional
+arbitrary data.
 
 ## Why this crate?
 
 * **Compact & cache-friendly.** A complete state → county → census-tract hierarchy (plus category, id, and extra data)
   is packed into a single `u64`, minimizing memory use and hash-map overhead.
 * **Zero-copy parsing.** Fast lexical routines turn text into `FIPSCode` values without intermediate heap allocations.
+
+## Standard alignment
+
+This crate is designed to be usable with any revision of the standard. The standard-dependent properties of this library
+are:
+
+* The minimal subset of the U.S. state codes that includes only proper states and the District of Columbia. The codes
+  for this subset have been stable for every revision.
+* The number of digits that represent the U.S. state, county, and census tract codes (2, 3, and 6 respectively) in the
+  parsing routines.
 
 ## Core primitives
 
@@ -62,5 +79,3 @@ assert_eq!(state, USState::AL);
 assert_eq!(county, 1);
 assert_eq!(tract, 20100);
 ```
-
-##
