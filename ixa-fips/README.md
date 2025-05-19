@@ -10,11 +10,15 @@
 
 ## Core primitives
 
-| Type / Module | Purpose                                                      |
-| ------------- | ------------------------------------------------------------ |
+| Type / Module | Purpose                                                                                |
+| ------------- |----------------------------------------------------------------------------------------|
 | `FIPSCode`    | 64-bit value encoding state + county + tract + category + id *(10 spare bits for you)* |
-| `parser`      | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments |
-| `USState`     | Exhaustive enum of valid state codes (fits in the 6 bits allocated by `FIPSCode`) |
+| `parser`      | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments                       |
+| `USState`     | Exhaustive enum of valid state codes\* (fits in the 6 bits allocated by `FIPSCode`)    |
+
+\* This is a minimal subset of FIPS state and state equivalent codes which have been stable for every FIPS standard
+revision so far. See the
+[2020 FIPS Standard here](https://www.census.gov/library/reference/code-lists/ansi.html#states).
 
 ## Quick tour
 

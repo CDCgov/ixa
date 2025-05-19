@@ -1,19 +1,15 @@
-/*!
-
-# FIPS Geographic Region Code Library
-
-FIPS geographic region codes are used to represent hierarchical geographic regions from the state level down to the
-"block" level. They are augmented in some synthetic population datasets with additional ID numbers for households,
-workplaces, and schools. This library provides types to represent FIPS geographic region codes (and "code fragments"),
-efficient representations, and utilities to convert to and from textual representations ([`crate::parser`]).
-
-The [`crate::aspr`] module provides types for representing records from the ASPR synthetic population dataset, and the
-[`crate::aspr::parser`] submodule provides parsers for textual representations of ASPR records.
-
-The `aspr_archive` feature (enabled by default) enables the [`crate::aspr::archive`] module, which provides a reader
-for ASPR synthetic population data files, including files that are within a zip archive.
-
-*/
+//! # FIPS Geographic Region Code Library
+//!
+//! FIPS geographic region codes are used to represent hierarchical geographic regions from the state level down to the
+//! "block" level. They are augmented in some synthetic population datasets with additional ID numbers for households,
+//! workplaces, and schools. This library provides types to represent FIPS geographic region codes (and "code fragments"),
+//! efficient representations, and utilities to convert to and from textual representations ([`crate::parser`]).
+//!
+//! The [`crate::aspr`] module provides types for representing records from the ASPR synthetic population dataset, and the
+//! [`crate::aspr::parser`] submodule provides parsers for textual representations of ASPR records.
+//!
+//! The `aspr_archive` feature (enabled by default) enables the [`crate::aspr::archive`] module, which provides a reader
+//! for ASPR synthetic population data files, including files that are within a zip archive.
 
 #![allow(dead_code)]
 
