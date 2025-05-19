@@ -1,10 +1,9 @@
-/*!
-
-An enum for states as represented by FIPS Geographic Region Codes. Note that the `FIPSCode` encoded type only uses six
-bits to encode the state code, which can accommodate codes <= 63. Thus, it is best to only use `FIPSCode` for actual
-proper states.
-
-*/
+//! An enum for U.S. states as represented by FIPS Geographic Region Codes. This is a minimal subset of FIPS state codes
+//! which have been stable for every FIPS standard revision so far.
+//! See https://www.census.gov/library/reference/code-lists/ansi.html#states
+//!
+//! Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63.
+//! Thus, it is best to only use `FIPSCode` for these states.
 
 use crate::StateCode;
 use strum::AsRefStr;
