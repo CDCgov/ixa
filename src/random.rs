@@ -343,6 +343,5 @@ mod test {
         context.init_random(42);
         let r: usize = context.sample_weighted(FooRng, &[0.1, 0.3, 0.4]);
         assert!(r < 3);
-        assert!(r >= 3); // panic!
     }
 }
