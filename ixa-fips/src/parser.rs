@@ -1,8 +1,36 @@
 //! Simple parsing utilities for parsing text representations of FIPS codes and variations thereupon.
 //!
-//! The concatenative structure of hierarchical FIPS geographic region codes, the (decimal)
-//! digit count of code fragments, and the bit count (defined by this implementation) allowed
-//! for each code fragment, are described in detail in the library level documentation
+//! # Terminology and Textual Representation
+//!
+//! We use the phrase *census tract* (block, place, etc.) to refer to the full 11-digit encoding, while the phrase *census
+//! tract code* (resp. block code, place code, etc.) refers to the 6 digits for the tract designation itself. The digits of
+//! more specific structures are generally the rightmost decimal digits of the encoding. Thus the census tract code is the
+//! rightmost 6 digits of the census tract.
+//!
+//! # FIPS Code Structure
+//!
+//! Source: <https://www.census.gov/programs-surveys/geography/guidance/geo-identifiers.html>
+//!
+//! | **Area Type**                              | **GEOID Structure**            | **Number of Digits** | **Example Geographic Area**                             | **Example GEOID** |
+//! | ------------------------------------------ | ------------------------------ | -------------------- | ------------------------------------------------------- | ----------------- |
+//! | State                                      | STATE                          | 2                    | Texas                                                   | 48                |
+//! | County                                     | STATE+COUNTY                   | 2+3=5                | Harris County, TX                                       | 48201             |
+//! | County Subdivision                         | STATE+COUNTY+COUSUB            | 2+3+5=10             | Pasadena CCD, Harris County, TX                         | 4820192975        |
+//! | Census Tract                               | STATE+COUNTY+TRACT             | 2+3+6=11             | Census Tract 2231 in Harris County, TX                  | 48201223100       |
+//! | Block Group                                | STATE+COUNTY+TRACT+BLOCK GROUP | 2+3+6+1=12           | Block Group 1 in Census Tract 2231 in Harris County, TX | 482012231001      |
+//! | Block*                                     | STATE+COUNTY+TRACT+BLOCK       | 2+3+6+4=15           | Block 1050 in Census Tract 2231 in Harris County, TX    | 482012231001050   |
+//! | Places                                     | STATE+PLACE                    | 2+5=7                | Houston, TX                                             | 4835000           |
+//! | Congressional District (113th Congress)    | STATE+CD                       | 2+2=4                | Connecticut District 2                                  | 902               |
+//! | State Legislative District (Upper Chamber) | STATE+SLDU                     | 2+3=5                | Connecticut State Senate District 33                    | 9033              |
+//! | State Legislative District (Lower Chamber) | STATE+SLDL                     | 2+3=5                | Connecticut State House District 147                    | 9147              |
+//! | ZCTA **                                    | ZCTA                           | 5                    | Suitland, MD ZCTA                                       | 20746             |
+//!
+//! \* The block group code is not included in the census block GEOID code
+//! because the first digit of a census block code represents the block group
+//! code. Note – some blocks also contain a one-character suffix (A, B, C, ect.)
+//!
+//! \** ZIP Code Tabulation Areas (ZCTAs) are generalized areal representations
+//! of United States Postal Service (USPS) ZIP Code service areas.
 
 use std::fmt::{Debug, Display};
 
