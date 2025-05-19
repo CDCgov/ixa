@@ -23,7 +23,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ github.head_ref }}
-
       - name: Build
         run: cargo build --verbose
       - name: Build benchmarks
