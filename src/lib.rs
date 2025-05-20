@@ -66,8 +66,8 @@ pub use log::{
 
 pub mod external_api;
 mod hashing;
-pub mod prelude;
 pub mod numeric;
+pub mod prelude;
 pub mod settings;
 pub mod web_api;
 

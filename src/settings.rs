@@ -10,10 +10,8 @@
 
 use crate::people::PersonId;
 use crate::{define_data_plugin, define_rng, Context, ContextRandomExt, HashMap, IxaError};
-use ixa_fips::aspr::SettingCategory;
-use ixa_fips::FIPSCode;
-use rand::distributions::Distribution;
-use rand::distributions::WeightedIndex;
+use ixa_fips::{FIPSCode, SettingCategoryCode};
+use rand::distributions::{Distribution, WeightedIndex};
 use rand::Rng;
 use std::collections::hash_map::Entry;
 use std::ops::Index;
@@ -36,7 +34,7 @@ impl ItineraryEntry {
 }
 
 /// A convenience wrapper for a vector of `ItineraryEntry`s that enforces the constraint that there
-/// is at most one instance of any given `SettingCategory` represented in the `Itinerary`.
+/// is at most one instance of any given `SettingCategoryCode` represented in the `Itinerary`.
 // ToDo(ap59): This should be a small_vec or equivalent, as many of these will have a single entry.
 #[derive(Debug, Clone, Default)]
 pub struct Itinerary(Vec<ItineraryEntry>);
@@ -106,14 +104,14 @@ impl Index<usize> for Itinerary {
 
 #[derive(Default)]
 pub struct SettingsDataContainer {
-    /// Each `SettingCategory` has an alpha of type `f64`
+    /// Each `SettingCategoryCode` has an alpha of type `f64`
     ///
     /// In a setting with `n` people (including the source of infection), the rate of the total
     /// infectiousness process is computed as
     ///      (intrinsic infectiousness) × (n - 1)ᵅ
     /// where 0 ≤ 𝛼 ≤ 1. This interpolates between having the total hazard _distributed_ equally and
     /// the total hazard applying equally to the nonsources.
-    alpha_for_setting_category: HashMap<SettingCategory, f64>,
+    alpha_for_setting_category: HashMap<SettingCategoryCode, f64>,
     /// Each `PersonId` has an `Itinerary` of `SettingId`s
     itineraries: HashMap<PersonId, Itinerary>,
     /// Each `SettingId` has a list of members
@@ -176,7 +174,7 @@ impl SettingsDataContainer {
     /// Looks up the itinerary for the given person and for each of its `ItineraryEntry`s calls
     /// `callback` with
     ///     - the `ItineraryEntry` (contains `SettingId` and `ratio`)
-    ///     - alpha - the alpha value for the `SettingCategory` associated to the `SettingId` in
+    ///     - alpha - the alpha value for the `SettingCategoryCode` associated to the `SettingId` in
     ///       the `ItineraryEntry`
     ///     - `member_count`: the length of the list of members of the setting
     ///
@@ -190,13 +188,13 @@ impl SettingsDataContainer {
             for entry in itinerary {
                 let alpha = match self
                     .alpha_for_setting_category
-                    .get(&entry.setting_id.category())
+                    .get(&entry.setting_id.category_code())
                 {
                     Some(alpha) => *alpha,
                     None => {
                         panic!(
                             "setting category {} was not assigned an alpha value",
-                            entry.setting_id.category()
+                            entry.setting_id.category_code()
                         );
                     }
                 };
@@ -272,11 +270,11 @@ define_data_plugin!(
 
 #[allow(dead_code)]
 pub trait ContextSettingExt {
-    /// Associates an alpha value to a `SettingCategory`. If a value of alpha was already set for
+    /// Associates an alpha value to a `SettingCategoryCode`. If a value of alpha was already set for
     /// the given category, returns the previous value.
     fn set_alpha_for_setting_category(
         &mut self,
-        setting_category: SettingCategory,
+        setting_category: SettingCategoryCode,
         alpha: f64,
     ) -> Option<f64>;
 
@@ -304,7 +302,7 @@ pub trait ContextSettingExt {
 impl ContextSettingExt for Context {
     fn set_alpha_for_setting_category(
         &mut self,
-        setting_category: SettingCategory,
+        setting_category: SettingCategoryCode,
         alpha: f64,
     ) -> Option<f64> {
         let container = self.get_data_container_mut(SettingDataPlugin);
@@ -346,15 +344,34 @@ mod test {
     use crate::settings::ContextSettingExt;
     use crate::ContextPeopleExt;
     use ixa_fips::{FIPSCode, USState};
+
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum SettingCategory {
+        Unspecified = 0,
+        Home,
+        Workplace,
+        PublicSchool,
+        PrivateSchool,
+        CensusTract,
+    }
+
+    impl From<SettingCategory> for SettingCategoryCode {
+        fn from(value: SettingCategory) -> Self {
+            value as SettingCategoryCode
+        }
+    }
+
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
         // Set new values
         assert!(context
-            .set_alpha_for_setting_category(SettingCategory::Home, 0.1)
+            .set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1)
             .is_none());
         assert!(context
-            .set_alpha_for_setting_category(SettingCategory::CensusTract, 0.001)
+            .set_alpha_for_setting_category(SettingCategory::CensusTract.into(), 0.001)
             .is_none());
 
         // Assert that:
@@ -362,14 +379,14 @@ mod test {
         //   2) the original value was inserted correctly to begin with
         assert_almost_eq!(
             context
-                .set_alpha_for_setting_category(SettingCategory::Home, 0.9)
+                .set_alpha_for_setting_category(SettingCategory::Home.into(), 0.9)
                 .unwrap(),
             0.1,
             0.0
         );
         assert_almost_eq!(
             context
-                .set_alpha_for_setting_category(SettingCategory::CensusTract, 0.5)
+                .set_alpha_for_setting_category(SettingCategory::CensusTract.into(), 0.5)
                 .unwrap(),
             0.001,
             0.0
@@ -381,11 +398,11 @@ mod test {
         // Different homes is ok. (Also, different person from person1 with same home is ok.)
         let itinerary0 = Itinerary::from_vec(vec![
             ItineraryEntry::new(
-                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home),
+                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into()),
                 0.5,
             ),
             ItineraryEntry::new(
-                FIPSCode::with_category(USState::TN, 0, 0, SettingCategory::Home),
+                FIPSCode::with_category(USState::TN, 0, 0, SettingCategory::Home.into()),
                 0.5,
             ),
         ]);
@@ -394,11 +411,18 @@ mod test {
         // Same value in "id" field but different setting type is ok.
         let itinerary1 = Itinerary::from_vec(vec![
             ItineraryEntry::new(
-                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 0),
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home.into(), 314, 0),
                 0.5,
             ),
             ItineraryEntry::new(
-                FIPSCode::new(USState::AK, 0, 0, SettingCategory::CensusTract, 314, 0),
+                FIPSCode::new(
+                    USState::AK,
+                    0,
+                    0,
+                    SettingCategory::CensusTract.into(),
+                    314,
+                    0,
+                ),
                 0.5,
             ),
         ]);
@@ -407,11 +431,11 @@ mod test {
         // Differing only in "data field" should be an error.
         let itinerary2 = Itinerary::from_vec(vec![
             ItineraryEntry::new(
-                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 1),
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home.into(), 314, 1),
                 0.5,
             ),
             ItineraryEntry::new(
-                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home, 314, 0),
+                FIPSCode::new(USState::AK, 0, 0, SettingCategory::Home.into(), 314, 0),
                 0.5,
             ),
         ]);
@@ -423,9 +447,10 @@ mod test {
         // Put two people into the same setting and sample one from the other's settings.
         let mut context = Context::new();
         context.init_random(42);
-        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
 
-        let common_setting = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let common_setting =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
 
         let person = context.add_person(()).unwrap();
         let itinerary =
@@ -451,9 +476,10 @@ mod test {
         // TODO: if setting not registered, shouldn't be able to register people to setting
         let mut context = Context::new();
         context.init_random(42);
-        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
 
-        let setting_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let setting_prototype =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
 
         for s in 0..5 {
             let itinerary_prototype =
@@ -482,12 +508,13 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
-        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
+        context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::CensusTract.into(), 0.01);
 
-        let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let home_prototype =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
         let tract_prototype =
-            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract.into());
 
         // Create 5 homes and census tracts with 5 people each.
         for s in 0..5 {
@@ -539,15 +566,16 @@ mod test {
         // Attempt to draw a contact from a setting with only the person trying to get a contact
         let mut context = Context::new();
         context.init_random(42);
-        context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
-        context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
+        context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
+        context.set_alpha_for_setting_category(SettingCategory::CensusTract.into(), 0.01);
 
         let person_a = context.add_person(()).unwrap();
         let person_b = context.add_person(()).unwrap();
 
-        let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+        let home_prototype =
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
         let tract_prototype =
-            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+            FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract.into());
 
         let itinerary_a = Itinerary::from_vec(vec![
             ItineraryEntry::new(home_prototype, 0.5),
@@ -591,12 +619,13 @@ mod test {
         for seed in 0..100 {
             let mut context = Context::new();
             context.init_random(seed);
-            context.set_alpha_for_setting_category(SettingCategory::Home, 0.1);
-            context.set_alpha_for_setting_category(SettingCategory::CensusTract, 0.01);
+            context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
+            context.set_alpha_for_setting_category(SettingCategory::CensusTract.into(), 0.01);
 
-            let home_prototype = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home);
+            let home_prototype =
+                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
             let tract_prototype =
-                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract);
+                FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract.into());
 
             {
                 let itinerary_home =
@@ -646,6 +675,28 @@ mod test {
         }
     }
 
-    // TODO: Test failure of getting properties if not initialized
-    // TODO: Test that proportions either add to 1 or that they are weighted based on proportion
+    #[test]
+    #[should_panic(expected = "setting category 1 was not assigned an alpha value")]
+    fn test_failure_if_alpha_not_initialized() {
+        let mut context = Context::new();
+        context.init_random(42);
+        // Commenting out this line should result in a panic.
+        // context.set_alpha_for_setting_category(SettingCategory::Home.into(), 0.1);
+
+        let person = context.add_person(()).unwrap();
+
+        let home = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::Home.into());
+        let tract = FIPSCode::with_category(USState::AK, 0, 0, SettingCategory::CensusTract.into());
+
+        let itinerary_a = Itinerary::from_vec(vec![
+            ItineraryEntry::new(home, 0.5),
+            ItineraryEntry::new(tract, 0.5),
+        ])
+        .unwrap();
+
+        let _ = context.add_itinerary_for_person(person, itinerary_a);
+
+        // Should panic
+        let _contact = context.draw_contact_from_itinerary(person);
+    }
 }
