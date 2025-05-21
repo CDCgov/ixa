@@ -22,7 +22,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-lock-${{ hashFiles('Cargo.toml') }}
+          key: cargo-${{ hashFiles('Cargo.toml') }}
       - name: Build
         run: cargo build --verbose
       - name: Build benchmarks
