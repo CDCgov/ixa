@@ -21,9 +21,11 @@ This crate is designed to be usable with any revision of the standard. The stand
 are:
 
 * The minimal subset of the U.S. state codes that includes only proper states and the District of Columbia. The codes
-  for this subset have been stable for every revision.
+  for this subset have been stable for every revision. This is only relevant to the `USState` enum the use of which is
+  optional.
 * The number of digits that represent the U.S. state, county, and census tract codes (2, 3, and 6 respectively) in the
-  parsing routines.
+  parsing routines. This is a hard dependency for the ASPR library but only affects this library in that it determines
+  maximum values for these fields.
 
 ## Core primitives
 

@@ -27,14 +27,13 @@
 //!
 //! \* The block group code is not included in the census block GEOID code
 //! because the first digit of a census block code represents the block group
-//! code. Note – some blocks also contain a one-character suffix (A, B, C, ect.)
+//! code. Note – some blocks also contain a one-character suffix (A, B, C, etc.)
 //!
 //! \** ZIP Code Tabulation Areas (ZCTAs) are generalized areal representations
 //! of United States Postal Service (USPS) ZIP Code service areas.
 
+use crate::StateCode;
 use std::fmt::{Debug, Display};
-
-use crate::states::USState;
 
 /// The FIPS parser error type.
 /// The assumption is that the parsing context is so small that it isn't necessary to track source location information.
@@ -82,7 +81,7 @@ pub type FIPSParseResult<'a, T> = IResult<&'a str, T>;
 /// parsed digits. If there is an error, the original input is returned along
 /// with the `FIPSParserError` variant describing the error.
 ///
-/// This function assumes ASCII decimal digits. (The rest of the string can by any  valid UTF-8.)
+/// This function assumes ASCII decimal digits. (The rest of the string can be any valid UTF-8.)
 pub fn parse_decimal_digits_to_bits(
     digit_count: u32,
     bit_count: u8,
@@ -102,7 +101,7 @@ pub fn parse_decimal_digits_to_bits(
                         input,
                         FIPSParserError::InvalidDigit {
                             // The UTF-8 encoded character at `idx` might not be represented as a single byte.
-                            // However, as we assume ASCII decimal digits, we are gauranteed that the first
+                            // However, as we assume ASCII decimal digits, we are guaranteed that the first
                             // `idx-1` bytes represent `idx-1` characters.
                             found: input.chars().nth(idx as usize).unwrap(),
                         },
@@ -138,22 +137,12 @@ pub fn parse_decimal_digits_to_bits(
     Ok((remaining, computed_value))
 }
 
-/// Parses the first two decimal digits of `input` into a `USState` enum variant.
-///
-/// This method is only intended to parse states for which `state.is_state()` is
-/// true. In particular, it enforces the constraint that the decimal value be
-/// representable by 6 binary bits (so values <= 63).
-pub fn parse_state_code(input: &str) -> FIPSParseResult<USState> {
-    parse_decimal_digits_to_bits(2, 6, input).map(|(rest, value)| {
-        // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 6
-        // bits, so this unwrap always succeeds.
-        let state = unsafe { USState::decode(value as u8).unwrap_unchecked() };
-        (rest, state)
-    })
+/// Parses the first two decimal digits of `input` into a `StateCode`.
+pub fn parse_state_code(input: &str) -> FIPSParseResult<StateCode> {
+    parse_decimal_digits_to_bits(2, 7, input).map(|(rest, value)| (rest, value as StateCode))
 }
 
-/// Parses the first three digits of `input` as a FIPS county code. Enforces the
-/// requirement that the value fit into 10 bits (a tautology in this case).
+/// Parses the first three digits of `input` as a FIPS county code.
 pub fn parse_county_code(input: &str) -> FIPSParseResult<u16> {
     parse_decimal_digits_to_bits(3, 10, input).map(|(rest, value)| {
         // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 10 bits.
@@ -161,8 +150,7 @@ pub fn parse_county_code(input: &str) -> FIPSParseResult<u16> {
     })
 }
 
-/// Parses the first six digits of `input` as a FIPS census tract code. Enforces the
-/// requirement that the value fit into 20 bits (a tautology in this case).
+/// Parses the first six digits of `input` as a FIPS census tract code.
 pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
     parse_decimal_digits_to_bits(6, 20, input).map(|(rest, value)| {
         // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 20 bits.
@@ -170,18 +158,10 @@ pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
     })
 }
 
-// #[allow(unused_imports)]
-// pub use crate::aspr::parser::{
-//   parse_home_id,
-//   parse_public_school_id,
-//   parse_private_school_id,
-//   parse_workplace_id,
-//   parse_integer
-// };
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::USState;
 
     #[test]
     fn test_parse_decimal_digits_to_bits_valid_cases() {
@@ -264,10 +244,6 @@ mod tests {
 
     #[test]
     fn test_parse_state_code_invalid_cases() {
-        // Value exceeds 6 bits
-        assert!(parse_state_code("64rest").is_err());
-        assert!(parse_state_code("99rest").is_err());
-
         // Non-digit characters
         assert!(parse_state_code("A1rest").is_err());
 
@@ -362,12 +338,12 @@ mod tests {
         let (remainder2, county) = parse_county_code(remainder1).unwrap();
         assert_eq!(remainder2, "020100RestOfData");
 
-        // Finally parse the tract
+        // Finally, parse the tract
         let (remainder3, tract) = parse_tract_code(remainder2).unwrap();
         assert_eq!(remainder3, "RestOfData");
 
         // Verify the parsed values (assuming USState enum implementation)
-        assert_eq!(state, USState::AL);
+        assert_eq!(state, USState::AL.into());
         assert_eq!(county, 1);
         assert_eq!(tract, 20100);
     }
