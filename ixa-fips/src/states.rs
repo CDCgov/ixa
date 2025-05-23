@@ -6,9 +6,10 @@
 //! Thus, it is best to only use `FIPSCode` for these states.
 
 use crate::StateCode;
-use strum::AsRefStr;
+use strum::{AsRefStr, FromRepr};
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, AsRefStr)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, AsRefStr, FromRepr)]
+#[repr(u8)]
 pub enum USState {
     AL = 1,
     AK = 2,
@@ -82,11 +83,7 @@ impl USState {
     /// Returns the state for the given numeric FIPS code.
     /// Returns `Err(())` if the code is invalid.
     pub fn decode(value: StateCode) -> Result<USState, ()> {
-        if !Self::is_state_code(value) {
-            return Err(());
-        }
-        // Safety: The value is valid as checked by `is_state_code`.
-        Ok(unsafe { std::mem::transmute::<StateCode, USState>(value) })
+        Self::from_repr(value).ok_or(())
     }
 }
 
