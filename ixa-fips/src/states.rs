@@ -80,13 +80,19 @@ impl USState {
     }
 
     /// Returns the state for the given numeric FIPS code.
-    /// Returns `None` if the code is invalid.
+    /// Returns `Err(())` if the code is invalid.
     pub fn decode(value: StateCode) -> Result<USState, ()> {
         if !Self::is_state_code(value) {
             return Err(());
         }
         // Safety: The value is valid as checked by `is_state_code`.
         Ok(unsafe { std::mem::transmute::<StateCode, USState>(value) })
+    }
+}
+
+impl From<USState> for StateCode {
+    fn from(value: USState) -> Self {
+        value.encode()
     }
 }
 

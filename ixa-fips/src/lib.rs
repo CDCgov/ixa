@@ -26,17 +26,18 @@ pub use states::USState;
 
 // Convenience constants
 const FOUR_BIT_MASK: u8 = 15; // 2^4-1
-const SIX_BIT_MASK: u8 = 63; // 2^6-1
+const SEVEN_BIT_MASK: u8 = 127; // 2^7-1
+const NINE_BIT_MASK: u16 = 511; // 2^9-1
 const TEN_BIT_MASK: u16 = 1023; // 2^10-1
-const FOURTEEN_BIT_MASK: u16 = 16383; // 2^14-1
-const TWENTY_BIT_MASK: u32 = 1048575; // 2^20-1
+const FOURTEEN_BIT_MASK: u16 = 16_383; // 2^14-1
+const TWENTY_BIT_MASK: u32 = 1_048_575; // 2^20-1
 
 // Offsets of the bit fields in the encoded FIPS code
-const STATE_OFFSET: usize = 58;
-const COUNTY_OFFSET: usize = 48;
-const TRACT_OFFSET: usize = 28;
-const CATEGORY_OFFSET: usize = 24;
-const ID_OFFSET: usize = 10;
+const STATE_OFFSET: usize = 57;
+const COUNTY_OFFSET: usize = 47;
+const TRACT_OFFSET: usize = 27;
+const CATEGORY_OFFSET: usize = 23;
+const ID_OFFSET: usize = 9;
 // const DATA_OFFSET: usize = 0;
 
 // Numeric types used for code fragments. By convention, zero values are reserved for "no data."
