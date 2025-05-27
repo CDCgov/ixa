@@ -2,9 +2,11 @@
 name = "ixa-fips"
 description = "A library for efficiently working with FIPS region codes"
 version = "0.1.0"
-edition.workspace = true
-license.workspace = true
 repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 [dependencies]
 strum = { version = "0.27", features = ["derive"] }
