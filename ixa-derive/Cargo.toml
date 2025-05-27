@@ -1,11 +1,12 @@
 [package]
 name = "ixa-derive"
 version = "0.0.1"
-edition = "2021"
 description = "Procedural macros for Ixa"
-repository = "https://github.com/CDCgov/ixa"
-license = "Apache-2.0"
-homepage = "https://github.com/CDCgov/ixa"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 [dependencies]
 quote = "^1.0.38"

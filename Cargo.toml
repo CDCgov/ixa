@@ -7,6 +7,7 @@ edition = "2021"
 repository = "https://github.com/CDCgov/ixa"
 license = "Apache-2.0"
 homepage = "https://github.com/CDCgov/ixa"
+authors = ["The Ixa Developers <cfa@cdc.gov>"]
 
 [package]
 name = "ixa"
@@ -15,6 +16,8 @@ description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
 edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 [dependencies]
 approx = "^0.5.1"

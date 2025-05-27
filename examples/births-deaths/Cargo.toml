@@ -1,7 +1,11 @@
 [package]
 name = "ixa_example_births_deaths"
 version = "0.1.0"
-edition = "2021"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 publish = false
 
