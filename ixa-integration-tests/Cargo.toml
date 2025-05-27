@@ -11,7 +11,7 @@ authors.workspace = true
 
 [dependencies]
 ixa = { path = "../" }
-clap = { version = "^4.5.26", features = ["derive"] }
+clap.workspace = true
 
 [dev-dependencies]
 assert_cmd = "^2.0.16"
