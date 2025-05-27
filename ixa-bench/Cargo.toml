@@ -13,8 +13,8 @@ authors.workspace = true
 release = false
 
 [dev-dependencies]
-criterion = "^0.5.1"
-tempfile = "^3.15.0"
+criterion.workspace = true
+tempfile.workspace = true
 ixa = { path = "../" }
 
 ixa_example_basic_infection = { path = "../examples/basic-infection" }
