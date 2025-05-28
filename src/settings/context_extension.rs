@@ -1,5 +1,5 @@
 use crate::settings::itinerary::Itinerary;
-use crate::settings::{SettingDataPlugin, SettingsRng};
+use crate::settings::{SettingDataPlugin, SettingId, SettingsRng};
 use crate::{Context, ContextRandomExt, PersonId};
 use ixa_fips::SettingCategoryCode;
 
@@ -13,14 +13,23 @@ pub trait ContextSettingExt {
         alpha: f64,
     ) -> Option<f64>;
 
-    /// Adds an `Itinerary` for the given person, inserting the person as a member of the settings
+    /// Corresponding getter to `set_alpha_for_setting_category()`.
+    fn get_alpha_for_setting_category(
+        &mut self,
+        setting_category: SettingCategoryCode,
+    ) -> Option<f64>;
+
+    /// Sets an `Itinerary` for the given person, inserting the person as a member of the settings
     /// in the given `Itinerary`. Returns the old `Itinerary` if the method replaced an existing
     /// itinerary (i.e. an itinerary was already set for this person), `None` otherwise.
-    fn add_itinerary_for_person(
+    fn set_itinerary_for_person(
         &mut self,
         person_id: PersonId,
         itinerary: Itinerary,
     ) -> Option<Itinerary>;
+
+    /// Corresponding getter to `set_itinerary_for_person()`.
+    fn get_itinerary_for_person(&mut self, person_id: PersonId) -> Option<&Itinerary>;
 
     /// For the given person, computes the inner product $<R, M>$ where $R$ is the vector of ratios
     /// for each setting and $M$ is the vector of multipliers for each setting.
@@ -29,9 +38,10 @@ pub trait ContextSettingExt {
     ///     `((n_members - 1) as f64).powf(alpha)`.
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
 
-    /// For a given person, use the person's itinerary and associated setting properties to
-    /// sample a contact from one of the person's settings.
-    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId>;
+    /// For a given person, use the person's itinerary and associated setting properties
+    /// to sample a setting and a contact from that setting. If the person has no
+    /// itinerary, or if the person is isolated (alone) in the setting, returns `None`.
+    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<(PersonId, SettingId)>;
 }
 
 impl ContextSettingExt for Context {
@@ -46,13 +56,29 @@ impl ContextSettingExt for Context {
             .insert(setting_category, alpha)
     }
 
-    fn add_itinerary_for_person(
+    fn get_alpha_for_setting_category(
+        &mut self,
+        setting_category: SettingCategoryCode,
+    ) -> Option<f64> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        container
+            .alpha_for_setting_category
+            .get(&setting_category)
+            .copied()
+    }
+
+    fn set_itinerary_for_person(
         &mut self,
         person_id: PersonId,
         itinerary: Itinerary,
     ) -> Option<Itinerary> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         container.add_itinerary_for_person(person_id, itinerary)
+    }
+
+    fn get_itinerary_for_person(&mut self, person_id: PersonId) -> Option<&Itinerary> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        container.itineraries.get(&person_id)
     }
 
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
@@ -64,10 +90,12 @@ impl ContextSettingExt for Context {
         }
     }
 
-    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId> {
+    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<(PersonId, SettingId)> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         self.sample(SettingsRng, |rng| {
-            container.draw_contact_from_itinerary(person_id, rng)
+            let setting_id = container.draw_setting_from_itinerary(person_id, rng)?;
+            let contact_id = container.draw_contact_from_itinerary(person_id, setting_id, rng)?;
+            Some((contact_id, setting_id))
         })
     }
 }
@@ -145,7 +173,7 @@ mod test {
             // Create 5 people
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
-                let _ = context.add_itinerary_for_person(person, itinerary_prototype.clone());
+                let _ = context.set_itinerary_for_person(person, itinerary_prototype.clone());
             }
         }
 
@@ -153,7 +181,7 @@ mod test {
         let itinerary =
             Itinerary::from_vec(vec![ItineraryEntry::new(setting_prototype, 0.5)]).unwrap();
         let person = context.add_person(()).unwrap();
-        let _ = context.add_itinerary_for_person(person, itinerary);
+        let _ = context.set_itinerary_for_person(person, itinerary);
 
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
 
@@ -188,7 +216,7 @@ mod test {
             .unwrap();
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
-                let _ = context.add_itinerary_for_person(person, itinerary_prototype.clone());
+                let _ = context.set_itinerary_for_person(person, itinerary_prototype.clone());
             }
         }
 
@@ -199,7 +227,7 @@ mod test {
         )])
         .unwrap();
         let person = context.add_person(()).unwrap();
-        let _ = context.add_itinerary_for_person(person, itinerary);
+        let _ = context.set_itinerary_for_person(person, itinerary);
 
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
@@ -215,7 +243,7 @@ mod test {
         ])
         .unwrap();
 
-        let _ = context.add_itinerary_for_person(person, itinerary_complete);
+        let _ = context.set_itinerary_for_person(person, itinerary_complete);
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
 
@@ -258,17 +286,13 @@ mod test {
         let itinerary_b =
             Itinerary::from_vec(vec![ItineraryEntry::new(home_prototype, 1.0)]).unwrap();
 
-        let _ = context.add_itinerary_for_person(person_a, itinerary_a);
-        let _ = context.add_itinerary_for_person(person_b, itinerary_b);
+        let _ = context.set_itinerary_for_person(person_a, itinerary_a);
+        let _ = context.set_itinerary_for_person(person_b, itinerary_b);
+        let (contact_a, _) = context.draw_contact_from_itinerary(person_a).unwrap();
+        let (contact_b, _) = context.draw_contact_from_itinerary(person_b).unwrap();
 
-        assert_eq!(
-            person_b,
-            context.draw_contact_from_itinerary(person_a).unwrap()
-        );
-        assert_eq!(
-            person_a,
-            context.draw_contact_from_itinerary(person_b).unwrap()
-        );
+        assert_eq!(person_b, contact_a);
+        assert_eq!(person_a, contact_b);
     }
 
     #[test]
@@ -311,7 +335,7 @@ mod test {
                 for _ in 0..3 {
                     let person = context.add_person(()).unwrap();
                     people_at_home.push(person);
-                    let _ = context.add_itinerary_for_person(person, itinerary_home.clone());
+                    let _ = context.set_itinerary_for_person(person, itinerary_home.clone());
                 }
             }
 
@@ -321,7 +345,7 @@ mod test {
                 for _ in 0..3 {
                     let person = context.add_person(()).unwrap();
                     people_at_tract.push(person);
-                    let _ = context.add_itinerary_for_person(person, itinerary_tract.clone());
+                    let _ = context.set_itinerary_for_person(person, itinerary_tract.clone());
                 }
             }
 
@@ -342,13 +366,13 @@ mod test {
             .unwrap();
 
             // First draw a contact from the itinerary with 1 at home and 0 at census tract
-            let _ = context.add_itinerary_for_person(person, itinerary_home);
-            let contact_id_home = context.draw_contact_from_itinerary(person).unwrap();
+            let _ = context.set_itinerary_for_person(person, itinerary_home);
+            let (contact_id_home, _) = context.draw_contact_from_itinerary(person).unwrap();
             assert!(people_at_home.contains(&contact_id_home));
 
             // Now draw a contact from the itinerary with 0 at home and 1 at census tract
-            let _ = context.add_itinerary_for_person(person, itinerary_tract);
-            let contact_id_tract = context.draw_contact_from_itinerary(person).unwrap();
+            let _ = context.set_itinerary_for_person(person, itinerary_tract);
+            let (contact_id_tract, _) = context.draw_contact_from_itinerary(person).unwrap();
             assert!(people_at_tract.contains(&contact_id_tract));
         }
     }
@@ -379,7 +403,7 @@ mod test {
         ])
         .unwrap();
 
-        let _ = context.add_itinerary_for_person(person, itinerary_a);
+        let _ = context.set_itinerary_for_person(person, itinerary_a);
 
         // Should panic
         let _contact = context.draw_contact_from_itinerary(person);

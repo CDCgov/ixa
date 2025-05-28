@@ -203,18 +203,17 @@ mod tests {
         let itinerary =
             Itinerary::from_vec(vec![ItineraryEntry::new(common_setting, 1.0)]).unwrap();
         assert!(context
-            .add_itinerary_for_person(person, itinerary)
+            .set_itinerary_for_person(person, itinerary)
             .is_none());
 
         let person2 = context.add_person(()).unwrap();
         let itinerary2 =
             Itinerary::from_vec(vec![ItineraryEntry::new(common_setting, 1.0)]).unwrap();
         assert!(context
-            .add_itinerary_for_person(person2, itinerary2)
+            .set_itinerary_for_person(person2, itinerary2)
             .is_none());
 
-        let sampled_person = context.draw_contact_from_itinerary(person);
-        let sampled_person = sampled_person.unwrap();
+        let (sampled_person, _) = context.draw_contact_from_itinerary(person).unwrap();
         assert_eq!(sampled_person, person2);
     }
 }

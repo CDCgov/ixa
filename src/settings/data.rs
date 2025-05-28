@@ -131,13 +131,13 @@ impl SettingsDataContainer {
         }
     }
 
-    /// For a given person, use the person's itinerary and associated setting properties to
-    /// sample a contact from one of the person's settings.
-    pub(crate) fn draw_contact_from_itinerary<R: Rng + ?Sized>(
+    /// For a given person, use the person's itinerary and associated
+    /// setting properties to sample a setting from the person's itinerary.
+    pub(crate) fn draw_setting_from_itinerary<R: Rng + ?Sized>(
         &self,
         person_id: PersonId,
         rng: &mut R,
-    ) -> Option<PersonId> {
+    ) -> Option<SettingId> {
         // Compute the element-wise product `R ⊗ M` where `R` is the vector of ratios for each
         // setting and `M` is the vector of multipliers for each setting.
         let itinerary_multiplier =
@@ -151,8 +151,19 @@ impl SettingsDataContainer {
         let itinerary = self.itineraries.get(&person_id).unwrap();
         let itinerary_entry = itinerary[setting_index];
 
-        // Unwrap guaranteed to succeed since `itinerary_multiplier` succeeded.
-        let members = self.members.get(&itinerary_entry.setting_id).unwrap();
+        Some(itinerary_entry.setting_id)
+    }
+
+    /// For a given person and setting, sample a contact from one of the person's settings.
+    ///
+    /// Use `draw_setting_from_itinerary()` to first select the setting.
+    pub(crate) fn draw_contact_from_itinerary<R: Rng + ?Sized>(
+        &self,
+        person_id: PersonId,
+        setting_id: SettingId,
+        rng: &mut R,
+    ) -> Option<PersonId> {
+        let members = self.members.get(&setting_id)?;
         if members.len() == 1 {
             // The person is isolated alone in this setting; there is no other contact.
             return None;
@@ -163,6 +174,7 @@ impl SettingsDataContainer {
         while contact_id == person_id {
             contact_id = members[rng.gen_range(0..members.len())];
         }
+
         Some(contact_id)
     }
 }
