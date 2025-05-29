@@ -51,7 +51,6 @@ strum = { version = "0.27", features = ["derive"] }
 quote = "^1.0.38"
 syn = "^2.0.95"
 
-
 [package]
 name = "ixa"
 version = "0.1.1"
@@ -107,6 +106,7 @@ implicit_hasher = "allow"
 missing_panics_doc = "allow"
 missing_errors_doc = "allow"
 uninlined_format_args = "allow"
+result_unit_err = "allow"
 
 [lib]
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
