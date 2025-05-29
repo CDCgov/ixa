@@ -1,6 +1,6 @@
 //! An enum for U.S. states as represented by FIPS Geographic Region Codes. This is a minimal subset of FIPS state codes
 //! which have been stable for every FIPS standard revision so far.
-//! See https://www.census.gov/library/reference/code-lists/ansi.html#states
+//! See <https://www.census.gov/library/reference/code-lists/ansi.html#states>.
 //!
 //! Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63.
 //! Thus, it is best to only use `FIPSCode` for these states.
@@ -66,16 +66,19 @@ pub enum USState {
 
 impl USState {
     /// Returns true if `self` is a state or District of Columbia
+    #[must_use]
     pub fn is_state(&self) -> bool {
         USState::is_state_code(*self as StateCode)
     }
 
     /// Returns true if the given state code is a state or District of Columbia
+    #[must_use]
     pub fn is_state_code(value: StateCode) -> bool {
         value <= 56u8 && ![3u8, 7, 14, 43, 52].contains(&value)
     }
 
     /// Returns the numeric FIPS code for this state.
+    #[must_use]
     pub fn encode(&self) -> StateCode {
         *self as StateCode
     }

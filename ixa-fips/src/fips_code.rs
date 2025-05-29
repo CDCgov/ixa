@@ -91,7 +91,7 @@ pub struct FIPSCode(NonZero<u64>);
 
 impl FIPSCode {
     // region Constructors
-    /// Constructs a new `FIPSCode` from a USState. Unlike the other constructors, this constructor is infallible.
+    /// Constructs a new `FIPSCode` from a `USState`. Unlike the other constructors, this constructor is infallible.
     #[must_use]
     pub fn with_state(state: USState) -> Self {
         Self::new(state.into(), 0, 0, 0, 0, 0).unwrap()
@@ -145,7 +145,7 @@ impl FIPSCode {
     // region Accessors
 
     /// Returns the FIPS STATE as a `USState` enum variant.
-    /// Returns `Err(())` if 'USState' cannot represent the state code. Use `FIPSCode::state_code()` to
+    /// Returns `Err(())` if [`USState`] cannot represent the state code. Use `FIPSCode::state_code()` to
     /// retrieve the state code in this case.
     #[inline(always)]
     pub fn state(&self) -> Result<USState, ()> {
