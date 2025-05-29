@@ -72,10 +72,11 @@
 //!    orthogonal
 //!
 //! We leave them unspecified until we have a use case for them.
+use crate::errors::FIPSError;
 use crate::{
     states::USState, CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode,
     CATEGORY_OFFSET, COUNTY_OFFSET, FOURTEEN_BIT_MASK, FOUR_BIT_MASK, ID_OFFSET, NINE_BIT_MASK,
-    SEVEN_BIT_MASK, STATE_OFFSET, TEN_BIT_MASK, TRACT_OFFSET, TWENTY_BIT_MASK,
+    STATE_OFFSET, TEN_BIT_MASK, TRACT_OFFSET, TWENTY_BIT_MASK,
 };
 use std::{
     cmp::Ordering,
@@ -98,17 +99,21 @@ impl FIPSCode {
     }
     /// Constructs a new `FIPSCode`.
     /// Returns `Err(())` if the data provided is out of range.
-    pub fn with_state_code(state_code: StateCode) -> Result<Self, ()> {
+    pub fn with_state_code(state_code: StateCode) -> Result<Self, FIPSError> {
         Self::new(state_code, 0, 0, 0, 0, 0)
     }
     /// Constructs a new `FIPSCode`.
     /// Returns `Err(())` if the data provided is out of range.
-    pub fn with_county(state: StateCode, county: CountyCode) -> Result<Self, ()> {
+    pub fn with_county(state: StateCode, county: CountyCode) -> Result<Self, FIPSError> {
         Self::new(state, county, 0, 0, 0, 0)
     }
     /// Constructs a new `FIPSCode`.
     /// Returns `Err(())` if the data provided is out of range.
-    pub fn with_tract(state: StateCode, county: CountyCode, tract: TractCode) -> Result<Self, ()> {
+    pub fn with_tract(
+        state: StateCode,
+        county: CountyCode,
+        tract: TractCode,
+    ) -> Result<Self, FIPSError> {
         Self::new(state, county, tract, 0, 0, 0)
     }
     /// Constructs a new `FIPSCode`.
@@ -118,7 +123,7 @@ impl FIPSCode {
         county: CountyCode,
         tract: TractCode,
         category: SettingCategoryCode,
-    ) -> Result<Self, ()> {
+    ) -> Result<Self, FIPSError> {
         Self::new(state, county, tract, category, 0, 0)
     }
 
@@ -129,7 +134,7 @@ impl FIPSCode {
         category: SettingCategoryCode,
         id: IdCode,
         data: DataCode,
-    ) -> Result<Self, ()> {
+    ) -> Result<Self, FIPSError> {
         let encoded: u64 = Self::encode_state(state)?
             | Self::encode_county(county)?
             | Self::encode_tract(tract)?
@@ -148,7 +153,7 @@ impl FIPSCode {
     /// Returns `Err(())` if [`USState`] cannot represent the state code. Use `FIPSCode::state_code()` to
     /// retrieve the state code in this case.
     #[inline(always)]
-    pub fn state(&self) -> Result<USState, ()> {
+    pub fn state(&self) -> Result<USState, FIPSError> {
         USState::decode(self.state_code())
     }
 
@@ -209,42 +214,42 @@ impl FIPSCode {
     }
 
     /// Creates a copy of `self` with the FIPS STATE set to `state`.
-    pub fn set_state_code(&self, state_code: StateCode) -> Result<Self, ()> {
+    pub fn set_state_code(&self, state_code: StateCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.state = state_code;
         expanded.to_fips_code()
     }
 
     /// Creates a copy of `self` with the FIPS COUNTY set to `county`.
-    pub fn set_county(&self, county: CountyCode) -> Result<Self, ()> {
+    pub fn set_county(&self, county: CountyCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.county = county;
         expanded.to_fips_code()
     }
 
     /// Creates a copy of `self` with the FIPS CENSUS TRACT set to `tract`.
-    pub fn set_tract(&self, tract: TractCode) -> Result<Self, ()> {
+    pub fn set_tract(&self, tract: TractCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.tract = tract;
         expanded.to_fips_code()
     }
 
     /// Creates a copy of `self` with the setting category set to `category`.
-    pub fn set_category(&self, category: SettingCategoryCode) -> Result<Self, ()> {
+    pub fn set_category(&self, category: SettingCategoryCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.category = category;
         expanded.to_fips_code()
     }
 
     /// Creates a copy of `self` with the ID number set to `id`.
-    pub fn set_id(&self, id: IdCode) -> Result<Self, ()> {
+    pub fn set_id(&self, id: IdCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.id = id;
         expanded.to_fips_code()
     }
 
     /// Creates a copy of `self` with the unused data region set to `data`.
-    pub fn set_data(&self, data: DataCode) -> Result<Self, ()> {
+    pub fn set_data(&self, data: DataCode) -> Result<Self, FIPSError> {
         let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
         expanded.data = data;
         expanded.to_fips_code()
@@ -253,9 +258,9 @@ impl FIPSCode {
     // endregion Setters
 
     /// Sets the unused data region occupying the 10 LSB in place.
-    /// Returns `Ok(())` if `data` is in range, `Err(())` otherwise.
+    /// Returns `Ok(())` if `data` is in range, `Err(FIPSError)` otherwise.
     #[inline(always)]
-    pub fn set_data_in_place(&mut self, data: u16) -> Result<(), ()> {
+    pub fn set_data_in_place(&mut self, data: DataCode) -> Result<(), FIPSError> {
         if data <= NINE_BIT_MASK {
             let inverse_mask = !(NINE_BIT_MASK as u64);
             let code = (self.0.get() & inverse_mask) | ((data & NINE_BIT_MASK) as u64);
@@ -263,7 +268,7 @@ impl FIPSCode {
             self.0 = NonZero::new(code).unwrap();
             Ok(())
         } else {
-            Err(())
+            Err(FIPSError::from_data_code(data))
         }
     }
 
@@ -285,62 +290,62 @@ impl FIPSCode {
     // enum variants, call the `encode` function on the enum variant.
 
     #[inline(always)]
-    fn encode_state(state: StateCode) -> Result<u64, ()> {
-        // Validate
-        if state <= SEVEN_BIT_MASK && state != 0 {
+    fn encode_state(state: StateCode) -> Result<u64, FIPSError> {
+        // Validate: Two decimal digits
+        if state <= 99 && state != 0 {
             Ok((state as u64) << STATE_OFFSET)
         } else {
-            Err(())
+            Err(FIPSError::from_state_code(state))
         }
     }
 
     #[inline(always)]
-    fn encode_county(county: CountyCode) -> Result<u64, ()> {
-        // Validate
-        if county <= TEN_BIT_MASK {
+    fn encode_county(county: CountyCode) -> Result<u64, FIPSError> {
+        // Validate: Three decimal digits
+        if county <= 999 {
             Ok((county as u64) << COUNTY_OFFSET)
         } else {
-            Err(())
+            Err(FIPSError::from_county_code(county))
         }
     }
 
     #[inline(always)]
-    fn encode_tract(tract: TractCode) -> Result<u64, ()> {
-        // Validate
-        if tract <= TWENTY_BIT_MASK {
+    fn encode_tract(tract: TractCode) -> Result<u64, FIPSError> {
+        // Validate: Six decimal digits
+        if tract <= 999_999 {
             Ok((tract as u64) << TRACT_OFFSET)
         } else {
-            Err(())
+            Err(FIPSError::from_tract_code(tract))
         }
     }
 
     #[inline(always)]
-    fn encode_category(setting_category: SettingCategoryCode) -> Result<u64, ()> {
+    fn encode_category(setting_category: SettingCategoryCode) -> Result<u64, FIPSError> {
         // Validate
         if setting_category <= FOUR_BIT_MASK {
             Ok((setting_category as u64) << CATEGORY_OFFSET)
         } else {
-            Err(())
+            Err(FIPSError::from_setting_category_code(setting_category))
         }
     }
 
     #[inline(always)]
-    fn encode_id(id: IdCode) -> Result<u64, ()> {
+    fn encode_id(id: IdCode) -> Result<u64, FIPSError> {
         // Validate
         if id <= FOURTEEN_BIT_MASK {
             Ok((id as u64) << ID_OFFSET)
         } else {
-            Err(())
+            Err(FIPSError::from_id_code(id))
         }
     }
 
     #[inline(always)]
-    fn encode_data(data: DataCode) -> Result<u64, ()> {
+    fn encode_data(data: DataCode) -> Result<u64, FIPSError> {
         // Validate
         if data <= NINE_BIT_MASK {
             Ok(data as u64)
         } else {
-            Err(())
+            Err(FIPSError::from_data_code(data))
         }
     }
     // endregion Encoding
@@ -397,7 +402,7 @@ impl ExpandedFIPSCode {
         }
     }
 
-    pub fn to_fips_code(&self) -> Result<FIPSCode, ()> {
+    pub fn to_fips_code(&self) -> Result<FIPSCode, FIPSError> {
         FIPSCode::new(
             self.state,
             self.county,
@@ -460,12 +465,12 @@ mod tests {
     #[test]
     fn test_data_ranges() {
         // Encode functions
-        assert!(FIPSCode::encode_state(SEVEN_BIT_MASK).is_ok());
-        assert!(FIPSCode::encode_state(SEVEN_BIT_MASK + 1).is_err());
-        assert!(FIPSCode::encode_county(TEN_BIT_MASK).is_ok());
-        assert!(FIPSCode::encode_county(TEN_BIT_MASK + 1).is_err());
-        assert!(FIPSCode::encode_tract(TWENTY_BIT_MASK).is_ok());
-        assert!(FIPSCode::encode_tract(TWENTY_BIT_MASK + 1).is_err());
+        assert!(FIPSCode::encode_state(99).is_ok());
+        assert!(FIPSCode::encode_state(100).is_err());
+        assert!(FIPSCode::encode_county(999).is_ok());
+        assert!(FIPSCode::encode_county(1000).is_err());
+        assert!(FIPSCode::encode_tract(999_999).is_ok());
+        assert!(FIPSCode::encode_tract(1_000_000).is_err());
         assert!(FIPSCode::encode_category(FOUR_BIT_MASK).is_ok());
         assert!(FIPSCode::encode_category(FOUR_BIT_MASK + 1).is_err());
         assert!(FIPSCode::encode_id(FOURTEEN_BIT_MASK).is_ok());
@@ -475,11 +480,11 @@ mod tests {
         // Constructors
         assert!(FIPSCode::with_state_code(1).is_ok());
         assert!(FIPSCode::with_state_code(0).is_err());
-        assert!(FIPSCode::with_state_code(SEVEN_BIT_MASK + 1).is_err());
+        assert!(FIPSCode::with_state_code(100).is_err());
         assert!(FIPSCode::with_county(1, 0).is_ok());
-        assert!(FIPSCode::with_county(1, TEN_BIT_MASK + 1).is_err());
+        assert!(FIPSCode::with_county(1, 1000).is_err());
         assert!(FIPSCode::with_tract(1, 0, 0).is_ok());
-        assert!(FIPSCode::with_tract(1, 0, TWENTY_BIT_MASK + 1).is_err());
+        assert!(FIPSCode::with_tract(1, 0, 1_000_000).is_err());
         assert!(FIPSCode::with_category(1, 0, 0, 0).is_ok());
         assert!(FIPSCode::with_category(1, 0, 0, FOUR_BIT_MASK + 1).is_err());
     }
@@ -557,5 +562,62 @@ mod tests {
 
         let other_fips_code = fips_code.set_id(0).unwrap();
         assert_eq!(fips_code, other_fips_code);
+    }
+
+    #[test]
+    fn test_fips_error() {
+        let err = FIPSError::new("foo", 1, 2, 3);
+        assert_eq!(
+            format!("{}", err),
+            "value 1 provided for foo is outside valid range of 2..3"
+        );
+
+        let e = USState::decode(58).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 58 provided for USState Code is outside valid range of 1..57"
+        );
+
+        let e = FIPSCode::encode_state(100).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 100 provided for StateCode is outside valid range of 1..100"
+        );
+
+        let e = FIPSCode::encode_state(0).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 0 provided for StateCode is outside valid range of 1..100"
+        );
+
+        let e = FIPSCode::encode_county(1000).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 1000 provided for CountyCode is outside valid range of 0..1000"
+        );
+
+        let e = FIPSCode::encode_tract(1_000_000).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 1000000 provided for TractCode is outside valid range of 0..1000000"
+        );
+
+        let e = FIPSCode::encode_category(16).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 16 provided for SettingCategoryCode is outside valid range of 0..16"
+        );
+
+        let e = FIPSCode::encode_id(16_384).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 16384 provided for IdCode is outside valid range of 0..16384"
+        );
+
+        let e = FIPSCode::encode_data(512).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "value 512 provided for DataCode is outside valid range of 0..512"
+        );
     }
 }

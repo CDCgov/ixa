@@ -5,6 +5,7 @@
 //! Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63.
 //! Thus, it is best to only use `FIPSCode` for these states.
 
+use crate::errors::FIPSError;
 use crate::StateCode;
 use strum::{AsRefStr, FromRepr};
 
@@ -84,9 +85,9 @@ impl USState {
     }
 
     /// Returns the state for the given numeric FIPS code.
-    /// Returns `Err(())` if the code is invalid.
-    pub fn decode(value: StateCode) -> Result<USState, ()> {
-        Self::from_repr(value).ok_or(())
+    /// Returns `Err(FIPSError)` if the code is invalid.
+    pub fn decode(value: StateCode) -> Result<USState, FIPSError> {
+        Self::from_repr(value).ok_or(FIPSError::from_us_state(value))
     }
 }
 

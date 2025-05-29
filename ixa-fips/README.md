@@ -34,6 +34,7 @@ are:
 | `FIPSCode`    | 64-bit value encoding state + county + tract + category + id *(10 spare bits for you)* |
 | `parser`      | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments                       |
 | `USState`     | Exhaustive enum of valid state codes\* (fits in the 6 bits allocated by `FIPSCode`)    |
+| `FIPSError`   | Represents value out of range errors.                                                  |
 
 \* This is a minimal subset of FIPS state and state equivalent codes which have been stable for every FIPS standard
 revision so far. See the

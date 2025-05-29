@@ -17,10 +17,12 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_lossless)]
 
+mod errors;
 pub mod fips_code;
 pub mod parser;
 pub mod states;
 
+pub use errors::FIPSError;
 pub use fips_code::{ExpandedFIPSCode, FIPSCode};
 pub use states::USState;
 
