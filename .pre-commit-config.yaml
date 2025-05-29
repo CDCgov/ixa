@@ -13,8 +13,8 @@ repos:
     hooks:
     -   id: fmt
     -   id: clippy
-        # Use 'all-targets' to run on all code, including tests and examples
-        args: ["--all-targets", "--", "-D", "warnings"]
+        # Use '--all' to run on all code, including tests and examples, even files that are not part of the library.
+        args: ["--all", "--", "-D", "warnings"]
 -   repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.17.2
     hooks:
