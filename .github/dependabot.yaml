@@ -11,7 +11,7 @@ updates:
       interval: "weekly"
     versioning-strategy: "increase"
     commit-message:
-      prefix: "fix: "
+      prefix: "chore: "
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     # Workflow files stored in the default location of `.github/workflows`
