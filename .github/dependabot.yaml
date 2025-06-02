@@ -9,7 +9,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
-    versioning-strategy: "increase"
+    versioning-strategy: "auto"
     commit-message:
       prefix: "chore: "
   # Enable version updates for GitHub Actions
