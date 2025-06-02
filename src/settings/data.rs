@@ -83,7 +83,8 @@ impl SettingsDataContainer {
     ///       the `ItineraryEntry`
     ///     - `member_count`: the length of the list of members of the setting
     ///
-    /// If there is no itinerary for the person, this method is a no-op.
+    /// If there is no itinerary for the person, this method is a no-op. For an example of use,
+    /// see `SettingsDataContainer::calculate_infectiousness_multiplier_vector_for_person`
     pub(super) fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
         // f(entry: ItineraryEntry, alpha_for_setting: f64, member_count: usize)

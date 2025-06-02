@@ -31,6 +31,10 @@ pub trait ContextSettingExt {
     /// Corresponding getter to `set_itinerary_for_person()`.
     fn get_itinerary_for_person(&mut self, person_id: PersonId) -> Option<&Itinerary>;
 
+    /// Returns a vector containing the members of the given `SettingId`.
+    /// If the setting has no members, it returns an empty vector.
+    fn get_setting_members(&self, setting_id: SettingId) -> Vec<PersonId>;
+
     /// For the given person, computes the inner product $<R, M>$ where $R$ is the vector of ratios
     /// for each setting and $M$ is the vector of multipliers for each setting.
     ///
@@ -38,9 +42,23 @@ pub trait ContextSettingExt {
     ///     `((n_members - 1) as f64).powf(alpha)`.
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
 
-    /// For a given person, use the person's itinerary and associated setting properties
-    /// to sample a setting and a contact from that setting. If the person has no
-    /// itinerary, or if the person is isolated (alone) in the setting, returns `None`.
+    /// For a given person, use the person's itinerary and associated
+    /// setting properties to sample a setting from the person's itinerary.
+    fn draw_setting_from_itinerary(&self, person_id: PersonId) -> Option<SettingId>;
+
+    /// For a given person and setting, sample a contact from one of
+    /// the person's settings. If the person has no itinerary, or if
+    /// the person is isolated (alone) in the setting, returns `None`.
+    ///
+    /// Use `draw_setting_from_itinerary()` to first select the setting.
+    fn draw_contact_from_setting(
+        &self,
+        person_id: PersonId,
+        setting_id: SettingId,
+    ) -> Option<PersonId>;
+
+    /// A convenience method that first calls `self.draw_setting_from_itinerary()` and then calls
+    /// `self.draw_contact_from_setting()` with the result.
     fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<(PersonId, SettingId)>;
 }
 
@@ -81,6 +99,14 @@ impl ContextSettingExt for Context {
         container.itineraries.get(&person_id)
     }
 
+    fn get_setting_members(&self, setting_id: SettingId) -> Vec<PersonId> {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        container
+            .members
+            .get(&setting_id)
+            .map_or_else(Vec::default, |v| v.clone())
+    }
+
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         // ToDo(ap59): What should happen if the person doesn't have an itinerary?
@@ -88,6 +114,24 @@ impl ContextSettingExt for Context {
             Some(v) => v.iter().sum(),
             None => 0.0,
         }
+    }
+
+    fn draw_setting_from_itinerary(&self, person_id: PersonId) -> Option<SettingId> {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        self.sample(SettingsRng, |rng| {
+            container.draw_setting_from_itinerary(person_id, rng)
+        })
+    }
+
+    fn draw_contact_from_setting(
+        &self,
+        person_id: PersonId,
+        setting_id: SettingId,
+    ) -> Option<PersonId> {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        self.sample(SettingsRng, |rng| {
+            container.draw_contact_from_itinerary(person_id, setting_id, rng)
+        })
     }
 
     fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<(PersonId, SettingId)> {
