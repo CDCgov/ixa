@@ -3,8 +3,9 @@
 //! The `SettingProperties::alpha` parameter determines how the hazard is distributed among an
 //! infected person's contacts within a setting.
 //!
-//! Data related to settings is managed by the `SettingsDataContainer`. A setting is a type that
-//! implements the `SettingType` trait.
+//! Data related to settings is managed by the [`SettingsDataContainer`]. A
+//! `SettingId` is just an alias for `FIPSCode`, a FIPS code. A setting category
+//! is represented by a `SettingCategoryCode`, which is an alias for a `u8`.
 //!
 //!
 
