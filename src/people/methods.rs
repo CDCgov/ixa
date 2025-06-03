@@ -22,7 +22,7 @@ impl Methods {
             }),
             get_display: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, T::get_instance());
-                format!("{value:?}")
+                T::get_display(&value)
             }),
         }
     }
