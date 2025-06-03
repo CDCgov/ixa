@@ -607,7 +607,6 @@ mod test {
             });
             context.execute();
         }
-
         let file_path = path.join("test_periodic.csv");
         assert!(file_path.exists(), "CSV file should exist");
 
@@ -623,9 +622,11 @@ mod test {
             .map(|result| result.unwrap().iter().map(String::from).collect())
             .collect();
         let mut expected = vec![
-            vec!["0", "false", "", "2"],
+            vec!["0", "false", "None", "2"],
             vec!["1.2", "false", "Category1", "0"],
+            vec!["1.2", "false", "None", "1"],
             vec!["1.2", "true", "Category1", "1"],
+            vec!["1.2", "true", "None", "0"],
         ];
 
         actual.sort();

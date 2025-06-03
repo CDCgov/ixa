@@ -62,7 +62,7 @@ macro_rules! define_person_property {
             fn get_display(value: &Self::Value) -> String {
                 match value {
                     Some(v) => format!("{:?}", v),
-                    None => "".to_string(),
+                    None => "None".to_string(),
                 }
             }
         }
@@ -109,7 +109,7 @@ macro_rules! define_person_property {
             fn get_display(value: &Self::Value) -> String {
                 match value {
                     Some(v) => format!("{:?}", v),
-                    None => "".to_string(),
+                    None => "None".to_string(),
                 }
             }
         }
@@ -285,7 +285,7 @@ mod tests {
                 "{:}",
                 Foo::get_display(&context.get_person_property(person2, Foo))
             ),
-            ""
+            "None"
         );
     }
 }
