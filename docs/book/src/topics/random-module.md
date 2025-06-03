@@ -10,8 +10,11 @@ Random sampling is a fundamental capability for most simulations. The requiremen
 Here are the primary ways we handle this challenge in Ixa:
 
 - We use pseudorandom number generators (PRNG or just RNG for short), which when provided with a seed number will produce numbers in a statistically random sequence—except that using the same seed will produce the same random sequence. To run a "new" simulation, provide a different seed.
-- Each module defines its own random number source, so the use of an RNG in one module is somewhat isolated from RNGs used in other modules. Of course, if a module interacts with other parts of Ixa, its own random behavior can "leak" and affect the determinism of other modules as well.
-- The default hash function used in the Rust Standard Library for containers like `std::collections::HashMap` and `std::collections::HashSet` is nondeterministic as a protection against DDoS attacks. DDoS attacks are not a concern for our application, but determinism is. Therefore, we provide `ixa::HashMap` and `ixa::HashSet`, which use a deterministic—and much faster—hash function.
+- The default hash function used in the Rust Standard Library for containers like `std::collections::HashMap` and `std::collections::HashSet` is nondeterministic for [technical reasons](https://en.wikipedia.org/wiki/Collision_attack#Hash_flooding) that don't apply to our application. Therefore, we provide `ixa::HashMap` and `ixa::HashSet`, which use a deterministic—and much faster—hash function.
+- Each module defines its own random number sources, so the use of RNGs in one module is somewhat isolated from RNGs used in other modules. Of course, if a module interacts with other parts of Ixa, its own random behavior can "leak" and affect the determinism of other modules as well.
+
+![Illustration of distinct RNGs](../assets/rng1.png)<img src="../assets/rng2.gif" style="float: right; width:270; height: auto;" alt="Illustration of a shared RNG">
+Using distinct RNGs in distinct components helps maintain simulation reproducibility and prevents unintended interactions between independent parts of your model. When modules share RNG streams, adding a new random call in one component can shift the entire sequence of random numbers consumed by other components, making it impossible to isolate changes or compare scenarios reliably. For example, if you're comparing two disease transmission scenarios where only the infection rate differs, you want the same sequence of people to be randomly selected for potential infection in both runs - but if these scenarios share an RNG with a recovery module that makes different numbers of random calls due to varying infection counts, the transmission module will consume different parts of the random sequence, compromising the comparison. By giving each module its own RNG, you ensure that changes in one module's random behavior don't cascade through the entire simulation, enabling precise scenario comparisons and reproducible debugging.
 
 > [!NOTE] Requirements for Determinism
 > The determinism guarantee applies to repeated execution of the same model compiled with the same version of Ixa.
@@ -91,7 +94,7 @@ let random_person = context.sample_range(MyRng, 0..POPULATION);
 ### Sample Boolean with Probability
 
 ```rust
-let result = context.sample_bool(MyRng, 0.5);  // 50% chance of true
+let result = context.sample_bool(MyRng, 0.4);  // 40% chance of true
 ```
 
 ### Sample from a Distribution
@@ -101,6 +104,9 @@ Ixa re-exports the `rand` crate as `ixa::rand`. The `rand` crate comes with [a f
 ```rust
 let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0));
 ```
+
+> [!WARNING] `rand` Crate Version Compatibility
+> As of this writing, the latest version of the `rand` crate is v0.9.1, but some popular crates in the Rust ecosystem still use `rand@0.8.*`, which is incompatible. Using an incompatible version in your code can result in confusing errors that ends with the tell-tale line, "Note: there are multiple different versions of crate `rand` in the dependency graph". Always using `rand` that Ixa re-exports at `ixa::rand` will help you avoid this trap.
 
 ### Custom Random Generation
 
