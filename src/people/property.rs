@@ -145,6 +145,13 @@ pub use define_person_property;
 /// * `$default`: An initial value
 #[macro_export]
 macro_rules! define_person_property_with_default {
+    ($person_property:ident, Option<$value:ty>, $default:expr) => {
+        $crate::define_person_property!(
+            $person_property,
+            Option<$value>,
+            |_context, _person_id| { $default }
+        );
+    };
     ($person_property:ident, $value:ty, $default:expr) => {
         $crate::define_person_property!($person_property, $value, |_context, _person_id| {
             $default
@@ -262,17 +269,23 @@ mod tests {
     define_person_property!(Foo, Option<u32>);
 
     #[test]
-    fn do_test() {
+    fn get_display_option() {
         let mut context = Context::new();
         let person = context.add_person((Foo, Some(42))).unwrap();
-        println!(
-            "{:?}",
-            Foo::get_display(&context.get_person_property(person, Foo))
+        assert_eq!(
+            format!(
+                "{:}",
+                Foo::get_display(&context.get_person_property(person, Foo))
+            ),
+            "42"
         );
         let person2 = context.add_person((Foo, None)).unwrap();
-        println!(
-            "{:?}",
-            Foo::get_display(&context.get_person_property(person2, Foo))
+        assert_eq!(
+            format!(
+                "{:}",
+                Foo::get_display(&context.get_person_property(person2, Foo))
+            ),
+            ""
         );
     }
 }
