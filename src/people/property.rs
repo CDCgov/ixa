@@ -254,22 +254,25 @@ macro_rules! define_multi_property_index {
     };
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use super::*;
+    use crate::prelude::*;
 
     define_person_property!(Foo, Option<u32>);
-
 
     #[test]
     fn do_test() {
         let mut context = Context::new();
         let person = context.add_person((Foo, Some(42))).unwrap();
-        println!("{:?}", Foo::get_display(&context.get_person_property(person, Foo)));
+        println!(
+            "{:?}",
+            Foo::get_display(&context.get_person_property(person, Foo))
+        );
         let person2 = context.add_person((Foo, None)).unwrap();
-        println!("{:?}", Foo::get_display(&context.get_person_property(person2, Foo)));
+        println!(
+            "{:?}",
+            Foo::get_display(&context.get_person_property(person2, Foo))
+        );
     }
-
 }
