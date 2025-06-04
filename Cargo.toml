@@ -85,22 +85,22 @@ serde_derive.workspace = true
 serde_json.workspace = true
 
 # Debugger
-shlex = { workspace = true, optional = true }
 rustyline = { workspace = true, optional = true }
+shlex = { workspace = true, optional = true }
 # Web API
-mime = { workspace = true, optional = true }
-tower-http = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
+mime = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-rand_distr.workspace = true
-tempfile.workspace = true
+assert_approx_eq.workspace = true
 assert_cmd.workspace = true
 criterion.workspace = true
-assert_approx_eq.workspace = true
+rand_distr.workspace = true
+tempfile.workspace = true
 
 # Only used in web API tests
 reqwest = { workspace = true }
