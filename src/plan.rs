@@ -80,6 +80,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         self.queue.peek().map(|e| e.time)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn clear(&mut self) {
         self.data_map.clear();
         self.queue.clear();
@@ -87,6 +88,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     }
 
     #[must_use]
+    #[allow(dead_code)]
     pub(crate) fn peek(&self) -> Option<(&PlanSchedule<P>, &T)> {
         // Iterate over queue until we find a plan with data or queue is empty
         for entry in &self.queue {

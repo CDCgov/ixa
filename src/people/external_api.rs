@@ -7,12 +7,14 @@ use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
 pub(crate) trait ContextPeopleExtCrate {
+    #[allow(dead_code)]
     fn get_person_property_by_name(
         &self,
         name: &str,
         person_id: PersonId,
     ) -> Result<String, IxaError>;
 
+    #[allow(dead_code)]
     fn tabulate_person_properties_by_name<F>(
         &self,
         properties: Vec<String>,
@@ -23,6 +25,7 @@ pub(crate) trait ContextPeopleExtCrate {
 
     fn index_property_by_id(&self, type_id: TypeId);
 
+    #[allow(dead_code)]
     fn get_person_property_names(&self) -> Vec<String>;
 }
 

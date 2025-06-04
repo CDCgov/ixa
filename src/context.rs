@@ -2,8 +2,9 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
-use crate::debugger::enter_debugger;
-use crate::plan::{PlanId, PlanSchedule, Queue};
+use crate::plan::{PlanId, Queue};
+#[cfg(feature = "debugger")]
+use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{error, trace};
 use crate::{HashMap, HashMapExt};
 use std::fmt::{Display, Formatter};
@@ -76,10 +77,13 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     data_plugins: HashMap<TypeId, Box<dyn Any>>,
+    #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
     shutdown_requested: bool,
+    #[cfg(feature = "debugger")]
     break_requested: bool,
+    #[cfg(feature = "debugger")]
     breakpoints_enabled: bool,
 }
 
@@ -92,10 +96,13 @@ impl Context {
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
             data_plugins: HashMap::new(),
+            #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
             current_time: 0.0,
             shutdown_requested: false,
+            #[cfg(feature = "debugger")]
             break_requested: false,
+            #[cfg(feature = "debugger")]
             breakpoints_enabled: true,
         }
     }
@@ -107,6 +114,7 @@ impl Context {
     /// # Errors
     /// Internal debugger errors e.g., reading or writing to stdin/stdout;
     /// errors in Ixa are printed to stdout
+    #[cfg(feature = "debugger")]
     pub fn schedule_debugger(
         &mut self,
         time: f64,
@@ -317,32 +325,38 @@ impl Context {
     }
 
     /// Request to enter a debugger session at next event loop
+    #[cfg(feature = "debugger")]
     pub fn request_debugger(&mut self) {
         self.break_requested = true;
     }
 
     /// Request to enter a debugger session at next event loop
+    #[cfg(feature = "debugger")]
     pub fn cancel_debugger_request(&mut self) {
         self.break_requested = false;
     }
 
     /// Disable breakpoints
+    #[cfg(feature = "debugger")]
     pub fn disable_breakpoints(&mut self) {
         self.breakpoints_enabled = false;
     }
 
     /// Enable breakpoints
+    #[cfg(feature = "debugger")]
     pub fn enable_breakpoints(&mut self) {
         self.breakpoints_enabled = true;
     }
 
     /// Returns `true` if breakpoints are enabled.
     #[must_use]
+    #[cfg(feature = "debugger")]
     pub fn breakpoints_are_enabled(&self) -> bool {
         self.breakpoints_enabled
     }
 
     /// Delete the breakpoint with the given ID
+    #[cfg(feature = "debugger")]
     pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<Box<Callback>> {
         self.breakpoints_scheduled
             .cancel_plan(&PlanId(breakpoint_id))
@@ -351,11 +365,13 @@ impl Context {
     /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
     /// `PlanSchedule`s ordered as they are in the queue itself.
     #[must_use]
+    #[cfg(feature = "debugger")]
     pub fn list_breakpoints(&self, at_most: usize) -> Vec<&PlanSchedule<ExecutionPhase>> {
         self.breakpoints_scheduled.list_schedules(at_most)
     }
 
     /// Deletes all breakpoints.
+    #[cfg(feature = "debugger")]
     pub fn clear_breakpoints(&mut self) {
         self.breakpoints_scheduled.clear();
     }
@@ -365,9 +381,17 @@ impl Context {
         trace!("entering event loop");
         // Start plan loop
         loop {
+            #[cfg(feature = "debugger")]
             if self.break_requested {
                 enter_debugger(self);
             } else if self.shutdown_requested {
+                break;
+            } else {
+                self.execute_single_step();
+            }
+
+            #[cfg(not(feature = "debugger"))]
+            if self.shutdown_requested {
                 break;
             } else {
                 self.execute_single_step();
@@ -385,6 +409,7 @@ impl Context {
         // of the `ExecutionPhase` of the breakpoint. If breakpoints are disabled, they are still
         // popped from the breakpoint queue at the time they are scheduled even though they are not
         // executed.
+        #[cfg(feature = "debugger")]
         if let Some((bp, _)) = self.breakpoints_scheduled.peek() {
             // If the priority of bp is `ExecutionPhase::First`, and if the next scheduled plan
             // is scheduled at or after bp's time (or doesn't exist), run bp.
@@ -432,6 +457,7 @@ impl Context {
 // and a plugin's data. In the future we hope to make a
 // convenient public API for this, which is why it's not
 // public now.
+#[cfg(feature = "debugger")]
 pub(crate) fn run_with_plugin<T: DataPlugin>(
     context: &mut Context,
     f: impl Fn(&mut Context, &mut T::DataContainer),

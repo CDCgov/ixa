@@ -61,39 +61,53 @@ edition.workspace = true
 homepage.workspace = true
 authors.workspace = true
 
+[features]
+default = ["debugger"]
+
+debugger = ["shlex", "rustyline"]
+web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
+
 [dependencies]
-approx.workspace = true
-rand.workspace = true
+approx.workspace = true # Macros
+bincode.workspace = true
+clap.workspace = true
 csv.workspace = true
+ctor.workspace = true
+ixa-derive.workspace = true
+log.workspace = true
+log4rs.workspace = true
+paste.workspace = true
+rand.workspace = true
+rustc-hash.workspace = true
+seq-macro.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
-bincode.workspace = true
-reikna.workspace = true
-ixa-derive.workspace = true
-seq-macro.workspace = true
-paste.workspace = true
-ctor.workspace = true
-clap.workspace = true
-shlex.workspace = true
-rustyline.workspace = true
-log.workspace = true
-log4rs.workspace = true
-axum.workspace = true
-tokio.workspace = true
-reqwest.workspace = true
-uuid.workspace = true
-tower-http.workspace = true
-mime.workspace = true
-rustc-hash.workspace = true
+
+# Debugger
+shlex = { workspace = true, optional = true }
+rustyline = { workspace = true, optional = true }
+# Web API
+mime = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
 
 [dev-dependencies]
 rand_distr.workspace = true
 tempfile.workspace = true
 assert_cmd.workspace = true
 criterion.workspace = true
-roots.workspace = true
 assert_approx_eq.workspace = true
+
+# Only used in web API tests
+reqwest = { workspace = true }
+
+# Only used in time-varying-infection
+reikna.workspace = true
+roots.workspace = true
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }
