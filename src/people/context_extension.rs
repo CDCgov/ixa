@@ -36,18 +36,15 @@ pub trait ContextPeopleExt {
     /// provided, and the property is not set this will panic, as long
     /// as the property has been set or subscribed to at least once before.
     /// Otherwise, Ixa doesn't know about the property.
-    fn get_person_property<T: PersonProperty + 'static>(
-        &self,
-        person_id: PersonId,
-        _property: T,
-    ) -> T::Value;
+    fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, _property: T)
+        -> T::Value;
 
     #[doc(hidden)]
-    fn register_property<T: PersonProperty + 'static>(&self);
+    fn register_property<T: PersonProperty>(&self);
 
     /// Given a [`PersonId`], sets the value of a defined person property
     /// Panics if the property is not initialized. Fires a change event.
-    fn set_person_property<T: PersonProperty + 'static>(
+    fn set_person_property<T: PersonProperty>(
         &mut self,
         person_id: PersonId,
         _property: T,
@@ -61,7 +58,7 @@ pub trait ContextPeopleExt {
     /// Ixa may choose to create an index for its own reasons even if
     /// [`Context::index_property()`] is not called, so this function just ensures
     /// that one is created.
-    fn index_property<T: PersonProperty + 'static>(&mut self, property: T);
+    fn index_property<T: PersonProperty>(&mut self, property: T);
 
     /// Query for all people matching a given set of criteria.
     ///
@@ -130,11 +127,7 @@ impl ContextPeopleExt for Context {
         Ok(person_id)
     }
 
-    fn get_person_property<T: PersonProperty + 'static>(
-        &self,
-        person_id: PersonId,
-        property: T,
-    ) -> T::Value {
+    fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
         let data_container = self.get_data_container(PeoplePlugin)
             .expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         self.register_property::<T>();
@@ -156,7 +149,7 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::single_match_else)]
-    fn set_person_property<T: PersonProperty + 'static>(
+    fn set_person_property<T: PersonProperty>(
         &mut self,
         person_id: PersonId,
         property: T,
@@ -242,7 +235,7 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn index_property<T: PersonProperty + 'static>(&mut self, _property: T) {
+    fn index_property<T: PersonProperty>(&mut self, _property: T) {
         // Ensure that the data container exists
         {
             let _ = self.get_data_container_mut(PeoplePlugin);
@@ -309,7 +302,7 @@ impl ContextPeopleExt for Context {
         true
     }
 
-    fn register_property<T: PersonProperty + 'static>(&self) {
+    fn register_property<T: PersonProperty>(&self) {
         let data_container = self.get_data_container(PeoplePlugin).
             expect("PeoplePlugin is not initialized; make sure you add a person before accessing properties");
         if data_container
@@ -443,13 +436,9 @@ impl ContextPeopleExt for Context {
 }
 
 pub trait ContextPeopleExtInternal {
-    fn register_indexer<T: PersonProperty + 'static>(&self);
-    fn add_to_index_maybe<T: PersonProperty + 'static>(&mut self, person_id: PersonId, property: T);
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    );
+    fn register_indexer<T: PersonProperty>(&self);
+    fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
+    fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
     fn query_people_internal(
         &self,
         accumulator: impl FnMut(PersonId),
@@ -458,7 +447,7 @@ pub trait ContextPeopleExtInternal {
 }
 
 impl ContextPeopleExtInternal for Context {
-    fn register_indexer<T: PersonProperty + 'static>(&self) {
+    fn register_indexer<T: PersonProperty>(&self) {
         {
             let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
@@ -475,11 +464,7 @@ impl ContextPeopleExtInternal for Context {
         property_indexes.insert(TypeId::of::<T>(), index);
     }
 
-    fn add_to_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    ) {
+    fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
@@ -490,11 +475,7 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn remove_from_index_maybe<T: PersonProperty + 'static>(
-        &mut self,
-        person_id: PersonId,
-        property: T,
-    ) {
+    fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data_container(PeoplePlugin).unwrap();
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {

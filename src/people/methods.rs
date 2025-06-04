@@ -14,7 +14,7 @@ pub(crate) struct Methods {
 }
 
 impl Methods {
-    pub(super) fn new<T: PersonProperty + 'static>() -> Self {
+    pub(super) fn new<T: PersonProperty>() -> Self {
         Self {
             indexer: Box::new(move |context: &Context, person_id: PersonId| {
                 let value = context.get_person_property(person_id, T::get_instance());

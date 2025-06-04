@@ -72,7 +72,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub(super) fn new<T: PersonProperty + 'static>(_context: &Context, _property: T) -> Self {
+    pub(super) fn new<T: PersonProperty>(_context: &Context, _property: T) -> Self {
         Self {
             name: std::any::type_name::<T>(),
             lookup: None,
@@ -139,10 +139,7 @@ pub static MULTI_PROPERTY_INDEX_MAP: LazyLock<
 > = LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
 #[allow(dead_code)]
-pub fn add_multi_property_index<T: PersonProperty + 'static>(
-    property_ids: &[TypeId],
-    index_type: TypeId,
-) {
+pub fn add_multi_property_index<T: PersonProperty>(property_ids: &[TypeId], index_type: TypeId) {
     let current_map = MULTI_PROPERTY_INDEX_MAP.lock().unwrap();
     let mut map = current_map.borrow_mut();
     let mut ordered_property_ids = property_ids.to_owned();

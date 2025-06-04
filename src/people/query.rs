@@ -22,7 +22,7 @@ impl Query for () {
 }
 
 // Implement the query version with one parameter.
-impl<T1: PersonProperty + 'static> Query for (T1, T1::Value) {
+impl<T1: PersonProperty> Query for (T1, T1::Value) {
     fn setup(&self, context: &Context) {
         context.register_property::<T1>();
     }
@@ -38,7 +38,7 @@ macro_rules! impl_query {
         seq!(N in 0..$ct {
             impl<
                 #(
-                    T~N : PersonProperty + 'static,
+                    T~N : PersonProperty,
                 )*
             > Query for (
                 #(
