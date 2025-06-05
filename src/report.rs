@@ -575,6 +575,17 @@ mod test {
         assert_eq!(records.count(), 0);
     }
 
+    #[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
+    pub enum SymptomValue {
+        Presymptomatic,
+        Category1,
+        Category2,
+        Category3,
+        Category4,
+    }
+
+    define_person_property_with_default!(Symptoms, Option<SymptomValue>, None);
+
     #[test]
     fn add_periodic_report() {
         let temp_dir = tempdir().unwrap();
@@ -586,32 +597,36 @@ mod test {
             config
                 .file_prefix("test_".to_string())
                 .directory(path.clone());
-            let _ = context.add_periodic_report("periodic", 1.2, (IsRunner,));
+            let _ = context.add_periodic_report("periodic", 1.2, (IsRunner, Symptoms));
             let person = context.add_person(()).unwrap();
             context.add_person(()).unwrap();
 
             context.add_plan(1.2, move |context: &mut Context| {
                 context.set_person_property(person, IsRunner, true);
+                context.set_person_property(person, Symptoms, Some(SymptomValue::Category1));
             });
-
             context.execute();
         }
-
         let file_path = path.join("test_periodic.csv");
         assert!(file_path.exists(), "CSV file should exist");
 
         let mut reader = csv::Reader::from_path(file_path).unwrap();
 
-        assert_eq!(reader.headers().unwrap(), vec!["t", "IsRunner", "count"]);
+        assert_eq!(
+            reader.headers().unwrap(),
+            vec!["t", "IsRunner", "Symptoms", "count"]
+        );
 
         let mut actual: Vec<Vec<String>> = reader
             .records()
             .map(|result| result.unwrap().iter().map(String::from).collect())
             .collect();
         let mut expected = vec![
-            vec!["0", "false", "2"],
-            vec!["1.2", "false", "1"],
-            vec!["1.2", "true", "1"],
+            vec!["0", "false", "None", "2"],
+            vec!["1.2", "false", "Category1", "0"],
+            vec!["1.2", "false", "None", "1"],
+            vec!["1.2", "true", "Category1", "1"],
+            vec!["1.2", "true", "None", "0"],
         ];
 
         actual.sort();

@@ -29,6 +29,9 @@ pub trait PersonProperty: Copy {
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
     fn get_instance() -> Self;
     fn name() -> &'static str;
+    fn get_display(value: &Self::Value) -> String {
+        format!("{:?}", value)
+    }
 }
 
 /// Defines a person property with the following parameters:
@@ -39,6 +42,31 @@ pub trait PersonProperty: Copy {
 ///   on the property without explicitly setting a value first will panic.
 #[macro_export]
 macro_rules! define_person_property {
+    ($person_property:ident, Option<$value:ty>, $initialize:expr) => {
+        #[derive(Copy, Clone)]
+        pub struct $person_property;
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = Option<$value>;
+            fn compute(
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
+            ) -> Self::Value {
+                $initialize(_context, _person)
+            }
+            fn get_instance() -> Self {
+                $person_property
+            }
+            fn name() -> &'static str {
+                stringify!($person_property)
+            }
+            fn get_display(value: &Self::Value) -> String {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
+        }
+    };
     ($person_property:ident, $value:ty, $initialize:expr) => {
         #[derive(Debug, Copy, Clone)]
         pub struct $person_property;
@@ -55,6 +83,34 @@ macro_rules! define_person_property {
             }
             fn name() -> &'static str {
                 stringify!($person_property)
+            }
+        }
+    };
+    ($person_property:ident, Option<$value:ty>) => {
+        #[derive(Debug, Copy, Clone)]
+        pub struct $person_property;
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = Option<$value>;
+            fn compute(
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
+            ) -> Self::Value {
+                panic!("Property not initialized when person created.");
+            }
+            fn is_required() -> bool {
+                true
+            }
+            fn get_instance() -> Self {
+                $person_property
+            }
+            fn name() -> &'static str {
+                stringify!($person_property)
+            }
+            fn get_display(value: &Self::Value) -> String {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
             }
         }
     };
@@ -89,6 +145,13 @@ pub use define_person_property;
 /// * `$default`: An initial value
 #[macro_export]
 macro_rules! define_person_property_with_default {
+    ($person_property:ident, Option<$value:ty>, $default:expr) => {
+        $crate::define_person_property!(
+            $person_property,
+            Option<$value>,
+            |_context, _person_id| { $default }
+        );
+    };
     ($person_property:ident, $value:ty, $default:expr) => {
         $crate::define_person_property!($person_property, $value, |_context, _person_id| {
             $default
@@ -196,4 +259,33 @@ macro_rules! define_multi_property_index {
             );
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+
+    define_person_property!(Foo, Option<u32>);
+
+    #[test]
+    fn get_display_option() {
+        let mut context = Context::new();
+        let person = context.add_person((Foo, Some(42))).unwrap();
+        assert_eq!(
+            format!(
+                "{:}",
+                Foo::get_display(&context.get_person_property(person, Foo))
+            ),
+            "42"
+        );
+        let person2 = context.add_person((Foo, None)).unwrap();
+        assert_eq!(
+            format!(
+                "{:}",
+                Foo::get_display(&context.get_person_property(person2, Foo))
+            ),
+            "None"
+        );
+    }
 }
