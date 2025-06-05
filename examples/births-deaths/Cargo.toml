@@ -13,12 +13,8 @@ publish = false
 ixa = { path = "../../../ixa" }
 ixa-derive = { path = "../../ixa-derive" }
 
-csv.workspace = true
-ctor.workspace = true
 serde.workspace = true
-rand.workspace = true
 rand_distr.workspace = true
-paste.workspace = true
 
 [lints]
 workspace = true
