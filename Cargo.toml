@@ -40,6 +40,7 @@ uuid = "^1.12.1"
 tower-http = { version = "^0.6.2", features = ["full"] }
 mime = "^0.3.17"
 rustc-hash = "^2.1.1"
+ixa-fips = { path = "ixa-fips" }
 
 rand_distr = "^0.4.3"
 tempfile = "^3.15.0"
@@ -60,6 +61,11 @@ license.workspace = true
 edition.workspace = true
 homepage.workspace = true
 authors.workspace = true
+
+[features]
+default = []
+
+settings = ["ixa-fips"] # Enables the Settings module
 
 [dependencies]
 approx.workspace = true
@@ -86,6 +92,7 @@ uuid.workspace = true
 tower-http.workspace = true
 mime.workspace = true
 rustc-hash.workspace = true
+ixa-fips = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand_distr.workspace = true

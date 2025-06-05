@@ -66,7 +66,10 @@ pub use log::{
 
 pub mod external_api;
 mod hashing;
+pub mod numeric;
 pub mod prelude;
+#[cfg(feature = "settings")]
+pub mod settings;
 pub mod web_api;
 
 // Re-export for macros
