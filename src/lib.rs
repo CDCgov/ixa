@@ -26,6 +26,17 @@
 //!   stages of disease until recovery.
 //! * A transmission manager that models the process of an infected
 //!   person trying to infect susceptible people in the population.
+//!
+//! ## Features
+//!
+//! - **`debugger`**: enables the interactive debugger, an interactive console-based REPL
+//!   (Read-Eval-Print Loop) that allows you to pause simulation execution, inspect state, and
+//!   control simulation flow through commands like breakpoints, population queries, and
+//!   step-by-step execution.
+//! - **`web_api`**: enables the web API, an HTTP-based remote control interface that allows
+//!   external applications to monitor simulation state, control execution, and query data through
+//!   REST endpoints. This feature implies the `debugger` feature.
+//!
 pub mod context;
 pub use context::{Context, ExecutionPhase, IxaEvent};
 
@@ -56,6 +67,7 @@ pub use report::{ConfigReportOptions, ContextReportExt, Report};
 pub mod runner;
 pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
 
+#[cfg(feature = "debugger")]
 pub mod debugger;
 
 pub mod log;
@@ -64,9 +76,11 @@ pub use log::{
     set_module_filters, trace, warn, LevelFilter,
 };
 
+#[cfg(feature = "debugger")]
 pub mod external_api;
 mod hashing;
 pub mod prelude;
+#[cfg(feature = "web_api")]
 pub mod web_api;
 
 // Re-export for macros

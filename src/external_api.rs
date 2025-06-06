@@ -1,3 +1,6 @@
+// Now all features of the external API are used internally, so we expect dead code.
+#![allow(dead_code)]
+
 use crate::context::Context;
 use crate::error::IxaError;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -105,6 +108,7 @@ pub(crate) mod global_properties {
 pub(crate) mod breakpoint {
     use crate::context::Context;
     use crate::debugger::enter_debugger;
+    #[cfg(feature = "web_api")]
     use crate::web_api::enter_web_debugger;
     use crate::{info, trace, IxaError};
     use clap::{Parser, Subcommand};
@@ -176,18 +180,25 @@ pub(crate) mod breakpoint {
                     Ok(Retval::List(list))
                 }
 
-                ArgsEnum::Set { time, console } => {
+                ArgsEnum::Set {
+                    time,
+                    #[allow(unused_variables)]
+                    console,
+                } => {
                     if *time < context.get_current_time() {
                         return Err(IxaError::from(format!(
                             "Breakpoint time {time} is in the past"
                         )));
                     }
 
+                    #[cfg(feature = "web_api")]
                     if *console {
                         context.schedule_debugger(*time, None, Box::new(enter_debugger));
                     } else {
                         context.schedule_debugger(*time, None, Box::new(enter_web_debugger));
                     }
+                    #[cfg(not(feature = "web_api"))]
+                    context.schedule_debugger(*time, None, Box::new(enter_debugger));
 
                     info!("Breakpoint set at t={time}");
                     Ok(Retval::Ok)
