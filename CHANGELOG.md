@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Make debugger and web API options with feature flags
+- Added the `ixa-fips` crate as a member of the workspace.
 - Add prelude ([#333](https://github.com/CDCgov/ixa/pull/333))
 - Add disallowed methods to linter - hashmap, hashset ([#335](https://github.com/CDCgov/ixa/pull/335))
 - Support multi-property indexes ([#309](https://github.com/CDCgov/ixa/pull/309))
+- Improve display of Option in reports ([#370](https://github.com/CDCgov/ixa/pull/370))
 
 ### Fixed
 
@@ -20,33 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- Added a more helpful error message when a duplicate global property causes a panic. ([#373](https://github.com/CDCgov/ixa/pull/373))
+- Make debugger and web API options with feature flags
 - Narrative-style documentation for the Random module ([#361](https://github.com/CDCgov/ixa/pull/361))
-- Added the `'static` constraint to `PersonProperty` and changed `PersonProperty + 'static` to `PersonProperty` everywhere. ([#372](https://github.com/CDCgov/ixa/pull/372))
-- Cdc as81 options report ([#370](https://github.com/CDCgov/ixa/pull/370))
 - Add dependabot.yaml. Closes #355. ([#356](https://github.com/CDCgov/ixa/pull/356))
-- change clippy to run on all files
-- Satisfy new Clippy lints.
+- Added a more helpful error message when a duplicate global property causes a panic. ([#373](https://github.com/CDCgov/ixa/pull/373))
+- Added the `'static` constraint to `PersonProperty` and changed `PersonProperty + 'static` to `PersonProperty` everywhere. ([#372](https://github.com/CDCgov/ixa/pull/372))
 - Dependencies are now listed in `[workspace.dependencies]` and inherited in packages that depend on them via `my_dependency.workspace = true`.
 - Workspace members and examples with their own `Cargo.toml` inherit the values of the fields repository, license, edition, homepage, and authors from the workspace.
 - Use `FromRepr` instead of `transmute` for `u8` to `USState` conversion.
-- Split out test feature into zipped archive and unzipped archive.
-- Satisfied Clippy lints.
-- Improved documentation and added more references to the standard.
-- Module doc comment style standardized.
-- Removed ASPR code (to its own library).
-- Fixed crate name in doc comments.
-- Added the `ixa-fips` crate as a member of the workspace.
 - Added cache to the github build ([#348](https://github.com/CDCgov/ixa/pull/348))
 - Use glob pattern for workspace members ([#345](https://github.com/CDCgov/ixa/pull/345))
 - Modified workspace members to opt in to workspace lint exceptions.
-- Vendors `almost_eq`, `convergence`, and the `assert_almost_eq!` macro from statrs@0.18.0 (prec.rs), which are implemented on top of the small `approx` crate.
-- updating release-plz to ver 0.5.105
-- Use rustdoc_include to link to full files in ixa book
-- disable unwanted clippy lints ([#329](https://github.com/CDCgov/ixa/pull/329))
+- Vendor `almost_eq`, `convergence`, and the `assert_almost_eq!` macro from statrs@0.18.0 (prec.rs), which are implemented on top of the small `approx` crate.
 - New benchmark action ([#326](https://github.com/CDCgov/ixa/pull/326))
 - Add bench=false to benchmarks package ([#327](https://github.com/CDCgov/ixa/pull/327))
-- *(book)* Change range of lines of code in display define_rng! ([#310](https://github.com/CDCgov/ixa/pull/310))
 - Move integration tests to unpublished sub crate ([#320](https://github.com/CDCgov/ixa/pull/320))
 
 ## [0.1.1](https://github.com/CDCgov/ixa/compare/ixa-v0.1.0...ixa-v0.1.1) - 2025-04-30
