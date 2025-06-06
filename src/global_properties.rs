@@ -59,7 +59,7 @@ where
 {
     trace!("Adding global property {name}");
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
-    assert!(properties
+    properties
         .borrow_mut()
         .insert(
             name.to_string(),
@@ -73,7 +73,7 @@ where
                         }
                         context.set_global_property_value(T::new(), val)?;
                         Ok(())
-                    }
+                    },
                 ),
                 getter: Box::new(|context: &Context| -> Result<Option<String>, IxaError> {
                     let value = context.get_global_property_value(T::new());
@@ -82,9 +82,9 @@ where
                         None => Ok(None),
                     }
                 }),
-            })
+            }),
         )
-        .is_none());
+        .inspect(|_| panic!("Duplicate global property {}", name));
 }
 
 fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
