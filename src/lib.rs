@@ -84,6 +84,7 @@ pub mod prelude;
 pub mod web_api;
 
 // Re-export for macros
+pub use csv;
 pub use ctor;
 pub use paste;
 pub use rand;

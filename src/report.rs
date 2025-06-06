@@ -77,7 +77,7 @@ macro_rules! create_report_trait {
                 std::any::TypeId::of::<$name>()
             }
 
-            fn serialize(&self, writer: &mut csv::Writer<std::fs::File>) {
+            fn serialize(&self, writer: &mut $crate::csv::Writer<std::fs::File>) {
                 writer.serialize(self).unwrap();
             }
         }
