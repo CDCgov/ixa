@@ -1,18 +1,25 @@
+//ANCHOR: imports
 use crate::{infection_manager::InfectionStatusEvent, people::InfectionStatusValue};
 use csv;
 use ixa::{prelude::*, trace, PersonId, Report};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+//ANCHOR_END: imports
 
+//ANCHOR: IncidenceReportItem
 #[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {
     time: f64,
     person_id: PersonId,
     infection_status: InfectionStatusValue,
 }
+//ANCHOR_END: IncidenceReportItem
 
+//ANCHOR: create_report_trait
 create_report_trait!(IncidenceReportItem);
+//ANCHOR_END: create_report_trait
 
+//ANCHOR: handle_infection_status_change
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     trace!(
         "Recording infection status change from {:?} to {:?} for {:?}",
@@ -26,7 +33,9 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
         infection_status: event.current,
     });
 }
+//ANCHOR_END: handle_infection_status_change
 
+// ANCHOR: init
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     trace!("Initializing incidence_report");
 
@@ -42,3 +51,4 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
     Ok(())
 }
+// ANCHOR_END: init

@@ -10,7 +10,7 @@ Ixa is a framework for developing *agent*-based models. In most of our models, t
 ## `PersonProperty`
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:5:10}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs:InfectionStatusValue}}
 ```
 
 To each person we will associate a value of the enum (short for “enumeration”) named `InfectionStatusValue`. An enum is a way to create a type that can be one of several predefined values. Here, we have three values:
@@ -34,7 +34,7 @@ The attributes written above the enum declaration, such as `#[derive(Debug, Hash
 All of our "person properties" in our models will "derive" these attributes. It is not enough to define this enum. We have to tell Ixa that it will be a `PersonProperty`:
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:12:16}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs:define_person_property}}
 ```
 
 > [!NOTE] Name Tags and Values
@@ -71,7 +71,7 @@ The `context.add_person()` method call might look a little odd, because we are n
 Having "magic numbers" embedded in your code, such as the constant `1000` here representing the total number of people in our model, is ***bad practice***. What if we want to change this value later? Will we even be able to find it in all of our source code? Ixa has a formal mechanism for managing these kinds of model parameters, but for now we will just define a "static constant" near the top of `src/main.rs` named `POPULATION` and replace the literal `1000` with `POPULATION`:
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:18:24}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs:init}}
 ```
 
 Let's revisit `src/main.rs`:
@@ -90,5 +90,5 @@ Turning back to `src/people.rs`, your IDE might have been complaining to you abo
 
 ```rust
 //people.rs
-{{#rustdoc_include ../../models/disease_model/src/people.rs}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs:all}}
 ```

@@ -149,8 +149,7 @@ cargo run -- --log-level disease_model=trace
 >
 > - Turn log messages on and off as needed.
 > - Enable only messages with a specified priority (for example, only warnings or higher).
-> - Filter messages to show only those emitted from a specific module, like the `people` module we write in the next
-    section.
+> - Filter messages to show only those emitted from a specific module, like the `people` module we write in the next section.
 >
 > See the logging documentation for more details.
 > [!INFO] Command Line Arguments
