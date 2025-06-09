@@ -52,6 +52,10 @@ quote = "^1.0.38"
 syn = "^2.0.95"
 delegate = "^0.13.3"
 
+console_log = "^1.0"
+fern = "0.7.1"
+getrandom = "0.2"
+
 [package]
 name = "ixa"
 version = "0.1.2"
@@ -63,8 +67,14 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["debugger"]
+default = ["wasm"]
 
+# `wasm` is pairwise mutually exclusive with `standard_logging`, `debugger`, and `web_api`. When `wasm` is enabled,
+# the JS logger is used.
+wasm = ["getrandom"]
+
+# `standard_logging` is mutually exclusive with the `wasm` feature. This feature enables logging with the `log4rs` crate.
+standard_logging = ["log4rs"]
 debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 
@@ -74,9 +84,10 @@ bincode.workspace = true
 clap.workspace = true
 csv.workspace = true
 ctor.workspace = true
+#fern = { workspace = true, optional = true }
 ixa-derive.workspace = true
 log.workspace = true
-log4rs.workspace = true
+log4rs = { workspace = true, optional = true }
 paste.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
@@ -85,6 +96,9 @@ serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
 delegate.workspace = true
+
+# WASM
+getrandom = { workspace = true,  optional = true, features = ["js"] }
 
 # Debugger
 rustyline = { workspace = true, optional = true }

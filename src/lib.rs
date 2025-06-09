@@ -102,3 +102,9 @@ pub mod prelude_for_plugins {
     pub use crate::IxaEvent;
     pub use ixa_derive::IxaEvent;
 }
+
+#[cfg(all(feature = "wasm", feature = "debugger"))]
+compile_error!("Features `wasm` and `debugger` are mutually exclusive — enable at most one.");
+
+#[cfg(all(feature = "wasm", feature = "standard_logging"))]
+compile_error!("Features `wasm` and `standard_logging` are mutually exclusive — enable at most one.");
