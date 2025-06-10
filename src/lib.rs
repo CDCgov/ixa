@@ -17,7 +17,7 @@
 //!
 //! In practice, a simulation usually consists of a set of modules that work
 //! together to provide all of the functions of the simulation. For instance,
-//! For instance, a simple disease transmission model might consist of the
+//! a simple disease transmission model might consist of the
 //! following modules:
 //! * A population loader that initializes the set of people represented
 //!   by the simulation.
