@@ -40,26 +40,22 @@
 //! }
 //! ```
 #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
-// Use `log4rs` logging
 mod standard_logger;
 
 #[cfg(all(target_arch = "wasm32", feature = "logging"))]
-// Use `wasm` logging
 mod wasm_logger;
 
 #[cfg(not(feature = "logging"))]
-// No logging
 mod null_logger;
 
-use std::collections::hash_map::Entry;
 pub use log::{debug, error, info, trace, warn, LevelFilter};
+use std::collections::hash_map::Entry;
 
-
-use std::sync::LazyLock;
-use std::sync::{Mutex, MutexGuard};
+use crate::HashMap;
 #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 use log4rs::Handle;
-use crate::HashMap;
+use std::sync::LazyLock;
+use std::sync::{Mutex, MutexGuard};
 
 // Logging disabled
 const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Off;
@@ -68,10 +64,6 @@ const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
     // `rustyline` logs are noisy.
     ("rustyline", LevelFilter::Off),
 ];
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
-// Use an ISO 8601 timestamp format and color coded level tag
-const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
 
 /// A global instance of the logging configuration.
 static LOG_CONFIGURATION: LazyLock<Mutex<LogConfiguration>> = LazyLock::new(Mutex::default);
@@ -96,7 +88,6 @@ impl From<(&str, LevelFilter)> for ModuleLogConfiguration {
     }
 }
 
-
 /// Holds logging configuration. It's primary responsibility is to keep track of the filter levels
 /// of modules and hold a handle to the global logger.
 ///
@@ -116,7 +107,6 @@ pub(in crate::log) struct LogConfiguration {
 
     #[cfg(all(target_arch = "wasm32", feature = "logging"))]
     initialized: bool,
-    
 }
 
 impl Default for LogConfiguration {
@@ -138,7 +128,6 @@ impl Default for LogConfiguration {
 }
 
 impl LogConfiguration {
-
     pub(in crate::log) fn set_log_level(&mut self, level: LevelFilter) {
         self.global_log_level = level;
         self.set_config();
@@ -196,7 +185,6 @@ impl LogConfiguration {
         }
     }
 }
-
 
 // The public API
 

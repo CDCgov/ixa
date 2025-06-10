@@ -4,7 +4,7 @@ This module provides a "logger" that does not output anything anywhere but satis
 
 */
 
-use crate::log::{LogConfiguration};
+use crate::log::LogConfiguration;
 
 impl LogConfiguration {
     /// Sets the global logger to conform to this `LogConfiguration`.

@@ -1,16 +1,10 @@
-use crate::log::{LogConfiguration, ModuleLogConfiguration, DEFAULT_LOG_PATTERN};
+use crate::log::{LogConfiguration, ModuleLogConfiguration};
 use log4rs::{
-    config::{
-        runtime::ConfigBuilder,
-        Appender,
-        Logger,
-        Root
-    },
     append::console::ConsoleAppender,
+    config::{runtime::ConfigBuilder, Appender, Logger, Root},
     encode::pattern::PatternEncoder,
-    Config
+    Config,
 };
-
 
 impl From<&ModuleLogConfiguration> for Logger {
     fn from(module_config: &ModuleLogConfiguration) -> Self {
@@ -56,3 +50,7 @@ impl LogConfiguration {
         }
     }
 }
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
+// Use an ISO 8601 timestamp format and color coded level tag
+const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";

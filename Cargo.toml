@@ -52,10 +52,10 @@ quote = "^1.0.38"
 syn = "^2.0.95"
 delegate = "^0.13.3"
 
-console_log = "^1.0"
 web-sys = "0.3"
 getrandom = "0.2"
 fern = "0.7"
+wasm-bindgen = "0.2"
 
 [package]
 name = "ixa"
@@ -70,7 +70,7 @@ authors.workspace = true
 [features]
 default = ["logging"]
 
-logging = ["log4rs", "console_log", "fern"]
+logging = ["log4rs", "fern", "wasm-bindgen",  "web-sys"]
 debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 
@@ -108,10 +108,10 @@ tower-http = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-console_log = { workspace = true, optional = true, features = ["color"] }
 fern = { workspace = true, optional = true }
 getrandom = { workspace = true,  features = ["js"] }
-web-sys = { workspace = true }
+wasm-bindgen = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = ["console"]  }
 
 [dev-dependencies]
 assert_approx_eq.workspace = true
