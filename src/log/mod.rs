@@ -45,9 +45,9 @@ mod standard_logger;
 
 #[cfg(feature = "wasm")]
 // Use `wasm` logging
-// mod wasm_logger;
+mod wasm_logger;
 
-// #[cfg(not(any(feature = "wasm", feature = "standard_logging")))]
+#[cfg(not(any(feature = "wasm", feature = "standard_logging")))]
 // No logging
 mod null_logger;
 
@@ -68,8 +68,10 @@ const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
     // `rustyline` logs are noisy.
     ("rustyline", LevelFilter::Off),
 ];
+
+#[cfg(feature = "standard_logging")]
 // Use an ISO 8601 timestamp format and color coded level tag
-// const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
+const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
 
 /// A global instance of the logging configuration.
 static LOG_CONFIGURATION: LazyLock<Mutex<LogConfiguration>> = LazyLock::new(Mutex::default);
@@ -112,8 +114,9 @@ pub(in crate::log) struct LogConfiguration {
     /// Handle to the `log4rs` logger.
     root_handle: Option<Handle>,
     
-    // #[cfg(feature = "wasm")]
-    // root_handle: 
+    #[cfg(feature = "wasm")]
+    initialized: bool,
+    
 }
 
 impl Default for LogConfiguration {
@@ -127,6 +130,9 @@ impl Default for LogConfiguration {
             
             #[cfg(feature = "standard_logging")]
             root_handle: None,
+
+            #[cfg(feature = "wasm")]
+            initialized: false,
         }
     }
 }

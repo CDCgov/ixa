@@ -4,44 +4,54 @@ A logger for WASM builds.
 
 */
 
-use crate::log::{LogConfiguration, ModuleLogConfiguration, DEFAULT_LOG_PATTERN};
-use fern::{Dispatch, FormatCallback};
-use log::{LevelFilter, Record};
-use std::io;
+use crate::log::{LogConfiguration, ModuleLogConfiguration, LOG_CONFIGURATION};
+use log::{LevelFilter};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fmt::Arguments;
+use fern::Dispatch;
 
-fn format_timestamp() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}.{:03}Z", now.as_secs(), now.subsec_millis())
-}
+// fn format_timestamp() -> String {
+//     let now = SystemTime::now()
+//         .duration_since(UNIX_EPOCH)
+//         .unwrap_or_default();
+//     format!("{}.{:03}Z", now.as_secs(), now.subsec_millis())
+// }
 
 impl LogConfiguration {
-    /// Sets up logging using `fern` according to this configuration.
-    pub fn set_config(&self) {
-        let formatter = move |out: FormatCallback, message: &Arguments, record: &Record| {
-            out.finish(format_args!(
-                "{} [{}] {}",
-                format_timestamp(),
-                record.level(),
-                message
-            ))
-        };
+    pub fn set_config(&mut self) {
+        if !self.initialized {
+            self.init()
+        }
+    }
+    
+    fn init(&mut self) {
+        // Setup fern with custom filtering and formatting
+        Dispatch::new()
+            .level(LevelFilter::Trace) // Set to lowest; we manually filter
+            .filter(|metadata| {
+                let config = LOG_CONFIGURATION.lock().unwrap();
+                config.should_log(metadata.target(), metadata.level())
+            })
+            .chain(fern::Output::call(console_log::log))
+            .apply()
+            .expect("Could not set up logging");
+        self.initialized = true;
+    }
 
-        // Start the base dispatcher
-        let mut base = Dispatch::new()
-            .format(formatter)
-            .level(self.global_log_level)
-            .chain(io::stdout());
-
-        // Add per-module overrides
-        for (module_name, module_config) in &self.module_configurations {
-            base = base.level_for(module_name.clone(), module_config.level);
+    fn should_log(&self, target: &str, level: log::Level) -> bool {
+        // Check exact or longest-prefix match in module_configurations
+        let mut longest_match = None;
+        for (prefix, config) in &self.module_configurations {
+            if target.starts_with(prefix)
+                && longest_match.as_ref().map_or(true, |(m, _): &(&String, &ModuleLogConfiguration)| m.len() < prefix.len())
+            {
+                longest_match = Some((prefix, config));
+            }
         }
 
-        // Apply the configuration
-        base.apply().expect("Failed to initialize fern logger");
+        match longest_match {
+            Some((_, ModuleLogConfiguration { level: module_level, .. })) => level <= *module_level,
+            None => level <= self.global_log_level,
+        }
     }
 }
+
