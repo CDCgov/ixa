@@ -31,7 +31,6 @@ use ixa::Context;
 
 static POPULATION: u64 = 1000;
 static FORCE_OF_INFECTION: f64 = 0.1;
-static MAX_TIME: f64 = 300.0;
 // ...the rest of the file...
 ```
 
@@ -41,7 +40,7 @@ We need to import these constants into `transmission_manager`. To define a new r
 
 ```rust
 // transmission_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:1:10}}
+{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:imports}}
 // ...the rest of the file...
 ```
 
@@ -52,11 +51,12 @@ The function `attempt_infection()` needs to do the following:
 3. Schedule the next infection attempt by inserting a plan into the timeline that will run `attempt_infection()` again.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:12:41}}
+{{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:attempt_infection}}
 ```
 
 Read through this implementation and make sure you understand how it accomplishes the three tasks above. A few observations:
 
+- The method `context.sample_person(())` returns an `Option\<PersonId>`, which can have the value of `PersonId` or `None`. In this case, `if let Some(person_to_infect)` matches against the `Option\<PersonId>` and continues into the following block of code if a `PersonId` is found.
 - The `#[allow(clippy::cast_precision_loss)]` is optional; without it the compiler will warn you about converting `population` 's integral type `usize` to the floating point type `f64`, but we know that this conversion is safe to do in this context.
 - If the sampled person is not susceptible, then the only thing this function does is schedule the next attempt at infection.
 - The time at which the next attempt is scheduled is sampled randomly from the exponential distribution according to our abstract model and using the random number source `TransmissionRng` that we defined specifically for this purpose.

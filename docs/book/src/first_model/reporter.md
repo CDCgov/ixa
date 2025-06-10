@@ -6,19 +6,19 @@ Our model will only have a single report that records the current in-simulation 
 
 ```rust
 // in incidence_report.rs
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:7:12}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:IncidenceReportItem}}
 ```
 
 The fact that `IncidenceReportItem` derives `Serialize` is what makes this magic work. We define a report for this struct using the `create_report_trait!` macro.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:14}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:create_report_trait}}
 ```
 
 The way we listen to events is almost identical to how we did it in the `infection` module. First let's make the event handler, that is, the callback that will be called whenever an event is emitted.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:16:28}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:handle_infection_status_change}}
 ```
 
 Just pass a `IncidenceReportItem` to `context.send_report()`! We also emit a trace log message so we can trace the execution of our model.
@@ -26,7 +26,7 @@ Just pass a `IncidenceReportItem` to `context.send_report()`! We also emit a tra
 In the `init()` function there is a little bit of setup needed. Also, we can't forget to register this callback to listen to `InfectionStatusEvent`s.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:30:44}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:init}}
 ```
 
 Note that:
@@ -43,5 +43,5 @@ Note that:
 If your IDE isn't capable of adding imports for you, the external symbols we need for this module are as follows.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:1:5}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:imports}}
 ```

@@ -8,21 +8,21 @@ Modules can subscribe to events. The infection manager registers a function with
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:8}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:infection_status_event}}
 ```
 
 This line isn't defining a new struct or even a new type. Rather, it defines an alias for `PersonPropertyChangeEvent\<T>` with the generic type  `T` instantiated with the property we want to monitor, `InfectionStatus`. This is effectively the name of the event we subscribe to in the module's `init()` function:
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:37:40}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:init}}
 ```
 
 The event handler is just a regular Rust function that takes a `Context` and an `InfectionStatusEvent`, the latter of which holds the `PersonId` of the person whose `InfectionStatus` changed, the current `InfectionStatusValue`, and the previous `InfectionStatusValue`.
 
 ```rust
 // in infection_manager.rs
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:25:35}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:handle_infection_status_change}}
 ```
 
 We only care about new infections in this model.
@@ -32,7 +32,7 @@ We only care about new infections in this model.
 As in `attempt_infection()`, we sample the recovery time from the exponential distribution with mean `INFECTION_DURATION`. We define a random number source for this module's exclusive use with `define_rng!(InfectionRng)`.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:12:23}}
+{{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:schedule_recovery}}
 ```
 
 Notice that the plan is again just a Rust function, but this time it takes the form of a closure rather than a traditionally define function. This is convenient when the function is only a line or two.
