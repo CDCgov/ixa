@@ -56,7 +56,7 @@ The function `attempt_infection()` needs to do the following:
 
 Read through this implementation and make sure you understand how it accomplishes the three tasks above. A few observations:
 
-- The method `context.sample_person(())` returns an `Option\<PersonId>`, which can have the value of `PersonId` or `None`. In this case, `if let Some(person_to_infect)` evaluates the `Option\<PersonId>` and continues into the following block of code if a `PersonId` is found.
+- The method `context.sample_person(())` returns an `Option\<PersonId>`, which can have the value of `PersonId` or `None`. In this case, `if let Some(person_to_infect)` matches against the `Option\<PersonId>` and continues into the following block of code if a `PersonId` is found.
 - The `#[allow(clippy::cast_precision_loss)]` is optional; without it the compiler will warn you about converting `population` 's integral type `usize` to the floating point type `f64`, but we know that this conversion is safe to do in this context.
 - If the sampled person is not susceptible, then the only thing this function does is schedule the next attempt at infection.
 - The time at which the next attempt is scheduled is sampled randomly from the exponential distribution according to our abstract model and using the random number source `TransmissionRng` that we defined specifically for this purpose.
