@@ -68,14 +68,9 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["wasm"]
+default = ["logging"]
 
-# `wasm` is pairwise mutually exclusive with `standard_logging`, `debugger`, and `web_api`. When `wasm` is enabled,
-# the JS logger is used.
-wasm = ["getrandom", "web-sys", "console_log", "fern"]
-
-# `standard_logging` is mutually exclusive with the `wasm` feature. This feature enables logging with the `log4rs` crate.
-standard_logging = ["log4rs"]
+logging = ["log4rs", "console_log", "fern"]
 debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 
@@ -87,7 +82,6 @@ csv.workspace = true
 ctor.workspace = true
 ixa-derive.workspace = true
 log.workspace = true
-log4rs = { workspace = true, optional = true }
 paste.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
@@ -97,15 +91,15 @@ serde_derive.workspace = true
 serde_json.workspace = true
 delegate.workspace = true
 
-# WASM
-getrandom = { workspace = true,  optional = true, features = ["js"] }
-web-sys = { workspace = true, optional = true }
-console_log = { workspace = true, optional = true, features = ["color"] }
-fern = { workspace = true, optional = true }
+# Non-WASM targets
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Logging
+log4rs = { workspace = true, optional = true }
 
 # Debugger
 rustyline = { workspace = true, optional = true }
 shlex = { workspace = true, optional = true }
+
 # Web API
 axum = { workspace = true, optional = true }
 mime = { workspace = true, optional = true }
@@ -113,6 +107,11 @@ tokio = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_log = { workspace = true, optional = true, features = ["color"] }
+fern = { workspace = true, optional = true }
+getrandom = { workspace = true,  features = ["js"] }
+web-sys = { workspace = true }
 
 [dev-dependencies]
 assert_approx_eq.workspace = true

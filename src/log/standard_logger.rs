@@ -1,5 +1,4 @@
 use crate::log::{LogConfiguration, ModuleLogConfiguration, DEFAULT_LOG_PATTERN};
-use log::LevelFilter;
 use log4rs::{
     config::{
         runtime::ConfigBuilder,
@@ -11,7 +10,7 @@ use log4rs::{
     encode::pattern::PatternEncoder,
     Config
 };
-use std::collections::hash_map::Entry;
+
 
 impl From<&ModuleLogConfiguration> for Logger {
     fn from(module_config: &ModuleLogConfiguration) -> Self {
@@ -21,7 +20,7 @@ impl From<&ModuleLogConfiguration> for Logger {
 
 impl LogConfiguration {
     /// Sets the global logger to conform to this `LogConfiguration`.
-    fn set_config(&mut self) {
+    pub(in crate::log) fn set_config(&mut self) {
         let stdout: ConsoleAppender = ConsoleAppender::builder()
             .encoder(Box::new(PatternEncoder::new(DEFAULT_LOG_PATTERN)))
             .build();

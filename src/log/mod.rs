@@ -39,15 +39,15 @@
 //!     set_module_filter("transmission_manager", LevelFilter::Trace);
 //! }
 //! ```
-#[cfg(feature = "standard_logging")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 // Use `log4rs` logging
 mod standard_logger;
 
-#[cfg(feature = "wasm")]
+#[cfg(all(target_arch = "wasm32", feature = "logging"))]
 // Use `wasm` logging
 mod wasm_logger;
 
-#[cfg(not(any(feature = "wasm", feature = "standard_logging")))]
+#[cfg(not(feature = "logging"))]
 // No logging
 mod null_logger;
 
@@ -57,7 +57,7 @@ pub use log::{debug, error, info, trace, warn, LevelFilter};
 
 use std::sync::LazyLock;
 use std::sync::{Mutex, MutexGuard};
-#[cfg(feature = "standard_logging")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 use log4rs::Handle;
 use crate::HashMap;
 
@@ -69,7 +69,7 @@ const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
     ("rustyline", LevelFilter::Off),
 ];
 
-#[cfg(feature = "standard_logging")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 // Use an ISO 8601 timestamp format and color coded level tag
 const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
 
@@ -109,12 +109,12 @@ pub(in crate::log) struct LogConfiguration {
     /// global filter level of `LevelFilter::Off` disables logging.
     pub(in crate::log) global_log_level: LevelFilter,
     pub(in crate::log) module_configurations: HashMap<String, ModuleLogConfiguration>,
-    
-    #[cfg(feature = "standard_logging")]
+
+    #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
     /// Handle to the `log4rs` logger.
     root_handle: Option<Handle>,
-    
-    #[cfg(feature = "wasm")]
+
+    #[cfg(all(target_arch = "wasm32", feature = "logging"))]
     initialized: bool,
     
 }
@@ -127,11 +127,11 @@ impl Default for LogConfiguration {
         Self {
             global_log_level: DEFAULT_LOG_LEVEL,
             module_configurations,
-            
-            #[cfg(feature = "standard_logging")]
+
+            #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
             root_handle: None,
 
-            #[cfg(feature = "wasm")]
+            #[cfg(all(target_arch = "wasm32", feature = "logging"))]
             initialized: false,
         }
     }
