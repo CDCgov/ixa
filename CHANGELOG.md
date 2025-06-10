@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2](https://github.com/CDCgov/ixa/compare/ixa-v0.1.1...ixa-v0.1.2) - 2025-06-06
+
+### Added
+
+- Added the `ixa-fips` crate as a member of the workspace.
+- Add prelude ([#333](https://github.com/CDCgov/ixa/pull/333))
+- Add disallowed methods to linter - hashmap, hashset ([#335](https://github.com/CDCgov/ixa/pull/335))
+- Support multi-property indexes ([#309](https://github.com/CDCgov/ixa/pull/309))
+- Improve display of Option in reports ([#370](https://github.com/CDCgov/ixa/pull/370))
+
+### Fixed
+
+- subscribe_to_event for derived properties should work even before adding people ([#347](https://github.com/CDCgov/ixa/pull/347))
+
+### Other
+
+- Make debugger and web API options with feature flags
+- Narrative-style documentation for the Random module ([#361](https://github.com/CDCgov/ixa/pull/361))
+- Add dependabot.yaml. Closes #355. ([#356](https://github.com/CDCgov/ixa/pull/356))
+- Added a more helpful error message when a duplicate global property causes a panic. ([#373](https://github.com/CDCgov/ixa/pull/373))
+- Added the `'static` constraint to `PersonProperty` and changed `PersonProperty + 'static` to `PersonProperty` everywhere. ([#372](https://github.com/CDCgov/ixa/pull/372))
+- Dependencies are now listed in `[workspace.dependencies]` and inherited in packages that depend on them via `my_dependency.workspace = true`.
+- Workspace members and examples with their own `Cargo.toml` inherit the values of the fields repository, license, edition, homepage, and authors from the workspace.
+- Use `FromRepr` instead of `transmute` for `u8` to `USState` conversion.
+- Added cache to the github build ([#348](https://github.com/CDCgov/ixa/pull/348))
+- Use glob pattern for workspace members ([#345](https://github.com/CDCgov/ixa/pull/345))
+- Modified workspace members to opt in to workspace lint exceptions.
+- Vendor `almost_eq`, `convergence`, and the `assert_almost_eq!` macro from statrs@0.18.0 (prec.rs), which are implemented on top of the small `approx` crate.
+- New benchmark action ([#326](https://github.com/CDCgov/ixa/pull/326))
+- Add bench=false to benchmarks package ([#327](https://github.com/CDCgov/ixa/pull/327))
+- Move integration tests to unpublished sub crate ([#320](https://github.com/CDCgov/ixa/pull/320))
+
 ## [0.1.1](https://github.com/CDCgov/ixa/compare/ixa-v0.1.0...ixa-v0.1.1) - 2025-04-30
 
 ### Added
