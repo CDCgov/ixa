@@ -452,6 +452,62 @@ impl Context {
     }
 }
 
+/// A supertrait that exposes useful methods from `Context`
+/// for plugins implementing Context extensions.
+///
+/// Usage:
+/// ```rust
+/// use ixa::prelude_for_plugins::*;
+/// define_data_plugin!(MyData, bool, false);
+/// pub trait MyPlugin: PluginContext {
+///     fn set_my_data(&mut self) {
+///         let my_data = self.get_data_container_mut(MyData);
+///         *my_data = true;
+///     }
+/// }
+pub trait PluginContext: Sized {
+    fn subscribe_to_event<E: IxaEvent + Copy + 'static>(
+        &mut self,
+        handler: impl Fn(&mut Context, E) + 'static,
+    );
+    fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
+    fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+    fn add_plan_with_phase(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId;
+    fn add_periodic_plan_with_phase(
+        &mut self,
+        period: f64,
+        callback: impl Fn(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    );
+    fn cancel_plan(&mut self, plan_id: &PlanId);
+    fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
+    fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+    fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+    fn get_current_time(&self) -> f64;
+}
+
+impl PluginContext for Context {
+    delegate::delegate! {
+        to self {
+            fn subscribe_to_event<E: IxaEvent + Copy + 'static>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
+            fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
+            fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+            fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
+            fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
+            fn cancel_plan(&mut self, plan_id: &PlanId);
+            fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
+            fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+            fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+            fn get_current_time(&self) -> f64;
+        }
+    }
+}
+
 // TODO(cym4@cdc.gov): This is a temporary hack to let you
 // run a plan with mutable references to both the context
 // and a plugin's data. In the future we hope to make a
@@ -886,5 +942,101 @@ mod tests {
             *context.get_data_container(ComponentA).unwrap(),
             vec![0, 1, 2]
         ); // time 0.0, 1.0, and 2.0
+    }
+
+    mod plugin_context_example {
+        use crate::prelude_for_plugins::*;
+        #[derive(Copy, Clone, IxaEvent)]
+        struct MyEvent {
+            pub data: usize,
+        }
+
+        define_data_plugin!(MyData, i32, 0);
+
+        fn do_stuff_with_context(context: &mut impl PluginContext) {
+            context.add_plan(1.0, |context| {
+                let data = context.get_data_container(MyData).unwrap();
+                assert_eq!(*data, 42);
+            });
+        }
+
+        trait MyDataExt: PluginContext {
+            fn all_methods(&mut self) {
+                assert_eq!(self.get_current_time(), 0.0);
+            }
+            fn all_methods_mut(&mut self) {
+                self.setup();
+                self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
+                    assert_eq!(event.data, 42);
+                });
+                self.emit_event(MyEvent { data: 42 });
+                self.add_plan_with_phase(
+                    1.0,
+                    |context| {
+                        let data = context.get_data_container(MyData).unwrap();
+                        assert_eq!(*data, 42);
+                        context.set_my_data(100);
+                    },
+                    crate::ExecutionPhase::Last,
+                );
+                self.add_plan(1.0, |context| {
+                    assert_eq!(context.get_my_data(), 42);
+                });
+                self.add_periodic_plan_with_phase(
+                    1.0,
+                    |context| {
+                        println!(
+                            "Periodic plan at time {} with data {}",
+                            context.get_current_time(),
+                            context.get_my_data()
+                        );
+                    },
+                    crate::ExecutionPhase::Normal,
+                );
+                self.queue_callback(|context| {
+                    let data = context.get_data_container(MyData).unwrap();
+                    assert_eq!(*data, 42);
+                });
+            }
+            fn setup(&mut self) {
+                let data = self.get_data_container_mut(MyData);
+                *data = 42;
+                do_stuff_with_context(self);
+            }
+            fn get_my_data(&self) -> i32 {
+                *self.get_data_container(MyData).unwrap()
+            }
+            fn set_my_data(&mut self, value: i32) {
+                let data = self.get_data_container_mut(MyData);
+                *data = value;
+            }
+            fn test_external_function(&mut self) {
+                self.setup();
+                do_stuff_with_context(self);
+            }
+        }
+        impl MyDataExt for Context {}
+
+        #[test]
+        fn test_all_methods() {
+            let mut context = Context::new();
+            context.all_methods_mut();
+            context.all_methods();
+            context.execute();
+        }
+
+        #[test]
+        fn test_plugin_context() {
+            let mut context = Context::new();
+            context.setup();
+            assert_eq!(context.get_my_data(), 42);
+        }
+
+        #[test]
+        fn test_external_function() {
+            let mut context = Context::new();
+            context.test_external_function();
+            assert_eq!(context.get_my_data(), 42);
+        }
     }
 }

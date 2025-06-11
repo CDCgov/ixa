@@ -50,6 +50,7 @@ assert_approx_eq = "1.1.0"
 strum = { version = "0.27", features = ["derive"] }
 quote = "^1.0.38"
 syn = "^2.0.95"
+delegate = "^0.13.3"
 
 [package]
 name = "ixa"
@@ -83,6 +84,7 @@ seq-macro.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
+delegate.workspace = true
 
 # Debugger
 rustyline = { workspace = true, optional = true }
