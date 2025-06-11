@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::hashing::hash_str;
-use crate::{HashMap, HashMapExt};
+use crate::{HashMap, HashMapExt, PluginContext};
 use log::trace;
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
@@ -69,7 +69,7 @@ crate::context::define_data_plugin!(
 /// Gets a mutable reference to the random number generator associated with the given
 /// `RngId`. If the Rng has not been used before, one will be created with the base seed
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
-fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
+fn get_rng<R: RngId + 'static>(context: &impl PluginContext) -> RefMut<R::RngType> {
     let data_container = context
         .get_data_container(RngPlugin)
         .expect("You must initialize the random number generator with a base seed");
@@ -99,59 +99,9 @@ fn get_rng<R: RngId + 'static>(context: &Context) -> RefMut<R::RngType> {
     })
 }
 
-// This is a trait exension on Context
-pub trait ContextRandomExt {
-    fn init_random(&mut self, base_seed: u64);
-
-    /// Gets a random sample from the random number generator associated with the given
-    /// `RngId` by applying the specified sampler function. If the Rng has not been used
-    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample<R: RngId + 'static, T>(
-        &self,
-        _rng_type: R,
-        sampler: impl FnOnce(&mut R::RngType) -> T,
-    ) -> T;
-
-    /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given `RngId`. If the Rng has not been used before, one will be
-    /// created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample_distr<R: RngId + 'static, T>(
-        &self,
-        _rng_type: R,
-        distribution: impl Distribution<T>,
-    ) -> T
-    where
-        R::RngType: Rng;
-
-    /// Gets a random sample within the range provided by `range`
-    /// using the generator associated with the given `RngId`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample_range<R: RngId + 'static, S, T>(&self, rng_type: R, range: S) -> T
-    where
-        R::RngType: Rng,
-        S: SampleRange<T>,
-        T: SampleUniform;
-
-    /// Gets a random boolean value which is true with probability `p`
-    /// using the generator associated with the given `RngId`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
-    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
-    where
-        R::RngType: Rng;
-
-    /// Draws a random entry out of the list provided in `weights`
-    /// with the given weights using the generator associated with the
-    /// given `RngId`.  Note that this will panic if
-    /// `set_base_random_seed` was not called yet.
-    fn sample_weighted<R: RngId + 'static, T>(&self, rng_id: R, weights: &[T]) -> usize
-    where
-        R::RngType: Rng,
-        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd;
-}
-
-impl ContextRandomExt for Context {
+// This is a trait extension on Context for
+// random number generation functionality.
+pub trait ContextRandomExt: PluginContext {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
     fn init_random(&mut self, base_seed: u64) {
@@ -164,18 +114,26 @@ impl ContextRandomExt for Context {
         rng_map.clear();
     }
 
+    /// Gets a random sample from the random number generator associated with the given
+    /// `RngId` by applying the specified sampler function. If the Rng has not been used
+    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId + 'static, T>(
         &self,
-        _rng_id: R,
+        _rng_type: R,
         sampler: impl FnOnce(&mut R::RngType) -> T,
     ) -> T {
         let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
     }
 
+    /// Gets a random sample from the specified distribution using a random number generator
+    /// associated with the given `RngId`. If the Rng has not been used before, one will be
+    /// created with the base seed you defined in `set_base_random_seed`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_distr<R: RngId + 'static, T>(
         &self,
-        _rng_id: R,
+        _rng_type: R,
         distribution: impl Distribution<T>,
     ) -> T
     where
@@ -185,6 +143,9 @@ impl ContextRandomExt for Context {
         distribution.sample::<R::RngType>(&mut rng)
     }
 
+    /// Gets a random sample within the range provided by `range`
+    /// using the generator associated with the given `RngId`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
         R::RngType: Rng,
@@ -194,6 +155,9 @@ impl ContextRandomExt for Context {
         self.sample(rng_id, |rng| rng.gen_range(range))
     }
 
+    /// Gets a random boolean value which is true with probability `p`
+    /// using the generator associated with the given `RngId`.
+    /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
         R::RngType: Rng,
@@ -201,6 +165,10 @@ impl ContextRandomExt for Context {
         self.sample(rng_id, |rng| rng.gen_bool(p))
     }
 
+    /// Draws a random entry out of the list provided in `weights`
+    /// with the given weights using the generator associated with the
+    /// given `RngId`.  Note that this will panic if
+    /// `set_base_random_seed` was not called yet.
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
@@ -211,6 +179,7 @@ impl ContextRandomExt for Context {
         index.sample(&mut *rng)
     }
 }
+impl ContextRandomExt for Context {}
 
 #[cfg(test)]
 mod test {
