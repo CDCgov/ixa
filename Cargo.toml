@@ -68,7 +68,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging"]
+default = ["logging", "debugger"]
 
 logging = ["log4rs", "fern", "wasm-bindgen",  "web-sys"]
 debugger = ["shlex", "rustyline"]

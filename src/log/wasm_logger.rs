@@ -6,8 +6,7 @@ A logger for WASM builds that logs to the JavaScript console.
 
 use crate::log::{LogConfiguration, ModuleLogConfiguration, LOG_CONFIGURATION};
 use fern::Dispatch;
-use log::LevelFilter;
-use log::{Level, Record};
+use log::{Level, LevelFilter, Record};
 use wasm_bindgen::JsValue;
 use web_sys::console;
 
@@ -26,7 +25,10 @@ impl LogConfiguration {
                 let config = LOG_CONFIGURATION.lock().unwrap();
                 config.should_log(metadata.target(), metadata.level())
             })
-            .chain(fern::Output::call(log_to_browser_console))
+            .chain(fern::Output::call(|record| {
+                let rec = BrowserRecord::from(record);
+                rec.emit_to_console();
+            }))
             .apply()
             .expect("Could not set up logging");
         self.initialized = true;
@@ -80,38 +82,179 @@ const STYLE: Style = Style {
     text: "",
 };
 
-/// Logs to the browser console with styled formatting.
-/// Intended to be used in `.chain(fern::Output::call(...))`
-pub fn log_to_browser_console(record: &Record) {
-    let console_fn = match record.level() {
-        Level::Error => console::error_4,
-        Level::Warn => console::warn_4,
-        Level::Info => console::info_4,
-        Level::Debug => console::log_4,
-        Level::Trace => console::debug_4,
-    };
+struct BrowserRecord {
+    level: Level,
+    level_style: String,
+    message: String,
+    text_style: String,
+}
 
-    let message = format!(
-        "%c{:<5}%c {:>20}:{:<4} %c\n{}",
-        record.level(),
-        record.file().unwrap_or_else(|| record.target()),
-        record
-            .line()
-            .map_or("[unknown]".to_string(), |l| l.to_string()),
-        record.args()
-    );
+impl From<&Record<'_>> for BrowserRecord {
+    fn from(record: &Record) -> Self {
+        let level = record.level();
+        let level_style = match level {
+            Level::Trace => STYLE.trace,
+            Level::Debug => STYLE.debug,
+            Level::Info => STYLE.info,
+            Level::Warn => STYLE.warn,
+            Level::Error => STYLE.error,
+        }
+        .to_string();
 
-    let level_style = JsValue::from_str(match record.level() {
-        Level::Trace => STYLE.trace,
-        Level::Debug => STYLE.debug,
-        Level::Info => STYLE.info,
-        Level::Warn => STYLE.warn,
-        Level::Error => STYLE.error,
-    });
+        let message = format!(
+            "%c{:<5}%c {:>20}:{:<4} %c\n{}",
+            record.level(),
+            record.file().unwrap_or_else(|| record.target()),
+            record
+                .line()
+                .map_or("[unknown]".to_string(), |l| l.to_string()),
+            record.args()
+        );
 
-    let file_line_style = JsValue::from_str(STYLE.file_line);
-    let text_style = JsValue::from_str(STYLE.text);
-    let message = JsValue::from_str(&message);
+        BrowserRecord {
+            level,
+            level_style,
+            message,
+            text_style: STYLE.text.to_string(),
+        }
+    }
+}
 
-    console_fn(&message, &level_style, &file_line_style, &text_style);
+impl BrowserRecord {
+    pub fn emit_to_console(&self) {
+        let console_fn = match self.level {
+            Level::Error => console::error_4,
+            Level::Warn => console::warn_4,
+            Level::Info => console::info_4,
+            Level::Debug => console::log_4,
+            Level::Trace => console::debug_4,
+        };
+
+        let message = JsValue::from_str(&self.message);
+
+        let level_style = JsValue::from_str(&self.level_style);
+        let location_style = JsValue::from_str(STYLE.file_line);
+        let text_style = JsValue::from_str(&self.text_style);
+
+        console_fn(&message, &level_style, &location_style, &text_style);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use log::{Level, LevelFilter, Record};
+    use std::collections::HashMap;
+
+    fn test_record(
+        level: Level,
+        target: &str,
+        file: Option<&str>,
+        line: Option<u32>,
+        msg: &str,
+    ) -> Record<'_> {
+        Record::builder()
+            .level(level)
+            .target(target)
+            .file(file)
+            .line(line)
+            .args(format_args!("{}", msg))
+            .build()
+    }
+
+    #[test]
+    fn should_log_global_level() {
+        let config = LogConfiguration {
+            global_log_level: LevelFilter::Info,
+            module_configurations: HashMap::new(),
+            logger: None,
+            initialized: true,
+        };
+
+        assert!(config.should_log("any::module", Level::Info));
+        assert!(!config.should_log("any::module", Level::Debug));
+    }
+
+    #[test]
+    fn should_log_per_module_override() {
+        let mut modules = HashMap::new();
+        modules.insert(
+            "my::mod".to_string(),
+            ModuleLogConfiguration {
+                module: "my::mod".to_string(),
+                level: LevelFilter::Debug,
+            },
+        );
+
+        let config = LogConfiguration {
+            global_log_level: LevelFilter::Warn,
+            module_configurations: modules,
+            logger: None,
+            initialized: true,
+        };
+
+        assert!(config.should_log("my::mod", Level::Debug)); // overridden
+        assert!(!config.should_log("my::mod", Level::Trace)); // overridden too low
+        assert!(!config.should_log("other::mod", Level::Info)); // falls back to global
+    }
+
+    #[test]
+    fn module_filtering_prefers_longest_match() {
+        let mut modules = HashMap::new();
+        modules.insert(
+            "a".to_string(),
+            ModuleLogConfiguration {
+                module: "a".to_string(),
+                level: LevelFilter::Warn,
+            },
+        );
+        modules.insert(
+            "a::b".to_string(),
+            ModuleLogConfiguration {
+                module: "a::b".to_string(),
+                level: LevelFilter::Debug,
+            },
+        );
+
+        let config = LogConfiguration {
+            global_log_level: LevelFilter::Error,
+            module_configurations: modules,
+            logger: None,
+            initialized: true,
+        };
+
+        // Should match "a::b", not "a"
+        assert!(config.should_log("a::b::c", Level::Debug));
+        assert!(!config.should_log("a::b::c", Level::Trace));
+    }
+
+    #[test]
+    fn browser_record_formats_message() {
+        let record = test_record(
+            Level::Info,
+            "my::module",
+            Some("src/lib.rs"),
+            Some(42),
+            "Hello from WASM",
+        );
+
+        let browser_rec = BrowserRecord::from(&record);
+        assert!(browser_rec.message.contains("Hello from WASM"));
+        assert!(browser_rec.message.contains("src/lib.rs"));
+        assert!(browser_rec.message.contains("42"));
+        assert!(browser_rec.message.contains("INFO"));
+        assert_eq!(browser_rec.level, Level::Info);
+        assert_eq!(browser_rec.level_style, STYLE.info);
+        assert_eq!(browser_rec.text_style, STYLE.text);
+    }
+
+    #[test]
+    fn browser_record_formats_unknown_location() {
+        let record = test_record(Level::Warn, "module", None, None, "Something went wrong");
+
+        let browser_rec = BrowserRecord::from(&record);
+        assert!(browser_rec.message.contains("[unknown]"));
+        assert!(browser_rec.message.contains("Something went wrong"));
+        assert_eq!(browser_rec.level_style, STYLE.warn);
+    }
 }

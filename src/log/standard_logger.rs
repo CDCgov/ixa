@@ -6,6 +6,9 @@ use log4rs::{
     Config,
 };
 
+// Use an ISO 8601 timestamp format and color coded level tag
+const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
+
 impl From<&ModuleLogConfiguration> for Logger {
     fn from(module_config: &ModuleLogConfiguration) -> Self {
         Logger::builder().build(module_config.module.clone(), module_config.level)
@@ -50,7 +53,3 @@ impl LogConfiguration {
         }
     }
 }
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
-// Use an ISO 8601 timestamp format and color coded level tag
-const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
