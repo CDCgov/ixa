@@ -1,3 +1,2 @@
 [workspace]
-#pr_labels = ["release"]
-pr_name = "release:{% if package and version %} {{ package }} {{ version }}{% endif %}"
+pr_name = "release:{% if package and version %} {{ package }} {{ version }}{% else %} multiple packages updated {% endif %}"
