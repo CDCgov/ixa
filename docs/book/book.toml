@@ -5,6 +5,9 @@ multilingual = false
 src = "src"
 title = "The Ixa Book"
 
+[build]
+create-missing = false
+
 [output.html]
 site-url = "/book/"
 
