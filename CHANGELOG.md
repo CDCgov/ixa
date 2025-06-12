@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/CDCgov/ixa/compare/ixa-v0.1.2...ixa-v0.2.0) - 2025-06-12
+
+### Added
+
+- Add release-plz configuration file
+- Add PluginContext trait for Context ([#385](https://github.com/CDCgov/ixa/pull/385))
+- Use a fast pseudorandom number generator ([#380](https://github.com/CDCgov/ixa/pull/380))
+
+### Other
+
+- update release-plz config
+- updated release-plz config
+- Update dependabot.yaml ([#382](https://github.com/CDCgov/ixa/pull/382))
+- Remove duplicate `For instance` from docs ([#383](https://github.com/CDCgov/ixa/pull/383))
+
 ## [0.1.2](https://github.com/CDCgov/ixa/compare/ixa-v0.1.1...ixa-v0.1.2) - 2025-06-06
 
 ### Added
