@@ -111,7 +111,7 @@ define_person_property!(
     }
 );
 
-impl VaccineContextExt for Context {
+trait VaccineContextExt: PluginContext {
     fn get_random_vaccine() {
         //....
     }

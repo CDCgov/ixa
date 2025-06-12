@@ -38,7 +38,7 @@
 //!   REST endpoints. This feature implies the `debugger` feature.
 //!
 pub mod context;
-pub use context::{Context, ExecutionPhase, IxaEvent};
+pub use context::{Context, ExecutionPhase, IxaEvent, PluginContext};
 
 pub mod error;
 pub use error::IxaError;
@@ -79,7 +79,7 @@ pub use log::{
 #[cfg(feature = "debugger")]
 pub mod external_api;
 mod hashing;
-pub mod prelude;
+
 #[cfg(feature = "web_api")]
 pub mod web_api;
 
@@ -91,3 +91,14 @@ pub use rand;
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
+
+// Preludes
+pub mod prelude;
+pub mod prelude_for_plugins {
+    pub use crate::context::PluginContext;
+    pub use crate::define_data_plugin;
+    pub use crate::error::IxaError;
+    pub use crate::prelude::*;
+    pub use crate::IxaEvent;
+    pub use ixa_derive::IxaEvent;
+}

@@ -1,5 +1,6 @@
 use crate::population_loader::{Age, RiskCategoryValue};
 use ixa::prelude::*;
+use ixa::prelude_for_plugins::*;
 use serde_derive::Serialize;
 
 define_rng!(VaccineRng);
@@ -22,12 +23,8 @@ define_person_property!(VaccineDoses, u8, |context: &Context, person_id| {
     }
 });
 
-pub trait ContextVaccineExt {
-    fn get_vaccine_props(&self, risk: RiskCategoryValue) -> (VaccineTypeValue, f64);
-}
-
-impl ContextVaccineExt for Context {
-    fn get_vaccine_props(self: &Context, risk: RiskCategoryValue) -> (VaccineTypeValue, f64) {
+pub trait ContextVaccineExt: PluginContext {
+    fn get_vaccine_props(&self, risk: RiskCategoryValue) -> (VaccineTypeValue, f64) {
         if risk == RiskCategoryValue::High {
             (VaccineTypeValue::A, 0.9)
         } else {
@@ -35,3 +32,4 @@ impl ContextVaccineExt for Context {
         }
     }
 }
+impl ContextVaccineExt for Context {}
