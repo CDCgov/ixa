@@ -1,0 +1,3 @@
+[workspace]
+pr_labels = ["release"]
+pr_name = "release: ixa {{version}}"
