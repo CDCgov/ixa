@@ -1,22 +1,31 @@
 /*!
 
-A logger for WASM builds that logs to the JavaScript console.
+A logger for WASM target that logs to the JavaScript console.
 
 */
 
-use crate::log::{LogConfiguration, ModuleLogConfiguration, LOG_CONFIGURATION};
+#[cfg(not(test))]
+use crate::log::LOG_CONFIGURATION;
+use crate::log::{LogConfiguration, ModuleLogConfiguration};
+#[cfg(not(test))]
 use fern::Dispatch;
-use log::{Level, LevelFilter, Record};
+#[cfg(not(test))]
+use log::LevelFilter;
+use log::{Level, Record};
+#[cfg(not(test))]
 use wasm_bindgen::JsValue;
+#[cfg(not(test))]
 use web_sys::console;
 
 impl LogConfiguration {
+    #[cfg(not(test))]
     pub fn set_config(&mut self) {
         if !self.initialized {
             self.init()
         }
     }
 
+    #[cfg(not(test))]
     fn init(&mut self) {
         // Setup fern with custom filtering and formatting
         Dispatch::new()
@@ -68,6 +77,7 @@ struct Style {
     info: &'static str,
     warn: &'static str,
     error: &'static str,
+    #[cfg(not(test))]
     file_line: &'static str,
     text: &'static str,
 }
@@ -78,6 +88,7 @@ const STYLE: Style = Style {
     info: "color: black",
     warn: "color: orange",
     error: "color: red; font-weight: bold",
+    #[cfg(not(test))]
     file_line: "color: gray",
     text: "",
 };
@@ -120,6 +131,7 @@ impl From<&Record<'_>> for BrowserRecord {
     }
 }
 
+#[cfg(not(test))]
 impl BrowserRecord {
     pub fn emit_to_console(&self) {
         let console_fn = match self.level {
@@ -143,32 +155,15 @@ impl BrowserRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::HashMap;
     use log::{Level, LevelFilter, Record};
-    use std::collections::HashMap;
-
-    fn test_record(
-        level: Level,
-        target: &str,
-        file: Option<&str>,
-        line: Option<u32>,
-        msg: &str,
-    ) -> Record<'_> {
-        Record::builder()
-            .level(level)
-            .target(target)
-            .file(file)
-            .line(line)
-            .args(format_args!("{}", msg))
-            .build()
-    }
 
     #[test]
     fn should_log_global_level() {
         let config = LogConfiguration {
             global_log_level: LevelFilter::Info,
-            module_configurations: HashMap::new(),
-            logger: None,
-            initialized: true,
+            module_configurations: HashMap::default(),
+            root_handle: None,
         };
 
         assert!(config.should_log("any::module", Level::Info));
@@ -177,7 +172,7 @@ mod tests {
 
     #[test]
     fn should_log_per_module_override() {
-        let mut modules = HashMap::new();
+        let mut modules = HashMap::default();
         modules.insert(
             "my::mod".to_string(),
             ModuleLogConfiguration {
@@ -189,8 +184,7 @@ mod tests {
         let config = LogConfiguration {
             global_log_level: LevelFilter::Warn,
             module_configurations: modules,
-            logger: None,
-            initialized: true,
+            root_handle: None,
         };
 
         assert!(config.should_log("my::mod", Level::Debug)); // overridden
@@ -200,7 +194,7 @@ mod tests {
 
     #[test]
     fn module_filtering_prefers_longest_match() {
-        let mut modules = HashMap::new();
+        let mut modules = HashMap::default();
         modules.insert(
             "a".to_string(),
             ModuleLogConfiguration {
@@ -219,8 +213,7 @@ mod tests {
         let config = LogConfiguration {
             global_log_level: LevelFilter::Error,
             module_configurations: modules,
-            logger: None,
-            initialized: true,
+            root_handle: None,
         };
 
         // Should match "a::b", not "a"
@@ -230,13 +223,16 @@ mod tests {
 
     #[test]
     fn browser_record_formats_message() {
-        let record = test_record(
-            Level::Info,
-            "my::module",
-            Some("src/lib.rs"),
-            Some(42),
-            "Hello from WASM",
-        );
+        let level = Level::Info;
+        let file = Some("src/lib.rs");
+        let line = Some(42);
+        let record = Record::builder()
+            .level(level)
+            .target("my::module")
+            .file(file)
+            .line(line)
+            .args(format_args!("Hello from WASM"))
+            .build();
 
         let browser_rec = BrowserRecord::from(&record);
         assert!(browser_rec.message.contains("Hello from WASM"));
@@ -250,7 +246,14 @@ mod tests {
 
     #[test]
     fn browser_record_formats_unknown_location() {
-        let record = test_record(Level::Warn, "module", None, None, "Something went wrong");
+        let level = Level::Warn;
+        let record = Record::builder()
+            .level(level)
+            .target("module")
+            .file(None)
+            .line(None)
+            .args(format_args!("Something went wrong"))
+            .build();
 
         let browser_rec = BrowserRecord::from(&record);
         assert!(browser_rec.message.contains("[unknown]"));

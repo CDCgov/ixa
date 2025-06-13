@@ -42,7 +42,7 @@
 #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 mod standard_logger;
 
-#[cfg(all(target_arch = "wasm32", feature = "logging"))]
+#[cfg(any(all(target_arch = "wasm32", feature = "logging"), test))]
 mod wasm_logger;
 
 #[cfg(not(feature = "logging"))]
