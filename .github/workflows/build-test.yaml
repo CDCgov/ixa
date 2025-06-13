@@ -23,8 +23,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: cargo-${{ hashFiles('Cargo.toml') }}
+      - name: Install wasm32 target
+        run: rustup target add wasm32-unknown-unknown
       - name: Build
         run: cargo build --verbose
+      - name: Build Wasm
+        run: cargo build --verbose --target wasm32-unknown-unknown --no-default-features --features logging
       - name: Build benchmarks
         run: cargo bench -p ixa-bench --no-run
       - name: Run tests

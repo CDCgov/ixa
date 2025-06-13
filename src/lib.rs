@@ -102,3 +102,8 @@ pub mod prelude_for_plugins {
     pub use crate::IxaEvent;
     pub use ixa_derive::IxaEvent;
 }
+
+#[cfg(all(target_arch = "wasm32", feature = "debugger"))]
+compile_error!(
+    "Target `wasm32` and feature `debugger` are mutually exclusive — enable at most one."
+);
