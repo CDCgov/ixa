@@ -30,4 +30,3 @@ repos:
     rev: v0.9.7
     hooks:
     -   id: check-message
-        stages: [post-commit]
