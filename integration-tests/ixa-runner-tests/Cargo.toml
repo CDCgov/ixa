@@ -1,5 +1,5 @@
 [package]
-name = "ixa-integration-tests"
+name = "ixa-runner-tests"
 version = "0.0.1"
 description = "Integration tests for ixa"
 publish = false
@@ -10,7 +10,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-ixa = { path = "../", features = ["logging", "debugger"] }
+ixa = { path = "../../", features = ["logging", "debugger"] }
 clap.workspace = true
 
 [dev-dependencies]
