@@ -1,0 +1,35 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install --with-deps
+
+      - name: Build WASM package
+        run: |
+          cargo install wasm-pack
+          wasm-pack build --target web
+
+      - name: Start server and run tests
+        run: |
+          npx http-server -c-1 . &  # start server in background
+          sleep 2                   # wait for server to start
+          npx playwright test
