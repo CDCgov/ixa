@@ -1,5 +1,9 @@
+ci:
+    autofix_commit_msg: 'ci: auto fixes from pre-commit.com hooks'
+    autoupdate_commit_msg: 'ci: pre-commit autoupdate'
+
 # prepare-commit-msg is used by hook id: check-message
-default_install_hook_types: [prepare-commit-msg]
+default_install_hook_types: [pre-commit, prepare-commit-msg]
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
