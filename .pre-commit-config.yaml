@@ -16,7 +16,11 @@ repos:
         # Use '--all' to run on all code, including tests and examples, even files that are not part of the library.
         args: ["--all", "--", "-D", "warnings"]
 -   repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.17.2
+    rev: v0.18.1
     hooks:
     -   id: markdownlint-cli2
         args: ["**/*.md"]
+-   repo: https://github.com/commit-check/commit-check
+    rev: v0.9.7
+    hooks:
+    -   id: check-message
