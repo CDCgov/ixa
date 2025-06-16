@@ -28,6 +28,8 @@ repos:
   hooks:
       - id: commitlint
         stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
+
 #-   repo: https://github.com/commit-check/commit-check
 #    rev: v0.9.7
 #    hooks:
