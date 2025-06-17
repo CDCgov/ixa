@@ -4,11 +4,11 @@
   "description": "A small demo of using Ixa in the browser with WASM.",
   "main": "index.js",
   "scripts": {
-    "serve": "http-server -c-1 .",
+    "start": "http-server -c-1 .",
     "test:e2e": "playwright test"
   },
   "keywords": [],
-  "author": "",
+  "author": "The Ixa Developers <cfa@cdc.gov>",
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.53.0",

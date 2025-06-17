@@ -27,6 +27,7 @@ Run the script with one of the following options:
 | ./build.sh clean | ❌ No              | ❌ No            | ❌ No              | ❌ No           | ❌ N/A                 |
 
 ## 📝 Requirements
+
 - Node.js and npm
 - wasm-pack
 - Either:
@@ -34,7 +35,6 @@ Run the script with one of the following options:
   - Or Python 3 for fallback static server
 
 The default command automatically installs playwright and other NPM dependencies.
-
 
 ## 🧹 Cleaning Up
 
@@ -45,6 +45,7 @@ To remove generated and temporary files, run:
 ```
 
 This deletes:
+
 - `pkg/` – WASM build output
 - `node_modules/` – NPM dependencies
 - `test-results/` – Playwright output

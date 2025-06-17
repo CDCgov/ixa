@@ -2,11 +2,11 @@ use ixa::LevelFilter;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 // use gloo_timers::future::TimeoutFuture;
-use web_sys::window;
 use js_sys::Promise;
+use web_sys::window;
 
+use ixa::log::{debug, error, info, set_log_level, warn};
 use ixa::prelude::*;
-use ixa::log::{set_log_level, debug, info, warn, error};
 
 // pub mod incidence_report;
 pub mod infection_manager;
@@ -33,9 +33,6 @@ pub fn initialize(context: &mut Context) {
     });
 }
 
-
-
-
 // Exported to JS
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
@@ -47,10 +44,10 @@ pub fn run_simulation() -> Promise {
             .performance()
             .ok_or("performance not available")?;
         let start = performance.now();
-        
+
         // Simulate a 5-second "computation"
         // TimeoutFuture::new(5000).await;
-        
+
         // Logging
         set_log_level(LevelFilter::Trace);
 
@@ -63,13 +60,12 @@ pub fn run_simulation() -> Promise {
         let elapsed = end - start;
 
         let result = format!("Simulation complete in {:.2} ms", elapsed);
-        
+
         debug!("This is a debug message.");
         info!("This is an info message.");
         warn!("This is a warning message.");
         error!("This is an error message.");
-        
-        
+
         Ok(JsValue::from_str(&result))
     })
 }

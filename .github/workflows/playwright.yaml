@@ -9,27 +9,59 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: integration-tests/ixa-wasm-tests
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      # Rust/Cargo cache
+      - name: Cache Cargo and target directories
+        uses: actions/cache@v4
         with:
-          node-version: 20
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.rustup/toolchains/
+            target/
+          key: cargo-${{ hashFiles('Cargo.toml') }}
 
-      - name: Install dependencies
+      # npm cache
+      - name: Cache npm and node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            integration-tests/ixa-wasm-tests/node_modules
+          key: npm-${{ hashFiles('integration-tests/ixa-wasm-tests/package.json') }}
+          restore-keys: |
+            npm-
+
+      # Playwright browser cache
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers
+
+      - name: Install Rust target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install JS dependencies and Playwright binaries
         run: |
           npm install
           npx playwright install --with-deps
 
       - name: Build WASM package
-        run: |
-          cargo install wasm-pack
-          wasm-pack build --target web
+        run: wasm-pack build --target web --out-dir pkg
 
-      - name: Start server and run tests
+      - name: Run Playwright tests
         run: |
-          npx http-server -c-1 . &  # start server in background
-          sleep 2                   # wait for server to start
           npx playwright test

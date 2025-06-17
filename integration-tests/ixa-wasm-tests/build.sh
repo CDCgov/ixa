@@ -14,7 +14,7 @@ PORT=8080
 export RUSTFLAGS='--cfg getrandom_backend="wasm_js"'
 
 # Install npm if it's not available
-install_npm_if_needed() {
+check_npm_installed() {
     if ! command -v npm &> /dev/null; then
         echo "📦 npm not found. Attempting to install..."
         if command -v brew &> /dev/null; then
@@ -79,29 +79,19 @@ clean_artifacts() {
 case "${1-}" in
     serve)
         build_wasm
-        echo "🌐 Serving on http://localhost:$PORT"
-        if command -v http-server &> /dev/null; then
-            http-server . -p $PORT
-        elif command -v python3 &> /dev/null; then
-            python3 -m http.server $PORT
-        else
-            echo "❌ No HTTP server found. Please install http-server (npm) or use Python 3."
-            exit 1
-        fi
+        start_server
         ;;
     test)
         build_wasm
-        start_server
         run_tests
         ;;
     clean)
         clean_artifacts
         ;;
     *)
-        install_npm_if_needed
+        check_npm_installed
         install_npm_deps
         build_wasm
-        start_server
         run_tests
         ;;
 esac
