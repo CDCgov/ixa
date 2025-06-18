@@ -55,18 +55,19 @@ particular use case.
 
 3. [Chapter 10, Section 2: Traits](https://rust-book.cs.brown.edu/ch10-02-traits.html): _If you read_
 _only one section, let this be it._ Traits are the cornerstone of Ixa's modular nature. They are
-used in at least two ways throughout the Ixa codebase. First, methods are implemented on top of the
-high-level types -- like `Property` and `Event` -- as part of a trait, giving these types shared
-features so that calling code can use them without needing to know the exact underlying type and
-easily letting users make their own versions of these types. For instance, `ixa-epi` defines a
-`TransmissionModifier` trait that a user implements on an object -- for example, `Facemasks` -- that
-specifies how an intervention may reduce the risk of disease transmission. All types that implement
-`TransmissionModifier` can be used as transmission modifiers without dependence on their underlying
-type. Secondly, traits implemented on `Context` (called "Context extensions" in Ixa) are the primary
-way of new modules adding a public interface so that their methods can be called from other modules.
-For instance, the `ContextPeopleExt` trait extension provides methods relating to people and their
-properties. Rust traits are a supercharged version of "interfaces" in other programming languages,
-and thinking in terms of traits will help you write modular Ixa code.
+used in at least two ways throughout the Ixa codebase. First, the methods that make up higher-level
+abstractions -- like `Property` and `Event` -- are organized into a trait, giving them shared features
+so that calling code can use these features without knowing the exact underlying type. For instance,
+your model might define a trait to specify interventions that impact the probability of transmission
+-- like facemasks or hazmat suits. Regardless of the exact nature of the intervention, your model
+wants to call some methods on the transmisison modifier, like returning its efficacy. If these
+methods are grouped into the `TransmissionModifier` trait, they can be implemented on any type and
+used wherever the code needs a transmission modifier without depending on the underlying type. Secondly,
+traits implemented on `Context` (called "Context extensions" in Ixa) are the primary way of new
+modules adding a public interface so that their methods can be called from other modules. For instance,
+the `ContextPeopleExt` trait extension provides methods relating to people and their properties. Rust
+traits are a supercharged version of "interfaces" in other programming languages, and thinking in terms
+of traits will help you write modular Ixa code.
 
 4. [Chapter 13, Section 1: Closures](https://rust-book.cs.brown.edu/ch13-01-closures.html): Ixa often
 requires the user to specify a function that gets executed in the future. This chapter goes over the
