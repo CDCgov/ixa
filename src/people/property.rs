@@ -34,6 +34,64 @@ pub trait PersonProperty: Copy + 'static {
     }
 }
 
+#[macro_export]
+macro_rules! __define_person_property_common {
+    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr) => {
+        #[derive(Debug, Copy, Clone)]
+        pub struct $person_property;
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = $value;
+            fn compute(
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
+            ) -> Self::Value {
+                $compute_fn(_context, _person)
+            }
+            fn is_required() -> bool {
+                $is_required
+            }
+            fn get_instance() -> Self {
+                $person_property
+            }
+            fn name() -> &'static str {
+                stringify!($person_property)
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! __define_person_property_option {
+    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr) => {
+        #[derive(Debug, Copy, Clone)]
+        pub struct $person_property;
+        impl $crate::people::PersonProperty for $person_property {
+            type Value = $value;
+            fn compute(
+                _context: &$crate::context::Context,
+                _person: $crate::people::PersonId,
+            ) -> Self::Value {
+                $compute_fn(_context, _person)
+            }
+            fn is_required() -> bool {
+                $is_required
+            }
+            fn get_instance() -> Self {
+                $person_property
+            }
+            fn name() -> &'static str {
+                stringify!($person_property)
+            }
+            fn get_display(value: &Self::Value) -> String {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
+        }
+    };
+}
+
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
@@ -42,99 +100,36 @@ pub trait PersonProperty: Copy + 'static {
 ///   on the property without explicitly setting a value first will panic.
 #[macro_export]
 macro_rules! define_person_property {
+    // Option<T> with initializer
     ($person_property:ident, Option<$value:ty>, $initialize:expr) => {
-        #[derive(Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = Option<$value>;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $initialize(_context, _person)
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-            fn get_display(value: &Self::Value) -> String {
-                match value {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
-            }
-        }
+        $crate::__define_person_property_option!(
+            $person_property,
+            Option<$value>,
+            $initialize,
+            false
+        );
     };
+    // T with initializer
     ($person_property:ident, $value:ty, $initialize:expr) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $initialize(_context, _person)
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-        }
+        $crate::__define_person_property_common!($person_property, $value, $initialize, false);
     };
+    // Option<T> without initializer
     ($person_property:ident, Option<$value:ty>) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = Option<$value>;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                panic!("Property not initialized when person created.");
-            }
-            fn is_required() -> bool {
-                true
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-            fn get_display(value: &Self::Value) -> String {
-                match value {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
-            }
-        }
+        $crate::__define_person_property_option!(
+            $person_property,
+            Option<$value>,
+            |_, _| panic!("Property not initialized when person created."),
+            true
+        );
     };
+    // T without initializer
     ($person_property:ident, $value:ty) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                panic!("Property not initialized when person created.");
-            }
-            fn is_required() -> bool {
-                true
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-        }
+        $crate::__define_person_property_common!(
+            $person_property,
+            $value,
+            |_, _| panic!("Property not initialized when person created."),
+            true
+        );
     };
 }
 pub use define_person_property;
@@ -266,26 +261,46 @@ mod tests {
     use super::*;
     use crate::prelude::*;
 
-    define_person_property!(Foo, Option<u32>);
+    define_person_property!(Pu32, u32);
+    define_person_property!(POu32, Option<u32>);
 
     #[test]
-    fn get_display_option() {
+    fn test_get_display() {
         let mut context = Context::new();
-        let person = context.add_person((Foo, Some(42))).unwrap();
+        let person = context.add_person(((POu32, Some(42)), (Pu32, 22))).unwrap();
         assert_eq!(
             format!(
                 "{:}",
-                Foo::get_display(&context.get_person_property(person, Foo))
+                POu32::get_display(&context.get_person_property(person, POu32))
             ),
             "42"
         );
-        let person2 = context.add_person((Foo, None)).unwrap();
         assert_eq!(
             format!(
                 "{:}",
-                Foo::get_display(&context.get_person_property(person2, Foo))
+                Pu32::get_display(&context.get_person_property(person, Pu32))
+            ),
+            "22"
+        );
+        let person2 = context.add_person(((POu32, None), (Pu32, 11))).unwrap();
+        assert_eq!(
+            format!(
+                "{:}",
+                POu32::get_display(&context.get_person_property(person2, POu32))
             ),
             "None"
         );
+    }
+
+    #[test]
+    fn test_debug_trait() {
+        let value = Pu32;
+        let debug_str = format!("{:?}", value);
+        // You can check for the struct name or any expected output
+        assert!(debug_str.contains("Pu32"));
+        let value = POu32;
+        let debug_str = format!("{:?}", value);
+        // You can check for the struct name or any expected output
+        assert!(debug_str.contains("POu32"));
     }
 }
