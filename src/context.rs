@@ -3,6 +3,8 @@
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
 use crate::plan::{PlanId, Queue};
+#[cfg(feature = "progress_bar")]
+use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{error, trace};
@@ -381,6 +383,11 @@ impl Context {
         trace!("entering event loop");
         // Start plan loop
         loop {
+            #[cfg(feature = "progress_bar")]
+            if crate::progress::MAX_TIME.get().is_some() {
+                update_timeline_progress(self.current_time);
+            }
+
             #[cfg(feature = "debugger")]
             if self.break_requested {
                 enter_debugger(self);
