@@ -1,17 +1,19 @@
-# Learning Rust for ixa
+# Learning Rust for Ixa
 
 ## Why Rust?
 
-Rust is different from many programming languages. The best resource for learning Rust remains
-[The Rust Book](https://rust-book.cs.brown.edu/) with quizzes.
-
-At a high-level, here's why Rust's unique features are useful for ABM development:
+We designed Ixa to be efficient for computers and for people. Rust provides the speed and memory
+characteristics necessary for large-scale, computationally-intensive simulations while still being
+relatively friendly to work with. That being said, if you are used to working in a higher-level
+language like R or Pythonm Rust can take some getting used to. We recommend taking a look at the
+[The Rust Book](https://rust-book.cs.brown.edu/) for a comprehensive overview. Here are a few features
+that might be new to you:
 
 1. Rust has a strict model of how it uses your computer memory, called ownership. In practice, this
 means that you can only manipulate objects in specific circumstances. This helps code actually do
 what you think it is doing and has been shown to reduce [long-term bugs](https://thehackernews.com/2024/09/googles-shift-to-rust-programming-cuts.html#:~:text=Google%20has%20revealed%20that%20its,a%20period%20of%20six%20years.).
 Rust's ownership rules are enforced at _compile-time_, which helps you find errors in your code
-earlier. When developing ABMs with ixa, these capabilities help us more easily reason about
+earlier. When developing ABMs with Ixa, these capabilities help us more easily reason about
 complicated model logic and ensure that plugins interact modularly.
 
 2. Rust has a cohesive ecosystem of all the tools you will need for development: it has a built-in
@@ -22,98 +24,111 @@ model development needs, and we find this centralization useful for ensuring rob
 and reproducibility of code across different users and computers. This also means that chances are
 someone has built a crate for a problem you may be troubleshooting.
 
-3. Despite being a strongly-typed language, compared to other systems programming languages, Rust
-has automatic type inference and other ergonomic features to help make writing code more seamless
-and efficient. As a result, you only need to specify the type of a variable in cases where it is
-ambiguous while still taking advantage of the rigidity of static typing to ensure your code is doing
-what you think it is doing. We find the combination of static typing with other Rust features for
-quick prototyping valuable for writing models and tests simultaneously.
+3. Rust is a strongly-typed language, meaning that the type of each variable must be known at
+compile-time and cannot be changed after variable definition. However, Rust also has automatic type
+inference and other ergonomic features to help make writing code more seamless and efficient. As a
+result, you only need to specify the type of a variable in cases where it is ambiguous while still
+taking advantage of the rigidity of static typing to ensure your code is doing what you think it is
+doing. We find the combination of static typing with other Rust features for quick prototyping
+valuable for writing models and tests simultaneously.
 
-## Learning Rust patterns
+## Common Rust features for Ixa modeling
 
 [The Rust Book](https://rust-book.cs.brown.edu/) remains the best resource to learn Rust, and we
 recommend reading the book in its entirety. However, the book emphasizes concepts that are less
-prevalent in day-to-day ixa use (for instance, ownership), and certain patterns that pop up a lot
+prevalent in day-to-day Ixa use (for instance, ownership), and certain patterns that pop up a lot
 are less emphasized. Below, we include sections of the book that are particularly important.
 
 1. [Chapter 5: Structs](https://rust-book.cs.brown.edu/ch05-00-structs.html): If you are new to
 object-oriented programming, this chapter introduces the "object-oriented"-ness of Rust. Rust has
 elements of both an object-oriented and functional programming language, but structs come up often
-when writing an ixa model, and thinking about ixa as being an object-oriented framework is useful
+when writing an Ixa model, and thinking about Ixa as being an object-oriented framework is useful
 for evaluating the kinds of data you need in your model and how to use the data.
 
 2. [Chapter 6: Enums](https://rust-book.cs.brown.edu/ch06-00-enums.html): Enums, match statements,
 and storing data in enum variants are all distinctly Rust patterns. If you have previously worked
 with Haskell or OCaml, these objects may be familiar to you. Nevertheless, enums come up frequently
-in ixa, in particular with person properties (e.g., a person's infection status is a value of an
+in Ixa, in particular with person properties (e.g., a person's infection status is a value of an
 enum with variants `Susceptible`, `Infected`, `Recovered`), and seeing how you can store information
 in each of these variants helps modelers understand how to best store the data they need for their
 particular use case.
 
 3. [Chapter 10, Section 2: Traits](https://rust-book.cs.brown.edu/ch10-02-traits.html): _If you read_
-_only one section, let this be it._ Traits are the cornerstone of ixa's modular nature. They are
-used in at least two ways throughout the ixa codebase: (i) methods are implemented on top of
-`Context` as part of a trait -- such as methods relating to people and their properties being
-implemented through the `ContextPeopleExt` trait extension -- and (ii) ixa defines traits that the
-user implements in their own modeling code. For example, `PersonProperty` is a trait that the user
-implements through calls to the `define_person_property!` macro, and `ixa-epi` defines a
-`TransmissionModifier` trait that a user implements when writing their own intervention. Rust traits
-are a supercharged version of interfaces in other programming languages, and thinking in traits will
-help you write modular ixa code.
+_only one section, let this be it._ Traits are the cornerstone of Ixa's modular nature. They are
+used in at least two ways throughout the Ixa codebase. First, ethods are implemented on top of the
+high-level types -- like `Property` and `Event` -- giving them shared features so that calling code
+can use them without needing to know their underlying type. For instance, `ixa-epi` defines a
+`TransmissionModifier` trait that a user implements on an object -- for example, `Facemasks` -- that
+specifies how an intervention may reduce the risk of disease transmission. All types that implement
+`TransmissionModifier` can be used as transmission modifiers identically, having no dependence on
+their underlying type. Secondly, traits implemented on `Context` (called "Context extensions" in Ixa)
+are the primary way of new modules adding a public interface so that their methods can be called
+from other modules. For instance, the `ContextPeopleExt` trait extension provides methods relating
+to people and their properties. Rust traits are a supercharged version of "interfaces" in other
+programming languages, and thinking in terms of traits will help you write modular Ixa code.
 
 4. [Chapter 13, Section 1: Closures](https://rust-book.cs.brown.edu/ch13-01-closures.html): Ixa often
 requires the user to specify a function that gets executed in the future. This chapter goes over the
 mechanics for how anonymous functions are specified in Rust. Although the syntax is not challenging,
-this chapter shows how closures interact with other aspects of Rust, such as the ownership model,
-and therefore how you can write the most useful code that depends on closures (which ixa calls a
-callback in the documentation).
+this chapter discusses capturing and moving values into a closure, type inference for closure arguments,
+and other concepts specific to Rust closures. You may see the word "callback" referred to in the Ixa
+documentation -- callbacks are what Ixa calls the user-specified closures that are evaluated when
+executing plans or handling events.
 
 In addition, [Chapter 19: Patterns](https://rust-book.cs.brown.edu/ch19-00-patterns.html) reiterates
 the power of enum variants and the `match` statement in Rust. If you find yourself writing more
 advanced Rust code, Chapters [9: Error Handling](https://rust-book.cs.brown.edu/ch09-00-error-handling.html),
 [18: Object-oriented programming](https://rust-book.cs.brown.edu/ch18-00-oop.html), and
 [20: Advanced Features](https://rust-book.cs.brown.edu/ch20-00-advanced-features.html) include
-helpful tips as you dive into more complicated ixa development.
+helpful tips as you dive into more complicated Ixa development.
 
 If you find yourself writing more analysis-focused code in Rust, Chapters [9: Error Handling](https://rust-book.cs.brown.edu/ch09-00-error-handling.html) and [13.2: Iterators](https://rust-book.cs.brown.edu/ch13-02-iterators.html)
 include helpful tools for writing code reminiscent of Python.
 
 ### On Ownership
 
-Rust's signature feature is its ownership rules. Many of the details of ownership are taken care of
-by the ixa framework, meaning ixa users are often abstracted from Rust ownership challenges.
-Nevertheless, understanding ownership rules is valuable for debugging more complicated ixa code and
-understanding what you can and cannot do in Rust. There are excellent resources for understanding
-Rust's ownership rules available [online](https://educatedguesswork.org/posts/memory-management-4/),
+Rust's signature feature is its ownership rules. We tried to design Ixa to handle ownership internally,
+so that users rarely have to think about the specific Rust rules when interfacing with Ixa.
+Nevertheless, understanding ownership rules is valuable for debugging more complicated Ixa code and
+understanding what you can and cannot do in Rust. There are excellent resources for learning Rust's
+ownership rules available [online](https://educatedguesswork.org/posts/memory-management-4/),
 but at a high-level, here are the key ideas to understand:
 
-1. When a function takes an object as input, it is taking ownership of that object -- meaning that
-the object is "consumed" by the function and does not exist after the calling of that function.
-    - This is true for all types except those that implement the `Copy` trait. All primitive types --
-    such as floats, integers, booleans, etc. -- implement the `Copy` trait, meaning that this
-    rule is really only felt with vectors and hashmaps.
-2. References (`&Object`) allow functions to have access to the object without taking ownership of it.
-Therefore, it's often useful to return a reference to an object without giving up ownership of the
-object, such as when there's data that's owned by `Context`.
+1. When a function takes an object as input, it takes ownership of that object -- meaning that the
+object is "consumed" by the function and does not exist after the calling of that function.
+    - This is true for all types except those that are automatically copyable, or in Rust lingo
+    implement the `Copy` trait. All primitive types -- floats, integers, booleans, etc. -- implement
+    `Copy`, meaning that this rule is most commonly felt with vectors and hashmaps. These are examples
+    of types that do not implement `Copy` -- in this case, that is because their size dynamically
+    changes as data is added and removed, so Rust stores them in a part of the memory optimized for
+    changing sizes rather than fast access and copying.
+2. References (denoted by an `&` in front of an object like `&Object`) allow functions to have
+access to the object without taking ownership of it. Therefore, we often return references to an
+object so that we do not have to give up explicit ownership of that object, such as when we want to
+get the value of data owned centrally by the simulation (ex., model parameters) in a particular
+module.
 3. There are two kinds of references -- mutable references `&mut Object` and immutable references
-`&Object`. There is no limit to the number of immutable references to an object that can be active
-(i.e., returned from a function), or you can take a mutable reference to an object, and you can only
-ever have one mutable reference that is active within a function at a time.
+`&Object`. Depending on what kind of reference you have, you can do one of two kinds of things.
+If you have an active immutable reference to an object, you can take any number of additional immutable
+references to the object. But, if you have a mutable reference to an object, you can only ever have
+that one mutable reference to the object be active. This is because an active immutable reference to
+the object would also have changed as the mutable reference is mutated, and Rust can no longer make
+guarantees about the memory to which the immutable reference points.
 
-In practice, #3 often requires the most troubleshooting to get around. Sometimes, a reorg of your
+In practice, #3 often requires the most troubleshooting to get around. Sometimes, a refactor of your
 code can help circumvent ownership challenges.
 
 ## Ixa tutorials
 
-Within the ixa repo, we have created some examples. Each example has a readme that walks the user
-through a toy model and what it illustrates about ixa's core functionality. To run the examples,
+Within the Ixa repo, we have created some examples. Each example has a readme that walks the user
+through a toy model and what it illustrates about Ixa's core functionality. To run the examples,
 from the repo root, just specify the name of the example:
 
 ```bash
 cargo run --example {name-of-example}
 ```
 
-In general, you will be using `cargo` to run and interact with your ixa models from the command line.
+In general, you will be using `cargo` to run and interact with your Ixa models from the command line.
 We recommend learning some [basic `cargo` commands](https://doc.rust-lang.org/cargo/guide/index.html)
 and there are valuable [cheatsheets](https://kapeli.com/cheat_sheets/Cargo.docset/Contents/Resources/Documents/index)
 to keep handy as you get more involved in active development.
