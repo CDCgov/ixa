@@ -56,8 +56,8 @@ particular use case.
 3. [Chapter 10, Section 2: Traits](https://rust-book.cs.brown.edu/ch10-02-traits.html): _If you read_
 _only one section, let this be it._ Traits are the cornerstone of Ixa's modular nature. They are
 used in at least two ways throughout the Ixa codebase. First, the methods that make up higher-level
-abstractions -- like `Property` or `Event` -- are organized into a trait, giving them shared features
-so that calling code can use these features without knowing the exact underlying type. For instance,
+abstractions -- like `Property` or `Event` -- are organized into traits, giving them shared features
+so that calling code can use these methods without knowing the exact underlying type. For instance,
 your model might define a trait to specify interventions that impact the probability of transmission
 -- like facemasks or hazmat suits. Regardless of the exact nature of the intervention, your model
 wants to call some methods on the transmisison modifier, like returning its efficacy. If these
