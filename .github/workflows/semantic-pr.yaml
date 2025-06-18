@@ -1,0 +1,28 @@
+name: Check Conventional Commits
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches:
+      - main
+
+jobs:
+  semantic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        with:
+          types: |
+            feat
+            fix
+            chore
+            dependencies
+            docs
+            style
+            refactor
+            release
+            revert
+            perf
+            test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
