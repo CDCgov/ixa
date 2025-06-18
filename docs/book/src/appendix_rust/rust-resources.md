@@ -5,13 +5,13 @@
 We designed Ixa to be efficient for computers and for people. Rust provides the speed and memory
 characteristics necessary for large-scale, computationally-intensive simulations while still being
 relatively friendly to work with. That being said, if you are used to working in a higher-level
-language like R or Pythonm Rust can take some getting used to. We recommend taking a look at the
+language like R or Python, Rust can take some time to learn. We recommend taking a look at the
 [The Rust Book](https://rust-book.cs.brown.edu/) for a comprehensive overview. Here are a few features
 that might be new to you:
 
 1. Rust has a strict model of how it uses your computer memory, called ownership. In practice, this
-means that you can only manipulate objects in specific circumstances. This helps code actually do
-what you think it is doing and has been shown to reduce [long-term bugs](https://thehackernews.com/2024/09/googles-shift-to-rust-programming-cuts.html#:~:text=Google%20has%20revealed%20that%20its,a%20period%20of%20six%20years.).
+means that you can only manipulate objects in specific ways. This helps code actually do what you
+think it is doing and has been shown to reduce [long-term bugs](https://thehackernews.com/2024/09/googles-shift-to-rust-programming-cuts.html#:~:text=Google%20has%20revealed%20that%20its,a%20period%20of%20six%20years.).
 Rust's ownership rules are enforced at _compile-time_, which helps you find errors in your code
 earlier. When developing ABMs with Ixa, these capabilities help us more easily reason about
 complicated model logic and ensure that plugins interact modularly.
@@ -32,7 +32,7 @@ taking advantage of the rigidity of static typing to ensure your code is doing w
 doing. We find the combination of static typing with other Rust features for quick prototyping
 valuable for writing models and tests simultaneously.
 
-## Common Rust features for Ixa modeling
+## Common Rust patterns in Ixa modeling
 
 [The Rust Book](https://rust-book.cs.brown.edu/) remains the best resource to learn Rust, and we
 recommend reading the book in its entirety. However, the book emphasizes concepts that are less
@@ -55,17 +55,18 @@ particular use case.
 
 3. [Chapter 10, Section 2: Traits](https://rust-book.cs.brown.edu/ch10-02-traits.html): _If you read_
 _only one section, let this be it._ Traits are the cornerstone of Ixa's modular nature. They are
-used in at least two ways throughout the Ixa codebase. First, ethods are implemented on top of the
-high-level types -- like `Property` and `Event` -- giving them shared features so that calling code
-can use them without needing to know their underlying type. For instance, `ixa-epi` defines a
+used in at least two ways throughout the Ixa codebase. First, methods are implemented on top of the
+high-level types -- like `Property` and `Event` -- as part of a trait, giving these types shared
+features so that calling code can use them without needing to know the exact underlying type and
+easily letting users make their own versions of these types. For instance, `ixa-epi` defines a
 `TransmissionModifier` trait that a user implements on an object -- for example, `Facemasks` -- that
 specifies how an intervention may reduce the risk of disease transmission. All types that implement
-`TransmissionModifier` can be used as transmission modifiers identically, having no dependence on
-their underlying type. Secondly, traits implemented on `Context` (called "Context extensions" in Ixa)
-are the primary way of new modules adding a public interface so that their methods can be called
-from other modules. For instance, the `ContextPeopleExt` trait extension provides methods relating
-to people and their properties. Rust traits are a supercharged version of "interfaces" in other
-programming languages, and thinking in terms of traits will help you write modular Ixa code.
+`TransmissionModifier` can be used as transmission modifiers without dependence on their underlying
+type. Secondly, traits implemented on `Context` (called "Context extensions" in Ixa) are the primary
+way of new modules adding a public interface so that their methods can be called from other modules.
+For instance, the `ContextPeopleExt` trait extension provides methods relating to people and their
+properties. Rust traits are a supercharged version of "interfaces" in other programming languages,
+and thinking in terms of traits will help you write modular Ixa code.
 
 4. [Chapter 13, Section 1: Closures](https://rust-book.cs.brown.edu/ch13-01-closures.html): Ixa often
 requires the user to specify a function that gets executed in the future. This chapter goes over the
@@ -82,8 +83,10 @@ advanced Rust code, Chapters [9: Error Handling](https://rust-book.cs.brown.edu/
 [20: Advanced Features](https://rust-book.cs.brown.edu/ch20-00-advanced-features.html) include
 helpful tips as you dive into more complicated Ixa development.
 
-If you find yourself writing more analysis-focused code in Rust, Chapters [9: Error Handling](https://rust-book.cs.brown.edu/ch09-00-error-handling.html) and [13.2: Iterators](https://rust-book.cs.brown.edu/ch13-02-iterators.html)
-include helpful tools for writing code reminiscent of Python.
+If you find yourself writing more analysis-focused code in Rust, Chapters
+[9: Error Handling](https://rust-book.cs.brown.edu/ch09-00-error-handling.html) and
+[13.2: Iterators](https://rust-book.cs.brown.edu/ch13-02-iterators.html) include helpful tools for
+writing code reminiscent of Python.
 
 ### On Ownership
 
@@ -129,7 +132,7 @@ cargo run --example {name-of-example}
 ```
 
 In general, you will be using `cargo` to run and interact with your Ixa models from the command line.
-We recommend learning some [basic `cargo` commands](https://doc.rust-lang.org/cargo/guide/index.html)
+We recommend learning some [basic `cargo` commands](https://doc.rust-lang.org/cargo/guide/index.html),
 and there are valuable [cheatsheets](https://kapeli.com/cheat_sheets/Cargo.docset/Contents/Resources/Documents/index)
 to keep handy as you get more involved in active development.
 
