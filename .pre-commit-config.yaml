@@ -16,8 +16,9 @@ repos:
     -   id: clippy
         # Use '--all' to run on all code, including tests and examples, even files that are not part of the library.
         args: ["--all", "--", "-D", "warnings"]
--   repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.18.1
-    hooks:
-    -   id: markdownlint-cli2
-        args: ["**/*.md"]
+# TODO<ryl8@cd.gov>: See https://github.com/CDCgov/ixa/issues/419
+# -   repo: https://github.com/DavidAnson/markdownlint-cli2
+#     rev: v0.18.1
+#     hooks:
+#     -   id: markdownlint-cli2
+#         args: ["**/*.md"]
