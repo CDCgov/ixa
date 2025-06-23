@@ -9,7 +9,7 @@ a genus of Indo-Pacific pebble crabs from the family Leucosiidae.
 
 API documentation can be found at [https://ixa.rs/doc/ixa](https://ixa.rs/doc/ixa).
 
-**his project is currently in the early stages of development and not ready for use in production.**
+**This project is currently in the early stages of development and not ready for use in production.**
 
 **General disclaimer** This repository was created for use by CDC programs to collaborate on public health related
 projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm).
