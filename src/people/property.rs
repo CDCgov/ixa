@@ -29,40 +29,12 @@ pub trait PersonProperty: Copy + 'static {
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
     fn get_instance() -> Self;
     fn name() -> &'static str;
-    fn get_display(value: &Self::Value) -> String {
-        format!("{:?}", value)
-    }
+    fn get_display(value: &Self::Value) -> String;
 }
 
 #[macro_export]
 macro_rules! __define_person_property_common {
-    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $compute_fn(_context, _person)
-            }
-            fn is_required() -> bool {
-                $is_required
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! __define_person_property_option {
-    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr) => {
+    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr, $display_impl:expr) => {
         #[derive(Debug, Copy, Clone)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
@@ -83,10 +55,7 @@ macro_rules! __define_person_property_option {
                 stringify!($person_property)
             }
             fn get_display(value: &Self::Value) -> String {
-                match value {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
+                $display_impl(value)
             }
         }
     };
@@ -102,24 +71,42 @@ macro_rules! __define_person_property_option {
 macro_rules! define_person_property {
     // Option<T> with initializer
     ($person_property:ident, Option<$value:ty>, $initialize:expr) => {
-        $crate::__define_person_property_option!(
+        $crate::__define_person_property_common!(
             $person_property,
             Option<$value>,
             $initialize,
-            false
+            false,
+            |&value| {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
         );
     };
     // T with initializer
     ($person_property:ident, $value:ty, $initialize:expr) => {
-        $crate::__define_person_property_common!($person_property, $value, $initialize, false);
+        $crate::__define_person_property_common!(
+            $person_property,
+            $value,
+            $initialize,
+            false,
+            |&value| format!("{:?}", value)
+        );
     };
     // Option<T> without initializer
     ($person_property:ident, Option<$value:ty>) => {
-        $crate::__define_person_property_option!(
+        $crate::__define_person_property_common!(
             $person_property,
             Option<$value>,
             |_, _| panic!("Property not initialized when person created."),
-            true
+            true,
+            |&value| {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
         );
     };
     // T without initializer
@@ -128,7 +115,8 @@ macro_rules! define_person_property {
             $person_property,
             $value,
             |_, _| panic!("Property not initialized when person created."),
-            true
+            true,
+            |&value| format!("{:?}", value)
         );
     };
 }
@@ -200,6 +188,9 @@ macro_rules! define_derived_property {
             }
             fn name() -> &'static str {
                 stringify!($derived_property)
+            }
+            fn get_display(value: &Self::Value) -> String {
+                format!("{:?}", value)
             }
         }
     };
