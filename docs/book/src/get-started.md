@@ -1,7 +1,7 @@
 # Get Started
 
 If you are new to Rust, we suggest taking some time to learn the parts of Rust that are most useful
-for ixa development. We've compiled some resources [here](appendix_rust/rust-resources.md).
+for ixa development. We've compiled some resources [in rust-resources.md](appendix_rust/rust-resources.md).
 
 Execute the following commands to create a new Rust project called `ixa_model`.
 
