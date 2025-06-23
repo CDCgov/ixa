@@ -98,6 +98,19 @@ pub trait ContextPeopleExt {
     fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
     where
         R::RngType: Rng;
+
+    /// Randomly sample a list of people from the population of people who match the query.
+    /// Returns an empty list if no people match the query.
+    ///
+    /// The syntax here is the same as with [`Context::query_people()`].
+    fn sample_people<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        query: T,
+        n: usize,
+    ) -> Vec<PersonId>
+    where
+        R::RngType: Rng;
 }
 
 impl ContextPeopleExt for Context {
@@ -392,18 +405,27 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_people<R: RngId + 'static, T: Query>(
+        &self,
+        rng_id: R,
+        query: T,
+        n: usize,
+    ) -> Vec<PersonId>
     where
         R::RngType: Rng,
     {
         if self.get_current_population() == 0 {
-            return None;
+            return Vec::new();
         }
-
+        let requested = std::cmp::min(n, self.get_current_population());
+        let mut selected = HashSet::new();
         // Special case the empty query because we can do it in O(1).
         if query.get_query().is_empty() {
-            let result = self.sample_range(rng_id, 0..self.get_current_population());
-            return Some(PersonId(result));
+            while selected.len() < requested {
+                let result = self.sample_range(rng_id, 0..self.get_current_population());
+                selected.insert(PersonId(result));
+            }
+            return selected.into_iter().collect();
         }
 
         T::setup(&query, self);
@@ -412,7 +434,6 @@ impl ContextPeopleExt for Context {
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
         // Temporary variables.
-        let mut selected: Option<PersonId> = None;
         let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
         let mut ctr: usize = 0;
         let mut i: usize = 1;
@@ -421,17 +442,38 @@ impl ContextPeopleExt for Context {
             |person| {
                 ctr += 1;
                 if i == ctr {
-                    selected = Some(person);
-                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
-                        as usize
-                        + 1;
-                    w *= self.sample_range(rng_id, 0.0..1.0);
+                    if selected.len() >= requested {
+                        let to_remove = *selected.iter().next().unwrap();
+                        selected.remove(&to_remove);
+                    }
+                    selected.insert(person);
+                    if selected.len() >= requested {
+                        i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w))
+                            .floor() as usize
+                            + 1;
+                        w *= self.sample_range(rng_id, 0.0..1.0);
+                    } else {
+                        i += 1;
+                    }
                 }
             },
             query.get_query(),
         );
 
-        selected
+        selected.into_iter().collect()
+    }
+
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    where
+        R::RngType: Rng,
+    {
+        let people = self.sample_people(rng_id, query, 1);
+        if people.is_empty() {
+            None
+        } else {
+            Some(people[0])
+        }
     }
 }
 
@@ -979,9 +1021,89 @@ mod tests {
         }
 
         // The chance of any of these being more unbalanced than this is ~10^{-4}
+        println!(
+            "Sampled person1: {}, person2: {}, person3: {}",
+            count_p1, count_p2, count_p3
+        );
         assert!(count_p1 >= 8700);
         assert!(count_p2 >= 8700);
         assert!(count_p3 >= 8700);
+    }
+
+    #[test]
+    fn test_sample_people_simple() {
+        define_rng!(SampleRng3);
+        let mut context = Context::new();
+        context.init_random(42);
+        let people0 = context.sample_people(SampleRng3, (), 1);
+        assert_eq!(people0.len(), 0);
+        let person1 = context.add_person(()).unwrap();
+        let person2 = context.add_person(()).unwrap();
+        let person3 = context.add_person(()).unwrap();
+
+        let people1 = context.sample_people(SampleRng3, (), 1);
+        assert_eq!(people1.len(), 1);
+        assert!(
+            people1.contains(&person1) || people1.contains(&person2) || people1.contains(&person3)
+        );
+
+        let people2 = context.sample_people(SampleRng3, (), 2);
+        assert_eq!(people2.len(), 2);
+
+        let people3 = context.sample_people(SampleRng3, (), 3);
+        assert_eq!(people3.len(), 3);
+
+        let people4 = context.sample_people(SampleRng3, (), 4);
+        assert_eq!(people4.len(), 3);
+    }
+
+    #[test]
+    fn test_sample_people() {
+        define_rng!(SampleRng4);
+        let mut context = Context::new();
+        context.init_random(42);
+        let person1 = context
+            .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+        let person2 = context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+        let person3 = context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
+            .unwrap();
+        let person4 = context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+        let person5 = context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
+            .unwrap();
+        let person6 = context
+            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
+            .unwrap();
+
+        let people1 = context.sample_people(SampleRng4, (Age, 40), 2);
+        assert_eq!(people1.len(), 1);
+        assert!(people1.contains(&person1));
+
+        let people2 = context.sample_people(SampleRng4, (Age, 42), 2);
+        assert_eq!(people2.len(), 2);
+        assert!(
+            people2.contains(&person2)
+                || people2.contains(&person3)
+                || people2.contains(&person4)
+                || people2.contains(&person5)
+                || people2.contains(&person6)
+        );
+
+        let people3 = context.sample_people(
+            SampleRng4,
+            ((Age, 42), (RiskCategory, RiskCategoryValue::High)),
+            2,
+        );
+        assert_eq!(people3.len(), 2);
+        assert!(
+            people3.contains(&person2) || people3.contains(&person4) || people3.contains(&person5)
+        );
     }
 
     mod property_initialization_queries {
