@@ -30,9 +30,6 @@ pub trait PersonProperty: Copy + 'static {
     fn get_instance() -> Self;
     fn name() -> &'static str;
     fn get_display(value: &Self::Value) -> String;
-    // fn get_display(value: &Self::Value) -> String {
-    //     format!("{:?}", value)
-    // }
 }
 
 #[macro_export]
@@ -63,40 +60,7 @@ macro_rules! __define_person_property_common {
         }
     };
 }
-/*
-#[macro_export]
-macro_rules! __define_person_property_option {
-    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $person_property;
-        impl $crate::people::PersonProperty for $person_property {
-            type Value = $value;
-            fn compute(
-                _context: &$crate::context::Context,
-                _person: $crate::people::PersonId,
-            ) -> Self::Value {
-                $compute_fn(_context, _person)
-            }
-            fn is_required() -> bool {
-                $is_required
-            }
-            fn get_instance() -> Self {
-                $person_property
-            }
-            fn name() -> &'static str {
-                stringify!($person_property)
-            }
-            fn get_display(value: &Self::Value) -> String {
-                
-                // match value {
-                //     Some(v) => format!("{:?}", v),
-                //     None => "None".to_string(),
-                // }
-            }
-        }
-    };
-}
-*/
+
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
@@ -112,7 +76,7 @@ macro_rules! define_person_property {
             Option<$value>,
             $initialize,
             false,
-            |&value|{
+            |&value| {
                 match value {
                     Some(v) => format!("{:?}", v),
                     None => "None".to_string(),
@@ -123,9 +87,9 @@ macro_rules! define_person_property {
     // T with initializer
     ($person_property:ident, $value:ty, $initialize:expr) => {
         $crate::__define_person_property_common!(
-            $person_property, 
-            $value, 
-            $initialize, 
+            $person_property,
+            $value,
+            $initialize,
             false,
             |&value| format!("{:?}", value)
         );
