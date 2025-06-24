@@ -1,0 +1,17 @@
+{
+  "name": "ixa-wasm-tests",
+  "version": "1.0.0",
+  "description": "A small demo of using Ixa in the browser with WASM.",
+  "main": "index.js",
+  "scripts": {
+    "start": "http-server -c-1 .",
+    "test": "wasm-pack build --target web && playwright test"
+  },
+  "keywords": [],
+  "author": "The Ixa Developers <cfa@cdc.gov>",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.53.0",
+    "http-server": "^14.1.1"
+  }
+}
