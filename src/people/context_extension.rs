@@ -418,9 +418,9 @@ impl ContextPeopleExt for Context {
             return Vec::new();
         }
         let requested = std::cmp::min(n, self.get_current_population());
-        let mut selected = HashSet::new();
         // Special case the empty query because we can do it in O(1).
         if query.get_query().is_empty() {
+            let mut selected = HashSet::new();
             while selected.len() < requested {
                 let result = self.sample_range(rng_id, 0..self.get_current_population());
                 selected.insert(PersonId(result));
@@ -437,16 +437,17 @@ impl ContextPeopleExt for Context {
         let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
         let mut ctr: usize = 0;
         let mut i: usize = 1;
+        let mut selected = Vec::new();
 
         self.query_people_internal(
             |person| {
                 ctr += 1;
                 if i == ctr {
                     if selected.len() >= requested {
-                        let to_remove = *selected.iter().next().unwrap();
-                        selected.remove(&to_remove);
+                        let to_remove = self.sample_range(rng_id, 0..selected.len());
+                        selected.swap_remove(to_remove);
                     }
-                    selected.insert(person);
+                    selected.push(person);
                     if selected.len() >= requested {
                         i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w))
                             .floor() as usize
@@ -460,7 +461,7 @@ impl ContextPeopleExt for Context {
             query.get_query(),
         );
 
-        selected.into_iter().collect()
+        selected
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -980,7 +981,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sample_matching_person() {
+    fn test_sample_person_distribution() {
         define_rng!(SampleRng2);
 
         let mut context = Context::new();
@@ -996,7 +997,7 @@ mod tests {
         // Test a non-matching query.
         assert!(context.sample_person(SampleRng2, (Age, 50)).is_none());
 
-        // See that the simple query always returns person3
+        // See that the simple query always returns person4
         for _ in 0..10 {
             assert_eq!(
                 context.sample_person(SampleRng2, (Age, 30)).unwrap(),
@@ -1024,6 +1025,65 @@ mod tests {
         assert!(count_p1 >= 8700);
         assert!(count_p2 >= 8700);
         assert!(count_p3 >= 8700);
+    }
+
+    #[test]
+    fn test_sample_people_distribution() {
+        define_rng!(SampleRng5);
+
+        let mut context = Context::new();
+        context.init_random(66);
+
+        // Test an empty query.
+        assert!(context.sample_person(SampleRng5, ()).is_none());
+        let person1 = context.add_person((Age, 10)).unwrap();
+        let person2 = context.add_person((Age, 10)).unwrap();
+        let person3 = context.add_person((Age, 10)).unwrap();
+        let person4 = context.add_person((Age, 44)).unwrap();
+        let person5 = context.add_person((Age, 10)).unwrap();
+        let person6 = context.add_person((Age, 10)).unwrap();
+        let person7 = context.add_person((Age, 22)).unwrap();
+        let person8 = context.add_person((Age, 10)).unwrap();
+
+        let mut count_p1: usize = 0;
+        let mut count_p2: usize = 0;
+        let mut count_p3: usize = 0;
+        let mut count_p5: usize = 0;
+        let mut count_p6: usize = 0;
+        let mut count_p8: usize = 0;
+        for _ in 0..60000 {
+            let p = context.sample_people(SampleRng5, (Age, 10), 2);
+            if p.contains(&person1) {
+                count_p1 += 1;
+            }
+            if p.contains(&person2) {
+                count_p2 += 1;
+            }
+            if p.contains(&person3) {
+                count_p3 += 1;
+            }
+            if p.contains(&person5) {
+                count_p5 += 1;
+            }
+            if p.contains(&person6) {
+                count_p6 += 1;
+            }
+            if p.contains(&person8) {
+                count_p8 += 1;
+            }
+            if p.contains(&person4) || p.contains(&person7) {
+                println!("Unexpected person in sample: {:?}", p);
+                panic!("Unexpected person");
+            }
+        }
+
+        // The chance of any of these being more unbalanced than this is ~10^{-4}
+        assert!(count_p1 >= 8700);
+        assert!(count_p2 >= 8700);
+        assert!(count_p3 >= 8700);
+        assert!(count_p5 >= 8700);
+        assert!(count_p6 >= 8700);
+        assert!(count_p8 >= 8700);
     }
 
     #[test]
@@ -1061,21 +1121,31 @@ mod tests {
         let person1 = context
             .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
-        let person2 = context
+        let _ = context
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         let person3 = context
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
-        let person4 = context
+        let _ = context
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
-        let person5 = context
+        let _ = context
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
             .unwrap();
         let person6 = context
             .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
+
+        // Test a non-matching query.
+        assert!(context.sample_people(SampleRng4, (Age, 50), 1).is_empty());
+
+        // See that the simple query always returns person4
+        for _ in 0..10 {
+            assert!(context
+                .sample_people(SampleRng4, (Age, 40), 1)
+                .contains(&person1));
+        }
 
         let people1 = context.sample_people(SampleRng4, (Age, 40), 2);
         assert_eq!(people1.len(), 1);
@@ -1083,13 +1153,7 @@ mod tests {
 
         let people2 = context.sample_people(SampleRng4, (Age, 42), 2);
         assert_eq!(people2.len(), 2);
-        assert!(
-            people2.contains(&person2)
-                || people2.contains(&person3)
-                || people2.contains(&person4)
-                || people2.contains(&person5)
-                || people2.contains(&person6)
-        );
+        assert!(!people2.contains(&person1));
 
         let people3 = context.sample_people(
             SampleRng4,
@@ -1098,7 +1162,9 @@ mod tests {
         );
         assert_eq!(people3.len(), 2);
         assert!(
-            people3.contains(&person2) || people3.contains(&person4) || people3.contains(&person5)
+            !people3.contains(&person1)
+                && !people3.contains(&person3)
+                && !people3.contains(&person6)
         );
     }
 
