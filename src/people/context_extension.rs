@@ -1021,10 +1021,6 @@ mod tests {
         }
 
         // The chance of any of these being more unbalanced than this is ~10^{-4}
-        println!(
-            "Sampled person1: {}, person2: {}, person3: {}",
-            count_p1, count_p2, count_p3
-        );
         assert!(count_p1 >= 8700);
         assert!(count_p2 >= 8700);
         assert!(count_p3 >= 8700);
