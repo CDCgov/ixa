@@ -52,7 +52,10 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+        run: |
+          if ! command -v wasm-pack &> /dev/null; then
+            cargo install wasm-pack --locked
+          fi
 
       - name: Install JS dependencies and Playwright binaries
         run: |
