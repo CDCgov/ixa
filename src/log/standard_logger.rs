@@ -1,3 +1,5 @@
+#[cfg(feature = "progress_bar")]
+use super::progress_bar_encoder::PBWrapperEncoder;
 use crate::log::{LogConfiguration, ModuleLogConfiguration};
 use log4rs::{
     append::console::ConsoleAppender,
@@ -18,9 +20,11 @@ impl From<&ModuleLogConfiguration> for Logger {
 impl LogConfiguration {
     /// Sets the global logger to conform to this `LogConfiguration`.
     pub(in crate::log) fn set_config(&mut self) {
-        let stdout: ConsoleAppender = ConsoleAppender::builder()
-            .encoder(Box::new(PatternEncoder::new(DEFAULT_LOG_PATTERN)))
-            .build();
+        let encoder = Box::new(PatternEncoder::new(DEFAULT_LOG_PATTERN));
+        // Appends an ANSI escape code to clear to end of line.
+        #[cfg(feature = "progress_bar")]
+        let encoder = Box::new(PBWrapperEncoder::new(encoder));
+        let stdout: ConsoleAppender = ConsoleAppender::builder().encoder(encoder).build();
         let mut config: ConfigBuilder =
             Config::builder().appender(Appender::builder().build("stdout", Box::new(stdout)));
 

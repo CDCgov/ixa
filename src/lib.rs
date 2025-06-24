@@ -76,6 +76,9 @@ pub use log::{
     set_module_filters, trace, warn, LevelFilter,
 };
 
+#[cfg(feature = "progress_bar")]
+pub mod progress;
+
 #[cfg(feature = "debugger")]
 pub mod external_api;
 mod hashing;
@@ -106,4 +109,9 @@ pub mod prelude_for_plugins {
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]
 compile_error!(
     "Target `wasm32` and feature `debugger` are mutually exclusive — enable at most one."
+);
+
+#[cfg(all(target_arch = "wasm32", feature = "progress_bar"))]
+compile_error!(
+    "Target `wasm32` and feature `progress_bar` are mutually exclusive — enable at most one."
 );

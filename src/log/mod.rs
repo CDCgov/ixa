@@ -47,6 +47,8 @@ mod wasm_logger;
 
 #[cfg(not(feature = "logging"))]
 mod null_logger;
+#[cfg(feature = "progress_bar")]
+mod progress_bar_encoder;
 
 pub use log::{debug, error, info, trace, warn, LevelFilter};
 use std::collections::hash_map::Entry;
