@@ -443,12 +443,12 @@ impl ContextPeopleExt for Context {
             |person| {
                 ctr += 1;
                 if i == ctr {
-                    if selected.len() >= requested {
+                    if selected.len() == requested {
                         let to_remove = self.sample_range(rng_id, 0..selected.len());
                         selected.swap_remove(to_remove);
                     }
                     selected.push(person);
-                    if selected.len() >= requested {
+                    if selected.len() == requested {
                         i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w))
                             .floor() as usize
                             + 1;
