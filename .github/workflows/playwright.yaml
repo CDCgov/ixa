@@ -59,9 +59,5 @@ jobs:
           npm install
           npx playwright install --with-deps
 
-      - name: Build WASM package
-        run: wasm-pack build --target web --out-dir pkg
-
       - name: Run Playwright tests
-        run: |
-          npx playwright test
+        run: npm test

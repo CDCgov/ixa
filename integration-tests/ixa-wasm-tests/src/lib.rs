@@ -1,14 +1,12 @@
 use ixa::LevelFilter;
+use js_sys::Promise;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-// use gloo_timers::future::TimeoutFuture;
-use js_sys::Promise;
 use web_sys::window;
 
 use ixa::log::{debug, error, info, set_log_level, warn};
 use ixa::prelude::*;
 
-// pub mod incidence_report;
 pub mod infection_manager;
 pub mod people;
 pub mod transmission_manager;
@@ -25,9 +23,7 @@ pub fn initialize(context: &mut Context) {
     people::init(context);
     transmission_manager::init(context);
     infection_manager::init(context);
-    // incidence_report::init(context).unwrap_or_else(|e| {
-    //     eprintln!("failed to init incidence_report: {}", e);
-    // });
+
     context.add_plan(MAX_TIME, |context| {
         context.shutdown();
     });
@@ -44,9 +40,6 @@ pub fn run_simulation() -> Promise {
             .performance()
             .ok_or("performance not available")?;
         let start = performance.now();
-
-        // Simulate a 5-second "computation"
-        // TimeoutFuture::new(5000).await;
 
         // Logging
         set_log_level(LevelFilter::Trace);

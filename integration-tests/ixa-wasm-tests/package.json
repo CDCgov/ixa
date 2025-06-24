@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "http-server -c-1 .",
-    "test:e2e": "playwright test"
+    "test": "wasm-pack build --target web && playwright test"
   },
   "keywords": [],
   "author": "The Ixa Developers <cfa@cdc.gov>",
