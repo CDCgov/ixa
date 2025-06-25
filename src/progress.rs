@@ -63,7 +63,7 @@
 //! fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
 //!   // We only increment the progress bar when a new infection occurs.
 //!   if (InfectionStatusValue::Susceptible, InfectionStatusValue::Infected)
-//!   		== (event.previous, event.current)
+//!       == (event.previous, event.current)
 //!   {
 //!     increment_custom_progress();
 //!   }
