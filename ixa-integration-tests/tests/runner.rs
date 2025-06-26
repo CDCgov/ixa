@@ -12,7 +12,7 @@ mod tests {
         // and the entry point is in tests/bin/runner_test_custom_args
         run_external_runner("runner_test_custom_args")
             .unwrap()
-            .args(["-a", "42"])
+            .args(["-a", "42", "--no-stats"])
             .assert()
             .success()
             .stdout("42\n");

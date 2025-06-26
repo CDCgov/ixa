@@ -110,7 +110,7 @@ pub(crate) mod breakpoint {
     use crate::debugger::enter_debugger;
     #[cfg(feature = "web_api")]
     use crate::web_api::enter_web_debugger;
-    use crate::{info, trace, IxaError};
+    use crate::{trace, IxaError};
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
 
@@ -196,7 +196,7 @@ pub(crate) mod breakpoint {
                     #[cfg(not(feature = "web_api"))]
                     context.schedule_debugger(*time, None, Box::new(enter_debugger));
 
-                    info!("Breakpoint set at t={time}");
+                    trace!("Breakpoint set at t={time}");
                     Ok(Retval::Ok)
                 }
 
