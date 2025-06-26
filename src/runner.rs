@@ -73,6 +73,10 @@ pub struct BaseArgs {
     /// Enable the timeline progress bar with a maximum time.
     #[arg(short, long)]
     pub timeline_progress_max: Option<f64>,
+
+    /// Suppresses the printout of summary statistics at the end of the simulation.
+    #[arg(long)]
+    pub no_stats: bool,
 }
 
 impl BaseArgs {
@@ -87,6 +91,7 @@ impl BaseArgs {
             debugger: None,
             web: None,
             timeline_progress_max: None,
+            no_stats: false,
         }
     }
 }
@@ -247,6 +252,15 @@ where
             println!("ProgressBar max set to {}", max_time);
             init_timeline_progress_bar(max_time);
         }
+    }
+
+    if args.no_stats {
+        if cfg!(target_family = "wasm") {
+            warn!("the print-stats option is enabled; some statistics are not supported for the wasm target family")
+        }
+        context.print_execution_statistics = false;
+    } else {
+        context.print_execution_statistics = true;
     }
 
     // Run the provided Fn
