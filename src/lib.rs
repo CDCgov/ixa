@@ -97,6 +97,7 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 // Preludes
 pub mod prelude;
+
 pub mod prelude_for_plugins {
     pub use crate::context::PluginContext;
     pub use crate::define_data_plugin;
@@ -105,6 +106,8 @@ pub mod prelude_for_plugins {
     pub use crate::IxaEvent;
     pub use ixa_derive::IxaEvent;
 }
+
+mod execution_stats;
 
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]
 compile_error!(
