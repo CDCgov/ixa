@@ -1,5 +1,5 @@
 use ixa::prelude::*;
-use std::path::Path;
+use std::path::PathBuf;
 
 mod incidence_report;
 mod infection_manager;
@@ -22,11 +22,14 @@ define_person_property_with_default!(
     InfectionStatusValue::S
 );
 
+fn example_dir() -> PathBuf {
+    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    parameters_path.join("examples").join("parameter-loading")
+}
+
 fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
-    let file_path = Path::new("examples")
-        .join("parameter-loading")
-        .join("input.json");
+    let file_path = example_dir().join("input.json");
 
     parameters_loader::init_parameters(&mut context, &file_path)?;
 
