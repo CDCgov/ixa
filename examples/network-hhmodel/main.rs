@@ -6,7 +6,8 @@ mod loader;
 mod network;
 mod parameters;
 mod seir;
-use std::path::Path;
+use std::path::PathBuf;
+
 define_rng!(MainRng);
 
 fn main() {
@@ -17,6 +18,11 @@ fn main() {
     .unwrap();
 }
 
+fn example_dir() -> PathBuf {
+    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    parameters_path.join("examples").join("network-hhmodel")
+}
+
 fn initialize(context: &mut Context) {
     context.init_random(1);
 
@@ -24,7 +30,7 @@ fn initialize(context: &mut Context) {
     let people = loader::init(context);
 
     // Load parameters from json
-    let file_path = Path::new(file!()).parent().unwrap().join("config.json");
+    let file_path = example_dir().join("config.json");
     context.load_global_properties(&file_path).unwrap();
 
     // Load network

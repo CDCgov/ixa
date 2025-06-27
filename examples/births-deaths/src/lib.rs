@@ -11,18 +11,11 @@ pub mod transmission_manager;
 
 use crate::parameters_loader::Parameters;
 
-pub fn initialize(context: &mut Context, given_parameters_path: &Path, output_path: &Path) {
-    let current_dir = Path::new(file!()).parent().unwrap();
+pub fn initialize(context: &mut Context, output_path: &Path) {
     let output_path_buff = PathBuf::from(&output_path);
 
-    let def_parameters_path = current_dir.join("../input.json");
-    let parameters_path = if given_parameters_path.exists() {
-        given_parameters_path
-    } else {
-        def_parameters_path.as_path()
-    };
-
-    parameters_loader::init_parameters(context, parameters_path).unwrap_or_else(|e| {
+    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("input.json");
+    parameters_loader::init_parameters(context, &parameters_path).unwrap_or_else(|e| {
         eprintln!("failed to init init_parameters: {}", e);
     });
 

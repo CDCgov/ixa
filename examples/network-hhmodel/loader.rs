@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use crate::example_dir;
 use csv::Reader;
 use ixa::prelude::*;
 use ixa::PersonId;
@@ -47,7 +46,7 @@ fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> Pe
 }
 
 pub fn open_csv(file_name: &str) -> Reader<File> {
-    let current_dir = Path::new(file!()).parent().unwrap();
+    let current_dir = example_dir();
     let file_path = current_dir.join(file_name);
     csv::Reader::from_path(file_path).unwrap()
 }
