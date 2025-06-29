@@ -1,35 +1,12 @@
 use crate::people::ContextPeopleExt;
 use crate::people::PeoplePlugin;
-use crate::Context;
+use crate::{Context, PluginContext};
 use crate::IxaError;
 use crate::PersonId;
 use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
-pub(crate) trait ContextPeopleExtCrate {
-    #[allow(dead_code)]
-    fn get_person_property_by_name(
-        &self,
-        name: &str,
-        person_id: PersonId,
-    ) -> Result<String, IxaError>;
-
-    #[allow(dead_code)]
-    fn tabulate_person_properties_by_name<F>(
-        &self,
-        properties: Vec<String>,
-        print_fn: F,
-    ) -> Result<(), IxaError>
-    where
-        F: Fn(&Context, &[String], usize);
-
-    fn index_property_by_id(&self, type_id: TypeId);
-
-    #[allow(dead_code)]
-    fn get_person_property_names(&self) -> Vec<String>;
-}
-
-impl ContextPeopleExtCrate for Context {
+pub(crate) trait ContextPeopleExtCrate: PluginContext {
     fn get_person_property_by_name(
         &self,
         name: &str,
@@ -100,6 +77,7 @@ impl ContextPeopleExtCrate for Context {
             .collect()
     }
 }
+impl ContextPeopleExtCrate for Context {}
 
 #[cfg(test)]
 mod test {
