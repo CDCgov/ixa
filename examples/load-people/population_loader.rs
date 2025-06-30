@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::prelude::*;
