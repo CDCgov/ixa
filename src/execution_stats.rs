@@ -1,3 +1,6 @@
+// Loss of precision is allowable in this module's use cases.
+#![allow(clippy::cast_precision_loss)]
+
 use bytesize::ByteSize;
 use humantime::format_duration;
 use log::{debug, error, info};
