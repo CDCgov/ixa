@@ -121,7 +121,6 @@ impl ExecutionProfilingCollector {
     #[allow(unused)]
     pub fn cpu_time(&mut self) -> u64 {
         if let Some(process_id) = self.process_id {
-            println!("refreshing cpu...");
             // Only refresh cpu statistics
             self.update_system_info(ProcessRefreshKind::nothing().with_cpu());
 
@@ -356,8 +355,6 @@ mod tests {
         }
 
         let cpu_time_2 = collector.cpu_time();
-        println!("start: {:?}, end: {:?}", cpu_time_1, cpu_time_2);
-
         assert!(cpu_time_2 > cpu_time_1);
     }
 }
