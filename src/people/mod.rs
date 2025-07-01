@@ -97,7 +97,7 @@ use std::{any::TypeId, hash::Hash};
 
 define_data_plugin!(
     PeoplePlugin,
-    PeopleData,
+    PeopleData<Context>,
     PeopleData {
         is_initializing: false,
         current_population: 0,

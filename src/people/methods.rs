@@ -3,7 +3,7 @@
 use crate::people::index::IndexValue;
 use crate::{ContextPeopleExt, PersonId, PersonProperty};
 
-type PersonCallback<T, C: ContextPeopleExt> = dyn Fn(&C, PersonId) -> T;
+type PersonCallback<T, C> = dyn Fn(&C, PersonId) -> T;
 
 pub(crate) struct Methods<C: ContextPeopleExt> {
     // A callback that calculates the IndexValue of a person's current property value
@@ -13,7 +13,7 @@ pub(crate) struct Methods<C: ContextPeopleExt> {
     pub(super) get_display: Box<PersonCallback<String, C>>,
 }
 
-impl<C: ContextPeopleExt> Methods<C>{
+impl<C: ContextPeopleExt> Methods<C> {
     pub(super) fn new<T: PersonProperty>() -> Self {
         Self {
             indexer: Box::new(move |context: &C, person_id: PersonId| {

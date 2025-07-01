@@ -80,7 +80,12 @@ impl Index {
         }
     }
 
-    pub(super) fn add_person(&mut self, context: &Context, methods: &Methods, person_id: PersonId) {
+    pub(super) fn add_person(
+        &mut self,
+        context: &Context,
+        methods: &Methods<Context>,
+        person_id: PersonId,
+    ) {
         let hash = (methods.indexer)(context, person_id);
         self.lookup
             .as_mut()
@@ -94,7 +99,7 @@ impl Index {
     pub(super) fn remove_person(
         &mut self,
         context: &Context,
-        methods: &Methods,
+        methods: &Methods<Context>,
         person_id: PersonId,
     ) {
         let hash = (methods.indexer)(context, person_id);
@@ -107,7 +112,7 @@ impl Index {
         }
     }
 
-    pub(super) fn index_unindexed_people(&mut self, context: &Context, methods: &Methods) {
+    pub(super) fn index_unindexed_people(&mut self, context: &Context, methods: &Methods<Context>) {
         if self.lookup.is_none() {
             return;
         }
