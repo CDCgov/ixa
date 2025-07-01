@@ -1,5 +1,6 @@
 # Performance and Profiling
-## Tweaking Compiler Optimizations with Build Profiles
+
+## Optimizing Performance with Build Profiles
 
 Build profiles allow you to configure compiler settings for different kinds of builds.
 By default, Cargo uses the `dev` profile, which is usually what you want for normal
@@ -9,29 +10,21 @@ which does more aggressive code optimization and disables runtime checks for num
 overflow and debug assertions. In some cases, this can improve performance dramatically.
 
 The [Cargo documentation for build
-profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) describes
-many different settings you can tweak. You are not limited to Cargo's built in
-profiles either. In fact, you might wish to create your own profile for creating
-flame graphs, for example, as we do in the section on flame graphs below.
-
-The table below lists settings that are particularly relevant for execution speed.
-
-| **Setting**       | **Type**               | **Description**                                                                             | **Typical for Release** |
-| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------- | ----------------------- |
-| `opt-level`       | 0-3, "s", "z"          | Controls the level of optimization. 3 = highest runtime speed. "s"/"z" = size-optimized.    | `3`                     |
-| `lto`             | Boolean, "thin", "fat" | Link Time Optimization. Improves runtime performance by optimizing across crate boundaries. | `true`                  |
-| `codegen-units`   | Integer                | Number of codegen units. Lower = better optimization. 1 enables whole-program optimization. | `1`                     |
-| `debug`           | Boolean                | Whether to include debug info. false = smaller, faster binary, but less debuggable.         | `false`                 |
-| `overflow-checks` | Boolean                | Whether to insert integer overflow checks. Disabling may improve performance in release.    | `false`                 |
-| `incremental`     | Boolean                | Enables incremental compilation. Good for dev speed, but bad for final binary performance.  | `false`                 |
-These settings go under `[profile.release]` or a custom profile like `[profile.bench]` in your `Cargo.toml` file. For **maximum execution speed**, the key trio is:
+profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) describes many different
+settings you can tweak. You are not limited to Cargo's built in profiles either. In fact, you
+might wish to create your own profile for creating flame graphs, for example, as we do in the
+section on flame graphs below. These settings go under `[profile.release]` or a custom profile
+like `[profile.bench]` in your `Cargo.toml` file. For **maximum execution speed**, the key trio is:
 
 ```toml
 [profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+opt-level = 3     # Controls the level of optimization. 3 = highest runtime speed. "s"/"z" = size-optimized.
+lto = true        # Link Time Optimization. Improves runtime performance by optimizing across crate boundaries.
+codegen-units = 1 # Number of codegen units. Lower = better optimization. 1 enables whole-program optimization.
 ```
+
+The [Cargo documentation for build profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) describes
+a few more settings that can affect runtime performance, but these are the most important.
 
 ## Visualizing Execution with Flame Graphs
 
@@ -73,11 +66,11 @@ samply record ./target/profiling/my_project
 We can pass command line arguments as usual if we need to:
 
 ```
-samply record ./target/profiling/my_project -- arg1 arg2
+samply record ./target/profiling/my_project arg1 arg2
 ```
 
-The `--` separates samply arguments from binary arguments.  When executing completes,
-samply will open the results in a browser. The graph looks something like this:
+When execution completes, samply will open the results in a browser. The graph looks
+something like this:
 
 ![](flamegraph.svg)
 
@@ -126,7 +119,9 @@ fn load_population_data(path: &str, context: &mut Context) {
 ```
 
 This pattern is especially useful to pair with a progress bar as in the next section.
+
 ## Progress Bar
+
 Provides functions to set up and update a progress bar.
 
 A progress bar has a label, a maximum progress value, and its current progress, which
@@ -164,7 +159,7 @@ pub fn update_custom_progress(current_value: usize);
 
 /// Increments the custom progress bar by 1. Use this if you don't want to keep track of the
 /// current value.
-pub fn increment_custom_progress()
+pub fn increment_custom_progress();
 ```
 
 ### Custom Example: People Infected
