@@ -7,6 +7,8 @@ use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
 pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
+    // Note: We can't do a default implementation here because
+    // it uses callbacks that take a &Context
     fn get_person_property_by_name(
         &self,
         name: &str,
