@@ -26,10 +26,10 @@ impl StoredPeopleProperties {
     }
 }
 
-pub(super) struct PeopleData<C: ContextPeopleExt> {
+pub(super) struct PeopleData {
     pub(super) is_initializing: bool,
     pub(super) current_population: usize,
-    pub(super) methods: RefCell<HashMap<TypeId, Methods<C>>>,
+    pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     pub(super) registered_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
@@ -129,7 +129,7 @@ where
     }
 }
 
-impl<C: ContextPeopleExt> PeopleData<C> {
+impl PeopleData {
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     /// This will increment the current population by 1.
     pub(super) fn add_person(&mut self) -> PersonId {
@@ -227,7 +227,7 @@ impl<C: ContextPeopleExt> PeopleData<C> {
         Ok(())
     }
 
-    pub(super) fn get_methods(&self, t: TypeId) -> RefMut<'_, Methods<C>> {
+    pub(super) fn get_methods(&self, t: TypeId) -> RefMut<'_, Methods> {
         let x = self.methods.borrow_mut();
         RefMut::map(x, |a| a.get_mut(&t).unwrap())
     }
