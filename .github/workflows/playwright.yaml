@@ -1,0 +1,66 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: integration-tests/ixa-wasm-tests
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Rust/Cargo cache
+      - name: Cache Cargo and target directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.rustup/toolchains/
+            target/
+          key: cargo-${{ hashFiles('Cargo.toml') }}
+
+      # npm cache
+      - name: Cache npm and node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            integration-tests/ixa-wasm-tests/node_modules
+          key: npm-${{ hashFiles('integration-tests/ixa-wasm-tests/package.json') }}
+          restore-keys: |
+            npm-
+
+      # Playwright browser cache
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers
+
+      - name: Install Rust target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack &> /dev/null; then
+            cargo install wasm-pack --locked
+          fi
+
+      - name: Install JS dependencies and Playwright binaries
+        run: |
+          npm install
+          npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        run: npm test

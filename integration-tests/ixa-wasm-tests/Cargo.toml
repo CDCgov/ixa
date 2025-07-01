@@ -1,0 +1,24 @@
+[package]
+name = "ixa-wasm-tests"
+version = "0.1.0"
+description = "Integration tests for the Wasm target"
+publish = false
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "^0.3.77", features = ["Window", "Performance"] }
+js-sys = "^0.3.77"
+
+# Explicitly use the Ixa in this same project.
+ixa = { path = "../../", default-features = false, features = ["logging"] }
+rand_distr = "^0.4.3"
+serde = { version = "^1.0.217", features = ["derive"] }
