@@ -17,9 +17,9 @@ To each person we will associate a value of the enum (short for “enumeration�
 
 - **S**: Represents someone who is susceptible to infection.
 - **I**: Represents someone who is currently infected.
-- **R**: Represents someone who has recovered (or is otherwise no longer infectious).
+- **R**: Represents someone who has recovered.
 
-Each value in the enum corresponds to a stage in our simple SIR (Susceptible, Infected, Recovered) model. The enum value for a person's `InfectionStatus` property will refer to an individual’s health status in our simulation.
+Each value in the enum corresponds to a stage in our simple model. The enum value for a person's `InfectionStatus` property will refer to an individual’s health status in our simulation.
 
 The attributes written above the enum declaration, such as `#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]`, automatically add useful functionality to the enum:
 

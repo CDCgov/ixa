@@ -1,6 +1,6 @@
 [package]
 name = "disease_model"
-description = "A basic SIR disease model using the Ixa agent-based modeling framework"
+description = "A basic disease model using the Ixa agent-based modeling framework"
 authors = ["John Doe <jdoe@example.com>"]
 version = "0.1.0"
 edition = "2024"
