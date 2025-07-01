@@ -5,6 +5,20 @@
     <title>Ixa WASM Demo</title>
 </head>
 <body>
-<h1 id="output">Ready</h1>
+<h1 id="output">Loading...</h1>
+<script type="module">
+    import init, { run_simulation } from "./pkg/ixa_wasm_tests.js";
+
+    init().then(() => {
+        const output = document.getElementById("output");
+        output.textContent = "Running simulation... ";
+
+        run_simulation().then((result) => {
+            output.textContent += result;
+        }).catch((err) => {
+            output.textContent = "Simulation failed: " + err;
+        });
+    });
+</script>
 </body>
 </html>

@@ -9,6 +9,9 @@ edition.workspace = true
 homepage.workspace = true
 authors.workspace = true
 
+[profile.release]
+debug = true
+
 [lib]
 crate-type = ["cdylib"]
 
