@@ -2,12 +2,15 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use crate::execution_stats::{
+    log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
+};
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{error, trace};
+use crate::{error, trace, ContextPeopleExt};
 use crate::{HashMap, HashMapExt};
 use std::fmt::{Display, Formatter};
 use std::{
@@ -87,6 +90,8 @@ pub struct Context {
     break_requested: bool,
     #[cfg(feature = "debugger")]
     breakpoints_enabled: bool,
+    execution_profiler: ExecutionProfilingCollector,
+    pub print_execution_statistics: bool,
 }
 
 impl Context {
@@ -106,6 +111,8 @@ impl Context {
             break_requested: false,
             #[cfg(feature = "debugger")]
             breakpoints_enabled: true,
+            execution_profiler: ExecutionProfilingCollector::new(),
+            print_execution_statistics: false,
         }
     }
 
@@ -397,12 +404,22 @@ impl Context {
                 self.execute_single_step();
             }
 
+            self.execution_profiler.refresh();
+
             #[cfg(not(feature = "debugger"))]
             if self.shutdown_requested {
                 break;
             } else {
                 self.execute_single_step();
             }
+        }
+
+        let population = self.get_current_population();
+        let stats = self.execution_profiler.compute_final_statistics(population);
+        if self.print_execution_statistics {
+            print_execution_statistics(&stats);
+        } else {
+            log_execution_statistics(&stats);
         }
     }
 

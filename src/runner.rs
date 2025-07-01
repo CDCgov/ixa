@@ -67,6 +67,10 @@ pub struct BaseArgs {
     /// Enable the Web API at a given time. Defaults to t=0.0
     #[arg(short, long)]
     pub web: Option<Option<u16>>,
+
+    /// Suppresses the printout of summary statistics at the end of the simulation.
+    #[arg(long)]
+    pub no_stats: bool,
 }
 
 impl BaseArgs {
@@ -80,6 +84,7 @@ impl BaseArgs {
             log_level: None,
             debugger: None,
             web: None,
+            no_stats: false,
         }
     }
 }
@@ -182,7 +187,7 @@ where
                 log_levels.iter().map(|(k, v)| (k, *v)).collect();
             set_module_filters(log_levels_slice.as_slice());
             for (key, value) in log_levels {
-                println!("Logging enabled for {key} at level {value}");
+                info!("Logging enabled for {key} at level {value}");
                 // Here you can set the log level for each key-value pair as needed
             }
         } else {
@@ -226,6 +231,15 @@ where
     #[cfg(not(feature = "web_api"))]
     if args.web.is_some() {
         warn!("Ixa was not compiled with the web_api feature, but a web_api option was provided");
+    }
+
+    if args.no_stats {
+        context.print_execution_statistics = false;
+    } else {
+        if cfg!(target_family = "wasm") {
+            warn!("the print-stats option is enabled; some statistics are not supported for the wasm target family");
+        }
+        context.print_execution_statistics = true;
     }
 
     // Run the provided Fn
