@@ -256,7 +256,7 @@ where
 
     if args.no_stats {
         if cfg!(target_family = "wasm") {
-            warn!("the print-stats option is enabled; some statistics are not supported for the wasm target family")
+            warn!("the print-stats option is enabled; some statistics are not supported for the wasm target family");
         }
         context.print_execution_statistics = false;
     } else {
