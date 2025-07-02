@@ -5,10 +5,9 @@
 //! arbitrary number of outgoing edges of a given type, with each edge
 //! having a weight. Edge types can also specify their own per-type
 //! data which will be stored along with the edge.
-use crate::HashMap;
 use crate::{
     context::Context, define_data_plugin, error::IxaError, people::PersonId,
-    random::ContextRandomExt, random::RngId,
+    random::ContextRandomExt, random::RngId, HashMap, PluginContext,
 };
 use rand::Rng;
 use std::any::{Any, TypeId};
@@ -180,7 +179,8 @@ macro_rules! define_edge_type {
 
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
-pub trait ContextNetworkExt {
+// Public API.
+pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
     /// Add an edge of type `T` between `person` and `neighbor` with a
     /// given `weight`.  `inner` is a value of whatever type is
     /// associated with `T`.
@@ -198,7 +198,10 @@ pub trait ContextNetworkExt {
         neighbor: PersonId,
         weight: f32,
         inner: T::Value,
-    ) -> Result<(), IxaError>;
+    ) -> Result<(), IxaError> {
+        let data_container = self.get_data_container_mut(NetworkPlugin);
+        data_container.add_edge::<T>(person, neighbor, weight, inner)
+    }
 
     /// Add a pair of edges of type `T` between `person1` and
     /// `neighbor2` with a given `weight`, one edge in each
@@ -219,84 +222,17 @@ pub trait ContextNetworkExt {
         person2: PersonId,
         weight: f32,
         inner: T::Value,
-    ) -> Result<(), IxaError>;
-
-    /// Remove an edge of type `T` between `person` and `neighbor`
-    /// if one exists.
-    ///
-    /// # Errors
-    /// Returns `IxaError` if no edge exists.
-    fn remove_edge<T: EdgeType + 'static>(
-        &mut self,
-        person: PersonId,
-        neighbor: PersonId,
-    ) -> Result<(), IxaError>;
-
-    /// Get an edge of type `T` between `person` and `neighbor`
-    /// if one exists.
-    fn get_edge<T: EdgeType + 'static>(
-        &self,
-        person: PersonId,
-        neighbor: PersonId,
-    ) -> Option<&Edge<T::Value>>;
-
-    /// Get all edges of type `T` from `person`.
-    fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>>;
-
-    /// Get all edges of type `T` from `person` that match the predicate
-    /// provided in `filter`. Note that because `filter` has access to
-    /// both the edge, which contains the neighbor and `Context`, it is
-    /// possible to filter on properties of the neighbor. The function
-    /// `context.matching_person()` might be helpful here.
-    ///
-    fn get_matching_edges<T: EdgeType + 'static>(
-        &self,
-        person: PersonId,
-        filter: impl Fn(&Context, &Edge<T::Value>) -> bool + 'static,
-    ) -> Vec<Edge<T::Value>>;
-
-    /// Find all people who have an edge of type `T` and degree `degree`.
-    fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId>;
-
-    /// Select a random edge out of the list of outgoing edges of type
-    /// `T` from `person_id`, weighted by the edge weights.
-    ///
-    /// # Errors
-    /// Returns `IxaError` if there are no edges.
-    fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(
-        &self,
-        rng_id: R,
-        person_id: PersonId,
-    ) -> Result<Edge<T::Value>, IxaError>
-    where
-        R::RngType: Rng;
-}
-
-// Public API.
-impl ContextNetworkExt for Context {
-    fn add_edge<T: EdgeType + 'static>(
-        &mut self,
-        person: PersonId,
-        neighbor: PersonId,
-        weight: f32,
-        inner: T::Value,
-    ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container_mut(NetworkPlugin);
-        data_container.add_edge::<T>(person, neighbor, weight, inner)
-    }
-
-    fn add_edge_bidi<T: EdgeType + 'static>(
-        &mut self,
-        person1: PersonId,
-        person2: PersonId,
-        weight: f32,
-        inner: T::Value,
     ) -> Result<(), IxaError> {
         let data_container = self.get_data_container_mut(NetworkPlugin);
         data_container.add_edge::<T>(person1, person2, weight, inner)?;
         data_container.add_edge::<T>(person2, person1, weight, inner)
     }
 
+    /// Remove an edge of type `T` between `person` and `neighbor`
+    /// if one exists.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if no edge exists.
     fn remove_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
@@ -311,6 +247,8 @@ impl ContextNetworkExt for Context {
         data_container.remove_edge::<T>(person, neighbor)
     }
 
+    /// Get an edge of type `T` between `person` and `neighbor`
+    /// if one exists.
     fn get_edge<T: EdgeType + 'static>(
         &self,
         person: PersonId,
@@ -324,6 +262,7 @@ impl ContextNetworkExt for Context {
         }
     }
 
+    /// Get all edges of type `T` from `person`.
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
         let data_container = self.get_data_container(NetworkPlugin);
 
@@ -333,21 +272,19 @@ impl ContextNetworkExt for Context {
         }
     }
 
+    /// Get all edges of type `T` from `person` that match the predicate
+    /// provided in `filter`. Note that because `filter` has access to
+    /// both the edge, which contains the neighbor and `Context`, it is
+    /// possible to filter on properties of the neighbor. The function
+    /// `context.matching_person()` might be helpful here.
+    ///
     fn get_matching_edges<T: EdgeType + 'static>(
         &self,
         person: PersonId,
         filter: impl Fn(&Context, &Edge<T::Value>) -> bool + 'static,
-    ) -> Vec<Edge<T::Value>> {
-        let edges = self.get_edges::<T>(person);
-        let mut result = Vec::new();
-        for edge in &edges {
-            if filter(self, edge) {
-                result.push(*edge);
-            }
-        }
-        result
-    }
+    ) -> Vec<Edge<T::Value>>;
 
+    /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
         let data_container = self.get_data_container(NetworkPlugin);
 
@@ -357,6 +294,11 @@ impl ContextNetworkExt for Context {
         }
     }
 
+    /// Select a random edge out of the list of outgoing edges of type
+    /// `T` from `person_id`, weighted by the edge weights.
+    ///
+    /// # Errors
+    /// Returns `IxaError` if there are no edges.
     fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(
         &self,
         rng_id: R,
@@ -375,6 +317,22 @@ impl ContextNetworkExt for Context {
         let weights: Vec<_> = edges.iter().map(|x| x.weight).collect();
         let index = self.sample_weighted(rng_id, &weights);
         Ok(edges[index])
+    }
+}
+impl ContextNetworkExt for Context {
+    fn get_matching_edges<T: EdgeType + 'static>(
+        &self,
+        person: PersonId,
+        filter: impl Fn(&Context, &Edge<T::Value>) -> bool + 'static,
+    ) -> Vec<Edge<T::Value>> {
+        let edges = self.get_edges::<T>(person);
+        let mut result = Vec::new();
+        for edge in &edges {
+            if filter(self, edge) {
+                result.push(*edge);
+            }
+        }
+        result
     }
 }
 

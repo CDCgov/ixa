@@ -17,8 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::trace;
-use crate::{HashMap, HashMapExt};
+use crate::{trace, HashMap, HashMapExt, PluginContext};
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
@@ -52,7 +51,7 @@ pub struct PropertyAccessors {
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertyAccessors>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
-#[allow(clippy::missing_panics_doc)]
+#[allow(clippy::missing_panics_doc, clippy::uninlined_format_args)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de> + serde::Serialize,
@@ -158,68 +157,6 @@ crate::context::define_data_plugin!(
     }
 );
 
-pub trait ContextGlobalPropertiesExt {
-    /// Set the value of a global property of type T
-    ///
-    /// # Errors
-    /// Will return an error if an attempt is made to change a value.
-    fn set_global_property_value<T: GlobalProperty + 'static>(
-        &mut self,
-        property: T,
-        value: T::Value,
-    ) -> Result<(), IxaError>;
-
-    /// Return value of global property T
-    fn get_global_property_value<T: GlobalProperty + 'static>(
-        &self,
-        _property: T,
-    ) -> Option<&T::Value>;
-
-    fn list_registered_global_properties(&self) -> Vec<String>;
-
-    /// Return the serialized value of a global property by fully qualified name
-    ///
-    /// # Errors
-    ///
-    /// Will return an `IxaError` if the property does not exist
-    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
-
-    /// Given a file path for a valid json file, deserialize parameter values
-    /// for a given struct T
-    ///
-    /// # Errors
-    ///
-    /// Will return an `IxaError` if the `file_path` does not exist or
-    /// cannot be deserialized
-    fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
-        &mut self,
-        file_path: &Path,
-    ) -> Result<T, IxaError>;
-
-    /// Load global properties from a JSON file.
-    ///
-    /// The expected structure is a dictionary with each name being
-    /// the name of the struct prefixed with the crate name, as in:
-    /// `ixa.NumFluVariants` and the value being an object which can
-    /// serde deserialize into the relevant struct.
-    ///
-    /// # Errors
-    /// Will return an `IxaError` if:
-    /// * The `file_path` doesn't exist
-    /// * The file isn't valid JSON
-    /// * A specified object doesn't correspond to an existing global property.
-    /// * There are two values for the same object.
-    ///
-    /// Ixa automatically knows about any property defined with
-    /// [`define_global_property!()`] so you don't need to register them
-    /// explicitly.
-    ///
-    /// It is possible to call [`Context::load_global_properties()`] multiple
-    /// times with different files as long as the files have disjoint
-    /// sets of properties.
-    fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
-}
-
 impl GlobalPropertiesDataContainer {
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
@@ -249,7 +186,11 @@ impl GlobalPropertiesDataContainer {
     }
 }
 
-impl ContextGlobalPropertiesExt for Context {
+pub trait ContextGlobalPropertiesExt: PluginContext {
+    /// Set the value of a global property of type T
+    ///
+    /// # Errors
+    /// Will return an error if an attempt is made to change a value.
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
@@ -260,6 +201,7 @@ impl ContextGlobalPropertiesExt for Context {
         data_container.set_global_property_value(&property, value)
     }
 
+    /// Return value of global property T
     #[allow(unused_variables)]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
@@ -278,14 +220,20 @@ impl ContextGlobalPropertiesExt for Context {
         tmp.keys().cloned().collect()
     }
 
-    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
-        let accessor = get_global_property_accessor(name);
-        match accessor {
-            Some(accessor) => (accessor.getter)(self),
-            None => Err(IxaError::from(format!("No global property: {name}"))),
-        }
-    }
+    /// Return the serialized value of a global property by fully qualified name
+    ///
+    /// # Errors
+    ///
+    /// Will return an `IxaError` if the property does not exist
+    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
 
+    /// Given a file path for a valid json file, deserialize parameter values
+    /// for a given struct T
+    ///
+    /// # Errors
+    ///
+    /// Will return an `IxaError` if the `file_path` does not exist or
+    /// cannot be deserialized
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &Path,
@@ -295,6 +243,39 @@ impl ContextGlobalPropertiesExt for Context {
         let reader = BufReader::new(config_file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
+    }
+
+    /// Load global properties from a JSON file.
+    ///
+    /// The expected structure is a dictionary with each name being
+    /// the name of the struct prefixed with the crate name, as in:
+    /// `ixa.NumFluVariants` and the value being an object which can
+    /// serde deserialize into the relevant struct.
+    ///
+    /// # Errors
+    /// Will return an `IxaError` if:
+    /// * The `file_path` doesn't exist
+    /// * The file isn't valid JSON
+    /// * A specified object doesn't correspond to an existing global property.
+    /// * There are two values for the same object.
+    ///
+    /// Ixa automatically knows about any property defined with
+    /// [`define_global_property!()`] so you don't need to register them
+    /// explicitly.
+    ///
+    /// It is possible to call [`Context::load_global_properties()`] multiple
+    /// times with different files as long as the files have disjoint
+    /// sets of properties.
+    fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
+}
+
+impl ContextGlobalPropertiesExt for Context {
+    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
+        let accessor = get_global_property_accessor(name);
+        match accessor {
+            Some(accessor) => (accessor.getter)(self),
+            None => Err(IxaError::from(format!("No global property: {name}"))),
+        }
     }
 
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError> {
