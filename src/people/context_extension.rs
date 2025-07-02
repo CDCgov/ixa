@@ -86,6 +86,10 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+
+    /// Similar to `match_person`, but more efficient, it removes people
+    /// from a list who do not match the given query.
+    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
@@ -313,6 +317,18 @@ impl ContextPeopleExt for Context {
             }
         }
         true
+    }
+
+    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T) {
+        T::setup(&q, self);
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        for (t, hash) in q.get_query() {
+            let methods = data_container.get_methods(t);
+            people.retain(|person_id| hash == (*methods.indexer)(self, *person_id));
+            if people.is_empty() {
+                break;
+            }
+        }
     }
 
     fn register_property<T: PersonProperty>(&self) {
