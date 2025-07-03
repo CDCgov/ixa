@@ -268,7 +268,6 @@ pub trait ContextGlobalPropertiesExt: PluginContext {
     /// sets of properties.
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
-
 impl ContextGlobalPropertiesExt for Context {
     fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
         let accessor = get_global_property_accessor(name);

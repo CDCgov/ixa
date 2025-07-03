@@ -497,7 +497,6 @@ pub trait PluginContext: Sized {
     fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
     fn get_current_time(&self) -> f64;
 }
-
 impl PluginContext for Context {
     delegate::delegate! {
         to self {
