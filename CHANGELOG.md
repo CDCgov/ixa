@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/CDCgov/ixa/compare/ixa-v0.1.2...ixa-v0.2.0) - 2025-07-07
+
+### Added
+
+- Adds `filter_people`, which removes people from a vector. Fixes #435. ([#437](https://github.com/CDCgov/ixa/pull/437))
+- Added wasm integration tests with playwright ([#410](https://github.com/CDCgov/ixa/pull/410))
+- Added a progress bar feature and modified the logging module to accommodate it. ([#416](https://github.com/CDCgov/ixa/pull/416))
+- add sample people ([#422](https://github.com/CDCgov/ixa/pull/422))
+- Resources for learning Rust for ixa development ([#412](https://github.com/CDCgov/ixa/pull/412))
+- Wasm Compatibility, including a new Wasm logger ([#379](https://github.com/CDCgov/ixa/pull/379))
+- Add PluginContext trait for Context ([#385](https://github.com/CDCgov/ixa/pull/385))
+- Use a fast pseudorandom number generator ([#380](https://github.com/CDCgov/ixa/pull/380))
+
+### Fixed
+
+- person_property debug trait ([#413](https://github.com/CDCgov/ixa/pull/413))
+- Fix paths for mdbook, turn off create-missing ([#395](https://github.com/CDCgov/ixa/pull/395))
+
+### Other
+
+- use PluginContext ([#438](https://github.com/CDCgov/ixa/pull/438))
+- Silences a few lints new in the latest Rust release. ([#442](https://github.com/CDCgov/ixa/pull/442))
+- edits to book re SIR terminology ([#432](https://github.com/CDCgov/ixa/pull/432))
+- Added a section on performance and profiling in the Ixa Book. Fixes #407. ([#425](https://github.com/CDCgov/ixa/pull/425))
+- Update context.rs ([#431](https://github.com/CDCgov/ixa/pull/431))
+- Made in-source references to input files for examples more robust. Fixes #374. ([#428](https://github.com/CDCgov/ixa/pull/428))
+- bump release-plz/action from 0.5.107 to 0.5.108 ([#418](https://github.com/CDCgov/ixa/pull/418))
+- add action to Check Conventional Commits ([#415](https://github.com/CDCgov/ixa/pull/415))
+- Disable markdown lint ([#420](https://github.com/CDCgov/ixa/pull/420))
+- Add release plz config to use conventional commits ([#411](https://github.com/CDCgov/ixa/pull/411))
+- Update dependabot.yaml ([#382](https://github.com/CDCgov/ixa/pull/382))
+- Remove duplicate `For instance` from docs ([#383](https://github.com/CDCgov/ixa/pull/383))
+
 ## [0.1.2](https://github.com/CDCgov/ixa/compare/ixa-v0.1.1...ixa-v0.1.2) - 2025-06-06
 
 ### Added
