@@ -147,7 +147,7 @@ impl Context {
         E::on_subscribe(self);
     }
 
-    /// Emit and event of type E to be handled by registered receivers
+    /// Emit an event of type E to be handled by registered receivers
     ///
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks

@@ -14,6 +14,13 @@ struct Incidence {
 
 create_report_trait!(Incidence);
 
+fn example_dir() -> PathBuf {
+    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    parameters_path
+        .join("examples")
+        .join("reports-multi-threaded")
+}
+
 #[allow(unexpected_cfgs)]
 fn main() {
     let scenarios = vec!["Illinois", "Wisconsin", "Arizona", "California"];
@@ -26,7 +33,7 @@ fn main() {
 
             context
                 .report_options()
-                .directory(PathBuf::from("./examples/reports-multi-threaded"))
+                .directory(example_dir())
                 .file_prefix(format!("{scenario}_"))
                 .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
             context

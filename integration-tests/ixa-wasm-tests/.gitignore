@@ -1,0 +1,8 @@
+# wasm-pack output
+/pkg/
+
+# node dependencies
+/node_modules/
+
+# playwright test output
+/test-results/

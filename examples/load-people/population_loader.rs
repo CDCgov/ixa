@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::prelude::*;
@@ -35,8 +35,11 @@ fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> Pe
 
 pub fn init(context: &mut Context) {
     // Load csv and deserialize records
-    let current_dir = Path::new(file!()).parent().unwrap();
-    let mut reader = csv::Reader::from_path(current_dir.join("people.csv")).unwrap();
+    let data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("load-people")
+        .join("people.csv");
+    let mut reader = csv::Reader::from_path(data_path).unwrap();
 
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
