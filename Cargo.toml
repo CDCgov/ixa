@@ -145,6 +145,12 @@ missing_panics_doc = "allow"
 missing_errors_doc = "allow"
 uninlined_format_args = "allow"
 result_unit_err = "allow"
+struct_field_names = "allow"
+unnecessary_debug_formatting = "allow"
+struct_excessive_bools = "allow"
+
+[lints]
+workspace = true
 
 [lib]
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
