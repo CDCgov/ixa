@@ -82,6 +82,7 @@ pub mod progress;
 #[cfg(feature = "debugger")]
 pub mod external_api;
 mod hashing;
+pub mod numeric;
 
 #[cfg(feature = "web_api")]
 pub mod web_api;
