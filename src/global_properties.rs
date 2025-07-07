@@ -51,7 +51,7 @@ pub struct PropertyAccessors {
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertyAccessors>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
-#[allow(clippy::missing_panics_doc, clippy::uninlined_format_args)]
+#[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de> + serde::Serialize,
