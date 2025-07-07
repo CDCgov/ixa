@@ -30,7 +30,6 @@ pub fn initialize(context: &mut Context) {
 }
 
 // Exported to JS
-#[allow(clippy::uninlined_format_args)]
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
     // Wrap our async simulation in a JS Promise
