@@ -88,7 +88,10 @@ pub trait ContextPeopleExt {
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
 
     /// Similar to `match_person`, but more efficient, it removes people
-    /// from a list who do not match the given query.
+    /// from a list who do not match the given query. Note that this
+    /// method modifies the vector in-place, so it is up to the caller
+    /// to clone the vector if they don't want to modify their original
+    /// vector.
     fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
