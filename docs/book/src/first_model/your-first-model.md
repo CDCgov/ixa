@@ -1,17 +1,17 @@
 # Your First Model
 
-In this section we will get acquainted with the basic features of Ixa by implementing a simple [SIR (Susceptible, Infected, Recovered) model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology#The_SIR_model). This section is just a starting point. It is _not_ intended to be:
+In this section we will get acquainted with the basic features of Ixa by implementing a simple infectious disease transmission model. This section is just a starting point. It is _not_ intended to be:
 
 - An introduction to the [Rust programming language](https://www.rust-lang.org/learn) (or [crash course](https://stevedonovan.github.io/rust-gentle-intro/readme.html)) or software engineering topics like [source control with Git](https://git-scm.com/book/ms/v2/Getting-Started-About-Version-Control)
 - A tutorial on using a Unix-flavored command line
-- An overview or survey of either [disease modeling](https://en.wikipedia.org/wiki/Mathematical_modelling_of_infectious_diseases) in general or [agent-based modeling](https://en.wikipedia.org/wiki/Agent-based_model) specifically
+- An overview or survey of either [disease modeling](https://en.wikipedia.org/wiki/Mathematical_modelling_of_infectious_diseases) or [agent-based modeling](https://en.wikipedia.org/wiki/Agent-based_model)
 - An exhaustive treatment of all of the features of Ixa
 
 ## Our Abstract Model
 
-We introduce modeling in Ixa by implementing a simple SIR model for a food-borne illness where infection events follow a **Poisson process**. We assume that each susceptible person has a constant risk of becoming infected over time, independent of past infections. The Poisson process describes events (infections) occurring randomly in time but with a constant rate.
+We introduce modeling in Ixa by implementing a simple model for a food-borne illness where infection events follow a **Poisson process**. We assume that each susceptible person has a constant risk of becoming infected over time, independent of past infections. The Poisson process describes events (infections) occurring randomly in time but with a constant rate.
 
-In this model, each individual susceptible person has an exponentially distributed time until they are infected. This means the time between successive infection events follows an exponential distribution. The rate of infection is typically expressed as a **force of infection**, which is a measure of the risk of a susceptible individual contracting the disease. In the case of a food-borne illness, this force is constant, meaning each susceptible individual faces a fixed probability per unit time of becoming infected, independent of the number of people already infected.
+In this model, each individual susceptible person has an exponentially distributed time until they are infected. This means the time between successive infection events follows an exponential distribution. The rate of infection is typically expressed as a **force of infection**, which is a measure of the risk of a susceptible individual contracting the disease. In the case of a food-borne illness, this force is constant, meaning each susceptible individual faces a fixed probability per unit time of becoming infected, independent of the number of people already infected. Infected individuals subsequently recovery and cannot be re-infected. (Note that while this model has S, I, and R compartments, it is different from the [canonical "SIR" model](https://en.wikipedia.org/wiki/Compartmental_models_(epidemiology)#The_SIR_model). In our simple model, the force of infection does not depend on the prevalence of infected persons. Put another way, our "I" compartment consists merely of _infected_ persons; they are not _infectious_.)
 
 ## High-level view of how Ixa functions
 
@@ -43,8 +43,8 @@ The single responsibility principle in software engineering is a key idea behind
 In the context of our disease transmission model:
 
 - The **population loader** is solely responsible for setting up the initial state of the simulation by importing and structuring the data about people.
-- The **transmission manager** focuses exclusively on modeling how the disease spreads from one person to another.
-- The **infection manager** takes care of the progression of the disease within an individual until recovery.
+- The **transmission manager** focuses exclusively on modeling the process by which persons get infected.
+- The **infection manager** takes care of the progression of the disease within an infected individual until recovery.
 - The **reporting module** handles data collection and output, ensuring that results are recorded accurately.
 
 By organizing the model into these distinct modules, each with a single responsibility, we ensure that our simulation remains organized and manageable—even as the complexity of the model grows.
