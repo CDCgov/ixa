@@ -1,10 +1,10 @@
 use crate::context::{run_with_plugin, Context};
-use crate::define_data_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, r#continue, run_ext_api, time,
     EmptyArgs,
 };
+use crate::{define_data_plugin, PluginContext};
 use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
 use axum::response::Redirect;
@@ -187,29 +187,11 @@ fn handle_web_api(context: &mut Context, api: &mut ApiData) {
     }
 }
 
-pub trait ContextWebApiExt {
+pub trait ContextWebApiExt: PluginContext {
     /// Set up the Web API and start the Web server.
     ///
     /// # Errors
     /// `IxaError` on failure to bind to `port`
-    fn setup_web_api(&mut self, port: u16) -> Result<String, IxaError>;
-
-    /// Schedule the simulation to pause at time t and listen for
-    /// requests from the Web API.
-    fn schedule_web_api(&mut self, t: f64);
-
-    /// Add an API point.
-    /// # Errors
-    /// `IxaError` when the Web API has not been set up yet.
-    fn add_web_api_handler(
-        &mut self,
-        name: &str,
-        handler: impl Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>
-            + 'static,
-    ) -> Result<(), IxaError>;
-}
-
-impl ContextWebApiExt for Context {
     fn setup_web_api(&mut self, port: u16) -> Result<String, IxaError> {
         // TODO(cym4@cdc.gov): Check on the limits here.
         let (api_to_ctx_send, api_to_ctx_recv) = mpsc::unbounded_channel::<ApiRequest>();
@@ -254,6 +236,8 @@ impl ContextWebApiExt for Context {
         Ok(url)
     }
 
+    /// Schedule the simulation to pause at time t and listen for
+    /// requests from the Web API.
     fn schedule_web_api(&mut self, t: f64) {
         self.add_plan(t, |context| {
             run_with_plugin::<ApiPlugin>(context, |context, data_container| {
@@ -263,6 +247,8 @@ impl ContextWebApiExt for Context {
     }
 
     /// Add an API point.
+    /// # Errors
+    /// `IxaError` when the Web API has not been set up yet.
     fn add_web_api_handler(
         &mut self,
         name: &str,
@@ -280,6 +266,7 @@ impl ContextWebApiExt for Context {
         }
     }
 }
+impl ContextWebApiExt for Context {}
 
 #[cfg(test)]
 mod tests {

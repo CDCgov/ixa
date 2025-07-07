@@ -1,53 +1,19 @@
 use crate::people::ContextPeopleExt;
 use crate::people::PeoplePlugin;
-use crate::Context;
 use crate::IxaError;
 use crate::PersonId;
+use crate::{Context, PluginContext};
 use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
-pub(crate) trait ContextPeopleExtCrate {
-    #[allow(dead_code)]
+pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
+    // Note: We can't do a default implementation here because
+    // it uses callbacks that take a &Context
     fn get_person_property_by_name(
         &self,
         name: &str,
         person_id: PersonId,
     ) -> Result<String, IxaError>;
-
-    #[allow(dead_code)]
-    fn tabulate_person_properties_by_name<F>(
-        &self,
-        properties: Vec<String>,
-        print_fn: F,
-    ) -> Result<(), IxaError>
-    where
-        F: Fn(&Context, &[String], usize);
-
-    fn index_property_by_id(&self, type_id: TypeId);
-
-    #[allow(dead_code)]
-    fn get_person_property_names(&self) -> Vec<String>;
-}
-
-impl ContextPeopleExtCrate for Context {
-    fn get_person_property_by_name(
-        &self,
-        name: &str,
-        person_id: PersonId,
-    ) -> Result<String, IxaError> {
-        let data_container = self.get_data_container(PeoplePlugin);
-        if data_container.is_none() {
-            return Err(IxaError::IxaError(String::from("No people exist")));
-        }
-        let data_container = data_container.unwrap();
-        let type_id = *data_container
-            .people_types
-            .borrow()
-            .get(name)
-            .ok_or(IxaError::IxaError(format!("No property '{name}'")))?;
-        let methods = data_container.get_methods(type_id);
-        Ok((methods.get_display)(self, person_id))
-    }
 
     fn tabulate_person_properties_by_name<F>(
         &self,
@@ -98,6 +64,26 @@ impl ContextPeopleExtCrate for Context {
             .keys()
             .map(std::string::ToString::to_string)
             .collect()
+    }
+}
+impl ContextPeopleExtCrate for Context {
+    fn get_person_property_by_name(
+        &self,
+        name: &str,
+        person_id: PersonId,
+    ) -> Result<String, IxaError> {
+        let data_container = self.get_data_container(PeoplePlugin);
+        if data_container.is_none() {
+            return Err(IxaError::IxaError(String::from("No people exist")));
+        }
+        let data_container = data_container.unwrap();
+        let type_id = *data_container
+            .people_types
+            .borrow()
+            .get(name)
+            .ok_or(IxaError::IxaError(format!("No property '{name}'")))?;
+        let methods = data_container.get_methods(type_id);
+        Ok((methods.get_display)(self, person_id))
     }
 }
 

@@ -119,7 +119,6 @@ pub trait ContextPeopleExt {
     where
         R::RngType: Rng;
 }
-
 impl ContextPeopleExt for Context {
     fn get_current_population(&self) -> usize {
         self.get_data_container(PeoplePlugin)

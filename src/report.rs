@@ -3,7 +3,7 @@ use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
 use crate::Tabulator;
 use crate::{error, trace};
-use crate::{HashMap, HashMapExt};
+use crate::{HashMap, HashMapExt, PluginContext};
 use csv::Writer;
 use serde::Serializer;
 use std::any::TypeId;
@@ -125,7 +125,7 @@ crate::context::define_data_plugin!(
     }
 );
 
-impl Context {
+pub trait ContextReportExt: PluginContext {
     // Builds the filename. Called by `add_report`, `short_name` refers to the
     // report type. The three main components are `prefix`, `directory`, and
     // `short_name`.
@@ -137,42 +137,13 @@ impl Context {
         let basename = format!("{prefix}{short_name}");
         directory.join(basename).with_extension("csv")
     }
-}
 
-pub trait ContextReportExt {
     /// Add a report file keyed by a `TypeId`.
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
     /// # Errors
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
     /// If the file cannot be created, raises an error.
-    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError>;
-
-    /// Call `add_report` with each report type, passing the name of the report type.
-    /// The `short_name` is used for file naming to distinguish what data each
-    /// output file points to.
-    /// # Errors
-    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
-    /// If the file cannot be created, raises an error.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>;
-
-    /// Adds a periodic report at the end of period `period` which summarizes the
-    /// number of people in each combination of properties in `tabulator`.
-    /// # Errors
-    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
-    /// If the file cannot be created, returns [`IxaError`]
-    fn add_periodic_report<T: Tabulator + Clone + 'static>(
-        &mut self,
-        short_name: &str,
-        period: f64,
-        tabulator: T,
-    ) -> Result<(), IxaError>;
-    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>>;
-    fn send_report<T: Report>(&self, report: T);
-    fn report_options(&mut self) -> &mut ConfigReportOptions;
-}
-
-impl ContextReportExt for Context {
     fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
         trace!("adding report {short_name} by type_id {type_id:?}");
         let path = self.generate_filename(short_name);
@@ -201,10 +172,23 @@ impl ContextReportExt for Context {
         file_writer.insert(type_id, writer);
         Ok(())
     }
+
+    /// Call `add_report` with each report type, passing the name of the report type.
+    /// The `short_name` is used for file naming to distinguish what data each
+    /// output file points to.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, raises an error.
     fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
         trace!("Adding report {short_name}");
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
+
+    /// Adds a periodic report at the end of period `period` which summarizes the
+    /// number of people in each combination of properties in `tabulator`.
+    /// # Errors
+    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
+    /// If the file cannot be created, returns [`IxaError`]
     fn add_periodic_report<T: Tabulator + Clone + 'static>(
         &mut self,
         short_name: &str,
@@ -270,6 +254,7 @@ impl ContextReportExt for Context {
         &mut data_container.config
     }
 }
+impl ContextReportExt for Context {}
 
 #[cfg(test)]
 mod test {
