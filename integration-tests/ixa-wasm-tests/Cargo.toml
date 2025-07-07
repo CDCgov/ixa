@@ -22,3 +22,6 @@ js-sys = "^0.3.77"
 ixa = { path = "../../", default-features = false, features = ["logging"] }
 rand_distr = "^0.4.3"
 serde = { version = "^1.0.217", features = ["derive"] }
+
+[lints]
+workspace = true
