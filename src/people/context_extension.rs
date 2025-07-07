@@ -86,6 +86,13 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+
+    /// Similar to `match_person`, but more efficient, it removes people
+    /// from a list who do not match the given query. Note that this
+    /// method modifies the vector in-place, so it is up to the caller
+    /// to clone the vector if they don't want to modify their original
+    /// vector.
+    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
@@ -313,6 +320,18 @@ impl ContextPeopleExt for Context {
             }
         }
         true
+    }
+
+    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T) {
+        T::setup(&q, self);
+        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        for (t, hash) in q.get_query() {
+            let methods = data_container.get_methods(t);
+            people.retain(|person_id| hash == (*methods.indexer)(self, *person_id));
+            if people.is_empty() {
+                break;
+            }
+        }
     }
 
     fn register_property<T: PersonProperty>(&self) {
@@ -968,6 +987,22 @@ mod tests {
         assert!(context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::High))));
         assert!(!context.match_person(person, ((Age, 43), (RiskCategory, RiskCategoryValue::High))));
         assert!(!context.match_person(person, ((Age, 42), (RiskCategory, RiskCategoryValue::Low))));
+    }
+
+    #[test]
+    fn test_filter_people() {
+        let mut context = Context::new();
+        let _ = context.add_person((Age, 40)).unwrap();
+        let _ = context.add_person((Age, 42)).unwrap();
+        let _ = context.add_person((Age, 42)).unwrap();
+        let mut all_people = context.query_people(());
+
+        let mut result = all_people.clone();
+        context.filter_people(&mut result, (Age, 42));
+        assert_eq!(result.len(), 2);
+
+        context.filter_people(&mut all_people, (Age, 43));
+        assert!(all_people.is_empty());
     }
 
     #[test]
