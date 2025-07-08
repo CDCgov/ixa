@@ -59,20 +59,20 @@ cargo build --profile profiling
 This creates your binary in `target/profiling/my_project`, where `my_project`
 is standing in for the name of the project. Now run the project with samply:
 
-```
+```bash
 samply record ./target/profiling/my_project
 ```
 
 We can pass command line arguments as usual if we need to:
 
-```
+```bash
 samply record ./target/profiling/my_project arg1 arg2
 ```
 
 When execution completes, samply will open the results in a browser. The graph looks
 something like this:
 
-![](flamegraph.svg)
+![Flame Graph](flamegraph.svg)
 
 The graph shows the "stack trace," that is, nested function calls, with a "deeper" function
 call stacked on top of the function that called it, but does not otherwise preserve
@@ -105,14 +105,14 @@ use std::time::Instant;
 use ixa::trace;
 
 fn load_population_data(path: &str, context: &mut Context) {
-	// Record the start time before we begin loading the data.
+    // Record the start time before we begin loading the data.
     let start = Instant::now();
 
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     // .. code to load in the data goes here ...
 
-	// This line computes the time that has elapsed since `start`.
+    // This line computes the time that has elapsed since `start`.
     let duration = start.elapsed();
     trace!("Loaded population data from {} in {:?}", path, duration);
 }
@@ -187,7 +187,7 @@ pub type InfectionStatusEvent = PersonPropertyChangeEvent<InfectionStatus>;
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
   // We only increment the progress bar when a new infection occurs.
   if (InfectionStatusValue::Susceptible, InfectionStatusValue::Infected)
-  		== (event.previous, event.current)
+      == (event.previous, event.current)
   {
     increment_custom_progress();
   }
