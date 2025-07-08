@@ -9,10 +9,10 @@ Our model will only have a single report that records the current in-simulation 
 {{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:IncidenceReportItem}}
 ```
 
-The fact that `IncidenceReportItem` derives `Serialize` is what makes this magic work. We define a report for this struct using the `create_report_trait!` macro.
+The fact that `IncidenceReportItem` derives `Serialize` is what makes this magic work. We define a report for this struct using the `define_report!` macro.
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:create_report_trait}}
+{{#rustdoc_include ../../models/disease_model/src/incidence_report.rs:define_report}}
 ```
 
 The way we listen to events is almost identical to how we did it in the `infection` module. First let's make the event handler, that is, the callback that will be called whenever an event is emitted.

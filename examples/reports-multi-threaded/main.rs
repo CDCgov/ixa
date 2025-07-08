@@ -1,5 +1,4 @@
 use ixa::prelude::*;
-use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::thread;
@@ -12,7 +11,7 @@ struct Incidence {
     t: f64,
 }
 
-create_report_trait!(Incidence);
+define_report!(Incidence);
 
 fn example_dir() -> PathBuf {
     let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
