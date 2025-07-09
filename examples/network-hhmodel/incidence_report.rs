@@ -2,7 +2,6 @@ use crate::parameters::Parameters;
 use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
 use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
-use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
@@ -14,7 +13,7 @@ struct IncidenceReportItem {
     infected_by: String,
 }
 
-create_report_trait!(IncidenceReportItem);
+define_report!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,

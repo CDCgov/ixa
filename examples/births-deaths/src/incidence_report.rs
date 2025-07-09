@@ -1,6 +1,5 @@
 use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
-use ixa::report::Report;
 use std::path::Path;
 
 use crate::population_manager::{
@@ -20,7 +19,7 @@ struct IncidenceReportItem {
     infection_status: InfectionStatusValue,
 }
 
-create_report_trait!(IncidenceReportItem);
+define_report!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,

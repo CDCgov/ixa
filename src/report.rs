@@ -70,9 +70,9 @@ pub trait Report: 'static {
 
 /// Use this macro to define a unique report type
 #[macro_export]
-macro_rules! create_report_trait {
+macro_rules! define_report {
     ($name:ident) => {
-        impl Report for $name {
+        impl $crate::Report for $name {
             fn type_id(&self) -> std::any::TypeId {
                 std::any::TypeId::of::<$name>()
             }
@@ -274,7 +274,7 @@ mod test {
         value: String,
     }
 
-    create_report_trait!(SampleReport);
+    define_report!(SampleReport);
 
     #[test]
     fn add_and_send_report() {

@@ -1,7 +1,6 @@
 use crate::infection_manager::InfectionStatusEvent;
 use crate::people::InfectionStatusValue;
 use ixa::prelude::*;
-use ixa::report::Report;
 use ixa::{trace, PersonId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,7 +12,7 @@ struct IncidenceReportItem {
     infection_status: InfectionStatusValue,
 }
 
-create_report_trait!(IncidenceReportItem);
+define_report!(IncidenceReportItem);
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     trace!(

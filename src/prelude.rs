@@ -1,5 +1,4 @@
 pub use crate::context::Context;
-pub use crate::create_report_trait;
 pub use crate::define_data_plugin;
 pub use crate::define_derived_property;
 pub use crate::define_edge_type;
@@ -7,6 +6,7 @@ pub use crate::define_global_property;
 pub use crate::define_multi_property_index;
 pub use crate::define_person_property;
 pub use crate::define_person_property_with_default;
+pub use crate::define_report;
 pub use crate::define_rng;
 pub use crate::error::IxaError;
 pub use crate::global_properties::ContextGlobalPropertiesExt;

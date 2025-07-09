@@ -1,10 +1,7 @@
 use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::Parameters;
+use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
 use ixa::prelude::*;
-use ixa::{
-    people::{PersonCreatedEvent, PersonPropertyChangeEvent},
-    report::Report,
-};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -18,7 +15,7 @@ struct PersonReportItem {
     property_current: String,
 }
 
-create_report_trait!(PersonReportItem);
+define_report!(PersonReportItem);
 
 fn handle_person_created(context: &mut Context, event: PersonCreatedEvent) {
     let person = event.person_id;

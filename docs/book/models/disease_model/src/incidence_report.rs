@@ -1,7 +1,7 @@
 //ANCHOR: imports
 use crate::{infection_manager::InfectionStatusEvent, people::InfectionStatusValue};
 use csv;
-use ixa::{prelude::*, trace, PersonId, Report};
+use ixa::{prelude::*, trace, PersonId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 //ANCHOR_END: imports
@@ -15,9 +15,9 @@ struct IncidenceReportItem {
 }
 //ANCHOR_END: IncidenceReportItem
 
-//ANCHOR: create_report_trait
-create_report_trait!(IncidenceReportItem);
-//ANCHOR_END: create_report_trait
+//ANCHOR: define_report
+define_report!(IncidenceReportItem);
+//ANCHOR_END: define_report
 
 //ANCHOR: handle_infection_status_change
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {

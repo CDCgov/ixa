@@ -1,6 +1,5 @@
 use ixa::prelude::*;
 use ixa::report::serialize_f64;
-use ixa::report::Report;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -18,8 +17,8 @@ struct Death {
     t: f64,
 }
 
-create_report_trait!(Incidence);
-create_report_trait!(Death);
+define_report!(Incidence);
+define_report!(Death);
 
 #[allow(unexpected_cfgs)]
 fn initialize() -> Result<Context, IxaError> {
