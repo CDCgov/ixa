@@ -219,22 +219,22 @@ macro_rules! define_multi_property_index {
         $crate::paste::paste! {
             define_derived_property!(
                 [< $($dependency)+ Query >],
-                $crate::people::index::IndexValue,
+                $crate::people::IndexValue,
                 [$($dependency),+],
                 |$([< $dependency:lower >]),+| {
                     let mut combined = vec!(
                         $(
                             (std::any::TypeId::of::<$dependency>(),
-                            $crate::people::index::IndexValue::compute(&[< $dependency:lower >]))
+                            $crate::people::IndexValue::compute(&[< $dependency:lower >]))
                         ),*
                     );
                     combined.sort_by(|a, b| a.0.cmp(&b.0));
                     let values = combined.iter().map(|x| x.1).collect::<Vec<_>>();
-                    $crate::people::index::IndexValue::compute(&values)
+                    $crate::people::IndexValue::compute(&values)
                 }
             );
 
-            $crate::people::index::add_multi_property_index::<[< $($dependency)+ Query >]>(
+            $crate::people::add_multi_property_index::<[< $($dependency)+ Query >]>(
                 #[allow(clippy::useless_vec)]
                 &vec![
                     $(
