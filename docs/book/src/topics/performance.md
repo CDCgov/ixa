@@ -1,5 +1,23 @@
 # Performance and Profiling
 
+## Indexing
+
+Indexing properties that are queried repeatedly in your simulation can
+lead to dramatic speedups. It is not uncommon to see two or more orders
+of magnitude of improvement in some cases. It is also very simple to do.
+
+You can index a single property, or you can index multiple properties
+*jointly*. Just include the following method call(s) during the initialization
+of `context`, replacing the example property names with your own:
+
+```rust
+// Somewhere during the initialization of `context`
+context.index_property(Age); // For single property indexes
+define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
+```
+
+See the [chapter on Indexing](indexing.md) for full details.
+
 ## Optimizing Performance with Build Profiles
 
 Build profiles allow you to configure compiler settings for different kinds of builds.
@@ -9,12 +27,12 @@ run a real experiment with your project, you will want to use the `release` buil
 which does more aggressive code optimization and disables runtime checks for numeric
 overflow and debug assertions. In some cases, this can improve performance dramatically.
 
-The [Cargo documentation for build
-profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) describes many different
-settings you can tweak. You are not limited to Cargo's built in profiles either. In fact, you
-might wish to create your own profile for creating flame graphs, for example, as we do in the
-section on flame graphs below. These settings go under `[profile.release]` or a custom profile
-like `[profile.bench]` in your `Cargo.toml` file. For **maximum execution speed**, the key trio is:
+The [Cargo documentation for build profiles](https://doc.rust-lang.org/cargo/reference/profiles.html)
+describes many different settings you can tweak. You are not limited to Cargo's built in profiles
+either. In fact, you might wish to create your own profile for creating flame graphs, for example, as
+we do in the section on flame graphs below. These settings go under `\[profile.release]` or a custom
+profile like `\[profile.bench]` in your `Cargo.toml` file. For **maximum execution speed**, the key
+trio is:
 
 ```toml
 [profile.release]
@@ -29,7 +47,7 @@ a few more settings that can affect runtime performance, but these are the most 
 ## Visualizing Execution with Flame Graphs
 
 [Samply](https://github.com/mstange/samply/) and
-[Flamegraph](https://github.com/flamegraph-rs/flamegraph) are easy to use
+[Flame Graph](https://github.com/flamegraph-rs/flamegraph) are easy to use
 profiling tools that generate a "flame graph" that visualizes stack traces,
 which allow you to see how much execution time is spent in different parts of
 your program. We demonstrate how to use Samply, which has better macOS support.
@@ -72,7 +90,7 @@ samply record ./target/profiling/my_project arg1 arg2
 When execution completes, samply will open the results in a browser. The graph looks
 something like this:
 
-![Flame Graph](flamegraph.svg)
+![Flame Graph](../assets/flamegraph.svg)
 
 The graph shows the "stack trace," that is, nested function calls, with a "deeper" function
 call stacked on top of the function that called it, but does not otherwise preserve

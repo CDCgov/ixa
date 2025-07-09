@@ -11,6 +11,7 @@
   - [Next Steps](first_model/next-steps.md)
 - [Topics](topics/topics.md)
   - [`random` module](topics/random-module.md)
+  - [Indexing](topics/indexing.md)
   - [Performance and Profiling](topics/performance.md)
 - [Appendix: Rust](appendix_rust/appendix-rust.md)
   - [Rust Learning Resources](appendix_rust/rust-resources.md)
