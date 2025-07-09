@@ -5,10 +5,10 @@ permissions:
   contents: write
 
 on:
-  - schedule:
+  schedule:
     # At 04:00 on Monday
     - cron: '0 4 * * 1'
-  - workflow_dispatch:
+  workflow_dispatch:
 
 env:
   # The date of the first run of the action. It has to be set to a date that is on the same weekday as the cron.
