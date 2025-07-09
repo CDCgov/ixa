@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
 //! Provides functions to set up and update a progress bar.
 //!
 //! A progress bar has a label, a maximum progress value, and its current progress, which
@@ -63,7 +65,7 @@
 //! fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
 //!   // We only increment the progress bar when a new infection occurs.
 //!   if (InfectionStatusValue::Susceptible, InfectionStatusValue::Infected)
-//!   		== (event.previous, event.current)
+//!       == (event.previous, event.current)
 //!   {
 //!     increment_custom_progress();
 //!   }
@@ -113,6 +115,7 @@ pub(crate) fn update_timeline_progress(mut current_time: f64) {
         set_progress_bar_progress(current_time.round() as usize);
         // It's possible that `progress.round() == max_time.round()` but `progress < max_time`.
         // We only finalize if they are equal as floats.
+        #[allow(clippy::float_cmp)]
         if current_time == *max_time {
             finalize_progress_bar();
         }
