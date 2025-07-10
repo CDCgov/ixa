@@ -4,13 +4,50 @@ permissions:
   pull-requests: write
   contents: write
 
-on: workflow_dispatch
+on:
+  schedule:
+    # At 04:00 on Monday
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+env:
+  # The date of the first run of the action. It has to be set to a date that is on the same weekday as the cron.
+  # 06/30/2025 is Monday, so the cron is set to run on Monday.
+  # Every second week of the bi-weekly cycle, the action is going to be skipped.
+  # The cron time can be set to any time of the day.
+  FIRST_RUN_DATE: 2025-06-30
 
 jobs:
+  weekindex:
+    runs-on: ubuntu-latest
+    outputs:
+      weekindex: ${{ steps.calculate.outputs.weekindex }}
+    steps:
+      - name: Calculate weekdiff
+        id: calculate
+        run: |
+          current_date=$(date +%Y-%m-%d)
+          start=$(date -d ${{ env.FIRST_RUN_DATE }} +%s)
+          end=$(date -d $current_date +%s)
+          weekdiff=$(((end-start) / 60 / 60 / 24 / 7))
+          weekindex=$((weekdiff % 2))
+          echo "weekindex=$weekindex" >> "$GITHUB_OUTPUT"
+          echo "FIRST_RUN_DATE: ${{ env.FIRST_RUN_DATE }}" >> $GITHUB_STEP_SUMMARY
+          echo "current_date: $current_date" >> $GITHUB_STEP_SUMMARY
+          echo "weekdiff: $weekdiff" >> $GITHUB_STEP_SUMMARY
+          echo "weekindex: $weekindex" >> $GITHUB_STEP_SUMMARY
+          if [ $weekindex -eq 0 ]; then
+            echo "🟢 It's the first week of the bi-weekly cycle. The action is going to run." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "🔴 It's the second week of the bi-weekly cycle. The action is going to be skipped." >> $GITHUB_STEP_SUMMARY
+          fi
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
     name: Release-plz PR
+    if: ${{ needs.weekindex.outputs.weekindex == 0 }}
+    needs:
+      - weekindex
     runs-on: ubuntu-latest
     permissions:
       contents: write
