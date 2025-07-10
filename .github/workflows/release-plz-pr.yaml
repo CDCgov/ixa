@@ -12,10 +12,10 @@ on:
 
 env:
   # The date of the first run of the action. It has to be set to a date that is on the same weekday as the cron.
-  # 07/07/2025 is Monday, so the cron is set to run on Monday.
+  # 06/30/2025 is Monday, so the cron is set to run on Monday.
   # Every second week of the bi-weekly cycle, the action is going to be skipped.
   # The cron time can be set to any time of the day.
-  FIRST_RUN_DATE: 2025-07-07
+  FIRST_RUN_DATE: 2025-06-30
 
 jobs:
   weekindex:
