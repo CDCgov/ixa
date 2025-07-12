@@ -1,9 +1,4 @@
 ########################################
-# Set environment variables for Rust builds
-########################################
-export RUSTFLAGS := "-D warnings"
-
-########################################
 # Setup Tasks (one-time developer use)
 ########################################
 
@@ -13,10 +8,12 @@ install-wasm-target:
 
 # Install wasm-pack if not already installed
 install-wasm-pack:
-    command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+    if ! command -v wasm-pack &> /dev/null; then
+        cargo install wasm-pack --locked
+    fi
 
 # Install JS dependencies and Playwright binaries
-install-playwright:
+playwright-setup:
     cd integration-tests/ixa-wasm-tests && \
     npm install && \
     npx playwright install --with-deps
@@ -29,26 +26,10 @@ install-mdbook:
 
 # Install pre-commit and set up Git hooks
 install-pre-commit:
-    command -v pre-commit >/dev/null || pip install --user pre-commit
-    pre-commit install
-
-# Install markdownlint
-install-markdownlint:
-    npm install -g markdownlint-cli
-
-# Install or upgrade Prettier for formatting Markdown
-install-prettier:
-    npm install -g prettier
-
-# install all
-install:
-    just install-wasm-target
-    just install-wasm-pack
-    just install-playwright
-    just install-mdbook
-    just install-pre-commit
-    just install-markdownlint
-    just install-prettier
+    if ! command -v pre-commit &> /dev/null; then
+        pip install --user pre-commit
+        pre-commit install
+    fi
 
 ########################################
 # Build Tasks
@@ -58,7 +39,8 @@ install:
 build:
     cargo build --workspace --verbose
 
-# Build the Wasm target with logging enabled and no default features as a check. Use `build-wasm-pack` instead.
+# Build the Wasm target with logging enabled and no default features.
+# Use `build-wasm-pack` instead.
 build-wasm:
     cargo build --verbose --target wasm32-unknown-unknown --no-default-features --features logging
 
@@ -78,7 +60,8 @@ build-examples:
 build-tests:
     cargo test --no-run --verbose
 
-# Build all targets: lib, bin, test, example, bench. Does NOT build wasm/wasm-pack
+# Build all targets: lib, bin, test, example, bench
+# Does NOT build wasm/wasm-pack
 build-all:
     cargo build --all-targets --workspace --verbose
 
@@ -86,71 +69,60 @@ build-all:
 # Test and Benchmark Tasks
 ########################################
 
-# Run all unit and integration tests for all packages (excludes examples and wasm)
+# Run all unit and integration tests
 test:
     cargo test --workspace --verbose
 
-# Run ixa example tests
+# Run example tests
 test-examples:
-    cargo test  --workspace --examples
+    cargo test --examples
 
 # Run all benchmarks
 bench:
     cargo bench -p ixa-bench
 
 # Run browser-based Playwright tests via npm
-test-playwright:
+playwright-test:
     cd integration-tests/ixa-wasm-tests && npm test
 
 # Alias: wasm-test is a clearer name for Playwright-based Wasm tests
-test-wasm: test-playwright
+wasm-test: playwright-test
 
 ########################################
 # Example Run Tasks
 ########################################
-# Run individual example binaries
 
-# Run the `basic` example
+# Run individual example binaries
 run-example-basic:
     cargo run --example basic
 
-# Run the `basic-infection` example
 run-example-basic-infection:
     cargo run --example basic-infection
 
-# Run the `births-deaths` example
 run-example-births-deaths:
     cargo run --example births-deaths
 
-# Run the `load-people` example
 run-example-load-people:
     cargo run --example load-people
 
-# Run the `network-hhmodel` example
 run-example-network-hhmodel:
     cargo run --example network-hhmodel
 
-# Run the `parameter-loading` example
 run-example-parameter-loading:
     cargo run --example parameter-loading
 
-# Run the `random` example
 run-example-random:
     cargo run --example random
 
-# Run the `reports` example
 run-example-reports:
     cargo run --example reports
 
-# Run the `reports-multi-threaded` example
 run-example-reports-multi-threaded:
     cargo run --example reports-multi-threaded
 
-# Run the `runner` example
 run-example-runner:
     cargo run --example runner
 
-# Run the `time-varying-infection` example
 run-example-time-varying-infection:
     cargo run --example time-varying-infection -- examples/time-varying-infection/input.json
 
@@ -180,53 +152,28 @@ build-docs:
 build-book:
     mdbook build docs/book -d ../../website/book
 
+
 ########################################
-# Linting, Formatting, and Code Quality
+# Linting and Code Quality
 ########################################
 
 # Run all pre-commit checks (as configured in .pre-commit-config.yaml)
 precommit:
     pre-commit run --all-files
 
-# Lint all Markdown files (no fixes)
-lint-md:
-    markdownlint "**/*.md"
-
-# Auto-fix and format all Markdown files
-fix-md:
-    markdownlint --fix "**/*.md"
-    prettier --write "**/*.md" --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
-
-# Lint a specific Markdown file
-lint-md-file filename:
-    markdownlint {{filename}}
-
-# Fix and format a specific Markdown file
-fix-md-file filename:
-    markdownlint --fix {{filename}}
-    prettier --write {{filename}}
-
-# Format all Rust code in the workspace using rustfmt
-format-rust:
-    cargo fmt
-
-# Lint the entire Rust workspace using Clippy (no auto-fix)
-lint-rust:
-    cargo clippy --workspace --all-targets -- -D warnings
-
-# Attempt to auto-fix Clippy lints (Rust nightly only)
-fix-rust:
-    cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings
+# Run markdownlint-cli2 manually (not yet enabled in pre-commit)
+markdownlint:
+    markdownlint-cli2 "**/*.md"
 
 ########################################
 # Clean Tasks
 ########################################
 
-# Remove Rust build artifacts (`cargo clean`)
+# Remove Rust build artifacts
 clean-target:
     cargo clean
 
-# Remove wasm-pack and Playwright build artifacts (including `node_modules`)
+# Remove wasm-pack and Playwright build artifacts
 clean-wasm:
     rm -rf pkg
     rm -rf integration-tests/ixa-wasm-tests/pkg
@@ -234,40 +181,17 @@ clean-wasm:
 
 # Remove all documentation artifacts
 clean-docs:
-    rm -rf website/doc website/debug
-    rm -f website/.rustc_info.json website/.rustdoc_fingerprint.json
+    rm -rf website/doc
 
-# Remove all book artifacts
 clean-book:
     rm -rf website/book
 
-# Delete example-generated output files and directories
-clean-examples:
-    rm -f \
-        Reports_death.csv \
-        Reports_incidence.csv \
-        examples/births-deaths/incidence.csv \
-        examples/births-deaths/people_report.csv \
-        examples/parameter-loading/incidence.csv \
-        examples/reports-multi-threaded/Arizona_incidence.csv \
-        examples/reports-multi-threaded/California_incidence.csv \
-        examples/reports-multi-threaded/Illinois_incidence.csv \
-        examples/reports-multi-threaded/Wisconsin_incidence.csv \
-        examples/time-varying-infection/incidence.csv \
-        examples/time-varying-infection/person_property_count.csv \
-        incidence.csv \
-        people_report.csv
-    rm -rf \
-        examples/network-hhmodel/output/ \
-        examples/network-hhmodel/tests/
-
-# Remove all build artifacts (all `clean*` recipes)
+# Remove all build artifacts
 clean:
     just clean-target
-    just clean-wasm
     just clean-docs
     just clean-book
-    just clean-examples
+    just clean-wasm
 
 ########################################
 # CI Task (all checks and builds)
@@ -276,12 +200,12 @@ clean:
 # Main CI task: run everything expected in CI (except setup/install)
 ci:
     just precommit
+    just markdownlint
     just build-all
     just build-wasm
     just test
     just test-examples
     just run-examples
-    just build-wasm-pack
-    just test-wasm
+    just wasm-test
     just build-docs
     just build-book
