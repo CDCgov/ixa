@@ -23,6 +23,7 @@ jobs:
             ~/.cargo/git/db/
             ~/.rustup/toolchains/
             target/
+            docs/book/book/
           key: cargo-${{ hashFiles('Cargo.toml') }}
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
