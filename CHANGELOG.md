@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/CDCgov/ixa/compare/ixa-v0.2.0...ixa-v0.2.1) - 2025-07-14
+
+### Added
+
+- Added `execution_stats.rs` that implements collecting profiling data. ([#427](https://github.com/CDCgov/ixa/pull/427))
+
+### Fixed
+
+- define_multi_property_index should not references private module ([#450](https://github.com/CDCgov/ixa/pull/450))
+
+### Other
+
+- release-pr should run every 2 weeks ([#446](https://github.com/CDCgov/ixa/pull/446))
+- Added a command line flag for a timeline progress bar. ([#426](https://github.com/CDCgov/ixa/pull/426))
+- Unorphands numeric.rs, which was accidentally orphaned in #333. ([#443](https://github.com/CDCgov/ixa/pull/443))
+- fix define_report macro ( renamed from create_report_trait) ([#447](https://github.com/CDCgov/ixa/pull/447))
+- fix performance md ([#445](https://github.com/CDCgov/ixa/pull/445))
+
 ## [0.2.0](https://github.com/CDCgov/ixa/compare/ixa-v0.1.2...ixa-v0.2.0) - 2025-07-07
 
 ### Added
