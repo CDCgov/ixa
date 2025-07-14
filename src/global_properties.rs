@@ -17,7 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::{trace, HashMap, HashMapExt, PluginContext};
+use crate::{define_data_plugin, trace, HashMap, HashMapExt, PluginContext};
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
@@ -149,7 +149,7 @@ struct GlobalPropertiesDataContainer {
     global_property_container: HashMap<TypeId, Box<dyn Any>>,
 }
 
-crate::context::define_data_plugin!(
+define_data_plugin!(
     GlobalPropertiesPlugin,
     GlobalPropertiesDataContainer,
     GlobalPropertiesDataContainer {
@@ -207,11 +207,8 @@ pub trait ContextGlobalPropertiesExt: PluginContext {
         &self,
         _property: T,
     ) -> Option<&T::Value> {
-        if let Some(data_container) = self.get_data_container(GlobalPropertiesPlugin) {
-            data_container.get_global_property_value::<T>()
-        } else {
-            None
-        }
+        self.get_data_container(GlobalPropertiesPlugin)
+            .get_global_property_value::<T>()
     }
 
     fn list_registered_global_properties(&self) -> Vec<String> {

@@ -40,6 +40,9 @@
 pub mod context;
 pub use context::{Context, ExecutionPhase, IxaEvent, PluginContext};
 
+mod data_plugin;
+pub use data_plugin::*;
+
 pub mod error;
 pub use error::IxaError;
 

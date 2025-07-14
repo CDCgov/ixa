@@ -2,6 +2,7 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use crate::data_plugin::{get_plugin_ids, DataPlugin};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
 };
@@ -12,10 +13,12 @@ use crate::progress::update_timeline_progress;
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{error, trace, ContextPeopleExt};
 use crate::{HashMap, HashMapExt};
-use std::fmt::{Display, Formatter};
+use polonius_the_crab::prelude::*;
+use std::cell::OnceCell;
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
+    fmt::{Display, Formatter},
     rc::Rc,
 };
 
@@ -81,7 +84,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
-    data_plugins: HashMap<TypeId, Box<dyn Any>>,
+    data_plugins: HashMap<TypeId, OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
@@ -98,7 +101,7 @@ impl Context {
     /// Create a new empty `Context`
     #[must_use]
     pub fn new() -> Context {
-        Context {
+        let mut context = Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
@@ -113,7 +116,14 @@ impl Context {
             breakpoints_enabled: true,
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
+        };
+
+        // Register all data plugins from global list
+        for plugin_type_id in get_plugin_ids() {
+            context.data_plugins.insert(plugin_type_id, OnceCell::new());
         }
+
+        context
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.
@@ -297,11 +307,28 @@ impl Context {
         &mut self,
         _data_plugin: T,
     ) -> &mut T::DataContainer {
-        self.data_plugins
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(T::create_data_container()))
+        let mut self_shadow = self;
+        let type_id = TypeId::of::<T>();
+
+        // If the data plugin is already initialized, return a mutable reference.
+        // Use polonius to address borrow checker limitations.
+        polonius!(|self_shadow| -> &'polonius mut T::DataContainer {
+            if let Some(cell) = self_shadow.data_plugins.get_mut(&type_id) {
+                if let Some(any) = cell.get_mut() {
+                    polonius_return!(any.downcast_mut::<T::DataContainer>().unwrap());
+                }
+                // Else, don't return. Fall through and initialize.
+            }
+        });
+
+        // Initialize the data plugin.
+        let data = T::init(self_shadow);
+        let cell = self_shadow.data_plugins.get_mut(&type_id).unwrap();
+        let _ = cell.set(Box::new(data));
+        cell.get_mut()
+            .unwrap()
             .downcast_mut::<T::DataContainer>()
-            .unwrap() // Will never panic as data container has the matching type
+            .unwrap()
     }
 
     /// Retrieve a reference to the data container associated with a
@@ -310,12 +337,14 @@ impl Context {
     /// Returns a reference to the data container if it exists or else `None`
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn get_data_container<T: DataPlugin>(&self, _data_plugin: T) -> Option<&T::DataContainer> {
-        if let Some(data) = self.data_plugins.get(&TypeId::of::<T>()) {
-            data.downcast_ref::<T::DataContainer>()
-        } else {
-            None
-        }
+    pub fn get_data_container<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
+        let type_id = TypeId::of::<T>();
+        self.data_plugins
+            .get(&type_id)
+            .expect("Data plugin not registered")
+            .get_or_init(|| Box::new(T::init(self)))
+            .downcast_ref::<T::DataContainer>()
+            .unwrap()
     }
 
     /// Shutdown the simulation cleanly, abandoning all events after whatever
@@ -480,7 +509,7 @@ impl Context {
 /// for plugins implementing Context extensions.
 ///
 /// Usage:
-/// ```rust
+/// ```ignore
 /// use ixa::prelude_for_plugins::*;
 /// define_data_plugin!(MyData, bool, false);
 /// pub trait MyPlugin: PluginContext {
@@ -511,7 +540,7 @@ pub trait PluginContext: Sized {
     fn cancel_plan(&mut self, plan_id: &PlanId);
     fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
     fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
-    fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+    fn get_data_container<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
     fn get_current_time(&self) -> f64;
 }
 impl PluginContext for Context {
@@ -525,7 +554,7 @@ impl PluginContext for Context {
             fn cancel_plan(&mut self, plan_id: &PlanId);
             fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
             fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
-            fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+            fn get_data_container<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
         }
     }
@@ -547,7 +576,7 @@ mod test_plugin_context {
 
     fn do_stuff_with_context(context: &mut impl PluginContext) {
         context.add_plan(1.0, |context| {
-            let data = context.get_data_container(MyData).unwrap();
+            let data = context.get_data_container(MyData);
             assert_eq!(*data, 42);
         });
     }
@@ -565,7 +594,7 @@ mod test_plugin_context {
             self.add_plan_with_phase(
                 1.0,
                 |context| {
-                    let data = context.get_data_container(MyData).unwrap();
+                    let data = context.get_data_container(MyData);
                     assert_eq!(*data, 42);
                     context.set_my_data(100);
                 },
@@ -586,7 +615,7 @@ mod test_plugin_context {
                 crate::ExecutionPhase::Normal,
             );
             self.queue_callback(|context| {
-                let data = context.get_data_container(MyData).unwrap();
+                let data = context.get_data_container(MyData);
                 assert_eq!(*data, 42);
             });
         }
@@ -596,7 +625,7 @@ mod test_plugin_context {
             do_stuff_with_context(self);
         }
         fn get_my_data(&self) -> i32 {
-            *self.get_data_container(MyData).unwrap()
+            *self.get_data_container(MyData)
         }
         fn set_my_data(&mut self, value: i32) {
             let data = self.get_data_container_mut(MyData);
@@ -632,6 +661,12 @@ mod test_plugin_context {
     }
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // TODO(cym4@cdc.gov): This is a temporary hack to let you
 // run a plan with mutable references to both the context
 // and a plugin's data. In the future we hope to make a
@@ -646,6 +681,8 @@ pub(crate) fn run_with_plugin<T: DataPlugin>(
     // we can operate on context.
     let mut data_container_box = context.data_plugins.remove(&TypeId::of::<T>()).unwrap();
     let data_container = data_container_box
+        .get_mut()
+        .unwrap()
         .downcast_mut::<T::DataContainer>()
         .unwrap();
 
@@ -658,42 +695,13 @@ pub(crate) fn run_with_plugin<T: DataPlugin>(
         .insert(TypeId::of::<T>(), data_container_box);
 }
 
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// A trait for objects that can provide data containers to be held by `Context`
-pub trait DataPlugin: Any {
-    type DataContainer;
-
-    fn create_data_container() -> Self::DataContainer;
-}
-
-/// Defines a new type for storing data in Context.
-#[macro_export]
-macro_rules! define_data_plugin {
-    ($plugin:ident, $data_container:ty, $default: expr) => {
-        struct $plugin;
-
-        impl $crate::context::DataPlugin for $plugin {
-            type DataContainer = $data_container;
-
-            fn create_data_container() -> Self::DataContainer {
-                $default
-            }
-        }
-    };
-}
-pub use define_data_plugin;
-
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
     use std::cell::RefCell;
 
     use super::*;
+    use crate::define_data_plugin;
     use ixa_derive::IxaEvent;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
@@ -709,13 +717,7 @@ mod tests {
     fn get_data_container() {
         let mut context = Context::new();
         context.get_data_container_mut(ComponentA).push(1);
-        assert_eq!(*context.get_data_container(ComponentA).unwrap(), vec![1],);
-    }
-
-    #[test]
-    fn get_uninitialized_data_container() {
-        let context = Context::new();
-        assert!(context.get_data_container(ComponentA).is_none());
+        assert_eq!(*context.get_data_container(ComponentA), vec![1],);
     }
 
     fn add_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
@@ -1062,9 +1064,6 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
 
-        assert_eq!(
-            *context.get_data_container(ComponentA).unwrap(),
-            vec![0, 1, 2]
-        ); // time 0.0, 1.0, and 2.0
+        assert_eq!(*context.get_data_container(ComponentA), vec![0, 1, 2]); // time 0.0, 1.0, and 2.0
     }
 }

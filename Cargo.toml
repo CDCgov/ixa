@@ -60,6 +60,7 @@ anyhow = "^1.0.28"
 sysinfo = "^0.35.2"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
+polonius-the-crab = "^0.4.2"
 
 [package]
 name = "ixa"
@@ -98,6 +99,7 @@ delegate.workspace = true
 sysinfo.workspace = true
 humantime.workspace = true
 bytesize.workspace = true
+polonius-the-crab.workspace = true
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

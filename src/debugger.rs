@@ -337,7 +337,8 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
+    use super::{enter_debugger, init, DebuggerPlugin};
+    use crate::context::run_with_plugin;
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt, ExecutionPhase};
     use assert_approx_eq::assert_approx_eq;
@@ -516,7 +517,7 @@ mod tests {
         let input = "global get\n";
         let context = &mut Context::new();
         init(context);
-        // We can't use process_line here because we an expect an error to be
+        // We can't use process_line here because we expect an error to be
         // returned rather than string output
         run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
             let debugger = data_container.take().unwrap();

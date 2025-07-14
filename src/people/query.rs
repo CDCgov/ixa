@@ -203,7 +203,6 @@ mod tests {
     fn property_is_indexed<T: 'static>(context: &Context) -> bool {
         context
             .get_data_container(PeoplePlugin)
-            .unwrap()
             .get_index_ref(TypeId::of::<T>())
             .unwrap()
             .lookup

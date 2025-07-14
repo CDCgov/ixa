@@ -238,11 +238,6 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         person: PersonId,
         neighbor: PersonId,
     ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container(NetworkPlugin);
-        // Generate an error if not initialized.
-        if data_container.is_none() {
-            return Err(IxaError::IxaError(String::from("Network not initialized")));
-        }
         let data_container = self.get_data_container_mut(NetworkPlugin);
         data_container.remove_edge::<T>(person, neighbor)
     }
@@ -254,22 +249,14 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         person: PersonId,
         neighbor: PersonId,
     ) -> Option<&Edge<T::Value>> {
-        let data_container = self.get_data_container(NetworkPlugin);
-
-        match data_container {
-            None => None,
-            Some(data_container) => data_container.get_edge::<T>(person, neighbor),
-        }
+        self.get_data_container(NetworkPlugin)
+            .get_edge::<T>(person, neighbor)
     }
 
     /// Get all edges of type `T` from `person`.
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
-        let data_container = self.get_data_container(NetworkPlugin);
-
-        match data_container {
-            None => Vec::new(),
-            Some(data_container) => data_container.get_edges::<T>(person),
-        }
+        self.get_data_container(NetworkPlugin)
+            .get_edges::<T>(person)
     }
 
     /// Get all edges of type `T` from `person` that match the predicate
@@ -286,12 +273,8 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
 
     /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
-        let data_container = self.get_data_container(NetworkPlugin);
-
-        match data_container {
-            None => Vec::new(),
-            Some(data_container) => data_container.find_people_by_degree::<T>(degree),
-        }
+        self.get_data_container(NetworkPlugin)
+            .find_people_by_degree::<T>(degree)
     }
 
     /// Select a random edge out of the list of outgoing edges of type

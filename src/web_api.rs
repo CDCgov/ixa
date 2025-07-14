@@ -1,4 +1,5 @@
-use crate::context::{run_with_plugin, Context};
+use crate::context::Context;
+use crate::data_plugin::run_with_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, r#continue, run_ext_api, time,

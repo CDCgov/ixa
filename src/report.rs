@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
-use crate::Tabulator;
+use crate::{define_data_plugin, Tabulator};
 use crate::{error, trace};
 use crate::{HashMap, HashMapExt, PluginContext};
 use csv::Writer;
@@ -116,7 +116,7 @@ struct ReportData {
 // Registers a data container that stores
 // * file_writers: Maps report type to file writer
 // * config: Contains all the customizable filename options that the user supplies
-crate::context::define_data_plugin!(
+define_data_plugin!(
     ReportPlugin,
     ReportData,
     ReportData {
@@ -231,9 +231,7 @@ pub trait ContextReportExt: PluginContext {
 
     fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
-        let data_container = self
-            .get_data_container(ReportPlugin)
-            .expect("No writer found for the report type");
+        let data_container = self.get_data_container(ReportPlugin);
         let writers = data_container.file_writers.try_borrow_mut().unwrap();
         RefMut::map(writers, |writers| {
             writers

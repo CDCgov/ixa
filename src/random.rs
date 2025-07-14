@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::hashing::hash_str;
-use crate::{HashMap, HashMapExt, PluginContext};
+use crate::{define_data_plugin, HashMap, HashMapExt, PluginContext};
 use log::trace;
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
@@ -57,7 +57,7 @@ struct RngData {
 // * rng_holders: A map of rngs, keyed by their RngId. Note that this is
 //   stored in a RefCell to allow for mutable borrow without requiring a
 //   mutable borrow of the Context itself.
-crate::context::define_data_plugin!(
+define_data_plugin!(
     RngPlugin,
     RngData,
     RngData {
@@ -70,9 +70,7 @@ crate::context::define_data_plugin!(
 /// `RngId`. If the Rng has not been used before, one will be created with the base seed
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
 fn get_rng<R: RngId + 'static>(context: &impl PluginContext) -> RefMut<R::RngType> {
-    let data_container = context
-        .get_data_container(RngPlugin)
-        .expect("You must initialize the random number generator with a base seed");
+    let data_container = context.get_data_container(RngPlugin);
 
     let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
     RefMut::map(rng_holders, |holders| {
@@ -204,13 +202,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "You must initialize the random number generator with a base seed")]
-    fn panic_if_not_initialized() {
-        let context = Context::new();
-        context.sample(FooRng, RngCore::next_u64);
-    }
-
-    #[test]
     fn multiple_rng_types() {
         let mut context = Context::new();
         context.init_random(42);
@@ -255,7 +246,7 @@ mod test {
         // probability of 2/3.
         *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container(SamplerData).unwrap();
+        let parameters = context.get_data_container(SamplerData);
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
@@ -277,7 +268,7 @@ mod test {
         // probability of 2/3.
         *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container(SamplerData).unwrap();
+        let parameters = context.get_data_container(SamplerData);
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {

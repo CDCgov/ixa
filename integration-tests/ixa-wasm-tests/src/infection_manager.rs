@@ -83,7 +83,7 @@ mod test {
         }
 
         context.execute();
-        let recovered_size: usize = *context.get_data_container(RecoveryPlugin).unwrap();
+        let recovered_size: usize = *context.get_data_container(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size);
     }
