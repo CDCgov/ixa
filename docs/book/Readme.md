@@ -5,8 +5,7 @@
 You need mdBook and the `mdbook-callouts` plugin.
 
 ```bash
-cargo install mdbook
-cargo install mdbook-callouts
+cargo install mdbook mdbook-callouts
 ```
 
 Optional but recommended, the `mdbook-inline-highlighting` plugin.
