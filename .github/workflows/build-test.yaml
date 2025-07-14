@@ -28,7 +28,7 @@ jobs:
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
       - name: Install mdBook mdbook-callouts
-        run: cargo install mdbook mdbook-callouts
+        run: cargo install mdbook mdbook-callouts mdbook-inline-highlighting
       - name: Build
         run: cargo build --verbose
       - name: Build Wasm
