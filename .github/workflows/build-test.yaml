@@ -21,14 +21,25 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            ~/.cargo-install/
             ~/.rustup/toolchains/
             target/
             docs/book/book/
           key: cargo-${{ hashFiles('Cargo.toml') }}
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
-      - name: Install mdBook mdbook-callouts
-        run: cargo install mdbook mdbook-callouts mdbook-inline-highlighting
+      - name: Install mdbook
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: mdbook
+      - name: Install mdbook-callouts
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: mdbook-callouts
+      - name: Install mdbook-inline-highlighting
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: mdbook-inline-highlighting
       - name: Build
         run: cargo build --verbose
       - name: Build Wasm
