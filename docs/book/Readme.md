@@ -2,7 +2,7 @@
 
 ## Prerequisits
 
-You need mdBook and the `mdbook-callouts` plugins.
+You need mdBook and the `mdbook-callouts` and `mdbook-inline-highlighting` plugins.
 
 ```bash
 cargo install mdbook mdbook-callouts mdbook-inline-highlighting
