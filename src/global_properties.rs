@@ -115,13 +115,15 @@ macro_rules! define_global_property {
         }
 
         $crate::paste::paste! {
-            #[$crate::ctor::ctor]
-            fn [<$global_property:snake _register>]() {
-                let module = module_path!();
-                let mut name = module.split("::").next().unwrap().to_string();
-                name += ".";
-                name += stringify!($global_property);
-                $crate::global_properties::add_global_property::<$global_property>(&name);
+            $crate::ctor::declarative::ctor!{
+                #[ctor]
+                fn [<$global_property:snake _register>]() {
+                    let module = module_path!();
+                    let mut name = module.split("::").next().unwrap().to_string();
+                    name += ".";
+                    name += stringify!($global_property);
+                    $crate::global_properties::add_global_property::<$global_property>(&name);
+                }
             }
         }
     };

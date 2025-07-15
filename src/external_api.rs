@@ -109,7 +109,7 @@ pub(crate) mod breakpoint {
     use crate::context::Context;
     use crate::debugger::enter_debugger;
     #[cfg(feature = "web_api")]
-    use crate::web_api::enter_web_debugger;
+    use crate::web_api::handle_web_api_with_plugin;
     use crate::{trace, IxaError};
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
@@ -180,7 +180,8 @@ pub(crate) mod breakpoint {
                     Ok(Retval::List(list))
                 }
 
-                ArgsEnum::Set { time, console: _ } => {
+                #[allow(unused_variables)]
+                ArgsEnum::Set { time, console } => {
                     if *time < context.get_current_time() {
                         return Err(IxaError::from(format!(
                             "Breakpoint time {time} is in the past"
@@ -191,7 +192,11 @@ pub(crate) mod breakpoint {
                     if *console {
                         context.schedule_debugger(*time, None, Box::new(enter_debugger));
                     } else {
-                        context.schedule_debugger(*time, None, Box::new(enter_web_debugger));
+                        context.schedule_debugger(
+                            *time,
+                            None,
+                            Box::new(handle_web_api_with_plugin),
+                        );
                     }
                     #[cfg(not(feature = "web_api"))]
                     context.schedule_debugger(*time, None, Box::new(enter_debugger));

@@ -1,5 +1,4 @@
 use crate::context::Context;
-use crate::data_plugin::run_with_plugin;
 use crate::error::IxaError;
 use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, r#continue, run_ext_api, time,
@@ -45,10 +44,18 @@ struct ApiData {
     handlers: HashMap<String, Box<WebApiHandler>>,
 }
 
-pub(crate) fn enter_web_debugger(context: &mut Context) {
-    run_with_plugin::<ApiPlugin>(context, |context, data_container| {
-        handle_web_api(context, data_container.as_mut().unwrap());
-    });
+/// This wrapper method allows simultaneous mutable access to the `ApiPlugin` and `context` at the
+/// same time.
+pub(crate) fn handle_web_api_with_plugin(context: &mut Context) {
+    // We temporarily swap out the `ApiPlugin` so we can have simultaneous mutable access to
+    // it and to `context`. We swap it back in at the end of the function.
+    let mut data_container = context.get_data_container_mut(ApiPlugin).take().unwrap();
+
+    handle_web_api(context, &mut data_container);
+
+    // Restore the `ApiPlugin`
+    let saved_data_container = context.get_data_container_mut(ApiPlugin);
+    *saved_data_container = Some(data_container);
 }
 
 define_data_plugin!(ApiPlugin, Option<ApiData>, None);
@@ -240,11 +247,7 @@ pub trait ContextWebApiExt: PluginContext {
     /// Schedule the simulation to pause at time t and listen for
     /// requests from the Web API.
     fn schedule_web_api(&mut self, t: f64) {
-        self.add_plan(t, |context| {
-            run_with_plugin::<ApiPlugin>(context, |context, data_container| {
-                handle_web_api(context, data_container.as_mut().unwrap());
-            });
-        });
+        self.add_plan(t, handle_web_api_with_plugin);
     }
 
     /// Add an API point.

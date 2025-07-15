@@ -46,9 +46,11 @@ macro_rules! __define_data_plugin {
         }
 
         $crate::paste::paste! {
-            #[$crate::ctor::ctor]
-            fn [<_register_plugin_$data_plugin:snake>]() {
-                $crate::add_plugin_to_registry::<$data_plugin>()
+            $crate::ctor::declarative::ctor!{
+                #[ctor]
+                fn [<_register_plugin_$data_plugin:snake>]() {
+                    $crate::add_plugin_to_registry::<$data_plugin>()
+                }
             }
         }
     };
