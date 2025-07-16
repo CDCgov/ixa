@@ -20,4 +20,3 @@ repos:
     rev: v0.45.0
     hooks:
     - id: markdownlint
-      args: ["--ignore", "CHANGELOG.md"]
