@@ -63,7 +63,7 @@ bytesize = "^2.0.1"
 
 [package]
 name = "ixa"
-version = "0.2.0"
+version = "0.2.1"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
