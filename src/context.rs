@@ -313,7 +313,9 @@ impl Context {
         polonius!(|self_shadow| -> &'polonius mut T::DataContainer {
             if let Some(cell) = self_shadow.data_plugins.get_mut(&type_id) {
                 if let Some(any) = cell.get_mut() {
-                    polonius_return!(any.downcast_mut::<T::DataContainer>().unwrap());
+                    polonius_return!(any
+                        .downcast_mut::<T::DataContainer>()
+                        .expect("TypeID does not match data plugin type"));
                 }
                 // Else, don't return. Fall through and initialize.
             }
@@ -321,12 +323,19 @@ impl Context {
 
         // Initialize the data plugin.
         let data = T::init(self_shadow);
-        let cell = self_shadow.data_plugins.get_mut(&type_id).unwrap();
+        let cell = self_shadow.data_plugins
+                              .get_mut(&type_id)
+                              .unwrap_or_else(
+            || panic!(
+                "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
+                type_name::<T>()
+            )
+        );
         let _ = cell.set(Box::new(data));
         cell.get_mut()
             .unwrap()
             .downcast_mut::<T::DataContainer>()
-            .unwrap()
+            .expect("TypeID does not match data plugin type")
     }
 
     /// Retrieve a reference to the data container associated with a
@@ -341,7 +350,7 @@ impl Context {
             .get(&type_id)
             .unwrap_or_else(
                 || panic!(
-                    "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! (https://ixa.rs/doc/ixa/macro.define_data_plugin.html) to declare plugins",
+                    "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
                     type_name::<T>()
                 )
             )
