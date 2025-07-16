@@ -49,12 +49,12 @@ struct ApiData {
 pub(crate) fn handle_web_api_with_plugin(context: &mut Context) {
     // We temporarily swap out the `ApiPlugin` so we can have simultaneous mutable access to
     // it and to `context`. We swap it back in at the end of the function.
-    let mut data_container = context.get_data_container_mut(ApiPlugin).take().unwrap();
+    let mut data_container = context.get_data_mut(ApiPlugin).take().unwrap();
 
     handle_web_api(context, &mut data_container);
 
     // Restore the `ApiPlugin`
-    let saved_data_container = context.get_data_container_mut(ApiPlugin);
+    let saved_data_container = context.get_data_mut(ApiPlugin);
     *saved_data_container = Some(data_container);
 }
 
@@ -204,7 +204,7 @@ pub trait ContextWebApiExt: PluginContext {
         // TODO(cym4@cdc.gov): Check on the limits here.
         let (api_to_ctx_send, api_to_ctx_recv) = mpsc::unbounded_channel::<ApiRequest>();
 
-        let data_container = self.get_data_container_mut(ApiPlugin);
+        let data_container = self.get_data_mut(ApiPlugin);
         if data_container.is_some() {
             return Err(IxaError::IxaError(String::from(
                 "HTTP API already initialized",
@@ -259,7 +259,7 @@ pub trait ContextWebApiExt: PluginContext {
         handler: impl Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>
             + 'static,
     ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container_mut(ApiPlugin);
+        let data_container = self.get_data_mut(ApiPlugin);
 
         match data_container {
             Some(dc) => {

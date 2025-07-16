@@ -70,7 +70,7 @@ define_data_plugin!(
 /// `RngId`. If the Rng has not been used before, one will be created with the base seed
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
 fn get_rng<R: RngId + 'static>(context: &impl PluginContext) -> RefMut<R::RngType> {
-    let data_container = context.get_data_container(RngPlugin);
+    let data_container = context.get_data(RngPlugin);
 
     let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
     RefMut::map(rng_holders, |holders| {
@@ -104,7 +104,7 @@ pub trait ContextRandomExt: PluginContext {
     /// seed. Note that rngs are created lazily when `get_rng` is called.
     fn init_random(&mut self, base_seed: u64) {
         trace!("initializing random module");
-        let data_container = self.get_data_container_mut(RngPlugin);
+        let data_container = self.get_data_mut(RngPlugin);
         data_container.base_seed = base_seed;
 
         // Clear any existing Rngs to ensure they get re-seeded when `get_rng` is called
@@ -244,9 +244,9 @@ mod test {
 
         // Initialize weighted sampler. Zero is selected with probability 1/3, one with a
         // probability of 2/3.
-        *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
+        *context.get_data_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container(SamplerData);
+        let parameters = context.get_data(SamplerData);
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {
@@ -266,9 +266,9 @@ mod test {
 
         // Initialize weighted sampler. Zero is selected with probability 1/3, one with a
         // probability of 2/3.
-        *context.get_data_container_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
+        *context.get_data_mut(SamplerData) = WeightedIndex::new(vec![1.0, 2.0]).unwrap();
 
-        let parameters = context.get_data_container(SamplerData);
+        let parameters = context.get_data(SamplerData);
         let n_samples = 3000;
         let mut zero_counter = 0;
         for _ in 0..n_samples {

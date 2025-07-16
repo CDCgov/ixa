@@ -121,11 +121,11 @@ pub trait ContextPeopleExt {
 }
 impl ContextPeopleExt for Context {
     fn get_current_population(&self) -> usize {
-        self.get_data_container(PeoplePlugin).current_population
+        self.get_data(PeoplePlugin).current_population
     }
 
     fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError> {
-        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let data_container = self.get_data_mut(PeoplePlugin);
         // Verify that every property that was supposed to be provided
         // actually was.
         data_container.check_initialization_list(&props)?;
@@ -138,7 +138,7 @@ impl ContextPeopleExt for Context {
         // set_person_property() from generating an event.
         data_container.is_initializing = true;
         props.set_properties(self, person_id);
-        let data_container = self.get_data_container_mut(PeoplePlugin);
+        let data_container = self.get_data_mut(PeoplePlugin);
         data_container.is_initializing = false;
 
         self.emit_event(PersonCreatedEvent { person_id });
@@ -146,7 +146,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         self.register_property::<T>();
 
         if T::is_derived() {
@@ -192,7 +192,7 @@ impl ContextPeopleExt for Context {
         //
         // Temporarily remove dependency properties since we need mutable references
         // to self during callback execution
-        let initializing = self.get_data_container(PeoplePlugin).is_initializing;
+        let initializing = self.get_data(PeoplePlugin).is_initializing;
 
         let (previous_value, deps_temp) = if initializing {
             (None, None)
@@ -204,7 +204,7 @@ impl ContextPeopleExt for Context {
 
             (
                 Some(previous_value),
-                self.get_data_container(PeoplePlugin)
+                self.get_data(PeoplePlugin)
                     .dependency_map
                     .borrow_mut()
                     .get_mut(&TypeId::of::<T>())
@@ -221,13 +221,13 @@ impl ContextPeopleExt for Context {
             }
 
             // Put the dependency list back in
-            let data_container = self.get_data_container(PeoplePlugin);
+            let data_container = self.get_data(PeoplePlugin);
             let mut dependencies = data_container.dependency_map.borrow_mut();
             dependencies.insert(TypeId::of::<T>(), deps);
         }
 
         // Update the main property and send a change event
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         data_container.set_person_property(person_id, property, value);
 
         if !initializing {
@@ -251,12 +251,12 @@ impl ContextPeopleExt for Context {
     fn index_property<T: PersonProperty>(&mut self, _property: T) {
         // Ensure that the data container exists
         {
-            let _ = self.get_data_container_mut(PeoplePlugin);
+            let _ = self.get_data_mut(PeoplePlugin);
         }
 
         self.register_property::<T>();
 
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         let mut index = data_container
             .get_index_ref_mut_by_prop(T::get_instance())
             .unwrap();
@@ -292,7 +292,7 @@ impl ContextPeopleExt for Context {
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(&q, self);
         // This cannot fail because someone must have been made by now.
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
 
         let query = q.get_query();
 
@@ -307,7 +307,7 @@ impl ContextPeopleExt for Context {
 
     fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T) {
         T::setup(&q, self);
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         for (t, hash) in q.get_query() {
             let methods = data_container.get_methods(t);
             people.retain(|person_id| hash == (*methods.indexer)(self, *person_id));
@@ -318,7 +318,7 @@ impl ContextPeopleExt for Context {
     }
 
     fn register_property<T: PersonProperty>(&self) {
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         if data_container
             .registered_properties
             .borrow()
@@ -367,7 +367,7 @@ impl ContextPeopleExt for Context {
         let type_ids = tabulator.get_typelist();
         tabulator.setup(self).unwrap();
 
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         for type_id in &type_ids {
             let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
             if index.lookup.is_none() {
@@ -483,7 +483,7 @@ pub trait ContextPeopleExtInternal {
 impl ContextPeopleExtInternal for Context {
     fn register_indexer<T: PersonProperty>(&self) {
         {
-            let data_container = self.get_data_container(PeoplePlugin);
+            let data_container = self.get_data(PeoplePlugin);
 
             let property_indexes = data_container.property_indexes.borrow_mut();
             if property_indexes.contains_key(&TypeId::of::<T>()) {
@@ -493,13 +493,13 @@ impl ContextPeopleExtInternal for Context {
 
         // If it doesn't exist, insert the new index
         let index = Index::new(self, T::get_instance());
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
         let mut property_indexes = data_container.property_indexes.borrow_mut();
         property_indexes.insert(TypeId::of::<T>(), index);
     }
 
     fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
             let methods = data_container.get_methods(TypeId::of::<T>());
@@ -510,7 +510,7 @@ impl ContextPeopleExtInternal for Context {
     }
 
     fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
 
         if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
             let methods = data_container.get_methods(TypeId::of::<T>());
@@ -527,7 +527,7 @@ impl ContextPeopleExtInternal for Context {
     ) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
         let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
-        let data_container = self.get_data_container(PeoplePlugin);
+        let data_container = self.get_data(PeoplePlugin);
 
         let mut property_hashs_working_set = property_hashes.clone();
         // intercept multi-property queries
@@ -788,7 +788,7 @@ mod tests {
     fn property_initialization_is_lazy() {
         let mut context = Context::new();
         let person = context.add_person((IsRunner, true)).unwrap();
-        let people_data = context.get_data_container_mut(PeoplePlugin);
+        let people_data = context.get_data_mut(PeoplePlugin);
 
         // Verify we haven't initialized the property yet
         let has_value = *people_data.get_person_property_ref(person, RunningShoes);

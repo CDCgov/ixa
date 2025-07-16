@@ -55,7 +55,7 @@ mod test {
 
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
         if event.current == InfectionStatusValue::R {
-            *context.get_data_container_mut(RecoveryPlugin) += 1;
+            *context.get_data_mut(RecoveryPlugin) += 1;
         }
     }
 
@@ -83,7 +83,7 @@ mod test {
         }
 
         context.execute();
-        let recovered_size: usize = *context.get_data_container(RecoveryPlugin);
+        let recovered_size: usize = *context.get_data(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size);
     }

@@ -284,10 +284,7 @@ pub fn enter_debugger(context: &mut Context) {
 
     // We temporarily swap out the debugger so we can have simultaneous mutable access to
     // it and to `context`. We swap it back in at the end of the function.
-    let mut debugger = context
-        .get_data_container_mut(DebuggerPlugin)
-        .take()
-        .unwrap();
+    let mut debugger = context.get_data_mut(DebuggerPlugin).take().unwrap();
 
     println!("Debugging simulation at t={current_time}");
     loop {
@@ -325,7 +322,7 @@ pub fn enter_debugger(context: &mut Context) {
     }
 
     // Restore the debugger
-    let saved_debugger = context.get_data_container_mut(DebuggerPlugin);
+    let saved_debugger = context.get_data_mut(DebuggerPlugin);
     *saved_debugger = Some(debugger);
 }
 
@@ -339,11 +336,11 @@ mod tests {
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
         // we can operate on context.
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
+        let data_container = context.get_data_mut(DebuggerPlugin);
         let debugger = data_container.take().unwrap();
 
         let res = debugger.process_command(line, context).unwrap();
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
+        let data_container = context.get_data_mut(DebuggerPlugin);
         *data_container = Some(debugger);
         res
     }
@@ -511,12 +508,9 @@ mod tests {
 
         // We can't use process_line here because we expect an error to be
         // returned rather than string output
-        let debugger = context
-            .get_data_container_mut(DebuggerPlugin)
-            .take()
-            .unwrap();
+        let debugger = context.get_data_mut(DebuggerPlugin).take().unwrap();
         let result = debugger.process_command(input, context);
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
+        let data_container = context.get_data_mut(DebuggerPlugin);
         *data_container = Some(debugger);
 
         assert!(result.is_err());

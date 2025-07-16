@@ -199,7 +199,7 @@ pub trait ContextGlobalPropertiesExt: PluginContext {
         value: T::Value,
     ) -> Result<(), IxaError> {
         T::validate(&value)?;
-        let data_container = self.get_data_container_mut(GlobalPropertiesPlugin);
+        let data_container = self.get_data_mut(GlobalPropertiesPlugin);
         data_container.set_global_property_value(&property, value)
     }
 
@@ -209,7 +209,7 @@ pub trait ContextGlobalPropertiesExt: PluginContext {
         &self,
         _property: T,
     ) -> Option<&T::Value> {
-        self.get_data_container(GlobalPropertiesPlugin)
+        self.get_data(GlobalPropertiesPlugin)
             .get_global_property_value::<T>()
     }
 

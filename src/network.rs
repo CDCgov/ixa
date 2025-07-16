@@ -199,7 +199,7 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container_mut(NetworkPlugin);
+        let data_container = self.get_data_mut(NetworkPlugin);
         data_container.add_edge::<T>(person, neighbor, weight, inner)
     }
 
@@ -223,7 +223,7 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         weight: f32,
         inner: T::Value,
     ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container_mut(NetworkPlugin);
+        let data_container = self.get_data_mut(NetworkPlugin);
         data_container.add_edge::<T>(person1, person2, weight, inner)?;
         data_container.add_edge::<T>(person2, person1, weight, inner)
     }
@@ -238,7 +238,7 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         person: PersonId,
         neighbor: PersonId,
     ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container_mut(NetworkPlugin);
+        let data_container = self.get_data_mut(NetworkPlugin);
         data_container.remove_edge::<T>(person, neighbor)
     }
 
@@ -249,14 +249,12 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
         person: PersonId,
         neighbor: PersonId,
     ) -> Option<&Edge<T::Value>> {
-        self.get_data_container(NetworkPlugin)
-            .get_edge::<T>(person, neighbor)
+        self.get_data(NetworkPlugin).get_edge::<T>(person, neighbor)
     }
 
     /// Get all edges of type `T` from `person`.
     fn get_edges<T: EdgeType + 'static>(&self, person: PersonId) -> Vec<Edge<T::Value>> {
-        self.get_data_container(NetworkPlugin)
-            .get_edges::<T>(person)
+        self.get_data(NetworkPlugin).get_edges::<T>(person)
     }
 
     /// Get all edges of type `T` from `person` that match the predicate
@@ -273,7 +271,7 @@ pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
 
     /// Find all people who have an edge of type `T` and degree `degree`.
     fn find_people_by_degree<T: EdgeType + 'static>(&self, degree: usize) -> Vec<PersonId> {
-        self.get_data_container(NetworkPlugin)
+        self.get_data(NetworkPlugin)
             .find_people_by_degree::<T>(degree)
     }
 
