@@ -29,10 +29,15 @@ Cargo.lock
 # html
 examples/**/*.html
 examples/**/*.csv
+# These outputs can end up in the root dir depending on how the example is invoced.
+*.csv
 
 # docs
 website/book/
 website/doc/
+website/debug/
+website/.rustc_info.json
+website/.rustdoc_fingerprint.json
 
 #exceptions:
 !.vscode/settings.json
