@@ -13,6 +13,7 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use web_sys::window;
 
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 /// How frequently we update the max memory used value.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -38,6 +39,7 @@ pub struct ExecutionStatistics {
     memory_per_person: u64,
 }
 
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub struct ExecutionProfilingCollector {
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
     #[cfg(not(target_arch = "wasm32"))]
@@ -106,6 +108,7 @@ impl ExecutionProfilingCollector {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     /// Updates maximum memory usage. This method should be called about once per second,
     /// as it is a relatively expensive system call.
     fn poll_memory(&mut self) {
