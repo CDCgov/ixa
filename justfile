@@ -190,7 +190,7 @@ lint-md:
 # Auto-fix and format all Markdown files
 fix-md:
     markdownlint --fix "**/*.md"
-    prettier --write "**/*.md"
+    prettier --write "**/*.md" --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
 
 # Lint a specific Markdown file
 lint-md-file filename:
