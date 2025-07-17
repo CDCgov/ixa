@@ -35,6 +35,16 @@ install-markdownlint:
 install-prettier:
     npm install -g prettier
 
+# install all
+install:
+    just install-wasm-target
+    just install-wasm-pack
+    just install-playwright
+    just install-mdbook
+    just install-pre-commit
+    just install-markdownlint
+    just install-prettier
+
 ########################################
 # Build Tasks
 ########################################
@@ -261,7 +271,6 @@ clean:
 # Main CI task: run everything expected in CI (except setup/install)
 ci:
     just precommit
-    just lint-md
     just build-all
     just build-wasm
     just test

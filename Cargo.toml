@@ -57,10 +57,13 @@ fern = "^0.7.1"
 wasm-bindgen = "^0.2.100"
 progress_bar = "^1.2.1"
 anyhow = "^1.0.28"
+sysinfo = "^0.35.2"
+humantime = "^2.2.0"
+bytesize = "^2.0.1"
 
 [package]
 name = "ixa"
-version = "0.2.0"
+version = "0.2.1"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
@@ -92,6 +95,9 @@ serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
 delegate.workspace = true
+sysinfo.workspace = true
+humantime.workspace = true
+bytesize.workspace = true
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -117,7 +123,7 @@ anyhow = { workspace = true, optional = true }
 fern = { workspace = true, optional = true }
 getrandom = { workspace = true,  features = ["js"] }
 wasm-bindgen = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = ["console"]  }
+web-sys = { workspace = true, optional = true, features = ["console", "Performance", "Window"]  }
 
 [dev-dependencies]
 assert_approx_eq.workspace = true

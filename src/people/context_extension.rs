@@ -487,12 +487,42 @@ impl ContextPeopleExt for Context {
     where
         R::RngType: Rng,
     {
-        let people = self.sample_people(rng_id, query, 1);
-        if people.is_empty() {
-            None
-        } else {
-            Some(people[0])
+        if self.get_current_population() == 0 {
+            return None;
         }
+
+        // Special case the empty query because we can do it in O(1).
+        if query.get_query().is_empty() {
+            let result = self.sample_range(rng_id, 0..self.get_current_population());
+            return Some(PersonId(result));
+        }
+
+        T::setup(&query, self);
+
+        // This function implements "Algorithm L" from KIM-HUNG LI
+        // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
+        // https://dl.acm.org/doi/pdf/10.1145/198429.198435
+        // Temporary variables.
+        let mut selected: Option<PersonId> = None;
+        let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
+        let mut ctr: usize = 0;
+        let mut i: usize = 1;
+
+        self.query_people_internal(
+            |person| {
+                ctr += 1;
+                if i == ctr {
+                    selected = Some(person);
+                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
+                        as usize
+                        + 1;
+                    w *= self.sample_range(rng_id, 0.0..1.0);
+                }
+            },
+            query.get_query(),
+        );
+
+        selected
     }
 }
 
