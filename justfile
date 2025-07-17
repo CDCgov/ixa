@@ -1,4 +1,9 @@
 ########################################
+# Set environment variables for Rust builds
+########################################
+export RUSTFLAGS := "-D warnings"
+
+########################################
 # Setup Tasks (one-time developer use)
 ########################################
 
