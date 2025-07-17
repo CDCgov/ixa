@@ -12,10 +12,8 @@ use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
-use crate::{info, set_log_level, set_module_filters, LevelFilter};
+use crate::{info, set_log_level, set_module_filters, warn, LevelFilter};
 use clap::{Args, Command, FromArgMatches as _};
-#[cfg(not(feature = "web_api"))]
-use log::warn;
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
@@ -116,7 +114,7 @@ fn create_ixa_cli() -> Command {
 ///
 /// # Parameters
 /// - `setup_fn`: A function that takes a mutable reference to a `Context`, a `BaseArgs` struct,
-///   a Option<A> where A is the custom cli arguments struct
+///   a `Option<A>` where `A` is the custom cli arguments struct
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails

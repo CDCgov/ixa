@@ -180,7 +180,8 @@ pub(crate) mod breakpoint {
                     Ok(Retval::List(list))
                 }
 
-                ArgsEnum::Set { time, console: _ } => {
+                #[allow(unused_variables)]
+                ArgsEnum::Set { time, console } => {
                     if *time < context.get_current_time() {
                         return Err(IxaError::from(format!(
                             "Breakpoint time {time} is in the past"

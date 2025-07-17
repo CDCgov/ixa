@@ -133,7 +133,7 @@ macro_rules! define_global_property {
 
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
-/// [`define_global_property()`]
+/// [`define_global_property`]
 pub trait GlobalProperty: Any {
     type Value: Any; // The actual type of the data.
 

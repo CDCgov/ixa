@@ -6,6 +6,7 @@ use crate::{Context, PluginContext};
 use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
+#[cfg_attr(not(feature = "web_api"), allow(dead_code))]
 pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
     // Note: We can't do a default implementation here because
     // it uses callbacks that take a &Context
