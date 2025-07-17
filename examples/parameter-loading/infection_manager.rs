@@ -67,7 +67,7 @@ mod test {
         context.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
                 if matches!(event.current, InfectionStatusValue::R) {
-                    *context.get_data_container_mut(RecoveryPlugin) += 1;
+                    *context.get_data_mut(RecoveryPlugin) += 1;
                 }
             },
         );
@@ -82,7 +82,7 @@ mod test {
         }
         context.execute();
         assert_eq!(population_size, context.get_current_population());
-        let recovered_size: usize = *context.get_data_container(RecoveryPlugin).unwrap();
+        let recovered_size: usize = *context.get_data(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size);
     }

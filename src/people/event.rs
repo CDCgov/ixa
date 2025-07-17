@@ -1,4 +1,3 @@
-use crate::people::PeoplePlugin;
 use crate::{Context, ContextPeopleExt, IxaEvent, PersonId, PersonProperty};
 use ixa_derive::IxaEvent;
 
@@ -27,7 +26,6 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
 impl<T: PersonProperty> IxaEvent for PersonPropertyChangeEvent<T> {
     fn on_subscribe(context: &mut Context) {
         if T::is_derived() {
-            let _ = context.get_data_container_mut(PeoplePlugin); // make sure the plugin is initialized
             context.register_property::<T>();
         }
     }
