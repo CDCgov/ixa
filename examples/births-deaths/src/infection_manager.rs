@@ -13,7 +13,7 @@ define_data_plugin!(
     InfectionPlansPlugin,
     InfectionPlansData,
     InfectionPlansData {
-        plans_map: HashMap::<PersonId, HashSet::<PlanId>>::new(),
+        plans_map: HashMap::<PersonId, HashSet<PlanId>>::new(),
     }
 );
 
@@ -35,7 +35,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         let plan_id = context.add_plan(recovery_time, move |context| {
             context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
         });
-        let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
+        let plans_data_container = context.get_data_mut(InfectionPlansPlugin);
         plans_data_container
             .plans_map
             .entry(person_id)
@@ -45,12 +45,12 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 }
 
 fn remove_recovery_plan_data(context: &mut Context, person_id: PersonId) {
-    let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
+    let plans_data_container = context.get_data_mut(InfectionPlansPlugin);
     plans_data_container.plans_map.remove(&person_id);
 }
 
 fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
-    let plans_data_container = context.get_data_container_mut(InfectionPlansPlugin);
+    let plans_data_container = context.get_data_mut(InfectionPlansPlugin);
     let plans_set = plans_data_container
         .plans_map
         .get(&person_id)
@@ -131,7 +131,7 @@ mod test {
         context.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
                 if matches!(event.current, InfectionStatusValue::R) {
-                    *context.get_data_container_mut(RecoveryPlugin) += 1;
+                    *context.get_data_mut(RecoveryPlugin) += 1;
                 }
             },
         );
@@ -153,7 +153,7 @@ mod test {
 
         context.execute();
         assert_eq!(population_size, context.get_current_population());
-        let recovered_size: usize = *context.get_data_container(RecoveryPlugin).unwrap();
+        let recovered_size: usize = *context.get_data(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size - 1);
     }

@@ -24,11 +24,7 @@ pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
     where
         F: Fn(&Context, &[String], usize),
     {
-        let data_container = self.get_data_container(PeoplePlugin);
-        if data_container.is_none() {
-            return Ok(());
-        }
-        let data_container = data_container.unwrap();
+        let data_container = self.get_data(PeoplePlugin);
         let people_types = data_container.people_types.borrow();
 
         let mut query = Vec::new();
@@ -45,7 +41,7 @@ pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
     }
 
     fn index_property_by_id(&self, type_id: TypeId) {
-        let data_container = self.get_data_container(PeoplePlugin).unwrap();
+        let data_container = self.get_data(PeoplePlugin);
 
         let mut index = data_container.get_index_ref_mut(type_id).unwrap();
         if index.lookup.is_none() {
@@ -54,11 +50,7 @@ pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
     }
 
     fn get_person_property_names(&self) -> Vec<String> {
-        let data_container = self.get_data_container(PeoplePlugin);
-        if data_container.is_none() {
-            return Vec::new();
-        }
-        let data_container = data_container.unwrap();
+        let data_container = self.get_data(PeoplePlugin);
         let people_types = data_container.people_types.borrow();
 
         people_types
@@ -73,11 +65,7 @@ impl ContextPeopleExtCrate for Context {
         name: &str,
         person_id: PersonId,
     ) -> Result<String, IxaError> {
-        let data_container = self.get_data_container(PeoplePlugin);
-        if data_container.is_none() {
-            return Err(IxaError::IxaError(String::from("No people exist")));
-        }
-        let data_container = data_container.unwrap();
+        let data_container = self.get_data(PeoplePlugin);
         let type_id = *data_container
             .people_types
             .borrow()

@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
-use crate::Tabulator;
+use crate::{define_data_plugin, Tabulator};
 use crate::{error, trace};
 use crate::{HashMap, HashMapExt, PluginContext};
 use csv::Writer;
@@ -116,7 +116,7 @@ struct ReportData {
 // Registers a data container that stores
 // * file_writers: Maps report type to file writer
 // * config: Contains all the customizable filename options that the user supplies
-crate::context::define_data_plugin!(
+define_data_plugin!(
     ReportPlugin,
     ReportData,
     ReportData {
@@ -130,7 +130,7 @@ pub trait ContextReportExt: PluginContext {
     // report type. The three main components are `prefix`, `directory`, and
     // `short_name`.
     fn generate_filename(&mut self, short_name: &str) -> PathBuf {
-        let data_container = self.get_data_container_mut(ReportPlugin);
+        let data_container = self.get_data_mut(ReportPlugin);
         let prefix = &data_container.config.file_prefix;
         let directory = &data_container.config.output_dir;
         let short_name = short_name.to_string();
@@ -148,7 +148,7 @@ pub trait ContextReportExt: PluginContext {
         trace!("adding report {short_name} by type_id {type_id:?}");
         let path = self.generate_filename(short_name);
 
-        let data_container = self.get_data_container_mut(ReportPlugin);
+        let data_container = self.get_data_mut(ReportPlugin);
 
         let file_creation_result = File::create_new(&path);
         let created_file = match file_creation_result {
@@ -231,9 +231,7 @@ pub trait ContextReportExt: PluginContext {
 
     fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
-        let data_container = self
-            .get_data_container(ReportPlugin)
-            .expect("No writer found for the report type");
+        let data_container = self.get_data(ReportPlugin);
         let writers = data_container.file_writers.try_borrow_mut().unwrap();
         RefMut::map(writers, |writers| {
             writers
@@ -250,7 +248,7 @@ pub trait ContextReportExt: PluginContext {
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
     fn report_options(&mut self) -> &mut ConfigReportOptions {
-        let data_container = self.get_data_container_mut(ReportPlugin);
+        let data_container = self.get_data_mut(ReportPlugin);
         &mut data_container.config
     }
 }

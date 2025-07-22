@@ -2,6 +2,7 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use crate::data_plugin::{get_plugin_ids, DataPlugin};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
 };
@@ -12,10 +13,13 @@ use crate::progress::update_timeline_progress;
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{error, trace, ContextPeopleExt};
 use crate::{HashMap, HashMapExt};
-use std::fmt::{Display, Formatter};
+use polonius_the_crab::prelude::*;
+use std::any::type_name;
+use std::cell::OnceCell;
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
+    fmt::{Display, Formatter},
     rc::Rc,
 };
 
@@ -81,7 +85,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
-    data_plugins: HashMap<TypeId, Box<dyn Any>>,
+    data_plugins: HashMap<TypeId, OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
@@ -98,11 +102,18 @@ impl Context {
     /// Create a new empty `Context`
     #[must_use]
     pub fn new() -> Context {
+        let mut data_plugins = HashMap::new();
+
+        // Register all data plugins from global list
+        for plugin_type_id in get_plugin_ids() {
+            data_plugins.insert(plugin_type_id, OnceCell::new());
+        }
+
         Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
-            data_plugins: HashMap::new(),
+            data_plugins,
             #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
             current_time: 0.0,
@@ -293,15 +304,38 @@ impl Context {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn get_data_container_mut<T: DataPlugin>(
-        &mut self,
-        _data_plugin: T,
-    ) -> &mut T::DataContainer {
-        self.data_plugins
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(T::create_data_container()))
+    pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
+        let mut self_shadow = self;
+        let type_id = TypeId::of::<T>();
+
+        // If the data plugin is already initialized, return a mutable reference.
+        // Use polonius to address borrow checker limitations.
+        polonius!(|self_shadow| -> &'polonius mut T::DataContainer {
+            if let Some(cell) = self_shadow.data_plugins.get_mut(&type_id) {
+                if let Some(any) = cell.get_mut() {
+                    polonius_return!(any
+                        .downcast_mut::<T::DataContainer>()
+                        .expect("TypeID does not match data plugin type"));
+                }
+                // Else, don't return. Fall through and initialize.
+            }
+        });
+
+        // Initialize the data plugin.
+        let data = T::init(self_shadow);
+        let cell = self_shadow.data_plugins
+                              .get_mut(&type_id)
+                              .unwrap_or_else(
+            || panic!(
+                "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
+                type_name::<T>()
+            )
+        );
+        let _ = cell.set(Box::new(data));
+        cell.get_mut()
+            .unwrap()
             .downcast_mut::<T::DataContainer>()
-            .unwrap() // Will never panic as data container has the matching type
+            .expect("TypeID does not match data plugin type")
     }
 
     /// Retrieve a reference to the data container associated with a
@@ -310,12 +344,19 @@ impl Context {
     /// Returns a reference to the data container if it exists or else `None`
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn get_data_container<T: DataPlugin>(&self, _data_plugin: T) -> Option<&T::DataContainer> {
-        if let Some(data) = self.data_plugins.get(&TypeId::of::<T>()) {
-            data.downcast_ref::<T::DataContainer>()
-        } else {
-            None
-        }
+    pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
+        let type_id = TypeId::of::<T>();
+        self.data_plugins
+            .get(&type_id)
+            .unwrap_or_else(
+                || panic!(
+                    "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
+                    type_name::<T>()
+                )
+            )
+            .get_or_init(|| Box::new(T::init(self)))
+            .downcast_ref::<T::DataContainer>()
+            .expect("TypeID does not match data plugin type")
     }
 
     /// Shutdown the simulation cleanly, abandoning all events after whatever
@@ -480,7 +521,10 @@ impl Context {
 /// for plugins implementing Context extensions.
 ///
 /// Usage:
-/// ```rust
+// This example triggers the error "#[ctor]/#[dtor] is not supported
+// on the current target," which appears to be spurious, so we
+// ignore it.
+/// ```ignore
 /// use ixa::prelude_for_plugins::*;
 /// define_data_plugin!(MyData, bool, false);
 /// pub trait MyPlugin: PluginContext {
@@ -510,8 +554,8 @@ pub trait PluginContext: Sized {
     );
     fn cancel_plan(&mut self, plan_id: &PlanId);
     fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
-    fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
-    fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+    fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+    fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
     fn get_current_time(&self) -> f64;
 }
 impl PluginContext for Context {
@@ -524,8 +568,8 @@ impl PluginContext for Context {
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
             fn cancel_plan(&mut self, plan_id: &PlanId);
             fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
-            fn get_data_container_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
-            fn get_data_container<T: DataPlugin>(&self, plugin: T) -> Option<&T::DataContainer>;
+            fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+            fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
         }
     }
@@ -547,7 +591,7 @@ mod test_plugin_context {
 
     fn do_stuff_with_context(context: &mut impl PluginContext) {
         context.add_plan(1.0, |context| {
-            let data = context.get_data_container(MyData).unwrap();
+            let data = context.get_data(MyData);
             assert_eq!(*data, 42);
         });
     }
@@ -565,7 +609,7 @@ mod test_plugin_context {
             self.add_plan_with_phase(
                 1.0,
                 |context| {
-                    let data = context.get_data_container(MyData).unwrap();
+                    let data = context.get_data(MyData);
                     assert_eq!(*data, 42);
                     context.set_my_data(100);
                 },
@@ -586,20 +630,20 @@ mod test_plugin_context {
                 crate::ExecutionPhase::Normal,
             );
             self.queue_callback(|context| {
-                let data = context.get_data_container(MyData).unwrap();
+                let data = context.get_data(MyData);
                 assert_eq!(*data, 42);
             });
         }
         fn setup(&mut self) {
-            let data = self.get_data_container_mut(MyData);
+            let data = self.get_data_mut(MyData);
             *data = 42;
             do_stuff_with_context(self);
         }
         fn get_my_data(&self) -> i32 {
-            *self.get_data_container(MyData).unwrap()
+            *self.get_data(MyData)
         }
         fn set_my_data(&mut self, value: i32) {
-            let data = self.get_data_container_mut(MyData);
+            let data = self.get_data_mut(MyData);
             *data = value;
         }
         fn test_external_function(&mut self) {
@@ -632,61 +676,11 @@ mod test_plugin_context {
     }
 }
 
-// TODO(cym4@cdc.gov): This is a temporary hack to let you
-// run a plan with mutable references to both the context
-// and a plugin's data. In the future we hope to make a
-// convenient public API for this, which is why it's not
-// public now.
-#[cfg(feature = "debugger")]
-pub(crate) fn run_with_plugin<T: DataPlugin>(
-    context: &mut Context,
-    f: impl Fn(&mut Context, &mut T::DataContainer),
-) {
-    // Temporarily take the data container out of context so that
-    // we can operate on context.
-    let mut data_container_box = context.data_plugins.remove(&TypeId::of::<T>()).unwrap();
-    let data_container = data_container_box
-        .downcast_mut::<T::DataContainer>()
-        .unwrap();
-
-    // Call the function.
-    f(context, data_container);
-
-    // Put the data container back into context.
-    context
-        .data_plugins
-        .insert(TypeId::of::<T>(), data_container_box);
-}
-
 impl Default for Context {
     fn default() -> Self {
         Self::new()
     }
 }
-
-/// A trait for objects that can provide data containers to be held by `Context`
-pub trait DataPlugin: Any {
-    type DataContainer;
-
-    fn create_data_container() -> Self::DataContainer;
-}
-
-/// Defines a new type for storing data in Context.
-#[macro_export]
-macro_rules! define_data_plugin {
-    ($plugin:ident, $data_container:ty, $default: expr) => {
-        struct $plugin;
-
-        impl $crate::context::DataPlugin for $plugin {
-            type DataContainer = $data_container;
-
-            fn create_data_container() -> Self::DataContainer {
-                $default
-            }
-        }
-    };
-}
-pub use define_data_plugin;
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
@@ -694,6 +688,7 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
+    use crate::define_data_plugin;
     use ixa_derive::IxaEvent;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
@@ -706,21 +701,15 @@ mod tests {
     }
 
     #[test]
-    fn get_data_container() {
+    fn get_data() {
         let mut context = Context::new();
-        context.get_data_container_mut(ComponentA).push(1);
-        assert_eq!(*context.get_data_container(ComponentA).unwrap(), vec![1],);
-    }
-
-    #[test]
-    fn get_uninitialized_data_container() {
-        let context = Context::new();
-        assert!(context.get_data_container(ComponentA).is_none());
+        context.get_data_mut(ComponentA).push(1);
+        assert_eq!(*context.get_data(ComponentA), vec![1],);
     }
 
     fn add_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
         context.add_plan(time, move |context| {
-            context.get_data_container_mut(ComponentA).push(value);
+            context.get_data_mut(ComponentA).push(value);
         })
     }
 
@@ -733,7 +722,7 @@ mod tests {
         context.add_plan_with_phase(
             time,
             move |context| {
-                context.get_data_container_mut(ComponentA).push(value);
+                context.get_data_mut(ComponentA).push(value);
             },
             phase,
         )
@@ -766,78 +755,75 @@ mod tests {
         add_plan(&mut context, 1.0, 1);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
     fn callback_only() {
         let mut context = Context::new();
         context.queue_callback(|context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
         });
         context.execute();
         assert_eq!(context.get_current_time(), 0.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
     fn callback_before_timed_plan() {
         let mut context = Context::new();
         context.queue_callback(|context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
         });
         add_plan(&mut context, 1.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
     }
 
     #[test]
     fn callback_adds_timed_plan() {
         let mut context = Context::new();
         context.queue_callback(|context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
             add_plan(context, 1.0, 2);
-            context.get_data_container_mut(ComponentA).push(3);
+            context.get_data_mut(ComponentA).push(3);
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 3, 2]);
     }
 
     #[test]
     fn callback_adds_callback_and_timed_plan() {
         let mut context = Context::new();
         context.queue_callback(|context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
             add_plan(context, 1.0, 2);
             context.queue_callback(|context| {
-                context.get_data_container_mut(ComponentA).push(4);
+                context.get_data_mut(ComponentA).push(4);
             });
-            context.get_data_container_mut(ComponentA).push(3);
+            context.get_data_mut(ComponentA).push(3);
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(
-            *context.get_data_container_mut(ComponentA),
-            vec![1, 3, 4, 2]
-        );
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 3, 4, 2]);
     }
 
     #[test]
     fn timed_plan_adds_callback_and_timed_plan() {
         let mut context = Context::new();
         context.add_plan(1.0, |context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
             // We add the plan first, but the callback will fire first.
             add_plan(context, 2.0, 3);
             context.queue_callback(|context| {
-                context.get_data_container_mut(ComponentA).push(2);
+                context.get_data_mut(ComponentA).push(2);
             });
         });
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2, 3]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
     }
 
     #[test]
@@ -850,22 +836,22 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
         let test_vec: Vec<u32> = vec![];
-        assert_eq!(*context.get_data_container_mut(ComponentA), test_vec);
+        assert_eq!(*context.get_data_mut(ComponentA), test_vec);
     }
 
     #[test]
     fn add_plan_with_current_time() {
         let mut context = Context::new();
         context.add_plan(1.0, move |context| {
-            context.get_data_container_mut(ComponentA).push(1);
+            context.get_data_mut(ComponentA).push(1);
             add_plan(context, 1.0, 2);
             context.queue_callback(|context| {
-                context.get_data_container_mut(ComponentA).push(3);
+                context.get_data_mut(ComponentA).push(3);
             });
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 3, 2]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 3, 2]);
     }
 
     #[test]
@@ -875,7 +861,7 @@ mod tests {
         add_plan(&mut context, 1.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1, 2]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
     }
 
     #[test]
@@ -895,10 +881,7 @@ mod tests {
         add_plan_with_phase(&mut context, 1.0, 4, ExecutionPhase::First);
         context.execute();
         assert_eq!(context.get_current_time(), 1.0);
-        assert_eq!(
-            *context.get_data_container_mut(ComponentA),
-            vec![3, 4, 1, 2, 5, 6]
-        );
+        assert_eq!(*context.get_data_mut(ComponentA), vec![3, 4, 1, 2, 5, 6]);
     }
 
     #[derive(Copy, Clone, IxaEvent)]
@@ -1008,7 +991,7 @@ mod tests {
         add_plan(&mut context, 2.0, 2);
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
@@ -1019,13 +1002,13 @@ mod tests {
             // Note that we add the callback *before* we call shutdown
             // but shutdown cancels everything.
             context.queue_callback(|context| {
-                context.get_data_container_mut(ComponentA).push(3);
+                context.get_data_mut(ComponentA).push(3);
             });
             context.shutdown();
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_container_mut(ComponentA), vec![1]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
@@ -1053,7 +1036,7 @@ mod tests {
             1.0,
             |context| {
                 let time = context.get_current_time();
-                context.get_data_container_mut(ComponentA).push(time as u32);
+                context.get_data_mut(ComponentA).push(time as u32);
             },
             ExecutionPhase::Last,
         );
@@ -1062,9 +1045,6 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
 
-        assert_eq!(
-            *context.get_data_container(ComponentA).unwrap(),
-            vec![0, 1, 2]
-        ); // time 0.0, 1.0, and 2.0
+        assert_eq!(*context.get_data(ComponentA), vec![0, 1, 2]); // time 0.0, 1.0, and 2.0
     }
 }

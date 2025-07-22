@@ -1,4 +1,3 @@
-use crate::context::run_with_plugin;
 use crate::define_data_plugin;
 use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
@@ -25,7 +24,36 @@ struct Debugger {
     cli: Command,
     commands: HashMap<&'static str, Box<dyn DebuggerCommand>>,
 }
-define_data_plugin!(DebuggerPlugin, Option<Debugger>, None);
+define_data_plugin!(DebuggerPlugin, Option<Debugger>, |_context| {
+    // Build the debugger context.
+    trace!("initializing debugger");
+    let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
+    commands.insert("breakpoint", Box::new(BreakpointCommand));
+    commands.insert("continue", Box::new(ContinueCommand));
+    commands.insert("global", Box::new(GlobalPropertyCommand));
+    commands.insert("halt", Box::new(HaltCommand));
+    commands.insert("next", Box::new(NextCommand));
+    commands.insert("people", Box::new(PeopleCommand));
+    commands.insert("population", Box::new(PopulationCommand));
+
+    let mut cli = Command::new("repl")
+        .multicall(true)
+        .arg_required_else_help(true)
+        .subcommand_required(true)
+        .subcommand_value_name("DEBUGGER")
+        .subcommand_help_heading("IXA DEBUGGER")
+        .help_template("{all-args}");
+
+    for handler in commands.values() {
+        cli = handler.extend(cli);
+    }
+
+    Some(Debugger {
+        rl: rustyline::DefaultEditor::new().unwrap(),
+        cli,
+        commands,
+    })
+});
 
 impl Debugger {
     fn get_command(&self, name: &str) -> Option<&dyn DebuggerCommand> {
@@ -243,70 +271,31 @@ impl DebuggerCommand for ContinueCommand {
     }
 }
 
-// Build the debugger context.
-fn init(context: &mut Context) {
-    let debugger = context.get_data_container_mut(DebuggerPlugin);
-
-    if debugger.is_none() {
-        trace!("initializing debugger");
-        let mut commands: HashMap<&'static str, Box<dyn DebuggerCommand>> = HashMap::new();
-        commands.insert("breakpoint", Box::new(BreakpointCommand));
-        commands.insert("continue", Box::new(ContinueCommand));
-        commands.insert("global", Box::new(GlobalPropertyCommand));
-        commands.insert("halt", Box::new(HaltCommand));
-        commands.insert("next", Box::new(NextCommand));
-        commands.insert("people", Box::new(PeopleCommand));
-        commands.insert("population", Box::new(PopulationCommand));
-
-        let mut cli = Command::new("repl")
-            .multicall(true)
-            .arg_required_else_help(true)
-            .subcommand_required(true)
-            .subcommand_value_name("DEBUGGER")
-            .subcommand_help_heading("IXA DEBUGGER")
-            .help_template("{all-args}");
-
-        for handler in commands.values() {
-            cli = handler.extend(cli);
-        }
-
-        *debugger = Some(Debugger {
-            rl: rustyline::DefaultEditor::new().unwrap(),
-            cli,
-            commands,
-        });
-    }
-}
-
 fn exit_debugger() -> ! {
     println!("Got Ctrl-D, Exiting...");
     std::process::exit(0);
 }
 
-/// Starts a debugging session.
+/// Starts a debugging REPL session, interrupting the normal simulation event loop.
 #[allow(clippy::missing_panics_doc)]
 pub fn enter_debugger(context: &mut Context) {
-    init(context);
-    run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
-        start_debugger(context, data_container.as_mut().unwrap()).expect("Error in debugger");
-    });
-}
+    let current_time = context.get_current_time();
+    context.cancel_debugger_request();
 
-/// Enters the debugger REPL, interrupting the normal simulation event loop. This private
-/// function is called from the public API `enter_debug()`.
-fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), IxaError> {
-    let t = context.get_current_time();
+    // We temporarily swap out the debugger so we can have simultaneous mutable access to
+    // it and to `context`. We swap it back in at the end of the function.
+    let mut debugger = context.get_data_mut(DebuggerPlugin).take().unwrap();
 
-    println!("Debugging simulation at t={t}");
+    println!("Debugging simulation at t={current_time}");
     loop {
-        let line = match debugger.rl.readline(&format!("t={t} $ ")) {
+        let line = match debugger.rl.readline(&format!("t={current_time:.4} $ ")) {
             Ok(line) => line,
             Err(
                 rustyline::error::ReadlineError::WindowResized
                 | rustyline::error::ReadlineError::Interrupted,
             ) => continue,
             Err(rustyline::error::ReadlineError::Eof) => exit_debugger(),
-            Err(err) => return Err(IxaError::IxaError(format!("Read error: {err}"))),
+            Err(err) => panic!("Read error: {err}"),
         };
         debugger
             .rl
@@ -332,12 +321,14 @@ fn start_debugger(context: &mut Context, debugger: &mut Debugger) -> Result<(), 
         }
     }
 
-    Ok(())
+    // Restore the debugger
+    let saved_debugger = context.get_data_mut(DebuggerPlugin);
+    *saved_debugger = Some(debugger);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{enter_debugger, init, run_with_plugin, DebuggerPlugin};
+    use super::{enter_debugger, DebuggerPlugin};
     use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
     use crate::{Context, ContextPeopleExt, ExecutionPhase};
     use assert_approx_eq::assert_approx_eq;
@@ -345,12 +336,11 @@ mod tests {
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
         // we can operate on context.
-        init(context);
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
+        let data_container = context.get_data_mut(DebuggerPlugin);
         let debugger = data_container.take().unwrap();
 
         let res = debugger.process_command(line, context).unwrap();
-        let data_container = context.get_data_container_mut(DebuggerPlugin);
+        let data_container = context.get_data_mut(DebuggerPlugin);
         *data_container = Some(debugger);
         res
     }
@@ -515,21 +505,18 @@ mod tests {
     fn test_cli_debugger_global_no_args() {
         let input = "global get\n";
         let context = &mut Context::new();
-        init(context);
-        // We can't use process_line here because we an expect an error to be
+
+        // We can't use process_line here because we expect an error to be
         // returned rather than string output
-        run_with_plugin::<DebuggerPlugin>(context, |context, data_container| {
-            let debugger = data_container.take().unwrap();
+        let debugger = context.get_data_mut(DebuggerPlugin).take().unwrap();
+        let result = debugger.process_command(input, context);
+        let data_container = context.get_data_mut(DebuggerPlugin);
+        *data_container = Some(debugger);
 
-            let result = debugger.process_command(input, context);
-            let data_container = context.get_data_container_mut(DebuggerPlugin);
-            *data_container = Some(debugger);
-
-            assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .contains("required arguments were not provided"));
-        });
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("required arguments were not provided"));
     }
 
     #[test]
