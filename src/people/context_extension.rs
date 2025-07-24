@@ -1,6 +1,7 @@
 use crate::people::index::{
     get_and_register_multi_property_index, get_multi_property_hash, Index, IndexValue,
 };
+use crate::people::methods::Methods;
 use crate::people::query::Query;
 use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
@@ -8,11 +9,10 @@ use crate::{
     PersonPropertyChangeEvent, RngId, Tabulator,
 };
 use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
+use log::warn;
 use rand::Rng;
 use std::any::TypeId;
 use std::cell::Ref;
-
-use crate::people::methods::Methods;
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -432,10 +432,15 @@ impl ContextPeopleExt for Context {
     where
         R::RngType: Rng,
     {
-        if self.get_current_population() == 0 {
+        let requested = std::cmp::min(n, self.get_current_population());
+        if requested == 0 {
+            warn!(
+                "Requested a sample of {} people from a population of {}",
+                n,
+                self.get_current_population()
+            );
             return Vec::new();
         }
-        let requested = std::cmp::min(n, self.get_current_population());
         // Special case the empty query because we can do it in O(1).
         if query.get_query().is_empty() {
             let mut selected = HashSet::new();
