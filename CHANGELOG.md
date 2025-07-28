@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/CDCgov/ixa/compare/ixa-v0.2.1...ixa-v0.3.0) - 2025-07-28
+
+### Added
+
+- [**breaking**] New data plugin API ([#464](https://github.com/CDCgov/ixa/pull/464))
+
+### Fixed
+
+- Silenced a handful of warnings that are only emitted for the `web_api` feature. ([#469](https://github.com/CDCgov/ixa/pull/469))
+
+### Other
+
+- Made the check for a request of zero sampled people more robust, which potentially avoids a panic deeper in the code path. ([#474](https://github.com/CDCgov/ixa/pull/474))
+- enable markdownlint and ignore CHANGELOG.md ([#462](https://github.com/CDCgov/ixa/pull/462))
+
 ## [0.2.1](https://github.com/CDCgov/ixa/compare/ixa-v0.2.0...ixa-v0.2.1) - 2025-07-14
 
 ### Added
