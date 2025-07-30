@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0](https://github.com/CDCgov/ixa/compare/ixa-v0.2.1...ixa-v0.3.0) - 2025-07-28
 
+This release makes a breaking change to data plugins. When migrating:
+
+* Look for instances of of `get_data_container` and replace them with `get_data`
+* Look for instances of `get_data_container_mut`; if they were purely for initialization of
+  the data container, they can be removed or replaced with `get_data`. 
+  If a mutable reference is actually needed, replace with `get_data_mut`
+* Look for instances of `define_data_plugin`; you may be able
+  to move code that was previously outside of the macro into the initializer
 ### Added
 
 - [**breaking**] New data plugin API ([#464](https://github.com/CDCgov/ixa/pull/464))
