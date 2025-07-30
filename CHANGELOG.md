@@ -15,6 +15,7 @@ This release makes a breaking change to data plugins. When migrating:
   If a mutable reference is actually needed, replace with `get_data_mut`
 * Look for instances of `define_data_plugin`; you may be able
   to move code that was previously outside of the macro into the initializer
+  
 ### Added
 
 - [**breaking**] New data plugin API ([#464](https://github.com/CDCgov/ixa/pull/464))
