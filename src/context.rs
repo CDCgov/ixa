@@ -303,7 +303,7 @@ impl Context {
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let mut self_shadow = self;
-        let index = T::index();
+        let index = T::index_within_context();
 
         // If the data plugin is already initialized, return a mutable reference.
         // Use polonius to address borrow checker limitations.
@@ -318,12 +318,15 @@ impl Context {
 
         // Initialize the data plugin.
         let data = T::init(self_shadow);
-        let cell = &mut self_shadow.data_plugins[index];
+        let cell = self_shadow
+            .data_plugins
+            .get_mut(index)
+            .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."));
         let _ = cell.set(Box::new(data));
         cell.get_mut()
             .unwrap()
             .downcast_mut::<T::DataContainer>()
-            .expect("TypeID does not match data plugin type")
+            .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }
 
     /// Retrieve a reference to the data container associated with a
@@ -333,11 +336,13 @@ impl Context {
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
-        let index = T::index();
-        self.data_plugins[index]
+        let index = T::index_within_context();
+        self.data_plugins
+            .get(index)
+            .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."))
             .get_or_init(|| Box::new(T::init(self)))
             .downcast_ref::<T::DataContainer>()
-            .expect("TypeID does not match data plugin type")
+            .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }
 
     /// Shutdown the simulation cleanly, abandoning all events after whatever

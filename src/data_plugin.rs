@@ -50,7 +50,8 @@ pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     // another instance of this plugin in another thread just initialized the index prior to us
     // obtaining the lock. If the index has been initialized beneath us, we do not update
     // `NEXT_DATA_PLUGIN_INDEX`, we just return the value `plugin_index` was initialized to.
-    match plugin_index.compare_exchange(usize::MAX, candidate, Ordering::SeqCst, Ordering::SeqCst) {
+    match plugin_index.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire)
+    {
         Ok(_) => {
             // We won the race — increment the global next plugin index and return the new index
             *guard += 1;
@@ -72,7 +73,7 @@ pub trait DataPlugin: Any {
 
     /// Returns the index into `Context::data_plugins`, the vector of data plugins, where
     /// the instance of this data plugin can be found.
-    fn index() -> usize;
+    fn index_within_context() -> usize;
 }
 
 /// Helper for `define_data_plugin`
@@ -88,9 +89,9 @@ macro_rules! __define_data_plugin {
                 $body
             }
 
-            fn index() -> usize {
+            fn index_within_context() -> usize {
                 // This static must be initialized with a compile-time constant expression.
-                // We use `usize::MAX` as a sentinenl to mean "uninitialized". This
+                // We use `usize::MAX` as a sentinel to mean "uninitialized". This
                 // static variable is shared among all instances of this data plugin type.
                 static INDEX: std::sync::atomic::AtomicUsize =
                     std::sync::atomic::AtomicUsize::new(usize::MAX);
@@ -127,4 +128,70 @@ macro_rules! define_data_plugin {
     ($data_plugin:ident, $data_container:ty, $default: expr) => {
         $crate::__define_data_plugin!($data_plugin, $data_container, |_context| $default);
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Context;
+
+    #[test]
+    #[should_panic(
+        expected = "No data plugin found with index = 1000. You must use the `define_data_plugin!` macro to create a data plugin."
+    )]
+    fn test_wrong_data_plugin_impl_index_oob() {
+        // Suppose a user doesn't use the `define_data_plugin` macro and tries to implement it
+        // themselves. What error modes are possible? First lets try an obviously out-of-bounds
+        // index.
+        struct MyDataPlugin;
+        impl DataPlugin for MyDataPlugin {
+            type DataContainer = Vec<u32>;
+
+            fn init(_context: &impl PluginContext) -> Self::DataContainer {
+                vec![]
+            }
+
+            fn index_within_context() -> usize {
+                1000 // arbitrarily out of bounds
+            }
+        }
+
+        let context = Context::new();
+        let container = context.get_data(MyDataPlugin);
+        println!("{}", container.len());
+    }
+
+    // We attempt a collision with this plugin
+    define_data_plugin!(LegitDataPlugin, Vec<u32>, vec![]);
+    #[should_panic(
+        expected = "TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin."
+    )]
+    #[test]
+    fn test_wrong_data_plugin_impl_wrong_type() {
+        // Suppose a user doesn't use the `define_data_plugin` macro and tries
+        // to implement it themselves. What error modes are possible? Here we
+        // test for an index collision.
+        struct MyOtherDataPlugin;
+        impl DataPlugin for MyOtherDataPlugin {
+            type DataContainer = Vec<u8>;
+
+            fn init(_context: &impl PluginContext) -> Self::DataContainer {
+                vec![]
+            }
+
+            fn index_within_context() -> usize {
+                // Several plugins are registered in a test context, so an index of 1 should
+                // collide with another plugin of a different type.
+                LegitDataPlugin::index_within_context()
+            }
+        }
+
+        let context = Context::new();
+        // Make sure the legit plugin is initialized first.
+        let _ = context.get_data(LegitDataPlugin);
+
+        let container = context.get_data(MyOtherDataPlugin); // Panic here
+                                                             // Some arbitrary code involving `container`.
+        println!("{}", container.len());
+    }
 }
