@@ -50,6 +50,8 @@ pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     // another instance of this plugin in another thread just initialized the index prior to us
     // obtaining the lock. If the index has been initialized beneath us, we do not update
     // `NEXT_DATA_PLUGIN_INDEX`, we just return the value `plugin_index` was initialized to.
+    // For a justification of the data ordering, see:
+    //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
     match plugin_index.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire)
     {
         Ok(_) => {
@@ -134,7 +136,10 @@ macro_rules! define_data_plugin {
 mod tests {
     use super::*;
     use crate::Context;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
 
+    // We attempt an out-of-bounds index with a plugin
     #[test]
     #[should_panic(
         expected = "No data plugin found with index = 1000. You must use the `define_data_plugin!` macro to create a data plugin."
@@ -161,7 +166,7 @@ mod tests {
         println!("{}", container.len());
     }
 
-    // We attempt a collision with this plugin
+    // We attempt a collision with a plugin
     define_data_plugin!(LegitDataPlugin, Vec<u32>, vec![]);
     #[should_panic(
         expected = "TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin."
@@ -187,11 +192,62 @@ mod tests {
         }
 
         let context = Context::new();
-        // Make sure the legit plugin is initialized first.
+        // Make sure the legit plugin is initialized first
         let _ = context.get_data(LegitDataPlugin);
 
-        let container = context.get_data(MyOtherDataPlugin); // Panic here
-                                                             // Some arbitrary code involving `container`.
+        // Panics here:
+        let container = context.get_data(MyOtherDataPlugin);
+        // Some arbitrary code involving `container`
         println!("{}", container.len());
+    }
+
+    // Test thread safety of `initialize_data_plugin_index`.
+    #[test]
+    fn test_multithreaded_plugin_init() {
+        struct DataPluginContainerA;
+        define_data_plugin!(DataPluginA, DataPluginContainerA, DataPluginContainerA);
+        struct DataPluginContainerB;
+        define_data_plugin!(DataPluginB, DataPluginContainerB, DataPluginContainerB);
+        struct DataPluginContainerC;
+        define_data_plugin!(DataPluginC, DataPluginContainerC, DataPluginContainerC);
+        struct DataPluginContainerD;
+        define_data_plugin!(DataPluginD, DataPluginContainerD, DataPluginContainerD);
+
+        // Plugin accessors
+        let accessors: Vec<&(dyn Fn(&Context) + Send + Sync)> = vec![
+            &|ctx: &Context| {
+                let _ = ctx.get_data(DataPluginA);
+            },
+            &|ctx: &Context| {
+                let _ = ctx.get_data(DataPluginB);
+            },
+            &|ctx: &Context| {
+                let _ = ctx.get_data(DataPluginC);
+            },
+            &|ctx: &Context| {
+                let _ = ctx.get_data(DataPluginD);
+            },
+        ];
+
+        let num_threads = 20;
+        let barrier = Arc::new(Barrier::new(num_threads));
+        let mut handles = Vec::with_capacity(num_threads);
+
+        for i in 0..num_threads {
+            let barrier = Arc::clone(&barrier);
+            let accessor = accessors[i % accessors.len()];
+
+            let handle = thread::spawn(move || {
+                let context = Context::new();
+                barrier.wait();
+                accessor(&context);
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
     }
 }
