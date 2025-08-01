@@ -2,7 +2,7 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
-use crate::data_plugin::{get_plugin_ids, DataPlugin};
+use crate::data_plugin::DataPlugin;
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
 };
@@ -11,10 +11,9 @@ use crate::plan::{PlanId, Queue};
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{error, trace, ContextPeopleExt};
+use crate::{error, get_data_plugin_count, trace, ContextPeopleExt};
 use crate::{HashMap, HashMapExt};
 use polonius_the_crab::prelude::*;
-use std::any::type_name;
 use std::cell::OnceCell;
 use std::{
     any::{Any, TypeId},
@@ -85,7 +84,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
-    data_plugins: HashMap<TypeId, OnceCell<Box<dyn Any>>>,
+    data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
@@ -102,12 +101,10 @@ impl Context {
     /// Create a new empty `Context`
     #[must_use]
     pub fn new() -> Context {
-        let mut data_plugins = HashMap::new();
-
-        // Register all data plugins from global list
-        for plugin_type_id in get_plugin_ids() {
-            data_plugins.insert(plugin_type_id, OnceCell::new());
-        }
+        // Create a vector to accommodate all registered data plugins
+        let data_plugins = std::iter::repeat_with(OnceCell::new)
+            .take(get_data_plugin_count())
+            .collect();
 
         Context {
             plan_queue: Queue::new(),
@@ -306,36 +303,30 @@ impl Context {
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let mut self_shadow = self;
-        let type_id = TypeId::of::<T>();
+        let index = T::index_within_context();
 
         // If the data plugin is already initialized, return a mutable reference.
         // Use polonius to address borrow checker limitations.
         polonius!(|self_shadow| -> &'polonius mut T::DataContainer {
-            if let Some(cell) = self_shadow.data_plugins.get_mut(&type_id) {
-                if let Some(any) = cell.get_mut() {
-                    polonius_return!(any
-                        .downcast_mut::<T::DataContainer>()
-                        .expect("TypeID does not match data plugin type"));
-                }
-                // Else, don't return. Fall through and initialize.
+            if let Some(any) = self_shadow.data_plugins[index].get_mut() {
+                polonius_return!(any
+                    .downcast_mut::<T::DataContainer>()
+                    .expect("TypeID does not match data plugin type"));
             }
+            // Else, don't return. Fall through and initialize.
         });
 
         // Initialize the data plugin.
         let data = T::init(self_shadow);
-        let cell = self_shadow.data_plugins
-                              .get_mut(&type_id)
-                              .unwrap_or_else(
-            || panic!(
-                "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
-                type_name::<T>()
-            )
-        );
+        let cell = self_shadow
+            .data_plugins
+            .get_mut(index)
+            .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."));
         let _ = cell.set(Box::new(data));
         cell.get_mut()
             .unwrap()
             .downcast_mut::<T::DataContainer>()
-            .expect("TypeID does not match data plugin type")
+            .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }
 
     /// Retrieve a reference to the data container associated with a
@@ -345,18 +336,13 @@ impl Context {
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
-        let type_id = TypeId::of::<T>();
+        let index = T::index_within_context();
         self.data_plugins
-            .get(&type_id)
-            .unwrap_or_else(
-                || panic!(
-                    "Type {} was not registered as a data plugin. Make sure you use define_data_plugin! to declare plugins.",
-                    type_name::<T>()
-                )
-            )
+            .get(index)
+            .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."))
             .get_or_init(|| Box::new(T::init(self)))
             .downcast_ref::<T::DataContainer>()
-            .expect("TypeID does not match data plugin type")
+            .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }
 
     /// Shutdown the simulation cleanly, abandoning all events after whatever
