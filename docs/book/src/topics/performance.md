@@ -16,6 +16,10 @@ context.index_property(Age); // For single property indexes
 define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
 ```
 
+The cost of creating indexes is increased memory use, which can be significant for
+large populations. So it is best to only create indexes / multi-indexes that actually
+improve model performance, especially if cloud computing costs / VM sizes are an issue.
+
 See the [chapter on Indexing](indexing.md) for full details.
 
 ## Optimizing Performance with Build Profiles

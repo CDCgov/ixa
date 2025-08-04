@@ -1,9 +1,32 @@
 # Understanding Indexing in Ixa
 
-To understand why some operations in Ixa are slow without an index, we need to understand how
-property data is stored internally and how an index provides Ixa an alternative view into that data.
+## Syntax and Best Practices
+
+Syntax:
+
+```rust
+// Somewhere during the initialization of `context`
+context.index_property(Age); // For single property indexes
+define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
+```
+
+Best practices:
+
+- Index a property to improve performance of queries of that property.
+- Create a multi-property index to improve performance of queries involving multiple properties.
+- The cost of creating indexes is increased memory use, which can be
+  significant for large populations. So it is best to only create indexes /
+  multi-indexes that actually improve model performance.
+- It may be best to call `context.index_property` and `define_multi_property_index!` in the `init()`
+  method of the module in which the property is defined, or you can put all of your
+  `index_property` calls together in a main initialization function if you prefer.
+- It is not an error to call `context.index_property(…)` in the middle of a running
+  simulation or to call it twice for the same property, but it makes little sense to do so.
 
 ## Property Value Storage in Ixa
+
+To understand why some operations in Ixa are slow without an index, we need to understand how
+property data is stored internally and how an index provides Ixa an alternative view into that data.
 
 In Ixa, each agent in a simulation—such as a person in a disease transmission model—is
 associated with a unique row of data. This data is stored in columnar form, meaning each
@@ -64,7 +87,7 @@ reused this table each time we needed to do this lookup. That's all an index is!
 The index for our example column of data:
 
 | `InfectionStatus` | List of `PersonId` 's    |
-| ----------------- |--------------------------|
+| ----------------- | ------------------------ |
 | `susceptible`     | `\[0, 2, 4, 5, 7, 9]`    |
 | `infected`        | `\[1, 6, 8, 11, 12, 13]` |
 | `recovered`       | `\[3, 10, 14]`           |
@@ -91,8 +114,8 @@ There are two costs you have to pay for indexing:
    of millions of little updates to the index can add up to a real runtime cost.
 2. The index uses memory. In fact, it uses more memory than the original column
    of data, because it has to store _both_ the `InfectionStatus` values (in our
-   example) _and_  the `PersonId` values, while the original column only stores
-   the `InfectionStatus` (the  `PersonId`'s were implicitly the row numbers).
+   example) _and_ the `PersonId` values, while the original column only stores
+   the `InfectionStatus` (the `PersonId`'s were implicitly the row numbers).
 
 > [!INFO] Creating vs. Maintaining an Index
 > Suspiciously missing from this list of costs is the initial cost of scanning through
@@ -117,10 +140,19 @@ the gigabytes. While we are in an era where tens of gigabytes of RAM is commonpl
 cloud computing costs and the selection of appropriate virtual machine sizes for experiments in
 production recommend that we have a feel for whether we really need the resources we are using.
 
+> [!TIP]
+> Sometimes, the best way to address a slow query in your model isn’t to add
+> indexes, but to remove the query entirely. A common scenario is when you want to report on
+> some aggregate statistics, for example, the total number of people having each infectiousness
+> status. It might be much better to just track the aggregate value directly than to run
+> a query for it every time you want to write it to a report. As usual when it comes to
+> performance issues, measure your specific use case to know for sure what the best strategy is.
+
 ## Multi Property Indexes
 
-It is possible to index multiple properties _jointly_ with a multi-index. Suppose we have the
-properties `AgeGroup` and `InfectionStatus`, and we want to speed up queries of these two properties:
+To speed up queries involving multiple properties, use a _multi-property index_ (or _multi-index_
+for short), which indexes multiple properties _jointly_. Suppose we have the properties
+`AgeGroup` and `InfectionStatus`, and we want to speed up queries of these two properties:
 
 ```rust
 let age_and_status = context.query_people(((AgeGroup, 30), (InfectionStatus, susceptible))); // Bottleneck
@@ -131,7 +163,7 @@ can do even better with a multi-index, which treats the pairs of values `(AgeGro
 InfectionStatus)` as if it were a single value. Such a multi-index might look like this:
 
 | `(AgeGroup, InfectionStatus)` | `PersonId`'s                     |
-| :---------------------------- |:---------------------------------|
+| :---------------------------- | :------------------------------- |
 | `(10, susceptible)`           | `\[16, 27, 31]`                  |
 | `(10, infected)`              | `\[38]`                          |
 | `(10, recovered)`             | `\[18, 23, 29, 34, 39]`          |
@@ -149,8 +181,9 @@ Ixa hides the boilerplate required for creating a multi-index with the macro `de
 define_multi_property_index!(AgeGroup, InfectionStatus);
 ```
 
-Creating a multi-index _does not_ automatically create indexes for each
-of the properties individually, but you can do so yourself if you wish.
+Creating a multi-index _does not_ automatically create indexes for each of
+the properties individually, but you can do so yourself if you wish, for
+example, if you had other single property queries you want to speed up.
 
 ## The Benefits of Indexing - A Case Study
 
@@ -210,7 +243,7 @@ cargo run --example births-deaths  5.79s user 0.07s system 97% cpu 5.990 total
 
 From six minutes to six seconds! This kind of dramatic speedup is typical
 with indexes. It allows models that would otherwise struggle with a
-population size of 1000 handle populations in the tens of millions.
+population size of 1000 to handle populations in the tens of millions.
 
 Exercises:
 
@@ -222,17 +255,3 @@ Exercises:
    it's better to index the _right_ properties than to just index everything.
 
 \*Your timings will be different but should be roughly proportional to these.
-
-## Summary of Syntax
-
-```rust
-// Somewhere during the initialization of `context`
-context.index_property(Age); // For single property indexes
-define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
-```
-
-- It may be best to call it in the `init()` method of the module in which
-  the property is defined, or you can put all of your `index_property`
-  calls together in a main initialization function if you prefer.
-- It is not an error to call `context.index_property(…)`  in the middle of a running
-  simulation or to call it twice for the same property, but it makes little sense to do so.
