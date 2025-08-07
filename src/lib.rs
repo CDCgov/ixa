@@ -111,7 +111,7 @@ pub mod prelude_for_plugins {
     pub use ixa_derive::IxaEvent;
 }
 
-mod execution_stats;
+pub mod execution_stats;
 
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]
 compile_error!(
