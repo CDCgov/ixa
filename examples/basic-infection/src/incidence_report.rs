@@ -2,10 +2,10 @@ use crate::infection_manager::InfectionStatusEvent;
 use crate::people::InfectionStatusValue;
 use ixa::prelude::*;
 use ixa::{trace, PersonId};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize)]
 struct IncidenceReportItem {
     time: f64,
     person_id: PersonId,

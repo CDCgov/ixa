@@ -4,6 +4,7 @@
 use bytesize::ByteSize;
 use humantime::format_duration;
 use log::{debug, error, info};
+use serde_derive::Serialize;
 use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -27,6 +28,7 @@ pub fn get_high_res_time() -> f64 {
 
 /// A container struct for computed final statistics. Note that if population size
 /// is zero, then the per person statistics are also zero, as they are meaningless.
+#[derive(Serialize)]
 pub struct ExecutionStatistics {
     max_memory_usage: u64,
     cpu_time: Duration,
@@ -40,7 +42,7 @@ pub struct ExecutionStatistics {
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub struct ExecutionProfilingCollector {
+pub(crate) struct ExecutionProfilingCollector {
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
     #[cfg(not(target_arch = "wasm32"))]
     start_time: Instant,
@@ -96,9 +98,9 @@ impl ExecutionProfilingCollector {
         new_stats
     }
 
-    /// If at least 1 second has passed since the previous refresh, memory usage is polled and
-    /// updated. Call this method as frequently as you like, as it takes care of limiting polling
-    /// frequency itself.
+    /// If at least `REFRESH_INTERVAL` (1 second) has passed since the previous
+    /// refresh, memory usage is polled and updated. Call this method as frequently
+    /// as you like, as it takes care of limiting polling frequency itself.
     #[inline]
     pub fn refresh(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
