@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 398 296" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;">
+    <g transform="matrix(1,0,0,-1,0,438.844)">
+        <path d="M32.699,219.422L392.699,219.422" style="fill:none;fill-rule:nonzero;stroke:rgb(184,184,184);stroke-width:0.5px;"/>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,316.844)">
+        <path d="M32.699,158.422L392.699,158.422" style="fill:none;fill-rule:nonzero;stroke:rgb(184,184,184);stroke-width:0.5px;"/>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,192.844)">
+        <path d="M32.699,96.422L392.699,96.422" style="fill:none;fill-rule:nonzero;stroke:rgb(184,184,184);stroke-width:0.5px;"/>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,68.844)">
+        <path d="M32.699,34.422L392.699,34.422" style="fill:none;fill-rule:nonzero;stroke:rgb(184,184,184);stroke-width:0.5px;"/>
+    </g>
+    <text x="15.81px" y="285.315px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">0</text>
+    <text x="4.69px" y="223.602px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">250</text>
+    <text x="4.69px" y="161.889px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">500</text>
+    <text x="4.69px" y="100.176px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">750</text>
+    <text x="-0.87px" y="38.464px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">1000</text>
+    <text x="25.745px" y="295.5px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">0.0	<tspan x="49.458px " y="295.5px ">6</tspan>.0	<tspan x="70.393px " y="295.5px ">1</tspan>2.0 <tspan x="94.106px " y="295.5px ">1</tspan>8.0 <tspan x="117.82px " y="295.5px ">2</tspan>4.0 <tspan x="141.534px " y="295.5px ">3</tspan>0.0 <tspan x="165.247px " y="295.5px ">3</tspan>6.0 <tspan x="188.961px " y="295.5px ">4</tspan>2.0 <tspan x="212.675px " y="295.5px ">4</tspan>8.0 <tspan x="236.388px " y="295.5px ">5</tspan>4.0 <tspan x="260.102px " y="295.5px ">6</tspan>0.0 <tspan x="283.816px " y="295.5px ">6</tspan>6.0 <tspan x="307.529px " y="295.5px ">7</tspan>2.0 <tspan x="331.243px " y="295.5px ">7</tspan>8.0 <tspan x="354.957px " y="295.5px ">8</tspan>4.0 <tspan x="378.67px " y="295.5px ">9</tspan>0.0</text>
+    <text x="60.906px" y="7.22px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">susceptible_count</text>
+    <text x="180.799px" y="7.22px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">infected_count</text>
+    <text x="285.501px" y="7.22px" style="font-family:'HelveticaNeue', 'Helvetica Neue';font-size:10px;">r<tspan x="288.651px 294.021px " y="7.22px 7.22px ">ec</tspan>over<tspan x="318.651px 324.021px " y="7.22px 7.22px ">ed</tspan>_count</text>
+    <g transform="matrix(1,0,0,-1,0,562.844)">
+        <path d="M33.199,281.422L392.199,281.422" style="fill:none;fill-rule:nonzero;stroke:black;stroke-width:1px;stroke-linecap:square;"/>
+    </g>
+    <g>
+        <g>
+            <clipPath id="_clip1">
+                <rect x="30.297" y="32.336" width="364.457" height="251.648" clip-rule="nonzero"/>
+            </clipPath>
+            <g clip-path="url(#_clip1)">
+                <g transform="matrix(1,0,0,-1,0,316.32)">
+                    <clipPath id="_clip2">
+                        <rect x="0" y="20.32" width="398" height="296" clip-rule="nonzero"/>
+                    </clipPath>
+                    <g clip-path="url(#_clip2)">
+                        <path d="M32.695,34.734L36.648,37.945L40.598,42.632L44.551,52.015L48.504,62.629L52.457,71.269L56.41,85.832L60.359,99.164L64.312,110.023L68.266,123.355L72.219,134.215L76.172,145.57L80.121,155.937L84.074,164.332L88.027,175.933L91.98,184.328L95.93,192.226L99.883,200.371L103.836,206.05L107.789,213.207L111.742,217.898L115.691,224.812L119.645,229.254L123.598,234.191L127.551,237.152L131.504,240.855L135.453,244.804L143.359,250.234L147.312,252.457L151.262,254.925L155.215,257.886L159.168,261.343L163.121,262.086L167.074,264.308L171.023,265.047L174.977,267.269L178.93,268.75L182.883,269.984L186.832,271.711L190.785,272.207L194.738,272.945L198.691,273.441L202.645,273.933L206.594,275.66L210.547,275.91L214.5,276.156L218.453,276.894L222.406,277.144L226.355,277.39L230.309,277.636L234.262,278.129L238.215,278.379L242.164,278.625L250.07,279.117L254.023,279.613L257.977,279.613L261.926,279.859L269.832,279.859L273.785,280.105L289.594,280.105L293.547,280.351L297.496,280.351L301.449,280.597L325.164,280.597L329.117,280.847L337.02,280.847L340.973,281.093L368.641,281.093L372.59,281.34L380.496,281.34L384.449,281.586L392.352,281.586" style="fill:none;fill-rule:nonzero;stroke:rgb(146,146,146);stroke-width:4px;"/>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+    <g>
+        <g>
+            <clipPath id="_clip3">
+                <rect x="30.297" y="212.117" width="364.457" height="71.867" clip-rule="nonzero"/>
+            </clipPath>
+            <g clip-path="url(#_clip3)">
+                <g transform="matrix(1,0,0,-1,0,501.703)">
+                    <clipPath id="_clip4">
+                        <rect x="0" y="205.703" width="398" height="296" clip-rule="nonzero"/>
+                    </clipPath>
+                    <g clip-path="url(#_clip4)">
+                        <path d="M32.695,220.367L36.648,242.828L40.598,258.875L44.551,267.762L48.504,275.906L52.457,281.586L56.41,280.101L60.359,280.844L64.312,280.598L68.266,276.648L72.219,274.918L76.172,270.476L80.121,268.008L84.074,265.785L88.027,260.848L91.98,257.394L95.93,256.406L99.883,252.457L103.836,250.976L107.789,247.765L111.742,247.765L115.691,244.308L119.645,244.308L123.598,242.828L127.551,242.336L131.504,240.605L135.453,238.137L139.406,237.644L143.359,236.656L147.312,236.41L151.262,235.918L155.215,233.695L159.168,231.969L163.121,231.719L167.074,229.992L171.023,229.992L174.977,228.265L178.93,227.769L182.883,226.785L186.832,225.551L190.785,225.301L198.691,224.808L202.645,224.316L206.594,222.586L210.547,222.34L214.5,222.34L218.453,221.848L222.406,222.094L226.355,221.848L230.309,221.598L234.262,221.105L238.215,221.351L242.164,221.351L250.07,220.859L254.023,220.367L257.977,220.367L261.926,220.117L265.879,220.117L269.832,220.613L273.785,220.367L277.734,220.367L285.641,220.859L297.496,220.859L301.449,220.613L325.164,220.613L329.117,220.367L337.02,220.367L340.973,220.117L352.828,220.117L356.781,220.367L380.496,220.367L384.449,220.117L392.352,220.117" style="fill:none;fill-rule:nonzero;stroke:rgb(97,216,54);stroke-width:4px;"/>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+    <g>
+        <g>
+            <clipPath id="_clip5">
+                <rect x="30.297" y="32.336" width="364.457" height="251.648" clip-rule="nonzero"/>
+            </clipPath>
+            <g clip-path="url(#_clip5)">
+                <g transform="matrix(1,0,0,-1,0,316.566)">
+                    <clipPath id="_clip6">
+                        <rect x="0" y="20.566" width="398" height="296" clip-rule="nonzero"/>
+                    </clipPath>
+                    <g clip-path="url(#_clip6)">
+                        <path d="M32.695,281.586L36.648,255.914L40.598,235.175L44.551,216.91L48.504,198.148L52.457,183.832L56.41,170.75L60.359,156.679L64.312,146.062L68.266,136.683L72.219,127.55L76.172,120.636L80.121,112.738L84.074,106.566L88.027,99.902L91.98,94.964L95.93,88.054L99.883,83.859L103.836,79.66L107.789,75.711L111.742,71.023L115.691,67.566L119.645,63.121L123.598,59.668L127.551,57.199L131.504,55.222L135.453,53.742L139.406,51.519L143.359,49.793L147.312,47.816L151.262,45.843L155.215,45.101L159.168,43.375L163.121,42.878L167.074,42.386L171.023,41.644L174.977,41.152L178.93,40.164L182.883,39.918L186.832,39.425L190.785,39.175L194.738,38.683L198.691,38.437L210.547,38.437L218.453,37.945L222.406,37.449L234.262,37.449L238.215,36.957L242.164,36.711L265.879,36.711L269.832,36.214L277.734,36.214L285.641,35.722L289.594,35.722L293.547,35.476L352.828,35.476L356.781,35.226L368.641,35.226L372.59,34.98L392.352,34.98" style="fill:none;fill-rule:nonzero;stroke:rgb(0,162,255);stroke-width:4px;"/>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,7.844)">
+        <clipPath id="_clip7">
+            <rect x="45.699" y="0.461" width="9" height="6.926" clip-rule="nonzero"/>
+        </clipPath>
+        <g clip-path="url(#_clip7)">
+            <path d="M45.699,3.922L54.699,3.922" style="fill:none;fill-rule:nonzero;stroke:rgb(0,162,255);stroke-width:1.73px;"/>
+        </g>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,7.844)">
+        <clipPath id="_clip8">
+            <rect x="164.699" y="0.461" width="10" height="6.926" clip-rule="nonzero"/>
+        </clipPath>
+        <g clip-path="url(#_clip8)">
+            <path d="M164.699,3.922L174.699,3.922" style="fill:none;fill-rule:nonzero;stroke:rgb(97,216,54);stroke-width:1.73px;"/>
+        </g>
+    </g>
+    <g transform="matrix(1,0,0,-1,0,7.844)">
+        <clipPath id="_clip9">
+            <rect x="269.699" y="0.461" width="10" height="6.926" clip-rule="nonzero"/>
+        </clipPath>
+        <g clip-path="url(#_clip9)">
+            <path d="M269.699,3.922L279.699,3.922" style="fill:none;fill-rule:nonzero;stroke:rgb(146,146,146);stroke-width:1.73px;"/>
+        </g>
+    </g>
+</svg>
