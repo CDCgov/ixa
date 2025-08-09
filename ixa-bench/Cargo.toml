@@ -20,6 +20,13 @@ ixa = { path = "../" }
 ixa_example_basic_infection = { path = "../examples/basic-infection" }
 ixa_example_births_deaths = { path = "../examples/births-deaths" }
 
+[dependencies]
+csv.workspace = true
+serde.workspace = true
+rand.workspace = true
+clap.workspace = true
+
+
 [lib]
 bench = false
 
@@ -35,3 +42,12 @@ harness = false
 name = "example_births_deaths"
 path = "example_births_deaths/example_births_deaths.rs"
 harness = false
+
+[[bench]]
+name = "large_dataset"
+path = "large_dataset/large_dataset.rs"
+harness = false
+
+[[bin]]
+name = "generate_population"
+path = "src/generate_population.rs"
