@@ -26,11 +26,6 @@ install-playwright:
     npm install && \
     npx playwright install --with-deps
 
-# Build the Wasm target with logging enabled and no default features as a check. Use `build-wasm-pack` instead.
-# We only did this in CI and only because we didn't have testing set up for Wasm.
-#build-wasm:
-#    cargo build --verbose --target wasm32-unknown-unknown --no-default-features --features logging
-
 # Build the wasm module for the browser using wasm-pack
 [group('Wasm')]
 [group('Build')]
@@ -291,6 +286,9 @@ clean: clean-target clean-wasm clean-docs clean-book clean-examples
 # CI Task (all checks and builds)
 ########################################
 
-# Main CI task: run everything expected in CI
-ci $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
+# In the GitHub Workflow, tasks are run individually. This recipe is for running the CI tasks in a local dev
+# environment, say, before pushing.
+
+# Run locally everything that runs in CI
+local-ci $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
                                       run-examples build-docs build-book
