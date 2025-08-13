@@ -89,9 +89,8 @@ lint-md:
 # Auto-fix and format all Markdown files
 [group('Ixa Book & Docs')]
 [group('Lint')]
-fix-md: install-markdownlint install-prettier
+fix-md: install-markdownlint
     markdownlint --fix "**/*.md" || true
-    prettier --write "**/*.md" --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
 
 # Lint a specific Markdown file
 [no-cd]
