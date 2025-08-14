@@ -58,7 +58,7 @@ pub(crate) struct ExecutionProfilingCollector {
     /// to compute the CPU time of the simulation execution
     start_cpu_time: u64,
     /// The maximum amount of real memory used by the process as reported by
-    /// `sysinfo:System::process::memory()`. This value is polled during execution to capture the
+    /// `sysinfo::System::process::memory()`. This value is polled during execution to capture the
     /// max.
     max_memory_usage: u64,
     /// A `sysinfo::System` for polling memory use
