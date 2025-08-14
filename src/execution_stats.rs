@@ -30,15 +30,15 @@ pub fn get_high_res_time() -> f64 {
 /// is zero, then the per person statistics are also zero, as they are meaningless.
 #[derive(Serialize)]
 pub struct ExecutionStatistics {
-    max_memory_usage: u64,
-    cpu_time: Duration,
-    wall_time: Duration,
+    pub max_memory_usage: u64,
+    pub cpu_time: Duration,
+    pub wall_time: Duration,
 
     // Per person stats
-    population: usize,
-    cpu_time_per_person: Duration,
-    wall_time_per_person: Duration,
-    memory_per_person: u64,
+    pub population: usize,
+    pub cpu_time_per_person: Duration,
+    pub wall_time_per_person: Duration,
+    pub memory_per_person: u64,
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
