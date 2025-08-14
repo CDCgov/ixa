@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/CDCgov/ixa/compare/ixa-v0.3.1...ixa-v0.3.2) - 2025-08-14
+
+### Fixed
+
+- Made the fields of ExecutionStatistics public ([#496](https://github.com/CDCgov/ixa/pull/496))
+
 ## [0.3.1](https://github.com/CDCgov/ixa/compare/ixa-v0.3.0...ixa-v0.3.1) - 2025-08-11
 
 ### Added
