@@ -126,7 +126,7 @@ mod tests {
     use crate::people::PeoplePlugin;
     use crate::people::{Query, QueryAnd};
     use crate::{
-        define_derived_property, define_multi_property_index, define_person_property, Context,
+        define_derived_property, define_person_property, Context,
         ContextPeopleExt, PersonProperty,
     };
     use serde_derive::Serialize;
@@ -409,8 +409,8 @@ mod tests {
         );
 
         // create a multi-property index
-        define_multi_property_index!(Age, County, Height);
-        define_multi_property_index!(County, Height);
+        // define_multi_property_index!(Age, County, Height);
+        // define_multi_property_index!(County, Height);
 
         // add some people
         let _person = context

@@ -1,5 +1,6 @@
 use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
+use crate::hashing::hash_serialized_128;
 use serde::Serialize;
 use std::fmt::Debug;
 
@@ -184,11 +185,14 @@ macro_rules! define_derived_property {
                             .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
                     ),*
                 );
+                #[allow(non_snake_case)]
                 (|$($param),+| $derive_fn)($($param),+)
             }
             fn is_derived() -> bool { true }
             fn dependencies() -> Vec<Box<dyn $crate::people::PersonPropertyHolder>> {
-                vec![$(Box::new($dependency)),+]
+                vec![$(
+                    Box::new($dependency) as Box<dyn $crate::people::PersonPropertyHolder>
+                ),*]
             }
             fn register_dependencies(context: &$crate::context::Context) {
                 $(context.register_property::<$dependency>();)+
@@ -219,50 +223,75 @@ macro_rules! define_derived_property {
         );
     };
 }
-use crate::hashing::hash_serialized_128;
 pub use define_derived_property;
 
 #[macro_export]
-macro_rules! define_multi_property_index {
+macro_rules! define_multi_property {
     (
-        $($dependency:ident),+
+        $person_property:ident,
+        ( $($dependency:ident),+ )
     ) => {
+        ixa_derive::sorted_tag_value_impl!(
+            tag_tuple = ( $($dependency),+ ),
+            value_tuple = ( $(<$dependency as PersonProperty>::Value),+ )
+        );
         $crate::paste::paste! {
-            define_derived_property!(
-                [< $($dependency)+ Query >],
-                $crate::people::HashValueType,
+            $crate::define_derived_property!(
+                $person_property,
+                <
+                ( $( <$dependency as $crate::people::PersonProperty>::Value ),+ )
+                as SortByTag<( $($dependency),+ )>>::ReorderedValue,
                 [$($dependency),+],
-                |$([< $dependency:lower >]),+| {
-                    let combined = vec!(
-                        $(
-                            (std::any::TypeId::of::<$dependency>(),
-                            $dependency::hash_property_value(&[< $dependency:lower >]))
-                        ),*
-                    );
-                    $crate::people::index::get_multi_property_value_hash(&combined)
+                |$( [<_ $dependency:lower>] ),+| {
+                    let values_tuple = ( $( [<_ $dependency:lower>] ),+ );
+                    values_tuple.reorder_by_tag()
                 }
-            );
-
-            $crate::people::index::add_multi_property_index::<[< $($dependency)+ Query >]>(
-                #[allow(clippy::useless_vec)]
-                &mut vec![
-                    $(
-                        std::any::TypeId::of::<$dependency>(),
-                    )*
-                ],
-                std::any::TypeId::of::<[< $($dependency)+ Query >]>(),
             );
         }
     };
 }
+pub use define_multi_property;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::prelude::*;
+    use crate::PersonProperty;
 
     define_person_property!(Pu32, u32);
     define_person_property!(POu32, Option<u32>);
+
+    define_person_property!(Name, &'static str);
+    define_person_property!(Age, u8);
+    define_person_property!(Weight, f64);
+
+    define_multi_property!(Profile, (Name, Age, Weight));
+
+    #[test]
+    fn test_multi_property() {
+        let mut context = Context::new();
+
+        context
+            .add_person(((Name, "John"), (Age, 42), (Weight, 220.5)))
+            .unwrap();
+        context
+            .add_person(((Name, "Jane"), (Age, 22), (Weight, 180.5)))
+            .unwrap();
+        context
+            .add_person(((Name, "Bob"), (Age, 32), (Weight, 190.5)))
+            .unwrap();
+        context
+            .add_person(((Name, "Alice"), (Age, 22), (Weight, 170.5)))
+            .unwrap();
+
+        context.index_property(Profile);
+
+        let results = context.query_people((Profile, ("John", 42, 220.5).reorder_by_tag()));
+        for r in &results {
+            println!("{:?}", r);
+        }
+        assert_eq!(results.len(), 1);
+    }
 
     #[test]
     fn test_get_display() {

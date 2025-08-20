@@ -1,9 +1,36 @@
 #![allow(dead_code)]
+/*!
+The `define_multi_property!` macro (defined in `property.rs`) takes a name
+and a tuple of property tags and implements `SortByTag` for the tuple. It
+defines a derived property (vio `define_derived_property`) with the provided
+name having the type of tuples of values corresponding to the provided tags.
 
-/// Orders the fields of the tuple `Self` according to the sorted order of the fields of the tuple
-/// `Tag`. The `SortedTag` associated type is the tuple type of `Tag` after sorting. The
-/// `ReorderedValue` associated type is the tuple type of `Self` after reordering according to the
-/// sorted order of the fields of `Tag`.
+```rust
+use ixa::people::{define_multi_property, define_person_property};
+
+define_person_property!(Name, &'static str);
+define_person_property!(Age, u8);
+define_person_property!(Weight, f64);
+
+define_multi_property!(Profile, (Name, Age, Weight));
+```
+
+The new derived property is not automatically indexed. You can index it just
+like any other property:
+
+```rust, ignore
+context.index_property(Profile);
+```
+
+The `SortByTag` trait endows the tuple type with methods `reorder_by_tag`
+and `unreorder_by_tag` that converts to and from the tuple value type
+of the sorted order of the fields of the tuple `Tag` respectively.
+*/
+
+/// Orders the fields of the tuple `Self` according to the sorted order of the
+/// fields of the tuple `Tag`. The `SortedTag` associated type is the tuple type of
+/// `Tag` after sorting. The `ReorderedValue` associated type is the tuple type of
+/// `Self` after reordering, according to the sorted order of the fields of `Tag`.
 pub trait SortByTag<Tag> {
     type SortedTag;
     type ReorderedValue;

@@ -74,7 +74,7 @@ mod event;
 pub(crate) mod external_api;
 mod index;
 pub(crate) mod methods;
-mod multi_index;
+mod multi_property;
 mod property;
 mod query;
 
@@ -86,9 +86,10 @@ use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
 pub use index::{add_multi_property_index, Index};
+pub use multi_property::SortByTag;
 pub use property::{
     define_derived_property, define_person_property, define_person_property_with_default,
-    PersonProperty,
+    define_multi_property, PersonProperty
 };
 
 use crate::{HashMap, HashMapExt, HashSet, HashSetExt};

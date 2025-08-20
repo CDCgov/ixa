@@ -1,22 +1,19 @@
-/*!
-
-Each property type `P: PersonProperty` has a corresponding `Index<P>` type a single
-instance of which is stored in the `PeopleData::property_indexes: RefCell<HashMap<TypeId,
-BxIndex>>` map. The map `PeopleData::property_indexes` is keyed by the `TypeId` of the
-property tag type `P`, _not_ the value type of the property, `PersonProperty::Value`.
-
-`Index<P>::lookup: HashTable<(T, std::collections::HashSet<PersonId>)>` is a hash table,
-_not_ a hash map. The difference is, a hash table is keyed by a `u64`, in our case,
-the 64-bit hash of the property value, and allows for a custom equality check. For
-equality, we compare the 128-bit hash of the property value. This allows us to keep the
-lookup operation completely type-erased. The value associated with the key is a tuple
-of the property value and a set of `PersonId`s. The property value is stored so that
-
-1. we can compute its 128-bit hash to check equality during lookup,
-2. we can iterate over (property value, set of `PersonId`s) pairs in the typed API, and
-3. we can iterate over (serialized property value, set of `PersonId`s) pairs in the type-erased API.
-
-*/
+//! Each property type `P: PersonProperty` has a corresponding `Index<P>` type a single
+//! instance of which is stored in the `PeopleData::property_indexes: RefCell<HashMap<TypeId,
+//! BxIndex>>` map. The map `PeopleData::property_indexes` is keyed by the `TypeId` of the
+//! property tag type `P`, _not_ the value type of the property, `PersonProperty::Value`.
+//!
+//! `Index<P>::lookup: HashTable<(T, std::collections::HashSet<PersonId>)>` is a hash table,
+//! _not_ a hash map. The difference is, a hash table is keyed by a `u64`, in our case,
+//! the 64-bit hash of the property value, and allows for a custom equality check. For
+//! equality, we compare the 128-bit hash of the property value. This allows us to keep the
+//! lookup operation completely type-erased. The value associated with the key is a tuple
+//! of the property value and a set of `PersonId`s. The property value is stored so that
+//!
+//! 1. we can compute its 128-bit hash to check equality during lookup,
+//! 2. we can iterate over (property value, set of `PersonId`s) pairs in the typed API, and
+//! 3. we can iterate over (serialized property value, set of `PersonId`s) pairs in the
+//!    type-erased API.
 
 use crate::people::external_api::ContextPeopleExtCrate;
 use crate::{
@@ -97,9 +94,6 @@ pub trait TypeErasedIndex {
 
     /// Fetching a set only requires the hash.
     fn get_with_hash(&self, hash: HashValueType) -> Option<&HashSet<PersonId>>;
-
-    // /// Fetching a set only requires the hash.
-    // fn get_with_hash_mut(&mut self, hash: HashValueType) -> Option<&mut HashSet<PersonId>>;
 
     fn is_indexed(&self) -> bool;
     fn set_indexed(&mut self, is_indexed: bool);
