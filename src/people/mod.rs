@@ -74,8 +74,10 @@ mod event;
 pub(crate) mod external_api;
 mod index;
 pub(crate) mod methods;
+mod multi_index;
 mod property;
 mod query;
+
 pub use query::{Query, QueryAnd};
 
 use crate::{context::Context, define_data_plugin};
