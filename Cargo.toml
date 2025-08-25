@@ -21,7 +21,7 @@ csv = "^1.3.1"
 serde = { version = "^1.0.217", features = ["derive"] }
 serde_derive = "^1.0.217"
 serde_json = "^1.0.135"
-bincode = "^1.3.3"
+bincode = { version = "^2.0.1", default-features = false, features = ["std", "serde"] }
 reikna = "^0.12.3"
 ixa-derive = { version = "0.0.2", path = "ixa-derive" }
 seq-macro = "^0.3.5"
@@ -61,6 +61,8 @@ sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
 polonius-the-crab = "^0.4.2"
+hashbrown = "^0.15.5"
+twox-hash = { version = "^2.1.1", default-features = false, features = ["xxhash3_128", "std"] }
 
 [package]
 name = "ixa"
@@ -100,6 +102,8 @@ sysinfo.workspace = true
 humantime.workspace = true
 bytesize.workspace = true
 polonius-the-crab.workspace = true
+hashbrown.workspace = true
+twox-hash.workspace = true
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

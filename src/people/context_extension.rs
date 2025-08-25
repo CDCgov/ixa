@@ -1,14 +1,14 @@
+use crate::hashing::hash_serialized_128;
 use crate::people::index::{
-    get_and_register_multi_property_index, get_multi_property_hash, Index, IndexValue,
+    get_and_register_multi_property_index, get_multi_property_value_hash, process_indices, BxIndex,
 };
 use crate::people::methods::Methods;
 use crate::people::query::Query;
-use crate::people::{index, InitializationList, PeoplePlugin, PersonPropertyHolder};
+use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::{
-    Context, ContextRandomExt, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
-    PersonPropertyChangeEvent, RngId, Tabulator,
+    Context, ContextRandomExt, HashSet, HashSetExt, IxaError, PersonCreatedEvent, PersonId,
+    PersonProperty, PersonPropertyChangeEvent, RngId, Tabulator,
 };
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use log::warn;
 use rand::Rng;
 use std::any::TypeId;
@@ -119,6 +119,7 @@ pub trait ContextPeopleExt {
     where
         R::RngType: Rng;
 }
+
 impl ContextPeopleExt for Context {
     fn get_current_population(&self) -> usize {
         self.get_data(PeoplePlugin).current_population
@@ -158,7 +159,7 @@ impl ContextPeopleExt for Context {
             return value;
         }
 
-        // Initialize the property. This does not fire a change event
+        // Initialize the property. This does not fire a change event.
         let initialized_value = T::compute(self, person_id);
         data_container.set_person_property(person_id, property, initialized_value);
 
@@ -248,21 +249,11 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn index_property<T: PersonProperty>(&mut self, _property: T) {
-        // Ensure that the data container exists
-        {
-            let _ = self.get_data_mut(PeoplePlugin);
-        }
-
+    fn index_property<T: PersonProperty>(&mut self, property: T) {
         self.register_property::<T>();
 
         let data_container = self.get_data(PeoplePlugin);
-        let mut index = data_container
-            .get_index_ref_mut_by_prop(T::get_instance())
-            .unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
-        }
+        data_container.set_property_indexed(true, property);
     }
 
     fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
@@ -369,24 +360,17 @@ impl ContextPeopleExt for Context {
 
         let data_container = self.get_data(PeoplePlugin);
         for type_id in &type_ids {
-            let mut index = data_container.get_index_ref_mut(*type_id).unwrap();
-            if index.lookup.is_none() {
-                // Start indexing this property if it's not already
-                // indexed.
-                index.lookup = Some(HashMap::new());
-            }
-
-            let methods = data_container.get_methods(*type_id);
-            index.index_unindexed_people(self, &methods);
+            data_container.set_property_indexed_by_type_id(true, *type_id);
+            data_container.index_unindexed_people_for_type_id(self, *type_id);
         }
 
         let index_container = data_container.property_indexes.borrow();
         let indices = type_ids
             .iter()
             .filter_map(|t| index_container.get(t))
-            .collect::<Vec<&Index>>();
+            .collect::<Vec<&BxIndex>>();
 
-        index::process_indices(
+        process_indices(
             self,
             indices.as_slice(),
             &mut Vec::new(),
@@ -511,57 +495,38 @@ pub trait ContextPeopleExtInternal {
     fn query_people_internal(
         &self,
         accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
+        property_hashes: Vec<(TypeId, HashValueType)>,
     );
 }
 
 impl ContextPeopleExtInternal for Context {
     fn register_indexer<T: PersonProperty>(&self) {
-        {
-            let data_container = self.get_data(PeoplePlugin);
-
-            let property_indexes = data_container.property_indexes.borrow_mut();
-            if property_indexes.contains_key(&TypeId::of::<T>()) {
-                return; // Index already exists, do nothing
-            }
-        }
-
-        // If it doesn't exist, insert the new index
-        let index = Index::new(self, T::get_instance());
         let data_container = self.get_data(PeoplePlugin);
-        let mut property_indexes = data_container.property_indexes.borrow_mut();
-        property_indexes.insert(TypeId::of::<T>(), index);
+        // Create an index object if it doesn't exist.
+        data_container.register_index::<T>();
     }
 
+    /// If the property is being indexed, add the person to the property's index.
     fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data(PeoplePlugin);
-
-        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
-            let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
-                index.add_person(self, &methods, person_id);
-            }
-        }
+        let value = self.get_person_property(person_id, property);
+        data_container.add_person_if_indexed::<T>(value, person_id);
     }
 
+    /// If the property is being indexed, add the person to the property's index.
     fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data(PeoplePlugin);
-
-        if let Some(mut index) = data_container.get_index_ref_mut_by_prop(property) {
-            let methods = data_container.get_methods(TypeId::of::<T>());
-            if index.lookup.is_some() {
-                index.remove_person(self, &methods, person_id);
-            }
-        }
+        let value = self.get_person_property(person_id, property);
+        data_container.remove_person_if_indexed::<T>(value, person_id);
     }
 
     fn query_people_internal(
         &self,
         mut accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
+        property_hashes: Vec<(TypeId, HashValueType)>,
     ) {
         let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
-        let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
+        let mut unindexed = Vec::<(TypeId, HashValueType)>::new();
         let data_container = self.get_data(PeoplePlugin);
 
         let mut property_hashs_working_set = property_hashes.clone();
@@ -570,25 +535,26 @@ impl ContextPeopleExtInternal for Context {
             if let Some(combined_index) =
                 get_and_register_multi_property_index(&property_hashes, self)
             {
-                let combined_hash = get_multi_property_hash(&property_hashes);
+                // ToDo(ap59): Right now the "value" we store for a multi-index is the hash of
+                //     the list of hashes of values. The hash of this "value" is the hash of
+                //     the hash of the list of hashes. This computation here needs to be kept
+                //     in sync with this convoluted definition until we redefine multi-indices.
+                let multi_index_value = get_multi_property_value_hash(&property_hashes);
+                let combined_hash = hash_serialized_128(multi_index_value);
                 property_hashs_working_set = vec![(combined_index, combined_hash)];
             }
         }
 
         // 1. Walk through each property and update the indexes.
         for (t, _) in &property_hashs_working_set {
-            let mut index = data_container.get_index_ref_mut(*t).unwrap();
-            let methods = data_container.get_methods(*t);
-            index.index_unindexed_people(self, &methods);
+            data_container.index_unindexed_people_for_type_id(self, *t);
         }
 
         // 2. Collect the index entry corresponding to the value.
         for (t, hash) in property_hashs_working_set {
-            let index = data_container.get_index_ref(t).unwrap();
-            if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
-                if let Ok(matching_people) =
-                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
-                {
+            let (is_indexed, people_set) = data_container.get_people_for_id_hash(t, hash);
+            if is_indexed {
+                if let Some(matching_people) = people_set {
                     indexes.push(matching_people);
                 } else {
                     // This is empty and so the intersection will
