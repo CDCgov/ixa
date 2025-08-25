@@ -291,7 +291,7 @@ pub fn enter_debugger(context: &mut Context) {
         let line = match debugger.rl.readline(&format!("t={current_time:.4} $ ")) {
             Ok(line) => line,
             Err(
-                rustyline::error::ReadlineError::WindowResized
+                rustyline::error::ReadlineError::Signal(_)
                 | rustyline::error::ReadlineError::Interrupted,
             ) => continue,
             Err(rustyline::error::ReadlineError::Eof) => exit_debugger(),
