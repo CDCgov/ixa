@@ -16,6 +16,7 @@ release = false
 criterion.workspace = true
 tempfile.workspace = true
 ixa = { path = "../" }
+ixa-derive = { path = "../ixa-derive" }
 
 ixa_example_basic_infection = { path = "../examples/basic-infection" }
 ixa_example_births_deaths = { path = "../examples/births-deaths" }
