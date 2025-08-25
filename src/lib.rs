@@ -84,15 +84,17 @@ pub mod progress;
 
 #[cfg(feature = "debugger")]
 pub mod external_api;
-mod hashing;
+pub mod hashing;
 pub mod numeric;
 
 #[cfg(feature = "web_api")]
 pub mod web_api;
 
 // Re-export for macros
+pub use bincode;
 pub use csv;
 pub use ctor;
+pub use ixa_derive::{sorted_tag_value_impl, static_sorted_tuples};
 pub use paste;
 pub use rand;
 

@@ -68,6 +68,18 @@ pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode::serde::encode_to_vec as serialize_to_vec;
+    use serde::Serialize;
+
+    #[test]
+    fn hash_serialized_equals_one_shot() {
+        let value = "hello";
+        let a = hash_serialized_128(value);
+        let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
+        let b = one_shot_128(&serialized.as_slice());
+
+        assert_eq!(a, b);
+    }
 
     #[test]
     fn hash_serialized_equals_one_shot() {
@@ -104,5 +116,42 @@ mod tests {
             y: "a".into(),
         });
         assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn serialization_is_concatenation() {
+        // We rely on the fact that the serialization of a tuple is the concatenation of the
+        // component types, and likewise for structs. This tests that invariant.
+
+        #[derive(Debug, Serialize)]
+        struct MyStruct {
+            name: &'static str,
+            age: i32,
+            height: f64,
+        }
+
+        let my_struct = MyStruct {
+            name: "John",
+            age: 25,
+            height: 1.80,
+        };
+        let my_tuple = ("John", 25, 1.80);
+
+        let encoded_struct = serialize_to_vec(my_struct, bincode::config::standard()).unwrap();
+        let encoded_tuple = serialize_to_vec(my_tuple, bincode::config::standard()).unwrap();
+
+        assert_eq!(encoded_struct, encoded_tuple);
+
+        let encoded_str = bincode::encode_to_vec("John", bincode::config::standard()).unwrap();
+        let encoded_int = bincode::encode_to_vec(25, bincode::config::standard()).unwrap();
+        let encoded_float = bincode::encode_to_vec(1.80, bincode::config::standard()).unwrap();
+        let flattened = encoded_str
+            .iter()
+            .copied()
+            .chain(encoded_int.iter().copied())
+            .chain(encoded_float.iter().copied())
+            .collect::<Vec<u8>>();
+
+        assert_eq!(flattened, encoded_tuple);
     }
 }

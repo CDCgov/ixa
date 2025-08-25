@@ -63,16 +63,14 @@ impl PeopleData {
     /// Removes a person from the index if the property is being indexed.
     pub(super) fn remove_person_if_indexed<T: PersonProperty>(
         &self,
-        value: T::Value,
+        value: T::CanonicalValue,
         person_id: PersonId,
     ) {
         let mut indexes = self.property_indexes.borrow_mut();
-        indexes.entry(TypeId::of::<T>()).and_modify(|index| {
+        indexes.entry(T::type_id()).and_modify(|index| {
             if index.is_indexed() {
-                // Only an `Index<T>` can be the value for key `TypeId::of::<T>()`, so unwrap
-                // is infallible.
-                let index = index.as_any_mut().downcast_mut::<Index<T>>().unwrap();
-                index.remove_person(&value, person_id);
+                let hash = T::hash_property_value(&value);
+                index.remove_person_with_hash(hash, person_id);
             }
         });
     }
@@ -80,12 +78,13 @@ impl PeopleData {
     /// Adds a person to the index if the property is being indexed.
     pub(super) fn add_person_if_indexed<T: PersonProperty>(
         &self,
-        value: T::Value,
+        value: T::CanonicalValue,
         person_id: PersonId,
     ) {
         let mut indexes = self.property_indexes.borrow_mut();
-        indexes.entry(TypeId::of::<T>()).and_modify(|index| {
+        indexes.entry(T::type_id()).and_modify(|index| {
             if index.is_indexed() {
+                // ToDo(ap59): The following invariant is no longer true for multi-properties.
                 // Only an `Index<T>` can be the value for key `TypeId::of::<T>()`, so unwrap
                 // is infallible.
                 let index = index.as_any_mut().downcast_mut::<Index<T>>().unwrap();
@@ -98,7 +97,7 @@ impl PeopleData {
     pub(super) fn register_index<T: PersonProperty>(&self) {
         let mut indexes = self.property_indexes.borrow_mut();
         indexes
-            .entry(TypeId::of::<T>())
+            .entry(T::type_id())
             .or_insert_with(|| Index::<T>::new());
     }
 
@@ -177,7 +176,7 @@ where
     }
 
     fn property_type_id(&self) -> TypeId {
-        TypeId::of::<T>()
+        T::type_id()
     }
 
     /// Returns of dependencies, where any derived dependencies

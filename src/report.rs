@@ -259,6 +259,7 @@ mod test {
     use crate::{define_person_property_with_default, info};
 
     use super::*;
+    use crate::log::{set_log_level, LevelFilter};
     use core::convert::TryInto;
     use serde_derive::{Deserialize, Serialize};
     use std::thread;
@@ -573,6 +574,8 @@ mod test {
     fn add_periodic_report() {
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
+        set_log_level(LevelFilter::Trace);
+
         // We need the writer to go out of scope so the file is flushed
         {
             let mut context = Context::new();

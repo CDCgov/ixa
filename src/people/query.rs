@@ -1,22 +1,66 @@
+use crate::hashing::{one_shot_128, HashMap};
+use crate::people::ordered_tuple::{
+    static_apply_reordering, static_sorted_indices, type_ids_to_multi_property_id,
+};
 use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
+use std::sync::{Mutex, OnceLock};
 
 /// Encapsulates a person query.
 ///
 /// [`Context::query_people`] actually takes an instance of [`Query`], but because
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
-pub trait Query: Copy {
+pub trait Query: Copy + 'static {
     fn setup(&self, context: &Context);
+    /// Returns a list of `(type_id, hash)` pairs where `hash` is the hash of a value of type
+    /// `Property::Value` and `type_id` is `Property.type_id()` (NOT the type ID of the value).
     fn get_query(&self) -> Vec<(TypeId, HashValueType)>;
+
+    /// Returns an unordered list of type IDs of the properties in this query.
+    fn get_type_ids(&self) -> Vec<TypeId>;
+
+    /// Returns the `TypeId` of the multi-property having the properties of this query, if any.
+    fn multi_property_type_id(&self) -> Option<TypeId> {
+        // This trick allows us to cache the multi-property ID so we don't have to allocate every
+        // time.
+        static REGISTRY: OnceLock<Mutex<HashMap<TypeId, &'static Option<TypeId>>>> =
+            OnceLock::new();
+
+        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
+        let mut map = map.lock().unwrap();
+        let type_id = TypeId::of::<Self>();
+        let entry = *map.entry(type_id).or_insert_with(|| {
+            let mut types = self.get_type_ids();
+            types.sort_unstable();
+            Box::leak(Box::new(type_ids_to_multi_property_id(types.as_slice())))
+        });
+
+        *entry
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType;
 }
 
 impl Query for () {
     fn setup(&self, _: &Context) {}
 
     fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        vec![]
+        Vec::new()
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        Vec::new()
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        let empty: &[u128] = &[];
+        one_shot_128(&empty)
+    }
+
+    fn multi_property_type_id(&self) -> Option<TypeId> {
+        None
     }
 }
 
@@ -27,11 +71,24 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
     }
 
     fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        vec![(TypeId::of::<T1>(), T1::hash_property_value(&self.1))]
+        let value = T1::make_canonical(self.1);
+        vec![(T1::type_id(), T1::hash_property_value(&value))]
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        vec![T1::type_id()]
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        // This method should never be called for a single-property query.
+        unreachable!("This method should never be called for a single-property query.");
+    }
+
+    fn multi_property_type_id(&self) -> Option<TypeId> {
+        None
     }
 }
 
-// Implement the versions with 1..20 parameters.
 macro_rules! impl_query {
     ($ct:expr) => {
         seq!(N in 0..$ct {
@@ -54,83 +111,69 @@ macro_rules! impl_query {
                 fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
                     let mut ordered_items = vec![
                     #(
-                        (std::any::TypeId::of::<T~N>(), T~N::hash_property_value(&self.N.1)),
+                        (T~N::type_id(), T~N::hash_property_value(&T~N::make_canonical(self.N.1))),
                     )*
                     ];
                     ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
                     ordered_items
                 }
+
+                fn get_type_ids(&self) -> Vec<TypeId> {
+                    vec![
+                        #(
+                            T~N::type_id(),
+                        )*
+                    ]
+                }
+
+                fn multi_property_value_hash(&self) -> HashValueType {
+                    // This needs to be kept in sync with how multi-properties compute their hash. We are
+                    // exploiting the fact that `bincode` encodes tuples as the concatenation of their
+                    // elements. Unfortunately, `bincode` allocates, but we avoid more allocations by
+                    // using staticly allocated arrays.
+
+                    // Multi-properties order their values by lexicographic order of the component
+                    // properties, not `TypeId` order.
+                    // let type_ids: [TypeId; $ct] = [
+                    //     #(
+                    //         T~N::type_id(),
+                    //     )*
+                    // ];
+                    let keys: [&str; $ct] = [
+                        #(
+                            T~N::name(),
+                        )*
+                    ];
+                    let mut values: [&Vec<u8>; $ct] = [
+                        #(
+                            &$crate::bincode::serde::encode_to_vec(self.N.1, bincode::config::standard()).unwrap(),
+                        )*
+                    ];
+                    let indices: [usize; $ct] = static_sorted_indices( &keys);
+                    static_apply_reordering(&mut values, &indices);
+                    let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
+                    one_shot_128(&data.as_slice())
+                }
+
             }
         });
     }
 }
 
-seq!(Z in 1..20 {
+// Implement the versions with 1..10 parameters.
+seq!(Z in 1..10 {
     impl_query!(Z);
 });
 
-/// Helper utility for combining two queries, useful if you want
-/// to iteratively construct a query in multiple parts.
-///
-/// Example:
-/// ```
-/// use ixa::{define_person_property, people::QueryAnd, Context, ContextPeopleExt};
-/// define_person_property!(Age, u8);
-/// define_person_property!(Alive, bool);
-/// let context = Context::new();
-/// let q1 = (Age, 42);
-/// let q2 = (Alive, true);
-/// context.query_people(QueryAnd::new(q1, q2));
-/// ```
-
-#[derive(Copy, Clone)]
-pub struct QueryAnd<Q1, Q2>
-where
-    Q1: Query,
-    Q2: Query,
-{
-    queries: (Q1, Q2),
-}
-
-impl<Q1, Q2> QueryAnd<Q1, Q2>
-where
-    Q1: Query,
-    Q2: Query,
-{
-    pub fn new(q1: Q1, q2: Q2) -> Self {
-        Self { queries: (q1, q2) }
-    }
-}
-
-impl<Q1, Q2> Query for QueryAnd<Q1, Q2>
-where
-    Q1: Query,
-    Q2: Query,
-{
-    fn setup(&self, context: &Context) {
-        Q1::setup(&self.queries.0, context);
-        Q2::setup(&self.queries.1, context);
-    }
-
-    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        let mut query = Vec::new();
-        query.extend_from_slice(&self.queries.0.get_query());
-        query.extend_from_slice(&self.queries.1.get_query());
-        query.sort_by(|a, b| a.0.cmp(&b.0));
-        query
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
     use crate::people::PeoplePlugin;
-    use crate::people::{Query, QueryAnd};
     use crate::{
-        define_derived_property, define_multi_property_index, define_person_property, Context,
+        define_derived_property, define_multi_property, define_person_property, Context,
         ContextPeopleExt, PersonProperty,
     };
     use serde_derive::Serialize;
-    use std::any::TypeId;
 
     define_person_property!(Age, u8);
     define_person_property!(County, u32);
@@ -203,7 +246,7 @@ mod tests {
         container
             .property_indexes
             .borrow()
-            .get(&TypeId::of::<T>())
+            .get(&T::type_id())
             .and_then(|index| Some(index.is_indexed()))
             .unwrap_or(false)
     }
@@ -397,6 +440,10 @@ mod tests {
         assert_eq!(not_seniors.len(), 0, "No non-seniors");
     }
 
+    // create a multi-property index
+    define_multi_property!(ACH, (Age, County, Height));
+    define_multi_property!(CH, (County, Height));
+
     #[test]
     fn query_derived_prop_with_optimized_index() {
         let mut context = Context::new();
@@ -407,10 +454,6 @@ mod tests {
             [Age, County, Height],
             |age, county, height| { (age, county, height) }
         );
-
-        // create a multi-property index
-        define_multi_property_index!(Age, County, Height);
-        define_multi_property_index!(County, Height);
 
         // add some people
         let _person = context
@@ -472,50 +515,5 @@ mod tests {
         assert_eq!(age_county_height5.len(), 2, "Should have 2 matches");
         assert!(age_county_height5.contains(&p2));
         assert!(age_county_height5.contains(&p3));
-    }
-
-    #[test]
-    fn query_and_returns_people() {
-        let mut context = Context::new();
-        context
-            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
-            .unwrap();
-
-        let q1 = (Age, 42);
-        let q2 = (RiskCategory, RiskCategoryValue::High);
-
-        let people = context.query_people(QueryAnd::new(q1, q2));
-        assert_eq!(people.len(), 1);
-    }
-
-    #[test]
-    fn query_and_conflicting() {
-        let mut context = Context::new();
-        context
-            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
-            .unwrap();
-
-        let q1 = (Age, 42);
-        let q2 = (Age, 64);
-
-        let people = context.query_people(QueryAnd::new(q1, q2));
-        assert_eq!(people.len(), 0);
-    }
-
-    fn query_and_copy_impl<Q: Query>(context: &Context, q: Q) {
-        for _ in 0..2 {
-            context.query_people(q);
-        }
-    }
-    #[test]
-    fn test_query_and_copy() {
-        let mut context = Context::new();
-        context
-            .add_person(((Age, 42), (RiskCategory, RiskCategoryValue::High)))
-            .unwrap();
-        query_and_copy_impl(
-            &context,
-            QueryAnd::new((Age, 42), (RiskCategory, RiskCategoryValue::High)),
-        );
     }
 }

@@ -62,7 +62,7 @@ sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
 polonius-the-crab = "^0.4.2"
-hashbrown = "^0.15.5"
+hashbrown = "^0.16.0"
 
 [package]
 name = "ixa"
@@ -92,6 +92,7 @@ ixa-derive.workspace = true
 log.workspace = true
 paste.workspace = true
 rand.workspace = true
+rustc-hash.workspace = true
 seq-macro.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
