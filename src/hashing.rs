@@ -15,80 +15,33 @@
 //! The `hash_usize` free function is a convenience function used in `crate::random::get_rng`.
 
 use bincode::serde::encode_to_vec as serialize_to_vec;
-pub use rustc_hash::FxHashMap as HashMap;
-pub use rustc_hash::FxHashSet as HashSet;
+use gxhash::{gxhash128, GxHasher};
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
-use twox_hash::XxHash3_128;
 
-/// Provides API parity with `std::collections::HashMap`.
-pub trait HashMapExt {
-    fn new() -> Self;
-}
-
-impl<K, V> HashMapExt for HashMap<K, V> {
-    fn new() -> Self {
-        HashMap::default()
-    }
-}
-
-// Note that trait aliases are not yet stabilized in rustc.
-// See https://github.com/rust-lang/rust/issues/41517
-/// Provides API parity with `std::collections::HashSet`.
-pub trait HashSetExt {
-    fn new() -> Self;
-}
-
-impl<T> HashSetExt for HashSet<T> {
-    fn new() -> Self {
-        HashSet::default()
-    }
-}
+pub use gxhash::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 /// A convenience method to compute the hash of a `&str`.
 pub fn hash_str(data: &str) -> u64 {
-    let mut hasher = rustc_hash::FxHasher::default();
+    let mut hasher = GxHasher::default();
     hasher.write(data.as_bytes());
     hasher.finish()
 }
 
-pub struct Xxh3Hasher128(XxHash3_128);
-
-impl Default for Xxh3Hasher128 {
-    fn default() -> Self {
-        Self(XxHash3_128::new())
-        // or Xxh3::with_seed(seed) for domain separation
-    }
-}
-
-impl Hasher for Xxh3Hasher128 {
-    fn write(&mut self, bytes: &[u8]) {
-        self.0.write(bytes); // stream bytes, no allocation
-    }
-    // Hasher requires a u64 result; return the low 64 bits of the 128-bit digest.
-    #[allow(clippy::cast_possible_truncation)]
-    fn finish(&self) -> u64 {
-        self.0.finish_128() as u64
-    }
-}
-
-impl Xxh3Hasher128 {
-    pub fn finish_u128(self) -> u128 {
-        // consume the state to produce the 128-bit digest
-        self.0.finish_128()
-    }
-}
-
 // Helper for any T: Hash
 pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
-    let mut h = Xxh3Hasher128::default();
+    let mut h = GxHasher::default();
+    // let mut h = Xxh3Hasher128::default();
     value.hash(&mut h);
     h.finish_u128()
 }
 
 pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
     let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
-    one_shot_128(&serialized)
+    // The `gxhash128` function gives ~3% speedup over `one_shot_128` on my machine on the
+    // `births-death` benchmark. HOWEVER, it is not guaranteed to give the same result as
+    // `GxHasher` as used in `one_shot_128(&serialized)`.
+    gxhash128(serialized.as_slice(), 42)
 }
 
 #[cfg(test)]
