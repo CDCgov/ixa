@@ -74,22 +74,25 @@ mod event;
 pub(crate) mod external_api;
 mod index;
 pub(crate) mod methods;
+mod multi_property;
 mod property;
 mod query;
-pub use query::{Query, QueryAnd};
+
+pub use query::Query;
 
 use crate::{context::Context, define_data_plugin};
+use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
-pub use index::{add_multi_property_index, get_multi_property_value_hash, Index};
+pub use index::Index;
+pub use multi_property::*;
 pub use property::{
-    define_derived_property, define_person_property, define_person_property_with_default,
-    PersonProperty,
+    define_derived_property, define_multi_property, define_person_property,
+    define_person_property_with_default, PersonProperty,
 };
 
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -114,7 +117,7 @@ define_data_plugin!(
 );
 
 /// Represents a unique person.
-//  the id refers to that person's index in the range 0 to population
+//  The id refers to that person's index in the range 0 to population
 // - 1 in the PeopleData container.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId(pub(crate) usize);

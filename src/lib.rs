@@ -89,15 +89,17 @@ pub mod progress;
 
 #[cfg(feature = "debugger")]
 pub mod external_api;
-mod hashing;
+pub mod hashing;
 pub mod numeric;
 
 #[cfg(feature = "web_api")]
 pub mod web_api;
 
 // Re-export for macros
+pub use bincode;
 pub use csv;
 pub use ctor;
+pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
 pub use paste;
 pub use rand;
 
@@ -109,10 +111,10 @@ pub mod prelude;
 
 pub mod prelude_for_plugins {
     pub use crate::context::ContextBase;
+    pub use crate::context::IxaEvent;
     pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;
-    pub use crate::IxaEvent;
     pub use ixa_derive::IxaEvent;
 }
 
