@@ -666,15 +666,6 @@ mod tests {
         age >= threshold
     });
 
-    // This isn't used, it's just testing for a compile error.
-    define_derived_property!(
-        NotUsed,
-        bool,
-        [Age],
-        [ThresholdP, ThresholdP],
-        |age, threshold, threshold2| { age >= threshold && age <= threshold2 }
-    );
-
     define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
             AgeGroupValue::Child

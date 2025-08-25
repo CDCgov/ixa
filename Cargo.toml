@@ -145,17 +145,14 @@ roots.workspace = true
 ixa_example_basic_infection = { path = "examples/basic-infection" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
 
+[workspace.lints.rust]
+mismatched_lifetime_syntaxes = "allow"
+
+# https://rust-lang.github.io/rust-clippy/master/index.html
 [workspace.lints.clippy]
-pedantic = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
-implicit_hasher = "allow"
-missing_panics_doc = "allow"
-missing_errors_doc = "allow"
-uninlined_format_args = "allow"
 result_unit_err = "allow"
-struct_field_names = "allow"
-unnecessary_debug_formatting = "allow"
-struct_excessive_bools = "allow"
+mismatched_lifetime_syntaxes = "allow"
 
 [lints]
 workspace = true
