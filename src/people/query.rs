@@ -136,7 +136,6 @@ mod tests {
     define_person_property!(Age, u8);
     define_person_property!(County, u32);
     define_person_property!(Height, u32);
-    define_derived_property!(AgeGroup, u8, [Age], |age| (age / 5));
 
     #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
     pub enum RiskCategoryValue {

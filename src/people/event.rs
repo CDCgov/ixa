@@ -49,9 +49,6 @@ mod tests {
         Adult,
     }
     define_global_property!(Threshold, u8);
-    define_derived_property!(IsEligible, bool, [Age], [Threshold], |age, threshold| {
-        age >= threshold
-    });
 
     define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
