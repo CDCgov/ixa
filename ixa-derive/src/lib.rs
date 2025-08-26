@@ -2,13 +2,14 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
+use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
 use syn::{
     parse::{Parse, ParseStream, Result},
-    // punctuated::Punctuated,
-    // Expr,
+    punctuated::Punctuated,
+    Expr,
     // ExprParen,
     // ExprTuple,
     Ident,
@@ -118,13 +119,23 @@ pub fn sorted_tag_value_impl(input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    // Resolve the path to the `ixa` crate
+    let ixa_path = match crate_name("ixa") {
+        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        Err(_) => quote!(::ixa), // fallback if discovery fails
+    };
+
     let tag_type = quote! { ( #( #orig_tags ),* ) };
     let value_type = quote! { ( #( #orig_values ),* ) };
     let sorted_tag_type = quote! { ( #( #sorted_tags ),* ) };
     let reordered_value_type = quote! { ( #( #reordered_value_types ),* ) };
 
     let expanded = quote! {
-        impl SortByTag<#tag_type> for #value_type {
+        impl #ixa_path::people::SortByTag<#tag_type> for #value_type {
             type SortedTag = #sorted_tag_type;
             type ReorderedValue = #reordered_value_type;
 
@@ -141,4 +152,154 @@ pub fn sorted_tag_value_impl(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+/// `static_sorted_tuples!{ ... }` supports two input "modes":
+/// 1) Values mode:
+///    tag_tuple = ( ... );
+///    value_tuple = ( ... );
+/// 2) Types/associated-types mode:
+///    type SortedTag = ( ... );
+///    type ReorderedValue = ( ... );
+enum StaticInput {
+    Values {
+        tag_ident: Ident,
+        value_ident: Ident,
+        tag_elems: Vec<Expr>,
+        value_elems: Vec<Expr>,
+    },
+    Types {
+        tag_ident: Ident,
+        value_ident: Ident,
+        tag_types: Vec<Type>,
+        value_types: Vec<Type>,
+    },
+}
+
+impl Parse for StaticInput {
+    fn parse(input: ParseStream) -> Result<Self> {
+        // Peek to decide which grammar we're parsing.
+        if input.peek(Token![type]) {
+            // Parse: `type SortedTag = ( ... );`
+            input.parse::<Token![type]>()?;
+            let first_ident: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let ts1;
+            syn::parenthesized!(ts1 in input);
+            let sorted_tag_types: Punctuated<Type, Token![,]> =
+                ts1.parse_terminated(Type::parse, Token![,])?;
+            // optional `;`
+            let _ = input.parse::<Token![;]>();
+
+            // Parse: `type ReorderedValue = ( ... );`
+            input.parse::<Token![type]>()?;
+            let second_ident: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let ts2;
+            syn::parenthesized!(ts2 in input);
+            let reordered_value_types: Punctuated<Type, Token![,]> =
+                ts2.parse_terminated(Type::parse, Token![,])?;
+            // optional `;`
+            let _ = input.parse::<Token![;]>();
+
+            Ok(StaticInput::Types {
+                tag_ident: first_ident,
+                value_ident: second_ident,
+                tag_types: sorted_tag_types.into_iter().collect(),
+                value_types: reordered_value_types.into_iter().collect(),
+            })
+        } else {
+            // Parse values mode:
+            // `tag_tuple = ( ... );`
+            let tag_key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let tts;
+            syn::parenthesized!(tts in input);
+            let tag_elems: Punctuated<Expr, Token![,]> =
+                tts.parse_terminated(Expr::parse, Token![,])?;
+            let _ = input.parse::<Token![;]>();
+
+            // `value_tuple = ( ... );`
+            let value_key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let vts;
+            syn::parenthesized!(vts in input);
+            let value_elems: Punctuated<Expr, Token![,]> =
+                vts.parse_terminated(Expr::parse, Token![,])?;
+            let _ = input.parse::<Token![;]>();
+
+            Ok(StaticInput::Values {
+                tag_ident: tag_key,
+                value_ident: value_key,
+                tag_elems: tag_elems.into_iter().collect(),
+                value_elems: value_elems.into_iter().collect(),
+            })
+        }
+    }
+}
+
+#[proc_macro]
+pub fn static_sorted_tuples(input: TokenStream) -> TokenStream {
+    let parsed = syn::parse_macro_input!(input as StaticInput);
+
+    match parsed {
+        StaticInput::Values {
+            tag_ident,
+            value_ident,
+            tag_elems,
+            value_elems,
+        } => {
+            assert_eq!(
+                tag_elems.len(),
+                value_elems.len(),
+                "tag/value tuple lengths must match"
+            );
+
+            // Build stable permutation by sorting the **stringified** tag elements.
+            let mut idx: Vec<(usize, String)> = tag_elems
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i, quote!(#t).to_string()))
+                .collect();
+            idx.sort_by(|a, b| a.1.cmp(&b.1)); // stable
+
+            let sorted_tags = idx.iter().map(|(i, _)| tag_elems[*i].clone());
+            let reordered_vals = idx.iter().map(|(i, _)| value_elems[*i].clone());
+
+            let expanded = quote! {
+                #tag_ident = ( #( #sorted_tags ),* );
+                #value_ident = ( #( #reordered_vals ),* );
+            };
+            TokenStream::from(expanded)
+        }
+
+        StaticInput::Types {
+            tag_ident,
+            value_ident,
+            tag_types,
+            value_types,
+        } => {
+            assert_eq!(
+                tag_types.len(),
+                value_types.len(),
+                "SortedTag/ReorderedValue tuple lengths must match"
+            );
+
+            let mut idx: Vec<(usize, String)> = tag_types
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i, quote!(#t).to_string()))
+                .collect();
+            idx.sort_by(|a, b| a.1.cmp(&b.1)); // stable
+
+            let sorted_tag_types = idx.iter().map(|(i, _)| tag_types[*i].clone());
+            let reordered_value_types = idx.iter().map(|(i, _)| value_types[*i].clone());
+
+            let expanded = quote! {
+                type #tag_ident = ( #( #sorted_tag_types ),* );
+                type #value_ident = ( #( #reordered_value_types ),* );
+            };
+            TokenStream::from(expanded)
+        }
+    }
 }

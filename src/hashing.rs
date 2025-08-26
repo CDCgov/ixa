@@ -15,7 +15,7 @@
 //! The `hash_usize` free function is a convenience function used in `crate::random::get_rng`.
 
 use bincode::serde::encode_to_vec as serialize_to_vec;
-use gxhash::{gxhash128, GxHasher};
+use gxhash::GxHasher;
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
 
@@ -31,7 +31,6 @@ pub fn hash_str(data: &str) -> u64 {
 // Helper for any T: Hash
 pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
     let mut h = GxHasher::default();
-    // let mut h = Xxh3Hasher128::default();
     value.hash(&mut h);
     h.finish_u128()
 }
@@ -41,7 +40,8 @@ pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
     // The `gxhash128` function gives ~3% speedup over `one_shot_128` on my machine on the
     // `births-death` benchmark. HOWEVER, it is not guaranteed to give the same result as
     // `GxHasher` as used in `one_shot_128(&serialized)`.
-    gxhash128(serialized.as_slice(), 42)
+    // gxhash128(serialized.as_slice(), 42)
+    one_shot_128(&serialized.as_slice())
 }
 
 #[cfg(test)]

@@ -12,6 +12,7 @@ authors.workspace = true
 quote.workspace = true
 syn.workspace = true
 proc-macro2 = "1.0.93"
+proc-macro-crate = "3.3.0"
 
 [lints]
 workspace = true
