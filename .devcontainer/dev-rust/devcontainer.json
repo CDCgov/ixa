@@ -18,5 +18,6 @@
 				"github.copilot"
 			]
 	  	}
-	}
+	},
+	"postCreateCommand": "cargo install just && sudo apt-get update && sudo apt-get install -y npm"
 }
