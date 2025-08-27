@@ -13,5 +13,5 @@
 			]
 		}
 	},
-	"postCreateCommand": "cargo install just && sudo apt-get update && sudo apt-get install -y npm"
+	"postCreateCommand": "cargo install just && wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && source ~/.bashrc && nvm install node"
 }
