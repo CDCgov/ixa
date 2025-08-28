@@ -2,7 +2,8 @@
 	"image": "rust:slim",
 	"features": {
 		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {},
-		"ghcr.io/devcontainers/features/node:1": {}
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/guiyomh/features/just:0": {}
 	},
 	"customizations": {
 		"vscode": {
@@ -19,6 +20,5 @@
 				"github.copilot"
 			]
 	  	}
-	},
-	"postCreateCommand": "cargo install just"
+	}
 }
