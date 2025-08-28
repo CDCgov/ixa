@@ -146,6 +146,8 @@ roots.workspace = true
 ixa_example_basic_infection = { path = "examples/basic-infection" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
 
+[workspace.lints.rust]
+mismatched_lifetime_syntaxes = "allow"
 
 # https://rust-lang.github.io/rust-clippy/master/index.html
 [workspace.lints.clippy]
