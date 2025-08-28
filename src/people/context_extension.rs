@@ -663,7 +663,7 @@ mod tests {
     }
     define_global_property!(ThresholdP, u8);
     define_derived_property!(IsEligible, bool, [Age], [ThresholdP], |age, threshold| {
-        age >= threshold
+        &age >= threshold
     });
 
     #[allow(dead_code)]
@@ -675,7 +675,7 @@ mod tests {
             bool,
             [Age],
             [ThresholdP, ThresholdP],
-            |age, threshold, threshold2| { age >= threshold && age <= threshold2 }
+            |age, threshold, threshold2| { &age >= threshold && &age <= threshold2 }
         );
     }
 
