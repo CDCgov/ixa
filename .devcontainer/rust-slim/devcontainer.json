@@ -1,7 +1,8 @@
 {
 	"image": "rust:slim",
 	"features": {
-		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
+		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {},
+		"ghcr.io/devcontainers/features/node:1": {}
 	},
 	"customizations": {
 		"vscode": {
@@ -19,5 +20,5 @@
 			]
 	  	}
 	},
-	"postCreateCommand": "cargo install just && wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.bashrc && nvm install node"
+	"postCreateCommand": "cargo install just"
 }
