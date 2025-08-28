@@ -1,0 +1,23 @@
+{
+	"image": "rust:slim",
+	"features": {
+		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"lldb.executable": "/usr/bin/lldb",
+				"editor.defaultFormatter": "rust-lang.rust-analyzer",
+				"editor.formatOnSave": true
+			},
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"vadimcn.vscode-lldb",
+				"yzhang.markdown-all-in-one",
+				"github.copilot"
+			]
+	  	}
+	},
+	"postCreateCommand": "cargo install just && wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.bashrc && nvm install node"
+}
