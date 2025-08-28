@@ -154,6 +154,7 @@ mismatched_lifetime_syntaxes = "allow"
 module-name-repetitions = "allow"
 result_unit_err = "allow"
 mismatched_lifetime_syntaxes = "allow"
+uninlined_format_args = "allow"
 
 [lints]
 workspace = true
