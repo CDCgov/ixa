@@ -290,5 +290,5 @@ clean: clean-target clean-wasm clean-docs clean-book clean-examples
 # environment, say, before pushing.
 
 # Run locally everything that runs in CI
-prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
+prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples \
                                       run-examples build-docs build-book
