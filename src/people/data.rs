@@ -1,7 +1,7 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
-use crate::people::index::Index;
+use crate::people::index::{BxIndex, Index};
 use crate::people::methods::Methods;
-use crate::people::InitializationList;
+use crate::people::{HashValueType, InitializationList};
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet, HashSetExt};
 use std::any::{Any, TypeId};
@@ -33,8 +33,82 @@ pub(super) struct PeopleData {
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     pub(super) registered_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
-    pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
+    pub(super) property_indexes: RefCell<HashMap<TypeId, BxIndex>>,
     pub(super) people_types: RefCell<HashMap<String, TypeId>>,
+}
+
+impl PeopleData {
+    /// Returns `(is_indexed, people_for_id_hash)`.
+    pub(crate) fn get_people_for_id_hash(
+        &self,
+        type_id: TypeId,
+        hash: HashValueType,
+    ) -> (bool, Option<Ref<HashSet<PersonId>>>) {
+        let mut is_indexed = false;
+        let people_for_id_hash = Ref::filter_map(self.property_indexes.borrow(), |map| {
+            map.get(&type_id).and_then(|index| {
+                if index.is_indexed() {
+                    is_indexed = true;
+                    index.get_with_hash(hash)
+                } else {
+                    None
+                }
+            })
+        })
+        .ok();
+
+        (is_indexed, people_for_id_hash)
+    }
+
+    /// Removes a person from the index if the property is being indexed.
+    pub(super) fn remove_person_if_indexed<T: PersonProperty>(
+        &self,
+        value: T::Value,
+        person_id: PersonId,
+    ) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        indexes.entry(TypeId::of::<T>()).and_modify(|index| {
+            if index.is_indexed() {
+                // Only an `Index<T>` can be the value for key `TypeId::of::<T>()`, so unwrap
+                // is infallible.
+                let index = index.as_any_mut().downcast_mut::<Index<T>>().unwrap();
+                index.remove_person(&value, person_id);
+            }
+        });
+    }
+
+    /// Adds a person to the index if the property is being indexed.
+    pub(super) fn add_person_if_indexed<T: PersonProperty>(
+        &self,
+        value: T::Value,
+        person_id: PersonId,
+    ) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        indexes.entry(TypeId::of::<T>()).and_modify(|index| {
+            if index.is_indexed() {
+                // Only an `Index<T>` can be the value for key `TypeId::of::<T>()`, so unwrap
+                // is infallible.
+                let index = index.as_any_mut().downcast_mut::<Index<T>>().unwrap();
+                index.add_person(&value, person_id);
+            }
+        });
+    }
+
+    /// Create an index object if it doesn't exist.
+    pub(super) fn register_index<T: PersonProperty>(&self) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        indexes
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Index::<T>::new());
+    }
+
+    pub(super) fn index_unindexed_people_for_type_id(&self, context: &Context, type_id: TypeId) {
+        let mut indexes = self.property_indexes.borrow_mut();
+        let Some(index) = indexes.get_mut(&type_id) else {
+            return;
+        };
+        index.index_unindexed_people(context);
+    }
 }
 
 // The purpose of this trait is to enable storing a Vec of different
@@ -177,30 +251,33 @@ impl PeopleData {
         *property_ref = Some(value);
     }
 
-    pub(super) fn get_index_ref_mut(&self, t: TypeId) -> Option<RefMut<Index>> {
+    /// Sets the `Index<T>::is_indexed` field for the index entry associated with `T`. Creates
+    /// an `Index<T>` instance if one does not exist.
+    pub(super) fn set_property_indexed<T: PersonProperty>(&self, is_indexed: bool, property: T) {
+        self.property_indexes
+            .borrow_mut()
+            .entry(property.property_type_id())
+            .or_insert_with(|| Index::<T>::new())
+            .set_indexed(is_indexed);
+    }
+
+    /// Sets the `Index<T>::is_indexed` field for the index entry associated with `T`. If there
+    /// is no `Index<T>` instance, this method panics.
+    pub(super) fn set_property_indexed_by_type_id(&self, is_indexed: bool, type_id: TypeId) {
+        self.property_indexes
+            .borrow_mut()
+            .get_mut(&type_id)
+            .expect("Index instance not found for type")
+            .set_indexed(is_indexed);
+    }
+
+    pub(super) fn get_index_ref_mut(&self, t: TypeId) -> Option<RefMut<BxIndex>> {
         let index_map = self.property_indexes.borrow_mut();
         if index_map.contains_key(&t) {
             Some(RefMut::map(index_map, |map| map.get_mut(&t).unwrap()))
         } else {
             None
         }
-    }
-
-    pub(super) fn get_index_ref(&self, t: TypeId) -> Option<Ref<Index>> {
-        let index_map = self.property_indexes.borrow();
-        if index_map.contains_key(&t) {
-            Some(Ref::map(index_map, |map| map.get(&t).unwrap()))
-        } else {
-            None
-        }
-    }
-
-    pub(super) fn get_index_ref_mut_by_prop<T: PersonProperty>(
-        &self,
-        _property: T,
-    ) -> Option<RefMut<Index>> {
-        let type_id = TypeId::of::<T>();
-        self.get_index_ref_mut(type_id)
     }
 
     // Convenience function to iterate over the current population.

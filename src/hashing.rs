@@ -14,37 +14,64 @@
 //!
 //! The `hash_usize` free function is a convenience function used in `crate::random::get_rng`.
 
-pub use rustc_hash::FxHashMap as HashMap;
-pub use rustc_hash::FxHashSet as HashSet;
-use std::hash::Hasher;
+use bincode::serde::encode_to_vec as serialize_to_vec;
+use gxhash::{gxhash128, GxHasher};
+use serde::Serialize;
+use std::hash::{Hash, Hasher};
 
-/// Provides API parity with `std::collections::HashMap`.
-pub trait HashMapExt {
-    fn new() -> Self;
-}
-
-impl<K, V> HashMapExt for HashMap<K, V> {
-    fn new() -> Self {
-        HashMap::default()
-    }
-}
-
-// Note that trait aliases are not yet stabilized in rustc.
-// See https://github.com/rust-lang/rust/issues/41517
-/// Provides API parity with `std::collections::HashSet`.
-pub trait HashSetExt {
-    fn new() -> Self;
-}
-
-impl<T> HashSetExt for HashSet<T> {
-    fn new() -> Self {
-        HashSet::default()
-    }
-}
+pub use gxhash::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 /// A convenience method to compute the hash of a `&str`.
 pub fn hash_str(data: &str) -> u64 {
-    let mut hasher = rustc_hash::FxHasher::default();
+    let mut hasher = GxHasher::default();
     hasher.write(data.as_bytes());
     hasher.finish()
+}
+
+// Helper for any T: Hash
+pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
+    let mut h = GxHasher::default();
+    // let mut h = Xxh3Hasher128::default();
+    value.hash(&mut h);
+    h.finish_u128()
+}
+
+pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
+    let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
+    // The `gxhash128` function gives ~3% speedup over `one_shot_128` on my machine on the
+    // `births-death` benchmark. HOWEVER, it is not guaranteed to give the same result as
+    // `GxHasher` as used in `one_shot_128(&serialized)`.
+    gxhash128(serialized.as_slice(), 42)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hashes_strings() {
+        let a = one_shot_128(&"hello");
+        let b = one_shot_128(&"hello");
+        let c = one_shot_128(&"world");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn hashes_structs() {
+        #[derive(Hash)]
+        struct S {
+            x: u32,
+            y: String,
+        }
+        let h1 = one_shot_128(&S {
+            x: 1,
+            y: "a".into(),
+        });
+        let h2 = one_shot_128(&S {
+            x: 1,
+            y: "a".into(),
+        });
+        assert_eq!(h1, h2);
+    }
 }
