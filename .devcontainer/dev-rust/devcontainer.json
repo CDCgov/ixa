@@ -1,6 +1,9 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/rust:latest",
+	"image": "mcr.microsoft.com/devcontainers/base:debian",
 	"features": {
+		"ghcr.io/devcontainers/features/rust:1": {},
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/guiyomh/features/just:0": {},
 		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
 	},
 	"customizations": {
@@ -19,5 +22,5 @@
 			]
 	  	}
 	},
-	"postCreateCommand": "cargo install just && wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.bashrc && nvm install node"
+	"postCreateCommand": "rustup component add rustfmt clippy"
 }
