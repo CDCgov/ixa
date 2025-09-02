@@ -9,10 +9,11 @@ use crate::{
     PersonPropertyChangeEvent, RngId, Tabulator,
 };
 use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
+use bumpalo::{collections::Vec as BumpVec, Bump};
 use log::warn;
 use rand::Rng;
 use std::any::TypeId;
-use std::cell::Ref;
+use std::cell::{Ref, RefMut};
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -119,6 +120,7 @@ pub trait ContextPeopleExt {
     where
         R::RngType: Rng;
 }
+
 impl ContextPeopleExt for Context {
     fn get_current_population(&self) -> usize {
         self.get_data(PeoplePlugin).current_population
@@ -272,7 +274,7 @@ impl ContextPeopleExt for Context {
             |person| {
                 result.push(person);
             },
-            q.get_query(),
+            q,
         );
         result
     }
@@ -284,7 +286,7 @@ impl ContextPeopleExt for Context {
             |_person| {
                 count += 1;
             },
-            q.get_query(),
+            q,
         );
         count
     }
@@ -292,29 +294,37 @@ impl ContextPeopleExt for Context {
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(&q, self);
         // This cannot fail because someone must have been made by now.
+        let mut allocator = self.get_allocator();
         let data_container = self.get_data(PeoplePlugin);
-
-        let query = q.get_query();
-
-        for (t, hash) in &query {
-            let methods = data_container.get_methods(*t);
-            if *hash != (*methods.indexer)(self, person_id) {
-                return false;
+        let mut result = true;
+        {
+            let query = q.get_query(&allocator);
+            for (t, hash) in &query {
+                let methods = data_container.get_methods(*t);
+                if *hash != (*methods.indexer)(self, person_id) {
+                    result = false;
+                    break;
+                }
             }
         }
-        true
+        allocator.reset();
+        result
     }
 
     fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T) {
         T::setup(&q, self);
+        let mut allocator = self.get_allocator();
         let data_container = self.get_data(PeoplePlugin);
-        for (t, hash) in q.get_query() {
+
+        for (t, hash) in q.get_query(&allocator) {
             let methods = data_container.get_methods(t);
             people.retain(|person_id| hash == (*methods.indexer)(self, *person_id));
             if people.is_empty() {
                 break;
             }
         }
+
+        allocator.reset();
     }
 
     fn register_property<T: PersonProperty>(&self) {
@@ -414,14 +424,19 @@ impl ContextPeopleExt for Context {
             );
             return Vec::new();
         }
-        // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let mut selected = HashSet::new();
-            while selected.len() < requested {
-                let result = self.sample_range(rng_id, 0..self.get_current_population());
-                selected.insert(PersonId(result));
+
+        {
+            let allocator = self.get_allocator();
+
+            // Special case the empty query because we can do it in O(1).
+            if query.get_query(&allocator).is_empty() {
+                let mut selected = HashSet::new();
+                while selected.len() < requested {
+                    let result = self.sample_range(rng_id, 0..self.get_current_population());
+                    selected.insert(PersonId(result));
+                }
+                return selected.into_iter().collect();
             }
-            return selected.into_iter().collect();
         }
 
         T::setup(&query, self);
@@ -454,7 +469,7 @@ impl ContextPeopleExt for Context {
                     }
                 }
             },
-            query.get_query(),
+            query,
         );
 
         selected
@@ -469,10 +484,14 @@ impl ContextPeopleExt for Context {
             return None;
         }
 
-        // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let result = self.sample_range(rng_id, 0..self.get_current_population());
-            return Some(PersonId(result));
+        {
+            let allocator = self.get_allocator();
+
+            // Special case the empty query because we can do it in O(1).
+            if query.get_query(&allocator).is_empty() {
+                let result = self.sample_range(rng_id, 0..self.get_current_population());
+                return Some(PersonId(result));
+            }
         }
 
         T::setup(&query, self);
@@ -497,7 +516,7 @@ impl ContextPeopleExt for Context {
                     w *= self.sample_range(rng_id, 0.0..1.0);
                 }
             },
-            query.get_query(),
+            query,
         );
 
         selected
@@ -505,17 +524,19 @@ impl ContextPeopleExt for Context {
 }
 
 pub trait ContextPeopleExtInternal {
+    fn get_allocator(&self) -> RefMut<Bump>;
     fn register_indexer<T: PersonProperty>(&self);
     fn add_to_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
     fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T);
-    fn query_people_internal(
-        &self,
-        accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
-    );
+    fn query_people_internal<Q: Query>(&self, accumulator: impl FnMut(PersonId), query: Q);
 }
 
 impl ContextPeopleExtInternal for Context {
+    fn get_allocator(&self) -> RefMut<Bump> {
+        let data_container = self.get_data(PeoplePlugin);
+        data_container.allocator.borrow_mut()
+    }
+
     fn register_indexer<T: PersonProperty>(&self) {
         {
             let data_container = self.get_data(PeoplePlugin);
@@ -555,89 +576,92 @@ impl ContextPeopleExtInternal for Context {
         }
     }
 
-    fn query_people_internal(
-        &self,
-        mut accumulator: impl FnMut(PersonId),
-        property_hashes: Vec<(TypeId, IndexValue)>,
-    ) {
-        let mut indexes = Vec::<Ref<HashSet<PersonId>>>::new();
-        let mut unindexed = Vec::<(TypeId, IndexValue)>::new();
-        let data_container = self.get_data(PeoplePlugin);
+    fn query_people_internal<Q: Query>(&self, mut accumulator: impl FnMut(PersonId), query: Q) {
+        let mut allocator = self.get_allocator();
 
-        let mut property_hashs_working_set = property_hashes.clone();
-        // intercept multi-property queries
-        if property_hashs_working_set.len() > 1 {
-            if let Some(combined_index) =
-                get_and_register_multi_property_index(&property_hashes, self)
-            {
-                let combined_hash = get_multi_property_hash(&property_hashes);
-                property_hashs_working_set = vec![(combined_index, combined_hash)];
-            }
-        }
+        {
+            let mut indexes = BumpVec::<Ref<HashSet<PersonId>>>::new_in(&allocator);
+            let mut unindexed = BumpVec::<(TypeId, IndexValue)>::new_in(&allocator);
+            let data_container = self.get_data(PeoplePlugin);
 
-        // 1. Walk through each property and update the indexes.
-        for (t, _) in &property_hashs_working_set {
-            let mut index = data_container.get_index_ref_mut(*t).unwrap();
-            let methods = data_container.get_methods(*t);
-            index.index_unindexed_people(self, &methods);
-        }
-
-        // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashs_working_set {
-            let index = data_container.get_index_ref(t).unwrap();
-            if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
-                if let Ok(matching_people) =
-                    Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
+            let mut property_hashs_working_set = query.get_query(&allocator);
+            // intercept multi-property queries
+            if property_hashs_working_set.len() > 1 {
+                if let Some(combined_index) =
+                    get_and_register_multi_property_index(&property_hashs_working_set, self)
                 {
-                    indexes.push(matching_people);
-                } else {
-                    // This is empty and so the intersection will
-                    // also be empty.
-                    return;
-                }
-            } else {
-                // No index, so we'll get to this after.
-                unindexed.push((t, hash));
-            }
-        }
-
-        // 3. Create an iterator over people, based one either:
-        //    (1) the smallest index if there is one.
-        //    (2) the overall population if there are no indices.
-
-        let holder: Ref<HashSet<PersonId>>;
-        let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
-            Box::new(data_container.people_iterator())
-        } else {
-            indexes.sort_by_key(|x| x.len());
-
-            holder = indexes.remove(0);
-            Box::new(holder.iter().copied())
-        };
-
-        // 4. Walk over the iterator and add people to the result
-        // iff:
-        //    (1) they exist in all the indexes
-        //    (2) they match the unindexed properties
-        'outer: for person in to_check {
-            // (1) check all the indexes
-            for index in &indexes {
-                if !index.contains(&person) {
-                    continue 'outer;
+                    let combined_hash = get_multi_property_hash(&property_hashs_working_set);
+                    let mut combined = BumpVec::with_capacity_in(1, &allocator);
+                    combined.push((combined_index, combined_hash));
+                    property_hashs_working_set = combined;
                 }
             }
 
-            // (2) check the unindexed properties
-            for (t, hash) in &unindexed {
+            // 1. Walk through each property and update the indexes.
+            for (t, _) in &property_hashs_working_set {
+                let mut index = data_container.get_index_ref_mut(*t).unwrap();
                 let methods = data_container.get_methods(*t);
-                if *hash != (*methods.indexer)(self, person) {
-                    continue 'outer;
+                index.index_unindexed_people(self, &methods);
+            }
+
+            // 2. Collect the index entry corresponding to the value.
+            for (t, hash) in property_hashs_working_set {
+                let index = data_container.get_index_ref(t).unwrap();
+                if let Ok(lookup) = Ref::filter_map(index, |x| x.lookup.as_ref()) {
+                    if let Ok(matching_people) =
+                        Ref::filter_map(lookup, |x| x.get(&hash).map(|entry| &entry.1))
+                    {
+                        indexes.push(matching_people);
+                    } else {
+                        // This is empty and so the intersection will
+                        // also be empty.
+                        return;
+                    }
+                } else {
+                    // No index, so we'll get to this after.
+                    unindexed.push((t, hash));
                 }
             }
 
-            // This matches.
-            accumulator(person);
+            // 3. Create an iterator over people, based one either:
+            //    (1) the smallest index if there is one.
+            //    (2) the overall population if there are no indices.
+
+            let holder: Ref<HashSet<PersonId>>;
+            let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
+                Box::new(data_container.people_iterator())
+            } else {
+                indexes.sort_by_key(|x| x.len());
+
+                holder = indexes.remove(0);
+                Box::new(holder.iter().copied())
+            };
+
+            // 4. Walk over the iterator and add people to the result
+            // iff:
+            //    (1) they exist in all the indexes
+            //    (2) they match the unindexed properties
+            'outer: for person in to_check {
+                // (1) check all the indexes
+                for index in &indexes {
+                    if !index.contains(&person) {
+                        continue 'outer;
+                    }
+                }
+
+                // (2) check the unindexed properties
+                for (t, hash) in &unindexed {
+                    let methods = data_container.get_methods(*t);
+                    if *hash != (*methods.indexer)(self, person) {
+                        continue 'outer;
+                    }
+                }
+
+                // This matches.
+                accumulator(person);
+            }
         }
+        allocator.reset();
     }
 }
 

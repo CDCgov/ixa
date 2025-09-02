@@ -108,6 +108,7 @@ define_data_plugin!(
         dependency_map: RefCell::new(HashMap::new()),
         property_indexes: RefCell::new(HashMap::new()),
         people_types: RefCell::new(HashMap::new()),
+        allocator: RefCell::new(bumpalo::Bump::new()),
     }
 );
 

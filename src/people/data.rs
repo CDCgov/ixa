@@ -4,6 +4,7 @@ use crate::people::methods::Methods;
 use crate::people::InitializationList;
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet, HashSetExt};
+use bumpalo::Bump;
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 
@@ -35,6 +36,7 @@ pub(super) struct PeopleData {
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, Index>>,
     pub(super) people_types: RefCell<HashMap<String, TypeId>>,
+    pub(super) allocator: RefCell<Bump>,
 }
 
 // The purpose of this trait is to enable storing a Vec of different

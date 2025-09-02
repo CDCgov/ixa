@@ -1,5 +1,6 @@
 use crate::people::index::IndexValue;
 use crate::{Context, ContextPeopleExt, PersonProperty};
+use bumpalo::{collections::Vec as BumpVec, Bump};
 use seq_macro::seq;
 use std::any::TypeId;
 
@@ -10,14 +11,16 @@ use std::any::TypeId;
 /// to the caller. Do not use this trait directly.
 pub trait Query: Copy {
     fn setup(&self, context: &Context);
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
+    /// Returns a list of `(type_id, hash)` pairs where `hash` is the hash of a value of type
+    /// `Property::Value` and `type_id` is `Property.type_id()` (NOT the type ID of the value).
+    fn get_query<'a>(&self, allocator: &'a Bump) -> BumpVec<'a, (TypeId, IndexValue)>;
 }
 
 impl Query for () {
     fn setup(&self, _: &Context) {}
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-        vec![]
+    fn get_query<'a>(&self, allocator: &'a Bump) -> BumpVec<'a, (TypeId, IndexValue)> {
+        BumpVec::new_in(allocator)
     }
 }
 
@@ -27,8 +30,10 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
         context.register_property::<T1>();
     }
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-        vec![(std::any::TypeId::of::<T1>(), IndexValue::compute(&self.1))]
+    fn get_query<'a>(&self, allocator: &'a Bump) -> BumpVec<'a, (TypeId, IndexValue)> {
+        let mut v = BumpVec::with_capacity_in(1, allocator);
+        v.push((TypeId::of::<T1>(), IndexValue::compute(&self.1)));
+        v
     }
 }
 
@@ -52,12 +57,13 @@ macro_rules! impl_query {
                     )*
                 }
 
-                fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-                    let mut ordered_items = vec![
+                fn get_query<'a>(&self, allocator: &'a Bump) -> BumpVec<'a, (TypeId, IndexValue)> {
+                    let mut ordered_items = BumpVec::with_capacity_in($ct, allocator);
                     #(
-                        (std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)),
+                        ordered_items.push(
+                            (std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1))
+                        );
                     )*
-                    ];
                     ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
                     ordered_items
                 }
@@ -113,10 +119,10 @@ where
         Q2::setup(&self.queries.1, context);
     }
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-        let mut query = Vec::new();
-        query.extend_from_slice(&self.queries.0.get_query());
-        query.extend_from_slice(&self.queries.1.get_query());
+    fn get_query<'a>(&self, allocator: &'a Bump) -> BumpVec<'a, (TypeId, IndexValue)> {
+        let mut query = BumpVec::new_in(allocator);
+        query.extend_from_slice(&self.queries.0.get_query(allocator));
+        query.extend_from_slice(&self.queries.1.get_query(allocator));
         query.sort_by(|a, b| a.0.cmp(&b.0));
         query
     }
