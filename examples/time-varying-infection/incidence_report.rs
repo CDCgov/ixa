@@ -32,9 +32,13 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
+
+    // Output directory is relative to the directory with the Cargo.toml file.
+    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(parameters.output_dir);
+
     context
         .report_options()
-        .directory(PathBuf::from(parameters.output_dir))
+        .directory(output_dir)
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {

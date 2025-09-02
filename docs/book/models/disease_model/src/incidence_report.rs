@@ -39,13 +39,16 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     trace!("Initializing incidence_report");
 
+    // Output directory is relative to the directory with the Cargo.toml file.
+    let output_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("output");
+
     // In the configuration of report options below, we set `overwrite(true)`, which is not
     // recommended for production code in order to prevent accidental data loss. It is set
     // here so that newcomers won't have to deal with a confusing error while running
     // examples.
     context
         .report_options()
-        .directory(PathBuf::from("../"))
+        .directory(output_path)
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence")?;
     context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);

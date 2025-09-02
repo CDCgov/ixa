@@ -223,27 +223,13 @@ build-examples:
     cargo build --workspace --examples --verbose
 
 
-# Delete example-generated output files and directories
+# Delete example-generated output files
 [group('Examples')]
 [group('Clean')]
 clean-examples:
-    rm -f \
-        Reports_death.csv \
-        Reports_incidence.csv \
-        examples/births-deaths/incidence.csv \
-        examples/births-deaths/people_report.csv \
-        examples/parameter-loading/incidence.csv \
-        examples/reports-multi-threaded/Arizona_incidence.csv \
-        examples/reports-multi-threaded/California_incidence.csv \
-        examples/reports-multi-threaded/Illinois_incidence.csv \
-        examples/reports-multi-threaded/Wisconsin_incidence.csv \
-        examples/time-varying-infection/incidence.csv \
-        examples/time-varying-infection/person_property_count.csv \
-        incidence.csv \
-        people_report.csv
-    rm -rf \
-        examples/network-hhmodel/output/ \
-        examples/network-hhmodel/tests/
+    @for example in $(cargo build --example 2>&1 | tail -n +3); do \
+        rm -f ./examples/"$example"/output/*.csv; \
+    done
 
 ########################################
 # Linting, Formatting, and Code Quality

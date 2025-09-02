@@ -24,10 +24,16 @@ define_report!(Death);
 fn initialize() -> Result<Context, IxaError> {
     let mut context = Context::new();
 
+    // Output directory is relative to the directory with the Cargo.toml file.
+    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("reports")
+        .join("output");
+
     context
         .report_options()
         .file_prefix("Reports_".to_string())
-        .directory(PathBuf::from("./"))
+        .directory(output_dir)
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
     context.add_report::<Incidence>("incidence")?;
     context.add_report::<Death>("death")?;

@@ -48,7 +48,9 @@ fn handle_infection_status_change(
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_global_property_value(Parameters).unwrap();
 
-    let output_dir = PathBuf::from(parameters.output_dir.clone());
+    // Output directory is relative to the directory with the Cargo.toml file.
+    let mut output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    output_dir = output_dir.join(parameters.output_dir.clone());
     fs::create_dir_all(&output_dir)?;
     context
         .report_options()
