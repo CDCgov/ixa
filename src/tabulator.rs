@@ -93,8 +93,7 @@ impl Tabulator for Vec<(TypeId, String)> {
 mod tests {
     use super::Tabulator;
     use crate::{
-        define_derived_property, define_person_property, define_person_property_with_default,
-        Context, ContextPeopleExt,
+        define_person_property, define_person_property_with_default, Context, ContextPeopleExt,
     };
     use crate::{HashSet, HashSetExt};
     use std::any::TypeId;
@@ -105,9 +104,6 @@ mod tests {
     define_person_property!(RiskCategory, RiskCategoryValue);
     define_person_property_with_default!(IsRunner, bool, false);
     define_person_property_with_default!(IsSwimmer, bool, false);
-    define_derived_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
-        is_swimmer && age >= 18
-    });
 
     #[test]
     fn test_tabulator() {

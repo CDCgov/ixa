@@ -4,6 +4,7 @@
 use bytesize::ByteSize;
 use humantime::format_duration;
 use log::{debug, error, info};
+use serde_derive::Serialize;
 use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -27,20 +28,21 @@ pub fn get_high_res_time() -> f64 {
 
 /// A container struct for computed final statistics. Note that if population size
 /// is zero, then the per person statistics are also zero, as they are meaningless.
+#[derive(Serialize)]
 pub struct ExecutionStatistics {
-    max_memory_usage: u64,
-    cpu_time: Duration,
-    wall_time: Duration,
+    pub max_memory_usage: u64,
+    pub cpu_time: Duration,
+    pub wall_time: Duration,
 
     // Per person stats
-    population: usize,
-    cpu_time_per_person: Duration,
-    wall_time_per_person: Duration,
-    memory_per_person: u64,
+    pub population: usize,
+    pub cpu_time_per_person: Duration,
+    pub wall_time_per_person: Duration,
+    pub memory_per_person: u64,
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub struct ExecutionProfilingCollector {
+pub(crate) struct ExecutionProfilingCollector {
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
     #[cfg(not(target_arch = "wasm32"))]
     start_time: Instant,
@@ -56,7 +58,7 @@ pub struct ExecutionProfilingCollector {
     /// to compute the CPU time of the simulation execution
     start_cpu_time: u64,
     /// The maximum amount of real memory used by the process as reported by
-    /// `sysinfo:System::process::memory()`. This value is polled during execution to capture the
+    /// `sysinfo::System::process::memory()`. This value is polled during execution to capture the
     /// max.
     max_memory_usage: u64,
     /// A `sysinfo::System` for polling memory use
@@ -96,9 +98,9 @@ impl ExecutionProfilingCollector {
         new_stats
     }
 
-    /// If at least 1 second has passed since the previous refresh, memory usage is polled and
-    /// updated. Call this method as frequently as you like, as it takes care of limiting polling
-    /// frequency itself.
+    /// If at least `REFRESH_INTERVAL` (1 second) has passed since the previous
+    /// refresh, memory usage is polled and updated. Call this method as frequently
+    /// as you like, as it takes care of limiting polling frequency itself.
     #[inline]
     pub fn refresh(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]

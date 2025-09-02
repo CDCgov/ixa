@@ -7,7 +7,7 @@ pub mod transmission_manager;
 
 static POPULATION: u64 = 1000;
 static SEED: u64 = 123;
-static MAX_TIME: f64 = 303.0;
+static MAX_TIME: f64 = 300.0;
 static FOI: f64 = 0.1;
 static INFECTION_DURATION: f64 = 5.0;
 

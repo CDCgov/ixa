@@ -48,11 +48,9 @@ impl LogConfiguration {
         let mut longest_match = None;
         for (prefix, config) in &self.module_configurations {
             if target.starts_with(prefix)
-                && longest_match
-                    .as_ref()
-                    .map_or(true, |(m, _): &(&String, &ModuleLogConfiguration)| {
-                        m.len() < prefix.len()
-                    })
+                && longest_match.as_ref().is_none_or(
+                    |(m, _): &(&String, &ModuleLogConfiguration)| m.len() < prefix.len(),
+                )
             {
                 longest_match = Some((prefix, config));
             }

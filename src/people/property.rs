@@ -170,7 +170,7 @@ macro_rules! define_derived_property {
                 let ($($param,)*) = (
                     $(context.get_person_property(person_id, $dependency)),*,
                     $(
-                        *context.get_global_property_value($global_dependency)
+                        context.get_global_property_value($global_dependency)
                             .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
                     ),*
                 );

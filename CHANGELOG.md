@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.2](https://github.com/CDCgov/ixa/compare/ixa-v0.3.1...ixa-v0.3.2) - 2025-08-14
+
+### Fixed
+
+- Made the fields of ExecutionStatistics public ([#496](https://github.com/CDCgov/ixa/pull/496))
+
+## [0.3.1](https://github.com/CDCgov/ixa/compare/ixa-v0.3.0...ixa-v0.3.1) - 2025-08-11
+
+### Added
+
+- Changed `Context::data_plugins` into a `Vec`, implemented `DataPlugin::index` method. ([#477](https://github.com/CDCgov/ixa/pull/477))
+- A `justfile` with a suite of tasks for local development. Implements #459. ([#460](https://github.com/CDCgov/ixa/pull/460))
+
+### Other
+
+- Publicly exposed `Context::get_execution_statistics`. ([#489](https://github.com/CDCgov/ixa/pull/489))
+- Added a chapter on indexing properties to the ixa book. ([#449](https://github.com/CDCgov/ixa/pull/449))
+- bump release-plz/action from 0.5.108 to 0.5.110 ([#479](https://github.com/CDCgov/ixa/pull/479))
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.3.0](https://github.com/CDCgov/ixa/compare/ixa-v0.2.1...ixa-v0.3.0) - 2025-07-28
 
 This release makes a breaking change to data plugins. When migrating:

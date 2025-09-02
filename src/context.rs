@@ -5,6 +5,7 @@
 use crate::data_plugin::DataPlugin;
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
+    ExecutionStatistics,
 };
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
@@ -441,8 +442,7 @@ impl Context {
             }
         }
 
-        let population = self.get_current_population();
-        let stats = self.execution_profiler.compute_final_statistics(population);
+        let stats = self.get_execution_statistics();
         if self.print_execution_statistics {
             print_execution_statistics(&stats);
         } else {
@@ -501,6 +501,11 @@ impl Context {
             self.shutdown_requested = true;
         }
     }
+
+    pub fn get_execution_statistics(&mut self) -> ExecutionStatistics {
+        let population = self.get_current_population();
+        self.execution_profiler.compute_final_statistics(population)
+    }
 }
 
 /// A supertrait that exposes useful methods from `Context`
@@ -543,6 +548,7 @@ pub trait PluginContext: Sized {
     fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
     fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
     fn get_current_time(&self) -> f64;
+    fn get_execution_statistics(&mut self) -> ExecutionStatistics;
 }
 impl PluginContext for Context {
     delegate::delegate! {
@@ -557,6 +563,7 @@ impl PluginContext for Context {
             fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
             fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
+            fn get_execution_statistics(&mut self) -> ExecutionStatistics;
         }
     }
 }

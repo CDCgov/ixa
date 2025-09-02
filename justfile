@@ -1,247 +1,231 @@
-########################################
-# Set environment variables for Rust builds
-########################################
-export RUSTFLAGS := "-D warnings"
+# List all available recipes
+default:
+    just --list
 
 ########################################
-# Setup Tasks (one-time developer use)
+# Wasm related tasks
 ########################################
 
 # Install the wasm32 target for Rust
+[group('Install')]
+[group('Wasm')]
 install-wasm-target:
     rustup target add wasm32-unknown-unknown
 
 # Install wasm-pack if not already installed
-install-wasm-pack:
+[group('Install')]
+[group('Wasm')]
+install-wasm-pack: install-wasm-target
     command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
 
 # Install JS dependencies and Playwright binaries
+[group('Install')]
+[group('Wasm')]
 install-playwright:
     cd integration-tests/ixa-wasm-tests && \
     npm install && \
     npx playwright install --with-deps
 
-# Install mdBook and its required plugins
-install-mdbook:
-    cargo install mdbook
-    cargo install mdbook-callouts
-    cargo install mdbook-inline-highlighting
+# Build the wasm module for the browser using wasm-pack
+[group('Wasm')]
+[group('Build')]
+build-wasm-pack: install-wasm-pack
+    cd integration-tests/ixa-wasm-tests && wasm-pack build --target web
 
-# Install pre-commit and set up Git hooks
-install-pre-commit:
-    command -v pre-commit >/dev/null || pip install --user pre-commit
-    pre-commit install
+# Run browser-based Playwright tests via npm
+[group('Bench')]
+[group('Wasm')]
+test-wasm: install-playwright build-wasm-pack
+    cd integration-tests/ixa-wasm-tests && npm test
+
+# Remove wasm-pack and Playwright build artifacts (including `node_modules`)
+[group('Wasm')]
+[group('Clean')]
+clean-wasm:
+    rm -rf pkg
+    rm -rf integration-tests/ixa-wasm-tests/pkg
+    rm -rf integration-tests/ixa-wasm-tests/node_modules
+
+########################################
+# Ixa Book & Docs
+########################################
+
+# Install mdBook and its required plugins
+[group('Install')]
+[group('Ixa Book & Docs')]
+install-mdbook:
+    cargo install mdbook mdbook-callouts mdbook-inline-highlighting
 
 # Install markdownlint
+[group('Install')]
+[group('Ixa Book & Docs')]
 install-markdownlint:
     npm install -g markdownlint-cli
 
 # Install or upgrade Prettier for formatting Markdown
+[group('Install')]
+[group('Ixa Book & Docs')]
 install-prettier:
     npm install -g prettier
 
-# install all
-install:
-    just install-wasm-target
-    just install-wasm-pack
-    just install-playwright
-    just install-mdbook
-    just install-pre-commit
-    just install-markdownlint
-    just install-prettier
+# Build the Rust API docs into the website/ directory
+[group('Build')]
+[group('Ixa Book & Docs')]
+build-docs:
+    cargo doc --no-deps --target-dir website/
+
+# Build the Ixa Book into website/book/
+[group('Build')]
+[group('Ixa Book & Docs')]
+build-book: install-mdbook
+    mdbook build docs/book -d ../../website/book
+
+# Lint all Markdown files (no fixes)
+[group('Ixa Book & Docs')]
+[group('Lint')]
+lint-md:
+    markdownlint "**/*.md"
+
+# Auto-fix and format all Markdown files
+[group('Ixa Book & Docs')]
+[group('Lint')]
+fix-md: install-markdownlint install-prettier
+    markdownlint --fix "**/*.md" || true
+    prettier --write "**/*.md" --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
+
+# Lint a specific Markdown file
+[no-cd]
+[group('Ixa Book & Docs')]
+[group('Lint')]
+lint-md-file filename: install-markdownlint
+    markdownlint {{filename}}
+
+# Fix and format a specific Markdown file
+[no-cd]
+[group('Ixa Book & Docs')]
+[group('Lint')]
+fix-md-file filename: install-markdownlint install-prettier
+    markdownlint --fix {{filename}} || true
+    prettier --write {{filename}}
+
+# Remove all documentation artifacts
+[group('Ixa Book & Docs')]
+[group('Clean')]
+clean-docs:
+    rm -rf website/doc website/debug
+    rm -f website/.rustc_info.json website/.rustdoc_fingerprint.json
+
+# Remove all book artifacts
+[group('Ixa Book & Docs')]
+[group('Clean')]
+clean-book:
+    rm -rf website/book
+
+########################################
+# Setup Tasks (one-time developer use)
+########################################
+
+# Install pre-commit and set up Git hooks
+[group('Install')]
+install-pre-commit:
+    command -v pre-commit >/dev/null || pip install --user pre-commit
+    pre-commit install
+
+# Install all
+[group('Install')]
+install: install-wasm-target install-wasm-pack install-playwright install-mdbook install-pre-commit \
+         install-markdownlint install-prettier
 
 ########################################
 # Build Tasks
 ########################################
 
 # Build the default Rust targets (bin and lib) for all workspace members
+[group('Build')]
 build:
     cargo build --workspace --verbose
 
-# Build the Wasm target with logging enabled and no default features as a check. Use `build-wasm-pack` instead.
-build-wasm:
-    cargo build --verbose --target wasm32-unknown-unknown --no-default-features --features logging
-
-# Build the wasm module for the browser using wasm-pack
-build-wasm-pack:
-    cd integration-tests/ixa-wasm-tests && wasm-pack build --target web
-
-# Ensure benchmark targets compile
-bench-build:
-    cargo bench -p ixa-bench --no-run
-
-# Build all examples
-build-examples:
-    cargo build --verbose --examples
-
-# Build all tests without running them
-build-tests:
-    cargo test --no-run --verbose
-
-# Build all targets: lib, bin, test, example, bench. Does NOT build wasm/wasm-pack
-build-all:
+# Build all targets for workspace: lib, bin, test, example, bench. Does NOT build wasm/wasm-pack
+[group('Build')]
+build-all-targets:
     cargo build --all-targets --workspace --verbose
 
 ########################################
 # Test and Benchmark Tasks
 ########################################
 
-# Run all unit and integration tests for all packages (excludes examples and wasm)
+# Run all unit and integration tests for all packages (excluding examples and wasm)
+[group('Tests')]
 test:
     cargo test --workspace --verbose
 
-# Run ixa example tests
-test-examples:
-    cargo test  --workspace --examples
-
 # Run all benchmarks
+[group('Bench')]
 bench:
     cargo bench -p ixa-bench
 
-# Run browser-based Playwright tests via npm
-test-playwright:
-    cd integration-tests/ixa-wasm-tests && npm test
+# Create a new named benchmark baseline
+[group('Bench')]
+baseline-create name:
+    @echo "Creating new Criterion baseline: {{name}}"
+    cargo bench -p ixa-bench -- --save-baseline {{name}}
 
-# Alias: wasm-test is a clearer name for Playwright-based Wasm tests
-test-wasm: test-playwright
+# Run benchmarks compared against an existing named baseline
+[group('Bench')]
+baseline-compare name:
+    @echo "Running benchmarks compared to baseline: {{name}}"
+    cargo bench -p ixa-bench -- --baseline {{name}}
+
+# Build benchmark targets
+[group('Build')]
+[group('Bench')]
+build-bench:
+    cargo bench -p ixa-bench --no-run
+
+# Build all tests in workspace without running them
+[group('Build')]
+[group('Tests')]
+build-tests:
+    cargo test --workspace --no-run --verbose
 
 ########################################
-# Example Run Tasks
+# Examples Run Tasks
 ########################################
-# Run individual example binaries
 
-# Run the `basic` example
-run-example-basic:
-    cargo run --example basic
-
-# Run the `basic-infection` example
-run-example-basic-infection:
-    cargo run --example basic-infection
-
-# Run the `births-deaths` example
-run-example-births-deaths:
-    cargo run --example births-deaths
-
-# Run the `load-people` example
-run-example-load-people:
-    cargo run --example load-people
-
-# Run the `network-hhmodel` example
-run-example-network-hhmodel:
-    cargo run --example network-hhmodel
-
-# Run the `parameter-loading` example
-run-example-parameter-loading:
-    cargo run --example parameter-loading
-
-# Run the `random` example
-run-example-random:
-    cargo run --example random
-
-# Run the `reports` example
-run-example-reports:
-    cargo run --example reports
-
-# Run the `reports-multi-threaded` example
-run-example-reports-multi-threaded:
-    cargo run --example reports-multi-threaded
-
-# Run the `runner` example
-run-example-runner:
-    cargo run --example runner
-
-# Run the `time-varying-infection` example
-run-example-time-varying-infection:
-    cargo run --example time-varying-infection -- examples/time-varying-infection/input.json
+# Run a named example
+[group('Examples')]
+run-example name:
+    @if [ "{{name}}" = "time-varying-infection" ]; then \
+        echo cargo run --example time-varying-infection -- examples/time-varying-infection/input.json ; \
+        cargo run --example time-varying-infection -- examples/time-varying-infection/input.json ; \
+    else \
+        echo cargo run --example "{{name}}" ; \
+        cargo run --example "{{name}}" ; \
+    fi
 
 # Run all example binaries
+[group('Examples')]
 run-examples:
-    just run-example-basic
-    just run-example-basic-infection
-    just run-example-births-deaths
-    just run-example-load-people
-    just run-example-network-hhmodel
-    just run-example-parameter-loading
-    just run-example-random
-    just run-example-reports
-    just run-example-reports-multi-threaded
-    just run-example-runner
-    just run-example-time-varying-infection
+    @for example in $(cargo build --example 2>&1 | tail -n +3); do \
+        just run-example "$example"; \
+    done
 
-########################################
-# Documentation Tasks
-########################################
+# Run ixa example tests
+[group('Examples')]
+[group('Tests')]
+test-examples:
+    cargo test  --workspace --examples
 
-# Build the Rust API docs into the website/ directory
-build-docs:
-    cargo doc --no-deps --target-dir website/
+# Build all examples in workspace
+[group('Examples')]
+[group('Build')]
+build-examples:
+    cargo build --workspace --examples --verbose
 
-# Build the Ixa Book into website/book/
-build-book:
-    mdbook build docs/book -d ../../website/book
-
-########################################
-# Linting, Formatting, and Code Quality
-########################################
-
-# Run all pre-commit checks (as configured in .pre-commit-config.yaml)
-precommit:
-    pre-commit run --all-files
-
-# Lint all Markdown files (no fixes)
-lint-md:
-    markdownlint "**/*.md"
-
-# Auto-fix and format all Markdown files
-fix-md:
-    markdownlint --fix "**/*.md"
-    prettier --write "**/*.md" --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
-
-# Lint a specific Markdown file
-lint-md-file filename:
-    markdownlint {{filename}}
-
-# Fix and format a specific Markdown file
-fix-md-file filename:
-    markdownlint --fix {{filename}}
-    prettier --write {{filename}}
-
-# Format all Rust code in the workspace using rustfmt
-format-rust:
-    cargo fmt
-
-# Lint the entire Rust workspace using Clippy (no auto-fix)
-lint-rust:
-    cargo clippy --workspace --all-targets -- -D warnings
-
-# Attempt to auto-fix Clippy lints (Rust nightly only)
-fix-rust:
-    cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings
-
-########################################
-# Clean Tasks
-########################################
-
-# Remove Rust build artifacts (`cargo clean`)
-clean-target:
-    cargo clean
-
-# Remove wasm-pack and Playwright build artifacts (including `node_modules`)
-clean-wasm:
-    rm -rf pkg
-    rm -rf integration-tests/ixa-wasm-tests/pkg
-    rm -rf integration-tests/ixa-wasm-tests/node_modules
-
-# Remove all documentation artifacts
-clean-docs:
-    rm -rf website/doc website/debug
-    rm -f website/.rustc_info.json website/.rustdoc_fingerprint.json
-
-# Remove all book artifacts
-clean-book:
-    rm -rf website/book
 
 # Delete example-generated output files and directories
+[group('Examples')]
+[group('Clean')]
 clean-examples:
     rm -f \
         Reports_death.csv \
@@ -261,32 +245,59 @@ clean-examples:
         examples/network-hhmodel/output/ \
         examples/network-hhmodel/tests/
 
+########################################
+# Linting, Formatting, and Code Quality
+########################################
+
+# Run all pre-commit checks (as configured in .pre-commit-config.yaml)
+[group('Lint')]
+precommit:
+    pre-commit run --all-files
+
+# Format all Rust code in the workspace using rustfmt
+[group('Lint')]
+format-rust:
+    cargo fmt
+
+# Lint the entire Rust workspace using Clippy (no auto-fix)
+[group('Lint')]
+lint-rust:
+    cargo clippy --workspace --all-targets -- -D warnings
+
+# Attempt to auto-fix Clippy lints (Rust nightly only)
+[group('Lint')]
+fix-rust:
+    cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings
+
+########################################
+# Clean Tasks
+########################################
+
+# Remove Rust build artifacts (`cargo clean`)
+[group('Clean')]
+clean-target:
+    cargo clean
+
 # Remove all build artifacts (all `clean*` recipes)
-clean:
-    just clean-target
-    just clean-wasm
-    just clean-docs
-    just clean-book
-    just clean-examples
+[group('Clean')]
+clean: clean-target clean-wasm clean-docs clean-book clean-examples
 
 ########################################
 # CI Task (all checks and builds)
 ########################################
 
-# Main CI task: run everything expected in CI (except setup/install)
-ci:
-    just precommit
-    just build-all
-    just build-wasm
-    just test
-    just test-examples
-    just run-examples
-    just build-wasm-pack
-    just test-wasm
-    just build-docs
-    just build-book
+# In the GitHub Workflow, tasks are run individually. This recipe is for running the CI tasks in a local dev
+# environment, say, before pushing.
 
-# run bench in Docker
+# Run locally everything that runs in CI
+prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
+                                      run-examples build-docs build-book
+
+########################################
+# Docker testing in container
+########################################
+
+# Run bench in Docker
 docker-run:
     docker build -t ixa-bench .
     docker run --rm -it -v "$PWD":/home/runner/ixa ixa-bench

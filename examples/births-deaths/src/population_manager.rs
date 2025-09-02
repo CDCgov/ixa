@@ -219,7 +219,7 @@ mod test {
         let mut context = Context::new();
         let age_vec = vec![0, 5, 62, 80];
         let years = 5.0;
-        let age_groups = vec![
+        let age_groups = [
             AgeGroupRisk::NewBorn,
             AgeGroupRisk::General,
             AgeGroupRisk::General,
@@ -243,7 +243,7 @@ mod test {
         }
 
         // Plan to check in 5 years
-        let future_age_groups = vec![
+        let future_age_groups = [
             AgeGroupRisk::General,
             AgeGroupRisk::General,
             AgeGroupRisk::OldAdult,
