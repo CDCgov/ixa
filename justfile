@@ -285,3 +285,8 @@ ci:
     just test-wasm
     just build-docs
     just build-book
+
+# run bench in Docker
+docker-run:
+    docker build -t ixa-bench .
+    docker run --rm -it -v "$PWD":/home/runner/ixa ixa-bench

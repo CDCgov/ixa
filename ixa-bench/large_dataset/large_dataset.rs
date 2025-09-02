@@ -70,30 +70,13 @@ fn bench_query_population_property(context: &mut Context) {
 }
 
 fn bench_query_population_derived_property(context: &mut Context) {
-    // Example query to count people in the OldAdult age group
     context.query_people_count((AgeGroupFoi, black_box(AgeGroupRisk::OldAdult)));
-    //println!("Number of people in the OldAdult age group: {}", query);
 }
-
-// benchs:
-// query person property
-// query indexed person property
-// query derived property
-// query indexed derived property
-// query multi-property property
-
-// 1. check if we need to use blackbox for the benchmarks
-// 2. check if we can create a vec of home ids and query for each home id (in each bench function)
-// 3. bench indexing.
-// 4. bench plans (add, execute, remove, etc.)
-// 5. bench events?
-// 6. bench reports?
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     define_multi_property_index!(Age, SchoolId, WorkplaceId);
     let mut context = Context::new();
     initialize(&mut context);
-    // done with prep.
 
     c.bench_function("bench_query_population_property", |bencher| {
         bencher.iter_with_large_drop(|| {
