@@ -11,7 +11,7 @@ pub mod infection_manager;
 pub mod people;
 pub mod transmission_manager;
 
-static POPULATION: u64 = 1000;
+static POPULATION: u64 = 100;
 static SEED: u64 = 123;
 static MAX_TIME: f64 = 303.0;
 static FOI: f64 = 0.1;

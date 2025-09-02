@@ -22,5 +22,5 @@
 			]
 	  	}
 	},
-	"postCreateCommand": "rustup component add rustfmt clippy"
+	"postCreateCommand": "rustup component add rustfmt clippy && sudo apt-get install pkg-config -y"
 }
