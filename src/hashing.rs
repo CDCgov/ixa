@@ -12,41 +12,72 @@
 //! `HashMapExt` trait extension. Similarly, for `HashSet` and `HashSetExt`.The traits need only be
 //! in scope.
 //!
-//! The `hash_usize` free function is a convenience function used in `crate::random::get_rng`.
 
 use bincode::serde::encode_to_vec as serialize_to_vec;
-use gxhash::{gxhash128, GxHasher};
+pub use rustc_hash::FxHashMap as HashMap;
+pub use rustc_hash::FxHashSet as HashSet;
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
+use xxhash_rust::xxh3::Xxh3Default;
 
-pub use gxhash::{HashMap, HashMapExt, HashSet, HashSetExt};
+/// Provides API parity with `std::collections::HashMap`.
+pub trait HashMapExt {
+    fn new() -> Self;
+}
+
+impl<K, V> HashMapExt for HashMap<K, V> {
+    fn new() -> Self {
+        HashMap::default()
+    }
+}
+
+// Note that trait aliases are not yet stabilized in rustc.
+// See https://github.com/rust-lang/rust/issues/41517
+/// Provides API parity with `std::collections::HashSet`.
+pub trait HashSetExt {
+    fn new() -> Self;
+}
+
+impl<T> HashSetExt for HashSet<T> {
+    fn new() -> Self {
+        HashSet::default()
+    }
+}
 
 /// A convenience method to compute the hash of a `&str`.
 pub fn hash_str(data: &str) -> u64 {
-    let mut hasher = GxHasher::default();
+    let mut hasher = rustc_hash::FxHasher::default();
     hasher.write(data.as_bytes());
     hasher.finish()
 }
 
 // Helper for any T: Hash
 pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
-    let mut h = GxHasher::default();
-    // let mut h = Xxh3Hasher128::default();
+    let mut h = Xxh3Default::default();
     value.hash(&mut h);
-    h.finish_u128()
+    h.digest128()
 }
 
 pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
     let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
-    // The `gxhash128` function gives ~3% speedup over `one_shot_128` on my machine on the
-    // `births-death` benchmark. HOWEVER, it is not guaranteed to give the same result as
-    // `GxHasher` as used in `one_shot_128(&serialized)`.
-    gxhash128(serialized.as_slice(), 42)
+    // The `xxh3_128` should be a little faster, but it is not guaranteed to produce the same hash.
+    // xxh3_128(serialized.as_slice())
+    one_shot_128(&serialized.as_slice())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hash_serialized_equals_one_shot() {
+        let value = "hello";
+        let a = hash_serialized_128(value);
+        let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
+        let b = one_shot_128(&serialized.as_slice());
+
+        assert_eq!(a, b);
+    }
 
     #[test]
     fn hashes_strings() {

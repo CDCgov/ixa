@@ -40,7 +40,8 @@ reqwest = { version = "^0.12.12", features = ["blocking", "json"] }
 uuid = "^1.12.1"
 tower-http = { version = "^0.6.2", features = ["full"] }
 mime = "^0.3.17"
-gxhash = { version = "3.5.0", features = ["deterministic"] }
+xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
+rustc-hash = "2.1.1"
 rand_distr = "^0.4.3"
 tempfile = "^3.15.0"
 assert_cmd = "^2.0.16"
@@ -101,7 +102,8 @@ humantime.workspace = true
 bytesize.workspace = true
 polonius-the-crab.workspace = true
 hashbrown.workspace = true
-gxhash.workspace = true
+xxhash-rust.workspace = true
+rustc-hash.workspace = true
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
