@@ -28,17 +28,21 @@ pub trait PersonProperty: Copy + 'static {
     fn is_derived() -> bool {
         false
     }
+
     #[must_use]
     fn is_required() -> bool {
         false
     }
+
     #[must_use]
     fn dependencies() -> Vec<Box<dyn PersonPropertyHolder>> {
         panic!("Dependencies not implemented");
     }
+
     fn register_dependencies(_: &Context) {
         panic!("Dependencies not implemented");
     }
+
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
 
     /// This transforms a `Self::Value` into a `Self::CanonicalValue`, e.g. for storage in an index.
@@ -63,6 +67,7 @@ pub trait PersonProperty: Copy + 'static {
     fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
         hash_serialized_128(value)
     }
+
     /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
     /// with the same component types in a different order will have the same type ID.
     #[must_use]

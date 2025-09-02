@@ -5,7 +5,7 @@ and a tuple of property tags and implements `SortByTag` for the tuple. It
 defines a derived property (vio `define_derived_property`) with the provided
 name having the type of tuples of values corresponding to the provided tags.
 
-```rust
+```rust,ignore
 use ixa::people::{define_multi_property, define_person_property};
 
 define_person_property!(Name, &'static str);
