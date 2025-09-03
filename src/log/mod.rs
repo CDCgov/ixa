@@ -15,9 +15,9 @@
 //! }
 //! ```
 //!
-//! Logging is _disabled_ by default. Logging messages can be enabled by passing the command line
-//! option `--log-level <level>`. Log messages can also be controlled programmatically. Logging
-//! can be enabled/disabled from code using the functions:
+//! Only errors are logged by default. More logging messages can be enabled by passing
+//! the command line option `--log-level <level>`. Log messages can also be controlled
+//! programmatically. Logging can be enabled/disabled from code using the functions:
 //!
 //!  - `enable_logging()`: turns on all log messages
 //!  - `disable_logging()`: turns off all log messages
@@ -59,8 +59,8 @@ use log4rs::Handle;
 use std::sync::LazyLock;
 use std::sync::{Mutex, MutexGuard};
 
-// Logging disabled
-const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Off;
+// Logging only errors by default.
+const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Error;
 // Default module specific filters
 const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
     // `rustyline` logs are noisy.

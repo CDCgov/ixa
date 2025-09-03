@@ -12,7 +12,7 @@ use crate::plan::{PlanId, Queue};
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{error, get_data_plugin_count, trace, ContextPeopleExt};
+use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt};
 use crate::{HashMap, HashMapExt};
 use polonius_the_crab::prelude::*;
 use std::cell::OnceCell;
@@ -275,7 +275,7 @@ impl Context {
         trace!("canceling plan {plan_id:?}");
         let result = self.plan_queue.cancel_plan(plan_id);
         if result.is_none() {
-            error!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
+            warn!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
         }
     }
 
