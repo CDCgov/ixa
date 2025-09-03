@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
 use ixa::prelude::*;
 use ixa_bench::generate_population::generate_population;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::hint::black_box;
 
 define_person_property!(Age, u8);
@@ -10,7 +10,7 @@ define_person_property!(HomeId, u32);
 define_person_property!(SchoolId, u32);
 define_person_property!(WorkplaceId, u32);
 
-#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AgeGroupRisk {
     NewBorn,
     General,
@@ -27,39 +27,14 @@ define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
     }
 });
 
-#[derive(Deserialize, Debug)]
-struct PeopleRecord {
-    age: u8,
-    #[serde(rename = "homeId")]
-    home_id: u32,
-    #[serde(rename = "schoolId")]
-    school_id: u32,
-    #[serde(rename = "workplaceId")]
-    workplace_id: u32,
-}
-
-fn get_population(n: usize, schools_percent: f64, workplaces_percent: f64) -> Vec<PeopleRecord> {
-    let pop = generate_population(n, schools_percent, workplaces_percent);
-    pop.people
-        .into_iter()
-        .map(|person| PeopleRecord {
-            age: person.age,
-            home_id: person.home_id as u32,
-            school_id: person.school_id as u32,
-            workplace_id: person.workplace_id as u32,
-        })
-        .collect()
-}
-
 fn initialize(context: &mut Context) {
-    let people = get_population(10000, 0.2, 10.0);
-    for record in people {
+    for person in generate_population(10000, 0.2, 10.0) {
         context
             .add_person((
-                (Age, record.age),
-                (HomeId, record.home_id),
-                (SchoolId, record.school_id),
-                (WorkplaceId, record.workplace_id),
+                (Age, person.age),
+                (HomeId, person.home_id as u32),
+                (SchoolId, person.school_id as u32),
+                (WorkplaceId, person.workplace_id as u32),
             ))
             .unwrap();
     }

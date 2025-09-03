@@ -1,5 +1,3 @@
-use clap::{Arg, Command};
-use csv::Writer;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
@@ -32,120 +30,108 @@ pub struct Population {
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::must_use_candidate)]
-pub fn generate_population(
+pub struct PopulationIterator {
     n: usize,
-    number_of_schools_as_percent_of_pop: f64,
-    number_of_workplaces_as_percent_of_pop: f64,
-) -> Population {
-    let num_schools = ((n as f64 * number_of_schools_as_percent_of_pop / 100.0).round()) as usize;
-    let num_workplaces =
-        ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
-    let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-    let school_ids: Vec<usize> = (1..=num_schools).collect();
-    let workplace_ids: Vec<usize> = (1..=num_workplaces).collect();
-    let home_ids: Vec<usize> = (1..=num_homes).collect();
-    let mut rng = rand::thread_rng();
-    let mut people = Vec::with_capacity(n);
+    idx: usize,
+    school_ids: Vec<usize>,
+    workplace_ids: Vec<usize>,
+    home_ids: Vec<usize>,
+    rng: rand::rngs::ThreadRng,
+}
 
-    for i in 0..n {
-        let age = rng.gen_range(MIN_AGE..=MAX_AGE);
-        let home_id = *home_ids.choose(&mut rng).unwrap();
+impl PopulationIterator {
+    pub fn new(
+        n: usize,
+        number_of_schools_as_percent_of_pop: f64,
+        number_of_workplaces_as_percent_of_pop: f64,
+    ) -> Self {
+        let num_schools =
+            ((n as f64 * number_of_schools_as_percent_of_pop / 100.0).round()) as usize;
+        let num_workplaces =
+            ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
+        let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
+        let school_ids: Vec<usize> = (1..=num_schools).collect();
+        let workplace_ids: Vec<usize> = (1..=num_workplaces).collect();
+        let home_ids: Vec<usize> = (1..=num_homes).collect();
+        let rng = rand::thread_rng();
+        PopulationIterator {
+            n,
+            idx: 0,
+            school_ids,
+            workplace_ids,
+            home_ids,
+            rng,
+        }
+    }
+}
+
+impl Iterator for PopulationIterator {
+    type Item = Person;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.n {
+            return None;
+        }
+        let age = self.rng.gen_range(MIN_AGE..=MAX_AGE);
+        let home_id = *self.home_ids.choose(&mut self.rng).unwrap();
         let mut school_id = 0;
         let mut workplace_id = 0;
         if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) {
-            school_id = *school_ids.choose(&mut rng).unwrap();
+            school_id = *self.school_ids.choose(&mut self.rng).unwrap();
         }
         if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) {
-            workplace_id = *workplace_ids.choose(&mut rng).unwrap();
+            workplace_id = *self.workplace_ids.choose(&mut self.rng).unwrap();
         }
-        people.push(Person {
-            id: i + 1,
+        let person = Person {
+            id: self.idx + 1,
             age,
             home_id,
             school_id,
             workplace_id,
-        });
-    }
-    Population {
-        people,
-        number_of_homes: num_homes,
-        number_of_schools: num_schools,
-        number_of_workplaces: num_workplaces,
+        };
+        self.idx += 1;
+        Some(person)
     }
 }
 
-#[allow(dead_code)]
-fn save_population_to_csv(population: &Population, output_file: &str) {
-    let mut wtr = Writer::from_path(output_file).expect("Cannot create output file");
-    wtr.write_record(["id", "age", "homeId", "schoolId", "workplaceId"])
-        .unwrap();
-    for person in &population.people {
-        wtr.write_record(&[
-            person.id.to_string(),
-            person.age.to_string(),
-            person.home_id.to_string(),
-            person.school_id.to_string(),
-            person.workplace_id.to_string(),
-        ])
-        .unwrap();
-    }
-    wtr.flush().unwrap();
+pub fn generate_population(
+    n: usize,
+    number_of_schools_as_percent_of_pop: f64,
+    number_of_workplaces_as_percent_of_pop: f64,
+) -> PopulationIterator {
+    PopulationIterator::new(
+        n,
+        number_of_schools_as_percent_of_pop,
+        number_of_workplaces_as_percent_of_pop,
+    )
 }
 
-// cargo run --release -- 1000 --schools_percent 0.2 --workplaces_percent 10 --output random_population.csv
-#[allow(dead_code)]
-fn main() {
-    let matches = Command::new("Generate random population CSV file")
-        .arg(
-            Arg::new("n")
-                .help("Size of population")
-                .required(true)
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("schools_percent")
-                .long("schools_percent")
-                .help("Number of schools as percent of population")
-                .num_args(1)
-                .default_value("0.2"),
-        )
-        .arg(
-            Arg::new("workplaces_percent")
-                .long("workplaces_percent")
-                .help("Number of workplaces as percent of population")
-                .num_args(1)
-                .default_value("10"),
-        )
-        .arg(
-            Arg::new("output")
-                .long("output")
-                .help("Output CSV file name")
-                .num_args(1)
-                .default_value("random_population.csv"),
-        )
-        .get_matches();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let n = matches
-        .get_one::<String>("n")
-        .unwrap()
-        .parse::<usize>()
-        .expect("n must be an integer");
-    let schools_percent = matches
-        .get_one::<String>("schools_percent")
-        .unwrap()
-        .parse::<f64>()
-        .expect("schools_percent must be a float");
-    let workplaces_percent = matches
-        .get_one::<String>("workplaces_percent")
-        .unwrap()
-        .parse::<f64>()
-        .expect("workplaces_percent must be a float");
-    let output = matches.get_one::<String>("output").unwrap();
+    #[test]
+    fn test_generate_population_stats() {
+        let n = 1000;
+        let schools_percent = 0.2;
+        let workplaces_percent = 10.0;
+        let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
+        let num_schools = ((n as f64 * schools_percent / 100.0).round()) as usize;
+        let num_workplaces = ((n as f64 * workplaces_percent / 100.0).round()) as usize;
 
-    let population = generate_population(n, schools_percent, workplaces_percent);
-    println!("Number of people: {}", population.people.len());
-    println!("Number of homes: {}", population.number_of_homes);
-    println!("Number of schools: {}", population.number_of_schools);
-    println!("Number of workplaces: {}", population.number_of_workplaces);
-    save_population_to_csv(&population, output);
+        let population_iter = generate_population(n, schools_percent, workplaces_percent);
+        let people: Vec<Person> = population_iter.collect();
+
+        assert_eq!(people.len(), n);
+        // Check that home_id, school_id, workplace_id are in valid ranges
+        for person in &people {
+            assert!(person.age >= MIN_AGE && person.age <= MAX_AGE);
+            assert!(person.home_id >= 1 && person.home_id <= num_homes);
+            if person.school_id != 0 {
+                assert!(person.school_id >= 1 && person.school_id <= num_schools);
+            }
+            if person.workplace_id != 0 {
+                assert!(person.workplace_id >= 1 && person.workplace_id <= num_workplaces);
+            }
+        }
+    }
 }
