@@ -26,12 +26,6 @@ Cargo.lock
 *~
 \#*
 
-# html
-examples/**/*.html
-examples/**/*.csv
-# These outputs can end up in the root dir depending on how the example is invoced.
-*.csv
-
 # docs
 website/book/
 website/doc/
@@ -39,9 +33,9 @@ website/debug/
 website/.rustc_info.json
 website/.rustdoc_fingerprint.json
 
+# Example Output
+examples/**/output/**
+
 #exceptions:
 !.vscode/settings.json
-!examples/load-people/people.csv
-!examples/network-hhmodel/Age5to17Edges.csv
-!examples/network-hhmodel/AgeUnder5Edges.csv
-!examples/network-hhmodel/Households.csv
+!examples/**/output/.gitkeep
