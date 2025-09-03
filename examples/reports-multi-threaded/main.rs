@@ -18,6 +18,7 @@ fn example_dir() -> PathBuf {
     parameters_path
         .join("examples")
         .join("reports-multi-threaded")
+        .join("output")
 }
 
 #[allow(unexpected_cfgs)]

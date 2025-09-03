@@ -4,6 +4,6 @@
     "seed": 123,
     "foi": 0.15,
     "infection_duration": 5.0,
-    "output_dir": "examples/parameter-loading",
+    "output_dir": "examples/parameter-loading/output",
     "output_file": "incidence"
 }
