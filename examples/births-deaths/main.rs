@@ -9,7 +9,7 @@ fn main() {
         .join("output");
 
     run_with_args(|context, _, _| {
-        initialize(context, &*output_path);
+        initialize(context, &output_path);
         Ok(())
     })
     .unwrap();

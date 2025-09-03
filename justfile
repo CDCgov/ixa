@@ -195,13 +195,7 @@ build-tests:
 # Run a named example
 [group('Examples')]
 run-example name:
-    @if [ "{{name}}" = "time-varying-infection" ]; then \
-        echo cargo run --example time-varying-infection -- examples/time-varying-infection/input.json ; \
-        cargo run --example time-varying-infection -- examples/time-varying-infection/input.json ; \
-    else \
-        echo cargo run --example "{{name}}" ; \
-        cargo run --example "{{name}}" ; \
-    fi
+    cargo run --example "{{name}}"
 
 # Run all example binaries
 [group('Examples')]

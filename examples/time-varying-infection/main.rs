@@ -14,11 +14,18 @@ use crate::parameters_loader::Parameters;
 
 #[derive(Args, Debug)]
 struct CustomArgs {
-    config_file: String,
+    config_file: Option<String>,
 }
 
 fn initialize(context: &mut Context, custom_args: Option<CustomArgs>) -> Result<(), IxaError> {
-    let file_path = PathBuf::from(custom_args.unwrap().config_file);
+    // If the user does not specify a config file, use the default one.
+    let file_path = match custom_args.unwrap().config_file {
+        Some(config_file) => PathBuf::from(config_file),
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("time-varying-infection")
+            .join("input.json"),
+    };
 
     parameters_loader::init_parameters(context, &file_path)?;
     let parameters = context
