@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom;
 use rand::Rng;
 
 const MIN_AGE: u8 = 0;
@@ -26,16 +25,12 @@ pub struct Population {
     pub number_of_workplaces: usize,
 }
 
-#[allow(clippy::cast_sign_loss)]
-#[allow(clippy::cast_precision_loss)]
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::must_use_candidate)]
 pub struct PopulationIterator {
     n: usize,
     idx: usize,
-    school_ids: Vec<usize>,
-    workplace_ids: Vec<usize>,
-    home_ids: Vec<usize>,
+    num_schools: usize,
+    num_workplaces: usize,
+    num_homes: usize,
     rng: rand::rngs::ThreadRng,
 }
 
@@ -50,16 +45,13 @@ impl PopulationIterator {
         let num_workplaces =
             ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-        let school_ids: Vec<usize> = (1..=num_schools).collect();
-        let workplace_ids: Vec<usize> = (1..=num_workplaces).collect();
-        let home_ids: Vec<usize> = (1..=num_homes).collect();
         let rng = rand::thread_rng();
         PopulationIterator {
             n,
             idx: 0,
-            school_ids,
-            workplace_ids,
-            home_ids,
+            num_schools,
+            num_workplaces,
+            num_homes,
             rng,
         }
     }
@@ -72,14 +64,14 @@ impl Iterator for PopulationIterator {
             return None;
         }
         let age = self.rng.gen_range(MIN_AGE..=MAX_AGE);
-        let home_id = *self.home_ids.choose(&mut self.rng).unwrap();
+        let home_id = self.rng.gen_range(1..=self.num_homes);
         let mut school_id = 0;
         let mut workplace_id = 0;
-        if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) {
-            school_id = *self.school_ids.choose(&mut self.rng).unwrap();
+        if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) && self.num_schools > 0 {
+            school_id = self.rng.gen_range(1..=self.num_schools);
         }
-        if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) {
-            workplace_id = *self.workplace_ids.choose(&mut self.rng).unwrap();
+        if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) && self.num_workplaces > 0 {
+            workplace_id = self.rng.gen_range(1..=self.num_workplaces);
         }
         let person = Person {
             id: self.idx + 1,
