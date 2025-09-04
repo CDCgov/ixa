@@ -683,6 +683,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn get_uninitialized_property_panics() {
+        // The `PersonProperty::compute()` implementation panics if there is no default value.
         let mut context = Context::new();
         let person = context.add_person(()).unwrap();
         context.get_person_property(person, Age);

@@ -167,6 +167,7 @@ seq!(Z in 1..10 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
     use crate::people::PeoplePlugin;
     use crate::{
         define_derived_property, define_multi_property, define_person_property, Context,

@@ -419,10 +419,49 @@ mod tests {
     define_person_property!(Age, u8);
     define_person_property!(Weight, f64);
 
-    define_multi_property!(Profile, (Name, Age, Weight));
+    define_multi_property!(ProfileNAW, (Name, Age, Weight));
+    define_multi_property!(ProfileAWN, (Age, Weight, Name));
+    define_multi_property!(ProfileWAN, (Weight, Age, Name));
 
     #[test]
-    fn test_multi_property() {
+    fn test_multi_property_ordering() {
+        let a: <ProfileNAW as PersonProperty>::Value = ("Jane", 22, 180.5);
+        let b: <ProfileAWN as PersonProperty>::Value = (22, 180.5, "Jane");
+        let c: <ProfileWAN as PersonProperty>::Value = (180.5, 22, "Jane");
+
+        assert_eq!(ProfileNAW::type_id(), ProfileAWN::type_id());
+        assert_eq!(ProfileNAW::type_id(), ProfileWAN::type_id());
+
+        let a_canonical: <ProfileNAW as PersonProperty>::CanonicalValue =
+            ProfileNAW::make_canonical(a);
+        let b_canonical: <ProfileAWN as PersonProperty>::CanonicalValue =
+            ProfileAWN::make_canonical(b);
+        let c_canonical: <ProfileWAN as PersonProperty>::CanonicalValue =
+            ProfileWAN::make_canonical(c);
+
+        assert_eq!(a_canonical, b_canonical);
+        assert_eq!(a_canonical, c_canonical);
+
+        // Actually, all of the `Profile***::hash_property_value` methods should be the same,
+        // so we could use any single one.
+        assert_eq!(
+            ProfileNAW::hash_property_value(&a_canonical),
+            ProfileAWN::hash_property_value(&b_canonical)
+        );
+        assert_eq!(
+            ProfileNAW::hash_property_value(&a_canonical),
+            ProfileWAN::hash_property_value(&c_canonical)
+        );
+
+        // Since the canonical values are the same, we could have used any single one, but this
+        // demonstrates that we can convert from one order to another.
+        assert_eq!(ProfileNAW::make_uncanonical(b_canonical), a);
+        assert_eq!(ProfileAWN::make_uncanonical(c_canonical), b);
+        assert_eq!(ProfileWAN::make_uncanonical(a_canonical), c);
+    }
+
+    #[test]
+    fn test_multi_property_vs_property_query() {
         let mut context = Context::new();
 
         context
@@ -438,14 +477,14 @@ mod tests {
             .add_person(((Name, "Alice"), (Age, 22), (Weight, 170.5)))
             .unwrap();
 
-        context.index_property(Profile);
+        context.index_property(ProfileNAW);
 
         {
             let data = context.get_data(PeoplePlugin);
             assert!(data
                 .property_indexes
                 .borrow()
-                .get(&Profile::type_id())
+                .get(&ProfileNAW::type_id())
                 .is_some());
         }
 
@@ -453,17 +492,14 @@ mod tests {
             let example_query = ((Name, "Alice"), (Age, 22), (Weight, 170.5));
             let query_multi_property_type_id = Query::multi_property_type_id(&example_query);
             assert!(query_multi_property_type_id.is_some());
-            assert_eq!(Profile::type_id(), query_multi_property_type_id.unwrap());
+            assert_eq!(ProfileNAW::type_id(), query_multi_property_type_id.unwrap());
             assert_eq!(
                 Query::multi_property_value_hash(&example_query),
-                Profile::hash_property_value(&Profile::make_canonical(("Alice", 22, 170.5)))
+                ProfileNAW::hash_property_value(&ProfileNAW::make_canonical(("Alice", 22, 170.5)))
             );
         }
 
-        let results = context.query_people((Profile, ("John", 42, 220.5)));
-        for r in &results {
-            println!("{:?}", r);
-        }
+        let results = context.query_people((ProfileNAW, ("John", 42, 220.5)));
         assert_eq!(results.len(), 1);
     }
 
@@ -497,13 +533,12 @@ mod tests {
 
     #[test]
     fn test_debug_trait() {
-        let value = Pu32;
-        let debug_str = format!("{:?}", value);
-        // You can check for the struct name or any expected output
-        assert!(debug_str.contains("Pu32"));
-        let value = POu32;
-        let debug_str = format!("{:?}", value);
-        // You can check for the struct name or any expected output
-        assert!(debug_str.contains("POu32"));
+        let property = Pu32;
+        let debug_str = format!("{:?}", property);
+        assert_eq!(debug_str, "Pu32");
+
+        let property = POu32;
+        let debug_str = format!("{:?}", property);
+        assert_eq!(debug_str, "POu32");
     }
 }
