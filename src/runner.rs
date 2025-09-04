@@ -13,7 +13,7 @@ use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
 use crate::{info, set_log_level, set_module_filters, warn, LevelFilter};
-use clap::{Args, Command, FromArgMatches as _};
+use clap::{ArgAction, Args, Command, FromArgMatches as _};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
@@ -60,6 +60,10 @@ pub struct BaseArgs {
     #[arg(short, long)]
     pub log_level: Option<String>,
 
+    /// Increase logging verbosity (-v, -vv, -vvv, etc.)
+    #[arg(short, long, action = ArgAction::Count)]
+    pub verbose: u8,
+
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
     pub debugger: Option<Option<f64>>,
@@ -86,6 +90,7 @@ impl BaseArgs {
             file_prefix: None,
             force_overwrite: false,
             log_level: None,
+            verbose: 0,
             debugger: None,
             web: None,
             timeline_progress_max: None,
@@ -183,6 +188,8 @@ where
     if args.force_overwrite {
         report_config.overwrite(true);
     }
+
+    // Explicitly setting the log level takes precedence over `-v`-style verbosity.
     if let Some(log_level) = args.log_level.as_ref() {
         if let Ok(level) = LevelFilter::from_str(log_level) {
             set_log_level(level);
@@ -198,8 +205,14 @@ where
         } else {
             return Err(format!("Invalid log level format: {log_level}").into());
         }
-    } else {
-        info!("Logging disabled.");
+    }
+    // Applicable only if the log level is not explicitly set.
+    else if args.verbose > 0 {
+        match args.verbose {
+            1 => set_log_level(LevelFilter::Info),
+            2 => set_log_level(LevelFilter::Debug),
+            _ => set_log_level(LevelFilter::Trace),
+        }
     }
 
     context.init_random(args.random_seed);
