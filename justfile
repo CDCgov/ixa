@@ -272,3 +272,12 @@ clean: clean-target clean-wasm clean-docs clean-book clean-examples
 # Run locally everything that runs in CI
 prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
                                       run-examples build-docs build-book
+
+########################################
+# Docker testing in container
+########################################
+
+# Run bench in Docker
+docker-run:
+    docker build -t ixa-bench .
+    docker run --rm -it -v "$PWD":/home/runner/ixa ixa-bench
