@@ -92,7 +92,6 @@ ixa-derive.workspace = true
 log.workspace = true
 paste.workspace = true
 rand.workspace = true
-rustc-hash.workspace = true
 seq-macro.workspace = true
 serde.workspace = true
 serde_derive.workspace = true

@@ -10,6 +10,6 @@ pub use crate::define_rng;
 pub use crate::error::IxaError;
 pub use crate::global_properties::ContextGlobalPropertiesExt;
 pub use crate::network::ContextNetworkExt;
-pub use crate::people::{ContextPeopleExt, SortByTag};
+pub use crate::people::ContextPeopleExt;
 pub use crate::random::ContextRandomExt;
 pub use crate::report::ContextReportExt;

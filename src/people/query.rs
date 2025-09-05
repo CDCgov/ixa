@@ -1,5 +1,5 @@
 use crate::hashing::{one_shot_128, HashMap};
-use crate::people::ordered_tuple::{
+use crate::people::multi_property::{
     static_apply_reordering, static_sorted_indices, type_ids_to_multi_property_id,
 };
 use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};

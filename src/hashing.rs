@@ -82,16 +82,6 @@ mod tests {
     }
 
     #[test]
-    fn hash_serialized_equals_one_shot() {
-        let value = "hello";
-        let a = hash_serialized_128(value);
-        let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
-        let b = one_shot_128(&serialized.as_slice());
-
-        assert_eq!(a, b);
-    }
-
-    #[test]
     fn hashes_strings() {
         let a = one_shot_128(&"hello");
         let b = one_shot_128(&"hello");

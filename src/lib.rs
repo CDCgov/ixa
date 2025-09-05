@@ -94,7 +94,7 @@ pub mod web_api;
 pub use bincode;
 pub use csv;
 pub use ctor;
-pub use ixa_derive::{sorted_tag_value_impl, static_sorted_tuples};
+pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
 pub use paste;
 pub use rand;
 
@@ -105,11 +105,11 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub mod prelude;
 
 pub mod prelude_for_plugins {
+    pub use crate::context::IxaEvent;
     pub use crate::context::PluginContext;
     pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;
-    pub use crate::IxaEvent;
     pub use ixa_derive::IxaEvent;
 }
 

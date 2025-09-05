@@ -1,3 +1,33 @@
+//! Properties are the main way to store and access data about people.
+//!
+//! # Properties
+//!
+//! Properties are defined using the `define_person_property!` and
+//! `define_derived_property!` macros.
+//!
+//! # Multi-properties
+//!
+//! The `define_multi_property!` macro (defined in `property.rs`) takes a name and a tuple
+//! of property tags. It defines a derived property (via `define_derived_property`) with the
+//! provided name having the type of tuples of values corresponding to the provided tags.
+//!
+//! ```rust,ignore
+//! use ixa::people::{define_multi_property, define_person_property};
+//!
+//! define_person_property!(Name, &'static str);
+//! define_person_property!(Age, u8);
+//! define_person_property!(Weight, f64);
+//!
+//! define_multi_property!(Profile, (Name, Age, Weight));
+//! ```
+//!
+//! The new derived property is not automatically indexed. You can index it just
+//! like any other property:
+//!
+//! ```rust, ignore
+//! context.index_property(Profile);
+//! ```
+
 use crate::hashing::hash_serialized_128;
 use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
@@ -336,24 +366,23 @@ macro_rules! define_multi_property {
         $person_property:ident,
         ( $($dependency:ident),+ )
     ) => {
-        $crate::sorted_property_impl!(( $($dependency),+ ));
+        // $crate::sorted_property_impl!(( $($dependency),+ ));
         $crate::paste::paste! {
             $crate::__define_derived_property_common!(
                 // Name
                 $person_property,
 
                 // `PersonProperty::Value` type
-                // <( $(<$dependency as $crate::people::PersonProperty>::Value),+ ) as $crate::people::SortByTag<( $($dependency),+ )>>,
                 ( $(<$dependency as $crate::people::PersonProperty>::Value),+ ),
 
                 // `PersonProperty::CanonicalValue` type
-                <( $(<$dependency as $crate::people::PersonProperty>::Value),+ ) as $crate::people::SortByTag<( $($dependency),+ )>>::ReorderedValue,
+                $crate::sorted_value_type!(( $($dependency),+ )),
 
                 // Function to transform a `PersonProperty::Value` to a `PersonProperty::CanonicalValue`
-                $crate::people::SortByTag::<( $($dependency),+ )>::reorder_by_tag,
+                $person_property::reorder_by_tag,
 
                 // Function to transform a `PersonProperty::CanonicalValue` to a `PersonProperty::Value`
-                $crate::people::SortByTag::<( $($dependency),+ )>::unreorder_by_tag,
+                $person_property::unreorder_by_tag,
 
                 // Code that runs at dependency registration time
                 {
@@ -373,9 +402,10 @@ macro_rules! define_multi_property {
                     ( $( [<_ $dependency:lower>] ),+ )
                 },
 
-                // A function that takes a value and returns a string representation of it
+                // A function that takes a canonical value and returns a string representation of it.
                 |values_tuple: &Self::CanonicalValue| {
-                    let values_tuple: Self::Value = $crate::people::SortByTag::<( $($dependency),+ )>::unreorder_by_tag(*values_tuple);
+                    // ice tThe string representation uses the original (unsorted) ordering.
+                    let values_tuple: Self::Value = Self::unreorder_by_tag(*values_tuple);
                     let mut displayed = String::from("(");
                     let ( $( [<_ $dependency:lower>] ),+ ) = values_tuple;
                     $(
@@ -396,10 +426,9 @@ macro_rules! define_multi_property {
                 // The type ID of a multi-property is the type ID of the SORTED tuple of its
                 // components. This is so that tuples with the same component types in a different
                 // order will have the same type ID.
-                std::any::TypeId::of::<
-                <( $(<$dependency as $crate::people::PersonProperty>::Value),+ )
-                as $crate::people::SortByTag<( $($dependency),+ )>>::SortedTag>()
+                std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
             );
+            $crate::impl_make_canonical!($person_property, ( $($dependency),+ ));
         }
     };
 }
