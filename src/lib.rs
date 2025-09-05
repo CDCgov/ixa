@@ -36,7 +36,9 @@
 //! - **`web_api`**: enables the web API, an HTTP-based remote control interface that allows
 //!   external applications to monitor simulation state, control execution, and query data through
 //!   REST endpoints. This feature implies the `debugger` feature.
-//!
+
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/cli-usage.md"))]
+
 pub mod context;
 pub use context::{Context, ExecutionPhase, IxaEvent, PluginContext};
 

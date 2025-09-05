@@ -13,7 +13,9 @@ use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
 use crate::{info, set_log_level, set_module_filters, warn, LevelFilter};
-use clap::{Args, Command, FromArgMatches as _};
+use clap::{ArgAction, Args, Command, FromArgMatches as _};
+#[cfg(debug_assertions)]
+use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
@@ -36,6 +38,13 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
 /// Default cli arguments for ixa runner
 #[derive(Args, Debug)]
 pub struct BaseArgs {
+    #[cfg(debug_assertions)]
+    /// Print help in Markdown format. This is enabled only for debug builds. Run an example with
+    /// `--markdown-help`, and the file `docs/cli-usage.md` will be written. This file is then
+    /// included in the crate-level docs. See `src/lib.rs`.
+    #[arg(long, hide = true)]
+    markdown_help: bool,
+
     /// Random seed
     #[arg(short, long, default_value = "0")]
     pub random_seed: u64,
@@ -60,6 +69,10 @@ pub struct BaseArgs {
     #[arg(short, long)]
     pub log_level: Option<String>,
 
+    /// Increase logging verbosity (-v, -vv, -vvv, etc.)
+    #[arg(short, long, action = ArgAction::Count)]
+    pub verbose: u8,
+
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
     pub debugger: Option<Option<f64>>,
@@ -80,12 +93,15 @@ pub struct BaseArgs {
 impl BaseArgs {
     fn new() -> Self {
         BaseArgs {
+            #[cfg(debug_assertions)]
+            markdown_help: false,
             random_seed: 0,
             config: None,
             output_dir: None,
             file_prefix: None,
             force_overwrite: false,
             log_level: None,
+            verbose: 0,
             debugger: None,
             web: None,
             timeline_progress_max: None,
@@ -162,6 +178,29 @@ fn run_with_args_internal<A, F>(
 where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
+    #[cfg(debug_assertions)]
+    // Print help in markdown format
+    if args.markdown_help {
+        let cli = create_ixa_cli();
+        let md_options = MarkdownOptions::new()
+            .show_footer(false)
+            .show_aliases(true)
+            .show_table_of_contents(false)
+            .title("Command Line Usage".to_string());
+        let markdown = help_markdown_command_custom(&cli, &md_options);
+        let path =
+            PathBuf::from(option_env!("CARGO_WORKSPACE_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
+                .join("docs")
+                .join("cli-usage.md");
+        std::fs::write(&path, markdown).unwrap_or_else(|e| {
+            panic!(
+                "Failed to write CLI help Markdown to file {}: {}",
+                path.display(),
+                e
+            );
+        });
+    }
+
     // Instantiate a context
     let mut context = Context::new();
 
@@ -183,6 +222,8 @@ where
     if args.force_overwrite {
         report_config.overwrite(true);
     }
+
+    // Explicitly setting the log level takes precedence over `-v`-style verbosity.
     if let Some(log_level) = args.log_level.as_ref() {
         if let Ok(level) = LevelFilter::from_str(log_level) {
             set_log_level(level);
@@ -198,8 +239,14 @@ where
         } else {
             return Err(format!("Invalid log level format: {log_level}").into());
         }
-    } else {
-        info!("Logging disabled.");
+    }
+    // Applicable only if the log level is not explicitly set.
+    else if args.verbose > 0 {
+        match args.verbose {
+            1 => set_log_level(LevelFilter::Info),
+            2 => set_log_level(LevelFilter::Debug),
+            _ => set_log_level(LevelFilter::Trace),
+        }
     }
 
     context.init_random(args.random_seed);
