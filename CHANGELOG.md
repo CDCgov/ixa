@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/CDCgov/ixa/compare/ixa-v0.3.2...ixa-v0.3.3) - 2025-09-08
+
+### Added
+
+- run tests in docker container ([#519](https://github.com/CDCgov/ixa/pull/519))
+
+### Fixed
+
+- remove extra codespace config ([#520](https://github.com/CDCgov/ixa/pull/520))
+- updated dev codespace install ([#515](https://github.com/CDCgov/ixa/pull/515))
+- Derived properties with Global Property dependencies, also removed rust lint that does not exist ([#510](https://github.com/CDCgov/ixa/pull/510))
+- updating Codespaces ([#511](https://github.com/CDCgov/ixa/pull/511))
+- allow uninlined_format_args lint and updated codespaces ([#509](https://github.com/CDCgov/ixa/pull/509))
+- update workspaces jsons to install just and npm ([#508](https://github.com/CDCgov/ixa/pull/508))
+
+### Other
+
+- Examples now write their output to an output directory. Fixes #490. ([#521](https://github.com/CDCgov/ixa/pull/521))
+- bump amannn/action-semantic-pull-request from 5 to 6 ([#501](https://github.com/CDCgov/ixa/pull/501))
+- bump actions/checkout from 4 to 5 ([#500](https://github.com/CDCgov/ixa/pull/500))
+- bump release-plz/action from 0.5.110 to 0.5.112 ([#502](https://github.com/CDCgov/ixa/pull/502))
+- Bumped versions: ctor, rustyline, criterion, sysinfo. ([#506](https://github.com/CDCgov/ixa/pull/506))
+- Disable pedantic and add ignore mismatched_lifetime_syntaxes ([#507](https://github.com/CDCgov/ixa/pull/507))
+
 ## [0.3.2](https://github.com/CDCgov/ixa/compare/ixa-v0.3.1...ixa-v0.3.2) - 2025-08-14
 
 ### Fixed
