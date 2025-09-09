@@ -208,7 +208,7 @@ where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
     #[cfg(debug_assertions)]
-    // Print help in markdown format
+    // Output help to a markdown file
     if args.markdown_help {
         let cli = create_ixa_cli();
         let md_options = MarkdownOptions::new()

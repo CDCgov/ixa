@@ -72,6 +72,8 @@ install-prettier:
 [group('Build')]
 [group('Ixa Book & Docs')]
 build-docs:
+    # Generate `docs/cli-usage.md`
+    cargo run --example basic-infection -- --markdown-help
     cargo doc --no-deps --target-dir website/
 
 # Build the Ixa Book into website/book/
@@ -112,6 +114,8 @@ fix-md-file filename: install-markdownlint install-prettier
 [group('Ixa Book & Docs')]
 [group('Clean')]
 clean-docs:
+    rm -rf docs/cli-usage.md
+    touch docs/cli-usage.md
     rm -rf website/doc website/debug
     rm -f website/.rustc_info.json website/.rustdoc_fingerprint.json
 
