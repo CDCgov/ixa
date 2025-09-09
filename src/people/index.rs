@@ -97,6 +97,7 @@ pub trait TypeErasedIndex {
     fn is_indexed(&self) -> bool;
     fn set_indexed(&mut self, is_indexed: bool);
     fn index_unindexed_people(&mut self, context: &Context);
+    fn max_indexed(&self) -> usize;
 
     /// Produces an iterator over pairs (serialized property value, set of `PersonId`s).
     fn iter_serialized_values_people(
@@ -188,6 +189,10 @@ impl<T: PersonProperty> TypeErasedIndex for Index<T> {
         self.max_indexed = current_pop;
     }
 
+    fn max_indexed(&self) -> usize {
+        self.max_indexed
+    }
+
     fn iter_serialized_values_people(
         &self,
     ) -> Box<dyn Iterator<Item = (String, &HashSet<PersonId>)> + '_> {
@@ -258,23 +263,23 @@ mod test {
             .add_person(((Age, 1u8), (Weight, 2u8), (Height, 3u8)))
             .unwrap();
 
-        let results_a = context.query_people((AWH, (1u8, 2u8, 3u8)));
+        let results_a = context.query_people((AWH, (1u8, 2u8, 3u8))).to_owned_vec();
         assert_eq!(results_a.len(), 1);
 
-        let results_b = context.query_people((WHA, (2u8, 3u8, 1u8)));
+        let results_b = context.query_people((WHA, (2u8, 3u8, 1u8))).to_owned_vec();
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
-        println!("Results: {:?}", results_a);
+        println!("Results: {:?} =?= {:?}", results_a, results_b);
 
         context
             .add_person(((Weight, 1u8), (Height, 2u8), (Age, 3u8)))
             .unwrap();
 
-        let results_a = context.query_people((WHA, (1u8, 2u8, 3u8)));
+        let results_a = context.query_people((WHA, (1u8, 2u8, 3u8))).to_owned_vec();
         assert_eq!(results_a.len(), 1);
 
-        let results_b = context.query_people((AWH, (3u8, 1u8, 2u8)));
+        let results_b = context.query_people((AWH, (3u8, 1u8, 2u8))).to_owned_vec();
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
