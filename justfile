@@ -194,8 +194,8 @@ build-tests:
 
 # Run a named example
 [group('Examples')]
-run-example name:
-    cargo run --example "{{name}}"
+run-example name *args:
+    cargo run --example {{name}} -- {{args}}
 
 # Run all example binaries
 [group('Examples')]

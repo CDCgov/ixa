@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::context::Context;
@@ -6,13 +6,14 @@ use crate::context::Context;
 use crate::debugger::enter_debugger;
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
+use crate::log::level_to_string_list;
 #[cfg(feature = "progress_bar")]
 use crate::progress::init_timeline_progress_bar;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
-use crate::{info, set_log_level, set_module_filters, warn, LevelFilter};
+use crate::{set_log_level, set_module_filters, warn, LevelFilter};
 use clap::{ArgAction, Args, Command, FromArgMatches as _};
 
 /// Custom parser for log levels
@@ -60,9 +61,34 @@ pub struct BaseArgs {
     #[arg(short, long)]
     pub log_level: Option<String>,
 
-    /// Increase logging verbosity (-v, -vv, -vvv, etc.)
-    #[arg(short, long, action = ArgAction::Count)]
+    #[arg(
+        short,
+        long,
+        action = ArgAction::Count,
+        long_help = r#"Increase logging verbosity (-v, -vv, -vvv, etc.)
+
+  ┌─────────┬───────┬──────┬───────┬───────┬───────┐
+  │ Level   │ ERROR │ WARN │ INFO  │ DEBUG │ TRACE │
+  ├─────────┼───────┼──────┼───────┼───────┼───────┤
+  │ Default │   ✓   │      │       │       │       │
+  │ -v      │   ✓   │  ✓   │   ✓   │       │       │
+  │ -vv     │   ✓   │  ✓   │   ✓   │   ✓   │       │
+  │ -vvv    │   ✓   │  ✓   │   ✓   │   ✓   │   ✓   │
+  └─────────┴───────┴──────┴───────┴───────┴───────┘
+"#)]
     pub verbose: u8,
+
+    /// Set logging to WARN level. Shortcut for `--log-level warn`.
+    #[arg(long)]
+    pub warn: bool,
+
+    /// Set logging to DEBUG level. Shortcut for `--log-level DEBUG`.
+    #[arg(long)]
+    pub debug: bool,
+
+    /// Set logging to TRACE level. Shortcut for `--log-level TRACE`.
+    #[arg(long)]
+    pub trace: bool,
 
     /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
     #[arg(short, long)]
@@ -91,6 +117,9 @@ impl BaseArgs {
             force_overwrite: false,
             log_level: None,
             verbose: 0,
+            warn: false,
+            debug: false,
+            trace: false,
             debugger: None,
             web: None,
             timeline_progress_max: None,
@@ -189,11 +218,15 @@ where
         report_config.overwrite(true);
     }
 
+    // The default log level. We process the arguments first and then set the log level once.
+    // We use the _maximum_ log level set by the user arguments if multiple log level flags
+    // are provided.
+    let mut current_log_level = crate::log::DEFAULT_LOG_LEVEL;
+
     // Explicitly setting the log level takes precedence over `-v`-style verbosity.
     if let Some(log_level) = args.log_level.as_ref() {
         if let Ok(level) = LevelFilter::from_str(log_level) {
-            set_log_level(level);
-            info!("Logging enabled at level {level}");
+            current_log_level = level;
         } else if let Ok(log_levels) = parse_log_levels(log_level) {
             let log_levels_slice: Vec<(&String, LevelFilter)> =
                 log_levels.iter().map(|(k, v)| (k, *v)).collect();
@@ -206,13 +239,45 @@ where
             return Err(format!("Invalid log level format: {log_level}").into());
         }
     }
-    // Applicable only if the log level is not explicitly set.
-    else if args.verbose > 0 {
-        match args.verbose {
-            1 => set_log_level(LevelFilter::Info),
-            2 => set_log_level(LevelFilter::Debug),
-            _ => set_log_level(LevelFilter::Trace),
-        }
+
+    // Process `-v`-style verbosity arguments.
+    if args.verbose > 0 {
+        let new_level = match args.verbose {
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
+        };
+        current_log_level = current_log_level.max(new_level);
+    }
+
+    // Process "shortcut" log level arguments `--warn`, `--debug`, `--trace`.
+    if args.warn {
+        current_log_level = current_log_level.max(LevelFilter::Warn);
+    }
+    if args.debug {
+        current_log_level = current_log_level.max(LevelFilter::Debug);
+    }
+    if args.trace {
+        current_log_level = LevelFilter::Trace;
+    }
+
+    // Tell the user what log level they have enabled.
+    let binary_name = std::env::args().next();
+    let binary_name = binary_name
+        .as_deref()
+        .map(Path::new)
+        .and_then(Path::file_name)
+        .and_then(|s| s.to_str())
+        .unwrap_or("[model]");
+    println!(
+        "Current log levels enabled: {}",
+        level_to_string_list(current_log_level)
+    );
+    println!("Run {binary_name} --help -v to see more options");
+
+    // Finally, set the log level to the computed max.
+    if current_log_level != crate::log::DEFAULT_LOG_LEVEL {
+        set_log_level(current_log_level);
     }
 
     context.init_random(args.random_seed);

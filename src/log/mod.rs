@@ -60,7 +60,7 @@ use std::sync::LazyLock;
 use std::sync::{Mutex, MutexGuard};
 
 // Logging only errors by default.
-const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Error;
+pub const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Error;
 // Default module specific filters
 const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
     // `rustyline` logs are noisy.
@@ -233,9 +233,19 @@ fn get_log_configuration() -> MutexGuard<'static, LogConfiguration> {
     LOG_CONFIGURATION.lock().expect("Mutex poisoned")
 }
 
+/// This utility function takes a `level` and returns a string representation of the list of levels
+/// that will be logged if the global log level filter is set to `level`.
+pub(crate) fn level_to_string_list(level: LevelFilter) -> String {
+    let level_list = ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+    level_list[0..level as usize].join(", ")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{get_log_configuration, remove_module_filter, set_log_level, set_module_filters};
+    use super::{
+        get_log_configuration, level_to_string_list, remove_module_filter, set_log_level,
+        set_module_filters,
+    };
     use log::{error, trace, LevelFilter};
     use std::sync::{LazyLock, Mutex};
 
@@ -314,5 +324,21 @@ mod tests {
                 Some(&("ixa", LevelFilter::Debug).into())
             );
         }
+    }
+
+    #[test]
+    fn test_level_to_string_list() {
+        assert_eq!(level_to_string_list(LevelFilter::Off), "");
+        assert_eq!(level_to_string_list(LevelFilter::Error), "ERROR");
+        assert_eq!(level_to_string_list(LevelFilter::Warn), "ERROR, WARN");
+        assert_eq!(level_to_string_list(LevelFilter::Info), "ERROR, WARN, INFO");
+        assert_eq!(
+            level_to_string_list(LevelFilter::Debug),
+            "ERROR, WARN, INFO, DEBUG"
+        );
+        assert_eq!(
+            level_to_string_list(LevelFilter::Trace),
+            "ERROR, WARN, INFO, DEBUG, TRACE"
+        );
     }
 }
