@@ -122,6 +122,8 @@ mod test {
 
     #[test]
     fn test_incidence_report() {
+        let mut output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        output_dir = output_dir.join("examples/network-hhmodel/output".to_owned().clone());
         let parameters = ParametersValues {
             incubation_period: 8.0,
             infectious_period: 27.0,
@@ -129,8 +131,8 @@ mod test {
             shape: 15.0,
             infection_duration: 5.0,
             between_hh_transmission_reduction: 1.0,
-            data_dir: "examples/network-hhmodel/tests".to_owned(),
-            output_dir: "examples/network-hhmodel/tests".to_owned(),
+            data_dir: output_dir.to_str().unwrap().to_string(),
+            output_dir: output_dir.to_str().unwrap().to_string(),
         };
 
         let infected_by_out: Rc<RefCell<Vec<IncidenceReportItem>>> =
