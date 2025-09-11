@@ -9,7 +9,75 @@ use crate::{
 use log::{trace, warn};
 use rand::Rng;
 use std::any::TypeId;
-use std::cell::Ref;
+use std::cell::{Ref, RefCell};
+use std::ops::Deref;
+
+
+/// An enum like `Cow` that supports `Ref<'a, T>` as a borrow type instead of `&'a T`. Query
+/// results are wrapped in this type so that either a new collection or a reference to the inner
+/// index set can be returned.
+#[derive(Debug)]
+pub enum MaybeOwned<'a, T> {
+    Borrowed(Ref<'a, T>),
+    Owned(T),
+}
+
+impl<'a, T: PartialEq> PartialEq for MaybeOwned<'a, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+impl<'a, T: Eq> Eq for MaybeOwned<'a, T> {}
+
+impl<'a, T> MaybeOwned<'a, T> {
+    pub fn owned(t: T) -> Self {
+        MaybeOwned::Owned(t)
+    }
+
+    pub fn borrowed(r: Ref<'a, T>) -> Self {
+        MaybeOwned::Borrowed(r)
+    }
+
+    pub fn is_owned(&self) -> bool {
+        matches!(self, MaybeOwned::Owned(_))
+    }
+
+    pub fn is_borrowed(&self) -> bool {
+        matches!(self, MaybeOwned::Borrowed(_))
+    }
+
+    pub fn into_owned(self) -> T
+    where
+        T: Clone,
+    {
+        match self {
+            MaybeOwned::Owned(o) => o,
+            MaybeOwned::Borrowed(r) => r.clone(),
+        }
+    }
+}
+
+impl<'a, P> MaybeOwned<'a, HashSet<P>>
+    where P: Clone,
+{
+    pub fn to_owned_vec(&self) -> Vec<P> {
+        match self {
+            MaybeOwned::Owned(o) => o.iter().cloned().collect(),
+            MaybeOwned::Borrowed(r) => r.iter().cloned().collect(),
+        }
+    }
+}
+
+impl<'a, T> Deref for MaybeOwned<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MaybeOwned::Borrowed(r) => &*r,
+            MaybeOwned::Owned(ref o) => o,
+        }
+    }
+}
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -64,7 +132,7 @@ pub trait ContextPeopleExt {
     /// to use the automatic syntax that implements [Query] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+    fn query_people<Q: Query>(&self, query: Q) -> MaybeOwned<HashSet<PersonId>>;
 
     /// Get the count of all people matching a given set of criteria.
     ///
@@ -77,19 +145,19 @@ pub trait ContextPeopleExt {
     /// This is intended to be slightly faster than [`Context::query_people()`]
     /// because it does not need to allocate a list. We haven't actually
     /// measured it, so the difference may be modest if any.
-    fn query_people_count<T: Query>(&self, q: T) -> usize;
+    fn query_people_count<Q: Query>(&self, query: Q) -> usize;
 
     /// Determine whether a person matches a given expression.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+    fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool;
 
     /// Similar to `match_person`, but more efficient, it removes people
     /// from a list who do not match the given query. Note that this
     /// method modifies the vector in-place, so it is up to the caller
     /// to clone the vector if they don't want to modify their original
     /// vector.
-    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
+    fn filter_people<Q: Query>(&self, people: &mut Vec<PersonId>, query: Q);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
@@ -99,7 +167,7 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     ///
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_person<R: RngId + 'static, Q: Query>(&self, rng_id: R, query: Q) -> Option<PersonId>
     where
         R::RngType: Rng;
 
@@ -107,10 +175,10 @@ pub trait ContextPeopleExt {
     /// Returns an empty list if no people match the query.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn sample_people<R: RngId + 'static, T: Query>(
+    fn sample_people<R: RngId + 'static, Q: Query>(
         &self,
         rng_id: R,
-        query: T,
+        query: Q,
         n: usize,
     ) -> Vec<PersonId>
     where
@@ -254,36 +322,71 @@ impl ContextPeopleExt for Context {
         data_container.set_property_indexed(true, property);
     }
 
-    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId> {
-        T::setup(&q, self);
-        let mut result = Vec::new();
+    fn query_people<Q: Query>(&self, query: Q) -> MaybeOwned<HashSet<PersonId>> {
+        Q::setup(&query, self);
+        let data_container = self.get_data(PeoplePlugin);
+
+        // The fast path for queries that are indexed.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            data_container.index_unindexed_people_for_type_id(self, multi_property_id);
+
+            let borrowed_indexes = RefCell::borrow(&data_container.property_indexes);
+            if let Ok(people_ref) = Ref::filter_map(
+                borrowed_indexes,
+                |indexes| {
+                    if let Some(index) = indexes.get(&multi_property_id) {
+                        let value = query.multi_property_value_hash();
+                        index.get_with_hash(value)
+                    } else { None }
+                }
+            ) {
+                return MaybeOwned::Borrowed(people_ref);
+            }
+        }
+
+        let mut result = HashSet::default();
         self.query_people_internal(
             |person| {
-                result.push(person);
+                result.insert(person);
             },
-            q,
+            query,
         );
-        result
+
+        MaybeOwned::Owned(result)
     }
 
-    fn query_people_count<T: Query>(&self, q: T) -> usize {
-        T::setup(&q, self);
+    fn query_people_count<Q: Query>(&self, query: Q) -> usize {
+        Q::setup(&query, self);
+        let data_container = self.get_data(PeoplePlugin);
+
+        // The fast path for queries that are indexed.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            data_container.index_unindexed_people_for_type_id(self, multi_property_id);
+
+            if let Some(index) = data_container.property_indexes.borrow().get(&multi_property_id){
+                let value = query.multi_property_value_hash();
+                if let Some(people_set) = index.get_with_hash(value) {
+                    return people_set.len();
+                }
+            }
+        }
+
         let mut count: usize = 0;
         self.query_people_internal(
             |_person| {
                 count += 1;
             },
-            q,
+            query,
         );
         count
     }
 
-    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
-        T::setup(&q, self);
+    fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool {
+        Q::setup(&query, self);
         // This cannot fail because someone must have been made by now.
         let data_container = self.get_data(PeoplePlugin);
 
-        let query = q.get_query();
+        let query = query.get_query();
 
         for (t, hash) in &query {
             let methods = data_container.get_methods(*t);
@@ -294,10 +397,10 @@ impl ContextPeopleExt for Context {
         true
     }
 
-    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T) {
-        T::setup(&q, self);
+    fn filter_people<Q: Query>(&self, people: &mut Vec<PersonId>, query: Q) {
+        Q::setup(&query, self);
         let data_container = self.get_data(PeoplePlugin);
-        for (t, hash) in q.get_query() {
+        for (t, hash) in query.get_query() {
             let methods = data_container.get_methods(t);
             people.retain(|person_id| hash == (*methods.indexer)(self, *person_id));
             if people.is_empty() {
@@ -379,10 +482,10 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_people<R: RngId + 'static, T: Query>(
+    fn sample_people<R: RngId + 'static, Q: Query>(
         &self,
         rng_id: R,
-        query: T,
+        query: Q,
         n: usize,
     ) -> Vec<PersonId>
     where
@@ -407,7 +510,7 @@ impl ContextPeopleExt for Context {
             return selected.into_iter().collect();
         }
 
-        T::setup(&query, self);
+        Q::setup(&query, self);
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -444,7 +547,7 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_person<R: RngId + 'static, Q: Query>(&self, rng_id: R, query: Q) -> Option<PersonId>
     where
         R::RngType: Rng,
     {
@@ -458,7 +561,7 @@ impl ContextPeopleExt for Context {
             return Some(PersonId(result));
         }
 
-        T::setup(&query, self);
+        Q::setup(&query, self);
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -954,9 +1057,10 @@ mod tests {
         let _ = context.add_person((Age, 40)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
-        let mut all_people = context.query_people(());
 
+        let mut all_people = context.query_people(()).to_owned_vec();
         let mut result = all_people.clone();
+
         context.filter_people(&mut result, (Age, 42));
         assert_eq!(result.len(), 2);
 

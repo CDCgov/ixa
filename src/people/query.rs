@@ -54,13 +54,13 @@ impl Query for () {
         Vec::new()
     }
 
+    fn multi_property_type_id(&self) -> Option<TypeId> {
+        None
+    }
+
     fn multi_property_value_hash(&self) -> HashValueType {
         let empty: &[u128] = &[];
         one_shot_128(&empty)
-    }
-
-    fn multi_property_type_id(&self) -> Option<TypeId> {
-        None
     }
 }
 
@@ -79,13 +79,42 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
         vec![T1::type_id()]
     }
 
+    fn multi_property_type_id(&self) -> Option<TypeId> {
+        // While not a "true" multi-property, it is convenient to have this method return the
+        // `TypeId` of the singleton property.
+        Some(T1::type_id())
+    }
+
     fn multi_property_value_hash(&self) -> HashValueType {
-        // This method should never be called for a single-property query.
-        unreachable!("This method should never be called for a single-property query.");
+        T1::hash_property_value(&T1::make_canonical(self.1))
+    }
+}
+
+// Implement the query version with one parameter as a singleton tuple. We split this out from the
+// `impl_query` macro to avoid applying the `SortedTuple` machinery to such a simple case and so
+// that `multi_property_type_id()` can just return `Some(T1::type_id())`.
+impl<T1: PersonProperty> Query for ((T1, T1::Value), ) {
+    fn setup(&self, context: &Context) {
+        context.register_property::<T1>();
+    }
+
+    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
+        let value = T1::make_canonical(self.0.1);
+        vec![(T1::type_id(), T1::hash_property_value(&value))]
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        vec![T1::type_id()]
     }
 
     fn multi_property_type_id(&self) -> Option<TypeId> {
-        None
+        // While not a "true" multi-property, it is convenient to have this method return the
+        // `TypeId` of the singleton property.
+        Some(T1::type_id())
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        T1::hash_property_value(&T1::make_canonical(self.0.1))
     }
 }
 
@@ -160,8 +189,8 @@ macro_rules! impl_query {
     }
 }
 
-// Implement the versions with 1..10 parameters.
-seq!(Z in 1..10 {
+// Implement the versions with 2..10 parameters. (The 1 case is implemented above.)
+seq!(Z in 2..10 {
     impl_query!(Z);
 });
 
@@ -255,9 +284,11 @@ mod tests {
     fn query_people_macro_index_second() {
         let mut context = Context::new();
         let _ = context.add_person((RiskCategory, RiskCategoryValue::High));
-        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
-        assert!(!is_property_indexed::<RiskCategory>(&context));
-        assert_eq!(people.len(), 1);
+        {
+            let people = context.query_people((RiskCategory, RiskCategoryValue::High));
+            assert!(!is_property_indexed::<RiskCategory>(&context));
+            assert_eq!(people.len(), 1);
+        }
         context.index_property(RiskCategory);
         assert!(is_property_indexed::<RiskCategory>(&context));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
@@ -271,10 +302,12 @@ mod tests {
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
 
-        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
-        assert_eq!(people.len(), 1);
-        let people = context.query_people((RiskCategory, RiskCategoryValue::Low));
-        assert_eq!(people.len(), 0);
+        {
+            let people = context.query_people((RiskCategory, RiskCategoryValue::High));
+            assert_eq!(people.len(), 1);
+            let people = context.query_people((RiskCategory, RiskCategoryValue::Low));
+            assert_eq!(people.len(), 0);
+        }
 
         context.set_person_property(person1, RiskCategory, RiskCategoryValue::Low);
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
@@ -301,10 +334,12 @@ mod tests {
         let _ = context
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategory);
-        assert!(is_property_indexed::<RiskCategory>(&context));
-        let people = context.query_people((RiskCategory, RiskCategoryValue::High));
-        assert_eq!(people.len(), 1);
+        {
+            context.index_property(RiskCategory);
+            assert!(is_property_indexed::<RiskCategory>(&context));
+            let people = context.query_people((RiskCategory, RiskCategoryValue::High));
+            assert_eq!(people.len(), 1);
+        }
 
         let _ = context
             .add_person((RiskCategory, RiskCategoryValue::High))
@@ -401,11 +436,13 @@ mod tests {
         let person = context.add_person((Age, 64)).unwrap();
         let _ = context.add_person((Age, 88)).unwrap();
 
-        // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let not_seniors = context.query_people((Senior, false));
-        let seniors = context.query_people((Senior, true));
-        assert_eq!(seniors.len(), 1, "One senior");
-        assert_eq!(not_seniors.len(), 1, "One non-senior");
+        {
+            // Age is a u8, by default integer literals are i32; the macro should cast it.
+            let not_seniors = context.query_people((Senior, false));
+            let seniors = context.query_people((Senior, true));
+            assert_eq!(seniors.len(), 1, "One senior");
+            assert_eq!(not_seniors.len(), 1, "One non-senior");
+        }
 
         context.set_person_property(person, Age, 65);
 
@@ -424,12 +461,13 @@ mod tests {
         context.index_property(Senior);
         let person = context.add_person((Age, 64)).unwrap();
         let _ = context.add_person((Age, 88)).unwrap();
-
-        // Age is a u8, by default integer literals are i32; the macro should cast it.
-        let not_seniors = context.query_people((Senior, false));
-        let seniors = context.query_people((Senior, true));
-        assert_eq!(seniors.len(), 1, "One senior");
-        assert_eq!(not_seniors.len(), 1, "One non-senior");
+        {
+            // Age is a u8, by default integer literals are i32; the macro should cast it.
+            let not_seniors = context.query_people((Senior, false));
+            let seniors = context.query_people((Senior, true));
+            assert_eq!(seniors.len(), 1, "One senior");
+            assert_eq!(not_seniors.len(), 1, "One non-senior");
+        }
 
         context.set_person_property(person, Age, 65);
 
@@ -475,34 +513,36 @@ mod tests {
             .add_person(((Age, 28), (County, 2), (Height, 160)))
             .unwrap();
 
-        // 'regular' derived property
-        let ach_people = context.query_people((Ach, (28, 2, 160)));
-        assert_eq!(ach_people.len(), 2, "Should have 2 matches");
-        assert!(ach_people.contains(&p4));
-        assert!(ach_people.contains(&p5));
+        {
+            // 'regular' derived property
+            let ach_people = context.query_people((Ach, (28, 2, 160)));
+            assert_eq!(ach_people.len(), 2, "Should have 2 matches");
+            assert!(ach_people.contains(&p4));
+            assert!(ach_people.contains(&p5));
 
-        // multi-property index
-        let age_county_height2 = context.query_people(((Age, 28), (County, 2), (Height, 160)));
-        assert_eq!(age_county_height2.len(), 2, "Should have 2 matches");
-        assert!(age_county_height2.contains(&p4));
-        assert!(age_county_height2.contains(&p5));
+            // multi-property index
+            let age_county_height2 = context.query_people(((Age, 28), (County, 2), (Height, 160)));
+            assert_eq!(age_county_height2.len(), 2, "Should have 2 matches");
+            assert!(age_county_height2.contains(&p4));
+            assert!(age_county_height2.contains(&p5));
 
-        // multi-property index with different order
-        let age_county_height3 = context.query_people(((County, 2), (Height, 160), (Age, 28)));
-        assert_eq!(age_county_height3.len(), 2, "Should have 2 matches");
-        assert!(age_county_height3.contains(&p4));
-        assert!(age_county_height3.contains(&p5));
+            // multi-property index with different order
+            let age_county_height3 = context.query_people(((County, 2), (Height, 160), (Age, 28)));
+            assert_eq!(age_county_height3.len(), 2, "Should have 2 matches");
+            assert!(age_county_height3.contains(&p4));
+            assert!(age_county_height3.contains(&p5));
 
-        // multi-property index with different order
-        let age_county_height4 = context.query_people(((Height, 160), (County, 2), (Age, 28)));
-        assert_eq!(age_county_height4.len(), 2, "Should have 2 matches");
-        assert!(age_county_height4.contains(&p4));
-        assert!(age_county_height4.contains(&p5));
+            // multi-property index with different order
+            let age_county_height4 = context.query_people(((Height, 160), (County, 2), (Age, 28)));
+            assert_eq!(age_county_height4.len(), 2, "Should have 2 matches");
+            assert!(age_county_height4.contains(&p4));
+            assert!(age_county_height4.contains(&p5));
 
-        // multi-property index with different order and different value
-        let age_county_height5 = context.query_people(((Height, 140), (County, 1), (Age, 28)));
-        assert_eq!(age_county_height5.len(), 1, "Should have 1 matches");
-        assert!(age_county_height5.contains(&p3));
+            // multi-property index with different order and different value
+            let age_county_height5 = context.query_people(((Height, 140), (County, 1), (Age, 28)));
+            assert_eq!(age_county_height5.len(), 1, "Should have 1 matches");
+            assert!(age_county_height5.contains(&p3));
+        }
 
         context.set_person_property(p2, Age, 28);
         // multi-property index again after changing the value

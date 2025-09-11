@@ -102,6 +102,26 @@ impl PeopleData {
     }
 
     pub(super) fn index_unindexed_people_for_type_id(&self, context: &Context, type_id: TypeId) {
+        {
+            // Avoid double borrowing by doing immutable check to see if a mutable borrow
+            // is necessary. We do these checks anyway, so it's just a matter of doing them
+            // earlier. We expect the typical case is that the index has already indexed the
+            // population and has nothing to do, so one could think of this as the fast path.
+            let indexes = self.property_indexes.borrow();
+            if let Some(index) = indexes.get(&type_id) {
+                if !index.is_indexed() {
+                    return;
+                }
+                let current_pop = context.get_current_population();
+                if index.max_indexed() == current_pop {
+                    return;
+                }
+            } else {
+                return;
+            };
+        }
+
+
         let mut indexes = self.property_indexes.borrow_mut();
         let Some(index) = indexes.get_mut(&type_id) else {
             return;
