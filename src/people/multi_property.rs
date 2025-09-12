@@ -1,0 +1,102 @@
+//! The utilities in this module are used by query and multi-properties so that queries
+//! having multiple properties can be resolved to an indexed multi-property if possible.
+
+use crate::hashing::{one_shot_128, HashMap};
+use crate::people::HashValueType;
+use std::any::TypeId;
+use std::cell::RefCell;
+use std::sync::{LazyLock, Mutex};
+
+/// A map from a list of `TypeId`s to the `TypeId` of the multi-property type.
+/// The list of `TypeId`s is assumed to be sorted.
+///
+/// Use `register_type_ids_to_muli_property_id()` to register a multi-property.
+static MULTI_PROPERTY_INDEX_MAP: LazyLock<Mutex<RefCell<HashMap<HashValueType, TypeId>>>> =
+    LazyLock::new(|| Mutex::new(RefCell::new(HashMap::default())));
+
+/// A method that looks up the `TypeId` of the multi-property that has the given
+/// list of `TypeId`s as its properties.
+pub fn type_ids_to_multi_property_id(type_ids: &[TypeId]) -> Option<TypeId> {
+    let hash = one_shot_128(&type_ids);
+    MULTI_PROPERTY_INDEX_MAP
+        .lock()
+        .unwrap()
+        .borrow()
+        .get(&hash)
+        .copied()
+}
+
+/// A method that registers the `TypeId` of the multi-property that has the given
+/// list of `TypeId`s as its properties.
+///
+/// Use `type_ids_to_muli_property_id()` to look up a `TypeId`.
+pub fn register_type_ids_to_muli_property_id(type_ids: &[TypeId], multi_property_id: TypeId) {
+    let hash = one_shot_128(&type_ids);
+    MULTI_PROPERTY_INDEX_MAP
+        .lock()
+        .unwrap()
+        .borrow_mut()
+        .insert(hash, multi_property_id);
+}
+
+const fn make_indices<const N: usize>() -> [usize; N] {
+    let mut arr = [0; N];
+    let mut i = 0;
+    while i < N {
+        arr[i] = i;
+        i += 1;
+    }
+    arr
+}
+
+/// Returns the indices of `keys` in sorted order.
+pub fn sorted_indices<T: Ord>(keys: &[T]) -> Vec<usize> {
+    let mut indices: Vec<usize> = (0..keys.len()).collect();
+    indices.sort_by_key(|&i| &keys[i]);
+    indices
+}
+
+/// Returns the indices of `keys` in sorted order. Does not allocate.
+pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N] {
+    let mut indices = make_indices::<N>();
+    indices.sort_by_key(|&i| &keys[i]);
+    indices
+}
+
+pub fn static_apply_reordering<T: Copy, const N: usize>(values: &mut [T; N], indices: &[usize; N]) {
+    let tmp_values: [T; N] = *values;
+    for (old_index, new_index) in indices.iter().enumerate() {
+        values[old_index] = tmp_values[*new_index];
+    }
+}
+
+/// Reorder `values` according to the sorted order of `keys`.
+/// Both slices must have the same length. Does not allocate.
+pub fn static_reorder_by_keys<T: Ord + Copy, U: Copy, const N: usize>(
+    keys: &mut [T; N],
+    values: &mut [U; N],
+) {
+    let indices: [usize; N] = static_sorted_indices(&*keys);
+    let tmp_keys: [T; N] = *keys;
+    let tmp_values: [U; N] = *values;
+
+    // Apply the permutation to values
+    for (old_index, new_index) in indices.into_iter().enumerate() {
+        values[old_index] = tmp_values[new_index];
+        keys[old_index] = tmp_keys[new_index];
+    }
+}
+
+/// Reorder `values` according to the sorted order of `keys`.
+/// Both slices are assumed to have the same length.
+pub fn reorder_by_keys<T: Ord + Copy, U: Copy>(keys: &mut [T], values: &mut [U]) {
+    let indices: Vec<usize> = sorted_indices(keys);
+    let tmp_keys = Vec::from(&*keys);
+    let tmp_values = Vec::from(&*values);
+
+    // Apply the permutation to values
+    for (old_index, new_index) in indices.into_iter().enumerate() {
+        values[old_index] = tmp_values[new_index];
+        keys[old_index] = tmp_keys[new_index];
+    }
+}

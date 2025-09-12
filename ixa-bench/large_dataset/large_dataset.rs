@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
+use ixa::define_multi_property;
 use ixa::prelude::*;
 use ixa_bench::generate_population::generate_population;
 use serde::Serialize;
@@ -49,7 +50,7 @@ fn bench_query_population_derived_property(context: &mut Context) {
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    define_multi_property_index!(Age, SchoolId, WorkplaceId);
+    define_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
     let mut context = Context::new();
     initialize(&mut context);
 
