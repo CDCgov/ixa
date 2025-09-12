@@ -3,6 +3,12 @@ use crate::{Context, PersonId};
 use serde::Serialize;
 use std::fmt::Debug;
 
+/// We factor this out and provide a blanket implementation for all types that
+/// can be value types for properties. This makes it convenient to reference
+/// `PersonPropertyValue` trait constraints.
+pub trait PersonPropertyValue: Copy + Debug + PartialEq + Serialize {}
+impl<T> PersonPropertyValue for T where T: Copy + Debug + PartialEq + Serialize {}
+
 /// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
@@ -10,7 +16,7 @@ use std::fmt::Debug;
 /// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
 /// macros.
 pub trait PersonProperty: Copy + 'static {
-    type Value: Copy + Debug + PartialEq + Serialize;
+    type Value: PersonPropertyValue;
     #[must_use]
     fn is_derived() -> bool {
         false
@@ -30,6 +36,10 @@ pub trait PersonProperty: Copy + 'static {
     fn get_instance() -> Self;
     fn name() -> &'static str;
     fn get_display(value: &Self::Value) -> String;
+
+    fn hash_property_value(value: &Self::Value) -> u128 {
+        hash_serialized_128(value)
+    }
 }
 
 #[macro_export]
@@ -209,6 +219,7 @@ macro_rules! define_derived_property {
         );
     };
 }
+use crate::hashing::hash_serialized_128;
 pub use define_derived_property;
 
 #[macro_export]
@@ -219,24 +230,22 @@ macro_rules! define_multi_property_index {
         $crate::paste::paste! {
             define_derived_property!(
                 [< $($dependency)+ Query >],
-                $crate::people::IndexValue,
+                $crate::people::HashValueType,
                 [$($dependency),+],
                 |$([< $dependency:lower >]),+| {
-                    let mut combined = vec!(
+                    let combined = vec!(
                         $(
                             (std::any::TypeId::of::<$dependency>(),
-                            $crate::people::IndexValue::compute(&[< $dependency:lower >]))
+                            $dependency::hash_property_value(&[< $dependency:lower >]))
                         ),*
                     );
-                    combined.sort_by(|a, b| a.0.cmp(&b.0));
-                    let values = combined.iter().map(|x| x.1).collect::<Vec<_>>();
-                    $crate::people::IndexValue::compute(&values)
+                    $crate::people::index::get_multi_property_value_hash(&combined)
                 }
             );
 
-            $crate::people::add_multi_property_index::<[< $($dependency)+ Query >]>(
+            $crate::people::index::add_multi_property_index::<[< $($dependency)+ Query >]>(
                 #[allow(clippy::useless_vec)]
-                &vec![
+                &mut vec![
                     $(
                         std::any::TypeId::of::<$dependency>(),
                     )*

@@ -3,7 +3,6 @@ use crate::people::PeoplePlugin;
 use crate::IxaError;
 use crate::PersonId;
 use crate::{Context, PluginContext};
-use crate::{HashMap, HashMapExt};
 use std::any::TypeId;
 
 #[cfg_attr(not(feature = "web_api"), allow(dead_code))]
@@ -44,8 +43,8 @@ pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
         let data_container = self.get_data(PeoplePlugin);
 
         let mut index = data_container.get_index_ref_mut(type_id).unwrap();
-        if index.lookup.is_none() {
-            index.lookup = Some(HashMap::new());
+        if !index.is_indexed() {
+            index.set_indexed(true);
         }
     }
 

@@ -1,5 +1,4 @@
-use crate::people::index::IndexValue;
-use crate::{Context, ContextPeopleExt, PersonProperty};
+use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
 
@@ -10,13 +9,13 @@ use std::any::TypeId;
 /// to the caller. Do not use this trait directly.
 pub trait Query: Copy {
     fn setup(&self, context: &Context);
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)>;
+    fn get_query(&self) -> Vec<(TypeId, HashValueType)>;
 }
 
 impl Query for () {
     fn setup(&self, _: &Context) {}
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
         vec![]
     }
 }
@@ -27,8 +26,8 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
         context.register_property::<T1>();
     }
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
-        vec![(std::any::TypeId::of::<T1>(), IndexValue::compute(&self.1))]
+    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
+        vec![(TypeId::of::<T1>(), T1::hash_property_value(&self.1))]
     }
 }
 
@@ -52,10 +51,10 @@ macro_rules! impl_query {
                     )*
                 }
 
-                fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+                fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
                     let mut ordered_items = vec![
                     #(
-                        (std::any::TypeId::of::<T~N>(), IndexValue::compute(&self.N.1)),
+                        (std::any::TypeId::of::<T~N>(), T~N::hash_property_value(&self.N.1)),
                     )*
                     ];
                     ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -113,7 +112,7 @@ where
         Q2::setup(&self.queries.1, context);
     }
 
-    fn get_query(&self) -> Vec<(TypeId, IndexValue)> {
+    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
         let mut query = Vec::new();
         query.extend_from_slice(&self.queries.0.get_query());
         query.extend_from_slice(&self.queries.1.get_query());
@@ -128,7 +127,7 @@ mod tests {
     use crate::people::{Query, QueryAnd};
     use crate::{
         define_derived_property, define_multi_property_index, define_person_property, Context,
-        ContextPeopleExt,
+        ContextPeopleExt, PersonProperty,
     };
     use serde_derive::Serialize;
     use std::any::TypeId;
@@ -194,18 +193,19 @@ mod tests {
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
         context.index_property(RiskCategory);
-        assert!(property_is_indexed::<RiskCategory>(&context));
+        assert!(is_property_indexed::<RiskCategory>(&context));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
 
-    fn property_is_indexed<T: 'static>(context: &Context) -> bool {
-        context
-            .get_data(PeoplePlugin)
-            .get_index_ref(TypeId::of::<T>())
-            .unwrap()
-            .lookup
-            .is_some()
+    fn is_property_indexed<T: PersonProperty>(context: &Context) -> bool {
+        let container = context.get_data(PeoplePlugin);
+        container
+            .property_indexes
+            .borrow()
+            .get(&TypeId::of::<T>())
+            .and_then(|index| Some(index.is_indexed()))
+            .unwrap_or(false)
     }
 
     #[test]
@@ -213,10 +213,10 @@ mod tests {
         let mut context = Context::new();
         let _ = context.add_person((RiskCategory, RiskCategoryValue::High));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
-        assert!(!property_is_indexed::<RiskCategory>(&context));
+        assert!(!is_property_indexed::<RiskCategory>(&context));
         assert_eq!(people.len(), 1);
         context.index_property(RiskCategory);
-        assert!(property_is_indexed::<RiskCategory>(&context));
+        assert!(is_property_indexed::<RiskCategory>(&context));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
@@ -247,7 +247,7 @@ mod tests {
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
         context.index_property(RiskCategory);
-        assert!(property_is_indexed::<RiskCategory>(&context));
+        assert!(is_property_indexed::<RiskCategory>(&context));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
     }
@@ -259,7 +259,7 @@ mod tests {
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
         context.index_property(RiskCategory);
-        assert!(property_is_indexed::<RiskCategory>(&context));
+        assert!(is_property_indexed::<RiskCategory>(&context));
         let people = context.query_people((RiskCategory, RiskCategoryValue::High));
         assert_eq!(people.len(), 1);
 
