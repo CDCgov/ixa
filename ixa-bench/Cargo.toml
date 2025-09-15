@@ -12,6 +12,13 @@ authors.workspace = true
 [package.metadata.release]
 release = false
 
+[features]
+default = []
+
+# This option includes benchmarks for algorithms we do not use in ixa.
+# This allows us to compare our implementations to alternatives.
+alternative_algorithm_benches = []
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile.workspace = true
@@ -24,7 +31,6 @@ ixa_example_births_deaths = { path = "../examples/births-deaths" }
 [dependencies]
 serde.workspace = true
 rand.workspace = true
-
 
 [lib]
 bench = false
@@ -45,4 +51,14 @@ harness = false
 [[bench]]
 name = "large_dataset"
 path = "large_dataset/large_dataset.rs"
+harness = false
+
+[[bench]]
+name = "index"
+path = "index/index_benches.rs"
+harness = false
+
+[[bench]]
+name = "algorithms"
+path = "algorithms/algorithm_benches.rs"
 harness = false

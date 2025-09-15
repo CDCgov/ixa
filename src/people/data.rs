@@ -84,9 +84,6 @@ impl PeopleData {
         let mut indexes = self.property_indexes.borrow_mut();
         indexes.entry(T::type_id()).and_modify(|index| {
             if index.is_indexed() {
-                // ToDo(ap59): The following invariant is no longer true for multi-properties.
-                // Only an `Index<T>` can be the value for key `TypeId::of::<T>()`, so unwrap
-                // is infallible.
                 let index = index.as_any_mut().downcast_mut::<Index<T>>().unwrap();
                 index.add_person(&value, person_id);
             }
@@ -120,7 +117,6 @@ impl PeopleData {
                 return;
             };
         }
-
 
         let mut indexes = self.property_indexes.borrow_mut();
         let Some(index) = indexes.get_mut(&type_id) else {

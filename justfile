@@ -161,8 +161,8 @@ test:
 
 # Run all benchmarks
 [group('Bench')]
-bench:
-    cargo bench -p ixa-bench
+bench *ARGS:
+    cargo bench -p ixa-bench -- {{ARGS}}
 
 # Create a new named benchmark baseline
 [group('Bench')]

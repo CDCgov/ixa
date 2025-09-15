@@ -2,7 +2,7 @@ use crate::hashing::{one_shot_128, HashMap};
 use crate::people::multi_property::{
     static_apply_reordering, static_sorted_indices, type_ids_to_multi_property_id,
 };
-use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
+use crate::{people::HashValueType, Context, ContextPeopleExt, PersonId, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
 use std::sync::{Mutex, OnceLock};
@@ -41,6 +41,8 @@ pub trait Query: Copy + 'static {
     }
 
     fn multi_property_value_hash(&self) -> HashValueType;
+
+    fn match_person(&self, person_id: PersonId, context: &Context) -> bool;
 }
 
 impl Query for () {
@@ -61,6 +63,10 @@ impl Query for () {
     fn multi_property_value_hash(&self) -> HashValueType {
         let empty: &[u128] = &[];
         one_shot_128(&empty)
+    }
+
+    fn match_person(&self, _: PersonId, _: &Context) -> bool {
+        true
     }
 }
 
@@ -88,18 +94,22 @@ impl<T1: PersonProperty> Query for (T1, T1::Value) {
     fn multi_property_value_hash(&self) -> HashValueType {
         T1::hash_property_value(&T1::make_canonical(self.1))
     }
+
+    fn match_person(&self, person_id: PersonId, context: &Context) -> bool {
+        self.1 == context.get_person_property(person_id, T1::get_instance())
+    }
 }
 
 // Implement the query version with one parameter as a singleton tuple. We split this out from the
 // `impl_query` macro to avoid applying the `SortedTuple` machinery to such a simple case and so
 // that `multi_property_type_id()` can just return `Some(T1::type_id())`.
-impl<T1: PersonProperty> Query for ((T1, T1::Value), ) {
+impl<T1: PersonProperty> Query for ((T1, T1::Value),) {
     fn setup(&self, context: &Context) {
         context.register_property::<T1>();
     }
 
     fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        let value = T1::make_canonical(self.0.1);
+        let value = T1::make_canonical(self.0 .1);
         vec![(T1::type_id(), T1::hash_property_value(&value))]
     }
 
@@ -114,7 +124,11 @@ impl<T1: PersonProperty> Query for ((T1, T1::Value), ) {
     }
 
     fn multi_property_value_hash(&self) -> HashValueType {
-        T1::hash_property_value(&T1::make_canonical(self.0.1))
+        T1::hash_property_value(&T1::make_canonical(self.0 .1))
+    }
+
+    fn match_person(&self, person_id: PersonId, context: &Context) -> bool {
+        self.0 .1 == context.get_person_property(person_id, T1::get_instance())
     }
 }
 
@@ -182,6 +196,15 @@ macro_rules! impl_query {
                     static_apply_reordering(&mut values, &indices);
                     let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
                     one_shot_128(&data.as_slice())
+                }
+
+                fn match_person(&self, person_id: PersonId, context: &Context) -> bool {
+                    #(
+                        if self.N.1 != context.get_person_property(person_id, T~N::get_instance()) {
+                            return false;
+                        }
+                    )*
+                    true
                 }
 
             }

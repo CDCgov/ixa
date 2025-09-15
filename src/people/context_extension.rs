@@ -7,11 +7,10 @@ use crate::{
     PersonProperty, PersonPropertyChangeEvent, RngId, Tabulator,
 };
 use log::{trace, warn};
-use rand::Rng;
-use std::any::TypeId;
+use rand::{seq::index::sample as choose_range, Rng};
+use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
-
 
 /// An enum like `Cow` that supports `Ref<'a, T>` as a borrow type instead of `&'a T`. Query
 /// results are wrapped in this type so that either a new collection or a reference to the inner
@@ -22,12 +21,15 @@ pub enum MaybeOwned<'a, T> {
     Owned(T),
 }
 
-impl<'a, T: PartialEq> PartialEq for MaybeOwned<'a, T> {
+impl<'a, T: PartialEq> PartialEq for MaybeOwned<'a, T>
+where
+    T: PartialEq,
+{
     fn eq(&self, other: &Self) -> bool {
-        self == other
+        self.deref() == other.deref()
     }
 }
-impl<'a, T: Eq> Eq for MaybeOwned<'a, T> {}
+impl<'a, T: Eq> Eq for MaybeOwned<'a, T> where T: Eq {}
 
 impl<'a, T> MaybeOwned<'a, T> {
     pub fn owned(t: T) -> Self {
@@ -58,7 +60,8 @@ impl<'a, T> MaybeOwned<'a, T> {
 }
 
 impl<'a, P> MaybeOwned<'a, HashSet<P>>
-    where P: Clone,
+where
+    P: Clone,
 {
     pub fn to_owned_vec(&self) -> Vec<P> {
         match self {
@@ -73,7 +76,7 @@ impl<'a, T> Deref for MaybeOwned<'a, T> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            MaybeOwned::Borrowed(r) => &*r,
+            MaybeOwned::Borrowed(r) => r,
             MaybeOwned::Owned(ref o) => o,
         }
     }
@@ -331,15 +334,14 @@ impl ContextPeopleExt for Context {
             data_container.index_unindexed_people_for_type_id(self, multi_property_id);
 
             let borrowed_indexes = RefCell::borrow(&data_container.property_indexes);
-            if let Ok(people_ref) = Ref::filter_map(
-                borrowed_indexes,
-                |indexes| {
-                    if let Some(index) = indexes.get(&multi_property_id) {
-                        let value = query.multi_property_value_hash();
-                        index.get_with_hash(value)
-                    } else { None }
+            if let Ok(people_ref) = Ref::filter_map(borrowed_indexes, |indexes| {
+                if let Some(index) = indexes.get(&multi_property_id) {
+                    let value = query.multi_property_value_hash();
+                    index.get_with_hash(value)
+                } else {
+                    None
                 }
-            ) {
+            }) {
                 return MaybeOwned::Borrowed(people_ref);
             }
         }
@@ -363,7 +365,11 @@ impl ContextPeopleExt for Context {
         if let Some(multi_property_id) = query.multi_property_type_id() {
             data_container.index_unindexed_people_for_type_id(self, multi_property_id);
 
-            if let Some(index) = data_container.property_indexes.borrow().get(&multi_property_id){
+            if let Some(index) = data_container
+                .property_indexes
+                .borrow()
+                .get(&multi_property_id)
+            {
                 let value = query.multi_property_value_hash();
                 if let Some(people_set) = index.get_with_hash(value) {
                     return people_set.len();
@@ -383,18 +389,7 @@ impl ContextPeopleExt for Context {
 
     fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool {
         Q::setup(&query, self);
-        // This cannot fail because someone must have been made by now.
-        let data_container = self.get_data(PeoplePlugin);
-
-        let query = query.get_query();
-
-        for (t, hash) in &query {
-            let methods = data_container.get_methods(*t);
-            if *hash != (*methods.indexer)(self, person_id) {
-                return false;
-            }
-        }
-        true
+        query.match_person(person_id, self)
     }
 
     fn filter_people<Q: Query>(&self, people: &mut Vec<PersonId>, query: Q) {
@@ -491,26 +486,65 @@ impl ContextPeopleExt for Context {
     where
         R::RngType: Rng,
     {
-        let requested = std::cmp::min(n, self.get_current_population());
+        let current_population = self.get_current_population();
+
+        let requested = std::cmp::min(n, current_population);
         if requested == 0 {
             warn!(
                 "Requested a sample of {} people from a population of {}",
-                n,
-                self.get_current_population()
+                n, current_population
             );
             return Vec::new();
         }
+
         // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let mut selected = HashSet::new();
-            while selected.len() < requested {
-                let result = self.sample_range(rng_id, 0..self.get_current_population());
-                selected.insert(PersonId(result));
-            }
-            return selected.into_iter().collect();
+        if query.type_id() == TypeId::of::<()>() {
+            let selected = self
+                .sample(rng_id, |rng| {
+                    choose_range(rng, current_population, requested)
+                        .into_iter()
+                        .map(PersonId)
+                })
+                .collect();
+            return selected;
         }
 
         Q::setup(&query, self);
+
+        // Check if this query is indexed.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            let container = self.get_data(PeoplePlugin);
+            if let Some(index) = container.property_indexes.borrow().get(&multi_property_id) {
+                let people_set = index.get_with_hash(query.multi_property_value_hash());
+                if let Some(people_set) = people_set {
+                    if people_set.len() <= requested {
+                        return people_set.iter().copied().collect();
+                    }
+
+                    let mut indexes = Vec::with_capacity(requested);
+                    indexes.extend(self.sample(rng_id, |rng| {
+                        choose_range(rng, people_set.len(), requested).into_iter()
+                    }));
+                    indexes.sort_unstable();
+                    let mut index_iterator = indexes.into_iter();
+                    let mut next_idx = index_iterator.next().unwrap();
+                    let mut selected = Vec::with_capacity(requested);
+
+                    for (idx, person_id) in people_set.iter().enumerate() {
+                        if idx == next_idx {
+                            selected.push(*person_id);
+                            if let Some(i) = index_iterator.next() {
+                                next_idx = i;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    return selected;
+                }
+            }
+        }
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -551,17 +585,32 @@ impl ContextPeopleExt for Context {
     where
         R::RngType: Rng,
     {
-        if self.get_current_population() == 0 {
+        let current_population = self.get_current_population();
+
+        if current_population == 0 {
+            warn!("Requested a sample person from an empty population");
             return None;
         }
 
         // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let result = self.sample_range(rng_id, 0..self.get_current_population());
+        if query.type_id() == TypeId::of::<()>() {
+            let result = self.sample_range(rng_id, 0..current_population);
             return Some(PersonId(result));
         }
 
         Q::setup(&query, self);
+
+        // Check if this query is indexed.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            let container = self.get_data(PeoplePlugin);
+            if let Some(index) = container.property_indexes.borrow().get(&multi_property_id) {
+                let people_set = index.get_with_hash(query.multi_property_value_hash());
+                if let Some(people_set) = people_set {
+                    let result = self.sample_range(rng_id, 0..people_set.len());
+                    return Some(*people_set.iter().nth(result).unwrap());
+                }
+            }
+        }
 
         // This function implements "Algorithm L" from KIM-HUNG LI
         // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -653,9 +702,9 @@ impl ContextPeopleExtInternal for Context {
             }
         }
 
-        // 3. Create an iterator over people, based one either:
-        //    (1) the smallest index if there is one.
-        //    (2) the overall population if there are no indices.
+        // 3. Create an iterator over people, based on either:
+        //    (1) the smallest index if there is one
+        //    (2) the overall population if there are no indices
 
         let holder: Ref<HashSet<PersonId>>;
         let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {

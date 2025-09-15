@@ -18,7 +18,6 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
     for person_id in people {
         let household_id = context.get_person_property(*person_id, HouseholdId);
         if households.insert(household_id) {
-            
             let mut members = {
                 let members = context.query_people((HouseholdId, household_id));
                 members.to_owned_vec()
