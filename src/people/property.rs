@@ -239,11 +239,11 @@ macro_rules! define_multi_property_index {
                             $dependency::hash_property_value(&[< $dependency:lower >]))
                         ),*
                     );
-                    $crate::people::index::get_multi_property_value_hash(&combined)
+                    $crate::people::get_multi_property_value_hash(&combined)
                 }
             );
 
-            $crate::people::index::add_multi_property_index::<[< $($dependency)+ Query >]>(
+            $crate::people::add_multi_property_index::<[< $($dependency)+ Query >]>(
                 #[allow(clippy::useless_vec)]
                 &mut vec![
                     $(
