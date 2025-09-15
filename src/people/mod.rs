@@ -83,7 +83,7 @@ pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
-pub use index::{add_multi_property_index, Index};
+pub use index::{add_multi_property_index, get_multi_property_value_hash, Index};
 pub use property::{
     define_derived_property, define_person_property, define_person_property_with_default,
     PersonProperty,
