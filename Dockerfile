@@ -6,10 +6,22 @@ RUN apt-get update && apt-get install -y curl
 RUN curl https://raw.githubusercontent.com/CDCgov/ocio-certificates/refs/heads/main/data/min-cdc-bundle-ca.crt | tee /usr/local/share/ca-certificates/min-cdc-bundle-ca.crt >/dev/null
 RUN update-ca-certificates
 
+# install missing dependencies for building some crates
+RUN apt-get update &&  apt install libssl-dev pkg-config unzip -y
+
+
 # Create a user to avoid running as root
 RUN useradd -m runner
+
 USER runner
 WORKDIR /home/runner/ixa
+
+# Copy ixa_setup.sh script to /home/runner and make it executable
+COPY scripts/ixa_setup.sh /home/runner/ixa_setup.sh
+#RUN chmod +x /home/runner/ixa_setup.sh
+
+# Install just for task running
+RUN cargo install just
 
 ## Local repo will be mounted at runtime, not copied
 
