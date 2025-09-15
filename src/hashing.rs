@@ -12,11 +12,13 @@
 //! `HashMapExt` trait extension. Similarly, for `HashSet` and `HashSetExt`.The traits need only be
 //! in scope.
 //!
-//! The `hash_usize` free function is a convenience function used in `crate::random::get_rng`.
 
+use bincode::serde::encode_to_vec as serialize_to_vec;
 pub use rustc_hash::FxHashMap as HashMap;
 pub use rustc_hash::FxHashSet as HashSet;
-use std::hash::Hasher;
+use serde::Serialize;
+use std::hash::{Hash, Hasher};
+use xxhash_rust::xxh3::Xxh3Default;
 
 /// Provides API parity with `std::collections::HashMap`.
 pub trait HashMapExt {
@@ -47,4 +49,60 @@ pub fn hash_str(data: &str) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();
     hasher.write(data.as_bytes());
     hasher.finish()
+}
+
+// Helper for any T: Hash
+pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
+    let mut h = Xxh3Default::default();
+    value.hash(&mut h);
+    h.digest128()
+}
+
+pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
+    let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
+    // The `xxh3_128` should be a little faster, but it is not guaranteed to produce the same hash.
+    // xxh3_128(serialized.as_slice())
+    one_shot_128(&serialized.as_slice())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hash_serialized_equals_one_shot() {
+        let value = "hello";
+        let a = hash_serialized_128(value);
+        let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
+        let b = one_shot_128(&serialized.as_slice());
+
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn hashes_strings() {
+        let a = one_shot_128(&"hello");
+        let b = one_shot_128(&"hello");
+        let c = one_shot_128(&"world");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn hashes_structs() {
+        #[derive(Hash)]
+        struct S {
+            x: u32,
+            y: String,
+        }
+        let h1 = one_shot_128(&S {
+            x: 1,
+            y: "a".into(),
+        });
+        let h2 = one_shot_128(&S {
+            x: 1,
+            y: "a".into(),
+        });
+        assert_eq!(h1, h2);
+    }
 }

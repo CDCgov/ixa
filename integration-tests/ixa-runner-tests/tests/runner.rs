@@ -15,7 +15,11 @@ mod tests {
             .args(["-a", "42", "--no-stats"])
             .assert()
             .success()
-            .stdout("42\n");
+            .stdout(
+                "Current log levels enabled: ERROR
+Run runner_test_custom_args --help -v to see more options
+42\n",
+            );
     }
 
     #[test]

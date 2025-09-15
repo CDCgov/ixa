@@ -83,7 +83,7 @@ pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
-pub use index::{add_multi_property_index, Index, IndexValue};
+pub use index::{add_multi_property_index, get_multi_property_value_hash, Index};
 pub use property::{
     define_derived_property, define_person_property, define_person_property_with_default,
     PersonProperty,
@@ -95,6 +95,8 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
 use std::{any::TypeId, hash::Hash};
+
+pub type HashValueType = u128;
 
 define_data_plugin!(
     PeoplePlugin,
