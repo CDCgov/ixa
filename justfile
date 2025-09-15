@@ -73,7 +73,7 @@ install-prettier:
 [group('Ixa Book & Docs')]
 build-docs:
     # Generate `docs/cli-usage.md`
-    cargo run --example basic-infection -- --markdown-help
+    cargo run --features write_cli_usage --example basic-infection -- --markdown-help
     cargo doc --no-deps --target-dir website/
 
 # Build the Ixa Book into website/book/

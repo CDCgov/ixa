@@ -83,6 +83,9 @@ debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 progress_bar = ["dep:progress_bar", "anyhow"]
 
+# Only used to write `cli-usage.md` from clap-generated docs.
+write_cli_usage = ["clap-markdown"]
+
 [dependencies]
 approx.workspace = true # Macros
 bincode.workspace = true
@@ -107,8 +110,7 @@ xxhash-rust.workspace = true
 rustc-hash.workspace = true
 
 # Building docs
-[target.'cfg(debug_assertions)'.dependencies]
-clap-markdown.workspace = true
+clap-markdown = { workspace = true, optional = true }
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

@@ -13,9 +13,9 @@ use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
-use crate::{info, set_log_level, set_module_filters, warn, LevelFilter};
+use crate::{set_log_level, set_module_filters, warn, LevelFilter};
 use clap::{ArgAction, Args, Command, FromArgMatches as _};
-#[cfg(debug_assertions)]
+#[cfg(feature = "write_cli_usage")]
 use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
 
 /// Custom parser for log levels
@@ -39,7 +39,7 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
 /// Default cli arguments for ixa runner
 #[derive(Args, Debug)]
 pub struct BaseArgs {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "write_cli_usage")]
     /// Print help in Markdown format. This is enabled only for debug builds. Run an example with
     /// `--markdown-help`, and the file `docs/cli-usage.md` will be written. This file is then
     /// included in the crate-level docs. See `src/lib.rs`.
@@ -76,14 +76,12 @@ pub struct BaseArgs {
         action = ArgAction::Count,
         long_help = r#"Increase logging verbosity (-v, -vv, -vvv, etc.)
 
-  ┌─────────┬───────┬──────┬───────┬───────┬───────┐
-  │ Level   │ ERROR │ WARN │ INFO  │ DEBUG │ TRACE │
-  ├─────────┼───────┼──────┼───────┼───────┼───────┤
-  │ Default │   ✓   │      │       │       │       │
-  │ -v      │   ✓   │  ✓   │   ✓   │       │       │
-  │ -vv     │   ✓   │  ✓   │   ✓   │   ✓   │       │
-  │ -vvv    │   ✓   │  ✓   │   ✓   │   ✓   │   ✓   │
-  └─────────┴───────┴──────┴───────┴───────┴───────┘
+| Level   | ERROR | WARN | INFO | DEBUG | TRACE |
+|---------|-------|------|------|-------|-------|
+| Default |   ✓   |      |      |       |       |
+| -v      |   ✓   |  ✓   |  ✓   |       |       |
+| -vv     |   ✓   |  ✓   |  ✓   |   ✓   |       |
+| -vvv    |   ✓   |  ✓   |  ✓   |   ✓   |   ✓   |
 "#)]
     pub verbose: u8,
 
@@ -119,7 +117,7 @@ pub struct BaseArgs {
 impl BaseArgs {
     fn new() -> Self {
         BaseArgs {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "write_cli_usage")]
             markdown_help: false,
             random_seed: 0,
             config: None,
@@ -207,7 +205,7 @@ fn run_with_args_internal<A, F>(
 where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "write_cli_usage")]
     // Output help to a markdown file
     if args.markdown_help {
         let cli = create_ixa_cli();

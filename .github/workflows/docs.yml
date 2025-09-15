@@ -31,7 +31,7 @@ jobs:
 
       - name: Build and Run CLI Binary
         # Writes out the file `docs/cli-usage.md`, which is included the crate-level docs.
-        run: cargo run --example basic-infection -- --markdown-help
+        run: cargo run --features write_cli_usage --example basic-infection -- --markdown-help
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
