@@ -1,6 +1,5 @@
 use crate::population_loader::{Age, RiskCategoryValue};
 use ixa::prelude::*;
-use ixa::prelude_for_plugins::*;
 use serde_derive::Serialize;
 
 define_rng!(VaccineRng);

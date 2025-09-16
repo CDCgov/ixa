@@ -7,7 +7,7 @@
 //! data which will be stored along with the edge.
 use crate::{
     context::Context, define_data_plugin, error::IxaError, people::PersonId,
-    random::ContextRandomExt, random::RngId, HashMap, PluginContext,
+    random::ContextRandomExt, random::RngId, ContextBase, HashMap,
 };
 use rand::Rng;
 use std::any::{Any, TypeId};
@@ -180,7 +180,7 @@ macro_rules! define_edge_type {
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
 // Public API.
-pub trait ContextNetworkExt: PluginContext + ContextRandomExt {
+pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     /// Add an edge of type `T` between `person` and `neighbor` with a
     /// given `weight`.  `inner` is a value of whatever type is
     /// associated with `T`.

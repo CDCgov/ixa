@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::hashing::hash_str;
-use crate::{define_data_plugin, HashMap, HashMapExt, PluginContext};
+use crate::{define_data_plugin, ContextBase, HashMap, HashMapExt};
 use log::trace;
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::distributions::WeightedIndex;
@@ -69,7 +69,7 @@ define_data_plugin!(
 /// Gets a mutable reference to the random number generator associated with the given
 /// `RngId`. If the Rng has not been used before, one will be created with the base seed
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
-fn get_rng<R: RngId + 'static>(context: &impl PluginContext) -> RefMut<R::RngType> {
+fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
     let data_container = context.get_data(RngPlugin);
 
     let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
@@ -99,7 +99,7 @@ fn get_rng<R: RngId + 'static>(context: &impl PluginContext) -> RefMut<R::RngTyp
 
 // This is a trait extension on Context for
 // random number generation functionality.
-pub trait ContextRandomExt: PluginContext {
+pub trait ContextRandomExt: ContextBase {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
     fn init_random(&mut self, base_seed: u64) {
