@@ -281,7 +281,9 @@ prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack te
 # Docker testing in container
 ########################################
 
-# Run bench in Docker
-docker-run:
+# Run in Docker, mounting the current directory and passing all args to the container
+# Example: just docker-run cargo test
+# Example: just docker-run just test
+docker-run *args:
     docker build -t ixa-bench .
-    docker run --rm -it -v "$PWD":/home/runner/ixa ixa-bench
+    docker run --rm -it -v "$PWD":/home/runner/ixa ixa-bench {{args}}
