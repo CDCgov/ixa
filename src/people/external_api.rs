@@ -2,11 +2,11 @@ use crate::people::ContextPeopleExt;
 use crate::people::PeoplePlugin;
 use crate::IxaError;
 use crate::PersonId;
-use crate::{Context, PluginContext};
+use crate::{Context, ContextBase};
 use std::any::TypeId;
 
 #[cfg_attr(not(feature = "web_api"), allow(dead_code))]
-pub(crate) trait ContextPeopleExtCrate: PluginContext + ContextPeopleExt {
+pub(crate) trait ContextPeopleExtCrate: ContextBase + ContextPeopleExt {
     // Note: We can't do a default implementation here because
     // it uses callbacks that take a &Context
     fn get_person_property_by_name(

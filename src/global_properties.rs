@@ -17,7 +17,7 @@
 //! Global properties can be read with [`Context::get_global_property_value()`]
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::{define_data_plugin, trace, HashMap, HashMapExt, PluginContext};
+use crate::{define_data_plugin, trace, ContextBase, HashMap, HashMapExt};
 use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
@@ -188,7 +188,7 @@ impl GlobalPropertiesDataContainer {
     }
 }
 
-pub trait ContextGlobalPropertiesExt: PluginContext {
+pub trait ContextGlobalPropertiesExt: ContextBase {
     /// Set the value of a global property of type T
     ///
     /// # Errors

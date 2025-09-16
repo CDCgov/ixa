@@ -3,7 +3,7 @@ use crate::error::IxaError;
 use crate::people::ContextPeopleExt;
 use crate::{define_data_plugin, Tabulator};
 use crate::{error, trace};
-use crate::{HashMap, HashMapExt, PluginContext};
+use crate::{ContextBase, HashMap, HashMapExt};
 use csv::Writer;
 use serde::Serializer;
 use std::any::TypeId;
@@ -125,7 +125,7 @@ define_data_plugin!(
     }
 );
 
-pub trait ContextReportExt: PluginContext {
+pub trait ContextReportExt: ContextBase {
     // Builds the filename. Called by `add_report`, `short_name` refers to the
     // report type. The three main components are `prefix`, `directory`, and
     // `short_name`.

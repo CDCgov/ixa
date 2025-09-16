@@ -40,7 +40,10 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/cli-usage.md"))]
 
 pub mod context;
-pub use context::{Context, ExecutionPhase, IxaEvent, PluginContext};
+pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
+
+mod plugin_context;
+pub use plugin_context::PluginContext;
 
 mod data_plugin;
 pub use data_plugin::*;
@@ -105,7 +108,7 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub mod prelude;
 
 pub mod prelude_for_plugins {
-    pub use crate::context::PluginContext;
+    pub use crate::context::ContextBase;
     pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;

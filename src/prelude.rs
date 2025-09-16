@@ -14,3 +14,4 @@ pub use crate::network::ContextNetworkExt;
 pub use crate::people::ContextPeopleExt;
 pub use crate::random::ContextRandomExt;
 pub use crate::report::ContextReportExt;
+pub use crate::PluginContext;

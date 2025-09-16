@@ -71,7 +71,7 @@ pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
 pub trait DataPlugin: Any {
     type DataContainer;
 
-    fn init(context: &impl PluginContext) -> Self::DataContainer;
+    fn init<C: PluginContext>(context: &C) -> Self::DataContainer;
 
     /// Returns the index into `Context::data_plugins`, the vector of data plugins, where
     /// the instance of this data plugin can be found.
@@ -87,7 +87,7 @@ macro_rules! __define_data_plugin {
         impl $crate::DataPlugin for $data_plugin {
             type DataContainer = $data_container;
 
-            fn init($ctx: &impl $crate::PluginContext) -> Self::DataContainer {
+            fn init<C: $crate::PluginContext>($ctx: &C) -> Self::DataContainer {
                 $body
             }
 
@@ -152,7 +152,7 @@ mod tests {
         impl DataPlugin for MyDataPlugin {
             type DataContainer = Vec<u32>;
 
-            fn init(_context: &impl PluginContext) -> Self::DataContainer {
+            fn init<C: PluginContext>(_context: &C) -> Self::DataContainer {
                 vec![]
             }
 
@@ -180,7 +180,7 @@ mod tests {
         impl DataPlugin for MyOtherDataPlugin {
             type DataContainer = Vec<u8>;
 
-            fn init(_context: &impl PluginContext) -> Self::DataContainer {
+            fn init<C: PluginContext>(_context: &C) -> Self::DataContainer {
                 vec![]
             }
 
