@@ -38,6 +38,7 @@ bench = false
 [[bin]]
 name = "hyperfine"
 path = "src/bench_utils/hyperfine.rs"
+bench = false
 
 [lints]
 workspace = true
