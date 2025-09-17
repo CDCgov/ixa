@@ -168,6 +168,39 @@ test:
 bench name="":
     cargo bench {{name}} -p ixa-bench
 
+
+_prehyperfine:
+    cargo build --release -p ixa-bench
+
+# List all hyperfine benchmarks
+[group('Hyperfine')]
+hyperfine-list: _prehyperfine
+    ./target/release/hyperfine list
+
+# Run all hyperfine benchmarks
+[group('Hyperfine')]
+hyperfine-all *args: _prehyperfine
+    for group in $(./target/release/hyperfine list); do \
+        just _hyperfine "$group" {{args}}; \
+    done
+
+# Run one hyperfine benchmark
+[group('Hyperfine')]
+hyperfine group *args: _prehyperfine
+    just _hyperfine {{group}} {{args}}
+
+# Run a single hyperfine benchmark
+_hyperfine group="" *hyperfine_opts="--warmup 3 --runs 50":
+    @bench_list=$(./target/release/hyperfine list --group {{group}} --one-line) && \
+    hyperfine -N {{hyperfine_opts}} \
+    --parameter-list bench_id $bench_list \
+    --command-name '{{group}}::{bench_id}' \
+    './target/release/hyperfine run --group {{group}} --bench {bench_id}'
+
+# Run a single run of all benchmarks.For CI
+hyperfine-check:
+    just hyperfine-all --runs 1
+
 # Create a new named benchmark baseline
 [group('Bench')]
 baseline-create name:
@@ -275,7 +308,7 @@ clean: clean-target clean-wasm clean-docs clean-book clean-examples
 
 # Run locally everything that runs in CI
 prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
-                                      run-examples build-docs build-book
+                                      run-examples build-docs build-book hyperfine-check
 
 ########################################
 # Docker testing in container
