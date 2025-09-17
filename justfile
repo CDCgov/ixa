@@ -135,6 +135,12 @@ install-pre-commit:
     command -v pre-commit >/dev/null || pip install --user pre-commit
     pre-commit install
 
+
+[group('Install')]
+install-hyperfine:
+    command -v pre-commit >/dev/null || cargo install --locked hyperfine
+
+
 # Install all
 [group('Install')]
 install: install-wasm-target install-wasm-pack install-playwright install-mdbook install-pre-commit \
@@ -168,9 +174,12 @@ test:
 bench name="":
     cargo bench {{name}} -p ixa-bench
 
-
 _prehyperfine:
-    cargo build --release -p ixa-bench
+    which hyperfine >/dev/null 2>&1 || { \
+        echo "hyperfine not found. You can install it with:\ncargo install hyperfine"; \
+        exit 1; \
+    }
+    cargo build --release -p ixa-bench \
 
 # List all hyperfine benchmarks
 [group('Hyperfine')]
