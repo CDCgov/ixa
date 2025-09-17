@@ -50,10 +50,14 @@ This will generate an SVG of the flamegraph in the current directory.
 
 ## Benchmarking Ixa
 
-Ixa uses [Criterion.rs](https://bheisler.github.io/criterion.rs/book/index.html) for statistical
-benchmarking.
+You have two options for benchmarks:
 
-## Optional Prerequisites
+- For micro-benchmarks you want to track over time, use [Criterion.rs](https://bheisler.github.io/criterion.rs/book/index.html)
+- For in-place, comparisons against a baseline or between multiple implementation, use [Hyperfine](https://github.com/sharkdp/hyperfine)
+
+## Criterion
+
+### Optional Prerequisites
 
 - [`gnuplot`](http://www.gnuplot.info/): The [plotters crate](https://github.com/38/plotters) will
   be used as a fallback if `gnuplot` is not found.
@@ -65,9 +69,9 @@ benchmarking.
 cargo install cargo-criterion
 ```
 
-## Running Benchmarks
+### Running Benchmarks
 
-### Using `cargo bench`
+#### Using `cargo bench`
 
 To run all benchmarks:
 
@@ -87,7 +91,7 @@ To run a specific named benchmark group named `example_benches`:
 cargo bench -p ixa-bench -- example_benches
 ```
 
-### Using `cargo criterion`
+#### Using `cargo criterion`
 
 To run all benchmarks:
 
@@ -107,7 +111,7 @@ To run only the benchmarks whose name or group matches `example_benches`:
 cargo criterion -- example_benches
 ```
 
-### Viewing Reports
+#### Viewing Reports
 
 An HTML report is created at `target/criterion/report/index.html`. On macOS:
 
@@ -117,3 +121,53 @@ open target/criterion/report/index.html
 
 On Linux platforms, replace `open` with `xdg-open`, `gnome-open`, or `kde-open`, depending on your
 system configuration, or just open the file in a browser.
+
+## Hyperfine
+
+### Prerequisites
+
+You will need to [install `hyperfine`](https://github.com/sharkdp/hyperfine?tab=readme-ov-file#installation), e.g. via cargo:
+
+```bash
+cargo install hyperfine
+```
+
+### Adding a Benchmark Group
+
+Benchmark groups are defined in the `ixa-bench/src` directory. Any included file
+that uses the `hyperfine_group!` macro will be registered with the hyperfine
+runner.
+
+Here's an example:
+
+```rust
+use sort_module::sort_algos;
+
+// To run a registered benchmark, you use its group name.
+// e.g. for this group, you would run "just run sort_algorithm"
+hyperfine_group!(sort_algorithm, {
+    // benchmark comparisons have access to the outer scope of the module
+    // as well as anything in the setup scope.
+    bubble_sort => {
+      sort_algos::bubble_sort(example_data);
+    },
+
+    quick_sort => {
+      sort_algos::quick_sort(example_data);
+    },
+});
+```
+
+### Running a Benchmark
+
+To list all available benchmarks:
+
+```bash
+just hyperfine-list
+```
+
+To run a specific benchmark group, e.g. `large_sir`:
+
+```bash
+just hyperfine large_sir
+```

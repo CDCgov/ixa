@@ -27,30 +27,32 @@ rand.workspace = true
 rand_distr.workspace = true
 indexmap = "2.11.3"
 derive_builder = "0.20.2"
-
+clap = { workspace = true, features = ["derive"] }
+paste.workspace = true
+anyhow.workspace = true
+ctor.workspace = true
 
 [lib]
 bench = false
+
+[[bin]]
+name = "hyperfine"
+path = "src/bench_utils/hyperfine.rs"
 
 [lints]
 workspace = true
 
 [[bench]]
 name = "example_basic_infection"
-path = "example_basic_infection/example_basic_infection.rs"
+path = "criterion/example_basic_infection.rs"
 harness = false
 
 [[bench]]
 name = "example_births_deaths"
-path = "example_births_deaths/example_births_deaths.rs"
+path = "criterion/example_births_deaths.rs"
 harness = false
 
 [[bench]]
 name = "large_dataset"
-path = "large_dataset/large_dataset.rs"
-harness = false
-
-[[bench]]
-name = "large_sir"
-path = "reference_models/large_sir.rs"
+path = "criterion/large_dataset.rs"
 harness = false
