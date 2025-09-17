@@ -2,13 +2,14 @@ use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
 use crate::people::query::Query;
 use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
+use crate::random::{sample_multiple_from_known_length, sample_single_from_known_length};
 use crate::{
     Context, ContextRandomExt, HashSet, HashSetExt, IxaError, PersonCreatedEvent, PersonId,
     PersonProperty, PersonPropertyChangeEvent, RngId, Tabulator,
 };
 use log::{trace, warn};
-use rand::Rng;
-use std::any::TypeId;
+use rand::{seq::index::sample as choose_range, Rng};
+use std::any::{Any, TypeId};
 use std::cell::Ref;
 
 /// A trait extension for [`Context`] that exposes the people
@@ -379,61 +380,108 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_people<R: RngId + 'static, T: Query>(
+    fn sample_people<R: RngId + 'static, Q: Query>(
         &self,
         rng_id: R,
-        query: T,
+        query: Q,
         n: usize,
     ) -> Vec<PersonId>
     where
         R::RngType: Rng,
     {
-        let requested = std::cmp::min(n, self.get_current_population());
+        if n == 1 {
+            return match self.sample_person(rng_id, query) {
+                None => {
+                    vec![]
+                }
+                Some(person) => {
+                    vec![person]
+                }
+            };
+        }
+
+        let current_population = self.get_current_population();
+
+        let requested = std::cmp::min(n, current_population);
         if requested == 0 {
             warn!(
                 "Requested a sample of {} people from a population of {}",
-                n,
-                self.get_current_population()
+                n, current_population
             );
             return Vec::new();
         }
+
         // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let mut selected = HashSet::new();
-            while selected.len() < requested {
-                let result = self.sample_range(rng_id, 0..self.get_current_population());
-                selected.insert(PersonId(result));
-            }
-            return selected.into_iter().collect();
+        if query.type_id() == TypeId::of::<()>() {
+            let selected = self
+                .sample(rng_id, |rng| {
+                    choose_range(rng, current_population, requested)
+                        .into_iter()
+                        .map(PersonId)
+                })
+                .collect();
+            return selected;
         }
 
-        T::setup(&query, self);
+        Q::setup(&query, self);
 
-        // This function implements "Algorithm L" from KIM-HUNG LI
-        // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
+        // Check if this query is indexed. This is a "known length" case.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            let container = self.get_data(PeoplePlugin);
+            // Get the mutable index, because we need to refresh the index.
+            if let Some(index) = container
+                .property_indexes
+                .borrow_mut()
+                .get_mut(&multi_property_id)
+            {
+                // Make sure the index isn't stale.
+                index.index_unindexed_people(self);
+
+                if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
+                    // If there are not enough items in the set to satisfy the request, return as
+                    // many as we can.
+                    if people_set.len() <= requested {
+                        return people_set.to_owned_vec();
+                    }
+
+                    // This is slightly faster than "Algorithm L" reservoir sampling when requested << ~5
+                    // and always much faster than the reservoir sampling algorithm in `rand`.
+                    return self.sample(rng_id, |rng| {
+                        sample_multiple_from_known_length(rng, people_set, requested)
+                    });
+                }
+            }
+        }
+
+        // This is the "unknown length" case. This algorithm is *much*
+        // faster than the reservoir algorithm implemented in `rand`.
+        // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
+        // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        // Temporary variables.
-        let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut ctr: usize = 0;
-        let mut i: usize = 1;
+        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
+        let mut position: usize = 0;
+        let mut next_pick_position: usize = 1;
         let mut selected = Vec::new();
 
+        // ToDo(RobertJacobsonCDC): This will use `iter_query_results` API when it is ready.
         self.query_people_internal(
             |person| {
-                ctr += 1;
-                if i == ctr {
+                position += 1;
+                if next_pick_position == position {
                     if selected.len() == requested {
                         let to_remove = self.sample_range(rng_id, 0..selected.len());
                         selected.swap_remove(to_remove);
                     }
                     selected.push(person);
                     if selected.len() == requested {
-                        i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w))
-                            .floor() as usize
+                        // `f32` arithmetic is no faster than `f64` on modern hardware.
+                        next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
+                            / f64::ln(1.0 - weight))
+                        .floor() as usize
                             + 1;
-                        w *= self.sample_range(rng_id, 0.0..1.0);
+                        weight *= self.sample_range(rng_id, 0.0..1.0);
                     } else {
-                        i += 1;
+                        next_pick_position += 1;
                     }
                 }
             },
@@ -444,40 +492,68 @@ impl ContextPeopleExt for Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_person<R: RngId + 'static, Q: Query>(&self, rng_id: R, query: Q) -> Option<PersonId>
     where
         R::RngType: Rng,
     {
-        if self.get_current_population() == 0 {
+        let current_population = self.get_current_population();
+
+        if current_population == 0 {
+            warn!("Requested a sample person from an empty population");
             return None;
         }
 
         // Special case the empty query because we can do it in O(1).
-        if query.get_query().is_empty() {
-            let result = self.sample_range(rng_id, 0..self.get_current_population());
+        if query.type_id() == TypeId::of::<()>() {
+            let result = self.sample_range(rng_id, 0..current_population);
             return Some(PersonId(result));
         }
 
-        T::setup(&query, self);
+        Q::setup(&query, self);
 
-        // This function implements "Algorithm L" from KIM-HUNG LI
-        // Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
+        // Check if this query is indexed. This is a "known length" case.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            let container = self.get_data(PeoplePlugin);
+            // Get the mutable index, because we need to refresh the index.
+            if let Some(index) = container
+                .property_indexes
+                .borrow_mut()
+                .get_mut(&multi_property_id)
+            {
+                // Make sure the index isn't stale.
+                index.index_unindexed_people(self);
+
+                if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
+                    return self.sample(rng_id, |rng| {
+                        sample_single_from_known_length(rng, people_set)
+                    });
+                }
+            }
+        }
+
+        // This is the "unknown length" case. This algorithm is *much*
+        // faster than the reservoir algorithm implemented in `rand`.
+        // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
+        // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        // Temporary variables.
         let mut selected: Option<PersonId> = None;
-        let mut w: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut ctr: usize = 0;
-        let mut i: usize = 1;
+        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
+        let mut position: usize = 0;
+        let mut next_pick_position: usize = 1;
 
+        // ToDo(RobertJacobsonCDC): This will use `random::sample_single_l_reservoir`
+        //     when the `iter_query_results` API is ready.
         self.query_people_internal(
             |person| {
-                ctr += 1;
-                if i == ctr {
+                position += 1;
+                if next_pick_position == position {
                     selected = Some(person);
-                    i += (f64::ln(self.sample_range(rng_id, 0.0..1.0)) / f64::ln(1.0 - w)).floor()
-                        as usize
+                    // `f32` arithmetic is no faster than `f64` on modern hardware.
+                    next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
+                        / f64::ln(1.0 - weight))
+                    .floor() as usize
                         + 1;
-                    w *= self.sample_range(rng_id, 0.0..1.0);
+                    weight *= self.sample_range(rng_id, 0.0..1.0);
                 }
             },
             query,
