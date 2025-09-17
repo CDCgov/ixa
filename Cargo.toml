@@ -51,7 +51,9 @@ roots = "0.0.8"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.27.1", features = ["derive"] }
 quote = "^1.0.38"
-syn = "^2.0.95"
+syn = { version = "^2.0.95",  default-features = false, features = ["derive", "parsing"] }
+proc-macro2 = "1.0.93"
+proc-macro-crate = "3.3.0"
 delegate = "^0.13.3"
 web-sys = "^0.3.77"
 getrandom = "0.2"
