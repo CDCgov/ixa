@@ -78,7 +78,7 @@ pub fn unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
 }
 
 /// Expands to an `impl $struct_name` block that defines make_canonical and make_uncanonical methods.
-pub fn impl_reoder_fns(input: TokenStream) -> TokenStream {
+pub fn impl_reorder_fns(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as ImplMakeCanonicalInput);
     let ImplMakeCanonicalInput { struct_name, tag } = input;
 

@@ -1,7 +1,5 @@
 use crate::hashing::{one_shot_128, HashMap};
-use crate::people::multi_property::{
-    static_apply_reordering, static_sorted_indices, type_ids_to_multi_property_id,
-};
+use crate::people::multi_property::{static_reorder_by_keys, type_ids_to_multi_property_id};
 use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
 use seq_macro::seq;
 use std::any::TypeId;
@@ -173,17 +171,20 @@ macro_rules! impl_query {
                             T~N::name(),
                         )*
                     ];
+                    // It is convenient to have the elements of the array to be `Copy` in the `static_apply_reordering`
+                    // function. Since references are trivially copyable, we construct `values` below to be an array
+                    // of _references_ to the `Vec`s returned from `encode_to_vec`. (The compiler is smart enough to
+                    // keep the referenced value in scope.)
                     let mut values: [&Vec<u8>; $ct] = [
                         #(
                             &$crate::bincode::serde::encode_to_vec(self.N.1, bincode::config::standard()).unwrap(),
                         )*
                     ];
-                    let indices: [usize; $ct] = static_sorted_indices( &keys);
-                    static_apply_reordering(&mut values, &indices);
+                    static_reorder_by_keys(&keys, &mut values);
+
                     let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
                     one_shot_128(&data.as_slice())
                 }
-
             }
         });
     }

@@ -31,5 +31,5 @@ pub fn sorted_value_type(input: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn impl_make_canonical(input: TokenStream) -> TokenStream {
-    reorder_fn::impl_reoder_fns(input)
+    reorder_fn::impl_reorder_fns(input)
 }
