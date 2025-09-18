@@ -55,5 +55,7 @@ jobs:
         run: cargo test --workspace --verbose
       - name: Run examples
         run: cargo test --examples
+      - name: Install hyperfine
+        run: just install-hyperfine
       - name: Check hyperfine
         run: just hyperfine-check
