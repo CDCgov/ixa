@@ -26,8 +26,11 @@ jobs:
             target/
             docs/book/book/
           key: cargo-${{ hashFiles('Cargo.toml') }}
+      - name: Install dependencies
+        uses: ./.github/actions/install-deps
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
+
       - name: Install mdbook
         uses: baptiste0928/cargo-install@v3
         with:
@@ -52,3 +55,5 @@ jobs:
         run: cargo test --workspace --verbose
       - name: Run examples
         run: cargo test --examples
+      - name: Check hyperfine
+        run: just hyperfine-check

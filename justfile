@@ -138,13 +138,13 @@ install-pre-commit:
 
 [group('Install')]
 install-hyperfine:
-    command -v pre-commit >/dev/null || cargo install --locked hyperfine
+    command -v hyperfine >/dev/null || cargo install --locked hyperfine
 
 
 # Install all
 [group('Install')]
 install: install-wasm-target install-wasm-pack install-playwright install-mdbook install-pre-commit \
-         install-markdownlint install-prettier
+         install-markdownlint install-prettier install-hyperfine
 
 ########################################
 # Build Tasks
@@ -172,10 +172,10 @@ test:
 # Run all benchmarks
 [group('Bench')]
 bench name="":
-    cargo bench {{name}} -p ixa-bench
+    cargo bench -p ixa-bench {{name}}
 
 _prehyperfine:
-    which hyperfine >/dev/null 2>&1 || { \
+    command -v hyperfine >/dev/null 2>&1 || { \
         echo "hyperfine not found. You can install it with:\ncargo install hyperfine"; \
         exit 1; \
     }

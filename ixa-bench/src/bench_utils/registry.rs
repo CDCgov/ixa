@@ -27,14 +27,12 @@ pub fn run_bench(group: &str, bench: &str) -> Result<()> {
 
 pub fn register_group(name: &'static str, entry: BenchGroupEntry) {
     // Check for conflicts
-    if BENCH_REGISTRY.lock().unwrap().borrow().contains_key(name) {
-        panic!("Duplicate benchmark group registration: {}", name);
-    }
-    BENCH_REGISTRY
-        .lock()
-        .unwrap()
-        .borrow_mut()
-        .insert(name, entry);
+    let map = BENCH_REGISTRY.lock().unwrap();
+    let mut map = map.borrow_mut();
+
+    map.entry(name)
+        .and_modify(|_| panic!("Duplicate benchmark group registration: {}", name))
+        .or_insert(entry);
 }
 
 pub fn is_valid_bench(group: &'static str, bench: &'static str) -> bool {
