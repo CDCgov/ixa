@@ -32,6 +32,7 @@ pub fn initialize(context: &mut Context) {
 // Exported to JS
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
+    console_error_panic_hook::set_once();
     // Wrap our async simulation in a JS Promise
     future_to_promise(async {
         // Start timing
@@ -60,5 +61,16 @@ pub fn run_simulation() -> Promise {
         error!("This is an error message.");
 
         Ok(JsValue::from_str(&result))
+    })
+}
+
+// Exported to JS for panic testing.
+#[wasm_bindgen]
+pub fn run_simulation_panic() -> Promise {
+    console_error_panic_hook::set_once();
+    future_to_promise(async {
+        debug!("{}", vec!["a", "b", "c"][4]);
+        #[allow(unreachable_code)]
+        Ok(JsValue::from_str("unreachable"))
     })
 }
