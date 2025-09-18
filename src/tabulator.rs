@@ -13,11 +13,11 @@ pub trait Tabulator {
 impl<T: PersonProperty> Tabulator for (T,) {
     fn setup(&self, context: &Context) -> Result<(), IxaError> {
         context.register_property::<T>();
-        context.index_property_by_id(std::any::TypeId::of::<T>());
+        context.index_property_by_id(T::type_id());
         Ok(())
     }
     fn get_typelist(&self) -> Vec<TypeId> {
-        vec![std::any::TypeId::of::<T>()]
+        vec![T::type_id()]
     }
     fn get_columns(&self) -> Vec<String> {
         vec![String::from(T::name())]
@@ -40,7 +40,7 @@ macro_rules! impl_tabulator {
                 fn setup(&self, context: &Context) -> Result<(), IxaError> {
                     #(
                         context.register_property::<T~N>();
-                        context.index_property_by_id(std::any::TypeId::of::<T~N>());
+                        context.index_property_by_id(T~N::type_id());
                     )*
                     Ok(())
                 }
@@ -48,7 +48,7 @@ macro_rules! impl_tabulator {
                 fn get_typelist(&self) -> Vec<TypeId> {
                     vec![
                     #(
-                        std::any::TypeId::of::<T~N>(),
+                        T~N::type_id(),
                     )*
                     ]
                 }
@@ -94,9 +94,8 @@ mod tests {
     use super::Tabulator;
     use crate::{
         define_person_property, define_person_property_with_default, Context, ContextPeopleExt,
+        HashSet, HashSetExt, PersonProperty,
     };
-    use crate::{HashSet, HashSetExt};
-    use std::any::TypeId;
     use std::cell::RefCell;
 
     define_person_property!(Age, u8);
@@ -110,7 +109,7 @@ mod tests {
         let cols = (Age, RiskCategory);
         assert_eq!(
             cols.get_typelist(),
-            vec![TypeId::of::<Age>(), TypeId::of::<RiskCategory>()]
+            vec![Age::type_id(), RiskCategory::type_id()]
         );
         assert_eq!(cols.get_columns(), vec!["Age", "RiskCategory"]);
     }
