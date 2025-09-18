@@ -15,18 +15,29 @@ release = false
 [dev-dependencies]
 criterion.workspace = true
 tempfile.workspace = true
-ixa = { path = "../" }
 ixa-derive = { path = "../ixa-derive" }
-
+approx.workspace = true
 ixa_example_basic_infection = { path = "../examples/basic-infection" }
 ixa_example_births_deaths = { path = "../examples/births-deaths" }
 
 [dependencies]
+ixa = { path = "../" }
 serde.workspace = true
 rand.workspace = true
-
+rand_distr.workspace = true
+indexmap = "2.11.3"
+derive_builder = "0.20.2"
+clap = { workspace = true, features = ["derive"] }
+paste.workspace = true
+anyhow.workspace = true
+ctor.workspace = true
 
 [lib]
+bench = false
+
+[[bin]]
+name = "hyperfine"
+path = "src/bench_utils/hyperfine.rs"
 bench = false
 
 [lints]
@@ -34,15 +45,15 @@ workspace = true
 
 [[bench]]
 name = "example_basic_infection"
-path = "example_basic_infection/example_basic_infection.rs"
+path = "criterion/example_basic_infection.rs"
 harness = false
 
 [[bench]]
 name = "example_births_deaths"
-path = "example_births_deaths/example_births_deaths.rs"
+path = "criterion/example_births_deaths.rs"
 harness = false
 
 [[bench]]
 name = "large_dataset"
-path = "large_dataset/large_dataset.rs"
+path = "criterion/large_dataset.rs"
 harness = false
