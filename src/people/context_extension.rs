@@ -9,6 +9,7 @@ use crate::{
 };
 use log::{trace, warn};
 use rand::{seq::index::sample as choose_range, Rng};
+use rustc_hash::FxBuildHasher;
 use std::any::{Any, TypeId};
 use std::cell::Ref;
 
@@ -58,6 +59,23 @@ pub trait ContextPeopleExt {
     /// that one is created.
     fn index_property<T: PersonProperty>(&mut self, property: T);
 
+    /// Query for all people matching a given set of criteria, calling the `scope`
+    /// callback with an immutable reference to the fully realized result set.
+    ///
+    /// If you don't need the entire result set, consider using [`Context::query_result_iterator`],
+    /// which gives an iterator that computes the results as needed. If you
+    /// only need to count the results, use [`Context::query_people_count`]
+    ///
+    /// [`Context::with_query_results()`] takes any type that implements [Query], but
+    /// instead of implementing query yourself it is best to use the automatic
+    /// syntax that implements [Query] for a tuple of pairs of (property,
+    /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
+    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>));
+
+    #[deprecated(
+        since = "0.3.4",
+        note = "Use `with_query_results`, which is much faster for indexed results"
+    )]
     /// Query for all people matching a given set of criteria.
     ///
     /// [`Context::query_people()`] takes any type that implements [Query],
@@ -65,7 +83,7 @@ pub trait ContextPeopleExt {
     /// to use the automatic syntax that implements [Query] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+    fn query_people<Q: Query>(&self, query: Q) -> Vec<PersonId>;
 
     /// Get the count of all people matching a given set of criteria.
     ///
@@ -78,19 +96,19 @@ pub trait ContextPeopleExt {
     /// This is intended to be slightly faster than [`Context::query_people()`]
     /// because it does not need to allocate a list. We haven't actually
     /// measured it, so the difference may be modest if any.
-    fn query_people_count<T: Query>(&self, q: T) -> usize;
+    fn query_people_count<Q: Query>(&self, query: Q) -> usize;
 
     /// Determine whether a person matches a given expression.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+    fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool;
 
     /// Similar to `match_person`, but more efficient, it removes people
     /// from a list who do not match the given query. Note that this
     /// method modifies the vector in-place, so it is up to the caller
     /// to clone the vector if they don't want to modify their original
     /// vector.
-    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
+    fn filter_people<Q: Query>(&self, people: &mut Vec<PersonId>, query: Q);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
@@ -100,7 +118,7 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     ///
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_person<R: RngId + 'static, Q: Query>(&self, rng_id: R, query: Q) -> Option<PersonId>
     where
         R::RngType: Rng;
 
@@ -108,10 +126,10 @@ pub trait ContextPeopleExt {
     /// Returns an empty list if no people match the query.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn sample_people<R: RngId + 'static, T: Query>(
+    fn sample_people<R: RngId + 'static, Q: Query>(
         &self,
         rng_id: R,
-        query: T,
+        query: Q,
         n: usize,
     ) -> Vec<PersonId>
     where
@@ -374,7 +392,7 @@ impl ContextPeopleExt for Context {
             self,
             indices.as_slice(),
             &mut Vec::new(),
-            &HashSet::new(),
+            &HashSet::default(),
             &print_fn,
         );
     }
@@ -561,6 +579,57 @@ impl ContextPeopleExt for Context {
 
         selected
     }
+
+    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>)) {
+        // Special case the empty query, which creates a set containing the entire population.
+        if query.type_id() == TypeId::of::<()>() {
+            let mut people_set =
+                HashSet::with_capacity_and_hasher(self.get_current_population(), FxBuildHasher);
+            (0..self.get_current_population()).for_each(|i| {
+                people_set.insert(PersonId(i));
+            });
+            scope(&people_set);
+            return;
+        }
+
+        Q::setup(&query, self);
+        let data_container = self.get_data(PeoplePlugin);
+
+        // The fast path for queries that are indexed.
+        if let Some(multi_property_id) = query.multi_property_type_id() {
+            // Make sure the index isn't stale.
+            data_container.index_unindexed_people_for_type_id(self, multi_property_id);
+
+            if let Some(index) = data_container
+                .property_indexes
+                .borrow()
+                .get(&multi_property_id)
+            {
+                if index.is_indexed() {
+                    let value = query.multi_property_value_hash();
+                    if let Some(people_set) = index.get_with_hash(value) {
+                        scope(people_set);
+                        return;
+                    } else {
+                        let empty = HashSet::default();
+                        scope(&empty);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // ToDo(Robert): This will use `iter_query_results` API when it is ready.
+        // The slow path: compute the result set.
+        let mut result = HashSet::default();
+        self.query_people_internal(
+            |person| {
+                result.insert(person);
+            },
+            query,
+        );
+        scope(&result);
+    }
 }
 
 pub trait ContextPeopleExtInternal {
@@ -596,7 +665,7 @@ impl ContextPeopleExtInternal for Context {
         let mut unindexed = Vec::<(TypeId, HashValueType)>::new();
         let data_container = self.get_data(PeoplePlugin);
 
-        let property_hashs_working_set: Vec<(TypeId, HashValueType)> =
+        let property_hashes_working_set: Vec<(TypeId, HashValueType)> =
             if let Some(multi_property_id) = query.multi_property_type_id() {
                 let combined_hash = query.multi_property_value_hash();
                 vec![(multi_property_id, combined_hash)]
@@ -605,12 +674,12 @@ impl ContextPeopleExtInternal for Context {
             };
 
         // 1. Walk through each property and update the indexes.
-        for (t, _) in &property_hashs_working_set {
+        for (t, _) in &property_hashes_working_set {
             data_container.index_unindexed_people_for_type_id(self, *t);
         }
 
         // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashs_working_set {
+        for (t, hash) in property_hashes_working_set {
             let (is_indexed, people_set) = data_container.get_people_for_id_hash(t, hash);
             if is_indexed {
                 if let Some(matching_people) = people_set {
@@ -626,7 +695,7 @@ impl ContextPeopleExtInternal for Context {
             }
         }
 
-        // 3. Create an iterator over people, based one either:
+        // 3. Create an iterator over people, based on either:
         //    (1) the smallest index if there is one.
         //    (2) the overall population if there are no indices.
 
