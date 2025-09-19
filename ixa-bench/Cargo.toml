@@ -74,3 +74,8 @@ harness = false
 name = "sampling"
 path = "criterion/sample_people.rs"
 harness = false
+
+[[bench]]
+name = "indexing"
+path = "criterion/index_benches.rs"
+harness = false
