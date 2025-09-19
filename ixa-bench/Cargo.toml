@@ -12,6 +12,13 @@ authors.workspace = true
 [package.metadata.release]
 release = false
 
+[features]
+default = []
+
+# This option includes benchmarks for algorithms we do not use in ixa.
+# This allows us to compare our implementations to alternatives.
+alternative_algorithm_benches = []
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile.workspace = true
@@ -56,4 +63,14 @@ harness = false
 [[bench]]
 name = "large_dataset"
 path = "criterion/large_dataset.rs"
+harness = false
+
+[[bench]]
+name = "algorithms"
+path = "criterion/algorithm_benches.rs"
+harness = false
+
+[[bench]]
+name = "sampling"
+path = "criterion/sample_people.rs"
 harness = false
