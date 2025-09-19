@@ -70,6 +70,7 @@ impl InfectionLoop for Context {
     }
     fn infected_people(&self) -> usize {
         if self.get_options().queries_enabled {
+            #[allow(deprecated)]
             self.query_people((InfectionStatus, InfectionStatusValue::Infectious))
                 .len()
         } else {

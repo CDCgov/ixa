@@ -38,6 +38,7 @@ clap = { workspace = true, features = ["derive"] }
 paste.workspace = true
 anyhow.workspace = true
 ctor.workspace = true
+nohash-hasher = "0.2.0"
 
 [lib]
 bench = false

@@ -177,7 +177,7 @@ _prehyperfine:
         echo "hyperfine not found. You can install it with:\ncargo install hyperfine"; \
         exit 1; \
     }
-    cargo build --release -p ixa-bench \
+    cargo build --release -p ixa-bench
 
 # List all hyperfine benchmarks
 [group('Hyperfine')]

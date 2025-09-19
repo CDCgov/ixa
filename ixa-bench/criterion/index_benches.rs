@@ -25,7 +25,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     let mut criterion = criterion.benchmark_group("indexing");
 
     let mut context = Context::new();
-    for _ in 0..100000 {
+    for _ in 0..100_000 {
         let _ = context.add_person(());
     }
 
@@ -37,6 +37,48 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     context.index_property(Property10);
     context.index_property(Property100);
     context.index_property(MProperty);
+
+    criterion.bench_function("with_query_results_single_indexed_property", |bencher| {
+        bencher.iter(|| {
+            for number in &numbers {
+                black_box(context.with_query_results(
+                    black_box((Property10, number % 10)),
+                    black_box(&mut |people_set| {
+                        black_box(people_set);
+                    }),
+                ));
+            }
+        });
+    });
+
+    criterion.bench_function(
+        "with_query_results_multiple_individually_indexed_properties",
+        |bencher| {
+            bencher.iter(|| {
+                for number in &numbers {
+                    black_box(context.with_query_results(
+                        black_box(((Property10, number * 3 % 10), (Property100, *number))),
+                        black_box(&mut |people_set| {
+                            black_box(people_set);
+                        }),
+                    ));
+                }
+            });
+        },
+    );
+
+    criterion.bench_function("with_query_results_indexed_multi-property", |bencher| {
+        bencher.iter(|| {
+            for number in &numbers {
+                black_box(context.with_query_results(
+                    black_box((MProperty, (number * 3 % 10, *number))),
+                    black_box(&mut |people_set| {
+                        black_box(people_set);
+                    }),
+                ));
+            }
+        });
+    });
 
     criterion.bench_function("query_people_count_single_indexed_property", |bencher| {
         bencher.iter(|| {
@@ -95,9 +137,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("query_people_indexed_multi-property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
-                black_box(
-                    context.query_people(black_box((MProperty, (number * 3 % 10, *number)))),
-                );
+                black_box(context.query_people(black_box((MProperty, (number * 3 % 10, *number)))));
             }
         });
     });
