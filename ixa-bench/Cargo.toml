@@ -57,3 +57,8 @@ harness = false
 name = "large_dataset"
 path = "criterion/large_dataset.rs"
 harness = false
+
+[[bench]]
+name = "test_bench"
+path = "criterion/test_new_bench.rs"
+harness = false
