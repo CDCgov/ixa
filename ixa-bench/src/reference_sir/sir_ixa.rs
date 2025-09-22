@@ -330,8 +330,7 @@ mod test {
             no_queries.ctx.infected_people(),
             no_queries
                 .ctx
-                .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len(),
+                .query_people_count((InfectionStatus, InfectionStatusValue::Infectious)),
             "no queries variant should compute infected people correctly",
         );
 

@@ -115,6 +115,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("query_people_single_indexed_property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
+                #[allow(deprecated)]
                 black_box(context.query_people(black_box((Property10, number % 10))));
             }
         });
@@ -125,6 +126,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         |bencher| {
             bencher.iter(|| {
                 for number in &numbers {
+                    #[allow(deprecated)]
                     black_box(context.query_people(black_box((
                         (Property10, number * 3 % 10),
                         (Property100, *number),
@@ -137,6 +139,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("query_people_indexed_multi-property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
+                #[allow(deprecated)]
                 black_box(context.query_people(black_box((MProperty, (number * 3 % 10, *number)))));
             }
         });
