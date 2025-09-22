@@ -742,7 +742,7 @@ mod tests {
     use crate::{
         define_derived_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        IxaError, PersonId, PersonPropertyChangeEvent,
+        HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use serde_derive::Serialize;
     use std::cell::RefCell;
@@ -1099,7 +1099,11 @@ mod tests {
         let _ = context.add_person((Age, 40)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
-        let mut all_people = context.query_people(());
+        let mut all_people = Vec::new();
+
+        context.with_query_results((), &mut |results| {
+            all_people = results.to_owned_vec();
+        });
 
         let mut result = all_people.clone();
         context.filter_people(&mut result, (Age, 42));

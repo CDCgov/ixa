@@ -18,7 +18,10 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
     for person_id in people {
         let household_id = context.get_person_property(*person_id, HouseholdId);
         if households.insert(household_id) {
-            let mut members = context.query_people((HouseholdId, household_id));
+            let mut members: Vec<PersonId> = Vec::new();
+            context.with_query_results((HouseholdId, household_id), &mut |results| {
+                members = results.iter().copied().collect()
+            });
             // create a dense network
             while let Some(person) = members.pop() {
                 for other_person in &members {
@@ -36,10 +39,16 @@ fn load_edge_list<T: EdgeType + 'static>(context: &mut Context, file_name: &str,
 
     for result in reader.deserialize() {
         let record: EdgeRecord = result.expect("Failed to parse edge");
-        let p1_vec = context.query_people((Id, record.v1));
+        let mut p1_vec = Vec::new();
+        context.with_query_results((Id, record.v1), &mut |people| {
+            p1_vec = people.to_owned_vec()
+        });
         assert_eq!(p1_vec.len(), 1);
         let p1 = p1_vec[0];
-        let p2_vec = context.query_people((Id, record.v2));
+        let mut p2_vec = Vec::new();
+        context.with_query_results((Id, record.v2), &mut |people| {
+            p2_vec = people.to_owned_vec()
+        });
         assert_eq!(p2_vec.len(), 1);
         let p2 = p2_vec[0];
         context.add_edge_bidi::<T>(p1, p2, 1.0, value).unwrap();
