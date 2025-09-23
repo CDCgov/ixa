@@ -35,7 +35,13 @@ pub fn initialize(context: &mut Context) {
     });
 }
 
-// Exported to JS
+// Ensure that errors are reported in console
+// See https://playwright.dev/docs/test-global-setup-teardown
+#[wasm_bindgen]
+pub fn setup_error_hook() {
+    console_error_panic_hook::set_once();
+}
+
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
     // Wrap our async simulation in a JS Promise
