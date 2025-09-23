@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/CDCgov/ixa/compare/ixa-v0.3.3...ixa-v0.4.0) - 2025-09-22
+
+### Added
+
+- Add reference model SIR benchmarks ([#544](https://github.com/CDCgov/ixa/pull/544))
+- Multi-Properties and Multi-Indexing Refactor ([#518](https://github.com/CDCgov/ixa/pull/518))
+- Extend PluginContext to include base plugins ([#543](https://github.com/CDCgov/ixa/pull/543))
+- update-dockerfile-for-ixa ([#539](https://github.com/CDCgov/ixa/pull/539))
+- Reimplemented Index to be type aware: `Index<T>`. ([#513](https://github.com/CDCgov/ixa/pull/513))
+- Added a `-v` / `--verbose` commandline argument. ([#522](https://github.com/CDCgov/ixa/pull/522))
+
+### Fixed
+
+- Add generated cli-usage file to git ([#547](https://github.com/CDCgov/ixa/pull/547))
+- Visibility of multi-property support functions used in a public macro was private. ([#538](https://github.com/CDCgov/ixa/pull/538))
+- network example output dir ([#532](https://github.com/CDCgov/ixa/pull/532))
+
+### Other
+
+- bump actions/upload-pages-artifact from 3 to 4 ([#526](https://github.com/CDCgov/ixa/pull/526))
+- bump actions/setup-python from 5 to 6 ([#527](https://github.com/CDCgov/ixa/pull/527))
+- bump release-plz/action from 0.5.112 to 0.5.117 ([#535](https://github.com/CDCgov/ixa/pull/535))
+- Include CLI usage in the rendered docs. Fixes #485.
+
 ## [0.3.3](https://github.com/CDCgov/ixa/compare/ixa-v0.3.2...ixa-v0.3.3) - 2025-09-08
 
 ### Added
