@@ -35,12 +35,23 @@ impl<K, V> HashMapExt for HashMap<K, V> {
 // See https://github.com/rust-lang/rust/issues/41517
 /// Provides API parity with `std::collections::HashSet`.
 pub trait HashSetExt {
+    type Item;
+
     fn new() -> Self;
+
+    /// Equivalent to `self.iter().cloned().collect::<Vec<_>>()`.
+    fn to_owned_vec(&self) -> Vec<Self::Item>;
 }
 
-impl<T> HashSetExt for HashSet<T> {
+impl<T: Clone> HashSetExt for HashSet<T> {
+    type Item = T;
+
     fn new() -> Self {
         HashSet::default()
+    }
+
+    fn to_owned_vec(&self) -> Vec<Self::Item> {
+        self.iter().cloned().collect()
     }
 }
 
