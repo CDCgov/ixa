@@ -41,8 +41,8 @@ reqwest = { version = "^0.12.12", features = ["blocking", "json"] }
 uuid = "^1.12.1"
 tower-http = { version = "^0.6.2", features = ["full"] }
 mime = "^0.3.17"
-xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
-rustc-hash = "2.1.1"
+xxhash-rust = { version = "^0.8.15", features = ["const_xxh3", "xxh3"] }
+rustc-hash = "^2.1.1"
 rand_distr = "^0.4.3"
 tempfile = "^3.15.0"
 assert_cmd = "^2.0.16"
@@ -51,7 +51,9 @@ roots = "0.0.8"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.27.1", features = ["derive"] }
 quote = "^1.0.38"
-syn = "^2.0.95"
+syn = { version = "^2.0.95",  default-features = false, features = ["derive", "parsing"] }
+proc-macro2 = "1.0.93"
+proc-macro-crate = "3.3.0"
 delegate = "^0.13.3"
 web-sys = "^0.3.77"
 getrandom = "0.2"
@@ -63,7 +65,7 @@ sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
 polonius-the-crab = "^0.4.2"
-hashbrown = "^0.15.5"
+hashbrown = "^0.16.0"
 
 [package]
 name = "ixa"

@@ -573,6 +573,7 @@ mod test {
     fn add_periodic_report() {
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
+
         // We need the writer to go out of scope so the file is flushed
         {
             let mut context = Context::new();

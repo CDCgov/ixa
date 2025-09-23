@@ -114,8 +114,6 @@ fix-md-file filename: install-markdownlint install-prettier
 [group('Ixa Book & Docs')]
 [group('Clean')]
 clean-docs:
-    rm -rf docs/cli-usage.md
-    touch docs/cli-usage.md
     rm -rf website/doc website/debug
     rm -f website/.rustc_info.json website/.rustdoc_fingerprint.json
 
@@ -135,10 +133,16 @@ install-pre-commit:
     command -v pre-commit >/dev/null || pip install --user pre-commit
     pre-commit install
 
+
+[group('Install')]
+install-hyperfine:
+    command -v hyperfine >/dev/null || cargo install --locked hyperfine
+
+
 # Install all
 [group('Install')]
 install: install-wasm-target install-wasm-pack install-playwright install-mdbook install-pre-commit \
-         install-markdownlint install-prettier
+         install-markdownlint install-prettier install-hyperfine
 
 ########################################
 # Build Tasks
@@ -165,8 +169,44 @@ test:
 
 # Run all benchmarks
 [group('Bench')]
-bench:
-    cargo bench -p ixa-bench
+bench name="":
+    cargo bench -p ixa-bench {{name}}
+
+_prehyperfine:
+    command -v hyperfine >/dev/null 2>&1 || { \
+        echo "hyperfine not found. You can install it with:\ncargo install hyperfine"; \
+        exit 1; \
+    }
+    cargo build --release -p ixa-bench \
+
+# List all hyperfine benchmarks
+[group('Hyperfine')]
+hyperfine-list: _prehyperfine
+    ./target/release/hyperfine list
+
+# Run all hyperfine benchmarks
+[group('Hyperfine')]
+hyperfine-all *args: _prehyperfine
+    for group in $(./target/release/hyperfine list); do \
+        just _hyperfine "$group" {{args}}; \
+    done
+
+# Run one hyperfine benchmark
+[group('Hyperfine')]
+hyperfine group *args: _prehyperfine
+    just _hyperfine {{group}} {{args}}
+
+# Run a single hyperfine benchmark
+_hyperfine group="" *hyperfine_opts="--warmup 3 --runs 50":
+    @bench_list=$(./target/release/hyperfine list --group {{group}} --one-line) && \
+    hyperfine -N {{hyperfine_opts}} \
+    --parameter-list bench_id $bench_list \
+    --command-name '{{group}}::{bench_id}' \
+    './target/release/hyperfine run --group {{group}} --bench {bench_id}'
+
+# Run a single run of all benchmarks.For CI
+hyperfine-check:
+    just hyperfine-all --runs 1
 
 # Create a new named benchmark baseline
 [group('Bench')]
@@ -275,7 +315,7 @@ clean: clean-target clean-wasm clean-docs clean-book clean-examples
 
 # Run locally everything that runs in CI
 prepush $RUSTFLAGS="-D warnings": precommit build-all-targets build-wasm-pack test test-examples test-wasm \
-                                      run-examples build-docs build-book
+                                      run-examples build-docs build-book hyperfine-check
 
 ########################################
 # Docker testing in container
