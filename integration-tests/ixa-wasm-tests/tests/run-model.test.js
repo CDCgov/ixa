@@ -1,11 +1,21 @@
 const { test, expect } = require('@playwright/test');
 
+test.beforeEach(async ({ page }) => {
+    await page.addInitScript(async () => {
+        window.setupWasm = async () => {
+            const wasm = await import('/pkg/ixa_wasm_tests.js');
+            await wasm.default();
+            wasm.setup_error_hook();
+            return wasm;
+        };
+    });
+});
+
 test('simulation completes successfully', async ({ page }) => {
     await page.goto('http://localhost:8080');
 
     const result = await page.evaluate(async () => {
-        const wasm = await import('/pkg/ixa_wasm_tests.js');
-        await wasm.default(); // Ensure WASM module is initialized.
+        let wasm = await window.setupWasm();
         return await wasm.run_simulation();
     });
 
@@ -23,8 +33,7 @@ test('simulation panics as expected', async ({ page }) => {
 
     // Run the panic function with a timeout to detect a hang/crash
     const errorInfo = await page.evaluate(async () => {
-        const wasm = await import('/pkg/ixa_wasm_tests.js');
-        await wasm.default();
+        let wasm = await window.setupWasm();
         function withTimeout(promise, ms) {
             return Promise.race([
                 promise,
@@ -32,7 +41,7 @@ test('simulation panics as expected', async ({ page }) => {
             ]);
         }
         try {
-            await withTimeout(wasm.run_simulation_panic(), 2000);
+            await withTimeout(wasm.run_simulation_panic(), 1000);
             return { result: 'resolved' };
         } catch (e) {
             let message = (e && e.message) ? e.message : String(e);
@@ -48,5 +57,5 @@ test('simulation panics as expected', async ({ page }) => {
         // eslint-disable-next-line no-console
         console.log('Captured panic message:', m.text);
     });
-    expect(errorInfo.result === 'timeout' || hasPanicMsg).toBeTruthy();
+    expect(errorInfo.result === 'timeout' && hasPanicMsg).toBeTruthy();
 });

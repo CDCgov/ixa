@@ -17,6 +17,12 @@ static MAX_TIME: f64 = 303.0;
 static FOI: f64 = 0.1;
 static INFECTION_DURATION: f64 = 5.0;
 
+// Ensure that errors are reported in console
+#[wasm_bindgen]
+pub fn setup_error_hook() {
+    console_error_panic_hook::set_once();
+}
+
 pub fn initialize(context: &mut Context) {
     context.init_random(SEED);
 
@@ -32,7 +38,6 @@ pub fn initialize(context: &mut Context) {
 // Exported to JS
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
-    console_error_panic_hook::set_once();
     // Wrap our async simulation in a JS Promise
     future_to_promise(async {
         // Start timing
@@ -64,10 +69,9 @@ pub fn run_simulation() -> Promise {
     })
 }
 
-// Exported to JS for panic testing.
+// Exported to JS to print panics to the console
 #[wasm_bindgen]
 pub fn run_simulation_panic() -> Promise {
-    console_error_panic_hook::set_once();
     future_to_promise(async {
         debug!("{}", vec!["a", "b", "c"][4]);
         #[allow(unreachable_code)]
