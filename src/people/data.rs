@@ -14,7 +14,7 @@ type ContextCallback = dyn FnOnce(&mut Context);
 // via their id.
 pub(super) struct StoredPeopleProperties {
     is_required: bool,
-    values: Box<dyn Any>,
+    pub(super) values: Box<dyn Any>,
 }
 
 impl StoredPeopleProperties {
@@ -98,12 +98,18 @@ impl PeopleData {
             .or_insert_with(|| Index::<T>::new());
     }
 
-    pub(super) fn index_unindexed_people_for_type_id(&self, context: &Context, type_id: TypeId) {
+    /// Refreshes the index for the property with the given type ID, returning `true` if the
+    /// property is index and false otherwise.
+    pub(super) fn index_unindexed_people_for_type_id(
+        &self,
+        context: &Context,
+        type_id: TypeId,
+    ) -> bool {
         let mut indexes = self.property_indexes.borrow_mut();
         let Some(index) = indexes.get_mut(&type_id) else {
-            return;
+            return false;
         };
-        index.index_unindexed_people(context);
+        index.index_unindexed_people(context)
     }
 }
 
@@ -291,13 +297,44 @@ impl PeopleData {
             .set_indexed(is_indexed);
     }
 
-    pub(super) fn get_index_ref_mut(&self, t: TypeId) -> Option<RefMut<BxIndex>> {
-        let index_map = self.property_indexes.borrow_mut();
-        if index_map.contains_key(&t) {
-            Some(RefMut::map(index_map, |map| map.get_mut(&t).unwrap()))
-        } else {
-            None
-        }
+    /// Returns an immutable reference to the set of `PersonId`s associated to the given type_id
+    /// and using the value hash. The caller should ensure the property's index isn't stale.
+    pub(super) fn get_index_set_for_hash_type_id(
+        &self,
+        type_id: TypeId,
+        hash_value: HashValueType,
+    ) -> Option<Ref<HashSet<PersonId>>> {
+        let index_map_ref = self.property_indexes.borrow();
+
+        Ref::filter_map(index_map_ref, |index_map| {
+            index_map.get(&type_id).and_then(|index| {
+                if index.is_indexed() {
+                    index.get_with_hash(hash_value)
+                } else {
+                    None
+                }
+            })
+        })
+        .ok()
+    }
+
+    /// Same as above, but the type ID of the property is not given
+    /// explicitly. The caller should ensure the property's index isn't stale.
+    pub(super) fn get_index_set<P: PersonProperty>(
+        &self,
+        value: P::Value,
+    ) -> Option<Ref<HashSet<PersonId>>> {
+        let type_id = P::type_id();
+        let index_ref_map = RefCell::borrow(&self.property_indexes);
+
+        Ref::filter_map(index_ref_map, |indexes| {
+            if let Some(index) = indexes.get(&type_id) {
+                index.get_with_hash(P::hash_property_value(&P::make_canonical(value)))
+            } else {
+                None
+            }
+        })
+        .ok()
     }
 
     // Convenience function to iterate over the current population.
@@ -331,7 +368,7 @@ impl PeopleData {
 }
 
 pub(super) struct PeopleIterator {
-    population: usize,
+    pub population: usize,
     person_id: usize,
 }
 
@@ -339,13 +376,16 @@ impl Iterator for PeopleIterator {
     type Item = PersonId;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ret = if self.person_id < self.population {
-            Some(PersonId(self.person_id))
+        if self.person_id < self.population {
+            self.person_id += 1;
+            Some(PersonId(self.person_id - 1))
         } else {
             None
-        };
-        self.person_id += 1;
+        }
+    }
 
-        ret
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let k = self.population - self.person_id;
+        (k, Some(k))
     }
 }

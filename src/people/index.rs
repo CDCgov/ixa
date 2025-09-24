@@ -96,7 +96,7 @@ pub trait TypeErasedIndex {
 
     fn is_indexed(&self) -> bool;
     fn set_indexed(&mut self, is_indexed: bool);
-    fn index_unindexed_people(&mut self, context: &Context);
+    fn index_unindexed_people(&mut self, context: &Context) -> bool;
 
     /// Produces an iterator over pairs (serialized property value, set of `PersonId`s).
     fn iter_serialized_values_people(
@@ -168,9 +168,9 @@ impl<T: PersonProperty> TypeErasedIndex for Index<T> {
         self.is_indexed = is_indexed;
     }
 
-    fn index_unindexed_people(&mut self, context: &Context) {
+    fn index_unindexed_people(&mut self, context: &Context) -> bool {
         if !self.is_indexed {
-            return;
+            return false;
         }
         let current_pop = context.get_current_population();
         trace!(
@@ -186,6 +186,8 @@ impl<T: PersonProperty> TypeErasedIndex for Index<T> {
             self.add_person(&T::make_canonical(value), person_id);
         }
         self.max_indexed = current_pop;
+
+        true
     }
 
     fn iter_serialized_values_people(

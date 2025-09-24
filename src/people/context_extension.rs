@@ -1,6 +1,6 @@
 use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
-use crate::people::query::Query;
+use crate::people::query::{Query, QueryResultIterator};
 use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::random::{sample_multiple_from_known_length, sample_single_from_known_length};
 use crate::{
@@ -62,15 +62,23 @@ pub trait ContextPeopleExt {
     /// Query for all people matching a given set of criteria, calling the `scope`
     /// callback with an immutable reference to the fully realized result set.
     ///
-    /// If you don't need the entire result set, consider using [`Context::query_result_iterator`],
+    /// If you don't need the entire result set, consider using [`Context::query_result_iterator()`],
     /// which gives an iterator that computes the results as needed. If you
-    /// only need to count the results, use [`Context::query_people_count`]
+    /// only need to count the results, use [`Context::query_people_count()`]
     ///
     /// [`Context::with_query_results()`] takes any type that implements [Query], but
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [Query] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
     fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>));
+
+    /// Query for all people matching a given set of criteria, returning an iterator
+    /// that computes the next `PersonId` as needed.
+    ///
+    /// Prefer this method to [`Context::with_query_results()`] in cases where you might
+    /// not need to realize the entire result set at once, such as when you just need a
+    /// single arbitrary (but not random) match to a query.
+    fn query_result_iterator<Q: Query>(&self, query: Q) -> QueryResultIterator;
 
     #[deprecated(
         since = "0.3.4",
@@ -299,7 +307,6 @@ impl ContextPeopleExt for Context {
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(&q, self);
-        // This cannot fail because someone must have been made by now.
         let data_container = self.get_data(PeoplePlugin);
 
         let query = q.get_query();
@@ -629,6 +636,10 @@ impl ContextPeopleExt for Context {
             query,
         );
         scope(&result);
+    }
+
+    fn query_result_iterator<Q: Query>(&self, query: Q) -> QueryResultIterator {
+        query.new_query_result_iterator(self)
     }
 }
 

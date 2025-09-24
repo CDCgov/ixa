@@ -55,7 +55,7 @@
 //!
 //! # Querying
 //!
-//! Person properties provides an interface to query for people matching
+//! Person properties provide an interface to query for people matching
 //! a given set of properties. The basic syntax is to supply a set of
 //! (property, value) pairs, like so `query_people(((Age, 30), (Gender, Female)))`.
 //! Note that these need to be wrapped in an extra set of parentheses

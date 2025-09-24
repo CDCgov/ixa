@@ -1,7 +1,11 @@
-use crate::hashing::{one_shot_128, HashMap};
-use crate::people::multi_property::{static_reorder_by_keys, type_ids_to_multi_property_id};
-use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
-use seq_macro::seq;
+mod query_impls;
+mod query_result_iterator;
+mod source_set;
+
+use crate::hashing::HashMap;
+use crate::people::multi_property::type_ids_to_multi_property_id;
+use crate::{people::HashValueType, Context};
+pub use query_result_iterator::QueryResultIterator;
 use std::any::TypeId;
 use std::sync::{Mutex, OnceLock};
 
@@ -38,162 +42,13 @@ pub trait Query: Copy + 'static {
         *entry
     }
 
+    /// If this query is a multi-property query, this method computes the hash of the
+    /// multi-property value.
     fn multi_property_value_hash(&self) -> HashValueType;
+
+    /// Creates a new `QueryResultIterator`
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c>;
 }
-
-impl Query for () {
-    fn setup(&self, _: &Context) {}
-
-    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        Vec::new()
-    }
-
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        Vec::new()
-    }
-
-    fn multi_property_type_id(&self) -> Option<TypeId> {
-        None
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        let empty: &[u128] = &[];
-        one_shot_128(&empty)
-    }
-}
-
-// Implement the query version with one parameter.
-impl<T1: PersonProperty> Query for (T1, T1::Value) {
-    fn setup(&self, context: &Context) {
-        context.register_property::<T1>();
-    }
-
-    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        let value = T1::make_canonical(self.1);
-        vec![(T1::type_id(), T1::hash_property_value(&value))]
-    }
-
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        vec![T1::type_id()]
-    }
-
-    fn multi_property_type_id(&self) -> Option<TypeId> {
-        // While not a "true" multi-property, it is convenient to have this method return the
-        // `TypeId` of the singleton property.
-        Some(T1::type_id())
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        T1::hash_property_value(&T1::make_canonical(self.1))
-    }
-}
-
-// Implement the query version with one parameter as a singleton tuple. We split this out from the
-// `impl_query` macro to avoid applying the `SortedTuple` machinery to such a simple case and so
-// that `multi_property_type_id()` can just return `Some(T1::type_id())`.
-impl<T1: PersonProperty> Query for ((T1, T1::Value),) {
-    fn setup(&self, context: &Context) {
-        context.register_property::<T1>();
-    }
-
-    fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-        let value = T1::make_canonical(self.0 .1);
-        vec![(T1::type_id(), T1::hash_property_value(&value))]
-    }
-
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        vec![T1::type_id()]
-    }
-
-    fn multi_property_type_id(&self) -> Option<TypeId> {
-        // While not a "true" multi-property, it is convenient to have this method return the
-        // `TypeId` of the singleton property.
-        Some(T1::type_id())
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        T1::hash_property_value(&T1::make_canonical(self.0 .1))
-    }
-}
-
-macro_rules! impl_query {
-    ($ct:expr) => {
-        seq!(N in 0..$ct {
-            impl<
-                #(
-                    T~N : PersonProperty,
-                )*
-            > Query for (
-                #(
-                    (T~N, T~N::Value),
-                )*
-            )
-            {
-                fn setup(&self, context: &Context) {
-                    #(
-                        context.register_property::<T~N>();
-                    )*
-                }
-
-                fn get_query(&self) -> Vec<(TypeId, HashValueType)> {
-                    let mut ordered_items = vec![
-                    #(
-                        (T~N::type_id(), T~N::hash_property_value(&T~N::make_canonical(self.N.1))),
-                    )*
-                    ];
-                    ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
-                    ordered_items
-                }
-
-                fn get_type_ids(&self) -> Vec<TypeId> {
-                    vec![
-                        #(
-                            T~N::type_id(),
-                        )*
-                    ]
-                }
-
-                fn multi_property_value_hash(&self) -> HashValueType {
-                    // This needs to be kept in sync with how multi-properties compute their hash. We are
-                    // exploiting the fact that `bincode` encodes tuples as the concatenation of their
-                    // elements. Unfortunately, `bincode` allocates, but we avoid more allocations by
-                    // using staticly allocated arrays.
-
-                    // Multi-properties order their values by lexicographic order of the component
-                    // properties, not `TypeId` order.
-                    // let type_ids: [TypeId; $ct] = [
-                    //     #(
-                    //         T~N::type_id(),
-                    //     )*
-                    // ];
-                    let keys: [&str; $ct] = [
-                        #(
-                            T~N::name(),
-                        )*
-                    ];
-                    // It is convenient to have the elements of the array to be `Copy` in the `static_apply_reordering`
-                    // function. Since references are trivially copyable, we construct `values` below to be an array
-                    // of _references_ to the `Vec`s returned from `encode_to_vec`. (The compiler is smart enough to
-                    // keep the referenced value in scope.)
-                    let mut values: [&Vec<u8>; $ct] = [
-                        #(
-                            &$crate::bincode::serde::encode_to_vec(self.N.1, bincode::config::standard()).unwrap(),
-                        )*
-                    ];
-                    static_reorder_by_keys(&keys, &mut values);
-
-                    let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
-                    one_shot_128(&data.as_slice())
-                }
-            }
-        });
-    }
-}
-
-// Implement the versions with 2..10 parameters. (The 1 case is implemented above.)
-seq!(Z in 2..10 {
-    impl_query!(Z);
-});
 
 #[cfg(test)]
 mod tests {

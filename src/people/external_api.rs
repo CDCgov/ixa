@@ -42,10 +42,7 @@ pub(crate) trait ContextPeopleExtCrate: ContextBase + ContextPeopleExt {
     fn index_property_by_id(&self, type_id: TypeId) {
         let data_container = self.get_data(PeoplePlugin);
 
-        let mut index = data_container.get_index_ref_mut(type_id).unwrap();
-        if !index.is_indexed() {
-            index.set_indexed(true);
-        }
+        data_container.set_property_indexed_by_type_id(true, type_id);
     }
 
     fn get_person_property_names(&self) -> Vec<String> {
