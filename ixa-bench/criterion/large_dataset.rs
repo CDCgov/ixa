@@ -2,9 +2,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
 use ixa::define_multi_property;
 use ixa::prelude::*;
-use ixa_bench::generate_population::generate_population;
+use ixa_bench::generate_population::generate_population_with_seed;
+
 use serde::Serialize;
 use std::hint::black_box;
+
+const SEED: u64 = 42;
 
 define_person_property!(Age, u8);
 define_person_property!(HomeId, u32);
@@ -29,7 +32,7 @@ define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
 });
 
 fn initialize(context: &mut Context) {
-    for person in generate_population(10000, 0.2, 10.0) {
+    for person in generate_population_with_seed(10_000, 0.2, 10.0, Some(SEED)) {
         context
             .add_person((
                 (Age, person.age),
@@ -52,25 +55,52 @@ fn bench_query_population_derived_property(context: &mut Context) {
 pub fn criterion_benchmark(c: &mut Criterion) {
     define_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
     let mut context = Context::new();
+    // Seed context RNGs for deterministic derived properties / sampling
+    context.init_random(SEED);
     initialize(&mut context);
+    let mut group = c.benchmark_group("large_dataset");
 
-    c.bench_function("bench_query_population_property", |bencher| {
+    group.bench_function("bench_query_population_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_property(&mut context);
         });
     });
+
     context.index_property(HomeId);
-    c.bench_function("bench_query_population_indexed_property", |bencher| {
+    group.bench_function("bench_query_population_indexed_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_property(&mut context);
         });
     });
 
-    c.bench_function("bench_query_population_derived_property", |bencher| {
+    group.bench_function("bench_query_population_derived_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_derived_property(&mut context);
         });
     });
+
+    // Multi-property unindexed vs indexed
+    group.bench_function("bench_query_population_multi_unindexed", |bencher| {
+        bencher.iter_with_large_drop(|| {
+            context.query_people_count((
+                (Age, black_box(30u8)),
+                (SchoolId, black_box(1u32)),
+                (WorkplaceId, black_box(1u32)),
+            ));
+        });
+    });
+    context.index_property(ASW);
+    group.bench_function("bench_query_population_multi_indexed", |bencher| {
+        bencher.iter_with_large_drop(|| {
+            context.query_people_count((
+                (Age, black_box(30u8)),
+                (SchoolId, black_box(1u32)),
+                (WorkplaceId, black_box(1u32)),
+            ));
+        });
+    });
+
+    group.finish();
 }
 
 criterion_group!(example_benches, criterion_benchmark);

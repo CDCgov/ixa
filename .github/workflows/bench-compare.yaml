@@ -27,11 +27,13 @@ jobs:
         run: |
           echo '### Benchmark Results' > criterion.md
           echo '```' >> criterion.md
-          if ! cargo bench -p ixa-bench -- --baseline base >> criterion.md 2>&1; then
-            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> criterion.md
-            cargo bench -p ixa-bench >> criterion.md 2>&1
+          # Run benches with baseline; keep full output in a temp file in case we need it
+          if ! cargo bench -p ixa-bench -- --baseline base 2>&1; then
+            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" > criterion.md
           fi
-          echo '```' >> criterion.md
+
+          # Run the Rust regression checker to get a concise summary
+          cargo run -q -p ixa-bench --bin check_criterion_regressions >> criterion.md 2>&1
 
       - name: Add comment to PR
         run: |
