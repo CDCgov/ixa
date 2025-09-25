@@ -3,10 +3,11 @@ use ixa::prelude::*;
 use ixa_example_births_deaths::initialize;
 use tempfile::tempdir;
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn criterion_benchmark(criterion: &mut Criterion) {
+    let mut criterion = criterion.benchmark_group("example");
     let output_dir = tempdir().unwrap();
 
-    c.bench_function("example births-deaths", |bencher| {
+    criterion.bench_function("example births-deaths", |bencher| {
         bencher.iter_with_large_drop(|| {
             let mut context = Context::new();
             initialize(&mut context, output_dir.path());
