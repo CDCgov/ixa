@@ -528,8 +528,9 @@ mod tests {
             );
         }
 
-        let results = context.query_people((ProfileNAW, ("John", 42, 220.5)));
-        assert_eq!(results.len(), 1);
+        context.with_query_results((ProfileNAW, ("John", 42, 220.5)), &mut |results| {
+            assert_eq!(results.len(), 1);
+        });
     }
 
     #[test]
