@@ -24,6 +24,18 @@ fn find_change_files(base: &Path) -> Vec<(String, String, std::path::PathBuf)> {
             if !gpath.is_dir() {
                 continue;
             }
+            // If this directory itself contains a change/estimates.json then it's a bench with no group
+            let self_change = gpath.join("change").join("estimates.json");
+            if self_change.exists() {
+                if let Some(bs) = gpath.file_name() {
+                    results.push((
+                        String::new(),
+                        bs.to_string_lossy().into_owned(),
+                        self_change,
+                    ));
+                }
+                continue;
+            }
             if let Ok(benches) = fs::read_dir(&gpath) {
                 for b in benches.flatten() {
                     let bpath = b.path();
@@ -113,9 +125,9 @@ fn print_table(title: &str, rows: &[(String, String, String, String, String)]) {
         "  {}  {}  {}  {}  {}",
         headers.0.pad_to_width(widths[0]),
         headers.1.pad_to_width(widths[1]),
-        headers.2.pad_to_width(widths[2]),
-        headers.3.pad_to_width(widths[3]),
-        headers.4.pad_to_width(widths[4])
+        headers.2.pad_left_to_width(widths[2]),
+        headers.3.pad_left_to_width(widths[3]),
+        headers.4.pad_left_to_width(widths[4])
     );
     println!(
         "  {}  {}  {}  {}  {}",
@@ -130,9 +142,9 @@ fn print_table(title: &str, rows: &[(String, String, String, String, String)]) {
             "  {}  {}  {}  {}  {}",
             r.0.pad_to_width(widths[0]),
             r.1.pad_to_width(widths[1]),
-            r.2.pad_to_width(widths[2]),
-            r.3.pad_to_width(widths[3]),
-            r.4.pad_to_width(widths[4])
+            r.2.pad_left_to_width(widths[2]),
+            r.3.pad_left_to_width(widths[3]),
+            r.4.pad_left_to_width(widths[4])
         );
     }
     println!();
@@ -140,6 +152,7 @@ fn print_table(title: &str, rows: &[(String, String, String, String, String)]) {
 
 trait Pad {
     fn pad_to_width(&self, w: usize) -> String;
+    fn pad_left_to_width(&self, w: usize) -> String;
 }
 
 impl Pad for &str {
@@ -150,11 +163,24 @@ impl Pad for &str {
         }
         s
     }
+
+    fn pad_left_to_width(&self, w: usize) -> String {
+        let s = self.to_string();
+        if s.len() < w {
+            format!("{}{}", " ".repeat(w - s.len()), s)
+        } else {
+            s
+        }
+    }
 }
 
 impl Pad for String {
     fn pad_to_width(&self, w: usize) -> String {
         self.as_str().pad_to_width(w)
+    }
+
+    fn pad_left_to_width(&self, w: usize) -> String {
+        self.as_str().pad_left_to_width(w)
     }
 }
 
@@ -239,7 +265,11 @@ fn main() {
         .iter()
         .map(|e| {
             (
-                e.group.clone(),
+                if e.group.is_empty() {
+                    "(no group)".to_string()
+                } else {
+                    e.group.clone()
+                },
                 e.bench.clone(),
                 format_pct(e.pe),
                 format_pct(e.lb),
@@ -251,7 +281,11 @@ fn main() {
         .iter()
         .map(|e| {
             (
-                e.group.clone(),
+                if e.group.is_empty() {
+                    "(no group)".to_string()
+                } else {
+                    e.group.clone()
+                },
                 e.bench.clone(),
                 format_pct(e.pe),
                 format_pct(e.lb),
@@ -263,7 +297,11 @@ fn main() {
         .iter()
         .map(|e| {
             (
-                e.group.clone(),
+                if e.group.is_empty() {
+                    "(no group)".to_string()
+                } else {
+                    e.group.clone()
+                },
                 e.bench.clone(),
                 format_pct(e.pe),
                 format_pct(e.lb),
