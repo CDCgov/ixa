@@ -314,6 +314,4 @@ fn main() {
     print_table("Regressions", &reg_rows);
     print_table("Improvements", &imp_rows);
     print_table("Unchanged", &un_rows);
-
-    std::process::exit(0);
 }
