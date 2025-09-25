@@ -1,4 +1,4 @@
-use rand::Rng;
+use ixa::rand::{rngs::StdRng, rngs::ThreadRng, thread_rng, Rng, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;
@@ -31,7 +31,12 @@ pub struct PopulationIterator {
     num_schools: usize,
     num_workplaces: usize,
     num_homes: usize,
-    rng: rand::rngs::ThreadRng,
+    rng: PopulationRng,
+}
+
+enum PopulationRng {
+    Thread(ThreadRng),
+    Std(Box<StdRng>),
 }
 
 impl PopulationIterator {
@@ -39,13 +44,17 @@ impl PopulationIterator {
         n: usize,
         number_of_schools_as_percent_of_pop: f64,
         number_of_workplaces_as_percent_of_pop: f64,
+        seed: Option<u64>,
     ) -> Self {
         let num_schools =
             ((n as f64 * number_of_schools_as_percent_of_pop / 100.0).round()) as usize;
         let num_workplaces =
             ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-        let rng = rand::thread_rng();
+        let rng = match seed {
+            Some(s) => PopulationRng::Std(Box::new(StdRng::seed_from_u64(s))),
+            None => PopulationRng::Thread(thread_rng()),
+        };
         PopulationIterator {
             n,
             idx: 0,
@@ -63,15 +72,27 @@ impl Iterator for PopulationIterator {
         if self.idx >= self.n {
             return None;
         }
-        let age = self.rng.gen_range(MIN_AGE..=MAX_AGE);
-        let home_id = self.rng.gen_range(1..=self.num_homes);
+        let age = match &mut self.rng {
+            PopulationRng::Thread(r) => r.gen_range(MIN_AGE..=MAX_AGE),
+            PopulationRng::Std(r) => r.gen_range(MIN_AGE..=MAX_AGE),
+        };
+        let home_id = match &mut self.rng {
+            PopulationRng::Thread(r) => r.gen_range(1..=self.num_homes),
+            PopulationRng::Std(r) => r.gen_range(1..=self.num_homes),
+        };
         let mut school_id = 0;
         let mut workplace_id = 0;
         if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) && self.num_schools > 0 {
-            school_id = self.rng.gen_range(1..=self.num_schools);
+            school_id = match &mut self.rng {
+                PopulationRng::Thread(r) => r.gen_range(1..=self.num_schools),
+                PopulationRng::Std(r) => r.gen_range(1..=self.num_schools),
+            };
         }
         if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) && self.num_workplaces > 0 {
-            workplace_id = self.rng.gen_range(1..=self.num_workplaces);
+            workplace_id = match &mut self.rng {
+                PopulationRng::Thread(r) => r.gen_range(1..=self.num_workplaces),
+                PopulationRng::Std(r) => r.gen_range(1..=self.num_workplaces),
+            };
         }
         let person = Person {
             id: self.idx + 1,
@@ -94,6 +115,22 @@ pub fn generate_population(
         n,
         number_of_schools_as_percent_of_pop,
         number_of_workplaces_as_percent_of_pop,
+        None,
+    )
+}
+
+/// Generate a population using an optional seed for determinism
+pub fn generate_population_with_seed(
+    n: usize,
+    number_of_schools_as_percent_of_pop: f64,
+    number_of_workplaces_as_percent_of_pop: f64,
+    seed: Option<u64>,
+) -> PopulationIterator {
+    PopulationIterator::new(
+        n,
+        number_of_schools_as_percent_of_pop,
+        number_of_workplaces_as_percent_of_pop,
+        seed,
     )
 }
 

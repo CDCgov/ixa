@@ -80,3 +80,8 @@ harness = false
 name = "sampling"
 path = "criterion/sample_people.rs"
 harness = false
+
+[[bench]]
+name = "counts"
+path = "criterion/counts.rs"
+harness = false
