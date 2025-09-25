@@ -1,0 +1,23 @@
+name: Cargo Build
+
+on:
+  push:
+    branches: main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v2
+
+      - name: Dev Build
+      - run: mise build
+
+      - name: WASM Build
+      - run: mise build --target wasm32-unknown-unknown --release

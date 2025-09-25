@@ -1,0 +1,29 @@
+name: Checks and tests
+
+on:
+  push:
+    branches: main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v2
+
+      - name: Pre-commit (lint, check)
+      - run: pre-commit run --all-files
+
+      - name: Test
+      - run: mise test
+
+      - name: Run examples
+      - run: mise examples
+
+      - name: Build docs
+      - run: mise docs

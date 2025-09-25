@@ -9,6 +9,9 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v2
+
       - name: Checkout base branch
         uses: actions/checkout@v5
         with:
@@ -16,29 +19,32 @@ jobs:
           # This fetches all branches so we can compare the PR branch with the base branch
           fetch-depth: 0
 
-      - name: Run cargo bench on base branch
-        run: cargo bench -p ixa-bench -- --save-baseline base
+      - name: Create a benchmark baseline
+        run: mise bench:create base
 
       - name: Checkout PR branch
         # The checkout is done manually to avoid cleaning up the baseline benchmark
         run: git checkout ${{ github.event.pull_request.head.ref }}
 
-      - name: Run cargo bench on head branch and format output
-        run: |
-          echo '### Benchmark Results' > criterion.md
-          echo '```' >> criterion.md
-          if ! cargo bench -p ixa-bench -- --baseline base 2>&1; then
-            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> criterion.md
-            cargo bench -p ixa-bench 2>&1
-          fi
+      - name: Run hyperfine benchmarks
+        run: mise bench:hyperfine -- -- --export-markdown hyperfine.md
 
-          # Run the Rust regression checker to get a concise summary
-          cargo run -q -p ixa-bench --bin check_criterion_regressions >> criterion.md 2>&1
+      - name: Run benchmarks on head branch and format output
+        run: |
+          echo '### Benchmark Results' > results.md
+          echo "### Hyperfine'
+          cat hyperfine.md >> results.md
+          echo '#### Criterion'
+          echo '```' >> results.md
+          if ! mise bench:compare base 2>&1; then
+            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
+            mise bench 2>&1
+          fi >> results.md
 
       - name: Add comment to PR
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
-            --body-file criterion.md
+            --body-file results.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
