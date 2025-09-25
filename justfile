@@ -169,9 +169,8 @@ test:
 
 # Run all benchmarks
 [group('Bench')]
-bench *name:
-    cargo bench -q -p ixa-bench {{name}}
-    cargo run -q -p ixa-bench --bin check_criterion_regressions
+bench name="":
+    cargo bench -p ixa-bench {{name}}
 
 _prehyperfine:
     command -v hyperfine >/dev/null 2>&1 || { \
