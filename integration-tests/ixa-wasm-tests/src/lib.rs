@@ -19,7 +19,6 @@ static INFECTION_DURATION: f64 = 5.0;
 
 pub fn initialize(context: &mut Context) {
     context.init_random(SEED);
-
     people::init(context);
     transmission_manager::init(context);
     infection_manager::init(context);

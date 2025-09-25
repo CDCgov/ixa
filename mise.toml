@@ -1,0 +1,169 @@
+[tools]
+node = "latest"
+pnpm = "latest"
+"pipx:pre-commit" = "4.3.0"
+"prettier" = "3.6.2"
+"npm:markdownlint-cli" = "0.45.0"
+"cargo:wasm-pack" = "latest"
+"cargo:hyperfine" = "latest"
+"cargo:mdbook" = "latest"
+"cargo:mdbook-callouts" = "latest"
+"cargo:mdbook-inline-highlighting" = "latest"
+
+[settings]
+# Note: If you have cargo-binstall installed, this will make tool installs much faster
+cargo.binstall = true
+
+[tasks.build]
+description = "Build default targets. Run with --release for a release build."
+run = ["cargo build --workspace"]
+
+[tasks.example]
+description = "Run an example"
+run = "cargo run --example {{arg(name='example', default='')}}"
+
+[tasks.examples]
+description = "Run all examples"
+run = '''
+for example in $(cargo build --example 2>&1 | tail -n +3); do \
+  mise run example "$example"; \
+done
+'''
+
+[tasks.docs]
+description = "Build the Rust cli docs, API docs and Ixa website"
+run = '''
+  cargo run --features write_cli_usage --example basic-infection -- --markdown-help
+  cargo doc --no-deps --target-dir website/
+  mdbook build docs/book -d ../../website/book
+'''
+
+[tasks.test]
+description = "Run all tests"
+run = "mise run test:*"
+
+[tasks.'test:unit']
+description = "Run all unit tests"
+run = ["cargo test --all-targets --workspace"]
+
+[tasks.'test:core']
+description = "Run just the core ixa tests (much faster)"
+run = ["cargo test -p ixa"]
+
+[tasks.'test:wasm']
+description = "Run wasm integration tests"
+dir="integration-tests/ixa-wasm-tests"
+depends=["wasm:pnpm", "wasm:compile"]
+run = "pnpm exec playwright test"
+
+[tasks.'wasm:pnpm']
+dir="integration-tests/ixa-wasm-tests"
+run=["pnpm install", "pnpm exec playwright install"]
+sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
+outputs = ['node_modules/.pnpm/lock.yaml']
+
+[tasks.'wasm:compile']
+dir="integration-tests/ixa-wasm-tests"
+run= "wasm-pack build --target web"
+sources=["src/*.rs", "Cargo.toml"]
+outputs=["pkg"]
+
+[tasks.'bench']
+description = "Run all benchmarks"
+run = [
+  "mise run bench:hyperfine",
+  "mise run bench:criterion"
+]
+
+[tasks.'bench:criterion']
+description = "Run all Criterion benchmarks (optionally pass a specific name)"
+run = ["cargo bench -p ixa-bench {{arg(name='name', default='')}}"]
+
+[tasks.'bench:create']
+description = "Compare benchmarks against a Criterion baseline"
+run = "mise bench:criterion -- --save-baseline {{arg(name='baseline')}}"
+
+[tasks.'bench:compare']
+description = "Compare benchmarks against a Criterion baseline"
+run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
+
+[tasks.'build:hyperfine']
+description = "Build the benchmark utilities binaries"
+run = ["cargo build -p ixa-bench --release"]
+sources = ["ixa-bench/src/**/*.rs", 'Cargo.toml', "ixa-bench/Cargo.toml"]
+outputs = ["target/release/hyperfine"]
+
+[tasks.'test:hyperfine']
+description = "Run one hyperfine run"
+run = ["mise bench:hyperfine --warmup=0 --runs=1"]
+
+[tasks.'bench:hyperfine']
+depends = ["build:hyperfine"]
+run = './target/release/hyperfine'
+
+[tasks.check]
+description = "Formatting and linting"
+run="mise run check:*"
+
+[tasks.'check:rust']
+run = [
+  # cargo check compiles everything without the final step of code generation
+  # --all-targets ensures we include --lib --bins --tests --benches --examples
+  "cargo check --all-targets --workspace",
+  "cargo fmt --check",
+  "cargo clippy --workspace --all-targets -- -D warnings"
+]
+
+[tasks.prettier]
+description = "Run prettier on all supported files"
+run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,yaml}" \
+  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
+'''
+
+[tasks.'check:markdown']
+run =["markdownlint '**/*.md'", "mise prettier check"]
+
+[tasks.fix]
+description = "Auto-fix formatting and linting issues"
+run="mise run fix:*"
+
+[tasks.'fix:prettier']
+run = "mise prettier write"
+
+[tasks.'fix:rust']
+run = [
+  "cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings",
+  "cargo fmt"
+]
+
+[tasks.'fix:markdown']
+run = "markdownlint --fix '**/*.md' || true"
+
+[tasks.clean]
+description = "Remove build artifacts"
+run='''
+  cargo clean
+  rm -rf pkg integration-tests/ixa-wasm-tests/{pkg,node_modules}
+  rm -rf website/{doc,debug,book}
+  rm -f website/{.rustc_info.json,.rustdoc_fingerprint.json}
+  rm -rf examples/**/output/*.csv
+'''
+
+[tasks.precommit]
+description = "This is used by pre-commit (which installs git hooks)"
+depends=["check"]
+
+[tasks.prepush]
+description = "Check everything before pushing"
+env.RUSTFLAGS = "-D warnings"
+run=["mise precommit", "mise examples", "mise docs", "mise test"]
+
+[tasks.'docker:build']
+run = "docker build -t ixa-bench ."
+
+[tasks.'docker:run']
+depends=["docker:build"]
+run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
+
+[tasks.'install:hooks']
+run = "pre-commit install"

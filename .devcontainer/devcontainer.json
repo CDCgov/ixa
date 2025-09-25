@@ -1,26 +1,29 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/base:debian",
-	"features": {
-		"ghcr.io/devcontainers/features/rust:1": {},
-		"ghcr.io/devcontainers/features/node:1": {},
-		"ghcr.io/guiyomh/features/just:0": {},
-		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
-	},
-	"customizations": {
-		"vscode": {
-			"settings": {
-				"lldb.executable": "/usr/bin/lldb",
-				"editor.defaultFormatter": "rust-lang.rust-analyzer",
-				"editor.formatOnSave": true
-			},
-			"extensions": [
-				"rust-lang.rust-analyzer",
-				"tamasfe.even-better-toml",
-				"vadimcn.vscode-lldb",
-				"yzhang.markdown-all-in-one",
-				"github.copilot"
-			]
-	  	}
-	},
-	"postCreateCommand": "rustup component add rustfmt clippy && sudo apt-get install pkg-config -y"
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {},
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/python:1": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/cargo-binstall:0": {},
+    "ghcr.io/devcontainers-extra/features/mise:1": {}
+  },
+  "waitFor": "postCreateCommand",
+  "postCreateCommand": "sh .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "lldb.executable": "/usr/bin/lldb",
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "yzhang.markdown-all-in-one",
+        "github.copilot",
+        "hverlin.mise-vscode"
+      ]
+    }
+  }
 }

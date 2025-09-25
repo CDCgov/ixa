@@ -1,0 +1,3 @@
+🦀 Your ixa codespace is ready!
+🚀 Try `mise test:core` to run the core unit tests.
+📋 `mise task` will show you a list of all available tasks!
