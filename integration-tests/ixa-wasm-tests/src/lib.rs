@@ -29,7 +29,12 @@ pub fn initialize(context: &mut Context) {
     });
 }
 
-// Exported to JS
+// Ensure that errors are reported in console
+#[wasm_bindgen]
+pub fn setup_error_hook() {
+    console_error_panic_hook::set_once();
+}
+
 #[wasm_bindgen]
 pub fn run_simulation() -> Promise {
     // Wrap our async simulation in a JS Promise
@@ -60,5 +65,15 @@ pub fn run_simulation() -> Promise {
         error!("This is an error message.");
 
         Ok(JsValue::from_str(&result))
+    })
+}
+
+// Exported to JS to print panics to the console
+#[wasm_bindgen]
+pub fn run_simulation_panic() -> Promise {
+    future_to_promise(async {
+        debug!("{}", vec!["a", "b", "c"][4]);
+        #[allow(unreachable_code)]
+        Ok(JsValue::from_str("unreachable"))
     })
 }
