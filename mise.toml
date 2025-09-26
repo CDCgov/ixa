@@ -84,17 +84,14 @@ usage = '''
 arg <baseline> help="The name of the criterion baseline to save"
 '''
 description = "Compare benchmarks against a Criterion baseline"
-run = ["mise bench -- --save-baseline {{arg(name='baseline')}}"]
+run = "mise bench:criterion -- --save-baseline {{arg(name='baseline')}}"
 
 [tasks.'bench:compare']
 usage = '''
 arg <baseline> help="The name of a criterion baseline"
 '''
 description = "Compare benchmarks against a Criterion baseline"
-run = [
-  "mise bench -- --baseline {{arg(name='baseline')}}",
-  "cargo run -q -p ixa-bench --bin check_criterion_regressions"
-]
+run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
