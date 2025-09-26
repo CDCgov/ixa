@@ -1,7 +1,8 @@
 # Python vs. Rust
 
-Many features of the Rust language will be familiar to Python programmers. Many examples are listed below.
-For more code comparisons, see [py2rs](https://github.com/dinhanhx/python-to-rust/blob/master/CODE_COMPARISON.md).
+Many features of the Rust language will be familiar to Python programmers. Many
+examples are listed below. For more code comparisons, see
+[py2rs](https://github.com/dinhanhx/python-to-rust/blob/master/CODE_COMPARISON.md).
 
 <style>
   .table-container {

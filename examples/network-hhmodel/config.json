@@ -8,5 +8,5 @@
     "between_hh_transmission_reduction": 3.0,
     "output_dir": "examples/network-hhmodel/output",
     "data_dir": "examples/network-hhmodel/data"
-}
+  }
 }

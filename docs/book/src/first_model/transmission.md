@@ -1,6 +1,9 @@
 # The Transmission Manager
 
-We call the module in charge of initiating new infections the transmission manager. Create the file `src/transmission_manager.rs` and add `mod transmission_manager;` to the top of `src/main.rs` right next to the  `mod people;` statement. We need to flesh out this skeleton.
+We call the module in charge of initiating new infections the transmission
+manager. Create the file `src/transmission_manager.rs` and add
+`mod transmission_manager;` to the top of `src/main.rs` right next to the
+`mod people;` statement. We need to flesh out this skeleton.
 
 ```rust
 // transmission_manager.rs
@@ -18,9 +21,18 @@ pub fn init(context: &mut Context) {
 
 ## Constants
 
-Recall our abstract model: We assume that each susceptible person has a constant risk of becoming infected over time, independent of past infections, expressed as a force of infection. Mathematically, this results in an exponentially distributed duration between infection events. So we need to represent the constant `FORCE_OF_INFECTION` and a random number source to sample exponentially distributed random time durations.
+Recall our abstract model: We assume that each susceptible person has a constant
+risk of becoming infected over time, independent of past infections, expressed
+as a force of infection. Mathematically, this results in an exponentially
+distributed duration between infection events. So we need to represent the
+constant `FORCE_OF_INFECTION` and a random number source to sample exponentially
+distributed random time durations.
 
-We have already dealt with constants when we defined the constant `POPULATION` in `main.rs`.  Let's define `FORCE_OF_INFECTION` right next to it. We also cap the simulation time to an arbitrarily large number, a good practice that prevents the simulation from running forever in case we make a programming error.
+We have already dealt with constants when we defined the constant `POPULATION`
+in `main.rs`. Let's define `FORCE_OF_INFECTION` right next to it. We also cap
+the simulation time to an arbitrarily large number, a good practice that
+prevents the simulation from running forever in case we make a programming
+error.
 
 ```rust
 // main.rs
@@ -36,7 +48,10 @@ static FORCE_OF_INFECTION: f64 = 0.1;
 
 ## Infection Attempts
 
-We need to import these constants into `transmission_manager`. To define a new random number source in Ixa, we use `define_rng!`.  There are other symbols from Ixa we will need for the implementation of `attempt_infection()`. You can have your IDE add these imports for you as you go, or you can add them yourself now.
+We need to import these constants into `transmission_manager`. To define a new
+random number source in Ixa, we use `define_rng!`. There are other symbols from
+Ixa we will need for the implementation of `attempt_infection()`. You can have
+your IDE add these imports for you as you go, or you can add them yourself now.
 
 ```rust
 // transmission_manager.rs
@@ -47,20 +62,42 @@ We need to import these constants into `transmission_manager`. To define a new r
 The function `attempt_infection()` needs to do the following:
 
 1. Randomly sample a person from the population to attempt to infect.
-2. Check the sampled person's *current* `InfectionStatus`, changing it to infected (`InfectionStatusValue::I`) if and only if the person is currently susceptible (`InfectionStatusValue::S`).
-3. Schedule the next infection attempt by inserting a plan into the timeline that will run `attempt_infection()` again.
+2. Check the sampled person's _current_ `InfectionStatus`, changing it to
+   infected (`InfectionStatusValue::I`) if and only if the person is currently
+   susceptible (`InfectionStatusValue::S`).
+3. Schedule the next infection attempt by inserting a plan into the timeline
+   that will run `attempt_infection()` again.
 
 ```rust
 {{#rustdoc_include ../../models/disease_model/src/transmission_manager.rs:attempt_infection}}
 ```
 
-Read through this implementation and make sure you understand how it accomplishes the three tasks above. A few observations:
+Read through this implementation and make sure you understand how it
+accomplishes the three tasks above. A few observations:
 
-- The method `context.sample_person(())` returns an `Option\<PersonId>`, which can have the value of `PersonId` or `None`. In this case, `if let Some(person_to_infect)` matches against the `Option\<PersonId>` and continues into the following block of code if a `PersonId` is found.
-- The `#[allow(clippy::cast_precision_loss)]` is optional; without it the compiler will warn you about converting `population` 's integral type `usize` to the floating point type `f64`, but we know that this conversion is safe to do in this context.
-- If the sampled person is not susceptible, then the only thing this function does is schedule the next attempt at infection.
-- The time at which the next attempt is scheduled is sampled randomly from the exponential distribution according to our abstract model and using the random number source `TransmissionRng` that we defined specifically for this purpose.
-- None of this code refers to the people module (except to import the types `InfectionStatus` and `InfectionStatusValue`) or the infection manager we are about to write.
+- The method `context.sample_person(())` returns an `Option\<PersonId>`, which
+  can have the value of `PersonId` or `None`. In this case,
+  `if let Some(person_to_infect)` matches against the `Option\<PersonId>` and
+  continues into the following block of code if a `PersonId` is found.
+- The `#[allow(clippy::cast_precision_loss)]` is optional; without it the
+  compiler will warn you about converting `population` 's integral type `usize`
+  to the floating point type `f64`, but we know that this conversion is safe to
+  do in this context.
+- If the sampled person is not susceptible, then the only thing this function
+  does is schedule the next attempt at infection.
+- The time at which the next attempt is scheduled is sampled randomly from the
+  exponential distribution according to our abstract model and using the random
+  number source `TransmissionRng` that we defined specifically for this purpose.
+- None of this code refers to the people module (except to import the types
+  `InfectionStatus` and `InfectionStatusValue`) or the infection manager we are
+  about to write.
 
-> [!INFO] Random Number Generators
-> Each module generally defines its own random number source with `define_rng!`, avoiding interfering with the random number sources used elsewhere in the simulation in order to preserve determinism. In Monte Carlo simulations, *deterministic* pseudorandom number sequences are desirable because they ensure reproducibility, improve efficiency, provide control over randomness, enable consistent statistical testing, and reduce the likelihood of bias or error. These qualities are critical in scientific computing, optimization problems, and simulations that require precise and *verifiable* results.
+> [!INFO] Random Number Generators Each module generally defines its own random
+> number source with `define_rng!`, avoiding interfering with the random number
+> sources used elsewhere in the simulation in order to preserve determinism. In
+> Monte Carlo simulations, _deterministic_ pseudorandom number sequences are
+> desirable because they ensure reproducibility, improve efficiency, provide
+> control over randomness, enable consistent statistical testing, and reduce the
+> likelihood of bias or error. These qualities are critical in scientific
+> computing, optimization problems, and simulations that require precise and
+> _verifiable_ results.
