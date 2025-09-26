@@ -277,7 +277,7 @@ mod tests {
             .property_indexes
             .borrow()
             .get(&T::type_id())
-            .and_then(|index| Some(index.is_indexed()))
+            .map(|index| index.is_indexed())
             .unwrap_or(false)
     }
 

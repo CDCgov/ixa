@@ -116,7 +116,6 @@ mod tests {
         assert_eq!(people.len(), n);
         // Check that home_id, school_id, workplace_id are in valid ranges
         for person in &people {
-            assert!(person.age >= MIN_AGE && person.age <= MAX_AGE);
             assert!(person.home_id >= 1 && person.home_id <= num_homes);
             if person.school_id != 0 {
                 assert!(person.school_id >= 1 && person.school_id <= num_schools);

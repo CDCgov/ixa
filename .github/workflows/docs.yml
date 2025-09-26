@@ -28,23 +28,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
 
-      - name: Build and Run CLI Binary
-        # Writes out the file `docs/cli-usage.md`, which is included the crate-level docs.
-        run: cargo run --features write_cli_usage --example basic-infection -- --markdown-help
+      - name: Build docs
+        run: mise run docs
+
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Build api docs
-        run: cargo doc --no-deps --target-dir website/
-      - name: Install mdBook
-        run: cargo install mdbook
-      - name: Install mdBook plugins
-        run: |
-          cargo install mdbook-callouts
-          cargo install mdbook-inline-highlighting
-      - name: Build Ixa Book
-        run: mdbook build docs/book -d ../../website/book
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:

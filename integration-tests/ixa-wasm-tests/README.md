@@ -1,10 +1,12 @@
 # 🧪 Ixa WASM Integration Tests
 
-This directory contains integration tests for the [Ixa](https://github.com/CDCgov/ixa)
-project compiled to WebAssembly and run in a browser using Playwright.
+This directory contains integration tests for the
+[Ixa](https://github.com/CDCgov/ixa) project compiled to WebAssembly and run in
+a browser using Playwright.
 
-The [`build.sh`](./build.sh) script is the primary entry point for building, serving, testing, and
-cleaning the project. It supports multiple modes, making it easy to run tests locally or in CI.
+The [`build.sh`](./build.sh) script is the primary entry point for building,
+serving, testing, and cleaning the project. It supports multiple modes, making
+it easy to run tests locally or in CI.
 
 ## 🚀 `build.sh` Usage
 
@@ -20,11 +22,11 @@ Run the script with one of the following options:
 ### 🔧 Command Summary
 
 | **Command**      | **Installs deps** | **Builds WASM** | **Starts Server** | **Runs Tests** | **Shuts Down Server** |
-| ---------------- |-------------------|-----------------| ----------------- | -------------- | --------------------- |
-| ./build.sh       | ✅ Yes             | ✅ Yes           | ✅ Yes             | ✅ Yes          | ✅ Yes                 |
-| ./build.sh test  | ❌ No              | ✅ Yes           | ✅ Yes             | ✅ Yes          | ✅ Yes                 |
-| ./build.sh serve | ❌ No              | ✅ Yes           | ✅ Yes             | ❌ No           | ❌ No                  |
-| ./build.sh clean | ❌ No              | ❌ No            | ❌ No              | ❌ No           | ❌ N/A                 |
+| ---------------- | ----------------- | --------------- | ----------------- | -------------- | --------------------- |
+| ./build.sh       | ✅ Yes            | ✅ Yes          | ✅ Yes            | ✅ Yes         | ✅ Yes                |
+| ./build.sh test  | ❌ No             | ✅ Yes          | ✅ Yes            | ✅ Yes         | ✅ Yes                |
+| ./build.sh serve | ❌ No             | ✅ Yes          | ✅ Yes            | ❌ No          | ❌ No                 |
+| ./build.sh clean | ❌ No             | ❌ No           | ❌ No             | ❌ No          | ❌ N/A                |
 
 ## 📝 Requirements
 
@@ -34,7 +36,8 @@ Run the script with one of the following options:
   - http-server (`npm install -g http-server`), installed with deps.
   - Or Python 3 for fallback static server
 
-The default command automatically installs playwright and other NPM dependencies.
+The default command automatically installs playwright and other NPM
+dependencies.
 
 ## 🧹 Cleaning Up
 

@@ -1,6 +1,9 @@
 # Parameters loading in Ixa
 
-The goal of global properties is to load values for parameters or variables that will be accessed all throughout the simulation. For this example, we will build on the basic-infection example and focus on parameters that can't change over time and are read from a config file.
+The goal of global properties is to load values for parameters or variables that
+will be accessed all throughout the simulation. For this example, we will build
+on the basic-infection example and focus on parameters that can't change over
+time and are read from a config file.
 
 ```yaml
 population: 1000
@@ -9,7 +12,8 @@ foi: 0.1
 infection_duration: 5.0
 ```
 
-To read parameters, we create a struct called Parameters and read from the configuration file.
+To read parameters, we create a struct called Parameters and read from the
+configuration file.
 
 ```rust
 use ixa::context::Context;
@@ -26,7 +30,9 @@ pub struct ParametersValues {
 }
 ```
 
-Parameters are read using a `load-parameters.rs` module which implements the method `load_parameters_from_config` and sets the parameters as a global property, which can be accessed by the other modules.
+Parameters are read using a `load-parameters.rs` module which implements the
+method `load_parameters_from_config` and sets the parameters as a global
+property, which can be accessed by the other modules.
 
 ```rust
 fn main() {

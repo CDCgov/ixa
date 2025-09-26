@@ -1,5 +1,0 @@
-printWidth: 120   # Default is 80 for markdownlint MD013
-tabWidth: 2       # Matches markdownlint MD007 and others
-useTabs: false    # Matches markdownlint MD010 (no hard tabs)
-proseWrap: always # Required for MD013 (wrap long lines)
-endOfLine: lf

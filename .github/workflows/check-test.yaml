@@ -1,0 +1,34 @@
+name: Checks and tests
+
+on:
+  push:
+    branches: main
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Install wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Pre-commit (lint, check)
+        run: pre-commit run --all-files
+
+      - name: Test
+        run: mise run test
+
+      - name: Run examples
+        run: mise run examples
+
+      - name: Build docs
+        run: mise run docs

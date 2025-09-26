@@ -20,8 +20,10 @@ WORKDIR /home/runner/ixa
 COPY scripts/ixa_setup.sh /home/runner/ixa_setup.sh
 #RUN chmod +x /home/runner/ixa_setup.sh
 
-# Install just for task running
-RUN cargo install just
+# Install mise for task running
+RUN curl -fsSL https://mise.run | sh
+ENV PATH="/home/runner/.local/bin:$PATH"
+RUN mise --version
 
 ## Local repo will be mounted at runtime, not copied
 

@@ -1,26 +1,26 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/base:debian",
-	"features": {
-		"ghcr.io/devcontainers/features/rust:1": {},
-		"ghcr.io/devcontainers/features/node:1": {},
-		"ghcr.io/guiyomh/features/just:0": {},
-		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
-	},
-	"customizations": {
-		"vscode": {
-			"settings": {
-				"lldb.executable": "/usr/bin/lldb",
-				"editor.defaultFormatter": "rust-lang.rust-analyzer",
-				"editor.formatOnSave": true
-			},
-			"extensions": [
-				"rust-lang.rust-analyzer",
-				"tamasfe.even-better-toml",
-				"vadimcn.vscode-lldb",
-				"yzhang.markdown-all-in-one",
-				"github.copilot"
-			]
-	  	}
-	},
-	"postCreateCommand": "rustup component add rustfmt clippy && sudo apt-get install pkg-config -y"
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "RUST_VERSION": "1.89.0",
+      "FOLDER_BASENAME": "${localWorkspaceFolderBasename}"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "lldb.executable": "/usr/bin/lldb",
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "yzhang.markdown-all-in-one",
+        "github.copilot"
+      ]
+    }
+  }
 }

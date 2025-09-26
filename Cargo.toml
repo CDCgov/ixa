@@ -166,8 +166,8 @@ mismatched_lifetime_syntaxes = "allow"
 [workspace.lints.clippy]
 module-name-repetitions = "allow"
 result_unit_err = "allow"
-mismatched_lifetime_syntaxes = "allow"
 uninlined_format_args = "allow"
+upper-case-acronyms = "allow"
 
 [lints]
 workspace = true
