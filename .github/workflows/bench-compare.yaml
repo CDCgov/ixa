@@ -10,8 +10,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
-      - uses: cargo-bins/cargo-binstall@v1.15.6
-      - uses: jdx/mise-action@v2
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
 
       - name: Checkout base branch
         uses: actions/checkout@v5
@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create a benchmark baseline
-        run: mise run bench:create base
+        run: mise run bench:create base || echo "Could not create baseline"
 
       - name: Checkout PR branch
         # The checkout is done manually to avoid cleaning up the baseline benchmark
