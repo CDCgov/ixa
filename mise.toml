@@ -80,16 +80,10 @@ description = "Run all Criterion benchmarks (optionally pass a specific name)"
 run = ["cargo bench -p ixa-bench {{arg(name='name', default='')}}"]
 
 [tasks.'bench:create']
-usage = '''
-arg <baseline> help="The name of the criterion baseline to save"
-'''
 description = "Compare benchmarks against a Criterion baseline"
 run = "mise bench:criterion -- --save-baseline {{arg(name='baseline')}}"
 
 [tasks.'bench:compare']
-usage = '''
-arg <baseline> help="The name of a criterion baseline"
-'''
 description = "Compare benchmarks against a Criterion baseline"
 run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
 
