@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: cargo-bins/cargo-binstall@v1
+      - uses: cargo-bins/cargo-binstall@v1.15.6
       - uses: jdx/mise-action@v2
 
       - name: Build docs
