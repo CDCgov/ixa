@@ -37,7 +37,4 @@ website/.rustdoc_fingerprint.json
 examples/**/output/**
 
 #exceptions:
-!.vscode/settings.json
 !examples/**/output/.gitkeep
-
-.vscode
