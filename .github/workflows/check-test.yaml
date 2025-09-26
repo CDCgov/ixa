@@ -19,13 +19,13 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Pre-commit (lint, check)
-      - run: pre-commit run --all-files
+        run: pre-commit run --all-files
 
       - name: Test
-      - run: mise run test
+        run: mise run test
 
       - name: Run examples
-      - run: mise run examples
+        run: mise run examples
 
       - name: Build docs
-      - run: mise run docs
+        run: mise run docs

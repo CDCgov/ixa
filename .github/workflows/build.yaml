@@ -19,7 +19,7 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Dev Build
-      - run: mise run build
+        run: mise run build
 
       - name: WASM Build
-      - run: mise run build --target wasm32-unknown-unknown --release
+        run: mise run build --target wasm32-unknown-unknown --release
