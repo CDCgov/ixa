@@ -18,6 +18,9 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
+      - name: Install wasm target
+        run: rustup target add wasm32-unknown-unknown
+
       - name: Dev Build
         run: mise run build
 
