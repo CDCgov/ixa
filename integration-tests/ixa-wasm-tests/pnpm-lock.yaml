@@ -8,11 +8,8 @@ importers:
   .:
     devDependencies:
       "@playwright/test":
-        specifier: ^1.55.1
+        specifier: ^1.53.0
         version: 1.55.1
-      "@types/node":
-        specifier: ^24.5.2
-        version: 24.5.2
       http-server:
         specifier: ^14.1.1
         version: 14.1.1
@@ -25,12 +22,6 @@ packages:
       }
     engines: { node: ">=18" }
     hasBin: true
-
-  "@types/node@24.5.2":
-    resolution:
-      {
-        integrity: sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ==,
-      }
 
   ansi-styles@4.3.0:
     resolution:
@@ -373,12 +364,6 @@ packages:
       }
     engines: { node: ">=8" }
 
-  undici-types@7.12.0:
-    resolution:
-      {
-        integrity: sha512-goOacqME2GYyOZZfb5Lgtu+1IDmAlAEu5xnD3+xTzS10hT0vzpf0SPjkXwAw9Jm+4n/mQGDP3LO8CPbYROeBfQ==,
-      }
-
   union@0.5.0:
     resolution:
       {
@@ -403,10 +388,6 @@ snapshots:
   "@playwright/test@1.55.1":
     dependencies:
       playwright: 1.55.1
-
-  "@types/node@24.5.2":
-    dependencies:
-      undici-types: 7.12.0
 
   ansi-styles@4.3.0:
     dependencies:
@@ -603,8 +584,6 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
-
-  undici-types@7.12.0: {}
 
   union@0.5.0:
     dependencies:
