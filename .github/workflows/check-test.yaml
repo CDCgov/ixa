@@ -14,16 +14,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: cargo-bins/cargo-binstall@v1
       - uses: jdx/mise-action@v2
 
       - name: Pre-commit (lint, check)
       - run: pre-commit run --all-files
 
       - name: Test
-      - run: mise test
+      - run: mise run test
 
       - name: Run examples
-      - run: mise examples
+      - run: mise run examples
 
       - name: Build docs
-      - run: mise docs
+      - run: mise run docs

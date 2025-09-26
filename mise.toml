@@ -6,9 +6,9 @@ pnpm = "latest"
 "cargo:mdbook-callouts" = "latest"
 "cargo:mdbook-inline-highlighting" = "latest"
 "cargo:hyperfine" = "latest"
-"pipx:pre-commit" = "latest"
-"prettier" = "latest"
-"npm:markdownlint-cli" = "latest"
+"pipx:pre-commit" = "4.3.0"
+"prettier" = "3.6.2"
+"npm:markdownlint-cli" = "0.45.0"
 
 [settings]
 # Note: If you have cargo-binstall installed, this will make tool installs much faster

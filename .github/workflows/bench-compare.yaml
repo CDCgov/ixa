@@ -10,6 +10,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
+      - uses: cargo-bins/cargo-binstall@v1
       - uses: jdx/mise-action@v2
 
       - name: Checkout base branch
@@ -20,14 +21,14 @@ jobs:
           fetch-depth: 0
 
       - name: Create a benchmark baseline
-        run: mise bench:create base
+        run: mise run bench:create base
 
       - name: Checkout PR branch
         # The checkout is done manually to avoid cleaning up the baseline benchmark
         run: git checkout ${{ github.event.pull_request.head.ref }}
 
       - name: Run hyperfine benchmarks
-        run: mise bench:hyperfine -- -- --export-markdown hyperfine.md
+        run: mise run bench:hyperfine -- -- --export-markdown hyperfine.md
 
       - name: Run benchmarks on head branch and format output
         run: |
@@ -36,9 +37,9 @@ jobs:
           cat hyperfine.md >> results.md
           echo '#### Criterion'
           echo '```' >> results.md
-          if ! mise bench:compare base 2>&1; then
+          if ! mise run bench:compare base 2>&1; then
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
-            mise bench 2>&1
+            mise run bench:criterion 2>&1
           fi >> results.md
 
       - name: Add comment to PR

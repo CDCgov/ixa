@@ -14,10 +14,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: cargo-bins/cargo-binstall@v1
       - uses: jdx/mise-action@v2
 
       - name: Dev Build
-      - run: mise build
+      - run: mise run build
 
       - name: WASM Build
-      - run: mise build --target wasm32-unknown-unknown --release
+      - run: mise run build --target wasm32-unknown-unknown --release
