@@ -7,3 +7,16 @@ runs:
       uses: cargo-bins/cargo-binstall@v1.15.6
     - name: Setup mise
       uses: jdx/mise-action@v2
+    - name: Cache
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.cargo-install/
+          ~/.rustup/toolchains/
+          target/
+          docs/book/book/
+        key: cargo-${{ hashFiles('Cargo.toml') }}

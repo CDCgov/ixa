@@ -33,14 +33,14 @@ jobs:
       - name: Run benchmarks on head branch and format output
         run: |
           echo '### Benchmark Results' > results.md
-          echo "### Hyperfine'
+          echo "#### Hyperfine'
           cat hyperfine.md >> results.md
           echo '#### Criterion'
           echo '```' >> results.md
           if ! mise run bench:compare base 2>&1; then
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
             mise run bench:criterion 2>&1
-          fi >> results.md
+          fi
 
       - name: Add comment to PR
         run: |
