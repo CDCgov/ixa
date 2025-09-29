@@ -1,0 +1,9 @@
+[project]
+name = "ixa-cfa-cloudops"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+	"cfa-cloudops @ git+https://github.com/CDCgov/cfa-cloudops.git"
+]
