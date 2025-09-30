@@ -7,7 +7,6 @@
     "ghcr.io/devcontainers-extra/features/mise:1": {}
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
-  "waitFor": "postCreateCommand",
   "postStartCommand": "mise install",
   "customizations": {
     "vscode": {
