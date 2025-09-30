@@ -75,4 +75,15 @@ impl<'a> Iterator for QueryResultIterator<'a> {
 
         None
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) = self.source.size_hint();
+        if self.sources.is_empty() {
+            (lower, upper)
+        } else {
+            // The intersection may be empty but cannot have more than the
+            // upper bound of the source set.
+            (0, upper)
+        }
+    }
 }

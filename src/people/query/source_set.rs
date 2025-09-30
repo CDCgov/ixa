@@ -6,8 +6,15 @@
 //! `SourceIterator<'c>`, an iterator over the set of `PersonId`s it represents. The
 //! lifetime `'c` is the lifetime of the (immutable) borrow of the underlying `Context`.
 //!
-//! The `SourceSet<'c>` and `SourceIterator<'c>` types are used by `QueryResultIterator<'c>`,
-//! which iterates over the intersection of a set of `SourceSet`s.
+//! The `SourceSet<'c>` and `SourceIterator<'c>` types are used by `QueryResultIterator<'c>`, which
+//! iterates over the intersection of a set of `SourceSet`s. Internally, `QueryResultIterator` holds
+//! its state in a set of `SourceSet` instances and a `SourceIterator`, which is an iterator created
+//! from a `SourceSet`. A `SourceSet` wraps either an index set (an immutable reference to a set
+//! from an index) or a property vector (the `Vec<Option<PersonProperty::Value>>` that internally
+//! stores the property values) and can compute membership very efficiently. The algorithm chooses
+//! the _smallest_ `SourceSet` to create its `SourceIterator` and, when `QueryResultIterator::next()`
+//! is called, this `SourceIterator` is iterated over until an ID is found that is contained
+//! in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
 
 use crate::people::data::PeopleIterator;
 use crate::{PersonId, PersonProperty};
@@ -18,17 +25,29 @@ use std::collections::hash_set::Iter as HashSetIter;
 
 type BxPropertyVec<'a> = Box<dyn AbstractPropertyVec<'a> + 'a>;
 
-/// Type erased property vec
+/// Type erased property vec representing the (abstract) set of `PersonId`s
+/// for which a particular property has a particular value.
 pub trait AbstractPropertyVec<'a> {
     fn len(&self) -> usize;
+
+    /// A test that `person_id` is contained in the (abstractly
+    /// defined) set. This operation is very efficient.
     fn contains(&self, person_id: PersonId) -> bool;
+
+    /// This is purely a type cast from `Box<dyn AbstractPropertyVec>` to
+    /// `Box<dyn Iterator<Item = PersonId>>`. Notice the type of `self`.
     fn to_iter(self: Box<Self>) -> Box<dyn Iterator<Item = PersonId> + 'a>;
 }
 
-/// Typed property vec. This does double duty as a concrete property vec and as an iterator.
+/// Typed property vec. This does double duty as a concrete property vec and as an
+/// iterator. Instances of this struct represent the (abstract) set of `PeopleId`s for
+/// which the property `P: PersonProperty` has the value `ConcretePropertyVec::value`.
 pub(super) struct ConcretePropertyVec<'a, P: PersonProperty> {
+    /// A `Ref` to the underlying property vector backing property `P`.
     values: Ref<'a, Vec<Option<P::Value>>>,
+    /// The value that `PersonId`s in this (abstract) set must have for `P`.
     value: P::Value,
+    /// See notes on the `Iterator` impl for this struct below.
     next_index: usize,
 }
 
@@ -60,6 +79,18 @@ impl<'a, P: PersonProperty> AbstractPropertyVec<'a> for ConcretePropertyVec<'a, 
     }
 }
 
+// This iterator implementation is identical to:
+// ```rust
+// self.values.iter().enumerate().filter_map(|(i, v)| {
+//             if *v == Some(self.value) {
+//                 Some(PersonId(i))
+//             } else {
+//                 None
+//             }
+//         })
+// ```
+// The type of the iterator above is not representable, so
+// it turns out to be a lot easier to implement it ourselves.
 impl<'a, P: PersonProperty> Iterator for ConcretePropertyVec<'a, P> {
     type Item = PersonId;
 
@@ -76,7 +107,9 @@ impl<'a, P: PersonProperty> Iterator for ConcretePropertyVec<'a, P> {
     }
 }
 
-/// The self-referential iterator type for index sets
+/// The self-referential iterator type for index sets. We don't implement
+/// `Iterator` for this struct, choosing instead to access the inner
+/// iterator in the `Iterator` implementation on `SourceIterator`.
 #[self_referencing]
 pub(super) struct IndexSetIterator<'a> {
     index_set: Ref<'a, HashSet<PersonId>>,
@@ -95,14 +128,6 @@ impl<'a> IndexSetIterator<'a> {
     }
 }
 
-/// Internally, `QueryResultIterator` holds its state in a set of `SourceSet` instances
-/// and a `SourceIterator`, which is an iterator created from a `SourceSet`. A `SourceSet`
-/// wraps either an index set (an immutable reference to a set from an index) or a property
-/// vector (the `Vec<Option<PersonProperty::Value>>` that internally stores the property
-/// values) and can compute membership very efficiently. The algorithm chooses the _smallest_
-/// `SourceSet` to create its `SourceIterator` and, when `QueryResultIterator::next()` is
-/// called, this `SourceIterator` is iterated over until an ID is found that is contained
-/// in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
 pub enum SourceSet<'a> {
     IndexSet(Ref<'a, HashSet<PersonId>>),
     PropertyVec(BxPropertyVec<'a>),
@@ -158,6 +183,15 @@ impl<'a> Iterator for SourceIterator<'a> {
             SourceIterator::PropertyVecIter(iter) => iter.next(),
             SourceIterator::WholePopulation(iter) => iter.next(),
             SourceIterator::Empty => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            SourceIterator::IndexIter(iter) => iter.with_iter(|iter| iter.size_hint()),
+            SourceIterator::PropertyVecIter(_) => (0, None),
+            SourceIterator::WholePopulation(iter) => iter.size_hint(),
+            SourceIterator::Empty => (0, Some(0)),
         }
     }
 }
