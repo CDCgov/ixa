@@ -1,5 +1,5 @@
 [tools]
-node = "lts"
+node = "latest"
 pnpm = "latest"
 "cargo:wasm-pack" = "latest"
 "cargo:mdbook" = "latest"
@@ -164,3 +164,6 @@ run = "docker build -t ixa-bench ."
 [tasks.'docker:run']
 depends=["docker:build"]
 run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
+
+[tasks.'install:hooks']
+run = "pre-commit install"

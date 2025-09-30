@@ -1,12 +1,13 @@
 {
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "RUST_VERSION": "1.89.0",
-      "FOLDER_BASENAME": "${localWorkspaceFolderBasename}"
-    }
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {},
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers-extra/features/mise:1": {}
   },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "waitFor": "postCreateCommand",
+  "postStartCommand": "mise install",
   "customizations": {
     "vscode": {
       "settings": {
@@ -19,7 +20,8 @@
         "tamasfe.even-better-toml",
         "vadimcn.vscode-lldb",
         "yzhang.markdown-all-in-one",
-        "github.copilot"
+        "github.copilot",
+        "hverlin.mise-vscode"
       ]
     }
   }
