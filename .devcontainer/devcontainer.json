@@ -3,6 +3,7 @@
   "features": {
     "ghcr.io/devcontainers/features/rust:1": {},
     "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/python:1": {},
     "ghcr.io/lee-orr/rusty-dev-containers/cargo-binstall:0": {},
     "ghcr.io/devcontainers-extra/features/mise:1": {}
   },
