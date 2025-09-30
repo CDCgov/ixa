@@ -1,6 +1,7 @@
 [tools]
 node = "latest"
 pnpm = "latest"
+python = "3.13"
 "cargo:wasm-pack" = "latest"
 "cargo:mdbook" = "latest"
 "cargo:mdbook-callouts" = "latest"
