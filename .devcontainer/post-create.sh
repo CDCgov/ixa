@@ -12,3 +12,7 @@ source ~/.bashrc
 
 # Add pre-commit hooks
 mise install:hooks
+
+# Copy the custom welcome message
+# See https://github.com/orgs/community/discussions/43534
+sudo cp .devcontainer/terminal-welcome.txt /usr/local/etc/vscode-dev-containers/first-run-notice.txt
