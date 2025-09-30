@@ -1,3 +1,4 @@
 🦀 Your ixa codespace is ready!
+🛠️ To install all dependencies, run `mise install`
 🚀 Try `mise test:core` to run the core unit tests.
 📋 `mise task` will show you a list of all available tasks!

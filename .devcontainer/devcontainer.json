@@ -7,6 +7,7 @@
     "ghcr.io/lee-orr/rusty-dev-containers/cargo-binstall:0": {},
     "ghcr.io/devcontainers-extra/features/mise:1": {}
   },
+  "waitFor": "postCreateCommand",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": "mise install",
   "customizations": {

@@ -12,7 +12,6 @@ source ~/.bashrc
 
 # Install everything listed under the [tools] section of mise.toml
 mise trust
-mise install
 
 # Add pre-commit hooks
 mise install:hooks
