@@ -62,6 +62,12 @@ pub use people::{
     ContextPeopleExt, PersonCreatedEvent, PersonId, PersonProperty, PersonPropertyChangeEvent,
 };
 
+pub mod type_store;
+pub mod vec_cell;
+
+pub mod entity;
+pub use entity::*;
+
 pub mod plan;
 pub mod random;
 pub use random::{ContextRandomExt, RngId};

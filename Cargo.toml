@@ -168,6 +168,7 @@ module-name-repetitions = "allow"
 result_unit_err = "allow"
 mismatched_lifetime_syntaxes = "allow"
 uninlined_format_args = "allow"
+module-inception = "allow"
 
 [lints]
 workspace = true

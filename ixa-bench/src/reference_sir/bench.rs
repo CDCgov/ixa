@@ -27,6 +27,10 @@ hyperfine_group!(
             sir_ixa::Model::new(build_params(), sir_ixa::ModelOptions {
                 queries_enabled: false,
             }).run();
+        },
+        // The equivalent Ixa implementation using entities
+        ixa_entities => {
+            sir_ixa_entities::Model::new(build_params()).run();
         }
     }
 );
