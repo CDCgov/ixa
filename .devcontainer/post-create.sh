@@ -5,9 +5,9 @@ cd /workspaces/ixa
 sudo cp .devcontainer/terminal-welcome.txt /usr/local/etc/vscode-dev-containers/first-run-notice.txt
 
 sudo chown vscode:rustlang "${CARGO_HOME}"
-sudo chmod 775 "${CARGO_HOME}"
+sudo chmod -R 775 "${CARGO_HOME}"
 sudo chown vscode:rustlang "${RUSTUP_HOME}"
-sudo chmod 775 "${RUSTUP_HOME}"
+sudo chmod -R 775 "${RUSTUP_HOME}"
 
 # See https://mise.jdx.dev/cli/activate.html
 # This makes sure that tools installed with mise (e.g., hyperfine, mdbook)
@@ -19,5 +19,5 @@ source ~/.bashrc
 mise trust
 
 # Add pre-commit hooks
-#mise install:hooks
+mise install:hooks
 
