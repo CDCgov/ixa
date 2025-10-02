@@ -9,7 +9,6 @@
   },
   "waitFor": "postCreateCommand",
   "postCreateCommand": "sh .devcontainer/post-create.sh",
-  //  "postStartCommand": "mise install",
   "customizations": {
     "vscode": {
       "settings": {
