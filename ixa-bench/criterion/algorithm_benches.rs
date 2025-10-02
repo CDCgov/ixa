@@ -56,9 +56,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
-
-            black_box(sample_single_from_known_length(rng, data));
+            let mut data_iter = black_box(data.iter().copied());
+            black_box(sample_single_from_known_length(
+                rng,
+                &mut data_iter,
+                100_000,
+            ));
         });
     });
 
@@ -71,9 +74,9 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
+            let mut data_iter = black_box(data.iter().copied());
 
-            black_box(sample_single_l_reservoir(rng, data));
+            black_box(sample_single_l_reservoir(rng, &mut data_iter));
         });
     });
 
@@ -84,8 +87,8 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
-            let iterator = NonExactSize::new(data.iter());
+            let data_iter = black_box(data.iter().copied());
+            let iterator = NonExactSize::new(data_iter);
 
             // Use the `rand` crate's reservoir sampling implementation
             let selected = iterator.choose(rng);
@@ -102,10 +105,11 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
+            let mut data_iter = black_box(data.iter().copied());
             let requested = counts[count_idx];
 
-            let selected = sample_multiple_from_known_length(rng, data, requested);
+            let selected =
+                sample_multiple_from_known_length(rng, &mut data_iter, 100_000, requested);
 
             assert_eq!(selected.len(), requested);
             count_idx = (count_idx + 1) % 1000;
@@ -121,10 +125,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
+            let mut data_iter = black_box(data.iter().copied());
             let requested = counts[count_idx];
 
-            let reservoir = sample_multiple_l_reservoir(rng, data, counts[count_idx]);
+            let reservoir = sample_multiple_l_reservoir(rng, &mut data_iter, counts[count_idx]);
             assert_eq!(reservoir.len(), requested);
             count_idx = (count_idx + 1) % 1000;
             black_box(reservoir);
@@ -137,13 +141,13 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             // Treat inputs as opaque at the start of the iteration
             let rng = black_box(&mut rng);
-            let data = black_box(&data);
+            let data_iter = black_box(data.iter().copied());
             let requested = counts[count_idx];
             // It turns out the following line makes no difference in performance.
-            // let iterator = NonExactSize::new(data.iter());
+            // let iterator = NonExactSize::new(data_iter);
 
             // Use the `rand` crate's reservoir sampling implementation
-            let selected = data.iter().choose_multiple(rng, requested);
+            let selected = data_iter.choose_multiple(rng, requested);
             assert_eq!(selected.len(), requested);
             count_idx = (count_idx + 1) % 1000;
             black_box(selected);

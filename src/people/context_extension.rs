@@ -1,11 +1,14 @@
 use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
-use crate::people::query::Query;
+use crate::people::query::{Query, QueryResultIterator};
 use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
-use crate::random::{sample_multiple_from_known_length, sample_single_from_known_length};
+use crate::random::{
+    sample_multiple_from_known_length, sample_multiple_l_reservoir,
+    sample_single_from_known_length, sample_single_l_reservoir,
+};
 use crate::{
-    Context, ContextRandomExt, HashSet, HashSetExt, IxaError, PersonCreatedEvent, PersonId,
-    PersonProperty, PersonPropertyChangeEvent, RngId, Tabulator,
+    Context, ContextRandomExt, HashSet, IxaError, PersonCreatedEvent, PersonId, PersonProperty,
+    PersonPropertyChangeEvent, RngId, Tabulator,
 };
 use log::{trace, warn};
 use rand::{seq::index::sample as choose_range, Rng};
@@ -58,6 +61,31 @@ pub trait ContextPeopleExt {
     /// that one is created.
     fn index_property<T: PersonProperty>(&mut self, property: T);
 
+    /// Query for all people matching a given set of criteria, calling the `scope`
+    /// callback with an immutable reference to the fully realized result set.
+    ///
+    /// If you don't need the entire result set, consider using [`Context::query_result_iterator()`],
+    /// which gives an iterator that computes the results as needed. If you
+    /// only need to count the results, use [`Context::query_people_count()`]
+    ///
+    /// [`Context::with_query_results()`] takes any type that implements [Query], but
+    /// instead of implementing query yourself it is best to use the automatic
+    /// syntax that implements [Query] for a tuple of pairs of (property,
+    /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
+    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>));
+
+    /// Query for all people matching a given set of criteria, returning an iterator
+    /// that computes the next `PersonId` as needed.
+    ///
+    /// Prefer this method to [`Context::with_query_results()`] in cases where you might
+    /// not need to realize the entire result set at once, such as when you just need a
+    /// single arbitrary (but not random) match to a query.
+    fn query_result_iterator<Q: Query>(&self, query: Q) -> QueryResultIterator;
+
+    #[deprecated(
+        since = "0.3.4",
+        note = "Use `with_query_results`, which is much faster for indexed results"
+    )]
     /// Query for all people matching a given set of criteria.
     ///
     /// [`Context::query_people()`] takes any type that implements [Query],
@@ -65,7 +93,7 @@ pub trait ContextPeopleExt {
     /// to use the automatic syntax that implements [Query] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn query_people<T: Query>(&self, q: T) -> Vec<PersonId>;
+    fn query_people<Q: Query>(&self, query: Q) -> Vec<PersonId>;
 
     /// Get the count of all people matching a given set of criteria.
     ///
@@ -78,19 +106,19 @@ pub trait ContextPeopleExt {
     /// This is intended to be slightly faster than [`Context::query_people()`]
     /// because it does not need to allocate a list. We haven't actually
     /// measured it, so the difference may be modest if any.
-    fn query_people_count<T: Query>(&self, q: T) -> usize;
+    fn query_people_count<Q: Query>(&self, query: Q) -> usize;
 
     /// Determine whether a person matches a given expression.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool;
+    fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool;
 
     /// Similar to `match_person`, but more efficient, it removes people
     /// from a list who do not match the given query. Note that this
     /// method modifies the vector in-place, so it is up to the caller
     /// to clone the vector if they don't want to modify their original
     /// vector.
-    fn filter_people<T: Query>(&self, people: &mut Vec<PersonId>, q: T);
+    fn filter_people<Q: Query>(&self, people: &mut Vec<PersonId>, query: Q);
     fn tabulate_person_properties<T: Tabulator, F>(&self, tabulator: &T, print_fn: F)
     where
         F: Fn(&Context, &[String], usize);
@@ -100,7 +128,7 @@ pub trait ContextPeopleExt {
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
     ///
-    fn sample_person<R: RngId + 'static, T: Query>(&self, rng_id: R, query: T) -> Option<PersonId>
+    fn sample_person<R: RngId + 'static, Q: Query>(&self, rng_id: R, query: Q) -> Option<PersonId>
     where
         R::RngType: Rng;
 
@@ -108,10 +136,10 @@ pub trait ContextPeopleExt {
     /// Returns an empty list if no people match the query.
     ///
     /// The syntax here is the same as with [`Context::query_people()`].
-    fn sample_people<R: RngId + 'static, T: Query>(
+    fn sample_people<R: RngId + 'static, Q: Query>(
         &self,
         rng_id: R,
-        query: T,
+        query: Q,
         n: usize,
     ) -> Vec<PersonId>
     where
@@ -281,7 +309,6 @@ impl ContextPeopleExt for Context {
 
     fn match_person<T: Query>(&self, person_id: PersonId, q: T) -> bool {
         T::setup(&q, self);
-        // This cannot fail because someone must have been made by now.
         let data_container = self.get_data(PeoplePlugin);
 
         let query = q.get_query();
@@ -374,7 +401,7 @@ impl ContextPeopleExt for Context {
             self,
             indices.as_slice(),
             &mut Vec::new(),
-            &HashSet::new(),
+            &HashSet::default(),
             &print_fn,
         );
     }
@@ -411,7 +438,8 @@ impl ContextPeopleExt for Context {
             return Vec::new();
         }
 
-        // Special case the empty query because we can do it in O(1).
+        // Special case the empty query, which represents the entire population,
+        // because we can sample from it in O(1).
         if query.type_id() == TypeId::of::<()>() {
             let selected = self
                 .sample(rng_id, |rng| {
@@ -423,72 +451,29 @@ impl ContextPeopleExt for Context {
             return selected;
         }
 
-        Q::setup(&query, self);
+        let mut query_result_iterator = self.query_result_iterator(query);
 
-        // Check if this query is indexed. This is a "known length" case.
-        if let Some(multi_property_id) = query.multi_property_type_id() {
-            let container = self.get_data(PeoplePlugin);
-            // Get the mutable index, because we need to refresh the index.
-            if let Some(index) = container
-                .property_indexes
-                .borrow_mut()
-                .get_mut(&multi_property_id)
-            {
-                // Make sure the index isn't stale.
-                index.index_unindexed_people(self);
+        match query_result_iterator.size_hint() {
+            // The empty case
+            (0, Some(0)) => vec![],
 
-                if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
-                    // If there are not enough items in the set to satisfy the request, return as
-                    // many as we can.
-                    if people_set.len() <= requested {
-                        return people_set.to_owned_vec();
-                    }
-
-                    // This is slightly faster than "Algorithm L" reservoir sampling when requested << ~5
-                    // and always much faster than the reservoir sampling algorithm in `rand`.
-                    return self.sample(rng_id, |rng| {
-                        sample_multiple_from_known_length(rng, people_set, requested)
-                    });
-                }
+            // This is a "known length" case
+            (lower_bound, Some(upper_bound)) if lower_bound == upper_bound && lower_bound > 0 => {
+                self.sample(rng_id, |rng| {
+                    sample_multiple_from_known_length(
+                        rng,
+                        &mut query_result_iterator,
+                        lower_bound,
+                        requested,
+                    )
+                })
             }
+
+            // The "unknown length" case
+            _ => self.sample(rng_id, |rng| {
+                sample_multiple_l_reservoir(rng, &mut query_result_iterator, requested)
+            }),
         }
-
-        // This is the "unknown length" case. This algorithm is *much*
-        // faster than the reservoir algorithm implemented in `rand`.
-        // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
-        // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
-        // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut position: usize = 0;
-        let mut next_pick_position: usize = 1;
-        let mut selected = Vec::new();
-
-        // ToDo(RobertJacobsonCDC): This will use `iter_query_results` API when it is ready.
-        self.query_people_internal(
-            |person| {
-                position += 1;
-                if next_pick_position == position {
-                    if selected.len() == requested {
-                        let to_remove = self.sample_range(rng_id, 0..selected.len());
-                        selected.swap_remove(to_remove);
-                    }
-                    selected.push(person);
-                    if selected.len() == requested {
-                        // `f32` arithmetic is no faster than `f64` on modern hardware.
-                        next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
-                            / f64::ln(1.0 - weight))
-                        .floor() as usize
-                            + 1;
-                        weight *= self.sample_range(rng_id, 0.0..1.0);
-                    } else {
-                        next_pick_position += 1;
-                    }
-                }
-            },
-            query,
-        );
-
-        selected
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -497,69 +482,74 @@ impl ContextPeopleExt for Context {
         R::RngType: Rng,
     {
         let current_population = self.get_current_population();
-
         if current_population == 0 {
             warn!("Requested a sample person from an empty population");
             return None;
         }
 
-        // Special case the empty query because we can do it in O(1).
+        // Special case the empty query, which represents the entire population,
+        // because we can sample from it in O(1).
         if query.type_id() == TypeId::of::<()>() {
             let result = self.sample_range(rng_id, 0..current_population);
             return Some(PersonId(result));
         }
 
+        let mut query_result_iterator = self.query_result_iterator(query);
+
+        match query_result_iterator.size_hint() {
+            // The empty case
+            (0, Some(0)) => None,
+
+            // This is a "known length" case
+            (lower_bound, Some(upper_bound)) if lower_bound == upper_bound && lower_bound > 0 => {
+                self.sample(rng_id, |rng| {
+                    sample_single_from_known_length(rng, &mut query_result_iterator, lower_bound)
+                })
+            }
+
+            // The "unknown length" case
+            _ => self.sample(rng_id, |rng| {
+                sample_single_l_reservoir(rng, &mut query_result_iterator)
+            }),
+        }
+    }
+
+    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>)) {
+        // The fast path for queries that are indexed.
         Q::setup(&query, self);
-
-        // Check if this query is indexed. This is a "known length" case.
+        let data_container = self.get_data(PeoplePlugin);
         if let Some(multi_property_id) = query.multi_property_type_id() {
-            let container = self.get_data(PeoplePlugin);
-            // Get the mutable index, because we need to refresh the index.
-            if let Some(index) = container
-                .property_indexes
-                .borrow_mut()
-                .get_mut(&multi_property_id)
-            {
-                // Make sure the index isn't stale.
-                index.index_unindexed_people(self);
+            // Make sure the index isn't stale.
+            data_container.index_unindexed_people_for_type_id(self, multi_property_id);
 
-                if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
-                    return self.sample(rng_id, |rng| {
-                        sample_single_from_known_length(rng, people_set)
-                    });
+            if let Some(index) = data_container
+                .property_indexes
+                .borrow()
+                .get(&multi_property_id)
+            {
+                if index.is_indexed() {
+                    let value = query.multi_property_value_hash();
+                    if let Some(people_set) = index.get_with_hash(value) {
+                        scope(people_set);
+                        return;
+                    } else {
+                        let empty = HashSet::default();
+                        scope(&empty);
+                        return;
+                    }
                 }
             }
         }
 
-        // This is the "unknown length" case. This algorithm is *much*
-        // faster than the reservoir algorithm implemented in `rand`.
-        // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
-        // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
-        // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        let mut selected: Option<PersonId> = None;
-        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut position: usize = 0;
-        let mut next_pick_position: usize = 1;
+        // The slow path: compute the result set.
+        let result = query
+            .new_query_result_iterator(self)
+            .collect::<HashSet<PersonId>>();
+        scope(&result);
+    }
 
-        // ToDo(RobertJacobsonCDC): This will use `random::sample_single_l_reservoir`
-        //     when the `iter_query_results` API is ready.
-        self.query_people_internal(
-            |person| {
-                position += 1;
-                if next_pick_position == position {
-                    selected = Some(person);
-                    // `f32` arithmetic is no faster than `f64` on modern hardware.
-                    next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
-                        / f64::ln(1.0 - weight))
-                    .floor() as usize
-                        + 1;
-                    weight *= self.sample_range(rng_id, 0.0..1.0);
-                }
-            },
-            query,
-        );
-
-        selected
+    fn query_result_iterator<Q: Query>(&self, query: Q) -> QueryResultIterator {
+        query.new_query_result_iterator(self)
     }
 }
 
@@ -596,7 +586,7 @@ impl ContextPeopleExtInternal for Context {
         let mut unindexed = Vec::<(TypeId, HashValueType)>::new();
         let data_container = self.get_data(PeoplePlugin);
 
-        let property_hashs_working_set: Vec<(TypeId, HashValueType)> =
+        let property_hashes_working_set: Vec<(TypeId, HashValueType)> =
             if let Some(multi_property_id) = query.multi_property_type_id() {
                 let combined_hash = query.multi_property_value_hash();
                 vec![(multi_property_id, combined_hash)]
@@ -605,12 +595,12 @@ impl ContextPeopleExtInternal for Context {
             };
 
         // 1. Walk through each property and update the indexes.
-        for (t, _) in &property_hashs_working_set {
+        for (t, _) in &property_hashes_working_set {
             data_container.index_unindexed_people_for_type_id(self, *t);
         }
 
         // 2. Collect the index entry corresponding to the value.
-        for (t, hash) in property_hashs_working_set {
+        for (t, hash) in property_hashes_working_set {
             let (is_indexed, people_set) = data_container.get_people_for_id_hash(t, hash);
             if is_indexed {
                 if let Some(matching_people) = people_set {
@@ -626,7 +616,7 @@ impl ContextPeopleExtInternal for Context {
             }
         }
 
-        // 3. Create an iterator over people, based one either:
+        // 3. Create an iterator over people, based on either:
         //    (1) the smallest index if there is one.
         //    (2) the overall population if there are no indices.
 
@@ -673,7 +663,7 @@ mod tests {
     use crate::{
         define_derived_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        IxaError, PersonId, PersonPropertyChangeEvent,
+        HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use serde_derive::Serialize;
     use std::cell::RefCell;
@@ -1030,7 +1020,11 @@ mod tests {
         let _ = context.add_person((Age, 40)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
         let _ = context.add_person((Age, 42)).unwrap();
-        let mut all_people = context.query_people(());
+        let mut all_people = Vec::new();
+
+        context.with_query_results((), &mut |results| {
+            all_people = results.to_owned_vec();
+        });
 
         let mut result = all_people.clone();
         context.filter_people(&mut result, (Age, 42));

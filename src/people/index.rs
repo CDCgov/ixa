@@ -96,7 +96,7 @@ pub trait TypeErasedIndex {
 
     fn is_indexed(&self) -> bool;
     fn set_indexed(&mut self, is_indexed: bool);
-    fn index_unindexed_people(&mut self, context: &Context);
+    fn index_unindexed_people(&mut self, context: &Context) -> bool;
 
     /// Produces an iterator over pairs (serialized property value, set of `PersonId`s).
     fn iter_serialized_values_people(
@@ -168,9 +168,9 @@ impl<T: PersonProperty> TypeErasedIndex for Index<T> {
         self.is_indexed = is_indexed;
     }
 
-    fn index_unindexed_people(&mut self, context: &Context) {
+    fn index_unindexed_people(&mut self, context: &Context) -> bool {
         if !self.is_indexed {
-            return;
+            return false;
         }
         let current_pop = context.get_current_population();
         trace!(
@@ -186,6 +186,8 @@ impl<T: PersonProperty> TypeErasedIndex for Index<T> {
             self.add_person(&T::make_canonical(value), person_id);
         }
         self.max_indexed = current_pop;
+
+        true
     }
 
     fn iter_serialized_values_people(
@@ -258,10 +260,16 @@ mod test {
             .add_person(((Age, 1u8), (Weight, 2u8), (Height, 3u8)))
             .unwrap();
 
-        let results_a = context.query_people((AWH, (1u8, 2u8, 3u8)));
+        let mut results_a = Default::default();
+        context.with_query_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
+            results_a = results.clone()
+        });
         assert_eq!(results_a.len(), 1);
 
-        let results_b = context.query_people((WHA, (2u8, 3u8, 1u8)));
+        let mut results_b = Default::default();
+        context.with_query_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
+            results_b = results.clone()
+        });
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
@@ -271,10 +279,16 @@ mod test {
             .add_person(((Weight, 1u8), (Height, 2u8), (Age, 3u8)))
             .unwrap();
 
-        let results_a = context.query_people((WHA, (1u8, 2u8, 3u8)));
+        let mut results_a = Default::default();
+        context.with_query_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
+            results_a = results.clone()
+        });
         assert_eq!(results_a.len(), 1);
 
-        let results_b = context.query_people((AWH, (3u8, 1u8, 2u8)));
+        let mut results_b = Default::default();
+        context.with_query_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
+            results_b = results.clone()
+        });
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
