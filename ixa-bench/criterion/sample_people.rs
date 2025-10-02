@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
-use ixa::rand::{thread_rng, Rng};
+use ixa::rand::{rng, Rng};
 use ixa::PersonId;
 use std::hint::black_box;
 
@@ -14,7 +14,7 @@ define_person_property!(Property100, u8, |context: &Context, _person: PersonId| 
 });
 
 fn setup() -> (Context, Vec<u8>) {
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let mut context = Context::new();
 
     context.index_property(Property10);
@@ -23,7 +23,7 @@ fn setup() -> (Context, Vec<u8>) {
     // The number of items to choose out of the data set for multiple sampling
     let mut counts: Vec<u8> = Vec::with_capacity(1000);
     for _ in 0..1000 {
-        counts.push(rng.gen_range(5..100));
+        counts.push(rng.random_range(5..100));
     }
 
     // Add population

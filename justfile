@@ -29,13 +29,13 @@ install-playwright:
 # Build the wasm module for the browser using wasm-pack
 [group('Wasm')]
 [group('Build')]
-build-wasm-pack: install-wasm-pack
+build-wasm-pack $RUSTFLAGS='--cfg getrandom_backend="wasm_js"': install-wasm-pack
     cd integration-tests/ixa-wasm-tests && wasm-pack build --target web
 
 # Run browser-based Playwright tests via npm
 [group('Bench')]
 [group('Wasm')]
-test-wasm: install-playwright build-wasm-pack
+test-wasm $RUSTFLAGS='--cfg getrandom_backend="wasm_js"': install-playwright build-wasm-pack
     cd integration-tests/ixa-wasm-tests && npm test
 
 # Remove wasm-pack and Playwright build artifacts (including `node_modules`)
