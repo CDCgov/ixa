@@ -19,5 +19,5 @@ source ~/.bashrc
 mise trust
 
 # Add pre-commit hooks
-mise install:hooks
+#mise install:hooks
 
