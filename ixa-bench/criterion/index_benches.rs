@@ -31,7 +31,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
 
     let mut numbers: Vec<u8> = Vec::with_capacity(1000);
     for _ in 0..1000 {
-        numbers.push(context.sample_range(IndexBenchRng, 0..100));
+        numbers.push(context.sample_range(IndexBenchRng, 0..10));
     }
 
     context.index_property(Property10);
