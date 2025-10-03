@@ -2,7 +2,8 @@
 
 ## Prerequisits
 
-You need mdBook and the `mdbook-callouts` and `mdbook-inline-highlighting` plugins.
+You need mdBook and the `mdbook-callouts` and `mdbook-inline-highlighting`
+plugins.
 
 ```bash
 cargo install mdbook mdbook-callouts mdbook-inline-highlighting
@@ -28,4 +29,7 @@ For authoring, use `serve` instead:
 mdbook serve --open
 ```
 
-> The `serve` command watches the book’s `src` directory for changes, rebuilding the book and refreshing clients for each change; this includes re-creating deleted files still mentioned in `SUMMARY.md`! A websocket connection is used to trigger the client-side refresh.
+> The `serve` command watches the book’s `src` directory for changes, rebuilding
+> the book and refreshing clients for each change; this includes re-creating
+> deleted files still mentioned in `SUMMARY.md`! A websocket connection is used
+> to trigger the client-side refresh.
