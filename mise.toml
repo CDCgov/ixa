@@ -63,6 +63,7 @@ sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
 outputs = ['node_modules/.pnpm/lock.yaml']
 
 [tasks.'wasm:compile']
+env.RUSTFLAGS='--cfg getrandom_backend="wasm_js"'
 dir="integration-tests/ixa-wasm-tests"
 run= "wasm-pack build --target web"
 sources=["src/*.rs", "Cargo.toml"]
