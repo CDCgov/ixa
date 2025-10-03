@@ -71,8 +71,7 @@ impl InfectionLoop for Context {
     fn infected_people(&self) -> usize {
         if self.get_options().queries_enabled {
             #[allow(deprecated)]
-            self.query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len()
+            self.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
         } else {
             self.get_data(NonQueryInfectionTracker).len()
         }

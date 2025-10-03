@@ -208,16 +208,16 @@ impl PeopleData {
         &self,
         type_id: TypeId,
         value_hash: HashValueType,
-        function: &mut dyn FnMut(&HashSet<PersonId>),
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
     ) -> Result<(), ()> {
         if let Some(index) = self.property_indexes.borrow().get(&type_id) {
             if let Some(people_set) = index.get_with_hash(value_hash) {
-                (function)(people_set);
+                (callback)(people_set);
             } else {
                 // The `value_hash` is not found. We assume this occurs when no people have that value for the
                 // property, so we pass an empty set to the function. (This is guaranteed not to allocate.)
                 let empty = HashSet::default();
-                (function)(&empty);
+                (callback)(&empty);
             }
             return Ok(());
         }

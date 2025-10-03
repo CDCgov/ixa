@@ -20,7 +20,7 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
         if households.insert(household_id) {
             let mut members: Vec<PersonId> = Vec::new();
             context.with_query_results((HouseholdId, household_id), &mut |results| {
-                members = results.iter().copied().collect()
+                members = results.to_owned_vec()
             });
             // create a dense network
             while let Some(person) = members.pop() {

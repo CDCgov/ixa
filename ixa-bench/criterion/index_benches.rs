@@ -43,9 +43,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for number in &numbers {
                 black_box(context.with_query_results(
                     black_box((Property10, number % 10)),
-                    black_box(&mut |people_set| {
-                        black_box(people_set);
-                    }),
+                    black_box(&mut |_| {}),
                 ));
             }
         });

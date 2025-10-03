@@ -70,7 +70,7 @@ pub trait ContextPeopleExt {
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [Query] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>));
+    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
 
     #[deprecated(
         since = "0.3.4",
@@ -580,7 +580,7 @@ impl ContextPeopleExt for Context {
         selected
     }
 
-    fn with_query_results<Q: Query>(&self, query: Q, scope: &mut dyn FnMut(&HashSet<PersonId>)) {
+    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             let mut people_set =
@@ -588,7 +588,7 @@ impl ContextPeopleExt for Context {
             (0..self.get_current_population()).for_each(|i| {
                 people_set.insert(PersonId(i));
             });
-            scope(&people_set);
+            callback(&people_set);
             return;
         }
 
@@ -608,11 +608,11 @@ impl ContextPeopleExt for Context {
                 if index.is_indexed() {
                     let value = query.multi_property_value_hash();
                     if let Some(people_set) = index.get_with_hash(value) {
-                        scope(people_set);
+                        callback(people_set);
                         return;
                     } else {
                         let empty = HashSet::default();
-                        scope(&empty);
+                        callback(&empty);
                         return;
                     }
                 }
@@ -628,7 +628,7 @@ impl ContextPeopleExt for Context {
             },
             query,
         );
-        scope(&result);
+        callback(&result);
     }
 }
 
