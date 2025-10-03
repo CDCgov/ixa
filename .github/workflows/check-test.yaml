@@ -24,8 +24,14 @@ jobs:
       - name: Pre-commit (lint, check)
         run: pre-commit run --all-files
 
-      - name: Test
-        run: mise run test
+      - name: Unit tests
+        run: mise run test:unit
+
+      - name: WASM tests
+        run: mise run test:wasm
+
+      - name: Check single run for hyperfine
+        run: mise run test:hyperfine
 
       - name: Run examples
         run: mise run examples
