@@ -102,7 +102,7 @@ let result = context.sample_bool(MyRng, 0.4);  // 40% chance of true
 Ixa re-exports the `rand` crate as `ixa::rand`. The `rand` crate comes with [a few common distributions](https://docs.rs/rand/0.8.5/rand/distributions/index.html). The [`rand_distr`](https://docs.rs/rand_distr/latest/rand_distr/) and the [`statrs`](https://docs.rs/statrs/latest/statrs/distribution/index.html) crates provide many more.
 
 ```rust
-let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0));
+let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0).unwrap());
 ```
 
 > [!WARNING] `rand` Crate Version Compatibility

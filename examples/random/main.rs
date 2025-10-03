@@ -1,6 +1,6 @@
 use ixa::prelude::*;
-use rand::distributions::Uniform;
 use rand::Rng;
+use rand_distr::Uniform;
 
 static SEED: u64 = 123;
 static POPULATION: u64 = 10;
@@ -24,9 +24,9 @@ fn main() {
     });
 
     let recovery_time = if context.sample_bool(MyRng, 0.5) {
-        context.sample_distr(MyRng, Uniform::new(2.0, 10.0))
+        context.sample_distr(MyRng, Uniform::new(2.0, 10.0).unwrap())
     } else {
-        context.sample(MyRng, |rng| rng.gen_range(10.0..20.0))
+        context.sample(MyRng, |rng| rng.random_range(10.0..20.0))
     };
 
     context.add_plan(recovery_time, {

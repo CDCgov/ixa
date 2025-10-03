@@ -1,8 +1,7 @@
-use crate::rand::{
-    distributions::uniform::{SampleRange, SampleUniform},
-    distributions::{Distribution, WeightedIndex},
-    Rng, SeedableRng,
-};
+use crate::rand::distr::uniform::{SampleRange, SampleUniform};
+use crate::rand::distr::weighted::{Weight, WeightedIndex};
+use crate::rand::distr::Distribution;
+use crate::rand::{Rng, SeedableRng};
 use crate::{
     hashing::hash_str,
     random::{RngHolder, RngPlugin},
@@ -95,7 +94,7 @@ pub trait ContextRandomExt: ContextBase {
         S: SampleRange<T>,
         T: SampleUniform,
     {
-        self.sample(rng_id, |rng| rng.gen_range(range))
+        self.sample(rng_id, |rng| rng.random_range(range))
     }
 
     /// Gets a random boolean value which is true with probability `p`
@@ -105,7 +104,7 @@ pub trait ContextRandomExt: ContextBase {
     where
         R::RngType: Rng,
     {
-        self.sample(rng_id, |rng| rng.gen_bool(p))
+        self.sample(rng_id, |rng| rng.random_bool(p))
     }
 
     /// Draws a random entry out of the list provided in `weights`
@@ -115,7 +114,12 @@ pub trait ContextRandomExt: ContextBase {
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
         R::RngType: Rng,
-        T: Clone + Default + SampleUniform + for<'a> std::ops::AddAssign<&'a T> + PartialOrd,
+        T: Clone
+            + Default
+            + SampleUniform
+            + for<'a> std::ops::AddAssign<&'a T>
+            + PartialOrd
+            + Weight,
     {
         let index = WeightedIndex::new(weights).unwrap();
         let mut rng = get_rng::<R>(self);
@@ -128,7 +132,8 @@ impl ContextRandomExt for Context {}
 #[cfg(test)]
 mod test {
     use crate::context::Context;
-    use crate::rand::{distributions::WeightedIndex, prelude::Distribution, RngCore};
+    use crate::rand::distr::{weighted::WeightedIndex, Distribution};
+    use crate::rand::RngCore;
     use crate::random::context_ext::ContextRandomExt;
     use crate::{define_data_plugin, define_rng};
 

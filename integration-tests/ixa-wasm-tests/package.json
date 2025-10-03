@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "http-server -c-1 .",
-    "test": "wasm-pack build --target web && playwright test"
+    "test": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --target web && playwright test"
   },
   "keywords": [],
   "author": "The Ixa Developers <cfa@cdc.gov>",

@@ -87,7 +87,7 @@ where
         return None;
     }
     // This little trick with `u32` makes this function 30% faster.
-    let index = rng.gen_range(0..len as u32) as usize;
+    let index = rng.random_range(0..len as u32) as usize;
     // The set need not be randomly indexable, so we have to use the `nth` method.
     set.iter().nth(index).cloned()
 }
@@ -113,7 +113,7 @@ where
     T: Clone + 'static,
 {
     let mut chosen_item: Option<T> = None; // the currently selected element
-    let mut weight: f64 = rng.gen_range(0.0..1.0); // controls skip distance distribution
+    let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
     let mut position: usize = 0; // current index in data
     let mut next_pick_position: usize = 1; // index of the next item to pick
 
@@ -122,8 +122,8 @@ where
         if position == next_pick_position {
             chosen_item = Some(item.clone());
             next_pick_position +=
-                (f64::ln(rng.gen_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize + 1;
-            weight *= rng.gen_range(0.0..1.0);
+                (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize + 1;
+            weight *= rng.random_range(0.0..1.0);
         }
     });
 
@@ -191,7 +191,7 @@ where
     Container: HasLen + HasIter<Item<'a> = &'a T>,
     T: Clone + 'static,
 {
-    let mut weight: f64 = rng.gen_range(0.0..1.0); // controls skip distance distribution
+    let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
     let mut position: usize = 0; // current index in data
     let mut next_pick_position: usize = 1; // index of the next item to pick
     let mut reservoir = Vec::with_capacity(requested); // the sample reservoir
@@ -200,15 +200,16 @@ where
         position += 1;
         if position == next_pick_position {
             if reservoir.len() == requested {
-                let to_remove = rng.gen_range(0..reservoir.len());
+                let to_remove = rng.random_range(0..reservoir.len());
                 reservoir.swap_remove(to_remove);
             }
             reservoir.push(item.clone());
 
             if reservoir.len() == requested {
-                next_pick_position +=
-                    (f64::ln(rng.gen_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize + 1;
-                weight *= rng.gen_range(0.0..1.0);
+                next_pick_position += (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight))
+                    .floor() as usize
+                    + 1;
+                weight *= rng.random_range(0.0..1.0);
             } else {
                 next_pick_position += 1;
             }

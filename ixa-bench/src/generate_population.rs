@@ -45,7 +45,7 @@ impl PopulationIterator {
         let num_workplaces =
             ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-        let rng = rand::thread_rng();
+        let rng = rand::rng();
         PopulationIterator {
             n,
             idx: 0,
@@ -63,15 +63,15 @@ impl Iterator for PopulationIterator {
         if self.idx >= self.n {
             return None;
         }
-        let age = self.rng.gen_range(MIN_AGE..=MAX_AGE);
-        let home_id = self.rng.gen_range(1..=self.num_homes);
+        let age = self.rng.random_range(MIN_AGE..=MAX_AGE);
+        let home_id = self.rng.random_range(1..=self.num_homes);
         let mut school_id = 0;
         let mut workplace_id = 0;
         if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) && self.num_schools > 0 {
-            school_id = self.rng.gen_range(1..=self.num_schools);
+            school_id = self.rng.random_range(1..=self.num_schools);
         }
         if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) && self.num_workplaces > 0 {
-            workplace_id = self.rng.gen_range(1..=self.num_workplaces);
+            workplace_id = self.rng.random_range(1..=self.num_workplaces);
         }
         let person = Person {
             id: self.idx + 1,

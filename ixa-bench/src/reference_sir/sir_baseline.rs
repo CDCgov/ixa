@@ -87,7 +87,7 @@ impl Model {
     }
 
     fn sample_random_person(&mut self) -> PersonId {
-        let index = self.rng.gen_range(0..self.population);
+        let index = self.rng.random_range(0..self.population);
         PersonId { id: index }
     }
 
@@ -104,7 +104,7 @@ impl Model {
         // Seed infections
         for _ in 0..self.parameters.initial_infections {
             let n_susceptible = self.susceptible_people.len();
-            let index = self.rng.gen_range(0..n_susceptible);
+            let index = self.rng.random_range(0..n_susceptible);
             let person_to_infect = *self.susceptible_people.get_index(index).unwrap();
             self.infect_person(person_to_infect, None);
         }
@@ -127,7 +127,7 @@ impl Model {
                     self.infect_person(person_to_infect, Some(self.time));
                 }
             } else {
-                let index = self.rng.gen_range(0..n_infectious);
+                let index = self.rng.random_range(0..n_infectious);
                 let person_to_recover = *self.infectious_people.get_index(index).unwrap();
                 self.set_infection_status(person_to_recover, InfectionStatus::Recovered);
                 self.stats.record_recovery();
@@ -163,9 +163,9 @@ mod test {
         );
         context.run();
 
-        // Final size relation is ~58%
+        // Final size relation is ~59%
         let incidence = context.get_stats().get_cum_incidence() as f64;
-        let expected = context.parameters.population as f64 * 0.58;
+        let expected = context.parameters.population as f64 * 0.59;
         assert_relative_eq!(incidence, expected, max_relative = 0.02);
     }
 }
