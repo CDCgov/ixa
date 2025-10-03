@@ -70,8 +70,8 @@ impl InfectionLoop for Context {
     }
     fn infected_people(&self) -> usize {
         if self.get_options().queries_enabled {
-            self.query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len()
+            #[allow(deprecated)]
+            self.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
         } else {
             self.get_data(NonQueryInfectionTracker).len()
         }
@@ -329,8 +329,7 @@ mod test {
             no_queries.ctx.infected_people(),
             no_queries
                 .ctx
-                .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len(),
+                .query_people_count((InfectionStatus, InfectionStatusValue::Infectious)),
             "no queries variant should compute infected people correctly",
         );
 
