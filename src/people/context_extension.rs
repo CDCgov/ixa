@@ -145,23 +145,10 @@ impl ContextPeopleExt for Context {
     }
 
     fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
-        let data_container = self.get_data(PeoplePlugin);
         self.register_property::<T>();
 
-        if T::is_derived() {
-            return T::compute(self, person_id);
-        }
-
-        // Attempt to retrieve the existing value
-        if let Some(value) = *data_container.get_person_property_ref(person_id, property) {
-            return value;
-        }
-
-        // Initialize the property. This does not fire a change event.
-        let initialized_value = T::compute(self, person_id);
-        data_container.set_person_property(person_id, property, initialized_value);
-
-        initialized_value
+        let data_container = self.get_data(PeoplePlugin);
+        data_container.get_person_property(self, person_id, property)
     }
 
     #[allow(clippy::single_match_else)]
@@ -855,8 +842,11 @@ mod tests {
         let people_data = context.get_data_mut(PeoplePlugin);
 
         // Verify we haven't initialized the property yet
-        let has_value = *people_data.get_person_property_ref(person, RunningShoes);
-        assert!(has_value.is_none());
+        {
+            let map = people_data.properties_map.borrow();
+            let has_value = map.get(&RunningShoes::type_id());
+            assert!(has_value.is_none());
+        }
 
         // This should initialize it
         let value = context.get_person_property(person, RunningShoes);
@@ -872,7 +862,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Property not initialized when person created")]
+    #[should_panic(
+        expected = "Property RiskCategory accessed before it was initialized for Person ID 0"
+    )]
     fn set_without_initializer_panics() {
         let mut context = Context::new();
         let person_id = context.add_person(()).unwrap();
@@ -880,7 +872,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Property not initialized when person created")]
+    #[should_panic(
+        expected = "Property RiskCategory accessed before it was initialized for Person ID 0"
+    )]
     fn get_without_initializer_panics() {
         let mut context = Context::new();
         let person_id = context.add_person(()).unwrap();

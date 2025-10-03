@@ -1,36 +1,22 @@
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
 use crate::people::index::{BxIndex, Index};
 use crate::people::methods::Methods;
+use crate::people::property::PropertyInitializationKind;
+use crate::people::property_store::{BxPropertyStore, PropertyStore};
 use crate::people::{HashValueType, InitializationList};
 use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
 use crate::{HashMap, HashSet, HashSetExt};
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::cell::{Ref, RefCell, RefMut};
+use std::collections::hash_map::Entry;
 
 type ContextCallback = dyn FnOnce(&mut Context);
-
-// PeopleData represents each unique person in the simulation with an id ranging
-// from 0 to population - 1. Person properties are associated with a person
-// via their id.
-pub(super) struct StoredPeopleProperties {
-    is_required: bool,
-    values: Box<dyn Any>,
-}
-
-impl StoredPeopleProperties {
-    fn new<T: PersonProperty>() -> Self {
-        StoredPeopleProperties {
-            is_required: T::is_required(),
-            values: Box::<Vec<Option<T::Value>>>::default(),
-        }
-    }
-}
 
 pub(super) struct PeopleData {
     pub(super) is_initializing: bool,
     pub(super) current_population: usize,
     pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
-    pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
+    pub(super) properties_map: RefCell<HashMap<TypeId, BxPropertyStore>>,
     pub(super) registered_properties: RefCell<HashSet<TypeId>>,
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, BxIndex>>,
@@ -98,6 +84,8 @@ impl PeopleData {
             .or_insert_with(|| Index::<T>::new());
     }
 
+    /// Refreshes the index for the property with the given type ID, returning `true` if the
+    /// property is index and false otherwise.
     pub(super) fn index_unindexed_people_for_type_id(&self, context: &Context, type_id: TypeId) {
         let mut indexes = self.property_indexes.borrow_mut();
         let Some(index) = indexes.get_mut(&type_id) else {
@@ -108,7 +96,7 @@ impl PeopleData {
 }
 
 // The purpose of this trait is to enable storing a Vec of different
-// `PersonProperty` types. While `PersonProperty`` is *not* object safe,
+// `PersonProperty` value types. While `PersonProperty`` is *not* object safe,
 // primarily because it stores a different Value type for each kind of property,
 // `PersonPropertyHolder` is, meaning we can treat different types of properties
 // uniformly at runtime.
@@ -208,31 +196,120 @@ impl PeopleData {
         PersonId(id)
     }
 
-    /// Retrieves a specific property of a person by their `PersonId`.
-    ///
-    /// Returns `RefMut<Option<T::Value>>`: `Some(value)` if the property exists for the given person,
-    /// or `None` if it doesn't.
-    #[allow(clippy::needless_pass_by_value)]
-    pub(super) fn get_person_property_ref<T: PersonProperty>(
+    pub(super) fn get_person_property<P: PersonProperty>(
         &self,
-        person: PersonId,
-        _property: T,
-    ) -> RefMut<Option<T::Value>> {
-        let properties_map = self.properties_map.borrow_mut();
-        let index = person.0;
-        RefMut::map(properties_map, |properties_map| {
-            let properties = properties_map
-                .entry(TypeId::of::<T>())
-                .or_insert_with(|| StoredPeopleProperties::new::<T>());
-            let values: &mut Vec<Option<T::Value>> = properties
-                .values
-                .downcast_mut()
-                .expect("Type mismatch in properties_map");
-            if index >= values.len() {
-                values.resize(index + 1, None);
+        context: &Context,
+        person_id: PersonId,
+        _property: P,
+    ) -> P::Value {
+        if P::is_derived() {
+            return P::compute(context, person_id);
+        }
+
+        // The outer option says whether the index is in bounds; the inner option says whether the value has been set.
+        let value: Option<Option<<P as PersonProperty>::Value>>;
+
+        // The scope of the mutable borrow of `properties_map`. The problem is that
+        // `PeopleData::get_person_property()` can call itself recursively indirectly
+        // through the call to `P::compute()`. In fact, it is common for `P::compute()`
+        // to call `PeopleData::get_person_property()`. Therefore, we need to make
+        // sure we are not holding a reference to `self.properties_map` at the time
+        // `P::compute()` is called in order to avoid a double borrow.
+        {
+            let mut properties_map = self.properties_map.borrow_mut();
+
+            // Fetch existing or initialize a new property store
+            let property_store: &mut PropertyStore<P> = match properties_map.entry(P::type_id()) {
+                Entry::Occupied(entry) => {
+                    let property_store = entry.into_mut();
+                    <dyn std::any::Any>::downcast_mut::<PropertyStore<P>>(property_store.as_mut())
+                        .expect("Type mismatch in properties_map")
+                }
+
+                Entry::Vacant(entry) => match P::property_initialization_kind() {
+                    PropertyInitializationKind::Normal => {
+                        panic!(
+                            "Property {} accessed before it was initialized for Person ID {}",
+                            P::name(),
+                            person_id
+                        );
+                    }
+                    PropertyInitializationKind::Constant => {
+                        // Initializer is a constant, so this call is safe, and we can just return it.
+                        return P::compute(context, person_id);
+                    }
+                    PropertyInitializationKind::Dynamic => {
+                        let property_store = entry.insert(Box::new(PropertyStore::<P>::new()));
+                        <dyn std::any::Any>::downcast_mut::<PropertyStore<P>>(
+                            property_store.as_mut(),
+                        )
+                        .expect("Type mismatch in properties_map")
+                    }
+
+                    PropertyInitializationKind::Derived => {
+                        // Handled at the top of this method.
+                        unreachable!();
+                    }
+                },
+            };
+
+            value = property_store.values.get(person_id.0).copied();
+        }
+
+        // We either found the value, or we need to compute it. If the vector is long enough to
+        // have a slot, or if `PropertyInitializationKind::Dynamic`, we store the computed value.
+        match value {
+            // In bounds and value set.
+            Some(Some(value)) => value,
+
+            // In bounds but value not set.
+            Some(None) => {
+                // We don't have to pay the cost of resizing the vector, but we
+                // are paying the cost of computing the value, so we store it.
+                let value = P::compute(context, person_id);
+                let mut properties_map = self.properties_map.borrow_mut();
+
+                // The following unwrap is safe, because we inserted the property store during value lookup above.
+                let property_store = properties_map.get_mut(&P::type_id()).unwrap();
+                let property_store =
+                    <dyn std::any::Any>::downcast_mut::<PropertyStore<P>>(property_store.as_mut())
+                        .expect("Type mismatch in properties_map");
+                property_store.values[person_id.0] = Some(value);
+                value
             }
-            &mut values[index]
-        })
+
+            // Not in bounds (and thus the value is not set)
+            None => match P::property_initialization_kind() {
+                // Accessing a property that has no default initializer before it has been set is an error.
+                PropertyInitializationKind::Normal => panic!(
+                    "Property {} accessed before it was initialized for Person ID {}",
+                    P::name(),
+                    person_id
+                ),
+
+                // Initial value is a constant, so we can just return it without doing work.
+                PropertyInitializationKind::Constant => P::compute(context, person_id),
+
+                // Initial value is dynamic, so we need to compute it and store the result.
+                PropertyInitializationKind::Dynamic => {
+                    let value = P::compute(context, person_id);
+                    let mut properties_map = self.properties_map.borrow_mut();
+
+                    // The following unwrap is safe, because we inserted the property store during value lookup above.
+                    let property_store = properties_map.get_mut(&P::type_id()).unwrap();
+                    let property_store = <dyn std::any::Any>::downcast_mut::<PropertyStore<P>>(
+                        property_store.as_mut(),
+                    )
+                    .expect("Type mismatch in properties_map");
+                    property_store.values.resize(person_id.0 + 1, None);
+                    property_store.values[person_id.0] = Some(value);
+                    value
+                }
+
+                // This case is taken care of at the top of this method.
+                PropertyInitializationKind::Derived => unreachable!(),
+            },
+        }
     }
 
     /// Sets the value of a property for a person
@@ -240,11 +317,30 @@ impl PeopleData {
     pub(super) fn set_person_property<T: PersonProperty>(
         &self,
         person_id: PersonId,
-        property: T,
+        _property: T,
         value: T::Value,
     ) {
-        let mut property_ref = self.get_person_property_ref(person_id, property);
-        *property_ref = Some(value);
+        let mut properties_map = self.properties_map.borrow_mut();
+        let index = person_id.0;
+        match properties_map.entry(T::type_id()) {
+            Entry::Occupied(mut entry) => {
+                let property_store = entry.get_mut();
+                // Only a `PropertyStore<T>` can be stored for key `T::type_id()`.
+                let property_store =
+                    <dyn std::any::Any>::downcast_mut::<PropertyStore<T>>(property_store.as_mut())
+                        .expect("Type mismatch in properties_map");
+                if index >= property_store.values.len() {
+                    property_store.values.resize(index + 1, None);
+                }
+                property_store.values[index] = Some(value);
+            }
+            Entry::Vacant(entry) => {
+                let mut property_store = Box::new(PropertyStore::<T>::new());
+                property_store.values.resize(index + 1, None);
+                property_store.values[index] = Some(value);
+                entry.insert(property_store);
+            }
+        }
     }
 
     /// Sets the `Index<T>::is_indexed` field for the index entry associated with `T`. Creates
@@ -267,13 +363,46 @@ impl PeopleData {
             .set_indexed(is_indexed);
     }
 
-    pub(super) fn get_index_ref_mut(&self, t: TypeId) -> Option<RefMut<BxIndex>> {
-        let index_map = self.property_indexes.borrow_mut();
-        if index_map.contains_key(&t) {
-            Some(RefMut::map(index_map, |map| map.get_mut(&t).unwrap()))
-        } else {
-            None
-        }
+    /// Returns an immutable reference to the set of `PersonId`s associated to the given type_id
+    /// and using the value hash. The caller should ensure the property's index isn't stale.
+    #[allow(dead_code)]
+    pub(super) fn get_index_set_for_hash_type_id(
+        &self,
+        type_id: TypeId,
+        hash_value: HashValueType,
+    ) -> Option<Ref<HashSet<PersonId>>> {
+        let index_map_ref = self.property_indexes.borrow();
+
+        Ref::filter_map(index_map_ref, |index_map| {
+            index_map.get(&type_id).and_then(|index| {
+                if index.is_indexed() {
+                    index.get_with_hash(hash_value)
+                } else {
+                    None
+                }
+            })
+        })
+        .ok()
+    }
+
+    /// Same as above, but the type ID of the property is not given
+    /// explicitly. The caller should ensure the property's index isn't stale.
+    #[allow(dead_code)]
+    pub(super) fn get_index_set<P: PersonProperty>(
+        &self,
+        value: P::Value,
+    ) -> Option<Ref<HashSet<PersonId>>> {
+        let type_id = P::type_id();
+        let index_ref_map = RefCell::borrow(&self.property_indexes);
+
+        Ref::filter_map(index_ref_map, |indexes| {
+            if let Some(index) = indexes.get(&type_id) {
+                index.get_with_hash(P::hash_property_value(&P::make_canonical(value)))
+            } else {
+                None
+            }
+        })
+        .ok()
     }
 
     // Convenience function to iterate over the current population.
@@ -292,7 +421,7 @@ impl PeopleData {
     ) -> Result<(), IxaError> {
         let properties_map = self.properties_map.borrow();
         for (t, property) in properties_map.iter() {
-            if property.is_required && !initialization.has_property(*t) {
+            if property.is_required() && !initialization.has_property(*t) {
                 return Err(IxaError::IxaError(String::from("Missing initial value")));
             }
         }
@@ -307,7 +436,7 @@ impl PeopleData {
 }
 
 pub(super) struct PeopleIterator {
-    population: usize,
+    pub population: usize,
     person_id: usize,
 }
 
@@ -315,13 +444,16 @@ impl Iterator for PeopleIterator {
     type Item = PersonId;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ret = if self.person_id < self.population {
-            Some(PersonId(self.person_id))
+        if self.person_id < self.population {
+            self.person_id += 1;
+            Some(PersonId(self.person_id - 1))
         } else {
             None
-        };
-        self.person_id += 1;
+        }
+    }
 
-        ret
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let k = self.population - self.person_id;
+        (k, Some(k))
     }
 }

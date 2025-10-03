@@ -352,7 +352,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Property not initialized")]
+    #[should_panic(
+        expected = "Property RiskCategory accessed before it was initialized for Person ID 0"
+    )]
     // This will panic when we query.
     fn query_people_add_after_index_panic() {
         let mut context = Context::new();

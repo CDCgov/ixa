@@ -29,11 +29,28 @@
 //! ```
 
 use crate::hashing::hash_serialized_128;
-use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
 use serde::Serialize;
 use std::any::TypeId;
 use std::fmt::Debug;
+
+/// The kind of initialization that a property has.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PropertyInitializationKind {
+    /// The property is not derived and has no initial value.
+    Normal,
+    /// The property is a derived property (it's value is computed dynamically from other property values)
+    Derived,
+
+    /// The property is given a constant initial value. Its initialization does not
+    /// trigger a change event. This is a promise that `PersonProperty::compute(_, _)`
+    /// returns a constant without accessing its arguments.`
+    Constant,
+
+    /// The property is given an initial value computed by a function of the
+    /// `context` and `person_id`. Its initialization does not trigger a change event.
+    Dynamic,
+}
 
 /// We factor this out and provide a blanket implementation for all types that
 /// can be value types for properties. This makes it convenient to reference
@@ -54,9 +71,15 @@ pub trait PersonProperty: Copy + 'static {
     /// type of the transformed value. For simple properties this will be the same as `Self::Value`.
     type CanonicalValue: PersonPropertyValue;
 
+    /// The kind of initialization this property has.
     #[must_use]
+    fn property_initialization_kind() -> PropertyInitializationKind;
+
+    /// Whether this property is derived.
+    #[must_use]
+    #[inline]
     fn is_derived() -> bool {
-        false
+        Self::property_initialization_kind() == PropertyInitializationKind::Derived
     }
 
     #[must_use]
@@ -108,12 +131,15 @@ pub trait PersonProperty: Copy + 'static {
 
 #[macro_export]
 macro_rules! __define_person_property_common {
-    ($person_property:ident, $value:ty, $compute_fn:expr, $is_required:expr, $display_impl:expr) => {
+    ($person_property:ident, $value:ty, $initialization_kind:expr, $compute_fn:expr, $is_required:expr, $display_impl:expr) => {
         #[derive(Debug, Copy, Clone, Eq, PartialEq)]
         pub struct $person_property;
         impl $crate::people::PersonProperty for $person_property {
             type Value = $value;
             type CanonicalValue = $value;
+            fn property_initialization_kind() -> $crate::people::PropertyInitializationKind {
+                $initialization_kind
+            }
             fn compute(
                 _context: &$crate::context::Context,
                 _person: $crate::people::PersonId,
@@ -150,11 +176,12 @@ macro_rules! __define_person_property_common {
 ///   on the property without explicitly setting a value first will panic.
 #[macro_export]
 macro_rules! define_person_property {
-    // Option<T> with initializer
+    // Option<T> with dynamic initializer
     ($person_property:ident, Option<$value:ty>, $initialize:expr) => {
         $crate::__define_person_property_common!(
             $person_property,
             Option<$value>,
+            $crate::people::PropertyInitializationKind::Dynamic,
             $initialize,
             false,
             |&value| {
@@ -165,11 +192,12 @@ macro_rules! define_person_property {
             }
         );
     };
-    // T with initializer
+    // T with dynamic initializer
     ($person_property:ident, $value:ty, $initialize:expr) => {
         $crate::__define_person_property_common!(
             $person_property,
             $value,
+            $crate::people::PropertyInitializationKind::Dynamic,
             $initialize,
             false,
             |&value| format!("{:?}", value)
@@ -180,6 +208,7 @@ macro_rules! define_person_property {
         $crate::__define_person_property_common!(
             $person_property,
             Option<$value>,
+            $crate::people::PropertyInitializationKind::Normal,
             |_, _| panic!("Property not initialized when person created."),
             true,
             |&value| {
@@ -195,6 +224,7 @@ macro_rules! define_person_property {
         $crate::__define_person_property_common!(
             $person_property,
             $value,
+            $crate::people::PropertyInitializationKind::Normal,
             |_, _| panic!("Property not initialized when person created."),
             true,
             |&value| format!("{:?}", value)
@@ -206,20 +236,35 @@ pub use define_person_property;
 /// Defines a person property with the following parameters:
 /// * `$person_property`: A name for the identifier type of the property
 /// * `$value`: The type of the property's value
-/// * `$default`: An initial value
+/// * `$default`: A constant initial value
 #[macro_export]
 macro_rules! define_person_property_with_default {
+    // Option<T> with constant initializer
     ($person_property:ident, Option<$value:ty>, $default:expr) => {
-        $crate::define_person_property!(
+        $crate::__define_person_property_common!(
             $person_property,
             Option<$value>,
-            |_context, _person_id| { $default }
+            $crate::people::PropertyInitializationKind::Constant,
+            |_context, _person_id| { $default },
+            false,
+            |&value| {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
         );
     };
+    // T with constant initializer
     ($person_property:ident, $value:ty, $default:expr) => {
-        $crate::define_person_property!($person_property, $value, |_context, _person_id| {
-            $default
-        });
+        $crate::__define_person_property_common!(
+            $person_property,
+            $value,
+            $crate::people::PropertyInitializationKind::Constant,
+            |_context, _person_id| { $default },
+            false,
+            |&value| format!("{:?}", value)
+        );
     };
 }
 pub use define_person_property_with_default;
@@ -254,6 +299,10 @@ macro_rules! __define_derived_property_common {
         impl $crate::people::PersonProperty for $derived_property {
             type Value = $value;
             type CanonicalValue = $canonical_value;
+
+            fn property_initialization_kind() -> $crate::people::PropertyInitializationKind {
+                $crate::people::PropertyInitializationKind::Derived
+            }
 
             fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
                 #[allow(unused_imports)]
@@ -432,6 +481,7 @@ macro_rules! define_multi_property {
         }
     };
 }
+use crate::people::PersonPropertyHolder;
 pub use define_multi_property;
 
 #[cfg(test)]
