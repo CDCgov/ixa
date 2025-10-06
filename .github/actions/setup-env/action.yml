@@ -3,9 +3,6 @@ description: Install cargo binstall and mise environment
 runs:
   using: composite
   steps:
-    - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@v1.15.6
-
     - name: Setup mise
       uses: jdx/mise-action@v2
 
