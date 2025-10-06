@@ -1,11 +1,13 @@
 # Ixa Profiling and Benchmarking
 
-For general Rust profiling information, see: [https://nnethercote.github.io/perf-book/profiling.html](https://nnethercote.github.io/perf-book/profiling.html).
+For general Rust profiling information, see:
+[https://nnethercote.github.io/perf-book/profiling.html](https://nnethercote.github.io/perf-book/profiling.html).
 
 ## Generating Flamegraphs
 
-You can use `samply` (Linux and macOS) to capture stack samples from your application and generate
-a flamegraph, helping you quickly identify and analyze performance hotspots.
+You can use `samply` (Linux and macOS) to capture stack samples from your
+application and generate a flamegraph, helping you quickly identify and analyze
+performance hotspots.
 
 ### Prerequisites
 
@@ -35,12 +37,13 @@ You can combine these two commands into one:
 cargo build --example basic-infection --release && samply record -- target/release/examples/basic-infection
 ```
 
-When it completes, `samply` will automatically open a browser with the generated report.
+When it completes, `samply` will automatically open a browser with the generated
+report.
 
 ### `flamegraph` Alternative
 
-You can use `flamegraph` if you prefer. It requires root privileges, but don't use
-`sudo cargo...`. Do this:
+You can use `flamegraph` if you prefer. It requires root privileges, but don't
+use `sudo cargo...`. Do this:
 
 ```bash
 cargo flamegraph --root --example basic-infection
@@ -52,18 +55,22 @@ This will generate an SVG of the flamegraph in the current directory.
 
 You have two options for benchmarks:
 
-- For micro-benchmarks you want to track over time, use [Criterion.rs](https://bheisler.github.io/criterion.rs/book/index.html)
-- For in-place, comparisons against a baseline or between multiple implementation, use [Hyperfine](https://github.com/sharkdp/hyperfine)
+- For micro-benchmarks you want to track over time, use
+  [Criterion.rs](https://bheisler.github.io/criterion.rs/book/index.html)
+- For in-place, comparisons against a baseline or between multiple
+  implementation, use [Hyperfine](https://github.com/sharkdp/hyperfine)
 
 ## Criterion
 
 ### Optional Prerequisites
 
-- [`gnuplot`](http://www.gnuplot.info/): The [plotters crate](https://github.com/38/plotters) will
-  be used as a fallback if `gnuplot` is not found.
+- [`gnuplot`](http://www.gnuplot.info/): The
+  [plotters crate](https://github.com/38/plotters) will be used as a fallback if
+  `gnuplot` is not found.
 - [cargo-criterion](https://bheisler.github.io/criterion.rs/book/cargo_criterion/cargo_criterion.html):
-  This is the upcoming "next generation" of Criterion.rs. Eventually it will reduce compilation
-  times and offer more features, but for now it only has feature parity.
+  This is the upcoming "next generation" of Criterion.rs. Eventually it will
+  reduce compilation times and offer more features, but for now it only has
+  feature parity.
 
 ```bash
 cargo install cargo-criterion
@@ -119,14 +126,16 @@ An HTML report is created at `target/criterion/report/index.html`. On macOS:
 open target/criterion/report/index.html
 ```
 
-On Linux platforms, replace `open` with `xdg-open`, `gnome-open`, or `kde-open`, depending on your
-system configuration, or just open the file in a browser.
+On Linux platforms, replace `open` with `xdg-open`, `gnome-open`, or `kde-open`,
+depending on your system configuration, or just open the file in a browser.
 
 ## Hyperfine
 
 ### Prerequisites
 
-You will need to [install `hyperfine`](https://github.com/sharkdp/hyperfine?tab=readme-ov-file#installation), e.g. via cargo:
+You will need to
+[install `hyperfine`](https://github.com/sharkdp/hyperfine?tab=readme-ov-file#installation),
+e.g. via cargo:
 
 ```bash
 cargo install hyperfine

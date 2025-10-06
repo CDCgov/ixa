@@ -50,6 +50,11 @@ path = "src/bench_utils/hyperfine.rs"
 bench = false
 
 [[bin]]
+name = "run_bench"
+path = "src/bench_utils/runner.rs"
+bench = false
+
+[[bin]]
 name = "check_criterion_regressions"
 path = "src/check_criterion_regressions.rs"
 bench = false

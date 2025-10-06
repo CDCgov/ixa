@@ -1,15 +1,15 @@
 # Ixa Debugger Commands
 
 The Ixa Debugger is a command line interface for pausing execution of a
-simulation, reading information about its current state, and possibly manipulating
-it. This document proposes a high-level grammar and initial set of commands
-we should make available in the REPL, as well as a brief description of the
-implementation of commands.
+simulation, reading information about its current state, and possibly
+manipulating it. This document proposes a high-level grammar and initial set of
+commands we should make available in the REPL, as well as a brief description of
+the implementation of commands.
 
 ## General structure
 
-Commands in the Ixa Debugger follow a hierarchical format composed
-of a primary command, subcommands, and arguments:
+Commands in the Ixa Debugger follow a hierarchical format composed of a primary
+command, subcommands, and arguments:
 
 ```bash
 <primary_command> [<subcommand>] [--<argument>[=][<value>] [<positional_argument>]]
@@ -17,23 +17,28 @@ of a primary command, subcommands, and arguments:
 
 Where:
 
-- `<primary_command>` is the top-level command category (e.g., `breakpoint`, `global`, `query`, `people`).
-- `[<subcommand>]` specifies an action to perform (e.g., `set`, `get`, `list`, `delete`).
-- `[<positional_argument>]` may be used to provide necessary inputs (e.g., the name of a property)
-- `[--<argument>[=][<value>]]` represents named options that modify behavior, or provide additional inputs
+- `<primary_command>` is the top-level command category (e.g., `breakpoint`,
+  `global`, `query`, `people`).
+- `[<subcommand>]` specifies an action to perform (e.g., `set`, `get`, `list`,
+  `delete`).
+- `[<positional_argument>]` may be used to provide necessary inputs (e.g., the
+  name of a property)
+- `[--<argument>[=][<value>]]` represents named options that modify behavior, or
+  provide additional inputs
 
-Individual commands define which components are optional or required; for example, a people
-command might require an `--id` argument but optionally take a set of properties.
+Individual commands define which components are optional or required; for
+example, a people command might require an `--id` argument but optionally take a
+set of properties.
 
 ## Command Categories
 
-In addition to some control flow commands (`next`, `continue`, `halt`, `help`), we
-might consider the following commands:
+In addition to some control flow commands (`next`, `continue`, `halt`, `help`),
+we might consider the following commands:
 
 ### 1. Breakpoints
 
-Commands related to setting, listing, and removing execution breakpoints.
-Note that this will require storing some internal state.
+Commands related to setting, listing, and removing execution breakpoints. Note
+that this will require storing some internal state.
 
 - **`breakpoint set <t>]`**
 
@@ -47,8 +52,8 @@ Note that this will require storing some internal state.
 
 - **`breakpoint delete [<id> | --all]`**
 
-  Delete the breakpoint with the specified id.
-  Providing the `--all` option removes all breakpoints.
+  Delete the breakpoint with the specified id. Providing the `--all` option
+  removes all breakpoints.
 
   Example: `breakpoint delete 1`
 
@@ -88,17 +93,18 @@ Commands for managing global properties in the simulation.
 
 - **`global list --prefix <prefix>`**
 
-  List all global variables with the specified prefix.
-  Example: `global list --prefix ixa.`
+  List all global variables with the specified prefix. Example:
+  `global list --prefix ixa.`
 
 ### 3. People
 
-Commands for retrieving and modifying information about entities in the simulation.
+Commands for retrieving and modifying information about entities in the
+simulation.
 
 - **`people get --id <person_id> [--property <property>]`**
 
-  Retrieve all known properties of the specified person.
-  If the `--property` option is included, only the value that property will be returned.
+  Retrieve all known properties of the specified person. If the `--property`
+  option is included, only the value that property will be returned.
 
   Example: `people get --id 42`
 
@@ -154,8 +160,7 @@ Commands for retrieving and modifying information about entities in the simulati
 
 - **`people query delete <id>`**
 
-  Delete the query with the specified id.
-  Example: `query delete 1`
+  Delete the query with the specified id. Example: `query delete 1`
 
 ## Implementation
 

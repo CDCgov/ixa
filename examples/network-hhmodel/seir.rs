@@ -188,7 +188,12 @@ mod tests {
 
         network::init(&mut context, &people);
 
-        let to_infect = context.query_people((Id, 71));
+        let mut to_infect = Vec::<PersonId>::new();
+        context.with_query_results((Id, 71), &mut |people| {
+            for p in people {
+                to_infect.push(*p);
+            }
+        });
 
         init(&mut context, &to_infect);
 
