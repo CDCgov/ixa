@@ -200,6 +200,30 @@ where
 }
 
 impl PeopleData {
+    #[allow(unused)]
+    /// This method looks up the index for the given `type_id` and `value_hash` and, if one is found, passes
+    /// an immutable reference to the index's `HashSet` to the given function. If either the index doesn't exist
+    /// or
+    pub(super) fn with_index(
+        &self,
+        type_id: TypeId,
+        value_hash: HashValueType,
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
+    ) -> Result<(), ()> {
+        if let Some(index) = self.property_indexes.borrow().get(&type_id) {
+            if let Some(people_set) = index.get_with_hash(value_hash) {
+                (callback)(people_set);
+            } else {
+                // The `value_hash` is not found. We assume this occurs when no people have that value for the
+                // property, so we pass an empty set to the function. (This is guaranteed not to allocate.)
+                let empty = HashSet::default();
+                (callback)(&empty);
+            }
+            return Ok(());
+        }
+        Err(())
+    }
+
     /// Adds a person and returns a `PersonId` that can be used to reference them.
     /// This will increment the current population by 1.
     pub(super) fn add_person(&mut self) -> PersonId {

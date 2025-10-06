@@ -1,4 +1,4 @@
-use ixa::rand::{rngs::StdRng, thread_rng, Rng, RngCore, SeedableRng};
+use ixa::rand::{rng, rngs::StdRng, Rng, RngCore, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;
@@ -48,12 +48,8 @@ impl PopulationIterator {
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
         let rng: Box<dyn RngCore> = match seed {
             Some(s) => Box::new(StdRng::seed_from_u64(s)),
-            None => Box::new(thread_rng()),
+            None => Box::new(rng()),
         };
-        // let rng = match seed {
-        //     Some(s) => PopulationRng::Std(Box::new(StdRng::seed_from_u64(s))),
-        //     None => PopulationRng::Thread(thread_rng()),
-        // };
         PopulationIterator {
             n,
             idx: 0,
@@ -71,15 +67,15 @@ impl Iterator for PopulationIterator {
         if self.idx >= self.n {
             return None;
         }
-        let age = self.rng.gen_range(MIN_AGE..=MAX_AGE);
-        let home_id = self.rng.gen_range(1..=self.num_homes);
+        let age = self.rng.random_range(MIN_AGE..=MAX_AGE);
+        let home_id = self.rng.random_range(1..=self.num_homes);
         let mut school_id = 0;
         let mut workplace_id = 0;
         if (SCHOOL_AGE_MIN..=SCHOOL_AGE_MAX).contains(&age) && self.num_schools > 0 {
-            school_id = self.rng.gen_range(1..=self.num_schools);
+            school_id = self.rng.random_range(1..=self.num_schools);
         }
         if (WORK_AGE_MIN..=WORK_AGE_MAX).contains(&age) && self.num_workplaces > 0 {
-            workplace_id = self.rng.gen_range(1..=self.num_workplaces);
+            workplace_id = self.rng.random_range(1..=self.num_workplaces);
         }
         let person = Person {
             id: self.idx + 1,

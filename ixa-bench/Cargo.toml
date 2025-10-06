@@ -39,6 +39,7 @@ clap = { workspace = true, features = ["derive"] }
 paste.workspace = true
 anyhow.workspace = true
 ctor.workspace = true
+nohash-hasher = "0.2.0"
 
 [lib]
 bench = false
@@ -74,6 +75,11 @@ harness = false
 [[bench]]
 name = "sampling"
 path = "criterion/sample_people.rs"
+harness = false
+
+[[bench]]
+name = "indexing"
+path = "criterion/index_benches.rs"
 harness = false
 
 [[bench]]
