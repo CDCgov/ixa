@@ -7,7 +7,7 @@ use crate::population_manager::{AgeGroupFoi, AgeGroupRisk, Alive};
 use crate::Parameters;
 use rand_distr::Exp;
 
-define_rng!(TransmissionRng);
+define_rng!(TransmissionRng1);
 
 //Attempt infection for specific age group risk (meaning different forces of infection)
 fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
@@ -24,7 +24,7 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         .unwrap();
     if population_size > 0 {
         let person_to_infect = context
-            .sample_person(TransmissionRng, ((Alive, true), (AgeGroupFoi, age_group)))
+            .sample_person(TransmissionRng1, ((Alive, true), (AgeGroupFoi, age_group)))
             .unwrap();
 
         let person_status: InfectionStatusValue =
@@ -35,7 +35,7 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         }
         #[allow(clippy::cast_precision_loss)]
         let next_attempt_time = context.get_current_time()
-            + context.sample_distr(TransmissionRng, Exp::new(foi).unwrap())
+            + context.sample_distr(TransmissionRng1, Exp::new(foi).unwrap())
                 / population_size as f64;
 
         if next_attempt_time <= parameters.max_time {

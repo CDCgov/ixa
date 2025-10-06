@@ -1,4 +1,4 @@
-use rand::Rng;
+use ixa::rand::{rng, rngs::StdRng, Rng, RngCore, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;
@@ -31,7 +31,7 @@ pub struct PopulationIterator {
     num_schools: usize,
     num_workplaces: usize,
     num_homes: usize,
-    rng: rand::rngs::ThreadRng,
+    rng: Box<dyn RngCore>,
 }
 
 impl PopulationIterator {
@@ -39,13 +39,17 @@ impl PopulationIterator {
         n: usize,
         number_of_schools_as_percent_of_pop: f64,
         number_of_workplaces_as_percent_of_pop: f64,
+        seed: Option<u64>,
     ) -> Self {
         let num_schools =
             ((n as f64 * number_of_schools_as_percent_of_pop / 100.0).round()) as usize;
         let num_workplaces =
             ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-        let rng = rand::rng();
+        let rng: Box<dyn RngCore> = match seed {
+            Some(s) => Box::new(StdRng::seed_from_u64(s)),
+            None => Box::new(rng()),
+        };
         PopulationIterator {
             n,
             idx: 0,
@@ -94,6 +98,22 @@ pub fn generate_population(
         n,
         number_of_schools_as_percent_of_pop,
         number_of_workplaces_as_percent_of_pop,
+        None,
+    )
+}
+
+/// Generate a population using an optional seed for determinism
+pub fn generate_population_with_seed(
+    n: usize,
+    number_of_schools_as_percent_of_pop: f64,
+    number_of_workplaces_as_percent_of_pop: f64,
+    seed: Option<u64>,
+) -> PopulationIterator {
+    PopulationIterator::new(
+        n,
+        number_of_schools_as_percent_of_pop,
+        number_of_workplaces_as_percent_of_pop,
+        seed,
     )
 }
 

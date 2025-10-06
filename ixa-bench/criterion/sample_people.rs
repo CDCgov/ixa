@@ -1,10 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
-use ixa::rand::{rng, Rng};
+use ixa::rand::{rngs::StdRng, Rng, SeedableRng};
 use ixa::PersonId;
 use std::hint::black_box;
 
 define_rng!(SampleBenchRng);
+
+const SEED: u64 = 42;
 
 define_person_property!(Property10, u8, |context: &Context, _person: PersonId| {
     context.sample_range(SampleBenchRng, 0..10)
@@ -14,8 +16,11 @@ define_person_property!(Property100, u8, |context: &Context, _person: PersonId| 
 });
 
 fn setup() -> (Context, Vec<u8>) {
-    let mut rng = rng();
+    let mut rng = StdRng::seed_from_u64(SEED);
     let mut context = Context::new();
+
+    // Seed context RNGs for deterministic property generation
+    context.init_random(SEED);
 
     context.index_property(Property10);
     context.index_property(Property100);
