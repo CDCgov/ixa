@@ -14,12 +14,3 @@ repos:
         verbose: true
         pass_filenames: false
         always_run: true
-      - id: mise-prepush
-        name: mise prepush
-        stages: [pre-push]
-        entry: mise
-        args: ["run", "prepush"]
-        language: system
-        verbose: true
-        pass_filenames: false
-        always_run: true

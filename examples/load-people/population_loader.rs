@@ -77,8 +77,8 @@ mod tests {
         // any change in the deterministic RNG.
         let expected_computed = vec![
             // (age, risk_category, vaccine_type, efficacy, doses)
-            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 3),
-            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 1),
+            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 1),
+            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 2),
         ];
 
         let mut context = Context::new();

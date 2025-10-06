@@ -159,7 +159,7 @@ The [`rand_distr`](https://docs.rs/rand_distr/latest/rand_distr/) and the
 provide many more.
 
 ```rust
-let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0));
+let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0).unwrap());
 ```
 
 > [!WARNING] `rand` Crate Version Compatibility As of this writing, the latest
