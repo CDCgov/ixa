@@ -52,35 +52,35 @@ fn bench_query_population_derived_property(context: &mut Context) {
     context.query_people_count((AgeGroupFoi, black_box(AgeGroupRisk::OldAdult)));
 }
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn criterion_benchmark(criterion: &mut Criterion) {
     define_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
     let mut context = Context::new();
     // Seed context RNGs for deterministic derived properties / sampling
     context.init_random(SEED);
     initialize(&mut context);
-    let mut group = c.benchmark_group("large_dataset");
+    let mut criterion = criterion.benchmark_group("large_dataset");
 
-    group.bench_function("bench_query_population_property", |bencher| {
+    criterion.bench_function("bench_query_population_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_property(&mut context);
         });
     });
 
     context.index_property(HomeId);
-    group.bench_function("bench_query_population_indexed_property", |bencher| {
+    criterion.bench_function("bench_query_population_indexed_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_property(&mut context);
         });
     });
 
-    group.bench_function("bench_query_population_derived_property", |bencher| {
+    criterion.bench_function("bench_query_population_derived_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_derived_property(&mut context);
         });
     });
 
     // Multi-property unindexed vs indexed
-    group.bench_function("bench_query_population_multi_unindexed", |bencher| {
+    criterion.bench_function("bench_query_population_multi_unindexed", |bencher| {
         bencher.iter_with_large_drop(|| {
             context.query_people_count((
                 (Age, black_box(30u8)),
@@ -90,7 +90,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         });
     });
     context.index_property(ASW);
-    group.bench_function("bench_query_population_multi_indexed", |bencher| {
+    criterion.bench_function("bench_query_population_multi_indexed", |bencher| {
         bencher.iter_with_large_drop(|| {
             context.query_people_count((
                 (Age, black_box(30u8)),
@@ -100,7 +100,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    group.finish();
+    criterion.finish();
 }
 
 criterion_group!(example_benches, criterion_benchmark);

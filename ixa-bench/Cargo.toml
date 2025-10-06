@@ -57,13 +57,8 @@ bench = false
 workspace = true
 
 [[bench]]
-name = "example_basic_infection"
-path = "criterion/example_basic_infection.rs"
-harness = false
-
-[[bench]]
-name = "example_births_deaths"
-path = "criterion/example_births_deaths.rs"
+name = "examples"
+path = "criterion/examples.rs"
 harness = false
 
 [[bench]]
