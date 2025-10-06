@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/CDCgov/ixa/compare/ixa-v0.4.0...ixa-v0.4.1) - 2025-10-06
+
+### Added
+
+- `with_query_results` API. Fixes #540. ([#556](https://github.com/CDCgov/ixa/pull/556))
+- benchmark summary ([#561](https://github.com/CDCgov/ixa/pull/561))
+
 ## [0.4.0](https://github.com/CDCgov/ixa/compare/ixa-v0.3.3...ixa-v0.4.0) - 2025-09-22
 
 ### Added
