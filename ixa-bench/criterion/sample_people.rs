@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
-use ixa::rand::{rng, Rng};
+use ixa::rand::{rngs::StdRng, Rng, SeedableRng};
 use ixa::PersonId;
 use std::hint::black_box;
 
