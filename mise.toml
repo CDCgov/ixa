@@ -110,7 +110,7 @@ run="mise run check:*"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
-#  "cargo check --all-targets --workspace",
+  "cargo check --all-targets --workspace",
   "cargo fmt --check",
   "cargo clippy --workspace --all-targets -- -D warnings"
 ]
