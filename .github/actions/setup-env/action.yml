@@ -16,6 +16,5 @@ runs:
           ~/.cargo/git/db/
           ~/.cargo-install/
           ~/.rustup/toolchains/
-          target/
           docs/book/book/
         key: cargo-${{ hashFiles('Cargo.toml') }}
