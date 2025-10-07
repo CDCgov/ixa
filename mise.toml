@@ -40,7 +40,12 @@ run = '''
 
 [tasks.test]
 description = "Run all tests"
-run = "mise run test:*"
+run = [
+  "mise run test:unit",
+  "mise run test:core",
+  "mise run test:wasm",
+  "mise run test:hyperfine"
+]
 
 [tasks.'test:unit']
 description = "Run all unit tests"
@@ -52,22 +57,22 @@ run = ["cargo test -p ixa"]
 
 [tasks.'test:wasm']
 description = "Run wasm integration tests"
-dir="integration-tests/ixa-wasm-tests"
-depends=["wasm:pnpm", "wasm:compile"]
+dir = "integration-tests/ixa-wasm-tests"
+depends = ["wasm:pnpm", "wasm:compile"]
 run = "pnpm exec playwright test"
 
 [tasks.'wasm:pnpm']
-dir="integration-tests/ixa-wasm-tests"
-run=["pnpm install", "pnpm exec playwright install"]
+dir = "integration-tests/ixa-wasm-tests"
+run = ["pnpm install", "pnpm exec playwright install"]
 sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
 outputs = ['node_modules/.pnpm/lock.yaml']
 
 [tasks.'wasm:compile']
-env.RUSTFLAGS='--cfg getrandom_backend="wasm_js"'
-dir="integration-tests/ixa-wasm-tests"
-run= "wasm-pack build --target web"
-sources=["src/*.rs", "Cargo.toml"]
-outputs=["pkg"]
+env.RUSTFLAGS = '--cfg getrandom_backend="wasm_js"'
+dir = "integration-tests/ixa-wasm-tests"
+run = "wasm-pack build --target web"
+sources = ["src/*.rs", "Cargo.toml"]
+outputs = ["pkg"]
 
 [tasks.'bench']
 description = "Run all benchmarks"
@@ -104,7 +109,10 @@ run = './target/release/hyperfine'
 
 [tasks.check]
 description = "Formatting and linting"
-run="mise run check:*"
+run = [
+  "mise run check:rust",
+  "mise run check:markdown"
+]
 
 [tasks.'check:rust']
 run = [
@@ -118,15 +126,19 @@ run = [
 [tasks.prettier]
 description = "Run prettier on all supported files"
 run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,yaml}" \
-  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
+  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore --ignore-path ./.prettierignore
 '''
 
 [tasks.'check:markdown']
-run =["markdownlint '**/*.md'", "mise prettier check"]
+run = ["markdownlint '**/*.md'", "mise prettier check"]
 
 [tasks.fix]
 description = "Auto-fix formatting and linting issues"
-run="mise run fix:*"
+run = [
+  "mise run fix:prettier",
+  "mise run fix:markdown",
+  "mise run fix:rust"
+]
 
 [tasks.'fix:prettier']
 run = "mise prettier write"
