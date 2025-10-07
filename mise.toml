@@ -110,7 +110,7 @@ run="mise run check:*"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
-  "cargo check --all-targets --workspace",
+#  "cargo check --all-targets --workspace",
   "cargo fmt --check",
   "cargo clippy --workspace --all-targets -- -D warnings"
 ]
@@ -118,7 +118,7 @@ run = [
 [tasks.prettier]
 description = "Run prettier on all supported files"
 run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,yaml}" \
-  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore
+  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore --ignore-path ./.prettierignore
 '''
 
 [tasks.'check:markdown']
