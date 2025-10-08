@@ -59,6 +59,10 @@ depends = [
   ]
 run = "pnpm exec playwright test"
 
+[tasks.'test:features']
+description = "Run just the core ixa tests (much faster)"
+run = "cargo test --no-default-features --features 'web_api logging'"
+
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
 run = [
