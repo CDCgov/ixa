@@ -16,7 +16,7 @@ cargo.binstall = true
 
 [tasks.build]
 description = "Build default targets. Run with --release for a release build."
-run = ["cargo build --workspace"]
+run = "cargo build --workspace"
 
 [tasks.example]
 description = "Run an example"
@@ -40,39 +40,47 @@ run = '''
 
 [tasks.test]
 description = "Run all tests"
-run = [
-  "mise run test:unit",
-  "mise run test:core",
-  "mise run test:wasm",
-  "mise run test:hyperfine"
-]
+depends = "test:*"
 
 [tasks.'test:unit']
 description = "Run all unit tests"
-run = ["cargo test --all-targets --workspace"]
+run = "cargo test --all-targets --workspace"
 
 [tasks.'test:core']
 description = "Run just the core ixa tests (much faster)"
-run = ["cargo test -p ixa"]
+run = "cargo test -p ixa"
 
 [tasks.'test:wasm']
 description = "Run wasm integration tests"
 dir = "integration-tests/ixa-wasm-tests"
-depends = ["wasm:pnpm", "wasm:compile"]
+depends = [
+  "wasm:pnpm",
+  "wasm:compile"
+  ]
 run = "pnpm exec playwright test"
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
-run = ["pnpm install", "pnpm exec playwright install"]
-sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
-outputs = ['node_modules/.pnpm/lock.yaml']
+run = [
+  "pnpm install",
+  "pnpm exec playwright install"
+  ]
+sources = [
+  'package.json',
+  'pnpm-lock.yaml',
+  'mise.toml'
+  ]
+outputs = 'node_modules/.pnpm/lock.yaml'
 
 [tasks.'wasm:compile']
 env.RUSTFLAGS = '--cfg getrandom_backend="wasm_js"'
 dir = "integration-tests/ixa-wasm-tests"
 run = "wasm-pack build --target web"
-sources = ["src/*.rs", "Cargo.toml"]
-outputs = ["pkg"]
+sources = [
+  "src/*.rs",
+  "Cargo.toml"
+  ]
+outputs = "pkg"
 
 [tasks.'bench']
 description = "Run all benchmarks"
@@ -83,7 +91,7 @@ run = [
 
 [tasks.'bench:criterion']
 description = "Run all Criterion benchmarks (optionally pass a specific name)"
-run = ["cargo bench -p ixa-bench {{arg(name='name', default='')}}"]
+run = "cargo bench -p ixa-bench {{arg(name='name', default='')}}"
 
 [tasks.'bench:create']
 description = "Compare benchmarks against a Criterion baseline"
@@ -95,24 +103,24 @@ run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
-run = ["cargo build -p ixa-bench --release"]
-sources = ["ixa-bench/src/**/*.rs", 'Cargo.toml', "ixa-bench/Cargo.toml"]
-outputs = ["target/release/hyperfine"]
+run = "cargo build -p ixa-bench --release"
+sources = [
+  "ixa-bench/src/**/*.rs", 'Cargo.toml',
+  "ixa-bench/Cargo.toml"
+  ]
+outputs = "target/release/hyperfine"
 
 [tasks.'test:hyperfine']
 description = "Run one hyperfine run"
-run = ["mise bench:hyperfine --warmup=0 --runs=1"]
+run = "mise bench:hyperfine --warmup=0 --runs=1"
 
 [tasks.'bench:hyperfine']
-depends = ["build:hyperfine"]
+depends = "build:hyperfine"
 run = './target/release/hyperfine'
 
 [tasks.check]
 description = "Formatting and linting"
-run = [
-  "mise run check:rust",
-  "mise run check:markdown"
-]
+depends = "check:*"
 
 [tasks.'check:rust']
 run = [
@@ -126,19 +134,19 @@ run = [
 [tasks.prettier]
 description = "Run prettier on all supported files"
 run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,yaml}" \
-  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore --ignore-path ./.prettierignore
+  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore \
+  --ignore-path ./integration-tests/ixa-wasm-tests/.gitignore
 '''
 
 [tasks.'check:markdown']
-run = ["markdownlint '**/*.md'", "mise prettier check"]
+run = [
+  "markdownlint '**/*.md'",
+  "mise prettier check"
+  ]
 
 [tasks.fix]
 description = "Auto-fix formatting and linting issues"
-run = [
-  "mise run fix:prettier",
-  "mise run fix:markdown",
-  "mise run fix:rust"
-]
+depends = "fix:*"
 
 [tasks.'fix:prettier']
 run = "mise prettier write"
@@ -154,7 +162,7 @@ run = "markdownlint --fix '**/*.md' || true"
 
 [tasks.clean]
 description = "Remove build artifacts"
-run='''
+run = '''
   cargo clean
   rm -rf pkg integration-tests/ixa-wasm-tests/{pkg,node_modules}
   rm -rf website/{doc,debug,book}
@@ -164,18 +172,23 @@ run='''
 
 [tasks.precommit]
 description = "This is used by pre-commit (which installs git hooks)"
-depends=["check"]
+depends = "check"
 
 [tasks.prepush]
 description = "Check everything before pushing"
 env.RUSTFLAGS = "-D warnings"
-run=["mise precommit", "mise examples", "mise docs", "mise test"]
+run = [
+  "mise precommit",
+  "mise examples",
+  "mise docs",
+  "mise test"
+  ]
 
 [tasks.'docker:build']
 run = "docker build -t ixa-bench ."
 
 [tasks.'docker:run']
-depends=["docker:build"]
+depends = "docker:build"
 run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
 [tasks.'install:hooks']
