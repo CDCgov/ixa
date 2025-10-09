@@ -29,7 +29,7 @@ install-playwright:
 # Build the wasm module for the browser using wasm-pack
 [group('Wasm')]
 [group('Build')]
-build-wasm-pack: install-wasm-pack
+build-wasm-pack $RUSTFLAGS='--cfg getrandom_backend="wasm_js"': install-wasm-pack
     cd integration-tests/ixa-wasm-tests && wasm-pack build --target web
 
 # Run browser-based Playwright tests via npm
@@ -178,7 +178,7 @@ _prehyperfine:
         echo "hyperfine not found. You can install it with:\ncargo install hyperfine"; \
         exit 1; \
     }
-    cargo build --release -p ixa-bench \
+    cargo build --release -p ixa-bench
 
 # List all hyperfine benchmarks
 [group('Hyperfine')]

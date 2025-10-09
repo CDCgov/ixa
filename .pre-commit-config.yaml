@@ -1,32 +1,16 @@
-
 repos:
--  repo: local
-   hooks:
-   -    id: rust-version
-        name: rust version
-        entry: rustc
-        args: ["-V"]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-toml
+  - repo: local
+    hooks:
+      - id: mise-precommit
+        name: mise precommit
+        entry: mise
+        args: ["run", "precommit"]
         language: system
         verbose: true
         pass_filenames: false
         always_run: true
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-    -   id: check-added-large-files
-    -   id: check-yaml
-    -   id: check-toml
-    -   id: end-of-file-fixer
-    -   id: mixed-line-ending
-    -   id: trailing-whitespace
--   repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
-    -   id: fmt
-    -   id: clippy
-        # Use '--all' to run on all code, including tests and examples, even files that are not part of the library.
-        args: ["--all", "--", "-D", "warnings"]
--   repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
-    hooks:
-    - id: markdownlint

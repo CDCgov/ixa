@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.1...ixa-fips-v0.1.2) - 2025-10-08
+
+### Added
+
+- Use mise for tasks and tool installation ([#562](https://github.com/CDCgov/ixa/pull/562))
+
 ## [0.1.1](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.0...ixa-fips-v0.1.1) - 2025-07-07
 
 ### Other

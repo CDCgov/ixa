@@ -8,7 +8,7 @@ use ixa::prelude::*;
 use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
 
-define_rng!(InfectionRng);
+define_rng!(InfectionRng1);
 define_data_plugin!(
     InfectionPlansPlugin,
     InfectionPlansData,
@@ -29,7 +29,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         .clone();
     let infection_duration = parameters.infection_duration;
     let recovery_time = context.get_current_time()
-        + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());
+        + context.sample_distr(InfectionRng1, Exp::new(1.0 / infection_duration).unwrap());
 
     if context.get_person_property(person_id, Alive) {
         let plan_id = context.add_plan(recovery_time, move |context| {

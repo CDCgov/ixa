@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ixa::rand::{prelude::ThreadRng, seq::IteratorRandom, thread_rng, Rng};
+use ixa::rand::{prelude::ThreadRng, rng, seq::IteratorRandom, Rng};
 use ixa::random::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
@@ -32,16 +32,16 @@ where
 }
 
 fn setup() -> (Vec<u8>, Vec<usize>, ThreadRng) {
-    let mut rng: ThreadRng = thread_rng();
+    let mut rng: ThreadRng = rng();
     // The number of items to choose out of the data set for multiple sampling
     let mut counts: Vec<usize> = Vec::with_capacity(1000);
     for _ in 0..1000 {
-        counts.push(rng.gen_range(5..100));
+        counts.push(rng.random_range(5..100));
     }
     // A data set of numbers to simulate sampling from a population (memory access patterns)
     let mut data: Vec<u8> = Vec::with_capacity(100_000);
     for _ in 0..100_000 {
-        data.push(rng.gen_range(0..100));
+        data.push(rng.random_range(0..100));
     }
 
     (data, counts, rng)

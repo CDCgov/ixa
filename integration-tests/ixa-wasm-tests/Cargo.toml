@@ -21,8 +21,10 @@ console_error_panic_hook = "0.1.7"
 
 # Explicitly use the Ixa in this same project.
 ixa = { path = "../../", default-features = false, features = ["logging"] }
-rand_distr = "^0.4.3"
-serde = { version = "^1.0.217", features = ["derive"] }
+rand_distr.workspace = true
+serde.workspace = true
+
+
 
 [lints]
 workspace = true

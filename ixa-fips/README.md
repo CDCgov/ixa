@@ -1,43 +1,50 @@
 # ixa-fips — FIPS geographic codes & utilities
 
-***Represent, parse, and manipulate hierarchical FIPS region codes in just 64 bits.***
+**_Represent, parse, and manipulate hierarchical FIPS region codes in just 64
+bits._**
 
-[Federal Information Processing Series (FIPS)](https://www.census.gov/library/reference/code-lists/ansi.html) is a
-standardized set of geographic codes useful for identifying places and regions like counties and voting districts.
-This library provides an efficient representation of a subset of these codes, in particular hierarchical region codes
-suitable for identifying schools, workplaces, and homes. The primary data type `FIPSCode` has explicit fields for
-state, county, and census tract, and has additional fields convenient for user-defined specificity and even additional
+[Federal Information Processing Series (FIPS)](https://www.census.gov/library/reference/code-lists/ansi.html)
+is a standardized set of geographic codes useful for identifying places and
+regions like counties and voting districts. This library provides an efficient
+representation of a subset of these codes, in particular hierarchical region
+codes suitable for identifying schools, workplaces, and homes. The primary data
+type `FIPSCode` has explicit fields for state, county, and census tract, and has
+additional fields convenient for user-defined specificity and even additional
 arbitrary data.
 
 ## Why this crate?
 
-* **Compact & cache-friendly.** A complete state → county → census-tract hierarchy (plus category, id, and extra data)
-  is packed into a single `u64`, minimizing memory use and hash-map overhead.
-* **Zero-copy parsing.** Fast lexical routines turn text into `FIPSCode` values without intermediate heap allocations.
+- **Compact & cache-friendly.** A complete state → county → census-tract
+  hierarchy (plus category, id, and extra data) is packed into a single `u64`,
+  minimizing memory use and hash-map overhead.
+- **Zero-copy parsing.** Fast lexical routines turn text into `FIPSCode` values
+  without intermediate heap allocations.
 
 ## Standard alignment
 
-This crate is designed to be usable with any revision of the standard. The standard-dependent properties of this library
-are:
+This crate is designed to be usable with any revision of the standard. The
+standard-dependent properties of this library are:
 
-* The minimal subset of the U.S. state codes that includes only proper states and the District of Columbia. The codes
-  for this subset have been stable for every revision. This is only relevant to the `USState` enum the use of which is
-  optional.
-* The number of digits that represent the U.S. state, county, and census tract codes (2, 3, and 6 respectively) in the
-  parsing routines. This is a hard dependency for the ASPR library but only affects this library in that it determines
-  maximum values for these fields.
+- The minimal subset of the U.S. state codes that includes only proper states
+  and the District of Columbia. The codes for this subset have been stable for
+  every revision. This is only relevant to the `USState` enum the use of which
+  is optional.
+- The number of digits that represent the U.S. state, county, and census tract
+  codes (2, 3, and 6 respectively) in the parsing routines. This is a hard
+  dependency for the ASPR library but only affects this library in that it
+  determines maximum values for these fields.
 
 ## Core primitives
 
 | Type / Module | Purpose                                                                                |
-| ------------- |----------------------------------------------------------------------------------------|
-| `FIPSCode`    | 64-bit value encoding state + county + tract + category + id *(10 spare bits for you)* |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `FIPSCode`    | 64-bit value encoding state + county + tract + category + id _(10 spare bits for you)_ |
 | `parser`      | Zero-allocation conversions <br/>`&str` ⇆ `FIPSCode` / fragments                       |
 | `USState`     | Exhaustive enum of valid state codes\* (fits in the 6 bits allocated by `FIPSCode`)    |
 | `FIPSError`   | Represents value out of range errors.                                                  |
 
-\* This is a minimal subset of FIPS state and state equivalent codes which have been stable for every FIPS standard
-revision so far. See the
+\* This is a minimal subset of FIPS state and state equivalent codes which have
+been stable for every FIPS standard revision so far. See the
 [2020 FIPS Standard here](https://www.census.gov/library/reference/code-lists/ansi.html#states).
 
 ## Quick tour

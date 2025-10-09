@@ -39,6 +39,7 @@ clap = { workspace = true, features = ["derive"] }
 paste.workspace = true
 anyhow.workspace = true
 ctor.workspace = true
+nohash-hasher = "0.2.0"
 
 [lib]
 bench = false
@@ -46,6 +47,11 @@ bench = false
 [[bin]]
 name = "hyperfine"
 path = "src/bench_utils/hyperfine.rs"
+bench = false
+
+[[bin]]
+name = "run_bench"
+path = "src/bench_utils/runner.rs"
 bench = false
 
 [[bin]]
@@ -57,13 +63,8 @@ bench = false
 workspace = true
 
 [[bench]]
-name = "example_basic_infection"
-path = "criterion/example_basic_infection.rs"
-harness = false
-
-[[bench]]
-name = "example_births_deaths"
-path = "criterion/example_births_deaths.rs"
+name = "examples"
+path = "criterion/examples.rs"
 harness = false
 
 [[bench]]
@@ -79,4 +80,14 @@ harness = false
 [[bench]]
 name = "sampling"
 path = "criterion/sample_people.rs"
+harness = false
+
+[[bench]]
+name = "indexing"
+path = "criterion/index_benches.rs"
+harness = false
+
+[[bench]]
+name = "counts"
+path = "criterion/counts.rs"
 harness = false
