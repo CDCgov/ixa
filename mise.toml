@@ -34,7 +34,7 @@ done
 description = "Build the Rust cli docs, API docs and Ixa website"
 run = '''
   cargo run --features write_cli_usage --example basic-infection -- --markdown-help
-  cargo doc --no-deps --target-dir website/
+  cargo doc --all-features --no-deps --target-dir website/
   mdbook build docs/book -d ../../website/book
 '''
 
@@ -58,6 +58,10 @@ depends = [
   "wasm:compile"
   ]
 run = "pnpm exec playwright test"
+
+[tasks.'test:features']
+description = "Run just the core ixa tests (much faster)"
+run = "cargo test --no-default-features --features 'web_api'"
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
@@ -126,9 +130,9 @@ depends = "check:*"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
-  "cargo check --all-targets --workspace",
+  "cargo check --all-targets --workspace --all-features",
   "cargo fmt --check",
-  "cargo clippy --workspace --all-targets -- -D warnings"
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings"
 ]
 
 [tasks.prettier]
@@ -153,7 +157,7 @@ run = "mise prettier write"
 
 [tasks.'fix:rust']
 run = [
-  "cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings",
+  "cargo clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
   "cargo fmt"
 ]
 

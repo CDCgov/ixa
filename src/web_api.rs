@@ -4,13 +4,13 @@ use crate::external_api::{
     breakpoint, global_properties, halt, next, people, population, r#continue, run_ext_api, time,
     EmptyArgs,
 };
+use crate::rand::RngCore;
 use crate::{define_data_plugin, PluginContext};
 use crate::{HashMap, HashMapExt};
 use axum::extract::{Json, Path, State};
 use axum::response::Redirect;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Router};
-use rand::RngCore;
 use serde_json::json;
 use std::thread;
 use tokio::sync::mpsc;
@@ -213,7 +213,8 @@ pub trait ContextWebApiExt: PluginContext {
 
         // Start the API server
         let mut random: [u8; 16] = [0; 16];
-        rand::rngs::OsRng.fill_bytes(&mut random);
+        let mut rng = rand::rng();
+        rng.fill_bytes(&mut random);
         let secret = uuid::Builder::from_random_bytes(random)
             .into_uuid()
             .to_string();
