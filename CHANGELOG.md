@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/CDCgov/ixa/compare/ixa-v0.4.1...ixa-v0.4.2) - 2025-10-20
+
+### Added
+
+- added mise task for test:features ([#573](https://github.com/CDCgov/ixa/pull/573))
+
 ## [0.4.1](https://github.com/CDCgov/ixa/compare/ixa-v0.4.0...ixa-v0.4.1) - 2025-10-08
 
 ### Added
