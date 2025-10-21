@@ -76,6 +76,7 @@ mod index;
 pub(crate) mod methods;
 mod multi_property;
 mod property;
+mod property_store;
 mod query;
 
 pub use query::Query;
@@ -90,7 +91,7 @@ pub use index::Index;
 pub use multi_property::*;
 pub use property::{
     define_derived_property, define_multi_property, define_person_property,
-    define_person_property_with_default, PersonProperty,
+    define_person_property_with_default, PersonProperty, PropertyInitializationKind,
 };
 
 use seq_macro::seq;
