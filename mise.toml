@@ -99,11 +99,14 @@ run = "cargo bench -p ixa-bench {{arg(name='name', default='')}}"
 
 [tasks.'bench:create']
 description = "Compare benchmarks against a Criterion baseline"
-run = "mise bench:criterion -- --save-baseline {{arg(name='baseline')}}"
+run = "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-baseline {{arg(name='baseline')}}"
 
 [tasks.'bench:compare']
 description = "Compare benchmarks against a Criterion baseline"
-run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
+run = [
+    "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline {{arg(name='baseline')}}",
+    "cargo run -q -p ixa-bench --bin check_criterion_regressions"
+  ]
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
