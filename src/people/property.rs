@@ -28,12 +28,14 @@
 //! context.index_property(Profile);
 //! ```
 
+use std::any::TypeId;
+use std::fmt::Debug;
+
+use serde::Serialize;
+
 use crate::hashing::hash_serialized_128;
 use crate::people::data::PersonPropertyHolder;
 use crate::{Context, PersonId};
-use serde::Serialize;
-use std::any::TypeId;
-use std::fmt::Debug;
 
 /// We factor this out and provide a blanket implementation for all types that
 /// can be value types for properties. This makes it convenient to reference

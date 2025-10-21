@@ -2,9 +2,7 @@ use ixa::people::{PersonId, PersonPropertyChangeEvent};
 use ixa::prelude::*;
 use rand_distr::Exp;
 
-use crate::InfectionStatus;
-use crate::InfectionStatusValue;
-use crate::Parameters;
+use crate::{InfectionStatus, InfectionStatusValue, Parameters};
 
 define_rng!(InfectionRng);
 

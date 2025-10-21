@@ -50,14 +50,14 @@ mod null_logger;
 #[cfg(feature = "progress_bar")]
 mod progress_bar_encoder;
 
-pub use log::{debug, error, info, trace, warn, LevelFilter};
 use std::collections::hash_map::Entry;
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
-use crate::HashMap;
+pub use log::{debug, error, info, trace, warn, LevelFilter};
 #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 use log4rs::Handle;
-use std::sync::LazyLock;
-use std::sync::{Mutex, MutexGuard};
+
+use crate::HashMap;
 
 // Logging only errors by default.
 pub const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Error;
@@ -242,12 +242,14 @@ pub(crate) fn level_to_string_list(level: LevelFilter) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{LazyLock, Mutex};
+
+    use log::{error, trace, LevelFilter};
+
     use super::{
         get_log_configuration, level_to_string_list, remove_module_filter, set_log_level,
         set_module_filters,
     };
-    use log::{error, trace, LevelFilter};
-    use std::sync::{LazyLock, Mutex};
 
     // Force logging tests to run serially for consistent behavior.
     static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);

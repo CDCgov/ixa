@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use clap::{ArgAction, Args, Command, FromArgMatches as _};
+#[cfg(feature = "write_cli_usage")]
+use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
+
 use crate::context::Context;
 #[cfg(feature = "debugger")]
 use crate::debugger::enter_debugger;
@@ -14,9 +18,6 @@ use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
 use crate::{set_log_level, set_module_filters, warn, LevelFilter};
-use clap::{ArgAction, Args, Command, FromArgMatches as _};
-#[cfg(feature = "write_cli_usage")]
-use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
@@ -381,9 +382,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
+
     use super::*;
     use crate::{define_global_property, define_rng};
-    use serde::{Deserialize, Serialize};
 
     #[derive(Args, Debug)]
     struct CustomArgs {

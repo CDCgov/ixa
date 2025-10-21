@@ -1,7 +1,8 @@
+use std::path::PathBuf;
+
 use ixa::prelude::*;
 use ixa::report::serialize_f64;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Incidence {

@@ -1,5 +1,5 @@
+use crate::context::{Context, ContextBase};
 use crate::{
-    context::{Context, ContextBase},
     ContextGlobalPropertiesExt, ContextNetworkExt, ContextPeopleExt, ContextRandomExt,
     ContextReportExt,
 };

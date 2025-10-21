@@ -1,9 +1,12 @@
-use crate::parameters::Parameters;
-use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
+use std::fs;
+use std::path::PathBuf;
+
 use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+
+use crate::parameters::Parameters;
+use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct IncidenceReportItem {
@@ -67,10 +70,13 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+    use std::path::Path;
+    use std::rc::Rc;
+
     use super::*;
     use crate::parameters::ParametersValues;
     use crate::{incidence_report, loader, network, seir, MainRng, PersonId};
-    use std::{cell::RefCell, path::Path, rc::Rc};
 
     fn check_values(path: &Path) -> (Vec<String>, Vec<IncidenceReportItem>) {
         let mut infected_by: Vec<IncidenceReportItem> = Vec::new();

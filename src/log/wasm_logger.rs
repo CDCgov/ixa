@@ -5,9 +5,6 @@ A logger for WASM target that logs to the JavaScript console.
 */
 
 #[cfg(not(test))]
-use crate::log::LOG_CONFIGURATION;
-use crate::log::{LogConfiguration, ModuleLogConfiguration};
-#[cfg(not(test))]
 use fern::Dispatch;
 #[cfg(not(test))]
 use log::LevelFilter;
@@ -16,6 +13,10 @@ use log::{Level, Record};
 use wasm_bindgen::JsValue;
 #[cfg(not(test))]
 use web_sys::console;
+
+#[cfg(not(test))]
+use crate::log::LOG_CONFIGURATION;
+use crate::log::{LogConfiguration, ModuleLogConfiguration};
 
 impl LogConfiguration {
     #[cfg(not(test))]
@@ -152,9 +153,10 @@ impl BrowserRecord {
 
 #[cfg(test)]
 mod tests {
+    use log::{Level, LevelFilter, Record};
+
     use super::*;
     use crate::HashMap;
-    use log::{Level, LevelFilter, Record};
 
     #[test]
     fn should_log_global_level() {

@@ -1,14 +1,13 @@
-use crate::network::{Age5to17, AgeUnder5, Household};
-use crate::parameters::Parameters;
 use ixa::log::info;
+use ixa::network::{Edge, EdgeType};
+use ixa::people::{PersonId, PersonPropertyChangeEvent};
 use ixa::prelude::*;
-use ixa::{
-    network::{Edge, EdgeType},
-    people::{PersonId, PersonPropertyChangeEvent},
-    ExecutionPhase,
-};
+use ixa::ExecutionPhase;
 use rand_distr::{Bernoulli, Gamma};
 use serde::{Deserialize, Serialize};
+
+use crate::network::{Age5to17, AgeUnder5, Household};
+use crate::parameters::Parameters;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
 pub enum DiseaseStatusValue {
@@ -156,11 +155,12 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
 
 #[cfg(test)]
 mod tests {
+    use ixa::context::Context;
+
     use super::*;
     use crate::loader::Id;
     use crate::parameters::ParametersValues;
     use crate::{loader, network};
-    use ixa::context::Context;
 
     #[test]
     fn test_disease_status() {

@@ -1,7 +1,7 @@
-use ixa::people::PersonPropertyChangeEvent;
-use ixa::prelude::*;
 use std::path::PathBuf;
 
+use ixa::people::PersonPropertyChangeEvent;
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::parameters_loader::Parameters;

@@ -131,7 +131,7 @@ run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
   "cargo check --all-targets --workspace --all-features",
-  "cargo fmt --check",
+  "cargo +nightly fmt --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings"
 ]
 
@@ -158,7 +158,7 @@ run = "mise prettier write"
 [tasks.'fix:rust']
 run = [
   "cargo clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
-  "cargo fmt"
+  "cargo +nightly fmt"
 ]
 
 [tasks.'fix:markdown']

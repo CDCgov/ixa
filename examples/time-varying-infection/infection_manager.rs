@@ -1,6 +1,5 @@
 use ixa::people::{PersonId, PersonPropertyChangeEvent};
 use ixa::prelude::*;
-
 use rand_distr::Exp;
 
 use crate::parameters_loader::Parameters;
@@ -82,7 +81,6 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::*;
-
     use crate::parameters_loader::ParametersValues;
     use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
 

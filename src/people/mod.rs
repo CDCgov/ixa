@@ -78,10 +78,11 @@ mod multi_property;
 mod property;
 mod query;
 
-pub use query::Query;
+use std::any::TypeId;
+use std::cell::RefCell;
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 
-use crate::{context::Context, define_data_plugin};
-use crate::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub use context_extension::ContextPeopleExt;
 use data::PeopleData;
 pub use data::PersonPropertyHolder;
@@ -92,12 +93,12 @@ pub use property::{
     define_derived_property, define_multi_property, define_person_property,
     define_person_property_with_default, PersonProperty,
 };
-
+pub use query::Query;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::fmt::{Debug, Display, Formatter};
-use std::{any::TypeId, hash::Hash};
+
+use crate::context::Context;
+use crate::{define_data_plugin, HashMap, HashMapExt, HashSet, HashSetExt};
 
 pub type HashValueType = u128;
 

@@ -1,11 +1,11 @@
 use ixa::prelude::*;
+use rand_distr::Exp;
 
 use crate::parameters_loader::Foi;
-use crate::population_manager::InfectionStatus;
-use crate::population_manager::InfectionStatusValue;
-use crate::population_manager::{AgeGroupFoi, AgeGroupRisk, Alive};
+use crate::population_manager::{
+    AgeGroupFoi, AgeGroupRisk, Alive, InfectionStatus, InfectionStatusValue,
+};
 use crate::Parameters;
-use rand_distr::Exp;
 
 define_rng!(TransmissionRng1);
 

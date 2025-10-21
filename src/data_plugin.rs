@@ -1,8 +1,9 @@
-use crate::{HashSet, PluginContext};
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
+
+use crate::{HashSet, PluginContext};
 
 /// A collection of `TypeId`s of all `DataPlugin` types linked into the code.
 static DATA_PLUGINS: LazyLock<Mutex<RefCell<HashSet<TypeId>>>> =
@@ -134,10 +135,11 @@ macro_rules! define_data_plugin {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Context;
     use std::sync::{Arc, Barrier};
     use std::thread;
+
+    use super::*;
+    use crate::Context;
 
     // We attempt an out-of-bounds index with a plugin
     #[test]

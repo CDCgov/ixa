@@ -1,11 +1,12 @@
 //! The utilities in this module are used by query and multi-properties so that queries
 //! having multiple properties can be resolved to an indexed multi-property if possible.
 
-use crate::hashing::{one_shot_128, HashMap};
-use crate::people::HashValueType;
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::sync::{LazyLock, Mutex};
+
+use crate::hashing::{one_shot_128, HashMap};
+use crate::people::HashValueType;
 
 /// A map from a list of `TypeId`s to the `TypeId` of the multi-property type.
 /// The list of `TypeId`s is assumed to be sorted.

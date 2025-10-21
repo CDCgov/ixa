@@ -1,10 +1,13 @@
+use std::hint::black_box;
+
 use criterion::{criterion_group, criterion_main, Criterion};
-use ixa::rand::{prelude::ThreadRng, rng, seq::IteratorRandom, Rng};
+use ixa::rand::prelude::ThreadRng;
+use ixa::rand::seq::IteratorRandom;
+use ixa::rand::{rng, Rng};
 use ixa::random::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
 };
-use std::hint::black_box;
 
 /// A wrapper around any iterator that prevents it from exposing `ExactSizeIterator`, `DoubleEndedIterator`, etc.
 /// This is needed to test the "slow path" with `rand`'s implementation, as `rand` has an optimization for when

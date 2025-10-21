@@ -1,10 +1,9 @@
-use crate::{
-    population_loader::Age,
-    sir::DiseaseStatus,
-    vaccine::{VaccineDoses, VaccineEfficacy, VaccineType},
-};
 use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
 use ixa::prelude::*;
+
+use crate::population_loader::Age;
+use crate::sir::DiseaseStatus;
+use crate::vaccine::{VaccineDoses, VaccineEfficacy, VaccineType};
 
 pub fn init(context: &mut Context) {
     // This subscribes to the disease status change events

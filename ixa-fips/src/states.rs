@@ -5,9 +5,10 @@
 //! Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63.
 //! Thus, it is best to only use `FIPSCode` for these states.
 
+use strum::{AsRefStr, FromRepr};
+
 use crate::errors::FIPSError;
 use crate::StateCode;
-use strum::{AsRefStr, FromRepr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, AsRefStr, FromRepr)]
 #[repr(u8)]

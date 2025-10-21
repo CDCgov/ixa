@@ -1,11 +1,10 @@
+use ixa::log::{debug, error, info, set_log_level, warn};
+use ixa::prelude::*;
 use ixa::LevelFilter;
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::window;
-
-use ixa::log::{debug, error, info, set_log_level, warn};
-use ixa::prelude::*;
 
 pub mod infection_manager;
 pub mod people;

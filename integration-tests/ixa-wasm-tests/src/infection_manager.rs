@@ -1,6 +1,5 @@
 use ixa::prelude::*;
-use ixa::trace;
-use ixa::{PersonId, PersonPropertyChangeEvent};
+use ixa::{trace, PersonId, PersonPropertyChangeEvent};
 use rand_distr::Exp;
 
 use crate::people::{InfectionStatus, InfectionStatusValue};
@@ -46,10 +45,10 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use crate::infection_manager::InfectionStatusEvent;
-    use crate::people::InfectionStatus;
-    use crate::people::InfectionStatusValue;
     use ixa::prelude::*;
+
+    use crate::infection_manager::InfectionStatusEvent;
+    use crate::people::{InfectionStatus, InfectionStatusValue};
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 

@@ -1,6 +1,7 @@
-use crate::population_loader::{Age, RiskCategoryValue};
 use ixa::prelude::*;
 use serde_derive::Serialize;
+
+use crate::population_loader::{Age, RiskCategoryValue};
 
 define_rng!(VaccineRng);
 

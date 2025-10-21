@@ -1,9 +1,7 @@
-use crate::people::ContextPeopleExt;
-use crate::people::PeoplePlugin;
-use crate::IxaError;
-use crate::PersonId;
-use crate::{Context, ContextBase};
 use std::any::TypeId;
+
+use crate::people::{ContextPeopleExt, PeoplePlugin};
+use crate::{Context, ContextBase, IxaError, PersonId};
 
 #[cfg_attr(not(feature = "web_api"), allow(dead_code))]
 pub(crate) trait ContextPeopleExtCrate: ContextBase + ContextPeopleExt {
@@ -77,13 +75,13 @@ impl ContextPeopleExtCrate for Context {
 
 #[cfg(test)]
 mod test {
-    use crate::{HashSet, HashSetExt};
     use std::cell::RefCell;
 
     use super::ContextPeopleExtCrate;
     use crate::people::{define_person_property, ContextPeopleExt};
-    use crate::ContextRandomExt;
-    use crate::{define_person_property_with_default, Context};
+    use crate::{
+        define_person_property_with_default, Context, ContextRandomExt, HashSet, HashSetExt,
+    };
 
     define_person_property!(Age, u8);
 

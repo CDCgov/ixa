@@ -1,8 +1,6 @@
 mod context_ext;
 mod sampling_algorithms;
 
-use crate::rand::SeedableRng;
-use crate::{define_data_plugin, HashMap, HashMapExt};
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 
@@ -11,6 +9,9 @@ pub use sampling_algorithms::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
 };
+
+use crate::rand::SeedableRng;
+use crate::{define_data_plugin, HashMap, HashMapExt};
 
 /// Use this to define a unique type which will be used as a key to retrieve
 /// an independent rng instance when calling `.get_rng`.

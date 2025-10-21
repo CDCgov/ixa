@@ -1,10 +1,11 @@
-use crate::parameters_loader::Parameters;
+use std::fmt;
+
 use ixa::people::PersonId;
 use ixa::prelude::*;
-
 use rand_distr::{Exp, Uniform};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+
+use crate::parameters_loader::Parameters;
 
 define_rng!(PeopleRng);
 
@@ -125,11 +126,13 @@ pub fn init(context: &mut Context) {
 mod test {
     // Silence spurious unused import warnings.
     #![allow(unused_imports)]
-    use super::*;
-    use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
-    use ixa::context::Context;
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    use ixa::context::Context;
+
+    use super::*;
+    use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
 
     #[test]
     fn test_birth_death() {
