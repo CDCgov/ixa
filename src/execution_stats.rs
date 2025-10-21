@@ -1,13 +1,14 @@
 // Loss of precision is allowable in this module's use cases.
 #![allow(clippy::cast_precision_loss)]
 
+use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
 use bytesize::ByteSize;
 use humantime::format_duration;
 use log::{debug, error, info};
 use serde_derive::Serialize;
-use std::time::Duration;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -287,8 +288,10 @@ pub fn log_execution_statistics(stats: &ExecutionStatistics) {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+    use std::time::Duration;
+
     use super::*;
-    use std::{thread, time::Duration};
 
     #[test]
     fn test_collector_initialization() {

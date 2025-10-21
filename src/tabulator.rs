@@ -1,8 +1,10 @@
+use std::any::TypeId;
+
+use seq_macro::seq;
+
 use crate::people::external_api::ContextPeopleExtCrate;
 use crate::people::PersonProperty;
 use crate::{Context, ContextPeopleExt, IxaError};
-use seq_macro::seq;
-use std::any::TypeId;
 pub trait Tabulator {
     #[allow(clippy::missing_errors_doc)]
     fn setup(&self, context: &Context) -> Result<(), IxaError>;
@@ -91,12 +93,13 @@ impl Tabulator for Vec<(TypeId, String)> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::Tabulator;
     use crate::{
         define_person_property, define_person_property_with_default, Context, ContextPeopleExt,
         HashSet, HashSetExt, PersonProperty,
     };
-    use std::cell::RefCell;
 
     define_person_property!(Age, u8);
     type RiskCategoryValue = u8;

@@ -2,6 +2,14 @@
 //!
 //! Defines a `Context` that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
+use std::any::{Any, TypeId};
+use std::cell::OnceCell;
+use std::collections::VecDeque;
+use std::fmt::{Display, Formatter};
+use std::rc::Rc;
+
+use polonius_the_crab::prelude::*;
+
 use crate::data_plugin::DataPlugin;
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
@@ -12,16 +20,7 @@ use crate::plan::{PlanId, Queue};
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt};
-use crate::{HashMap, HashMapExt};
-use polonius_the_crab::prelude::*;
-use std::cell::OnceCell;
-use std::{
-    any::{Any, TypeId},
-    collections::VecDeque,
-    fmt::{Display, Formatter},
-    rc::Rc,
-};
+use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt, HashMap, HashMapExt};
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -563,9 +562,10 @@ impl Default for Context {
 mod tests {
     use std::cell::RefCell;
 
+    use ixa_derive::IxaEvent;
+
     use super::*;
     use crate::define_data_plugin;
-    use ixa_derive::IxaEvent;
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 

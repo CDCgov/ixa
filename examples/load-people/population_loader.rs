@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 use ixa::prelude::*;
 use ixa::PersonId;
 use serde::Deserialize;
 use serde_derive::Serialize;
+
+use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum RiskCategoryValue {
@@ -49,15 +50,14 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use ixa::{PersonCreatedEvent, PersonPropertyChangeEvent};
 
     use super::*;
-    use crate::{
-        population_loader::Age,
-        vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue},
-    };
-    use ixa::PersonCreatedEvent;
-    use ixa::PersonPropertyChangeEvent;
+    use crate::population_loader::Age;
+    use crate::vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue};
 
     const EXPECTED_ROWS: usize = 5;
 

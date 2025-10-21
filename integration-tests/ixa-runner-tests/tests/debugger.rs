@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use assert_cmd::cargo::CargoError;
     use std::sync::{LazyLock, Mutex};
+
+    use assert_cmd::cargo::CargoError;
 
     static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 

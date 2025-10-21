@@ -3,9 +3,10 @@
 //! with the `FIPSError::from_*_code()` constructor methods in the `FIPSCode::encode_*()` constructor methods.
 //!
 
-use crate::{CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+
+use crate::{CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct FIPSError {

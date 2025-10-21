@@ -15,9 +15,11 @@
 //! 3. we can iterate over (serialized property value, set of `PersonId`s) pairs in the
 //!    type-erased API.
 
-use crate::{people::HashValueType, Context, ContextPeopleExt, HashSet, PersonId, PersonProperty};
 use hashbrown::HashTable;
 use log::{error, trace};
+
+use crate::people::HashValueType;
+use crate::{Context, ContextPeopleExt, HashSet, PersonId, PersonProperty};
 
 pub type BxIndex = Box<dyn TypeErasedIndex>;
 
@@ -232,11 +234,12 @@ pub fn process_indices(
 mod test {
     // Tests in `src/people/query.rs` also exercise indexing code.
 
+    use log::LevelFilter;
+
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::people::index::Index;
     use crate::prelude::*;
     use crate::{define_multi_property, set_log_level, set_module_filter, PersonProperty};
-    use log::LevelFilter;
 
     define_person_property!(Age, u8);
     define_person_property!(Weight, u8);

@@ -15,10 +15,6 @@
 //! will result in an error.
 //!
 //! Global properties can be read with [`Context::get_global_property_value()`]
-use crate::context::Context;
-use crate::error::IxaError;
-use crate::{define_data_plugin, trace, ContextBase, HashMap, HashMapExt};
-use serde::de::DeserializeOwned;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -26,9 +22,13 @@ use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::LazyLock;
-use std::sync::Mutex;
+use std::sync::{Arc, LazyLock, Mutex};
+
+use serde::de::DeserializeOwned;
+
+use crate::context::Context;
+use crate::error::IxaError;
+use crate::{define_data_plugin, trace, ContextBase, HashMap, HashMapExt};
 
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
@@ -296,12 +296,14 @@ impl ContextGlobalPropertiesExt for Context {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
+    use serde::{Deserialize, Serialize};
+    use tempfile::tempdir;
+
     use super::*;
     use crate::context::Context;
     use crate::error::IxaError;
-    use serde::{Deserialize, Serialize};
-    use std::path::PathBuf;
-    use tempfile::tempdir;
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ParamType {
         pub days: usize,

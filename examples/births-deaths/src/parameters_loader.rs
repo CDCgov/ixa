@@ -1,8 +1,9 @@
+use std::fmt::Debug;
+use std::path::Path;
+
 use ixa::prelude::*;
 use ixa::HashMap;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use std::path::Path;
 
 use crate::population_manager::AgeGroupRisk;
 

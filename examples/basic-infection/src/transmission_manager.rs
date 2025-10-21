@@ -1,11 +1,9 @@
 use ixa::prelude::*;
 use ixa::{trace, PersonId};
-
-use crate::people::{InfectionStatus, InfectionStatusValue};
 use rand_distr::Exp;
 
-use crate::FOI;
-use crate::MAX_TIME;
+use crate::people::{InfectionStatus, InfectionStatusValue};
+use crate::{FOI, MAX_TIME};
 
 define_rng!(TransmissionRng);
 
@@ -49,11 +47,12 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use ixa::context::Context;
+    use ixa::people::ContextPeopleExt;
+
     use super::*;
     use crate::people::{InfectionStatus, InfectionStatusValue};
     use crate::SEED;
-    use ixa::context::Context;
-    use ixa::people::ContextPeopleExt;
 
     #[test]
     fn test_attempt_infection() {

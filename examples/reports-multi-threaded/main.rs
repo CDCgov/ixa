@@ -1,7 +1,8 @@
-use ixa::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::thread;
+
+use ixa::prelude::*;
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone)]

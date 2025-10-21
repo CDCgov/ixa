@@ -1,12 +1,10 @@
-use ixa::people::PersonPropertyChangeEvent;
-use ixa::prelude::*;
 use std::path::PathBuf;
 
-use crate::InfectionStatus;
-use crate::InfectionStatusValue;
+use ixa::people::PersonPropertyChangeEvent;
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::Parameters;
+use crate::{InfectionStatus, InfectionStatusValue, Parameters};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {

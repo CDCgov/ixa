@@ -1,14 +1,15 @@
+use std::any::TypeId;
+use std::cell::RefMut;
+
+use log::trace;
+
+use crate::hashing::hash_str;
 use crate::rand::distr::uniform::{SampleRange, SampleUniform};
 use crate::rand::distr::weighted::{Weight, WeightedIndex};
 use crate::rand::distr::Distribution;
 use crate::rand::{Rng, SeedableRng};
-use crate::{
-    hashing::hash_str,
-    random::{RngHolder, RngPlugin},
-    Context, ContextBase, RngId,
-};
-use log::trace;
-use std::{any::TypeId, cell::RefMut};
+use crate::random::{RngHolder, RngPlugin};
+use crate::{Context, ContextBase, RngId};
 
 /// Gets a mutable reference to the random number generator associated with the given
 /// `RngId`. If the Rng has not been used before, one will be created with the base seed
@@ -132,7 +133,8 @@ impl ContextRandomExt for Context {}
 #[cfg(test)]
 mod test {
     use crate::context::Context;
-    use crate::rand::distr::{weighted::WeightedIndex, Distribution};
+    use crate::rand::distr::weighted::WeightedIndex;
+    use crate::rand::distr::Distribution;
     use crate::rand::RngCore;
     use crate::random::context_ext::ContextRandomExt;
     use crate::{define_data_plugin, define_rng};

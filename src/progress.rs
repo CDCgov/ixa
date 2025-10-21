@@ -81,13 +81,15 @@
 //! ```
 //!
 
-use crate::log::{trace, warn};
+// Requires at least rustc@1.70
+use std::sync::OnceLock;
+
 use progress_bar::{
     finalize_progress_bar, inc_progress_bar, init_progress_bar, set_progress_bar_action,
     set_progress_bar_progress, Color, Style,
 };
-// Requires at least rustc@1.70
-use std::sync::OnceLock;
+
+use crate::log::{trace, warn};
 
 /// We want to store the original `f64` max value, not the `usize` we initialized the progress
 /// bar with.

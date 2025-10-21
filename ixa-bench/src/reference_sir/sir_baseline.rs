@@ -1,7 +1,9 @@
-use super::{ModelStats, Parameters};
 use indexmap::IndexSet;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::Exp;
+
+use super::{ModelStats, Parameters};
 
 #[derive(Clone, Copy)]
 pub enum InfectionStatus {
@@ -148,9 +150,9 @@ pub struct PersonId {
 
 #[cfg(test)]
 mod test {
-    use super::super::ParametersBuilder;
     use approx::assert_relative_eq;
 
+    use super::super::ParametersBuilder;
     use super::*;
 
     #[test]

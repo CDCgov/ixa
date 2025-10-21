@@ -1,9 +1,12 @@
-use crate::hashing::{one_shot_128, HashMap};
-use crate::people::multi_property::{static_reorder_by_keys, type_ids_to_multi_property_id};
-use crate::{people::HashValueType, Context, ContextPeopleExt, PersonProperty};
-use seq_macro::seq;
 use std::any::TypeId;
 use std::sync::{Mutex, OnceLock};
+
+use seq_macro::seq;
+
+use crate::hashing::{one_shot_128, HashMap};
+use crate::people::multi_property::{static_reorder_by_keys, type_ids_to_multi_property_id};
+use crate::people::HashValueType;
+use crate::{Context, ContextPeopleExt, PersonProperty};
 
 /// Encapsulates a person query.
 ///
@@ -198,12 +201,13 @@ seq!(Z in 2..10 {
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]
+    use serde_derive::Serialize;
+
     use crate::people::PeoplePlugin;
     use crate::{
         define_derived_property, define_multi_property, define_person_property, Context,
         ContextPeopleExt, HashSetExt, PersonProperty,
     };
-    use serde_derive::Serialize;
 
     define_person_property!(Age, u8);
     define_person_property!(County, u32);

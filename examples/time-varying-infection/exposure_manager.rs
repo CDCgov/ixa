@@ -1,15 +1,15 @@
-use ixa::people::PersonCreatedEvent;
-use ixa::prelude::*;
 use std::rc::Rc;
 
-use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
-
+use ixa::people::PersonCreatedEvent;
+use ixa::prelude::*;
 use rand_distr::Exp1;
 use reikna::func;
 use reikna::func::Function;
 use reikna::integral::integrate;
 use roots::find_root_brent;
+
+use crate::parameters_loader::Parameters;
+use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
 
 define_rng!(ExposureRng);
 
@@ -66,12 +66,11 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
-    use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
     use reikna::integral::integrate;
 
+    use super::*;
     use crate::parameters_loader::ParametersValues;
+    use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
 
     #[test]
     fn test_attempt_infection() {

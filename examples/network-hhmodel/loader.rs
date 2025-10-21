@@ -1,10 +1,12 @@
-use crate::example_dir;
+use std::fs::File;
+
 use csv::Reader;
 use ixa::prelude::*;
 use ixa::PersonId;
 use serde::Deserialize;
 use serde_derive::Serialize;
-use std::fs::File;
+
+use crate::example_dir;
 
 define_person_property!(Id, u16);
 
@@ -69,8 +71,10 @@ pub fn init(context: &mut Context) -> Vec<PersonId> {
 
 #[cfg(test)]
 mod tests {
+    use ixa::context::Context;
+    use ixa::random::ContextRandomExt;
+
     use super::*;
-    use ixa::{context::Context, random::ContextRandomExt};
 
     const EXPECTED_ROWS: usize = 1606;
 

@@ -1,9 +1,11 @@
-use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
-use crate::Parameters;
+use std::path::Path;
+
 use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+
+use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
+use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PersonReportItem {

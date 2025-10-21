@@ -1,13 +1,12 @@
+use std::path::Path;
+
 use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
 
 use crate::population_manager::{
     Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusValue,
 };
-
-use serde::{Deserialize, Serialize};
-
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]

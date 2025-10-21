@@ -96,12 +96,8 @@ pub mod numeric;
 pub mod web_api;
 
 // Re-export for macros
-pub use bincode;
-pub use csv;
-pub use ctor;
 pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
-pub use paste;
-pub use rand;
+pub use {bincode, csv, ctor, paste, rand};
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
@@ -110,12 +106,12 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub mod prelude;
 
 pub mod prelude_for_plugins {
-    pub use crate::context::ContextBase;
-    pub use crate::context::IxaEvent;
+    pub use ixa_derive::IxaEvent;
+
+    pub use crate::context::{ContextBase, IxaEvent};
     pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;
-    pub use ixa_derive::IxaEvent;
 }
 
 pub mod execution_stats;

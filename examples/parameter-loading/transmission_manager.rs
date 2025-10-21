@@ -1,9 +1,7 @@
 use ixa::prelude::*;
-
-use crate::InfectionStatus;
-use crate::InfectionStatusValue;
-use crate::Parameters;
 use rand_distr::Exp;
+
+use crate::{InfectionStatus, InfectionStatusValue, Parameters};
 
 define_rng!(TransmissionRng);
 

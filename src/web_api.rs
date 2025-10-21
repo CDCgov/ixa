@@ -1,3 +1,14 @@
+use std::thread;
+
+use axum::extract::{Json, Path, State};
+use axum::http::StatusCode;
+use axum::response::Redirect;
+use axum::routing::{get, post};
+use axum::Router;
+use serde_json::json;
+use tokio::sync::{mpsc, oneshot};
+use tower_http::services::{ServeDir, ServeFile};
+
 use crate::context::Context;
 use crate::error::IxaError;
 use crate::external_api::{
@@ -5,17 +16,7 @@ use crate::external_api::{
     EmptyArgs,
 };
 use crate::rand::RngCore;
-use crate::{define_data_plugin, PluginContext};
-use crate::{HashMap, HashMapExt};
-use axum::extract::{Json, Path, State};
-use axum::response::Redirect;
-use axum::routing::get;
-use axum::{http::StatusCode, routing::post, Router};
-use serde_json::json;
-use std::thread;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tower_http::services::{ServeDir, ServeFile};
+use crate::{define_data_plugin, HashMap, HashMapExt, PluginContext};
 
 pub type WebApiHandler =
     dyn Fn(&mut Context, serde_json::Value) -> Result<serde_json::Value, IxaError>;
@@ -275,14 +276,15 @@ impl ContextWebApiExt for Context {}
 
 #[cfg(test)]
 mod tests {
-    use super::ContextWebApiExt;
-    use crate::people::define_person_property;
-    use crate::{define_global_property, ContextGlobalPropertiesExt};
-    use crate::{Context, ContextPeopleExt};
+    use std::thread;
+
     use reqwest::StatusCode;
     use serde::Serialize;
     use serde_json::json;
-    use std::thread;
+
+    use super::ContextWebApiExt;
+    use crate::people::define_person_property;
+    use crate::{define_global_property, Context, ContextGlobalPropertiesExt, ContextPeopleExt};
 
     define_global_property!(WebApiTestGlobal, String);
     define_person_property!(Age, u8);

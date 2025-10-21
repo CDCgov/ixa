@@ -1,14 +1,15 @@
-use ixa::prelude::*;
 use std::path::PathBuf;
+
+use ixa::prelude::*;
 
 mod incidence_report;
 mod infection_manager;
 mod parameters_loader;
 mod transmission_manager;
 
-use crate::parameters_loader::Parameters;
-
 use serde::{Deserialize, Serialize};
+
+use crate::parameters_loader::Parameters;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum InfectionStatusValue {

@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, Ident, Result, Token};
+use syn::parse::Parse;
+use syn::{Ident, Result, Token};
 
 use crate::utilities::{resolved_person_property_path, TypeTuple};
 

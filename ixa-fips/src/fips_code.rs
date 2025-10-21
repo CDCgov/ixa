@@ -72,16 +72,16 @@
 //!    orthogonal
 //!
 //! We leave them unspecified until we have a use case for them.
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display, Formatter};
+use std::num::NonZero;
+
 use crate::errors::FIPSError;
+use crate::states::USState;
 use crate::{
-    states::USState, CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode,
-    CATEGORY_OFFSET, COUNTY_OFFSET, FOURTEEN_BIT_MASK, FOUR_BIT_MASK, ID_OFFSET, NINE_BIT_MASK,
-    STATE_OFFSET, TEN_BIT_MASK, TRACT_OFFSET, TWENTY_BIT_MASK,
-};
-use std::{
-    cmp::Ordering,
-    fmt::{Debug, Display, Formatter},
-    num::NonZero,
+    CountyCode, DataCode, IdCode, SettingCategoryCode, StateCode, TractCode, CATEGORY_OFFSET,
+    COUNTY_OFFSET, FOURTEEN_BIT_MASK, FOUR_BIT_MASK, ID_OFFSET, NINE_BIT_MASK, STATE_OFFSET,
+    TEN_BIT_MASK, TRACT_OFFSET, TWENTY_BIT_MASK,
 };
 
 /// Encodes a hierarchical FIPS geographic region code in 64 bits. Excludes the nonhierarchical codes places,

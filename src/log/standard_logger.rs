@@ -1,12 +1,12 @@
+use log4rs::append::console::ConsoleAppender;
+use log4rs::config::runtime::ConfigBuilder;
+use log4rs::config::{Appender, Logger, Root};
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::Config;
+
 #[cfg(feature = "progress_bar")]
 use super::progress_bar_encoder::PBWrapperEncoder;
 use crate::log::{LogConfiguration, ModuleLogConfiguration};
-use log4rs::{
-    append::console::ConsoleAppender,
-    config::{runtime::ConfigBuilder, Appender, Logger, Root},
-    encode::pattern::PatternEncoder,
-    Config,
-};
 
 // Use an ISO 8601 timestamp format and color coded level tag
 const DEFAULT_LOG_PATTERN: &str = "{d(%Y-%m-%dT%H:%M:%SZ)} {h({l})} {t} - {m}{n}";
