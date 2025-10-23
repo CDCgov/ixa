@@ -68,22 +68,6 @@ pub trait Report: 'static {
     fn serialize(&self, writer: &mut Writer<File>);
 }
 
-/// Use this macro to define a unique report type
-#[macro_export]
-macro_rules! define_report {
-    ($name:ident) => {
-        impl $crate::Report for $name {
-            fn type_id(&self) -> std::any::TypeId {
-                std::any::TypeId::of::<$name>()
-            }
-
-            fn serialize(&self, writer: &mut $crate::csv::Writer<std::fs::File>) {
-                writer.serialize(self).unwrap();
-            }
-        }
-    };
-}
-
 /// # Errors
 /// function will return Error if it fails to `serialize_str`
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -263,7 +247,7 @@ mod test {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{define_person_property_with_default, info};
+    use crate::{define_person_property_with_default, define_report, info};
 
     define_person_property_with_default!(IsRunner, bool, false);
 
