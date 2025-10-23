@@ -57,6 +57,9 @@ pub use global_properties::{ContextGlobalPropertiesExt, GlobalProperty};
 pub mod network;
 pub use network::{ContextNetworkExt, Edge, EdgeType};
 
+pub mod macros;
+//pub use macros::*;
+
 pub mod people;
 pub use people::{
     ContextPeopleExt, PersonCreatedEvent, PersonId, PersonProperty, PersonPropertyChangeEvent,

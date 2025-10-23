@@ -73,6 +73,7 @@ mod data;
 mod event;
 pub(crate) mod external_api;
 mod index;
+mod macros;
 pub(crate) mod methods;
 mod multi_property;
 mod property;
@@ -88,11 +89,9 @@ use data::PeopleData;
 pub use data::PersonPropertyHolder;
 pub use event::{PersonCreatedEvent, PersonPropertyChangeEvent};
 pub use index::Index;
+pub use macros::*;
 pub use multi_property::*;
-pub use property::{
-    define_derived_property, define_multi_property, define_person_property,
-    define_person_property_with_default, PersonProperty,
-};
+pub use property::PersonProperty;
 pub use query::Query;
 use seq_macro::seq;
 use serde::{Deserialize, Serialize};

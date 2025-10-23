@@ -163,23 +163,6 @@ impl NetworkData {
     }
 }
 
-/// Define a new edge type for use with `network`.
-///
-/// Defines a new edge type of type `$edge_type`, with inner type `$value`.
-/// Use `()` for `$value` to have no inner type.
-#[allow(unused_macros)]
-#[macro_export]
-macro_rules! define_edge_type {
-    ($edge_type:ident, $value:ty) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $edge_type;
-
-        impl $crate::network::EdgeType for $edge_type {
-            type Value = $value;
-        }
-    };
-}
-
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
 // Public API.
@@ -325,6 +308,7 @@ impl ContextNetworkExt for Context {
 // Tests for the inner core.
 mod test_inner {
     use super::{Edge, NetworkData};
+    use crate::define_edge_type;
     use crate::error::IxaError;
     use crate::people::PersonId;
 
@@ -502,11 +486,11 @@ mod test_inner {
 // Tests for the API.
 mod test_api {
     use crate::context::Context;
-    use crate::define_rng;
     use crate::error::IxaError;
     use crate::network::{ContextNetworkExt, Edge};
     use crate::people::{define_person_property, ContextPeopleExt, PersonId};
     use crate::random::ContextRandomExt;
+    use crate::{define_edge_type, define_rng};
 
     define_edge_type!(EdgeType1, u32);
     define_person_property!(Age, u8);

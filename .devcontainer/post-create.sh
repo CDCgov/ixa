@@ -21,3 +21,5 @@ mise trust
 # Add pre-commit hooks
 mise install:hooks
 
+#install needed libs for wasm
+sudo apt-get install -y libcups2 libcairo2 libpango-1.0-0
