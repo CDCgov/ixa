@@ -37,9 +37,11 @@ jobs:
           cat hyperfine.md >> results.md
           echo '#### Criterion'
           echo '```' >> results.md
-          if ! mise run bench:compare '' base 2>&1; then
+          if ! cargo bench -p ixa-bench -- --baseline base 2>&1; then
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
             mise run bench:criterion 2>&1
+          else
+            cargo run -q -p ixa-bench --bin check_criterion_regressions >> results.md
           fi
 
       - name: Add comment to PR
