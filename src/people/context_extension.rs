@@ -9,7 +9,7 @@ use rustc_hash::FxBuildHasher;
 use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
 use crate::people::query::Query;
-use crate::people::query_iterator::QueryIterator;
+use crate::people::query_iterator::{PersonIdCb, PersonIdCbMut, QueryIterator};
 use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::random::{sample_multiple_from_known_length, sample_single_from_known_length};
 use crate::{
@@ -138,6 +138,10 @@ pub trait ContextPeopleExt {
     /// Example:
     /// ```
     fn iter_query<Q: Query>(&self, query: Q) -> impl Iterator<Item = PersonId>;
+
+    fn with_person<Q: Query>(&self, query: Q, callback: impl PersonIdCb);
+
+    fn with_person_mut<Q: Query>(&mut self, query: Q, callback: impl PersonIdCbMut);
 
     /// Determine whether a person matches a given expression.
     ///
@@ -623,6 +627,16 @@ impl ContextPeopleExt for Context {
 
     fn iter_query<Q: Query>(&self, query: Q) -> impl Iterator<Item = PersonId> {
         QueryIterator::new(self, query)
+    }
+
+    fn with_person<Q: Query>(&self, query: Q, callback: impl PersonIdCb) {
+        let iter = QueryIterator::new_with_callback(self, query, callback);
+        for _ in iter {}
+    }
+
+    fn with_person_mut<Q: Query>(&mut self, query: Q, callback: impl PersonIdCbMut) {
+        let iter = QueryIterator::new_mut_with_callback(self, query, callback);
+        for _ in iter {}
     }
 
     fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
