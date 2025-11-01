@@ -91,3 +91,8 @@ harness = false
 name = "counts"
 path = "criterion/counts.rs"
 harness = false
+
+[[bench]]
+name = "query_iterator"
+path = "criterion/query_iterator.rs"
+harness = false
