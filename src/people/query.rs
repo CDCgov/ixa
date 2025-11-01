@@ -14,6 +14,9 @@ use crate::{Context, ContextPeopleExt, PersonProperty};
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
 pub trait Query: Copy + 'static {
+    fn is_empty() -> bool {
+        false
+    }
     fn setup(&self, context: &Context);
     /// Returns a list of `(type_id, hash)` pairs where `hash` is the hash of a value of type
     /// `Property::Value` and `type_id` is `Property.type_id()` (NOT the type ID of the value).
@@ -45,6 +48,9 @@ pub trait Query: Copy + 'static {
 }
 
 impl Query for () {
+    fn is_empty() -> bool {
+        true
+    }
     fn setup(&self, _: &Context) {}
 
     fn get_query(&self) -> Vec<(TypeId, HashValueType)> {

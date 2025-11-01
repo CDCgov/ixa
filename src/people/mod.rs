@@ -77,6 +77,7 @@ pub(crate) mod methods;
 mod multi_property;
 mod property;
 mod query;
+mod query_iterator;
 
 use std::any::TypeId;
 use std::cell::RefCell;

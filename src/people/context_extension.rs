@@ -9,6 +9,7 @@ use rustc_hash::FxBuildHasher;
 use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
 use crate::people::query::Query;
+use crate::people::query_iterator::QueryIterator;
 use crate::people::{HashValueType, InitializationList, PeoplePlugin, PersonPropertyHolder};
 use crate::random::{sample_multiple_from_known_length, sample_single_from_known_length};
 use crate::{
@@ -21,6 +22,10 @@ use crate::{
 pub trait ContextPeopleExt {
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
+
+    fn get_person_by_index(&self, index: usize) -> PersonId {
+        PersonId(index)
+    }
 
     /// Creates a new person. The caller must supply initial values
     /// for all non-derived properties that don't have a default or an initializer.
@@ -100,6 +105,39 @@ pub trait ContextPeopleExt {
     /// because it does not need to allocate a list. We haven't actually
     /// measured it, so the difference may be modest if any.
     fn query_people_count<Q: Query>(&self, query: Q) -> usize;
+
+    /// Returns an iterator over all people in the context.
+    /// You can break or return out of the loop early to
+    /// avoid allocating a full list of people.
+    ///
+    /// Example:
+    /// ```
+    /// # use ixa::prelude::*;
+    /// # define_person_property!(Age, u8);
+    /// #
+    /// # fn main() {
+    /// #   let mut context = Context::new();
+    /// #   context.add_person((Age, 12)).unwrap();
+    /// #   let expected = context.add_person((Age, 19)).unwrap();
+    /// #   let mut found: Option<PersonId> = None;
+    /// for person_id in context.iter_people() {
+    ///    if context.get_person_property(person_id, Age) > 18 {
+    ///        found = Some(person_id);
+    ///        break;
+    ///    }
+    /// }
+    /// #   assert_eq!(found, Some(expected));
+    /// # }
+    /// ```
+    fn iter_people(&self) -> impl Iterator<Item = PersonId> {
+        self.iter_query(())
+    }
+
+    /// Returns an iterator over all people matching a given query
+    ///
+    /// Example:
+    /// ```
+    fn iter_query<Q: Query>(&self, query: Q) -> impl Iterator<Item = PersonId>;
 
     /// Determine whether a person matches a given expression.
     ///
@@ -583,6 +621,10 @@ impl ContextPeopleExt for Context {
         selected
     }
 
+    fn iter_query<Q: Query>(&self, query: Q) -> impl Iterator<Item = PersonId> {
+        QueryIterator::new(self, query)
+    }
+
     fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
@@ -847,6 +889,16 @@ mod tests {
             context.add_person(()).unwrap();
         }
         assert_eq!(context.get_current_population(), 3);
+    }
+
+    #[test]
+    fn get_person_by_index() {
+        let mut context = Context::new();
+
+        context.add_person(()).unwrap();
+        context.add_person(()).unwrap();
+        let person_id = context.add_person(()).unwrap();
+        assert_eq!(context.get_person_by_index(2), person_id);
     }
 
     #[test]
