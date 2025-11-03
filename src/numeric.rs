@@ -26,22 +26,11 @@ pub fn convergence(x: &mut f64, x_new: f64) -> bool {
     res
 }
 
-#[macro_export]
-macro_rules! assert_almost_eq {
-    ($a:expr, $b:expr, $prec:expr $(,)?) => {
-        if !$crate::numeric::almost_eq($a, $b, $prec) {
-            panic!(
-                "assertion failed: `abs(left - right) < {:e}`, (left: `{}`, right: `{}`)",
-                $prec, $a, $b
-            );
-        }
-    };
-}
-
 // Not from statrs.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_almost_eq;
 
     #[test]
     fn almost_eq_within_tolerance() {
