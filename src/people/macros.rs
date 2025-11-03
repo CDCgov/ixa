@@ -252,6 +252,10 @@ macro_rules! define_derived_property {
 }
 pub use define_derived_property;
 
+/// Defines a named multi-property composed of a tuple of several existing other properties.  
+/// - `$person_property`: The name of the new multi-property type.  
+/// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list of existing  
+///   property identifiers that this multi-property is composed from.  
 #[macro_export]
 macro_rules! define_multi_property {
     (
