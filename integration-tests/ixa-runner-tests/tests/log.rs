@@ -8,14 +8,11 @@ mod tests {
             .ok()
             .expect("Failed to build runner_test_debug");
 
-        let output = assert_cmd::Command::cargo_bin("runner_test_debug")
-            .unwrap()
-            .args([
-                "--debugger",
-                "1.0",
-                "--log-level",
-                "rustyline=Debug,ixa=Trace",
-            ])
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_debug")
+            .arg("--debugger")
+            .arg("1.0")
+            .arg("--log-level")
+            .arg("rustyline=Debug,ixa=Trace")
             .write_stdin("population\n")
             .output();
         match String::from_utf8(output.unwrap().stdout) {
@@ -40,9 +37,8 @@ mod tests {
             .expect("Failed to build runner_test_debug");
 
         // `-v`
-        let output = assert_cmd::Command::cargo_bin("runner_test_debug")
-            .unwrap()
-            .args(["-v"])
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_debug")
+            .arg("-v")
             .output();
         match String::from_utf8(output.unwrap().stdout) {
             Ok(s) => {
@@ -58,9 +54,8 @@ mod tests {
         }
 
         // `-vv`
-        let output = assert_cmd::Command::cargo_bin("runner_test_debug")
-            .unwrap()
-            .args(["-vv"])
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_debug")
+            .arg("-vv")
             .output();
         match String::from_utf8(output.unwrap().stdout) {
             Ok(s) => {
@@ -76,9 +71,8 @@ mod tests {
         }
 
         // `-vvv`
-        let output = assert_cmd::Command::cargo_bin("runner_test_debug")
-            .unwrap()
-            .args(["-vvv"])
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_debug")
+            .arg("-vvv")
             .output();
         match String::from_utf8(output.unwrap().stdout) {
             Ok(s) => {
