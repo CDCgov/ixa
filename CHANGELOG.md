@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/CDCgov/ixa/compare/ixa-v0.4.1...ixa-v0.4.2) - 2025-11-03
+
+### Added
+
+- added mise task for test:features ([#573](https://github.com/CDCgov/ixa/pull/573))
+
+### Other
+
+- fix benchamarks output to PR ([#590](https://github.com/CDCgov/ixa/pull/590))
+- bump release-plz/action from 0.5.117 to 0.5.118 ([#575](https://github.com/CDCgov/ixa/pull/575))
+- *(deps)* bump playwright and @playwright/test in /integration-tests/ixa-wasm-tests ([#583](https://github.com/CDCgov/ixa/pull/583))
+- added rust fmt rules for imports ([#586](https://github.com/CDCgov/ixa/pull/586))
+- Add integration tests for ixa macros ([#579](https://github.com/CDCgov/ixa/pull/579))
+- benchmarks action is broken ([#585](https://github.com/CDCgov/ixa/pull/585))
+
 ## [0.4.1](https://github.com/CDCgov/ixa/compare/ixa-v0.4.0...ixa-v0.4.1) - 2025-10-08
 
 ### Added
