@@ -22,4 +22,4 @@ mise trust
 mise install:hooks
 
 #install needed libs for wasm
-sudo apt-get install -y libcups2 libcairo2 libpango-1.0-0
+sudo apt-get update && sudo apt-get install -y libcups2 libcairo2 libpango-1.0-0
