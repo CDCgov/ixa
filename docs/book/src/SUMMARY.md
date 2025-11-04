@@ -2,6 +2,7 @@
 
 - [Introduction](introduction.md)
   - [Get Started](get-started.md)
+  - [Command Line Usage](cli-usage.md)
 - [Your First Model](first_model/your-first-model.md)
   - [Setting Up Your First Model](first_model/setup.md)
   - [The People Module](first_model/people.md)
