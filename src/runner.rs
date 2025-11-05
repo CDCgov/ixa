@@ -42,7 +42,7 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
 pub struct BaseArgs {
     #[cfg(feature = "write_cli_usage")]
     /// Print help in Markdown format. This is enabled only for debug builds. Run an example with
-    /// `--markdown-help`, and the file `docs/cli-usage.md` will be written. This file is then
+    /// `--markdown-help`, and the file `docs/book/src/cli-usage.md` will be written. This file is then
     /// included in the crate-level docs. See `src/lib.rs`.
     #[arg(long, hide = true)]
     markdown_help: bool,
@@ -219,6 +219,8 @@ where
         let path =
             PathBuf::from(option_env!("CARGO_WORKSPACE_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
                 .join("docs")
+                .join("book")
+                .join("src")
                 .join("cli-usage.md");
         std::fs::write(&path, markdown).unwrap_or_else(|e| {
             panic!(
