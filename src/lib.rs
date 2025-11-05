@@ -37,7 +37,7 @@
 //!   external applications to monitor simulation state, control execution, and query data through
 //!   REST endpoints. This feature implies the `debugger` feature.
 
-#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/cli-usage.md"))]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
 pub mod context;
 pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
