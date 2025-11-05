@@ -37,7 +37,7 @@
 //!   external applications to monitor simulation state, control execution, and query data through
 //!   REST endpoints. This feature implies the `debugger` feature.
 
-#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/cli-usage.md"))]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
 pub mod context;
 pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
@@ -56,6 +56,9 @@ pub use global_properties::{ContextGlobalPropertiesExt, GlobalProperty};
 
 pub mod network;
 pub use network::{ContextNetworkExt, Edge, EdgeType};
+
+pub mod macros;
+//pub use macros::*;
 
 pub mod people;
 pub use people::{
@@ -96,12 +99,8 @@ pub mod numeric;
 pub mod web_api;
 
 // Re-export for macros
-pub use bincode;
-pub use csv;
-pub use ctor;
 pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
-pub use paste;
-pub use rand;
+pub use {bincode, csv, ctor, paste, rand};
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
@@ -110,12 +109,12 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub mod prelude;
 
 pub mod prelude_for_plugins {
-    pub use crate::context::ContextBase;
-    pub use crate::context::IxaEvent;
+    pub use ixa_derive::IxaEvent;
+
+    pub use crate::context::{ContextBase, IxaEvent};
     pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;
-    pub use ixa_derive::IxaEvent;
 }
 
 pub mod execution_stats;

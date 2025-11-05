@@ -1,7 +1,9 @@
 //! Algorithms for uniform random sampling from hash sets or iterators. These algorithms are written to be generic
 //! over the container type using zero-cost trait abstractions.
-use crate::rand::{seq::index::sample as choose_range, Rng};
 use std::collections::{HashMap, HashSet};
+
+use crate::rand::seq::index::sample as choose_range;
+use crate::rand::Rng;
 
 /// The `len` capability, a zero-cost abstraction for types that have a known length.
 pub trait HasLen {

@@ -13,11 +13,11 @@
 //! in scope.
 //!
 
-use bincode::serde::encode_to_vec as serialize_to_vec;
-pub use rustc_hash::FxHashMap as HashMap;
-pub use rustc_hash::FxHashSet as HashSet;
-use serde::Serialize;
 use std::hash::{Hash, Hasher};
+
+use bincode::serde::encode_to_vec as serialize_to_vec;
+pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use serde::Serialize;
 use xxhash_rust::xxh3::Xxh3Default;
 
 /// Provides API parity with `std::collections::HashMap`.
@@ -78,9 +78,10 @@ pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bincode::serde::encode_to_vec as serialize_to_vec;
     use serde::Serialize;
+
+    use super::*;
 
     #[test]
     fn hash_serialized_equals_one_shot() {

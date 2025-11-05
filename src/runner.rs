@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use clap::{ArgAction, Args, Command, FromArgMatches as _};
+#[cfg(feature = "write_cli_usage")]
+use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
+
 use crate::context::Context;
 #[cfg(feature = "debugger")]
 use crate::debugger::enter_debugger;
@@ -14,9 +18,6 @@ use crate::report::ContextReportExt;
 #[cfg(feature = "web_api")]
 use crate::web_api::ContextWebApiExt;
 use crate::{set_log_level, set_module_filters, warn, LevelFilter};
-use clap::{ArgAction, Args, Command, FromArgMatches as _};
-#[cfg(feature = "write_cli_usage")]
-use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
@@ -41,7 +42,7 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
 pub struct BaseArgs {
     #[cfg(feature = "write_cli_usage")]
     /// Print help in Markdown format. This is enabled only for debug builds. Run an example with
-    /// `--markdown-help`, and the file `docs/cli-usage.md` will be written. This file is then
+    /// `--markdown-help`, and the file `docs/book/src/cli-usage.md` will be written. This file is then
     /// included in the crate-level docs. See `src/lib.rs`.
     #[arg(long, hide = true)]
     markdown_help: bool,
@@ -218,6 +219,8 @@ where
         let path =
             PathBuf::from(option_env!("CARGO_WORKSPACE_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
                 .join("docs")
+                .join("book")
+                .join("src")
                 .join("cli-usage.md");
         std::fs::write(&path, markdown).unwrap_or_else(|e| {
             panic!(
@@ -381,9 +384,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
+
     use super::*;
     use crate::{define_global_property, define_rng};
-    use serde::{Deserialize, Serialize};
 
     #[derive(Args, Debug)]
     struct CustomArgs {

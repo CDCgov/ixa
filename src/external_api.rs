@@ -1,9 +1,11 @@
 // Now all features of the external API are used internally, so we expect dead code.
 #![allow(dead_code)]
 
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
 use crate::context::Context;
 use crate::error::IxaError;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub(crate) trait ExtApi {
     type Args: DeserializeOwned;
@@ -23,12 +25,13 @@ pub(crate) fn run_ext_api<T: ExtApi>(
 }
 
 pub(crate) mod population {
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::people::ContextPeopleExt;
     use crate::IxaError;
-    use clap::Parser;
-    use serde::{Deserialize, Serialize};
 
     pub(crate) struct Api {}
     #[derive(Parser, Debug, Deserialize)]
@@ -54,11 +57,12 @@ pub(crate) mod population {
 }
 
 pub(crate) mod global_properties {
+    use clap::{Parser, Subcommand};
+    use serde::{Deserialize, Serialize};
+
     use crate::context::Context;
     use crate::global_properties::ContextGlobalPropertiesExt;
     use crate::IxaError;
-    use clap::{Parser, Subcommand};
-    use serde::{Deserialize, Serialize};
 
     pub(crate) struct Api {}
     #[derive(Serialize, Deserialize, Debug)]
@@ -106,13 +110,14 @@ pub(crate) mod global_properties {
 }
 
 pub(crate) mod breakpoint {
+    use clap::{Parser, Subcommand};
+    use serde::{Deserialize, Serialize};
+
     use crate::context::Context;
     use crate::debugger::enter_debugger;
     #[cfg(feature = "web_api")]
     use crate::web_api::handle_web_api_with_plugin;
     use crate::{trace, IxaError};
-    use clap::{Parser, Subcommand};
-    use serde::{Deserialize, Serialize};
 
     #[derive(Subcommand, Clone, Debug, Serialize, Deserialize)]
     /// Manipulate Debugger Breakpoints
@@ -242,12 +247,13 @@ pub(crate) mod breakpoint {
 }
 
 pub(crate) mod next {
-    use crate::context::Context;
-    use crate::external_api::EmptyArgs;
-    use crate::IxaError;
     use clap::Parser;
     use serde::Serialize;
     use serde_derive::Deserialize;
+
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::IxaError;
 
     #[derive(Parser, Debug, Serialize, Deserialize)]
     pub enum Args {
@@ -273,12 +279,13 @@ pub(crate) mod next {
 }
 
 pub(crate) mod halt {
-    use crate::context::Context;
-    use crate::external_api::EmptyArgs;
-    use crate::IxaError;
     use clap::Parser;
     use serde::Serialize;
     use serde_derive::Deserialize;
+
+    use crate::context::Context;
+    use crate::external_api::EmptyArgs;
+    use crate::IxaError;
 
     #[derive(Parser, Debug, Serialize, Deserialize)]
     pub enum Args {
@@ -304,11 +311,12 @@ pub(crate) mod halt {
 }
 
 pub(crate) mod r#continue {
+    use clap::Parser;
+    use serde_derive::{Deserialize, Serialize};
+
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::IxaError;
-    use clap::Parser;
-    use serde_derive::{Deserialize, Serialize};
 
     #[derive(Parser, Debug, Serialize, Deserialize)]
     pub enum Args {
@@ -334,14 +342,14 @@ pub(crate) mod r#continue {
 }
 
 pub(crate) mod people {
-    use crate::{HashMap, HashMapExt};
     use std::cell::RefCell;
 
-    use crate::people::{external_api::ContextPeopleExtCrate, ContextPeopleExt, PersonId};
-    use crate::Context;
-    use crate::IxaError;
     use clap::{Parser, Subcommand};
     use serde::{Deserialize, Serialize};
+
+    use crate::people::external_api::ContextPeopleExtCrate;
+    use crate::people::{ContextPeopleExt, PersonId};
+    use crate::{Context, HashMap, HashMapExt, IxaError};
 
     fn person_id_from_str(s: &str) -> Result<PersonId, String> {
         match s.parse::<usize>() {
@@ -433,8 +441,7 @@ pub(crate) mod people {
     mod test {
         use super::*;
         use crate::external_api::run_ext_api;
-        use crate::{define_person_property, Context};
-        use crate::{HashSet, HashSetExt};
+        use crate::{define_person_property, Context, HashSet, HashSetExt};
         #[test]
         fn query_nonexistent_user() {
             let mut context = Context::new();
@@ -545,11 +552,12 @@ pub(crate) mod people {
 
 pub(crate) mod time {
     #![allow(clippy::float_cmp)]
+    use clap::Parser;
+    use serde::{Deserialize, Serialize};
+
     use crate::context::Context;
     use crate::external_api::EmptyArgs;
     use crate::IxaError;
-    use clap::Parser;
-    use serde::{Deserialize, Serialize};
 
     pub(crate) struct Api {}
     #[derive(Parser, Debug, Deserialize)]

@@ -1,7 +1,8 @@
-use crate::loader::{open_csv, HouseholdId, Id};
 use ixa::prelude::*;
 use ixa::{EdgeType, HashSet, HashSetExt, PersonId};
 use serde::Deserialize;
+
+use crate::loader::{open_csv, HouseholdId, Id};
 
 define_edge_type!(Household, ());
 define_edge_type!(AgeUnder5, ());
@@ -70,8 +71,7 @@ pub fn init(context: &mut Context, people: &[PersonId]) {
 mod tests {
 
     use super::*;
-    use crate::loader;
-    use crate::network;
+    use crate::{loader, network};
 
     const N_SIZE_12: usize = 1;
     const N_SIZE_11: usize = 1;

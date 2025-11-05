@@ -1,10 +1,10 @@
+use std::hint::black_box;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
 use ixa::define_multi_property;
 use ixa::prelude::*;
 use ixa_bench::generate_population::generate_population_with_seed;
-
-use std::hint::black_box;
 
 const SEED: u64 = 42;
 

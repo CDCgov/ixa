@@ -32,8 +32,9 @@
 //! \** ZIP Code Tabulation Areas (ZCTAs) are generalized areal representations
 //! of United States Postal Service (USPS) ZIP Code service areas.
 
-use crate::StateCode;
 use std::fmt::{Debug, Display};
+
+use crate::StateCode;
 
 /// The FIPS parser error type.
 /// The assumption is that the parsing context is so small that it isn't necessary to track source location information.

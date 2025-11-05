@@ -1,4 +1,5 @@
-use ixa::rand::{rng, rngs::StdRng, Rng, RngCore, SeedableRng};
+use ixa::rand::rngs::StdRng;
+use ixa::rand::{rng, Rng, RngCore, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;

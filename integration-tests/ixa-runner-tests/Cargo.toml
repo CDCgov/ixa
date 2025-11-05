@@ -14,7 +14,9 @@ ixa = { path = "../../", features = ["logging", "debugger", "progress_bar"] }
 clap.workspace = true
 
 [dev-dependencies]
-assert_cmd = "^2.0.16"
+assert_cmd = "^2.1.1"
+serde = { version = "1.0", features = ["derive"] }
+tempfile = "3"
 
 [lints]
 workspace = true

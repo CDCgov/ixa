@@ -1,11 +1,14 @@
+use std::any::{Any, TypeId};
+use std::cell::{Ref, RefCell, RefMut};
+
 use crate::people::context_extension::{ContextPeopleExt, ContextPeopleExtInternal};
 use crate::people::index::{BxIndex, Index};
 use crate::people::methods::Methods;
 use crate::people::{HashValueType, InitializationList};
-use crate::{Context, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent};
-use crate::{HashMap, HashSet, HashSetExt};
-use std::any::{Any, TypeId};
-use std::cell::{Ref, RefCell, RefMut};
+use crate::{
+    Context, HashMap, HashSet, HashSetExt, IxaError, PersonId, PersonProperty,
+    PersonPropertyChangeEvent,
+};
 
 type ContextCallback = dyn FnOnce(&mut Context);
 

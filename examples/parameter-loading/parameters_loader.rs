@@ -1,7 +1,7 @@
-use ixa::prelude::*;
 use std::fmt::Debug;
 use std::path::Path;
 
+use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

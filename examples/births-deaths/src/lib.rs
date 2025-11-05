@@ -1,6 +1,6 @@
+use std::path::{Path, PathBuf};
+
 use ixa::prelude::*;
-use std::path::Path;
-use std::path::PathBuf;
 
 pub mod demographics_report;
 pub mod incidence_report;

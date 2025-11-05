@@ -1,9 +1,9 @@
-use ixa::{HashSet, HashSetExt};
-use serde_json::Value;
-use std::env;
-use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
+use std::{env, fs};
+
+use ixa::{HashSet, HashSetExt};
+use serde_json::Value;
 
 struct Est {
     group: String,

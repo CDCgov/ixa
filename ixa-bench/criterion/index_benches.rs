@@ -1,7 +1,8 @@
+use std::hint::black_box;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
 use ixa::{define_multi_property, PersonId};
-use std::hint::black_box;
 
 define_rng!(IndexBenchRng);
 

@@ -1,5 +1,6 @@
-use crate::{Context, ContextPeopleExt, IxaEvent, PersonId, PersonProperty};
 use ixa_derive::IxaEvent;
+
+use crate::{Context, ContextPeopleExt, IxaEvent, PersonId, PersonProperty};
 
 /// Emitted when a new person is created
 /// These should not be emitted outside this module
@@ -33,14 +34,16 @@ impl<T: PersonProperty> IxaEvent for PersonPropertyChangeEvent<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use serde_derive::Serialize;
+
     use crate::{
         define_derived_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextPeopleExt, PersonCreatedEvent,
         PersonId, PersonPropertyChangeEvent,
     };
-    use serde_derive::Serialize;
-    use std::cell::RefCell;
-    use std::rc::Rc;
 
     define_person_property!(Age, u8);
     #[derive(Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]

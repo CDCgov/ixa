@@ -1,13 +1,12 @@
-use crate::define_data_plugin;
-use crate::external_api::{
-    breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
-};
-use crate::{trace, Context, IxaError};
-use crate::{HashMap, HashMapExt};
+use std::fmt::Write;
+
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use std::fmt::Write;
+use crate::external_api::{
+    breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
+};
+use crate::{define_data_plugin, trace, Context, HashMap, HashMapExt, IxaError};
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -328,10 +327,13 @@ pub fn enter_debugger(context: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use super::{enter_debugger, DebuggerPlugin};
-    use crate::{define_global_property, define_person_property, ContextGlobalPropertiesExt};
-    use crate::{Context, ContextPeopleExt, ExecutionPhase};
     use assert_approx_eq::assert_approx_eq;
+
+    use super::{enter_debugger, DebuggerPlugin};
+    use crate::{
+        define_global_property, define_person_property, Context, ContextGlobalPropertiesExt,
+        ContextPeopleExt, ExecutionPhase,
+    };
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that

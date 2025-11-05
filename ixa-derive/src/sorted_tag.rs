@@ -1,6 +1,7 @@
-use crate::utilities::{resolved_person_property_path, TypeTuple};
 use proc_macro::TokenStream;
 use quote::quote;
+
+use crate::utilities::{resolved_person_property_path, TypeTuple};
 
 /// Returns a new tuple with identifiers sorted alphabetically
 pub fn sorted_tag(input: TokenStream) -> TokenStream {

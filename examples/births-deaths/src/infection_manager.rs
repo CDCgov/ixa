@@ -1,12 +1,11 @@
-use crate::population_manager::Alive;
-use crate::population_manager::InfectionStatus;
-use crate::population_manager::InfectionStatusValue;
-use crate::Parameters;
 use ixa::people::{PersonId, PersonPropertyChangeEvent};
 use ixa::plan::PlanId;
 use ixa::prelude::*;
 use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
+
+use crate::population_manager::{Alive, InfectionStatus, InfectionStatusValue};
+use crate::Parameters;
 
 define_rng!(InfectionRng1);
 define_data_plugin!(
@@ -97,9 +96,9 @@ pub fn init(context: &mut Context) {
 mod test {
     // Silence spurious unused import warnings.
     #![allow(unused_imports)]
-    use super::*;
     use ixa::prelude::*;
 
+    use super::*;
     use crate::parameters_loader::{FoiAgeGroups, ParametersValues};
     use crate::population_manager::Age;
 

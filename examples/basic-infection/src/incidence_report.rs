@@ -1,9 +1,11 @@
-use crate::infection_manager::InfectionStatusEvent;
-use crate::people::InfectionStatusValue;
+use std::path::PathBuf;
+
 use ixa::prelude::*;
 use ixa::{trace, PersonId};
 use serde::Serialize;
-use std::path::PathBuf;
+
+use crate::infection_manager::InfectionStatusEvent;
+use crate::people::InfectionStatusValue;
 
 #[derive(Serialize)]
 struct IncidenceReportItem {

@@ -1,8 +1,10 @@
-use super::{ModelStats, Parameters};
 use indexmap::IndexSet;
-use ixa::{prelude::*, PersonId};
+use ixa::prelude::*;
+use ixa::PersonId;
 use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
+
+use super::{ModelStats, Parameters};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ModelOptions {
@@ -241,10 +243,10 @@ impl Model {
 
 #[cfg(test)]
 mod test {
+    use approx::assert_relative_eq;
+
     use super::super::ParametersBuilder;
     use super::*;
-
-    use approx::assert_relative_eq;
 
     fn model_variants() -> Vec<Model> {
         vec![

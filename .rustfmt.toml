@@ -1,0 +1,2 @@
+imports_granularity = "Module" # Preserve, Crate, Module, Item, One
+group_imports = "StdExternalCrate" # Preserve, StdExternalCrate, One

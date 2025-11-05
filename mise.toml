@@ -34,7 +34,7 @@ done
 description = "Build the Rust cli docs, API docs and Ixa website"
 run = '''
   cargo run --features write_cli_usage --example basic-infection -- --markdown-help
-  cargo doc --no-deps --target-dir website/
+  cargo doc --all-features --no-deps --target-dir website/
   mdbook build docs/book -d ../../website/book
 '''
 
@@ -58,6 +58,10 @@ depends = [
   "wasm:compile"
   ]
 run = "pnpm exec playwright test"
+
+[tasks.'test:features']
+description = "Run just the core ixa tests (much faster)"
+run = "cargo test --no-default-features --features 'web_api'"
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
@@ -95,11 +99,14 @@ run = "cargo bench -p ixa-bench {{arg(name='name', default='')}}"
 
 [tasks.'bench:create']
 description = "Compare benchmarks against a Criterion baseline"
-run = "mise bench:criterion -- --save-baseline {{arg(name='baseline')}}"
+run = "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-baseline {{arg(name='baseline')}}"
 
 [tasks.'bench:compare']
 description = "Compare benchmarks against a Criterion baseline"
-run = "cargo run -q -p ixa-bench --bin check_criterion_regressions"
+run = [
+    "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline {{arg(name='baseline')}}",
+    "cargo run -q -p ixa-bench --bin check_criterion_regressions"
+  ]
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
@@ -126,9 +133,10 @@ depends = "check:*"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
-  "cargo check --all-targets --workspace",
-  "cargo fmt --check",
-  "cargo clippy --workspace --all-targets -- -D warnings"
+  "cargo check --all-targets --workspace --all-features",
+  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
+  "cargo +nightly fmt --check",
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings"
 ]
 
 [tasks.prettier]
@@ -153,8 +161,9 @@ run = "mise prettier write"
 
 [tasks.'fix:rust']
 run = [
-  "cargo clippy --fix --workspace --all-targets --allow-dirty -- -D warnings",
-  "cargo fmt"
+  "cargo clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
+  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
+  "cargo +nightly fmt"
 ]
 
 [tasks.'fix:markdown']

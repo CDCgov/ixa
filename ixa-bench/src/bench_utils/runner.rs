@@ -1,4 +1,5 @@
-use clap::{builder::PossibleValuesParser, Parser};
+use clap::builder::PossibleValuesParser;
+use clap::Parser;
 use ixa_bench::bench_utils::registry;
 
 fn main() {

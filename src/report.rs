@@ -1,16 +1,16 @@
-use crate::context::Context;
-use crate::error::IxaError;
-use crate::people::ContextPeopleExt;
-use crate::{define_data_plugin, Tabulator};
-use crate::{error, trace};
-use crate::{ContextBase, HashMap, HashMapExt};
-use csv::Writer;
-use serde::Serializer;
 use std::any::TypeId;
 use std::cell::{RefCell, RefMut};
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
+
+use csv::Writer;
+use serde::Serializer;
+
+use crate::context::Context;
+use crate::error::IxaError;
+use crate::people::ContextPeopleExt;
+use crate::{define_data_plugin, error, trace, ContextBase, HashMap, HashMapExt, Tabulator};
 
 // * file_prefix: precedes the report name in the filename. An example of a
 // potential prefix might be scenario or simulation name
@@ -66,22 +66,6 @@ pub trait Report: 'static {
     fn type_id(&self) -> TypeId;
     // Serializes the data with the correct writer
     fn serialize(&self, writer: &mut Writer<File>);
-}
-
-/// Use this macro to define a unique report type
-#[macro_export]
-macro_rules! define_report {
-    ($name:ident) => {
-        impl $crate::Report for $name {
-            fn type_id(&self) -> std::any::TypeId {
-                std::any::TypeId::of::<$name>()
-            }
-
-            fn serialize(&self, writer: &mut $crate::csv::Writer<std::fs::File>) {
-                writer.serialize(self).unwrap();
-            }
-        }
-    };
 }
 
 /// # Errors
@@ -256,13 +240,14 @@ impl ContextReportExt for Context {}
 
 #[cfg(test)]
 mod test {
-    use crate::{define_person_property_with_default, info};
+    use core::convert::TryInto;
+    use std::thread;
+
+    use serde_derive::{Deserialize, Serialize};
+    use tempfile::tempdir;
 
     use super::*;
-    use core::convert::TryInto;
-    use serde_derive::{Deserialize, Serialize};
-    use std::thread;
-    use tempfile::tempdir;
+    use crate::{define_person_property_with_default, define_report, info};
 
     define_person_property_with_default!(IsRunner, bool, false);
 

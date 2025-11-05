@@ -1,3 +1,11 @@
+use std::any::{Any, TypeId};
+use std::cell::Ref;
+
+use log::{trace, warn};
+use rand::seq::index::sample as choose_range;
+use rand::Rng;
+use rustc_hash::FxBuildHasher;
+
 use crate::people::index::{process_indices, BxIndex};
 use crate::people::methods::Methods;
 use crate::people::query::Query;
@@ -7,11 +15,6 @@ use crate::{
     Context, ContextRandomExt, HashSet, HashSetExt, IxaError, PersonCreatedEvent, PersonId,
     PersonProperty, PersonPropertyChangeEvent, RngId, Tabulator,
 };
-use log::{trace, warn};
-use rand::{seq::index::sample as choose_range, Rng};
-use rustc_hash::FxBuildHasher;
-use std::any::{Any, TypeId};
-use std::cell::Ref;
 
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
@@ -737,6 +740,11 @@ impl ContextPeopleExtInternal for Context {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use serde_derive::Serialize;
+
     use crate::people::{PeoplePlugin, PersonProperty, PersonPropertyHolder};
     use crate::random::{define_rng, ContextRandomExt};
     use crate::{
@@ -744,9 +752,6 @@ mod tests {
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
-    use serde_derive::Serialize;
-    use std::cell::RefCell;
-    use std::rc::Rc;
 
     define_person_property!(Age, u8);
     #[derive(Serialize, Copy, Clone, Debug, PartialEq, Eq)]

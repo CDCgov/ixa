@@ -1,18 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use assert_cmd::cargo::CargoError;
-
-    pub fn run_external_runner(runner_name: &str) -> Result<assert_cmd::Command, CargoError> {
-        assert_cmd::Command::cargo_bin(runner_name)
-    }
 
     #[test]
     fn test_cli_invocation_with_custom_args() {
         // Note this target is defined in the bin section of Cargo.toml
         // and the entry point is in tests/bin/runner_test_custom_args
-        run_external_runner("runner_test_custom_args")
-            .unwrap()
-            .args(["-a", "42", "--no-stats"])
+        assert_cmd::cargo::cargo_bin_cmd!("runner_test_custom_args")
+            .arg("-a")
+            .arg("42")
+            .arg("--no-stats")
             .assert()
             .success()
             .stdout(
@@ -29,14 +25,11 @@ Run runner_test_custom_args --help -v to see more options
             .ok()
             .expect("Failed to build runner_test_debug");
 
-        let output = assert_cmd::Command::cargo_bin("runner_test_debug")
-            .unwrap()
-            .args([
-                "--debugger",
-                "1.0",
-                "--log-level",
-                "rustyline=Debug,ixa=Trace",
-            ])
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_debug")
+            .arg("--debugger")
+            .arg("1.0")
+            .arg("--log-level")
+            .arg("rustyline=Debug,ixa=Trace")
             .write_stdin("population\n")
             .output();
         match String::from_utf8(output.unwrap().stdout) {
