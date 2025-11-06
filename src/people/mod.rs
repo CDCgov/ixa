@@ -122,6 +122,13 @@ define_data_plugin!(
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonId(pub(crate) usize);
 
+impl PersonId {
+    /// Get the underlying id for this person
+    pub fn get_id(&self) -> usize {
+        self.0
+    }
+}
+
 impl Display for PersonId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
