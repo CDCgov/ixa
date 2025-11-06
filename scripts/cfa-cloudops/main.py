@@ -1,46 +1,78 @@
 from cfa.cloudops import CloudClient
 
+'''
+This script needs the following in a file 'env'
+AZURE_BATCH_ACCOUNT=
+AZURE_BATCH_LOCATION=
+AZURE_USER_ASSIGNED_IDENTITY=
+AZURE_SUBNET_ID=
+AZURE_CLIENT_ID=
+AZURE_KEYVAULT_NAME=
+AZURE_KEYVAULT_SP_SECRET_ID=
+
+# Azure Blob storage config
+AZURE_BLOB_STORAGE_ACCOUNT=
+
+# Azure container registry config
+AZURE_CONTAINER_REGISTRY_ACCOUNT=
+
+# Azure SP info
+AZURE_TENANT_ID=
+AZURE_SUBSCRIPTION_ID=
+AZURE_CLIENT_SECRET=
+AZURE_RESOURCE_GROUP_NAME=
+'''
+
+
+DOCKER_IMAGE_NAME = "ixa-bench"
+REGISTRY_NAME = "cfaprdbatchcr"
+POOL_NAME = "ixa-pool1"
+JOB_NAME = "ixa-job1"
+
 def main():
     # initialize
     print("Initializing CloudClient...")
     cc = CloudClient(dotenv_path="env", use_sp = True)
-#    print("Hello from ixa-cfa-cloudops!")
-#    files = cc.list_blob_files("input-test")
-#    print(f"Files in 'input-test' container: {files}")
-    container_name = cc.package_and_upload_dockerfile(
-        registry_name = "my_azure_registry",
-        repo_name = "ixa-bench",
-        tag = "latest"
+
+    cc.upload_files(
+        files = "ixa_setup.sh",
+        container_name = "input-test",
+        local_root_dir = "../",
+        location_in_blob = "ixa-bench"
     )
 
     cc.create_pool(
-        "getting-started-pool",
-        mounts = [('input-test', 'inputs')],
-        container_image_name = container_name,
+        pool_name = POOL_NAME,
+        mounts = ['input-test'],
+        container_image_name = "rust:slim",
         vm_size = "standard_d8s_v3",
-        max_autoscale_nodes = 5
+        max_autoscale_nodes = 1,
+        autoscale = False
     )
 
+    print("create_job")
     cc.create_job(
-        "getting-started-job",
-        pool_name = "getting-started-pool",
+        JOB_NAME,
+        pool_name = POOL_NAME,
         exist_ok = True
     )
 
     cc.add_task(
-        job_name = "getting-started-job",
-        command_line = "python3 /inputs/main.py --user Ryan"
+        job_name = JOB_NAME,
+        command_line = "/input-test/ixa-bench/ixa_setup.sh"
     )
 
     cc.monitor_job(
-        "getting-started-job"
+        JOB_NAME
     )
 
+    # get the stdout/stderr and print them?
+
     # delete the job
-    cc.delete_job("getting-started-job")
+    cc.delete_job(JOB_NAME)
 
     # delete the pool
-    cc.delete_pool("getting-started-pool")
+    cc.delete_pool(POOL_NAME)
 
 if __name__ == "__main__":
     main()
