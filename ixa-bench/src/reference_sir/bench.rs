@@ -30,3 +30,23 @@ hyperfine_group!(
         }
     }
 );
+
+hyperfine_group!(
+    // Benchmarks for periodic counting/reporting functionality
+    periodic_counts_bench {
+        // Baseline: run model without periodic reporting
+        no_periodic_reports => {
+            use super::periodic_counts;
+            periodic_counts::Model::new(build_params(), periodic_counts::ModelOptions {
+                periodic_reporting: false,
+            }).run();
+        },
+        // With periodic reporting of infection counts
+        with_periodic_reports => {
+            use super::periodic_counts;
+            periodic_counts::Model::new(build_params(), periodic_counts::ModelOptions {
+                periodic_reporting: true,
+            }).run();
+        }
+    }
+);
