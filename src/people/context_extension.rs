@@ -65,9 +65,7 @@ pub trait ContextPeopleExt {
     /// Query for all people matching a given set of criteria, calling the `scope`
     /// callback with an immutable reference to the fully realized result set.
     ///
-    /// If you don't need the entire result set, consider using [`Context::query_result_iterator`],
-    /// which gives an iterator that computes the results as needed. If you
-    /// only need to count the results, use [`Context::query_people_count`]
+    /// If you only need to count the results, use [`Context::query_people_count`]
     ///
     /// [`Context::with_query_results()`] takes any type that implements [Query], but
     /// instead of implementing query yourself it is best to use the automatic
