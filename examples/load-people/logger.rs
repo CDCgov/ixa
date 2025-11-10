@@ -1,4 +1,3 @@
-use ixa::people::{PersonCreatedEvent, PersonPropertyChangeEvent};
 use ixa::prelude::*;
 
 use crate::population_loader::Age;
