@@ -1,8 +1,9 @@
+use std::path::PathBuf;
+
 use ixa::prelude::*;
 use ixa::PersonId;
 use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 use super::Parameters;
@@ -221,9 +222,10 @@ impl Model {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
     use super::super::ParametersBuilder;
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn run_model_with_periodic_reports() {
@@ -306,7 +308,7 @@ mod test {
         let lines: Vec<&str> = contents.lines().collect();
 
         // Check header exists
-        assert!(lines.len() >= 1, "CSV should have at least a header");
+        assert!(!lines.is_empty(), "CSV should have at least a header");
 
         // Check header
         let header = lines[0];
@@ -328,7 +330,7 @@ mod test {
         let lines: Vec<&str> = contents.lines().collect();
 
         // Check header exists
-        assert!(lines.len() >= 1, "CSV should have at least a header");
+        assert!(!lines.is_empty(), "CSV should have at least a header");
 
         // Check header
         let header = lines[0];
