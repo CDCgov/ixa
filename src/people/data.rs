@@ -262,6 +262,36 @@ impl PeopleData {
         })
     }
 
+    pub(super) fn get_entity_property_ref<T: PersonProperty>(
+        &self,
+        person: PersonId,
+    ) -> RefMut<Option<T::Value>> {
+        let properties_map = self.properties_map.borrow_mut();
+        let index = person.0;
+        RefMut::map(properties_map, |properties_map| {
+            let properties = properties_map
+                .entry(TypeId::of::<T>())
+                .or_insert_with(|| StoredPeopleProperties::new::<T>());
+            let values: &mut Vec<Option<T::Value>> = properties
+                .values
+                .downcast_mut()
+                .expect("Type mismatch in properties_map");
+            if index >= values.len() {
+                values.resize(index + 1, None);
+            }
+            &mut values[index]
+        })
+    }
+
+    pub(super) fn set_entity_property<T: PersonProperty>(
+        &self,
+        person_id: PersonId,
+        value: T::Value,
+    ) {
+        let mut property_ref = self.get_entity_property_ref::<T>(person_id);
+        *property_ref = Some(value);
+    }
+
     /// Sets the value of a property for a person
     #[allow(clippy::needless_pass_by_value)]
     pub(super) fn set_person_property<T: PersonProperty>(

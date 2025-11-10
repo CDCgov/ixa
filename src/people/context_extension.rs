@@ -19,6 +19,7 @@ use crate::{
 /// A trait extension for [`Context`] that exposes the people
 /// functionality.
 pub trait ContextPeopleExt {
+    fn get_entity_property<T: PersonProperty>(&self, person_id: PersonId) -> T::Value;
     /// Returns the current population size
     fn get_current_population(&self) -> usize;
 
@@ -163,6 +164,20 @@ impl ContextPeopleExt for Context {
 
         self.emit_event(PersonCreatedEvent { person_id });
         Ok(person_id)
+    }
+
+    fn get_entity_property<T: PersonProperty>(&self, person_id: PersonId) -> T::Value {
+        let data_container = self.get_data(PeoplePlugin);
+        self.register_property::<T>();
+        if T::is_derived() {
+            return T::compute(self, person_id);
+        }
+        if let Some(value) = *data_container.get_entity_property_ref::<T>(person_id) {
+            return value;
+        }
+        let initialized_value = T::compute(self, person_id);
+        data_container.set_entity_property::<T>(person_id, initialized_value);
+        initialized_value
     }
 
     fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
