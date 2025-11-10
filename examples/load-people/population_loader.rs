@@ -53,7 +53,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use ixa::{PersonCreatedEvent, PersonPropertyChangeEvent};
+    use ixa::prelude::*;
 
     use super::*;
     use crate::population_loader::Age;

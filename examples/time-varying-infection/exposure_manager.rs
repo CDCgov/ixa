@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use ixa::people::PersonCreatedEvent;
 use ixa::prelude::*;
 use rand_distr::Exp1;
 use reikna::func;

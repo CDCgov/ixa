@@ -1,5 +1,4 @@
 use ixa::prelude::*;
-use ixa::PersonCreatedEvent;
 use serde_derive::Serialize;
 
 #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
