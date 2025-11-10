@@ -96,8 +96,10 @@ impl InfectionLoop for Context {
         let infection_event_rate = infection_rate * n;
         let recovery_event_rate = n / params.infectious_period;
 
-        let infection_event_time =
-            self.sample_distr(PeriodicNextEventRng, Exp::new(infection_event_rate).unwrap());
+        let infection_event_time = self.sample_distr(
+            PeriodicNextEventRng,
+            Exp::new(infection_event_rate).unwrap(),
+        );
         let recovery_event_time =
             self.sample_distr(PeriodicNextEventRng, Exp::new(recovery_event_rate).unwrap());
 
@@ -137,9 +139,7 @@ impl InfectionLoop for Context {
             max_time,
             ..
         } = self.get_params();
-        let &ModelOptions {
-            periodic_reporting,
-        } = self.get_options();
+        let &ModelOptions { periodic_reporting } = self.get_options();
 
         self.init_random(seed);
         self.index_property(InfectionStatus);
@@ -164,10 +164,8 @@ impl InfectionLoop for Context {
         if periodic_reporting {
             if let Some(dir) = temp_dir {
                 let output_dir = PathBuf::from(dir.path());
-                
-                self.report_options()
-                    .directory(output_dir)
-                    .overwrite(true);
+
+                self.report_options().directory(output_dir).overwrite(true);
 
                 // Add periodic report for infection status
                 self.add_periodic_report("daily_infections", 1.0, (InfectionStatus,))
@@ -199,17 +197,19 @@ pub struct Model {
 impl Model {
     pub fn new(params: Parameters, options: ModelOptions) -> Self {
         let mut ctx = Context::new();
-        
+
         // Create temp directory for reports only if periodic reporting is enabled
         let temp_dir = if options.periodic_reporting {
             Some(TempDir::new().expect("Failed to create temp directory"))
         } else {
             None
         };
-        
-        ctx.set_global_property_value(PeriodicParams, params).unwrap();
-        ctx.set_global_property_value(PeriodicOptions, options).unwrap();
-        
+
+        ctx.set_global_property_value(PeriodicParams, params)
+            .unwrap();
+        ctx.set_global_property_value(PeriodicOptions, options)
+            .unwrap();
+
         Self { ctx, temp_dir }
     }
     pub fn run(&mut self) {
@@ -261,7 +261,7 @@ mod test {
     fn verify_csv_output() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let output_path = PathBuf::from(temp_dir.path());
-        
+
         // We need the context to go out of scope so the CSV writers are flushed
         {
             let mut ctx = Context::new();
@@ -282,12 +282,12 @@ mod test {
                 },
             )
             .unwrap();
-            
+
             ctx.setup(Some(&temp_dir));
             ctx.next_event();
             ctx.execute();
         }
-        
+
         // Now the context is dropped and files should be flushed
         let infections_file = output_path.join("daily_infections.csv");
         let by_age_file = output_path.join("infections_by_age.csv");
@@ -304,10 +304,10 @@ mod test {
         // Verify daily_infections.csv has expected structure
         let contents = std::fs::read_to_string(&infections_file).unwrap();
         let lines: Vec<&str> = contents.lines().collect();
-        
+
         // Check header exists
         assert!(lines.len() >= 1, "CSV should have at least a header");
-        
+
         // Check header
         let header = lines[0];
         assert!(header.contains("t"), "Header should contain 't'");
@@ -326,10 +326,10 @@ mod test {
         // Verify infections_by_age.csv has expected structure
         let contents = std::fs::read_to_string(&by_age_file).unwrap();
         let lines: Vec<&str> = contents.lines().collect();
-        
+
         // Check header exists
         assert!(lines.len() >= 1, "CSV should have at least a header");
-        
+
         // Check header
         let header = lines[0];
         assert!(header.contains("t"), "Header should contain 't'");
