@@ -223,6 +223,7 @@ impl Model {
 mod test {
     use super::super::ParametersBuilder;
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn run_model_with_periodic_reports() {
@@ -254,5 +255,95 @@ mod test {
             },
         );
         model.run();
+    }
+
+    #[test]
+    fn verify_csv_output() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let output_path = PathBuf::from(temp_dir.path());
+        
+        // We need the context to go out of scope so the CSV writers are flushed
+        {
+            let mut ctx = Context::new();
+            ctx.set_global_property_value(
+                PeriodicParams,
+                ParametersBuilder::default()
+                    .population(100)
+                    .initial_infections(5)
+                    .max_time(3.0)
+                    .build()
+                    .unwrap(),
+            )
+            .unwrap();
+            ctx.set_global_property_value(
+                PeriodicOptions,
+                ModelOptions {
+                    periodic_reporting: true,
+                },
+            )
+            .unwrap();
+            
+            ctx.setup(Some(&temp_dir));
+            ctx.next_event();
+            ctx.execute();
+        }
+        
+        // Now the context is dropped and files should be flushed
+        let infections_file = output_path.join("daily_infections.csv");
+        let by_age_file = output_path.join("infections_by_age.csv");
+
+        assert!(
+            infections_file.exists(),
+            "daily_infections.csv should be created"
+        );
+        assert!(
+            by_age_file.exists(),
+            "infections_by_age.csv should be created"
+        );
+
+        // Verify daily_infections.csv has expected structure
+        let contents = std::fs::read_to_string(&infections_file).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        
+        // Check header exists
+        assert!(lines.len() >= 1, "CSV should have at least a header");
+        
+        // Check header
+        let header = lines[0];
+        assert!(header.contains("t"), "Header should contain 't'");
+        assert!(
+            header.contains("InfectionStatus"),
+            "Header should contain 'InfectionStatus'"
+        );
+        assert!(header.contains("count"), "Header should contain 'count'");
+
+        // Should have data rows (at t=0, t=1, t=2, t=3)
+        assert!(
+            lines.len() > 1,
+            "CSV should have data rows in addition to header"
+        );
+
+        // Verify infections_by_age.csv has expected structure
+        let contents = std::fs::read_to_string(&by_age_file).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        
+        // Check header exists
+        assert!(lines.len() >= 1, "CSV should have at least a header");
+        
+        // Check header
+        let header = lines[0];
+        assert!(header.contains("t"), "Header should contain 't'");
+        assert!(
+            header.contains("InfectionStatus"),
+            "Header should contain 'InfectionStatus'"
+        );
+        assert!(header.contains("Age"), "Header should contain 'Age'");
+        assert!(header.contains("count"), "Header should contain 'count'");
+
+        // Should have data rows
+        assert!(
+            lines.len() > 1,
+            "CSV should have data rows in addition to header"
+        );
     }
 }
