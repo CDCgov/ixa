@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 use super::Parameters;
+use crate::generate_population::generate_population_with_seed;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ModelOptions {
@@ -141,15 +142,23 @@ impl InfectionLoop for Context {
             ..
         } = self.get_params();
         let &ModelOptions { periodic_reporting } = self.get_options();
-
+        println!("Setting up model: population={}, initial_infections={}, max_time={}, periodic_reporting={}",
+            population, initial_infections, max_time, periodic_reporting);
         self.init_random(seed);
         self.index_property(InfectionStatus);
 
-        // Set up population with ages
-        for i in 0..population {
-            // Assign ages roughly evenly across 0-100
-            let age = (i % 101) as u8;
-            self.add_person(((Age, age),)).unwrap();
+        // Set up population with ages using the population generator
+        // Use small, sensible defaults for schools/workplaces percent of population
+        const SCHOOLS_PERCENT: f64 = 0.2;
+        const WORKPLACES_PERCENT: f64 = 10.0;
+        for person in generate_population_with_seed(
+            population,
+            SCHOOLS_PERCENT,
+            WORKPLACES_PERCENT,
+            Some(seed),
+        ) {
+            // We currently only need the Age attribute for this benchmark
+            self.add_person(((Age, person.age),)).unwrap();
         }
 
         // Seed infections
@@ -167,10 +176,6 @@ impl InfectionLoop for Context {
                 let output_dir = PathBuf::from(dir.path());
 
                 self.report_options().directory(output_dir).overwrite(true);
-
-                // Add periodic report for infection status
-                self.add_periodic_report("daily_infections", 1.0, (InfectionStatus,))
-                    .expect("Failed to add periodic report for infections");
 
                 // Add periodic report for infections by age group
                 self.add_periodic_report("infections_by_age", 1.0, (InfectionStatus, Age))
@@ -291,38 +296,11 @@ mod test {
         }
 
         // Now the context is dropped and files should be flushed
-        let infections_file = output_path.join("daily_infections.csv");
         let by_age_file = output_path.join("infections_by_age.csv");
 
         assert!(
-            infections_file.exists(),
-            "daily_infections.csv should be created"
-        );
-        assert!(
             by_age_file.exists(),
             "infections_by_age.csv should be created"
-        );
-
-        // Verify daily_infections.csv has expected structure
-        let contents = std::fs::read_to_string(&infections_file).unwrap();
-        let lines: Vec<&str> = contents.lines().collect();
-
-        // Check header exists
-        assert!(!lines.is_empty(), "CSV should have at least a header");
-
-        // Check header
-        let header = lines[0];
-        assert!(header.contains("t"), "Header should contain 't'");
-        assert!(
-            header.contains("InfectionStatus"),
-            "Header should contain 'InfectionStatus'"
-        );
-        assert!(header.contains("count"), "Header should contain 'count'");
-
-        // Should have data rows (at t=0, t=1, t=2, t=3)
-        assert!(
-            lines.len() > 1,
-            "CSV should have data rows in addition to header"
         );
 
         // Verify infections_by_age.csv has expected structure
