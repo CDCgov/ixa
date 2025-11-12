@@ -313,7 +313,14 @@ macro_rules! impl_property_with_options {
             $property,
             $entity,
             $crate::impl_property_with_options!(@unwrap_or_ty $($canonical_value)?, $property),
-            $crate::impl_property_with_options!(@unwrap_or $($initialization_kind)?, $crate::entity::property::PropertyInitializationKind::Explicit),
+
+            // If `initialization_kind` is not specified, use `Constant` if a constant is given, or `Explicit` otherwise.
+            // (The `Derived` case always supplies an explicit `$initialization_kind` parameter.)
+            $crate::impl_property_with_options!(@unwrap_or
+                $($initialization_kind)?,
+                $crate::impl_property_with_options!(@unwrap_or_default_kind $($default_const)?)
+            ),
+
             $crate::impl_property_with_options!(@unwrap_or $($is_required)?, false),
             $crate::impl_property_with_options!(@unwrap_or $($compute_derived_fn)?, |_, _| panic!("property {} is not derived", stringify!($property)) ),
             $crate::impl_property_with_options!(@unwrap_or $($default_const)?, panic!("property {} has no default value", stringify!($property))),
@@ -329,6 +336,16 @@ macro_rules! impl_property_with_options {
 
     (@unwrap_or_ty $ty:ty, $_default:ty) => { $ty };
     (@unwrap_or_ty, $default:ty) => { $default };
+
+    // This special case of `@unwrap_or*` ignores the contents of `$expr`.
+    // If `default_const` is present (matched by `$expr`), use `Constant`.
+    // If it's absent, fall back to `Explicit`.
+    (@unwrap_or_default_kind $expr:expr) => {
+        $crate::entity::property::PropertyInitializationKind::Constant
+    };
+    (@unwrap_or_default_kind) => {
+        $crate::entity::property::PropertyInitializationKind::Explicit
+    };
 }
 pub use impl_property_with_options;
 

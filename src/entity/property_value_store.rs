@@ -42,14 +42,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
         self.data.reserve(additional);
     }
 
-    /// Returns the property value for the given entity.
+    /// Returns the property value for the given entity. Returns `None`
+    /// if the property is both not set and has no default value.
     pub fn get(&self, entity_id: EntityId<E>) -> Option<P> {
         self.data.get(entity_id.0).unwrap_or_else(|| {
             // `None` means index was out of bounds, which means the property is not set.
             // Return the default if there is one.
             if P::initialization_kind() == PropertyInitializationKind::Constant {
-                let p: P = P::default_const();
-                Some(p)
+                Some(P::default_const())
             } else {
                 None
             }
