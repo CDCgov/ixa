@@ -1,0 +1,15 @@
+{
+  "population": 100,
+  "max_time": 780.0,
+  "seed": 123,
+  "birth_rate": 0.1,
+  "death_rate": 0.1,
+  "foi_groups": [
+    { "group_name": "NewBorn", "foi": 0.2 },
+    { "group_name": "General", "foi": 0.1 },
+    { "group_name": "OldAdult", "foi": 0.15 }
+  ],
+  "infection_duration": 5.0,
+  "output_file": "incidence",
+  "demographic_output_file": "people_report.csv"
+}

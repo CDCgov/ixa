@@ -61,7 +61,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let rng = black_box(&mut rng);
             let data = black_box(&data);
 
-            black_box(sample_single_from_known_length(rng, data));
+            black_box(sample_single_from_known_length(rng, data.iter()));
         });
     });
 
@@ -108,7 +108,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let data = black_box(&data);
             let requested = counts[count_idx];
 
-            let selected = sample_multiple_from_known_length(rng, data, requested);
+            let selected = sample_multiple_from_known_length(rng, data.iter(), requested);
 
             assert_eq!(selected.len(), requested);
             count_idx = (count_idx + 1) % 1000;
@@ -127,7 +127,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let data = black_box(&data);
             let requested = counts[count_idx];
 
-            let reservoir = sample_multiple_l_reservoir(rng, data, counts[count_idx]);
+            let reservoir = sample_multiple_l_reservoir(rng, data.iter(), counts[count_idx]);
             assert_eq!(reservoir.len(), requested);
             count_idx = (count_idx + 1) % 1000;
             black_box(reservoir);

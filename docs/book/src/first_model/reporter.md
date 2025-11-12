@@ -7,7 +7,7 @@ the data we want to have. The built-in report feature makes it easy to record
 data to a CSV file during the simulation.
 
 Our model will only have a single report that records the current in-simulation
-time, the `PersonId`, and the `InfectionStatusValue` of a person whenever their
+time, the `PersonId`, and the `InfectionStatus` of a person whenever their
 `InfectionStatus` changes. We define a struct representing a single row of data.
 
 ```rust
@@ -50,12 +50,14 @@ Note that:
   `context.add_report()` returns if the CSV file cannot be created for some
   reason, or `Ok(())` otherwise.
 
-> [!INFO] `Result<U, V>` and Handling Errors The Rust `Result<U, V>` type is an
-> enum used for error handling. It represents a value that can either be a
-> successful outcome (`Ok`) containing a value of type `U`, or an error (`Err`)
-> containing a value of type `V`. Think of it as a built-in way to return and
-> propagate errors without relying on exceptions, similar to using “`Either`”
-> types or special error codes in other languages.
+> [!INFO] Result and Handling Errors
+>
+> The Rust `Result\<U, V>` type is an enum used for error handling. It
+> represents a value that can either be a successful outcome (`Ok`) containing a
+> value of type `U`, or an error (`Err`) containing a value of type `V`. Think
+> of it as a built-in way to return and propagate errors without relying on
+> exceptions, similar to using “`Either`” types or special error codes in other
+> languages.
 >
 > The `?` operator works with `Result` to simplify error handling. When you
 > append `?` to a function call that returns a `Result`, it automatically checks

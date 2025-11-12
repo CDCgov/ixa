@@ -3,12 +3,12 @@
 //! # Properties
 //!
 //! Properties are defined using the `define_person_property!` and
-//! `define_derived_property!` macros.
+//! `define_derived_person_property!` macros.
 //!
 //! # Multi-properties
 //!
 //! The `define_multi_property!` macro (defined in `property.rs`) takes a name and a tuple
-//! of property tags. It defines a derived property (via `define_derived_property`) with the
+//! of property tags. It defines a derived property (via `define_derived_person_property`) with the
 //! provided name having the type of tuples of values corresponding to the provided tags.
 //!
 //! ```rust,ignore
@@ -122,9 +122,9 @@ mod tests {
     define_person_property!(Age, u8);
     define_person_property!(Weight, f64);
 
-    define_multi_property!(ProfileNAW, (Name, Age, Weight));
-    define_multi_property!(ProfileAWN, (Age, Weight, Name));
-    define_multi_property!(ProfileWAN, (Weight, Age, Name));
+    define_person_multi_property!(ProfileNAW, (Name, Age, Weight));
+    define_person_multi_property!(ProfileAWN, (Age, Weight, Name));
+    define_person_multi_property!(ProfileWAN, (Weight, Age, Name));
 
     #[test]
     fn test_multi_property_ordering() {
@@ -180,7 +180,7 @@ mod tests {
             .add_person(((Name, "Alice"), (Age, 22), (Weight, 170.5)))
             .unwrap();
 
-        context.index_property(ProfileNAW);
+        context.index_person_property(ProfileNAW);
 
         {
             let data = context.get_data(PeoplePlugin);
@@ -202,7 +202,7 @@ mod tests {
             );
         }
 
-        context.with_query_results((ProfileNAW, ("John", 42, 220.5)), &mut |results| {
+        context.with_query_people_results((ProfileNAW, ("John", 42, 220.5)), &mut |results| {
             assert_eq!(results.len(), 1);
         });
     }

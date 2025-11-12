@@ -42,7 +42,7 @@ pub trait ContextPeopleExt {
         -> T::Value;
 
     #[doc(hidden)]
-    fn register_property<T: PersonProperty>(&self);
+    fn register_person_property<T: PersonProperty>(&self);
 
     /// Given a [`PersonId`], sets the value of a defined person property
     /// Panics if the property is not initialized. Fires a change event.
@@ -58,20 +58,24 @@ pub trait ContextPeopleExt {
     /// If an index is available, [`Context::query_people()`] will use it, so this is
     /// intended to allow faster querying of commonly used properties.
     /// Ixa may choose to create an index for its own reasons even if
-    /// [`Context::index_property()`] is not called, so this function just ensures
+    /// [`Context::index_person_property()`] is not called, so this function just ensures
     /// that one is created.
-    fn index_property<T: PersonProperty>(&mut self, property: T);
+    fn index_person_property<T: PersonProperty>(&mut self, property: T);
 
     /// Query for all people matching a given set of criteria, calling the `callback`
     /// with an immutable reference to the fully realized result set.
     ///
     /// If you only need to count the results, use [`Context::query_people_count`]
     ///
-    /// [`Context::with_query_results()`] takes any type that implements [`Query`], but
+    /// [`Context::with_query_people_results()`] takes any type that implements [Query], but
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
+    fn with_query_people_results<Q: Query>(
+        &self,
+        query: Q,
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
+    );
 
     #[deprecated(
         since = "0.3.4",
@@ -165,7 +169,7 @@ impl ContextPeopleExt for Context {
 
     fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
         let data_container = self.get_data(PeoplePlugin);
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         if T::is_derived() {
             return T::compute(self, person_id);
@@ -190,7 +194,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         assert!(!T::is_derived(), "Cannot set a derived property");
 
@@ -256,7 +260,7 @@ impl ContextPeopleExt for Context {
             let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
                 person_id,
                 current: value,
-                previous: previous_value.unwrap(), // This muse be Some() of !initializing
+                previous: previous_value.unwrap(), // This must be Some() if !initializing
             };
             self.emit_event(change_event);
         }
@@ -266,9 +270,9 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn index_property<T: PersonProperty>(&mut self, property: T) {
+    fn index_person_property<T: PersonProperty>(&mut self, property: T) {
         trace!("indexing property {}", T::name());
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         let data_container = self.get_data(PeoplePlugin);
         data_container.set_property_indexed(true, property);
@@ -326,7 +330,7 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn register_property<T: PersonProperty>(&self) {
+    fn register_person_property<T: PersonProperty>(&self) {
         let data_container = self.get_data(PeoplePlugin);
         if data_container
             .registered_properties
@@ -340,8 +344,10 @@ impl ContextPeopleExt for Context {
 
         // In order to avoid borrowing recursively, we must register dependencies first.
         if instance.is_derived() {
+            // The properties we depend on need to be themselves registered before we proceed.
             T::register_dependencies(self);
 
+            // Get a list of transitive non-derived dependencies.
             let dependencies = instance.non_derived_dependencies();
             for dependency in dependencies {
                 let mut dependency_map = data_container.dependency_map.borrow_mut();
@@ -466,7 +472,11 @@ impl ContextPeopleExt for Context {
                     // This is slightly faster than "Algorithm L" reservoir sampling when requested << ~5
                     // and always much faster than the reservoir sampling algorithm in `rand`.
                     return self.sample(rng_id, |rng| {
-                        sample_multiple_from_known_length(rng, people_set, requested)
+                        sample_multiple_from_known_length(
+                            rng,
+                            people_set.iter().cloned(),
+                            requested,
+                        )
                     });
                 }
             }
@@ -545,7 +555,7 @@ impl ContextPeopleExt for Context {
 
                 if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
                     return self.sample(rng_id, |rng| {
-                        sample_single_from_known_length(rng, people_set)
+                        sample_single_from_known_length(rng, people_set.iter().cloned())
                     });
                 }
             }
@@ -582,7 +592,11 @@ impl ContextPeopleExt for Context {
         selected
     }
 
-    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
+    fn with_query_people_results<Q: Query>(
+        &self,
+        query: Q,
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
+    ) {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             let mut people_set =
@@ -655,7 +669,7 @@ impl ContextPeopleExtInternal for Context {
         data_container.add_person_if_indexed::<T>(T::make_canonical(value), person_id);
     }
 
-    /// If the property is being indexed, add the person to the property's index.
+    /// If the property is being indexed, remove the person from the property's index.
     fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data(PeoplePlugin);
         let value = self.get_person_property(person_id, property);
@@ -705,7 +719,7 @@ impl ContextPeopleExtInternal for Context {
         let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
             Box::new(data_container.people_iterator())
         } else {
-            indexes.sort_by_key(|x| x.len());
+            indexes.sort_unstable_by_key(|x| x.len());
 
             holder = indexes.remove(0);
             Box::new(holder.iter().copied())
@@ -748,7 +762,7 @@ mod tests {
     use crate::people::{PeoplePlugin, PersonProperty, PersonPropertyHolder};
     use crate::random::{define_rng, ContextRandomExt};
     use crate::{
-        define_derived_property, define_global_property, define_person_property,
+        define_derived_person_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
@@ -760,7 +774,7 @@ mod tests {
         Adult,
     }
     define_global_property!(ThresholdP, u8);
-    define_derived_property!(IsEligible, bool, [Age], [ThresholdP], |age, threshold| {
+    define_derived_person_property!(IsEligible, bool, [Age], [ThresholdP], |age, threshold| {
         &age >= threshold
     });
 
@@ -768,7 +782,7 @@ mod tests {
     mod unused {
         use super::*;
         // This isn't used, it's just testing for a compile error.
-        define_derived_property!(
+        define_derived_person_property!(
             NotUsed,
             bool,
             [Age],
@@ -777,7 +791,7 @@ mod tests {
         );
     }
 
-    define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
+    define_derived_person_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
             AgeGroupValue::Child
         } else {
@@ -801,20 +815,20 @@ mod tests {
             0
         }
     });
-    define_derived_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
+    define_derived_person_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
         is_runner && age >= 18
     });
-    define_derived_property!(
+    define_derived_person_property!(
         SeniorRunner,
         bool,
         [AdultRunner, Age],
         |adult_runner, age| { adult_runner && age >= 65 }
     );
     define_person_property_with_default!(IsSwimmer, bool, false);
-    define_derived_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
+    define_derived_person_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
         is_swimmer && age >= 18
     });
-    define_derived_property!(
+    define_derived_person_property!(
         AdultAthlete,
         bool,
         [AdultRunner, AdultSwimmer],
@@ -1046,8 +1060,8 @@ mod tests {
     fn test_resolve_dependencies() {
         let mut actual = SeniorRunner.non_derived_dependencies();
         let mut expected = vec![Age::type_id(), IsRunner::type_id()];
-        actual.sort();
-        expected.sort();
+        actual.sort_unstable();
+        expected.sort_unstable();
         assert_eq!(actual, expected);
     }
 
@@ -1121,7 +1135,7 @@ mod tests {
         let _ = context.add_person((Age, 42)).unwrap();
         let mut all_people = Vec::new();
 
-        context.with_query_results((), &mut |results| {
+        context.with_query_people_results((), &mut |results| {
             all_people = results.to_owned_vec();
         });
 
@@ -1411,8 +1425,8 @@ mod tests {
 
         define_rng!(PropertyInitRng);
         define_person_property_with_default!(SimplePropWithDefault, u8, 1);
-        define_derived_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
-        define_derived_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
+        define_derived_person_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
+        define_derived_person_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
 
         #[test]
         fn test_query_derived_property_not_initialized() {

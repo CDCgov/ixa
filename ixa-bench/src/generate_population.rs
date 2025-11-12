@@ -1,3 +1,5 @@
+use std::iter::FusedIterator;
+
 use ixa::rand::rngs::StdRng;
 use ixa::rand::{rng, Rng, RngCore, SeedableRng};
 
@@ -64,6 +66,7 @@ impl PopulationIterator {
 
 impl Iterator for PopulationIterator {
     type Item = Person;
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self.n {
             return None;
@@ -88,7 +91,30 @@ impl Iterator for PopulationIterator {
         self.idx += 1;
         Some(person)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.n.saturating_sub(self.idx);
+        (remaining, Some(remaining))
+    }
+
+    fn count(self) -> usize {
+        self.n.saturating_sub(self.idx)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Person> {
+        self.idx = (self.idx + n).min(self.n);
+        self.next()
+    }
 }
+
+impl ExactSizeIterator for PopulationIterator {
+    fn len(&self) -> usize {
+        let (remaining, _) = self.size_hint();
+        remaining
+    }
+}
+
+impl FusedIterator for PopulationIterator {}
 
 pub fn generate_population(
     n: usize,

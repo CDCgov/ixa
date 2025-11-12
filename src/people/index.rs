@@ -239,14 +239,14 @@ mod test {
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::people::index::Index;
     use crate::prelude::*;
-    use crate::{define_multi_property, set_log_level, set_module_filter, PersonProperty};
+    use crate::{define_person_multi_property, set_log_level, set_module_filter, PersonProperty};
 
     define_person_property!(Age, u8);
     define_person_property!(Weight, u8);
     define_person_property!(Height, u8);
 
-    define_multi_property!(AWH, (Age, Weight, Height));
-    define_multi_property!(WHA, (Weight, Height, Age));
+    define_person_multi_property!(AWH, (Age, Weight, Height));
+    define_person_multi_property!(WHA, (Weight, Height, Age));
 
     #[test]
     fn test_multi_property_index_typed_api() {
@@ -254,21 +254,21 @@ mod test {
         set_log_level(LevelFilter::Trace);
         set_module_filter("ixa", LevelFilter::Trace);
 
-        context.index_property(WHA);
-        context.index_property(AWH);
+        context.index_person_property(WHA);
+        context.index_person_property(AWH);
 
         context
             .add_person(((Age, 1u8), (Weight, 2u8), (Height, 3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_people_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
+        context.with_query_people_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);
@@ -281,13 +281,13 @@ mod test {
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_people_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
+        context.with_query_people_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);

@@ -125,7 +125,7 @@ pub use define_person_property_with_default;
 /// * `$display`: A closure that takes the value of the derived property and returns a string representation
 /// * `$hash_fn`: A function that can compute the hash of values of this property
 #[macro_export]
-macro_rules! __define_derived_property_common {
+macro_rules! __define_derived_person_property_common {
     (
         $derived_property:ident,
         $value:ty,
@@ -175,7 +175,7 @@ macro_rules! __define_derived_property_common {
             }
             fn register_dependencies(context: &$crate::context::Context) {
                 $at_dependency_registration
-                $(context.register_property::<$dependency>();)+
+                $(context.register_person_property::<$dependency>();)+
             }
             fn get_instance() -> Self {
                 $derived_property
@@ -203,7 +203,7 @@ macro_rules! __define_derived_property_common {
 /// * `[$($dependency),*]`: A list of global properties the derived property depends on (optional)
 /// * $calculate: A closure that takes the values of each dependency and returns the derived value
 #[macro_export]
-macro_rules! define_derived_property {
+macro_rules! define_derived_person_property {
     (
         $derived_property:ident,
         $value:ty,
@@ -211,7 +211,7 @@ macro_rules! define_derived_property {
         [$($global_dependency:ident),*],
         |$($param:ident),+| $derive_fn:expr
     ) => {
-        $crate::__define_derived_property_common!(
+        $crate::__define_derived_person_property_common!(
             $derived_property,
             $value,
             $value,
@@ -234,7 +234,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*],
         |$($param:ident),+| $derive_fn:expr
     ) => {
-        $crate::__define_derived_property_common!(
+        $crate::__define_derived_person_property_common!(
             $derived_property,
             $value,
             $value,
@@ -250,21 +250,21 @@ macro_rules! define_derived_property {
         );
     };
 }
-pub use define_derived_property;
+pub use define_derived_person_property;
 
-/// Defines a named multi-property composed of a tuple of several existing other properties.  
-/// - `$person_property`: The name of the new multi-property type.  
-/// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list of existing  
-///   property identifiers that this multi-property is composed from.  
+/// Defines a named multi-property composed of a tuple of several existing other properties.
+/// - `$person_property`: The name of the new multi-property type.
+/// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list (tuple) of existing
+///   property identifiers that this multi-property is composed of.
 #[macro_export]
-macro_rules! define_multi_property {
+macro_rules! define_person_multi_property {
     (
         $person_property:ident,
         ( $($dependency:ident),+ )
     ) => {
         // $crate::sorted_property_impl!(( $($dependency),+ ));
         $crate::paste::paste! {
-            $crate::__define_derived_property_common!(
+            $crate::__define_derived_person_property_common!(
                 // Name
                 $person_property,
 
@@ -283,8 +283,8 @@ macro_rules! define_multi_property {
                 // Code that runs at dependency registration time
                 {
                     let type_ids = &mut [$($dependency::type_id()),+ ];
-                    type_ids.sort();
-                    $crate::people::register_type_ids_to_muli_property_id(type_ids, Self::type_id());
+                    type_ids.sort_unstable();
+                    $crate::people::register_type_ids_to_multi_property_id(type_ids, Self::type_id());
                 },
 
                 // Property dependency list
@@ -324,8 +324,8 @@ macro_rules! define_multi_property {
                 // order will have the same type ID.
                 std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
             );
-            $crate::impl_make_canonical!($person_property, ( $($dependency),+ ));
+            $crate::impl_people_make_canonical!($person_property, ( $($dependency),+ ));
         }
     };
 }
-pub use define_multi_property;
+pub use define_person_multi_property;

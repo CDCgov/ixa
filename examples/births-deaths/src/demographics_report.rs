@@ -1,9 +1,10 @@
 use std::path::Path;
 
+use ixa::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::population_manager::{Age, AgeGroupFoi, AgeGroupRisk, Alive};
+use crate::population_manager::{Age, AgeGroupRisk, Alive, Person};
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -18,9 +19,9 @@ struct PersonReportItem {
 
 define_report!(PersonReportItem);
 
-fn handle_person_created(context: &mut Context, event: PersonCreatedEvent) {
-    let person = event.person_id;
-    let age_group_person = context.get_person_property(person, AgeGroupFoi);
+fn handle_person_created(context: &mut Context, event: EntityCreatedEvent<Person>) {
+    let person = event.entity_id;
+    let age_group_person: AgeGroupRisk = context.get_property(person);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
@@ -31,30 +32,30 @@ fn handle_person_created(context: &mut Context, event: PersonCreatedEvent) {
     });
 }
 
-fn handle_person_aging(context: &mut Context, event: PersonPropertyChangeEvent<Age>) {
-    let person = event.person_id;
-    let age_group_person = context.get_person_property(person, AgeGroupFoi);
+fn handle_person_aging(context: &mut Context, event: PropertyChangeEvent<Person, Age>) {
+    let person = event.entity_id;
+    let age_group_person: AgeGroupRisk = context.get_property(person);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
         age_group: age_group_person,
         property: "Age".to_string(),
-        property_prev: format!("{:?}", event.previous),
-        property_current: format!("{:?}", event.current),
+        property_prev: format!("{:?}", event.previous_value),
+        property_current: format!("{:?}", event.current_value),
     });
 }
 
-fn handle_death_events(context: &mut Context, event: PersonPropertyChangeEvent<Alive>) {
-    if !event.current {
-        let person = event.person_id;
-        let age_group_person = context.get_person_property(person, AgeGroupFoi);
+fn handle_death_events(context: &mut Context, event: PropertyChangeEvent<Person, Alive>) {
+    if !event.current_value.0 {
+        let person = event.entity_id;
+        let age_group_person: AgeGroupRisk = context.get_property(person);
         context.send_report(PersonReportItem {
             time: context.get_current_time(),
             person_id: format!("{person}"),
             age_group: age_group_person,
             property: "Alive".to_string(),
-            property_prev: format!("{:?}", event.previous),
-            property_current: format!("{:?}", event.current),
+            property_prev: format!("{:?}", event.previous_value),
+            property_current: format!("{:?}", event.current_value),
         });
     }
 }
@@ -72,14 +73,13 @@ pub fn init(context: &mut Context, output_path: &Path) -> Result<(), IxaError> {
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.
 
     context.add_report::<PersonReportItem>(&parameters.demographic_output_file)?;
-    context.subscribe_to_event(|context, event: PersonCreatedEvent| {
+    context.subscribe_to_event(|context, event: EntityCreatedEvent<Person>| {
         handle_person_created(context, event);
     });
-    context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<Alive>| {
+    context.subscribe_to_event(|context, event: PropertyChangeEvent<Person, Alive>| {
         handle_death_events(context, event);
     });
-
-    context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<Age>| {
+    context.subscribe_to_event(|context, event: PropertyChangeEvent<Person, Age>| {
         handle_person_aging(context, event);
     });
 

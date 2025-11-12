@@ -6,7 +6,7 @@ use crate::utilities::{resolved_person_property_path, TypeTuple};
 /// Returns a new tuple with identifiers sorted alphabetically
 pub fn sorted_tag(input: TokenStream) -> TokenStream {
     let TypeTuple(mut idents) = syn::parse_macro_input!(input as TypeTuple);
-    idents.sort_by_key(|a| a.to_string());
+    idents.sort_unstable_by_key(|a| a.to_string());
     let output = quote! { ( #( #idents ),* ) };
     output.into()
 }
@@ -15,7 +15,7 @@ pub fn sorted_tag(input: TokenStream) -> TokenStream {
 pub fn sorted_value_type(input: TokenStream) -> TokenStream {
     let person_property_path = resolved_person_property_path();
     let TypeTuple(mut idents) = syn::parse_macro_input!(input as TypeTuple);
-    idents.sort_by_key(|a| a.to_string());
+    idents.sort_unstable_by_key(|a| a.to_string());
     let values = idents
         .iter()
         .map(|id| quote! { <#id as #person_property_path>::Value });

@@ -9,9 +9,9 @@ mod tests {
     define_person_property_with_default!(TestPropDefault, u32, 7u32);
     define_person_property!(TestPropOpt, Option<u8>);
 
-    define_derived_property!(DerivedProp, u32, [TestPropU32], |v| v + 1);
+    define_derived_person_property!(DerivedProp, u32, [TestPropU32], |v| v + 1);
 
-    define_multi_property!(MultiProp, (TestPropU32, TestPropU32b));
+    define_person_multi_property!(MultiProp, (TestPropU32, TestPropU32b));
 
     // Test global property macro
     define_global_property!(TestGlobal, u32);

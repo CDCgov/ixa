@@ -66,7 +66,7 @@
 //! The internals of query are deliberately opaque in that Ixa may or
 //! may not ordinarily choose to create caches or indexes for
 //! queries. However, you force an index to be created for a single
-//! property by using [`Context::index_property()`].
+//! property by using [`Context::index_person_property()`].
 
 mod context_extension;
 mod data;
