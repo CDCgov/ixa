@@ -17,7 +17,7 @@ To build without opening it:
 mdbook build
 ```
 
-...or to build and the open the rendered book in your browser:
+...or to build and then open the rendered book in your browser:
 
 ```bash
 mdbook build --open

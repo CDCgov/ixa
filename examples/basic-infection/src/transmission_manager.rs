@@ -1,26 +1,21 @@
 use ixa::prelude::*;
-use ixa::{trace, PersonId};
+use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, InfectionStatusValue};
+use crate::people::{InfectionStatus, Person, PersonId};
 use crate::{FOI, MAX_TIME};
 
 define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
-    let population_size: usize = context.get_current_population();
-    let person_to_infect: PersonId = context.sample_person(TransmissionRng, ()).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
+    let population_size: usize = context.get_entity_count::<Person>();
+    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
 
-    let person_status: InfectionStatusValue =
-        context.get_person_property(person_to_infect, InfectionStatus);
+    let person_status: InfectionStatus = context.get_property(person_to_infect);
 
-    if person_status == InfectionStatusValue::S {
-        context.set_person_property::<InfectionStatus>(
-            person_to_infect,
-            InfectionStatus,
-            InfectionStatusValue::I,
-        );
+    if person_status == InfectionStatus::S {
+        context.set_property(person_to_infect, InfectionStatus::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection), each _person_ experiences an
@@ -48,20 +43,19 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use ixa::context::Context;
-    use ixa::people::ContextPeopleExt;
 
     use super::*;
-    use crate::people::{InfectionStatus, InfectionStatusValue};
+    use crate::people::{InfectionStatus, PersonId};
     use crate::SEED;
 
     #[test]
     fn test_attempt_infection() {
         let mut context = Context::new();
         context.init_random(SEED);
-        let person_id = context.add_person(()).unwrap();
+        let person_id: PersonId = context.add_entity(()).unwrap();
         attempt_infection(&mut context);
-        let person_status = context.get_person_property(person_id, InfectionStatus);
-        assert_eq!(person_status, InfectionStatusValue::I);
+        let person_status: InfectionStatus = context.get_property(person_id);
+        assert_eq!(person_status, InfectionStatus::I);
         context.execute();
     }
 }

@@ -600,8 +600,8 @@ mod test {
             vec!["1.2", "true", "None", "0"],
         ];
 
-        actual.sort();
-        expected.sort();
+        actual.sort_unstable();
+        expected.sort_unstable();
 
         assert_eq!(actual, expected, "CSV file should contain the correct data");
     }

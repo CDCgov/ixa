@@ -2,24 +2,18 @@ use indexmap::IndexSet;
 use ixa::prelude::*;
 use ixa::PersonId;
 use rand_distr::Exp;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use super::{ModelStats, Parameters};
+use crate::reference_sir::sir_ixa::{
+    ModelOptions, ModelStatsPlugin, NextEventRng, NextPersonRng, Options, Params,
+};
+use crate::reference_sir::{ModelStats, Parameters};
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct ModelOptions {
-    pub queries_enabled: bool,
-}
-impl Default for ModelOptions {
-    fn default() -> Self {
-        ModelOptions {
-            queries_enabled: true,
-        }
-    }
-}
-
-define_global_property!(Params, Parameters);
-define_global_property!(Options, ModelOptions);
+define_data_plugin!(
+    NonQueryInfectionTracker,
+    IndexSet<PersonId>,
+    IndexSet::new()
+);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 pub enum InfectionStatusValue {
@@ -32,19 +26,6 @@ define_person_property_with_default!(
     InfectionStatus,
     InfectionStatusValue,
     InfectionStatusValue::Susceptible
-);
-
-define_rng!(NextPersonRng);
-define_rng!(NextEventRng);
-
-define_data_plugin!(ModelStatsPlugin, ModelStats, |context| {
-    let params = context.get_global_property_value(Params).unwrap();
-    ModelStats::new(params.initial_infections, params.population, 0.2)
-});
-define_data_plugin!(
-    NonQueryInfectionTracker,
-    IndexSet<PersonId>,
-    IndexSet::new()
 );
 
 trait InfectionLoop {
@@ -184,7 +165,7 @@ impl InfectionLoop for Context {
         self.init_random(seed);
 
         if queries_enabled {
-            self.index_property(InfectionStatus);
+            self.index_person_property(InfectionStatus);
         }
 
         // Set up population
@@ -245,8 +226,8 @@ impl Model {
 mod test {
     use approx::assert_relative_eq;
 
-    use super::super::ParametersBuilder;
     use super::*;
+    use crate::reference_sir::ParametersBuilder;
 
     fn model_variants() -> Vec<Model> {
         vec![
@@ -308,7 +289,7 @@ mod test {
         // Final size relation is ~58%
         let incidence = model.get_stats().get_cum_incidence() as f64;
         let expected = population as f64 * 0.58;
-        assert_relative_eq!(incidence, expected, max_relative = 0.05);
+        assert_relative_eq!(incidence, expected, max_relative = 0.02);
     }
 
     #[test]

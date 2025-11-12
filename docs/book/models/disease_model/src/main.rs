@@ -3,7 +3,7 @@ mod infection_manager;
 mod people;
 mod transmission_manager;
 
-use ixa::{error, info, run_with_args, Context};
+use ixa::{Context, error, info, run_with_args};
 
 static POPULATION: u64 = 100;
 static FORCE_OF_INFECTION: f64 = 0.1;

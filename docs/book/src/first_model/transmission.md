@@ -43,6 +43,7 @@ use ixa::Context;
 
 static POPULATION: u64 = 1000;
 static FORCE_OF_INFECTION: f64 = 0.1;
+static MAX_TIME: f64 = 200.0;
 // ...the rest of the file...
 ```
 
@@ -63,8 +64,8 @@ The function `attempt_infection()` needs to do the following:
 
 1. Randomly sample a person from the population to attempt to infect.
 2. Check the sampled person's _current_ `InfectionStatus`, changing it to
-   infected (`InfectionStatusValue::I`) if and only if the person is currently
-   susceptible (`InfectionStatusValue::S`).
+   infected (`InfectionStatus::I`) if and only if the person is currently
+   susceptible (`InfectionStatus::S`).
 3. Schedule the next infection attempt by inserting a plan into the timeline
    that will run `attempt_infection()` again.
 
@@ -75,10 +76,12 @@ The function `attempt_infection()` needs to do the following:
 Read through this implementation and make sure you understand how it
 accomplishes the three tasks above. A few observations:
 
-- The method `context.sample_person(())` returns an `Option\<PersonId>`, which
-  can have the value of `PersonId` or `None`. In this case,
-  `if let Some(person_to_infect)` matches against the `Option\<PersonId>` and
-  continues into the following block of code if a `PersonId` is found.
+- The method call `context.sample_entity(TransmissionRng, ())` takes the name of
+  a random number source and a query and returns an `Option\<PersonId>`, which
+  can have the value of `Some(PersonId)` or `None`. In this case, we give it the
+  "empty query" `()`, which means we want to sample from the entire population.
+  The population will never be empty, so the result will never be `None`, and so
+  we just call `unwrap()` on the `Some(PersonId)` value to get the `PersonId`.
 - The `#[allow(clippy::cast_precision_loss)]` is optional; without it the
   compiler will warn you about converting `population` 's integral type `usize`
   to the floating point type `f64`, but we know that this conversion is safe to
@@ -89,8 +92,9 @@ accomplishes the three tasks above. A few observations:
   exponential distribution according to our abstract model and using the random
   number source `TransmissionRng` that we defined specifically for this purpose.
 - None of this code refers to the people module (except to import the types
-  `InfectionStatus` and `InfectionStatusValue`) or the infection manager we are
-  about to write.
+  `InfectionStatus` and `PersonId`) or the infection manager we are about to
+  write, demonstrating the software engineering principle of
+  [modularity](https://en.wikipedia.org/wiki/Component-based_software_engineering).
 
 > [!INFO] Random Number Generators
 >

@@ -11,7 +11,7 @@ use crate::people::HashValueType;
 /// A map from a list of `TypeId`s to the `TypeId` of the multi-property type.
 /// The list of `TypeId`s is assumed to be sorted.
 ///
-/// Use `register_type_ids_to_muli_property_id()` to register a multi-property.
+/// Use `register_type_ids_to_multi_property_id()` to register a multi-property.
 static MULTI_PROPERTY_INDEX_MAP: LazyLock<Mutex<RefCell<HashMap<HashValueType, TypeId>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::default())));
 
@@ -31,7 +31,7 @@ pub fn type_ids_to_multi_property_id(type_ids: &[TypeId]) -> Option<TypeId> {
 /// list of `TypeId`s as its properties.
 ///
 /// Use `type_ids_to_muli_property_id()` to look up a `TypeId`.
-pub fn register_type_ids_to_muli_property_id(type_ids: &[TypeId], multi_property_id: TypeId) {
+pub fn register_type_ids_to_multi_property_id(type_ids: &[TypeId], multi_property_id: TypeId) {
     let hash = one_shot_128(&type_ids);
     MULTI_PROPERTY_INDEX_MAP
         .lock()
@@ -59,7 +59,7 @@ const fn make_indices<const N: usize>() -> [usize; N] {
 /// returning an allocated `Vec`.
 pub fn sorted_indices<T: Ord>(keys: &[T]) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..keys.len()).collect();
-    indices.sort_by_key(|&i| &keys[i]);
+    indices.sort_unstable_by_key(|&i| &keys[i]);
     indices
 }
 
@@ -70,7 +70,7 @@ pub fn sorted_indices<T: Ord>(keys: &[T]) -> Vec<usize> {
 /// known size, avoiding `Vec` allocations.
 pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N] {
     let mut indices = make_indices::<N>();
-    indices.sort_by_key(|&i| &keys[i]);
+    indices.sort_unstable_by_key(|&i| &keys[i]);
     indices
 }
 

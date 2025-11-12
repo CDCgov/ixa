@@ -20,6 +20,8 @@ pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use serde::Serialize;
 use xxhash_rust::xxh3::Xxh3Default;
 
+pub type HashValueType = u128;
+
 /// Provides API parity with `std::collections::HashMap`.
 pub trait HashMapExt {
     fn new() -> Self;

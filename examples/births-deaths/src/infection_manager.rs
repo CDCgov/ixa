@@ -1,10 +1,10 @@
-use ixa::people::{PersonId, PersonPropertyChangeEvent};
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::plan::PlanId;
 use ixa::prelude::*;
 use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
 
-use crate::population_manager::{Alive, InfectionStatus, InfectionStatusValue};
+use crate::population_manager::{Alive, InfectionStatus, Person, PersonId};
 use crate::Parameters;
 
 define_rng!(InfectionRng1);
@@ -29,10 +29,11 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let infection_duration = parameters.infection_duration;
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng1, Exp::new(1.0 / infection_duration).unwrap());
+    let is_alive: Alive = context.get_property(person_id);
 
-    if context.get_person_property(person_id, Alive) {
+    if is_alive.0 {
         let plan_id = context.add_plan(recovery_time, move |context| {
-            context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
+            context.set_property(person_id, InfectionStatus::R);
         });
         let plans_data_container = context.get_data_mut(InfectionPlansPlugin);
         plans_data_container
@@ -65,29 +66,32 @@ fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatus>,
+    event: PropertyChangeEvent<Person, InfectionStatus>,
 ) {
-    if matches!(event.current, InfectionStatusValue::I) {
-        schedule_recovery(context, event.person_id);
-    }
-    if matches!(event.current, InfectionStatusValue::R) {
-        remove_recovery_plan_data(context, event.person_id);
+    match event.current_value {
+        InfectionStatus::I => {
+            schedule_recovery(context, event.entity_id);
+        }
+        InfectionStatus::R => {
+            remove_recovery_plan_data(context, event.entity_id);
+        }
+        _ => {}
     }
 }
 
-fn handle_person_removal(context: &mut Context, event: PersonPropertyChangeEvent<Alive>) {
-    if !event.current {
-        cancel_recovery_plans(context, event.person_id);
+fn handle_person_removal(context: &mut Context, event: PropertyChangeEvent<Person, Alive>) {
+    if !event.current_value.0 {
+        cancel_recovery_plans(context, event.entity_id);
     }
 }
 pub fn init(context: &mut Context) {
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+        move |context, event: PropertyChangeEvent<Person, InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );
 
-    context.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<Alive>| {
+    context.subscribe_to_event(move |context, event: PropertyChangeEvent<Person, Alive>| {
         handle_person_removal(context, event);
     });
 }
@@ -128,8 +132,8 @@ mod test {
         init(&mut context);
 
         context.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
-                if matches!(event.current, InfectionStatusValue::R) {
+            move |context, event: PropertyChangeEvent<Person, InfectionStatus>| {
+                if event.current_value == InfectionStatus::R {
                     *context.get_data_mut(RecoveryPlugin) += 1;
                 }
             },
@@ -137,21 +141,21 @@ mod test {
 
         let population_size: usize = 10;
         for index in 0..population_size {
-            let person = context.add_person((Age, 0)).unwrap();
+            let person = context.add_entity((Age(0),)).unwrap();
 
             context.add_plan(1.0, move |context| {
-                context.set_person_property(person, InfectionStatus, InfectionStatusValue::I);
+                context.set_property(person, InfectionStatus::I);
             });
 
             if index == 0 {
                 context.add_plan(1.1, move |context| {
-                    context.set_person_property(person, Alive, false);
+                    context.set_property(person, Alive(false));
                 });
             }
         }
 
         context.execute();
-        assert_eq!(population_size, context.get_current_population());
+        assert_eq!(population_size, context.get_entity_count::<Person>());
         let recovered_size: usize = *context.get_data(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size - 1);
@@ -164,7 +168,7 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        let person = context.add_person((Age, 0)).unwrap();
+        let person = context.add_entity((Age(0),)).unwrap();
         context.add_plan(1.1, move |context| {
             cancel_recovery_plans(context, person);
         });

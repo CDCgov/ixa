@@ -1,5 +1,5 @@
-/// Use this to define a unique type which will be used as a key to retrieve  
-/// an independent rng instance when calling `Context::get_rng`.  
+/// Use this to define a unique type which will be used as a key to retrieve
+/// an independent rng instance when calling `Context::get_rng`.
 #[macro_export]
 macro_rules! define_rng {
     ($random_id:ident) => {
