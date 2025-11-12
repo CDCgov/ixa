@@ -21,6 +21,10 @@ use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt, HashMap, HashMapExt};
+use crate::entity::{Entity, EntityId};
+use crate::entity::entity_store::EntityStore;
+use crate::entity::property_list::PropertyList;
+use crate::entity::property_store::PropertyStore;
 
 /// The common callback used by multiple `Context` methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -84,6 +88,8 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
+    entity_store: EntityStore,
+    property_store: PropertyStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
@@ -110,6 +116,8 @@ impl Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
+            entity_store: EntityStore::new(),
+            property_store: PropertyStore::new(),
             data_plugins,
             #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
@@ -122,6 +130,27 @@ impl Context {
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
         }
+    }
+
+
+    pub fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> EntityId<E> {
+        // Check that the properties in the list are distinct.
+        if let Err(msg) = PL::validate() {
+            panic!("invalid property list: {}", msg);
+        }
+
+        // Check that all required properties are present.
+        if !PL::contains_required_properties() {
+            panic!("initialization list is missing required properties");
+        }
+
+        // Now that we know we will succeed, we create the entity.
+        let new_entity_id = self.entity_store.new_entity_id::<E>();
+
+        // Assign the properties in the list to the new entity.
+        property_list.set_values_for_entity(new_entity_id.clone(), &self.property_store);
+
+        new_entity_id
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.

@@ -100,7 +100,7 @@ pub mod web_api;
 
 // Re-export for macros
 pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
-pub use {bincode, csv, ctor, paste, rand};
+pub use {bincode, csv, ctor, paste, rand, serde};
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
@@ -118,6 +118,8 @@ pub mod prelude_for_plugins {
 }
 
 pub mod execution_stats;
+pub mod entity;
+mod value_vec;
 
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]
 compile_error!(

@@ -85,6 +85,9 @@ debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 progress_bar = ["dep:progress_bar", "anyhow"]
 
+# Remove before PR.
+disabled = []
+
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
 
