@@ -3,6 +3,7 @@ use crate::hyperfine_group;
 
 fn build_params() -> Parameters {
     ParametersBuilder::default()
+        // when increasing population also increase max_time accordingly.
         .population(10_000)
         .initial_infections(1000)
         .max_time(10.0)

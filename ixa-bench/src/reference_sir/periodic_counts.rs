@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use ixa::prelude::*;
 use ixa::PersonId;
-use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
@@ -47,12 +46,7 @@ define_rng!(PeriodicNextEventRng);
 trait InfectionLoop {
     fn get_params(&self) -> &Parameters;
     fn get_options(&self) -> &ModelOptions;
-    fn infected_people(&self) -> usize;
-    fn random_person(&mut self) -> Option<PersonId>;
-    fn random_infected_person(&mut self) -> Option<PersonId>;
     fn infect_person(&mut self, p: PersonId);
-    fn recover_person(&mut self, p: PersonId);
-    fn next_event(&mut self);
     fn setup(&mut self, temp_dir: Option<&TempDir>);
 }
 
@@ -60,22 +54,11 @@ impl InfectionLoop for Context {
     fn get_params(&self) -> &Parameters {
         self.get_global_property_value(PeriodicParams).unwrap()
     }
+
     fn get_options(&self) -> &ModelOptions {
         self.get_global_property_value(PeriodicOptions).unwrap()
     }
-    fn infected_people(&self) -> usize {
-        #[allow(deprecated)]
-        self.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
-    }
-    fn random_person(&mut self) -> Option<PersonId> {
-        self.sample_person(PeriodicNextPersonRng, ())
-    }
-    fn random_infected_person(&mut self) -> Option<PersonId> {
-        self.sample_person(
-            PeriodicNextPersonRng,
-            (InfectionStatus, InfectionStatusValue::Infectious),
-        )
-    }
+
     fn infect_person(&mut self, p: PersonId) {
         if self.get_person_property(p, InfectionStatus) != InfectionStatusValue::Susceptible {
             return;
@@ -83,56 +66,6 @@ impl InfectionLoop for Context {
         self.set_person_property(p, InfectionStatus, InfectionStatusValue::Infectious);
     }
 
-    fn recover_person(&mut self, p: PersonId) {
-        self.set_person_property(p, InfectionStatus, InfectionStatusValue::Recovered);
-    }
-    fn next_event(&mut self) {
-        let params = self.get_params();
-        let infection_rate = params.r0 / params.infectious_period;
-        let n = self.infected_people() as f64;
-
-        if n == 0.0 {
-            return;
-        }
-
-        let infection_event_rate = infection_rate * n;
-        let recovery_event_rate = n / params.infectious_period;
-
-        let infection_event_time = self.sample_distr(
-            PeriodicNextEventRng,
-            Exp::new(infection_event_rate).unwrap(),
-        );
-        let recovery_event_time =
-            self.sample_distr(PeriodicNextEventRng, Exp::new(recovery_event_rate).unwrap());
-
-        let p = self.random_person().unwrap();
-        if infection_event_time < recovery_event_time {
-            if self.get_person_property(p, InfectionStatus) == InfectionStatusValue::Susceptible {
-                self.add_plan(
-                    self.get_current_time() + infection_event_time,
-                    move |context| {
-                        context.infect_person(p);
-                        if context.infected_people() > 0 {
-                            context.next_event();
-                        }
-                    },
-                );
-                return;
-            }
-        } else {
-            self.add_plan(self.get_current_time() + recovery_event_time, |context| {
-                if let Some(p) = context.random_infected_person() {
-                    context.recover_person(p);
-                }
-                if context.infected_people() > 0 {
-                    context.next_event();
-                }
-            });
-            return;
-        }
-
-        self.next_event();
-    }
     fn setup(&mut self, temp_dir: Option<&TempDir>) {
         let &Parameters {
             population,
@@ -158,16 +91,10 @@ impl InfectionLoop for Context {
             Some(seed),
         ) {
             // We currently only need the Age attribute for this benchmark
-            self.add_person(((Age, person.age),)).unwrap();
-        }
-
-        // Seed infections
-        for p in self.sample_people(
-            PeriodicNextPersonRng,
-            (InfectionStatus, InfectionStatusValue::Susceptible),
-            initial_infections,
-        ) {
-            self.infect_person(p);
+            let person = self.add_person(((Age, person.age),)).unwrap();
+            self.add_plan(0.0, move |context| {
+                context.infect_person(person);
+            });
         }
 
         // Set up periodic reporting if enabled
@@ -186,12 +113,6 @@ impl InfectionLoop for Context {
         self.add_plan(max_time, |context| {
             context.shutdown();
         });
-
-        assert_eq!(
-            self.infected_people(),
-            initial_infections,
-            "should have infected people at start"
-        );
     }
 }
 
@@ -220,7 +141,6 @@ impl Model {
     }
     pub fn run(&mut self) {
         self.ctx.setup(self.temp_dir.as_ref());
-        self.ctx.next_event();
         self.ctx.execute();
     }
 }
@@ -291,7 +211,6 @@ mod test {
             .unwrap();
 
             ctx.setup(Some(&temp_dir));
-            ctx.next_event();
             ctx.execute();
         }
 
