@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
+use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
@@ -138,24 +139,36 @@ impl Context {
         }
     }
 
-    pub fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> EntityId<E> {
+    pub fn add_entity<E: Entity, PL: PropertyList<E>>(
+        &mut self,
+        property_list: PL,
+    ) -> Result<EntityId<E>, String>
+    // This constraint is always satisfied, but the compiler can't determine this.
+    where
+        EntityCreatedEvent<E>: Copy,
+    {
         // Check that the properties in the list are distinct.
         if let Err(msg) = PL::validate() {
-            panic!("invalid property list: {}", msg);
+            return Err(format!("invalid property list: {}", msg));
         }
 
         // Check that all required properties are present.
         if !PL::contains_required_properties() {
-            panic!("initialization list is missing required properties");
+            return Err("initialization list is missing required properties".to_string());
         }
 
         // Now that we know we will succeed, we create the entity.
         let new_entity_id = self.entity_store.new_entity_id::<E>();
 
         // Assign the properties in the list to the new entity.
+        // This does not generate a property change event.
         property_list.set_values_for_entity(new_entity_id.clone(), &self.property_store);
 
-        new_entity_id
+        // Emit an `EntityCreatedEvent<Entity>`. Note that `EntityCreatedEvent::<E>` and
+        // `EntityId<E>` is always `Copy`, but the compiler cannot determine this itself.
+        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id.clone()));
+
+        Ok(new_entity_id)
     }
 
     pub fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
@@ -182,17 +195,29 @@ impl Context {
         }
     }
 
+    /// Set's the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
     pub fn set_property<E: Entity, P: Property<E>>(
-        &self,
+        &mut self,
         entity_id: EntityId<E>,
         property_value: P,
-    ) {
+    )
+    // This constraint is always satisfied, but the compiler cannot determine this.
+    where
+        PropertyChangeEvent<E, P>: Copy,
+    {
         debug_assert!(
             P::initialization_kind() != PropertyInitializationKind::Derived,
             "cannot set a derived property"
         );
+
         let property_value_store = self.property_store.get::<E, P>();
-        property_value_store.set(entity_id, property_value);
+        let previous_value = property_value_store.replace(entity_id.clone(), property_value);
+
+        self.emit_event(PropertyChangeEvent {
+            entity_id,
+            current: property_value.clone(),
+            previous: previous_value,
+        });
     }
 
     pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>
@@ -803,7 +828,9 @@ mod tests {
     #[should_panic(expected = "initialization list is missing required properties")]
     fn add_an_entity_without_required_properties() {
         let mut context = Context::new();
-        let person1 = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
+        let person1 = context
+            .add_entity((InfectionStatus::Susceptible, Vaccinated(true)))
+            .unwrap();
         println!("{:?}", person1);
     }
 
@@ -812,7 +839,7 @@ mod tests {
         let mut context = Context::new();
 
         // Create a person with required Age property
-        let person = context.add_entity((Age(25),));
+        let person = context.add_entity((Age(25),)).unwrap();
 
         // Retrieve it
         let age: Age = context.get_property(person);
@@ -829,7 +856,7 @@ mod tests {
         let mut context = Context::new();
 
         // `Vaccinated` has a default value (false)
-        let person = context.add_entity((Age(40),));
+        let person = context.add_entity((Age(40),)).unwrap();
 
         // Even though we didn't set Vaccinated, it should exist with its default
         let vaccinated: Vaccinated = context.get_property(person);
@@ -846,7 +873,7 @@ mod tests {
         let mut context = Context::new();
 
         // InfectionStatus has a default of Susceptible
-        let person = context.add_entity((Age(22),));
+        let person = context.add_entity((Age(22),)).unwrap();
         let status: InfectionStatus = context.get_property(person);
         assert_eq!(status, InfectionStatus::Susceptible);
     }
