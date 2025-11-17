@@ -9,15 +9,11 @@ create or destructure `EntityId<Entity>` values directly. Instead,
 
 */
 
-use std::{
-    any::{Any, TypeId},
-    cell::OnceCell,
-    collections::HashMap,
-    sync::{
-        LazyLock, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+use std::any::{Any, TypeId};
+use std::cell::OnceCell;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex};
 
 use polonius_the_crab::{polonius, polonius_return};
 
@@ -202,10 +198,9 @@ impl EntityStore {
         // Use polonius to address borrow checker limitations.
         polonius!(|self_shadow| -> &'polonius mut E {
             if let Some(any) = self_shadow.items[index].entity.get_mut() {
-                polonius_return!(
-                    any.downcast_mut::<E>()
-                        .expect("TypeID does not match registered item type")
-                );
+                polonius_return!(any
+                    .downcast_mut::<E>()
+                    .expect("TypeID does not match registered item type"));
             }
             // Else, don't return. Fall through and initialize.
         });
@@ -233,27 +228,25 @@ impl EntityStore {
         record.entity_count += 1;
         EntityId::new(id)
     }
+
+    pub fn get_entity_count<E: Entity>(&self) -> usize {
+        let index = E::index();
+        let record = &self.items[index];
+        record.entity_count
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        any::Any,
-        sync::{
-            Arc, Barrier,
-            atomic::{AtomicUsize, Ordering},
-        },
-        thread,
-    };
+    use std::any::Any;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+    use std::thread;
 
-    use crate::entity::{
-        Entity,
-        entity_store::{
-            EntityStore, add_to_entity_registry, get_registered_entity_count,
-            initialize_entity_index,
-        },
-        impl_entity,
+    use crate::entity::entity_store::{
+        add_to_entity_registry, get_registered_entity_count, initialize_entity_index, EntityStore,
     };
+    use crate::entity::{impl_entity, Entity};
 
     // Test item types
     #[derive(Debug, Clone, PartialEq)]

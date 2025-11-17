@@ -28,7 +28,8 @@ could be replaced with a requirement that prevents re-entrance into methods of
 
 */
 
-use std::{cell::UnsafeCell, fmt::Debug};
+use std::cell::UnsafeCell;
+use std::fmt::Debug;
 
 /**
 A by-value, `ref`-less vector with interior mutability. Values of type `V` can be moved into and out of the vector. We require `V` to be `Copy` to avoid subtle soundness issues.

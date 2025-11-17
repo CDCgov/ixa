@@ -23,14 +23,9 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
-use super::{
-    entity::{
-        Entity,
-        EntityId
-    },
-    property::Property,
-    property_store::PropertyStore
-};
+use super::entity::{Entity, EntityId};
+use super::property::Property;
+use super::property_store::PropertyStore;
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Validates that the properties are distinct. If not, returns a string describing the problematic properties.
@@ -56,7 +51,7 @@ impl<E: Entity> PropertyList<E> for () {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
-    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore){
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore) {
         // No values to assign.
     }
 }
@@ -77,7 +72,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
     }
-    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore){
+    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore) {
         let property_value_store = property_store.get::<E, P>();
         property_value_store.set(entity_id, self.0);
     }

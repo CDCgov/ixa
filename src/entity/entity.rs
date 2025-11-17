@@ -6,11 +6,10 @@ Right now an `Entity` type is just a zero-sized marker type. The static data ass
 
 */
 
-use std::{
-    any::{Any, TypeId},
-    marker::PhantomData,
-};
+use std::any::{Any, TypeId};
 use std::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
+
 use serde::{Deserialize, Serialize};
 
 use super::entity_store::get_entity_metadata_static;
@@ -24,19 +23,14 @@ pub struct EntityId<E: Entity>(pub(crate) usize, PhantomData<E>);
 impl<E: Entity> Clone for EntityId<E> {
     #[inline]
     fn clone(&self) -> Self {
-        Self(
-            self.0,
-            PhantomData,
-        )
+        Self(self.0, PhantomData)
     }
 }
 
 impl<E: Entity> Debug for EntityId<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let name = format!("{}Id", E::name());
-        f.debug_tuple(name.as_str())
-         .field(&self.0)
-         .finish()
+        f.debug_tuple(name.as_str()).field(&self.0).finish()
     }
 }
 

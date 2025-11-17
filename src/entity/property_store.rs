@@ -6,21 +6,15 @@ of `Property` is the value type. Sincere there's a 1-1 correspondence between pr
 types and their value stores, we implement the `index` method for each property type.
 
 */
-use std::{
-    any::Any,
-    cell::OnceCell,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+use std::any::Any;
+use std::cell::OnceCell;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
-use super::{
-    entity::Entity,
-    entity_store::register_property_with_entity,
-    property::Property,
-    property_value_store::PropertyValueStore,
-};
+use super::entity::Entity;
+use super::entity_store::register_property_with_entity;
+use super::property::Property;
+use super::property_value_store::PropertyValueStore;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
