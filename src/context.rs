@@ -9,6 +9,11 @@ use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
+use crate::entity::entity_store::EntityStore;
+use crate::entity::property::{Property, PropertyInitializationKind};
+use crate::entity::property_list::PropertyList;
+use crate::entity::property_store::PropertyStore;
+use crate::entity::{Entity, EntityId};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
@@ -16,14 +21,14 @@ use crate::execution_stats::{
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
+use crate::rand::seq::index::sample as choose_range;
+use crate::rand::Rng;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt, HashMap, HashMapExt};
-use crate::entity::{Entity, EntityId};
-use crate::entity::entity_store::EntityStore;
-use crate::entity::property::{Property, PropertyInitializationKind};
-use crate::entity::property_list::PropertyList;
-use crate::entity::property_store::PropertyStore;
+use crate::{
+    get_data_plugin_count, trace, warn, ContextPeopleExt, ContextRandomExt, HashMap, HashMapExt,
+    RngId,
+};
 
 /// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -165,22 +170,87 @@ impl Context {
                 property_store.get(entity_id).expect("attempted to get a property value with \"explicit\" initialization that was not set")
             }
 
-            PropertyInitializationKind::Derived => {
-                P::compute_derived(self, entity_id)
-            }
+            PropertyInitializationKind::Derived => P::compute_derived(self, entity_id),
 
             PropertyInitializationKind::Constant => {
                 let property_store = self.property_store.get::<E, P>();
                 // If this unwrap fails, it is an internal ixa error, not a user error.
-                property_store.get(entity_id).expect("getting a property value with \"constant\" initialization should never fail")
+                property_store.get(entity_id).expect(
+                    "getting a property value with \"constant\" initialization should never fail",
+                )
             }
         }
     }
 
-    pub fn set_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>, property_value: P) {
-        debug_assert!(P::initialization_kind() != PropertyInitializationKind::Derived, "cannot set a derived property");
+    pub fn set_property<E: Entity, P: Property<E>>(
+        &self,
+        entity_id: EntityId<E>,
+        property_value: P,
+    ) {
+        debug_assert!(
+            P::initialization_kind() != PropertyInitializationKind::Derived,
+            "cannot set a derived property"
+        );
         let property_value_store = self.property_store.get::<E, P>();
         property_value_store.set(entity_id, property_value);
+    }
+
+    pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>
+    where
+        R::RngType: Rng,
+    {
+        let entity_count = self.entity_store.get_entity_count::<E>();
+
+        if entity_count == 0 {
+            warn!("Requested a sample entity from an empty population");
+            return None;
+        }
+
+        let result = self.sample_range(rng_id, 0..entity_count);
+        Some(EntityId::new(result))
+    }
+
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn sample_entities<R: RngId + 'static, E: Entity>(
+        &self,
+        rng_id: R,
+        // query: Q,
+        n: usize,
+    ) -> Vec<EntityId<E>>
+    where
+        R::RngType: Rng,
+    {
+        if n == 1 {
+            return match self.sample_entity(rng_id) {
+                None => {
+                    vec![]
+                }
+                Some(entity_id) => {
+                    vec![entity_id]
+                }
+            };
+        }
+
+        let entity_count = self.entity_store.get_entity_count::<E>();
+
+        let requested = std::cmp::min(n, entity_count);
+        if requested == 0 {
+            warn!(
+                "Requested a sample of {} entities from a population of {}",
+                n, entity_count
+            );
+            return Vec::new();
+        }
+
+        let selected = self
+            .sample(rng_id, |rng| {
+                choose_range(rng, entity_count, requested)
+                    .into_iter()
+                    .map(EntityId::<E>::new)
+            })
+            .collect();
+
+        selected
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.
@@ -690,8 +760,8 @@ mod tests {
 
     use ixa_derive::IxaEvent;
 
-    use crate::{define_entity, define_property, define_data_plugin};
     use super::*;
+    use crate::{define_data_plugin, define_entity, define_property};
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -718,34 +788,22 @@ mod tests {
     #[test]
     fn add_an_entity() {
         let mut context = Context::new();
-        let person = context.add_entity((
-            Age(12),
-            InfectionStatus::Susceptible,
-            Vaccinated(true),
-        ));
+        let person = context.add_entity((Age(12), InfectionStatus::Susceptible, Vaccinated(true)));
         println!("{:?}", person);
 
-        let person = context.add_entity((
-            Age(34),
-            Vaccinated(true),
-        ));
+        let person = context.add_entity((Age(34), Vaccinated(true)));
         println!("{:?}", person);
 
         // Age is the only required property
-        let person = context.add_entity((
-            Age(120),
-        ));
+        let person = context.add_entity((Age(120),));
         println!("{:?}", person);
     }
 
     #[test]
     #[should_panic(expected = "initialization list is missing required properties")]
-    fn add_an_entity_without_required_properties(){
+    fn add_an_entity_without_required_properties() {
         let mut context = Context::new();
-        let person1 = context.add_entity((
-            InfectionStatus::Susceptible,
-            Vaccinated(true),
-        ));
+        let person1 = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
         println!("{:?}", person1);
     }
 
@@ -776,7 +834,6 @@ mod tests {
         // Even though we didn't set Vaccinated, it should exist with its default
         let vaccinated: Vaccinated = context.get_property(person);
         assert_eq!(vaccinated, Vaccinated(false));
-
 
         // Now override
         context.set_property(person, Vaccinated(true));

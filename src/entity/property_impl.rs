@@ -458,7 +458,6 @@ macro_rules! __impl_property_common {
 }
 pub use __impl_property_common;
 
-
 /*
 /// Defines a derived property with the following parameters:
 /// * `$property`: A name for the identifier type of the property
