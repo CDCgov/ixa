@@ -4,10 +4,8 @@ A `PropertyStore<P: Property>` is the backing storage for property values.
 
 */
 
-use super::{
-    entity::{Entity, EntityId},
-    property::{Property, PropertyInitializationKind},
-};
+use super::entity::{Entity, EntityId};
+use super::property::{Property, PropertyInitializationKind};
 use crate::value_vec::ValueVec;
 
 pub struct PropertyValueStore<E: Entity, P: Property<E>> {

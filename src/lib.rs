@@ -117,8 +117,8 @@ pub mod prelude_for_plugins {
     pub use crate::prelude::*;
 }
 
-pub mod execution_stats;
 pub mod entity;
+pub mod execution_stats;
 mod value_vec;
 
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]

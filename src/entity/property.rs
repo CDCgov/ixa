@@ -4,14 +4,13 @@ A `Property` is the newtype value type for properties associated to an `Entity`.
 
 */
 
-use std::{any::TypeId, fmt::Debug};
+use std::any::TypeId;
+use std::fmt::Debug;
 
 use serde::Serialize;
 
-use crate::{
-    Context,
-    entity::{Entity, EntityId},
-};
+use crate::entity::{Entity, EntityId};
+use crate::Context;
 
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
