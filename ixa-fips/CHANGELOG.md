@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.2...ixa-fips-v0.1.3) - 2025-11-17
+
+### Other
+
+- added rust fmt rules for imports ([#586](https://github.com/CDCgov/ixa/pull/586))
+
 ## [0.1.2](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.1...ixa-fips-v0.1.2) - 2025-10-08
 
 ### Added
