@@ -66,6 +66,11 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
                 _ => None,
             };
 
+            // If we are trying to set the same value as the default, don't bother doing anything.
+            if Some(value) == default_value {
+                return;
+            }
+
             // Pre-reserve exact capacity to avoid reallocations
             self.data.reserve(index + 1 - len);
 
@@ -76,6 +81,44 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
         } else {
             // The index is in bounds, so we can just set the value directly.
             self.data.set(index, Some(value));
+        }
+    }
+
+    /// Sets the value for `entity_id` to `value`, returning the previous value if it exists.
+    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> Option<P> {
+        let index = entity_id.0;
+        let len = self.data.len();
+
+        if index >= len {
+            // ToDo(RobertJacobsonCDC): What's the semantics when you "set" the same value that was already in
+            //     the store? (Here we act as if they're different.)
+
+            // The index is out of bounds, so we need to fill in the missing slots.
+            let default_value = match P::initialization_kind() {
+                PropertyInitializationKind::Constant => Some(P::default_const()),
+                _ => None,
+            };
+
+            // If we are trying to set the same value as the default, don't bother doing anything.
+            if Some(value) == default_value {
+                return Some(value);
+            }
+
+            // Pre-reserve exact capacity to avoid reallocations
+            self.data.reserve(index + 1 - len);
+
+            // Fill any missing slots up to (but not including) `idx`
+            self.data.resize_with(index, || default_value.clone());
+            // ...and finally push the provided value
+            self.data.push(Some(value));
+
+            // ToDo(RobertJacobsonCDC): What's the semantics when you "set" an unset value that has a default?
+            //     (Here we pretend the "previous" value is the default.)
+            // The "existing value" is the default.
+            default_value
+        } else {
+            // The index is in bounds, so we can just set the value directly.
+            self.data.replace(index, Some(value))
         }
     }
 }
