@@ -40,6 +40,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     }
 
     /// Assigns the given entity the property values in `self` in the `property_store`.
+    /// This method does NOT emit property change events.
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore);
 }
 
@@ -70,7 +71,8 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         Ok(())
     }
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-        property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
+        property_type_ids.len() == 0
+            || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
     }
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore) {
         let property_value_store = property_store.get::<E, P>();

@@ -258,7 +258,7 @@ impl ContextPeopleExt for Context {
             let change_event: PersonPropertyChangeEvent<T> = PersonPropertyChangeEvent {
                 person_id,
                 current: value,
-                previous: previous_value.unwrap(), // This muse be Some() of !initializing
+                previous: previous_value.unwrap(), // This must be Some() if !initializing
             };
             self.emit_event(change_event);
         }
