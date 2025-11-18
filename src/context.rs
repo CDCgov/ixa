@@ -236,7 +236,7 @@ impl Context {
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    fn sample_entities<R: RngId + 'static, E: Entity>(
+    pub fn sample_entities<R: RngId + 'static, E: Entity>(
         &self,
         rng_id: R,
         // query: Q,
