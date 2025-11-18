@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::vec;
 
 use clap::builder::PossibleValuesParser;
-use clap::{arg, Parser};
+use clap::Parser;
 use ixa_bench::bench_utils::registry::{list_benches, list_groups};
 
 const STYLE_FLAGS: [&str; 2] = ["--show-output", "--style"];

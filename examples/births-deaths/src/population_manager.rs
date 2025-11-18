@@ -38,7 +38,7 @@ define_person_property_with_default!(
 );
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
-define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
+define_derived_person_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
     if age <= 1 {
         AgeGroupRisk::NewBorn
     } else if age <= 65 {

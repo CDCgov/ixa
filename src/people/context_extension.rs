@@ -748,7 +748,7 @@ mod tests {
     use crate::people::{PeoplePlugin, PersonProperty, PersonPropertyHolder};
     use crate::random::{define_rng, ContextRandomExt};
     use crate::{
-        define_derived_property, define_global_property, define_person_property,
+        define_derived_person_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
@@ -760,7 +760,7 @@ mod tests {
         Adult,
     }
     define_global_property!(ThresholdP, u8);
-    define_derived_property!(IsEligible, bool, [Age], [ThresholdP], |age, threshold| {
+    define_derived_person_property!(IsEligible, bool, [Age], [ThresholdP], |age, threshold| {
         &age >= threshold
     });
 
@@ -768,7 +768,7 @@ mod tests {
     mod unused {
         use super::*;
         // This isn't used, it's just testing for a compile error.
-        define_derived_property!(
+        define_derived_person_property!(
             NotUsed,
             bool,
             [Age],
@@ -777,7 +777,7 @@ mod tests {
         );
     }
 
-    define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
+    define_derived_person_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
             AgeGroupValue::Child
         } else {
@@ -801,20 +801,20 @@ mod tests {
             0
         }
     });
-    define_derived_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
+    define_derived_person_property!(AdultRunner, bool, [IsRunner, Age], |is_runner, age| {
         is_runner && age >= 18
     });
-    define_derived_property!(
+    define_derived_person_property!(
         SeniorRunner,
         bool,
         [AdultRunner, Age],
         |adult_runner, age| { adult_runner && age >= 65 }
     );
     define_person_property_with_default!(IsSwimmer, bool, false);
-    define_derived_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
+    define_derived_person_property!(AdultSwimmer, bool, [IsSwimmer, Age], |is_swimmer, age| {
         is_swimmer && age >= 18
     });
-    define_derived_property!(
+    define_derived_person_property!(
         AdultAthlete,
         bool,
         [AdultRunner, AdultSwimmer],
@@ -1321,8 +1321,8 @@ mod tests {
 
         define_rng!(PropertyInitRng);
         define_person_property_with_default!(SimplePropWithDefault, u8, 1);
-        define_derived_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
-        define_derived_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
+        define_derived_person_property!(DerivedOnce, u8, [SimplePropWithDefault], |n| n * 2);
+        define_derived_person_property!(DerivedTwice, bool, [DerivedOnce], |n| n == 2);
 
         #[test]
         fn test_query_derived_property_not_initialized() {

@@ -3,12 +3,12 @@
 //! # Properties
 //!
 //! Properties are defined using the `define_person_property!` and
-//! `define_derived_property!` macros.
+//! `define_derived_person_property!` macros.
 //!
 //! # Multi-properties
 //!
 //! The `define_multi_property!` macro (defined in `property.rs`) takes a name and a tuple
-//! of property tags. It defines a derived property (via `define_derived_property`) with the
+//! of property tags. It defines a derived property (via `define_derived_person_property`) with the
 //! provided name having the type of tuples of values corresponding to the provided tags.
 //!
 //! ```rust,ignore
@@ -47,7 +47,7 @@ impl<T> PersonPropertyValue for T where T: Copy + Debug + PartialEq + Serialize 
 /// disease status.
 ///
 /// Person properties should be defined with the [`define_person_property!()`],
-/// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
+/// [`define_person_property_with_default!()`] and [`define_derived_person_property!()`]
 /// macros.
 pub trait PersonProperty: Copy + 'static {
     /// The type of the property's values.

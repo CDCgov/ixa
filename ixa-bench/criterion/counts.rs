@@ -13,7 +13,7 @@ define_person_property!(HomeId, u32);
 define_person_property!(SchoolId, u32);
 define_person_property!(WorkplaceId, u32);
 
-define_derived_property!(AgeGroupFoi, u8, [Age], |age| {
+define_derived_person_property!(AgeGroupFoi, u8, [Age], |age| {
     if age <= 1 {
         0
     } else if age <= 65 {
