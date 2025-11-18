@@ -40,7 +40,7 @@ mod tests {
     use serde_derive::Serialize;
 
     use crate::{
-        define_derived_property, define_global_property, define_person_property,
+        define_derived_person_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextPeopleExt, PersonCreatedEvent,
         PersonId, PersonPropertyChangeEvent,
     };
@@ -53,7 +53,7 @@ mod tests {
     }
     define_global_property!(Threshold, u8);
 
-    define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
+    define_derived_person_property!(AgeGroup, AgeGroupValue, [Age], |age| {
         if age < 18 {
             AgeGroupValue::Child
         } else {

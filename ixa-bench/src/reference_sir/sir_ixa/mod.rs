@@ -1,4 +1,3 @@
-use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use ixa::{define_data_plugin, define_global_property, define_rng};
 use crate::reference_sir::{ModelStats, Parameters};

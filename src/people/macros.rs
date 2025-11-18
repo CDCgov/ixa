@@ -125,7 +125,7 @@ pub use define_person_property_with_default;
 /// * `$display`: A closure that takes the value of the derived property and returns a string representation
 /// * `$hash_fn`: A function that can compute the hash of values of this property
 #[macro_export]
-macro_rules! __define_derived_property_common {
+macro_rules! __define_derived_person_property_common {
     (
         $derived_property:ident,
         $value:ty,
@@ -203,7 +203,7 @@ macro_rules! __define_derived_property_common {
 /// * `[$($dependency),*]`: A list of global properties the derived property depends on (optional)
 /// * $calculate: A closure that takes the values of each dependency and returns the derived value
 #[macro_export]
-macro_rules! define_derived_property {
+macro_rules! define_derived_person_property {
     (
         $derived_property:ident,
         $value:ty,
@@ -211,7 +211,7 @@ macro_rules! define_derived_property {
         [$($global_dependency:ident),*],
         |$($param:ident),+| $derive_fn:expr
     ) => {
-        $crate::__define_derived_property_common!(
+        $crate::__define_derived_person_property_common!(
             $derived_property,
             $value,
             $value,
@@ -234,7 +234,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*],
         |$($param:ident),+| $derive_fn:expr
     ) => {
-        $crate::__define_derived_property_common!(
+        $crate::__define_derived_person_property_common!(
             $derived_property,
             $value,
             $value,
@@ -250,12 +250,12 @@ macro_rules! define_derived_property {
         );
     };
 }
-pub use define_derived_property;
+pub use define_derived_person_property;
 
-/// Defines a named multi-property composed of a tuple of several existing other properties.  
-/// - `$person_property`: The name of the new multi-property type.  
-/// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list of existing  
-///   property identifiers that this multi-property is composed from.  
+/// Defines a named multi-property composed of a tuple of several existing other properties.
+/// - `$person_property`: The name of the new multi-property type.
+/// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list of existing
+///   property identifiers that this multi-property is composed from.
 #[macro_export]
 macro_rules! define_multi_property {
     (
@@ -264,7 +264,7 @@ macro_rules! define_multi_property {
     ) => {
         // $crate::sorted_property_impl!(( $($dependency),+ ));
         $crate::paste::paste! {
-            $crate::__define_derived_property_common!(
+            $crate::__define_derived_person_property_common!(
                 // Name
                 $person_property,
 

@@ -128,7 +128,7 @@ impl GlobalPropertiesDataContainer {
                 Ok(())
             }
             // Note: If we change global properties to be mutable, we'll need to
-            // update define_derived_property to either handle updates or only
+            // update define_derived_person_property to either handle updates or only
             // allow immutable properties.
             Entry::Occupied(_) => Err(IxaError::from("Entry already exists")),
         }

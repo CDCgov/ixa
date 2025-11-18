@@ -3,12 +3,12 @@
 //! # Properties
 //!
 //! Properties are defined using the `define_person_property!` and
-//! `define_derived_property!` macros.
+//! `define_derived_person_property!` macros.
 //!
 //! # Multi-properties
 //!
 //! The `define_multi_property!` macro (defined in `property.rs`) takes a name and a tuple
-//! of property tags. It defines a derived property (via `define_derived_property`) with the
+//! of property tags. It defines a derived property (via `define_derived_person_property`) with the
 //! provided name having the type of tuples of values corresponding to the provided tags.
 //!
 //! ```rust,ignore
@@ -46,9 +46,15 @@ impl<T> PersonPropertyValue for T where T: Copy + Debug + PartialEq + Serialize 
 /// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
+<<<<<<< HEAD
 /// Person properties should be defined with the [`define_person_property!`](crate::define_person_property!),
 /// [`define_person_property_with_default!`](crate::define_person_property_with_default!) and
 /// [`define_derived_property!`](crate::define_derived_property!) macros.
+=======
+/// Person properties should be defined with the [`define_person_property!()`],
+/// [`define_person_property_with_default!()`] and [`define_derived_person_property!()`]
+/// macros.
+>>>>>>> 2512722 (Renamed `define_derived_property!` to `define_derived_person_property!` in preparation for implementing the entities variant.)
 pub trait PersonProperty: Copy + 'static {
     /// The type of the property's values.
     type Value: PersonPropertyValue;
