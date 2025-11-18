@@ -46,9 +46,9 @@ impl<T> PersonPropertyValue for T where T: Copy + Debug + PartialEq + Serialize 
 /// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
-/// Person properties should be defined with the [`define_person_property!()`],
-/// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
-/// macros.
+/// Person properties should be defined with the [`define_person_property!`](crate::define_person_property!),
+/// [`define_person_property_with_default!`](crate::define_person_property_with_default!) and
+/// [`define_derived_property!`](crate::define_derived_property!) macros.
 pub trait PersonProperty: Copy + 'static {
     /// The type of the property's values.
     type Value: PersonPropertyValue;
