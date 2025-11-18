@@ -205,7 +205,7 @@ mod tests {
 
     use crate::people::PeoplePlugin;
     use crate::{
-        define_derived_property, define_multi_property, define_person_property, Context,
+        define_derived_person_property, define_multi_property, define_person_property, Context,
         ContextPeopleExt, HashSetExt, PersonProperty,
     };
 
@@ -461,7 +461,7 @@ mod tests {
     #[test]
     fn query_derived_prop() {
         let mut context = Context::new();
-        define_derived_property!(Senior, bool, [Age], |age| age >= 65);
+        define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
 
         let person = context.add_person((Age, 64)).unwrap();
         let _ = context.add_person((Age, 88));
@@ -493,7 +493,7 @@ mod tests {
     #[test]
     fn query_derived_prop_with_index() {
         let mut context = Context::new();
-        define_derived_property!(Senior, bool, [Age], |age| age >= 65);
+        define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
 
         context.index_property(Senior);
         let person = context.add_person((Age, 64)).unwrap();
@@ -532,7 +532,7 @@ mod tests {
     fn query_derived_prop_with_optimized_index() {
         let mut context = Context::new();
         // create a 'regular' derived property
-        define_derived_property!(
+        define_derived_person_property!(
             Ach,
             (u8, u32, u32),
             [Age, County, Height],

@@ -21,7 +21,7 @@ pub enum AgeGroupRisk {
     OldAdult,
 }
 
-define_derived_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
+define_derived_person_property!(AgeGroupFoi, AgeGroupRisk, [Age], |age| {
     if age <= 1 {
         AgeGroupRisk::NewBorn
     } else if age <= 65 {
