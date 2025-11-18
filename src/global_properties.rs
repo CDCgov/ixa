@@ -94,7 +94,7 @@ fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
 
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
-/// [`crate::define_global_property`]
+/// [`define_global_property!`](crate::define_global_property!)
 pub trait GlobalProperty: Any {
     type Value: Any; // The actual type of the data.
 
