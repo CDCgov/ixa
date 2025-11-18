@@ -20,11 +20,17 @@ hyperfine_group!(
         },
         // The equivalent Ixa implementation, with queries enabled
         ixa => {
-            sir_ixa::Model::new(build_params(), sir_ixa::ModelOptions::default()).run();
+            sir_ixa::legacy::Model::new(build_params(), sir_ixa::ModelOptions::default()).run();
         },
         // The equivalent Ixa implementation, with queries disabled
         ixa_no_queries => {
-            sir_ixa::Model::new(build_params(), sir_ixa::ModelOptions {
+            sir_ixa::legacy::Model::new(build_params(), sir_ixa::ModelOptions {
+                queries_enabled: false,
+            }).run();
+        },
+        // The equivalent Ixa implementation, using entities and with queries disabled
+        ixa_entities_no_queries => {
+            sir_ixa::entities::Model::new(build_params(), sir_ixa::ModelOptions {
                 queries_enabled: false,
             }).run();
         }
