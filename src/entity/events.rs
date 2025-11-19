@@ -38,13 +38,6 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     pub previous: Option<P>,
 }
 
-// impl<E: Entity, P: Property<E>> IxaEvent for PropertyChangeEvent<E, P> {
-//     fn on_subscribe(context: &mut Context) {
-//         if P::is_derived() {
-//             context.register_property::<T>();
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -54,7 +47,7 @@ mod tests {
     use serde_derive::Serialize;
 
     use super::*;
-    use crate::{define_entity, define_property, Context};
+    use crate::{define_entity, define_property, define_derived_property, Context};
 
     define_entity!(Person);
 
@@ -67,13 +60,25 @@ mod tests {
     }
     // define_global_property!(Threshold, u8);
 
-    // define_derived_property!(AgeGroup, AgeGroupValue, [Age], |age| {
-    //     if age < 18 {
-    //         AgeGroupValue::Child
-    //     } else {
-    //         AgeGroupValue::Adult
-    //     }
-    // });
+    // An enum
+    define_derived_property!(
+        enum AgeGroup {
+            Child,
+            Adult
+        },
+        Person,
+        [Age], // Depends only on age
+        [], // No global dependencies
+        |age| {
+            let age: Age = age;
+            if age.0 < 18 {
+                AgeGroup::Child
+            } else {
+                AgeGroup::Adult
+            }
+        }
+    );
+
 
     define_property!(
         enum RiskCategory {
@@ -151,7 +156,6 @@ mod tests {
         assert!(*flag.borrow());
     }
 
-    /*
     #[test]
     fn get_entity_property_change_event() {
         let mut context = Context::new();
@@ -163,7 +167,7 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, AgeGroup>| {
                 assert_eq!(event.entity_id.0, 0);
-                assert_eq!(event.previous, AgeGroup::Child);
+                assert_eq!(event.previous.unwrap(), AgeGroup::Child);
                 assert_eq!(event.current, AgeGroup::Adult);
                 *flag_clone.borrow_mut() = true;
             },
@@ -172,7 +176,6 @@ mod tests {
         context.execute();
         assert!(*flag.borrow());
     }
-    */
 
     #[test]
     fn test_person_property_change_event_no_people() {
@@ -183,8 +186,8 @@ mod tests {
         });
 
         // Derived person property -- can't add an event without people being present
-        // context.subscribe_to_event(|_context, _event: PropertyChangeEvent<Person, AgeGroup>| {
-        //     unreachable!();
-        // });
+        context.subscribe_to_event(|_context, _event: PropertyChangeEvent<Person, AgeGroup>| {
+            unreachable!();
+        });
     }
 }
