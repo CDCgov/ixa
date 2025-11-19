@@ -61,6 +61,9 @@ pub unsafe fn get_entity_metadata_static(
         .entry(entity_type_id)
         .or_insert_with(|| (Vec::new(), Vec::new()));
 
+    // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
+    //        the simplest way to implement this. Make a decision either way about whether additional complexity is
+    //        worth eliminating this use of `unsafe`.
     // Transmute to `'static` slices. This assumes these `Vec`s will never move or deallocate.
     let props_static: &'static [TypeId] =
         unsafe { std::mem::transmute::<&[TypeId], &'static [TypeId]>(props.as_slice()) };
