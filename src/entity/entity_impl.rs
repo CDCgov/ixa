@@ -5,14 +5,12 @@
 #[macro_export]
 macro_rules! define_entity {
     ($entity_name:ident) => {
+        #[allow(unused)]
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
-        pub struct $entity_name {
-            // Field holds the total count of all entities of this type. Equivalently,
-            // this is the index of the next entity to be created.
-            entity_count: usize,
-        }
+        pub struct $entity_name;
 
         impl $entity_name {
+            #[allow(unused)]
             pub fn new() -> Self {
                 Self::default()
             }
@@ -35,6 +33,7 @@ macro_rules! impl_entity {
     ($entity_name:ident) => {
         // Alias of the form `MyEntityId = EntityId<MyEntity>`
         $crate::paste::paste! {
+            #[allow(unused)]
             pub type [<$entity_name Id>] = $crate::entity::EntityId<$entity_name>;
         }
 
