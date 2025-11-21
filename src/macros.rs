@@ -40,7 +40,7 @@ macro_rules! define_global_property {
 }
 pub use define_global_property;
 
-/// Define a new edge type for use with `network`.
+/// Define a new edge type for use with [`network`](crate::network).
 ///
 /// Defines a new edge type of type `$edge_type`, with inner type `$value`.
 /// Use `()` for `$value` to have no inner type.

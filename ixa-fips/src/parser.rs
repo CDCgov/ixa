@@ -80,7 +80,7 @@ pub type FIPSParseResult<'a, T> = IResult<&'a str, T>;
 /// specified number of binary bits. Upon success, returns the remainder of the
 /// input after consuming the parsed digits together with the value of the
 /// parsed digits. If there is an error, the original input is returned along
-/// with the `FIPSParserError` variant describing the error.
+/// with the [`FIPSParserError`] variant describing the error.
 ///
 /// This function assumes ASCII decimal digits. (The rest of the string can be any valid UTF-8.)
 pub fn parse_decimal_digits_to_bits(
@@ -138,7 +138,7 @@ pub fn parse_decimal_digits_to_bits(
     Ok((remaining, computed_value))
 }
 
-/// Parses the first two decimal digits of `input` into a `StateCode`.
+/// Parses the first two decimal digits of `input` into a [`StateCode`].
 pub fn parse_state_code(input: &str) -> FIPSParseResult<StateCode> {
     parse_decimal_digits_to_bits(2, 7, input).map(|(rest, value)| (rest, value as StateCode))
 }

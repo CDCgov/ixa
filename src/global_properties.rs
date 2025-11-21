@@ -180,7 +180,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     ///
-    /// Will return an `IxaError` if the property does not exist
+    /// Will return an [`IxaError`] if the property does not exist
     fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
 
     /// Given a file path for a valid json file, deserialize parameter values
@@ -188,7 +188,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     ///
-    /// Will return an `IxaError` if the `file_path` does not exist or
+    /// Will return an [`IxaError`] if the `file_path` does not exist or
     /// cannot be deserialized
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
@@ -209,14 +209,14 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// serde deserialize into the relevant struct.
     ///
     /// # Errors
-    /// Will return an `IxaError` if:
+    /// Will return an [`IxaError`] if:
     /// * The `file_path` doesn't exist
     /// * The file isn't valid JSON
     /// * A specified object doesn't correspond to an existing global property.
     /// * There are two values for the same object.
     ///
     /// Ixa automatically knows about any property defined with
-    /// [`crate::define_global_property!()`] so you don't need to register them
+    /// [`define_global_property!`](crate::define_global_property) so you don't need to register them
     /// explicitly.
     ///
     /// It is possible to call [`Context::load_global_properties()`] multiple

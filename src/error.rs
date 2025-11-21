@@ -1,11 +1,11 @@
-//! Provides `IxaError` and wraps other errors.
+//! Provides [`IxaError`] and wraps other errors.
 use std::fmt::{self, Debug, Display};
 use std::io;
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-/// Provides `IxaError` and maps to other errors to
-/// convert to an `IxaError`
+/// Provides [`IxaError`] and maps to other errors to
+/// convert to an [`IxaError`]
 pub enum IxaError {
     IoError(io::Error),
     JsonError(serde_json::Error),

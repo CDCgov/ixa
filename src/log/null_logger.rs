@@ -7,7 +7,7 @@ This module provides a "logger" that does not output anything anywhere but satis
 use crate::log::LogConfiguration;
 
 impl LogConfiguration {
-    /// Sets the global logger to conform to this `LogConfiguration`.
+    /// Sets the global logger to conform to this [`LogConfiguration`].
     pub(in crate::log) fn set_config(&mut self) {
         // No global logger. We still keep up appearances.
         log::set_max_level(self.global_log_level);

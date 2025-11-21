@@ -122,7 +122,7 @@ pub trait ContextReportExt: ContextBase {
         directory.join(basename).with_extension("csv")
     }
 
-    /// Add a report file keyed by a `TypeId`.
+    /// Add a report file keyed by a [`TypeId`].
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
     /// # Errors

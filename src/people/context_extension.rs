@@ -33,7 +33,7 @@ pub trait ContextPeopleExt {
     /// Will return [`IxaError`] if a required initializer is not provided.
     fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
-    /// Given a `PersonId` returns the value of a defined person property,
+    /// Given a [`PersonId`] returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
     /// provided, and the property is not set this will panic, as long
     /// as the property has been set or subscribed to at least once before.
@@ -55,21 +55,21 @@ pub trait ContextPeopleExt {
 
     /// Create an index for property `T`.
     ///
-    /// If an index is available [`Context::query_people()`] will use it, so this is
+    /// If an index is available, [`Context::query_people()`] will use it, so this is
     /// intended to allow faster querying of commonly used properties.
     /// Ixa may choose to create an index for its own reasons even if
     /// [`Context::index_property()`] is not called, so this function just ensures
     /// that one is created.
     fn index_property<T: PersonProperty>(&mut self, property: T);
 
-    /// Query for all people matching a given set of criteria, calling the `scope`
-    /// callback with an immutable reference to the fully realized result set.
+    /// Query for all people matching a given set of criteria, calling the `callback`
+    /// with an immutable reference to the fully realized result set.
     ///
     /// If you only need to count the results, use [`Context::query_people_count`]
     ///
-    /// [`Context::with_query_results()`] takes any type that implements [Query], but
+    /// [`Context::with_query_results()`] takes any type that implements [`Query`], but
     /// instead of implementing query yourself it is best to use the automatic
-    /// syntax that implements [Query] for a tuple of pairs of (property,
+    /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
     fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
 
@@ -79,18 +79,18 @@ pub trait ContextPeopleExt {
     )]
     /// Query for all people matching a given set of criteria.
     ///
-    /// [`Context::query_people()`] takes any type that implements [Query],
+    /// [`Context::query_people()`] takes any type that implements [`Query`],
     /// but instead of implementing query yourself it is best
-    /// to use the automatic syntax that implements [Query] for
+    /// to use the automatic syntax that implements [`Query`] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<Q: Query>(&self, query: Q) -> Vec<PersonId>;
 
     /// Get the count of all people matching a given set of criteria.
     ///
-    /// [`Context::query_people_count()`] takes any type that implements [Query],
+    /// [`Context::query_people_count()`] takes any type that implements [`Query`],
     /// but instead of implementing query yourself it is best
-    /// to use the automatic syntax that implements [Query] for
+    /// to use the automatic syntax that implements [`Query`] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     ///
@@ -104,7 +104,7 @@ pub trait ContextPeopleExt {
     /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool;
 
-    /// Similar to `match_person`, but more efficient, it removes people
+    /// Similar to [`match_person`](Self::match_person), but more efficient, it removes people
     /// from a list who do not match the given query. Note that this
     /// method modifies the vector in-place, so it is up to the caller
     /// to clone the vector if they don't want to modify their original

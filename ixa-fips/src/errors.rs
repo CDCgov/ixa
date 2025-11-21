@@ -42,7 +42,7 @@ impl FIPSError {
     // Convenience constructors for the code types. These should be kept in sync with the module-level documentation
     // in `fips_code.rs`.
 
-    /// This one is unique in that it represents an error converting a (presumably valid) `StateCode` to a `USState`
+    /// This one is unique in that it represents an error converting a (presumably valid) [`StateCode`] to a [`USState`]
     /// variant. We lie a little bit and claim that values in 1..57 are valid when 3, 7, 14, 43, and 52 are not.
     #[must_use]
     pub fn from_us_state(value: StateCode) -> Self {

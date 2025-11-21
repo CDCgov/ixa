@@ -5,7 +5,7 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::{HashSet, PluginContext};
 
-/// A collection of `TypeId`s of all `DataPlugin` types linked into the code.
+/// A collection of [`TypeId`]s of all [`DataPlugin`] types linked into the code.
 static DATA_PLUGINS: LazyLock<Mutex<RefCell<HashSet<TypeId>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashSet::default())));
 
@@ -34,8 +34,8 @@ pub fn get_data_plugin_count() -> usize {
 /// Global data plugin index counter, keeps track of the index that will be assigned to the next
 /// data plugin that requests an index.
 ///
-/// Instead of storing data plugins in a `HashMap` in `Context`, we store them in a vector. To fetch
-/// the data plugin, we ask the data plugin type for the index into `Context::data_plugins` at
+/// Instead of storing data plugins in a [`HashMap`] in [`Context`], we store them in a vector. To fetch
+/// the data plugin, we ask the data plugin type for the index into [`Context`]`::data_plugins` at
 /// which an instance of the data plugin type should be stored. Accessing a data plugin, then, is
 /// just an index into an array.
 static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
@@ -68,7 +68,7 @@ pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     }
 }
 
-/// A trait for objects that can provide data containers to be held by `Context`
+/// A trait for objects that can provide data containers to be held by [`Context`](crate::Context)
 pub trait DataPlugin: Any {
     type DataContainer;
 
