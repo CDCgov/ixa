@@ -60,7 +60,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
         let len = self.data.len();
 
         if index >= len {
-            // The index is out of bounds, so we need to fill in the missing slots.
+            // The index is out of bounds. We potentially expand the backing storage with default values.
             let default_value = match P::initialization_kind() {
                 PropertyInitializationKind::Constant => Some(P::default_const()),
                 _ => None,
@@ -90,10 +90,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
         let len = self.data.len();
 
         if index >= len {
-            // ToDo(RobertJacobsonCDC): What's the semantics when you "set" the same value that was already in
-            //     the store? (Here we act as if they're different.)
-
-            // The index is out of bounds, so we need to fill in the missing slots.
+            // The index is out of bounds. We potentially expand the backing storage with default values.
             let default_value = match P::initialization_kind() {
                 PropertyInitializationKind::Constant => Some(P::default_const()),
                 _ => None,
@@ -112,8 +109,6 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
             // ...and finally push the provided value
             self.data.push(Some(value));
 
-            // ToDo(RobertJacobsonCDC): What's the semantics when you "set" an unset value that has a default?
-            //     (Here we pretend the "previous" value is the default.)
             // The "existing value" is the default.
             default_value
         } else {

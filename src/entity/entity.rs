@@ -68,6 +68,7 @@ pub trait Entity: Any + Default {
         TypeId::of::<Self>()
     }
 
+    /// Get a list of all properties this `Entity` has. This list is static, computed in with `ctor` magic.
     fn property_ids() -> &'static [TypeId]
     where
         Self: Sized,
@@ -76,6 +77,7 @@ pub trait Entity: Any + Default {
         property_ids
     }
 
+    /// Get a list of all properties of this `Entity` that _must_ be supplied when a new entity is created.
     fn required_property_ids() -> &'static [TypeId]
     where
         Self: Sized,

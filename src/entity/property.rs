@@ -10,7 +10,8 @@ use std::fmt::Debug;
 use serde::Serialize;
 
 use crate::entity::{Entity, EntityId};
-use crate::Context;
+use crate::{Context, HashSet};
+use crate::entity::property_store::get_property_metadata_static;
 
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -97,6 +98,28 @@ pub trait Property<E: Entity>: AnyProperty {
 
     /// For implementing the registry pattern
     fn index() -> usize;
+
+    /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
+    /// Vec will be empty. The dependencies are represented by their `Property<E>::index()` value.
+    ///
+    /// This function is only used to construct the static dependency graph
+    /// within property `ctor`s, after which time the dependents of a property
+    /// are accessible through `Property<E>::dependents()` as a `&'static [usize]`.
+    fn non_derived_dependencies() -> Vec<usize> {
+        let mut result = HashSet::default();
+        Self::collect_non_derived_dependencies(&mut result);
+        result.into_iter().collect()
+    }
+
+    /// An auxiliary helper for `non_derived_dependencies` above.
+    fn collect_non_derived_dependencies(result: &mut HashSet<usize>);
+
+    /// Get a list of derived properties that depend on this property. The properties are
+    /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
+    fn dependents() -> &'static [usize]{
+        unsafe{ get_property_metadata_static(Self::index()) }
+    }
+
 }
 
 #[cfg(feature = "disabled")]
