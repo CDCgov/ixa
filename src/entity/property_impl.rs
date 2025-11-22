@@ -303,6 +303,7 @@ macro_rules! impl_property_with_options {
         $(, initialization_kind = $initialization_kind:expr)?
         $(, is_required = $is_required:expr)?
         $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, default_const = $default_const:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, canonical_value = $canonical_value:ty)?
@@ -331,6 +332,13 @@ macro_rules! impl_property_with_options {
                 @unwrap_or
                 $($compute_derived_fn)?,
                 |_, _| panic!("property {} is not derived", stringify!($property))
+            ),
+
+            // collect_deps_fn
+            $crate::impl_property_with_options!(
+                @unwrap_or
+                $($collect_deps_fn)?,
+                |_| {/* Do nothing */}
             ),
 
             // default_const
@@ -396,6 +404,7 @@ macro_rules! __impl_property_common {
         $initialization_kind:expr, // The kind of initialization this property has
         $is_required:expr,         // Do we require that new entities have this property explicitly set?
         $compute_derived_fn:expr,  // If the property is derived, the function that computes the value
+        $collect_deps_fn:expr,  // If the property is derived, the function that computes the value
         $default_const:expr,       // If the property has a constant default initial value, the default value
         $display_impl:expr,         // A function that takes a canonical value and returns a string representation of this property
         $make_canonical:expr,      // A function that takes a value and returns a canonical value
@@ -454,6 +463,10 @@ macro_rules! __impl_property_common {
 
                 // Slow path: initialize it.
                 $crate::entity::property_store::initialize_property_index(&INDEX)
+            }
+
+            fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
+              $collect_deps_fn(result)
             }
         }
 
@@ -652,6 +665,17 @@ macro_rules! define_derived_property {
                 [$($global_dependency),*],
                 |$($param),+| $derive_fn
             ),
+
+            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                $(
+                    if $dependency::is_derived() {
+                        $dependency::collect_non_derived_dependencies(deps);
+                    } else {
+                        deps.insert($dependency::index());
+                    }
+                )*
+            }
+
             display_impl = |value: &Option<$inner_ty>| {
                 match value {
                     Some(v) => format!("{:?}", v),
@@ -779,7 +803,7 @@ macro_rules! define_multi_property {
                 {
                     let type_ids = &mut [$($dependency::type_id()),+ ];
                     type_ids.sort();
-                    $crate::people::register_type_ids_to_muli_property_id(type_ids, Self::type_id());
+                    $crate::people::register_type_ids_to_multi_property_id(type_ids, Self::type_id());
                 },
 
                 // Property dependency list

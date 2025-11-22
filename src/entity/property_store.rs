@@ -8,8 +8,9 @@ types and their value stores, we implement the `index` method for each property 
 */
 use std::any::Any;
 use std::cell::OnceCell;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use super::entity::Entity;
 use super::entity_store::register_property_with_entity;
@@ -20,24 +21,54 @@ use super::property_value_store::PropertyValueStore;
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
 static NEXT_PROPERTY_INDEX: Mutex<usize> = Mutex::new(0);
 
-/// Adds a new item to the registry. The job of this method is to create whatever
-/// "singleton" data/metadata is associated with the [`Entity`] if it doesn't already
-/// exist.
-///
-/// In our use case, this method is called in the `ctor` function of each `Entity`
-/// type and ultimately exists only so that we know how many `OnceCell`s to
-/// construct in the constructor of `EntityStore`, so that we never have to mutate
-/// `EntityStore` itself when an `Entity` is accessed for the first time. (The
-/// `OnceCell` itself handles the interior mutability required for initialization.)
+/// This maps `property_type_index` to `(vec_of_transitive_dependents)`. This data is actually
+/// written by the property `ctor`s with a call to [`register_property_with_entity()`].
+static PROPERTY_METADATA: LazyLock<Mutex<HashMap<usize, Vec<usize>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::default()));
+
+/// The public getter to `PROPERTY_METADATA`.
+/// # Safety
+/// This function assumes that `PROPERTY_METADATA` will never again be mutated after initial
+/// construction. Mutating the `Vec`s after taking these references would cause undefined behavior.
+pub unsafe fn get_property_metadata_static(property_index: usize) -> &'static [usize] {
+    let mut map = PROPERTY_METADATA.lock().unwrap();
+
+    // Insert an empty vector if not already registered
+    let dependents = map
+        .entry(property_index)
+        .or_insert_with(|| Vec::new());
+
+    // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
+    //        the simplest way to implement this. Make a decision either way about whether additional complexity is
+    //        worth eliminating this use of `unsafe`.
+    // Transmute to `'static` slice. This assumes the `Vec` will never move or reallocate.
+    let dependents_static: &'static [usize] =
+        unsafe { std::mem::transmute::<&[usize], &'static [usize]>(dependents.as_slice()) };
+
+    dependents_static
+}
+
+/// Adds a new item to the registry. The job of this method is to create whatever "singleton"
+/// data/metadata is associated with the [`Property<E>`] if it doesn't already exist. In
+/// our use case, this method is called in the `ctor` function of each `Property<E>` type.
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     // Initializes the index for the property type.
-    let _ = P::index();
+    let property_index = P::index();
+
     // Registers the property with the entity type.
     register_property_with_entity(
         <E as Entity>::type_id(),
         <P as Property<E>>::type_id(),
         P::is_required(),
     );
+
+    // Construct the dependency graph
+    let mut dependency_map = PROPERTY_METADATA.lock().unwrap();
+    for dependency in P::non_derived_dependencies() {
+        // Add `property_index` as a dependent of the dependency
+        let dependents = dependency_map.get_mut(&dependency).unwrap();
+        dependents.push(property_index);
+    }
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
@@ -129,6 +160,7 @@ impl PropertyStore {
 
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
     use super::*;
     use crate::entity::EntityId;
     use crate::{define_entity, define_property, impl_property};
@@ -139,8 +171,7 @@ mod tests {
     // need to put in the `derive` clause for a property.
     define_property!(struct Age(u8), Person);
 
-    // The `define_property` macro also gives you a cute syntax for specifying the default value, although it's not
-    // much harder to specify a default using other macros.
+    // The `define_property` macro also lets you specify the default value.
     define_property!(
         enum InfectionStatus {
             Susceptible,

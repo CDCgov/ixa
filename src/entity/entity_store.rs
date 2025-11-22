@@ -48,9 +48,8 @@ pub fn register_property_with_entity(
 
 /// The public getter to `ENTITY_METADATA`.
 /// # Safety
-/// This function assumes that `ENTITY_METADATA` will never again be mutated
-/// after the first call.  Mutating the map or the `Vec`s after taking these
-/// references would cause undefined behavior.
+/// This function assumes that `ENTITY_METADATA` will never again be mutated after initial
+/// construction.  Mutating the `Vec`s after taking these references would cause undefined behavior.
 pub unsafe fn get_entity_metadata_static(
     entity_type_id: TypeId,
 ) -> (&'static [TypeId], &'static [TypeId]) {
@@ -64,7 +63,7 @@ pub unsafe fn get_entity_metadata_static(
     // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
     //        the simplest way to implement this. Make a decision either way about whether additional complexity is
     //        worth eliminating this use of `unsafe`.
-    // Transmute to `'static` slices. This assumes these `Vec`s will never move or deallocate.
+    // Transmute to `'static` slices. This assumes these `Vec`s will never move or reallocate.
     let props_static: &'static [TypeId] =
         unsafe { std::mem::transmute::<&[TypeId], &'static [TypeId]>(props.as_slice()) };
     let reqs_static: &'static [TypeId] =
