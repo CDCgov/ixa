@@ -284,7 +284,7 @@ macro_rules! define_multi_property {
                 {
                     let type_ids = &mut [$($dependency::type_id()),+ ];
                     type_ids.sort();
-                    $crate::people::register_type_ids_to_muli_property_id(type_ids, Self::type_id());
+                    $crate::people::register_type_ids_to_multi_property_id(type_ids, Self::type_id());
                 },
 
                 // Property dependency list

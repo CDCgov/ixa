@@ -34,7 +34,7 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     pub entity_id: EntityId<E>,
     /// The new value
     pub current: P,
-    /// The old value
+    /// The old value, if there is one
     pub previous: Option<P>,
 }
 
@@ -44,8 +44,6 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use serde_derive::Serialize;
-
     use super::*;
     use crate::{define_entity, define_property, define_derived_property, Context};
 
@@ -53,11 +51,6 @@ mod tests {
 
     define_property!(struct Age(u8), Person);
 
-    #[derive(Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-    pub enum AgeGroupValue {
-        Child,
-        Adult,
-    }
     // define_global_property!(Threshold, u8);
 
     // An enum

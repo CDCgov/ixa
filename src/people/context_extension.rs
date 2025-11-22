@@ -342,8 +342,10 @@ impl ContextPeopleExt for Context {
 
         // In order to avoid borrowing recursively, we must register dependencies first.
         if instance.is_derived() {
+            // The properties we depend on need to be themselves registered before we proceed.
             T::register_dependencies(self);
 
+            // Get a list of transitive non-derived dependencies.
             let dependencies = instance.non_derived_dependencies();
             for dependency in dependencies {
                 let mut dependency_map = data_container.dependency_map.borrow_mut();
@@ -656,7 +658,7 @@ impl ContextPeopleExtInternal for Context {
         data_container.add_person_if_indexed::<T>(T::make_canonical(value), person_id);
     }
 
-    /// If the property is being indexed, add the person to the property's index.
+    /// If the property is being indexed, remove the person from the property's index.
     fn remove_from_index_maybe<T: PersonProperty>(&mut self, person_id: PersonId, property: T) {
         let data_container = self.get_data(PeoplePlugin);
         let value = self.get_person_property(person_id, property);

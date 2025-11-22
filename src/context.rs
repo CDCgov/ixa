@@ -211,6 +211,17 @@ impl Context {
         );
 
         let property_value_store = self.property_store.get::<E, P>();
+
+        // Old values need to be computed so we know which bucket in the index to remove the entity from.
+
+        // We need to be able to do the following for each dependent:
+        // - is_indexed: determine if property is indexed.
+        // - remove person from index: compute current value, remove person from bucket for that value
+        // - add person to index: compute current value, remove person from bucket for that value
+        // - emit_event if the value changed.
+
+        // This functionality should exist on the type-erased index!
+
         let previous_value = property_value_store.replace(entity_id.clone(), property_value);
 
         self.emit_event(PropertyChangeEvent {
@@ -714,6 +725,7 @@ impl Default for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
+    #![allow(dead_code)]
     use std::cell::RefCell;
 
     use ixa_derive::IxaEvent;

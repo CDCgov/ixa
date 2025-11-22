@@ -35,6 +35,7 @@ pub(super) struct PeopleData {
     pub(super) methods: RefCell<HashMap<TypeId, Methods>>,
     pub(super) properties_map: RefCell<HashMap<TypeId, StoredPeopleProperties>>,
     pub(super) registered_properties: RefCell<HashSet<TypeId>>,
+    /// A map from non-derived property to a list of all _derived_ properties depending on that property
     pub(super) dependency_map: RefCell<HashMap<TypeId, Vec<Box<dyn PersonPropertyHolder>>>>,
     pub(super) property_indexes: RefCell<HashMap<TypeId, BxIndex>>,
     pub(super) people_types: RefCell<HashMap<String, TypeId>>,
@@ -179,9 +180,9 @@ where
         T::type_id()
     }
 
-    /// Returns of dependencies, where any derived dependencies
-    /// are recursively expanded to their non-derived dependencies.
-    /// If the property is not derived, the Vec will be empty.
+    /// Returns a vec of transitive non-derived dependencies, that is, any
+    /// derived dependencies are recursively expanded to their non-derived
+    /// dependencies. If the property is not derived, the Vec will be empty.
     fn non_derived_dependencies(&self) -> Vec<TypeId> {
         let mut result = HashSet::new();
         self.collect_non_derived_dependencies(&mut result);
