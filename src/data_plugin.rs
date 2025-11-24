@@ -35,7 +35,7 @@ pub fn get_data_plugin_count() -> usize {
 /// data plugin that requests an index.
 ///
 /// Instead of storing data plugins in a [`HashMap`] in [`Context`], we store them in a vector. To fetch
-/// the data plugin, we ask the data plugin type for the index into [`Context`]`::data_plugins` at
+/// the data plugin, we ask the data plugin type for the index into [`Context::data_plugins`] at
 /// which an instance of the data plugin type should be stored. Accessing a data plugin, then, is
 /// just an index into an array.
 static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
