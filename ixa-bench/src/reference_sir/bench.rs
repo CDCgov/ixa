@@ -3,6 +3,7 @@ use crate::hyperfine_group;
 
 fn build_params() -> Parameters {
     ParametersBuilder::default()
+        // when increasing population also increase max_time accordingly.
         .population(10_000)
         .initial_infections(1000)
         .max_time(10.0)
@@ -26,6 +27,26 @@ hyperfine_group!(
         ixa_no_queries => {
             sir_ixa::Model::new(build_params(), sir_ixa::ModelOptions {
                 queries_enabled: false,
+            }).run();
+        }
+    }
+);
+
+hyperfine_group!(
+    // Benchmarks for periodic counting/reporting functionality
+    periodic_counts_bench {
+        // Baseline: run model without periodic reporting
+        no_periodic_reports => {
+            use super::periodic_counts;
+            periodic_counts::Model::new(build_params(), periodic_counts::ModelOptions {
+                periodic_reporting: false,
+            }).run();
+        },
+        // With periodic reporting of infection counts
+        with_periodic_reports => {
+            use super::periodic_counts;
+            periodic_counts::Model::new(build_params(), periodic_counts::ModelOptions {
+                periodic_reporting: true,
             }).run();
         }
     }
