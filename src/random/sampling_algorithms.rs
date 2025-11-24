@@ -103,10 +103,10 @@ where
 /// <https://dl.acm.org/doi/pdf/10.1145/198429.198435>
 ///
 /// This algorithm is significantly slower than the "known length" algorithm (factor
-/// of 10^4). The reservoir algorithm from `rand` reduces to the "known length`
-/// algorithm when the iterator is an `ExactSizeIterator`, or more precisely,
+/// of 10^4). The reservoir algorithm from [`rand`](crate::rand) reduces to the "known length"
+/// algorithm when the iterator is an [`ExactSizeIterator`](std::iter::ExactSizeIterator), or more precisely,
 /// when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
-/// this algorithm is much faster than the `rand` implementation (factor of 100).
+/// this algorithm is much faster than the [`rand`](crate::rand) implementation (factor of 100).
 // ToDo(RobertJacobsonCDC): This function will take an iterator once the `iter_query_results` API is ready.
 pub fn sample_single_l_reservoir<'a, Container, R, T>(rng: &mut R, set: &'a Container) -> Option<T>
 where

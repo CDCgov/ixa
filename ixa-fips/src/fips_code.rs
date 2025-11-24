@@ -372,13 +372,13 @@ impl Debug for FIPSCode {
     }
 }
 
-/// A struct that holds an expanded version of a `FIPSCode` in which all fields are represented by
+/// A struct that holds an expanded version of a [`FIPSCode`] in which all fields are represented by
 /// their associated numeric types.
 ///
 /// It is up to the client code to ensure the field values are within
 /// range. See the module level docs for range constraints.
 ///
-/// This struct is useful for converting raw data to/from a `FIPSCode` for temporary direct field access.
+/// This struct is useful for converting raw data to/from a [`FIPSCode`] for temporary direct field access.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ExpandedFIPSCode {
     pub state: StateCode,
