@@ -9,12 +9,12 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Checkout base branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           # This fetches all branches so we can compare the PR branch with the base branch
