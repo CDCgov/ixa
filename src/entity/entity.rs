@@ -17,10 +17,19 @@ use super::entity_store::get_entity_metadata_static;
 
 /// A type that can be named and used (copied, cloned) but not created outside of this crate.
 /// In the `define_entity!` macro we define the alias `pub type MyEntityId = EntityId<MyEntity>`.
-#[derive(PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct EntityId<E: Entity>(pub(crate) usize, PhantomData<E>);
 // Note: The generics on `EntityId<E>` prevent the compiler from "seeing" the derived traits in some client code,
 //       so we provide blanket implementations below.
+
+// Otherwise the compiler isn't smart enough to know `EntityId<E>` is always `PartialEq`/`Eq`
+impl<E: Entity> PartialEq for EntityId<E> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl<E: Entity> Eq for EntityId<E> {}
+
 
 // Otherwise the compiler isn't smart enough to know `EntityId<E>` is always `Clone`
 impl<E: Entity> Clone for EntityId<E> {

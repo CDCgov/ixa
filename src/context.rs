@@ -195,34 +195,57 @@ impl Context {
         }
     }
 
-    /// Set's the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
+    /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
     pub fn set_property<E: Entity, P: Property<E>>(
         &mut self,
         entity_id: EntityId<E>,
         property_value: P,
-    )
-    // This constraint is always satisfied, but the compiler cannot determine this.
-    where
-        PropertyChangeEvent<E, P>: Copy,
-    {
+    ) {
         debug_assert!(
             P::initialization_kind() != PropertyInitializationKind::Derived,
             "cannot set a derived property"
         );
 
+        // The algorithm is as follows
+        // 1. Get the previous value of the property.
+        //    1.1 If it's the same as `property_value`, exit.
+        //    1.2 Otherwise, create a `PartialPropertyChangeEvent<E, P>`.
+        // 2. Remove the `entity_id` from the index bucket corresponding to its old value.
+        // 3. For each dependent of the property, do the analog of steps 1 & 2:
+        //    3.1 Compute the previous value of the dependent property `Q`, creating a
+        //        `PartialPropertyChangeEvent<E, Q>` instance if necessary.
+        //    3.2 Remove the `entity_id` from the index bucket corresponding to the old value of `Q`.
+        // 4. Set the new value of the (main) property in the property store.
+        // 5. Update the property index: Insert the `entity_id` into the index bucket corresponding to the new value.
+        // 6. Emit the property change event: convert the `PartialPropertyChangeEvent<E, P>` into a
+        //    `event: PropertyChangeEvent<E, P>` and call `Context::emit_event(event)`.
+        // 7. For each dependent of the property, do the analog of steps 4-6:
+        //    7.1 Compute the new value of the dependent property
+        //    7.2 Add `entity_id` to the index bucket corresponding to the new value.
+        //    7.3 convert the `PartialPropertyChangeEvent<E, Q>` into a
+        //        `event: PropertyChangeEvent<E, Q>` and call `Context::emit_event(event)`.
+
+        // We need two passes over the dependents: one pass to compute all the old values and
+        // another to compute all the new values. We group the steps for each dependent (and, it
+        // turns out, for the main property `P` as well) into two parts:
+        //  1. Before
+
+
+
         let property_value_store = self.property_store.get::<E, P>();
 
-        // Old values need to be computed so we know which bucket in the index to remove the entity from.
+        let previous_value = property_value_store.get(entity_id);
+        if Some(property_value) != previous_value {
+            return;
+        }
 
-        // We need to be able to do the following for each dependent:
-        // - is_indexed: determine if property is indexed.
-        // - remove person from index: compute current value, remove person from bucket for that value
-        // - add person to index: compute current value, remove person from bucket for that value
-        // - emit_event if the value changed.
+        
 
-        // This functionality should exist on the type-erased index!
+        for dependent_idx in P::dependents() {
 
-        let previous_value = property_value_store.replace(entity_id.clone(), property_value);
+        }
+
+        property_value_store.set(entity_id, property_value);
 
         self.emit_event(PropertyChangeEvent {
             entity_id,
@@ -287,6 +310,11 @@ impl Context {
             .collect();
 
         selected
+    }
+
+    #[inline]
+    pub fn get_entity_count<E: Entity>(&self) -> usize {
+        self.entity_store.get_entity_count::<E>()
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.
