@@ -11,11 +11,12 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
-
+use crate::entity::EntityId;
+use crate::entity::events::PartialPropertyChangeEvent;
 use super::entity::Entity;
 use super::entity_store::register_property_with_entity;
 use super::property::Property;
-use super::property_value_store::PropertyValueStore;
+use super::property_value_store_core::PropertyValueStoreCore;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
@@ -147,14 +148,23 @@ impl PropertyStore {
     /// Fetches an immutable reference to the `PropertyValueStore<P>`. This
     /// implementation lazily instantiates the item if it has not yet been instantiated.
     #[must_use]
-    pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStore<E, P> {
+    pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
         let index = P::index();
         self.items
         .get(index)
         .unwrap_or_else(|| panic!("No registered property found with index = {index:?}. You must use the `define_property!` macro to create a registered property."))
-        .get_or_init(|| Box::new(PropertyValueStore::<E, P>::new()))
-        .downcast_ref::<PropertyValueStore::<E, P>>()
+        .get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()))
+        .downcast_ref::<PropertyValueStoreCore::<E, P>>()
         .expect("TypeID does not match registered property type. You must use the `define_property!` macro to create a registered property.")
+    }
+
+    /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`.
+    pub (super) fn create_partial_property_change<E: Entity>(&self, property_index: usize, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
+        let property_store = self.items
+                                 .get(property_index)
+                                 .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."))
+            .get();
+        property_store.
     }
 }
 
@@ -196,17 +206,17 @@ mod tests {
         let property_store = PropertyStore::new();
 
         {
-            let ages: &PropertyValueStore<_, Age> = property_store.get();
+            let ages: &PropertyValueStoreCore<_, Age> = property_store.get();
             ages.set(EntityId::<Person>::new(0), Age(12));
             ages.set(EntityId::<Person>::new(1), Age(33));
             ages.set(EntityId::<Person>::new(2), Age(44));
 
-            let infection_statuses: &PropertyValueStore<_, InfectionStatus> = property_store.get();
+            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> = property_store.get();
             infection_statuses.set(EntityId::<Person>::new(0), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(1), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(2), InfectionStatus::Infected);
 
-            let vaccine_status: &PropertyValueStore<_, Vaccinated> = property_store.get();
+            let vaccine_status: &PropertyValueStoreCore<_, Vaccinated> = property_store.get();
             vaccine_status.set(EntityId::<Person>::new(0), Vaccinated(true));
             vaccine_status.set(EntityId::<Person>::new(1), Vaccinated(false));
             vaccine_status.set(EntityId::<Person>::new(2), Vaccinated(true));
@@ -214,12 +224,12 @@ mod tests {
 
         // Verify that `get` returns the expected values
         {
-            let ages: &PropertyValueStore<_, Age> = property_store.get();
+            let ages: &PropertyValueStoreCore<_, Age> = property_store.get();
             assert_eq!(ages.get(EntityId::<Person>::new(0)), Some(Age(12)));
             assert_eq!(ages.get(EntityId::<Person>::new(1)), Some(Age(33)));
             assert_eq!(ages.get(EntityId::<Person>::new(2)), Some(Age(44)));
 
-            let infection_statuses: &PropertyValueStore<_, InfectionStatus> = property_store.get();
+            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> = property_store.get();
             assert_eq!(
                 infection_statuses.get(EntityId::<Person>::new(0)),
                 Some(InfectionStatus::Susceptible)
@@ -233,7 +243,7 @@ mod tests {
                 Some(InfectionStatus::Infected)
             );
 
-            let vaccine_status: &PropertyValueStore<_, Vaccinated> = property_store.get();
+            let vaccine_status: &PropertyValueStoreCore<_, Vaccinated> = property_store.get();
             assert_eq!(
                 vaccine_status.get(EntityId::<Person>::new(0)),
                 Some(Vaccinated(true))

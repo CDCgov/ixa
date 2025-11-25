@@ -1,6 +1,28 @@
 /*!
 
-`EntityCreatedEvent` and `EntityPropertyChangeEvent` types in analogy to `PersonCreatedEvent` and `PersonPropertyChangeEvent`.
+`EntityCreatedEvent` and `EntityPropertyChangeEvent` types are emitted when an entity is created or an entity's
+property value is changed.
+
+Client code can subscribe to these events with the `Context::subscribe_to_event<IxaEvent>(handler)` method:
+
+```rust,ignore
+// Suppose `InfectionStatus` is a property of the entity `Person`.
+// A type alias for property change events makes code more concise and readable.
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
+// Suppose we want to execute the following function whenever `InfectionStatus` changes.
+fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent){
+    // ... handle the infection status change event ...
+}
+// We do so by subscribing to this event.
+context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
+```
+
+
+A non-derived property sits on the type-erased side of the boundary of its dependent's `PropertyValueStore`, so it
+needs to somehow trigger the creation of and emit the change events for its dependents in a type-erased way.
+
+Property change events are triggered and collected on the outside of the type-erased `PropertyValueStore` boundary,
+because a non-derived p
 
 */
 
@@ -8,15 +30,75 @@ use ixa_derive::IxaEvent;
 
 use crate::entity::property::Property;
 use crate::entity::{Entity, EntityId};
-use crate::IxaEvent;
+use crate::{Context, IxaEvent};
+
+/// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
+pub(crate) trait PartialPropertyChangeEvent {
+
+}
+
+/// Represents a partially created `PropertyChangeEvent` of a derived property during the computation of property
+/// changes during the update of one of its non-derived property dependencies.
+///
+/// A `Box<PartialPropertyChangeEventCore<E, P>>` can be transformed into a `Box<PropertyChangeEvent<E, P>>` in place,
+/// avoiding an allocation.
+#[repr(transparent)]
+pub(super) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(PropertyChangeEvent<E, P>);
+// We provide blanket impls for these because the compiler isn't smart enough to know
+// `PartialPropertyChangeEvent<E, P>` is always `Copy`/`Clone` if we derive them.
+impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P>{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P>{}
+
+impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
+    pub fn new(entity_id: EntityId<E>, old_value: P) -> Self {
+        Self(
+            PropertyChangeEvent{
+                entity_id,
+                current: old_value,
+                previous: None,
+            }
+        )
+    }
+
+    pub fn to_event(self, current_value: P) -> PropertyChangeEvent<E, P> {
+        PropertyChangeEvent{
+            entity_id: self.entity_id,
+            current: current_value,
+            previous: Some(self.old_value),
+        }
+    }
+}
+
+impl<E: Entity, P: Property<E>> From<PartialPropertyChangeEventCore<E, P>> for PropertyChangeEvent<E, P> {
+    fn from(value: PartialPropertyChangeEventCore<E, P>) -> Self {
+        Self{
+            entity_id: value.entity_id,
+            current: value.old_value,
+            previous: Some(value.old_value),
+        }
+    }
+}
+
 
 /// Emitted when a new entity is created.
 /// These should not be emitted outside this module.
-#[derive(Clone, Copy, IxaEvent)]
+#[derive(IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct EntityCreatedEvent<E: Entity> {
     /// The [`EntityId<E>`] of the new entity.
     pub entity_id: EntityId<E>,
+}
+// We provide blanket impls for these because the compiler isn't smart enough to know
+// this type is always `Copy`/`Clone` if we derive them.
+impl<E: Entity> Copy for EntityCreatedEvent<E> {}
+impl<E: Entity> Clone for EntityCreatedEvent<E> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<E: Entity> EntityCreatedEvent<E> {
@@ -27,7 +109,7 @@ impl<E: Entity> EntityCreatedEvent<E> {
 
 /// Emitted when a property is updated.
 /// These should not be emitted outside this module.
-#[derive(Copy, Clone, IxaEvent)]
+#[derive(IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
@@ -37,6 +119,18 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The old value, if there is one
     pub previous: Option<P>,
 }
+// We provide blanket impls for these because the compiler isn't smart enough to know
+// this type is always `Copy`/`Clone` if we derive them.
+impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
+    fn clone(&self) -> Self {
+        Self{
+            entity_id: self.entity_id,
+            current: self.current,
+            previous: self.previous.clone(),
+        }
+    }
+}
+impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
 
 
 #[cfg(test)]

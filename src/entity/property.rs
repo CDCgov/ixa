@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::entity::{Entity, EntityId};
 use crate::{Context, HashSet};
 use crate::entity::property_store::get_property_metadata_static;
+use crate::hashing::hash_serialized_128;
 
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -83,11 +84,11 @@ pub trait Property<E: Entity>: AnyProperty {
     #[must_use]
     fn get_display(&self) -> String;
 
-    // /// For cases when the property's hash needs to be computed in a special way.
-    // #[must_use]
-    // fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
-    //   hash_serialized_128(value)
-    // }
+    /// For cases when the property's hash needs to be computed in a special way.
+    #[must_use]
+    fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
+      hash_serialized_128(value)
+    }
 
     /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
     /// with the same component types in a different order will have the same type ID.

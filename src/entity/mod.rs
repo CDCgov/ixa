@@ -1,7 +1,7 @@
 /*!
 
 A "person" is represented by a `PersonId` and has multiple `PersonProperty` values
-associated with it. Entities generalizes this: An `Entity` is analogous to a table in
+associated with it. Entities generalize this: An `Entity` is analogous to a table in
 a relationship database, and the properties of an entity are analogous to the columns
 that exist on the table. A row in the table is addressable with an `EntityId<Entity>`
 (implemented as a newtype of a `usize`). In this new paradigm, `Person` is a particular
@@ -33,14 +33,20 @@ static variable `index`. Each concrete `Entity` type is thus assigned a unique i
 
 mod entity;
 mod entity_impl;
+mod index;
 pub mod entity_store;
 pub mod events;
 pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
-pub mod property_value_store;
+pub mod property_value_store_core;
+mod property_value_store;
 
 // Flatten the module hierarchy.
 pub use entity::*;
 pub use entity_impl::*;
+
+/// The type used in the indexing infrastructure. This type alias is
+/// public, because it is used by any implementor of `Property<E: Entity>`.
+pub type HashValueType = u128;

@@ -1,121 +1,120 @@
 /*!
 
-A `PropertyStore<P: Property>` is the backing storage for property values.
+The `PropertyValueStore` trait is the type-erased interface to property value storage.
+
+Responsibilities:
+
+- type-erased interface to the index
+- Create "partial" property change events during property value updates
 
 */
 
-use super::entity::{Entity, EntityId};
-use super::property::{Property, PropertyInitializationKind};
-use crate::value_vec::ValueVec;
+use std::any::Any;
 
-pub struct PropertyValueStore<E: Entity, P: Property<E>> {
-    data: ValueVec<Option<P>>,
+use log::{error, trace};
 
-    _phantom: std::marker::PhantomData<E>,
+use crate::{
+    entity::{
+        index::Index,
+        property::Property,
+        property_value_store_core::PropertyValueStoreCore,
+        Entity,
+        EntityId,
+        HashValueType
+    },
+    Context,
+    HashSet
+};
+use crate::entity::events::PartialPropertyChangeEvent;
+
+/// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
+pub trait PropertyValueStore<E: Entity> {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
+    // Methods related to updating a value of a dependency
+    /// Fetch the existing value of the property for the given `entity_id`, remove the `entity_id`
+    /// from the corresponding index bucket, and return a `PartialPropertyChangeEvent` object
+    /// wrapping the previous value and `entity_id` that can be used to emit a property change event.
+    fn create_partial_property_change(&self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent>;
+
+    // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
+    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
+    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<&HashSet<EntityId<E>>>;
+    fn is_indexed(&self) -> bool;
+    fn set_indexed(&mut self, is_indexed: bool);
+    fn index_unindexed_entities(&mut self, context: &Context);
 }
 
-impl<E: Entity, P: Property<E>> Default for PropertyValueStore<E, P> {
-    fn default() -> Self {
-        Self {
-            data: ValueVec::default(),
-            _phantom: Default::default(),
-        }
-    }
-}
-
-impl<E: Entity, P: Property<E>> PropertyValueStore<E, P> {
-    pub fn new() -> Self {
-        Self::default()
+impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: ValueVec::with_capacity(capacity),
-            _phantom: Default::default(),
+    fn create_partial_property_change(&self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
+        // 1. Fetch the existing value of the property for the given `entity_id`
+        // 2. Remove the `entity_id` from the corresponding index bucket
+        // 3. Return a `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
+        // ToDo(RobertJacobsonCDC): Is this always `Some`? Is this unwrap justified?
+        let previous_value = self.get(entity_id).unwrap();
+        if let Some(index) = self.index {
+            index.remove_entity(previous_value, entity_id);
         }
     }
 
-    /// Ensures capacity for at least `additional` more elements
-    pub fn reserve(&self, additional: usize) {
-        self.data.reserve(additional);
-    }
-
-    /// Returns the property value for the given entity. Returns `None`
-    /// if the property is both not set and has no default value.
-    pub fn get(&self, entity_id: EntityId<E>) -> Option<P> {
-        self.data.get(entity_id.0).unwrap_or_else(|| {
-            // `None` means index was out of bounds, which means the property is not set.
-            // Return the default if there is one.
-            if P::initialization_kind() == PropertyInitializationKind::Constant {
-                Some(P::default_const())
-            } else {
-                None
-            }
-        })
-    }
-
-    /// Sets the value for `entity_id` to `value`.
-    pub fn set(&self, entity_id: EntityId<E>, value: P) {
-        let index = entity_id.0;
-        let len = self.data.len();
-
-        if index >= len {
-            // The index is out of bounds. We potentially expand the backing storage with default values.
-            let default_value = match P::initialization_kind() {
-                PropertyInitializationKind::Constant => Some(P::default_const()),
-                _ => None,
-            };
-
-            // If we are trying to set the same value as the default, don't bother doing anything.
-            if Some(value) == default_value {
-                return;
-            }
-
-            // Pre-reserve exact capacity to avoid reallocations
-            self.data.reserve(index + 1 - len);
-
-            // Fill any missing slots up to (but not including) `idx`
-            self.data.resize_with(index, || default_value.clone());
-            // ...and finally push the provided value
-            self.data.push(Some(value));
+    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
+        if let Some(index) = &mut self.index {
+            index.add_entity_with_hash(hash, entity_id);
         } else {
-            // The index is in bounds, so we can just set the value directly.
-            self.data.set(index, Some(value));
+            error!("attempted to add an entity to an index for an unindexed property");
         }
     }
 
-    /// Sets the value for `entity_id` to `value`, returning the previous value if it exists.
-    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> Option<P> {
-        let index = entity_id.0;
-        let len = self.data.len();
-
-        if index >= len {
-            // The index is out of bounds. We potentially expand the backing storage with default values.
-            let default_value = match P::initialization_kind() {
-                PropertyInitializationKind::Constant => Some(P::default_const()),
-                _ => None,
-            };
-
-            // If we are trying to set the same value as the default, don't bother doing anything.
-            if Some(value) == default_value {
-                return Some(value);
-            }
-
-            // Pre-reserve exact capacity to avoid reallocations
-            self.data.reserve(index + 1 - len);
-
-            // Fill any missing slots up to (but not including) `idx`
-            self.data.resize_with(index, || default_value.clone());
-            // ...and finally push the provided value
-            self.data.push(Some(value));
-
-            // The "existing value" is the default.
-            default_value
+    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
+        if let Some(index) = &mut self.index {
+            index.remove_entity_with_hash(hash, entity_id);
         } else {
-            // The index is in bounds, so we can just set the value directly.
-            self.data.replace(index, Some(value))
+            error!("attempted to remove an entity from an index for an unindexed property");
+        }
+    }
+
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<&HashSet<EntityId<E>>> {
+        if let Some(index) = &self.index {
+            index.get_with_hash(hash)
+        } else {
+            error!("attempted to add an entity to a property index for an unindexed property");
+            None
+        }
+    }
+
+    fn is_indexed(&self) -> bool {
+        self.index.is_some()
+    }
+
+    fn set_indexed(&mut self, is_indexed: bool) {
+        if is_indexed && !self.is_indexed() {
+            self.index = Some(Index::new());
+        } else if !is_indexed {
+            self.index = None;
+        }
+    }
+
+    fn index_unindexed_entities(&mut self, context: &Context) {
+        if let Some(index) = &mut self.index {
+            let current_pop = context.get_entity_count::<E>();
+            trace!(
+                "{}: indexing unindexed entity {}..<{}",
+                P::name(),
+                index.max_indexed,
+                current_pop
+            );
+
+            for id in index.max_indexed..current_pop {
+                let entity_id = EntityId::new(id);
+                let value = context.get_property(entity_id);
+                index.add_entity(&P::make_canonical(value), entity_id);
+            }
+            index.max_indexed = current_pop;
         }
     }
 }
-
-// See tests in `property_store.rs`.
