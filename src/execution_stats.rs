@@ -138,7 +138,7 @@ impl ExecutionProfilingCollector {
     }
 
     /// Refreshes the internal `sysinfo::System` object for this process using the given
-    /// `ProcessRefreshKind`.
+    /// [`ProcessRefreshKind`](sysinfo::ProcessRefreshKind).
     #[inline]
     fn update_system_info(&mut self, process_refresh_kind: ProcessRefreshKind) {
         if let Some(pid) = self.process_id {
@@ -216,7 +216,7 @@ impl ExecutionProfilingCollector {
 
 /// Prints execution statistics to the console.
 ///
-/// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct `ExecutionStatistics`.
+/// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn print_execution_statistics(summary: &ExecutionStatistics) {
     println!("━━━━ Execution Summary ━━━━");
     if summary.max_memory_usage == 0 {
@@ -256,7 +256,7 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
 
 /// Logs execution statistics with the logging system.
 ///
-/// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct `ExecutionStatistics`.
+/// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn log_execution_statistics(stats: &ExecutionStatistics) {
     info!("Execution complete.");
     if stats.max_memory_usage == 0 {

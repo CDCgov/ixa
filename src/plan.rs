@@ -1,12 +1,12 @@
 //! A priority queue that stores arbitrary data sorted by time and priority
 //!
-//! Defines a `Queue<T, P>` that is intended to store a queue of items of type
-//! T - sorted by `f64` time and definable priority `P` - called 'plans'.
+//! Defines a [`Queue`]`<T, P>` that is intended to store a queue of items of type
+//! `T` - sorted by `f64` time and definable priority `P` - called 'plans'.
 //! This queue has methods for adding plans, cancelling plans, and retrieving
 //! the earliest plan in the queue. Adding a plan is *O*(log(*n*)) while
 //! cancellation and retrieval are *O*(1).
 //!
-//! This queue is used by `Context` to store future events where some callback
+//! This queue is used by [`Context`](crate::Context) to store future events where some callback
 //! closure `FnOnce(&mut Context)` will be executed at a given point in time.
 
 use std::cmp::Ordering;
@@ -16,15 +16,15 @@ use crate::{trace, HashMap, HashMapExt};
 
 /// A priority queue that stores arbitrary data sorted by time
 ///
-/// Items of type `T` are stored in order by `f64` time and called `Plan<T>`.
+/// Items of type `T` are stored in order by `f64` time and called [`Plan`]`<T>`.
 /// Plans can have priorities given by some specified orderable type `P`.
-/// When plans are created they are sequentially assigned a `PlanId` that is a
+/// When plans are created they are sequentially assigned a [`PlanId`] that is a
 /// wrapped `u64`. If two plans are scheduled for the same time then the plan
 /// with the lowest priority is placed earlier. If two plans have the same time
 /// and priority then the plan that is scheduled first (i.e., that has the
 /// lowest id) is placed earlier.
 ///
-/// The time, plan id, and priority are stored in a binary heap of `Entry<P>`
+/// The time, plan id, and priority are stored in a binary heap of [`PlanSchedule`]`<P>`
 /// objects. The data payload of the event is stored in a hash map by plan id.
 /// Plan cancellation occurs by removing the corresponding entry from the data
 /// hash map.
@@ -47,7 +47,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
 
     /// Add a plan to the queue at the specified time
     ///
-    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
     /// if needed.
     pub fn add_plan(&mut self, time: f64, data: T, priority: P) -> PlanId {
         trace!("adding plan at {time}");
@@ -126,7 +126,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     }
 
     /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
-    /// `PlanSchedule`s ordered as they are in the queue itself.
+    /// [`PlanSchedule`]s ordered as they are in the queue itself.
     #[must_use]
     pub fn list_schedules(&self, at_most: usize) -> Vec<&PlanSchedule<P>> {
         let mut items = vec![];
@@ -156,9 +156,9 @@ impl<T, P: Eq + PartialEq + Ord> Default for Queue<T, P> {
     }
 }
 
-/// A time, id, and priority object used to order plans in the `Queue<T>`
+/// A time, id, and priority object used to order plans in the [`Queue`]`<T>`
 ///
-/// `Entry` objects are sorted in increasing order of time, priority and then
+/// [`PlanSchedule`] objects are sorted in increasing order of time, priority and then
 /// plan id
 #[derive(PartialEq, Debug)]
 pub struct PlanSchedule<P: Eq + PartialEq + Ord> {
@@ -210,7 +210,7 @@ impl<P: Eq + PartialEq + Ord> Ord for PlanSchedule<P> {
     }
 }
 
-/// A unique identifier for a plan added to a `Queue<T>`
+/// A unique identifier for a plan added to a [`Queue`]`<T>`
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct PlanId(pub(crate) u64);
 

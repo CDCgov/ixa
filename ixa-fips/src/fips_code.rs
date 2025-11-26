@@ -92,22 +92,22 @@ pub struct FIPSCode(NonZero<u64>);
 
 impl FIPSCode {
     // region Constructors
-    /// Constructs a new `FIPSCode` from a `USState`. Unlike the other constructors, this constructor is infallible.
+    /// Constructs a new [`FIPSCode`] from a [`USState`]. Unlike the other constructors, this constructor is infallible.
     #[must_use]
     pub fn with_state(state: USState) -> Self {
         Self::new(state.into(), 0, 0, 0, 0, 0).unwrap()
     }
-    /// Constructs a new `FIPSCode`.
+    /// Constructs a new [`FIPSCode`].
     /// Returns `Err(())` if the data provided is out of range.
     pub fn with_state_code(state_code: StateCode) -> Result<Self, FIPSError> {
         Self::new(state_code, 0, 0, 0, 0, 0)
     }
-    /// Constructs a new `FIPSCode`.
+    /// Constructs a new [`FIPSCode`].
     /// Returns `Err(())` if the data provided is out of range.
     pub fn with_county(state: StateCode, county: CountyCode) -> Result<Self, FIPSError> {
         Self::new(state, county, 0, 0, 0, 0)
     }
-    /// Constructs a new `FIPSCode`.
+    /// Constructs a new [`FIPSCode`].
     /// Returns `Err(())` if the data provided is out of range.
     pub fn with_tract(
         state: StateCode,
@@ -116,7 +116,7 @@ impl FIPSCode {
     ) -> Result<Self, FIPSError> {
         Self::new(state, county, tract, 0, 0, 0)
     }
-    /// Constructs a new `FIPSCode`.
+    /// Constructs a new [`FIPSCode`].
     /// Returns `Err(())` if the data provided is out of range.
     pub fn with_category(
         state: StateCode,
@@ -149,15 +149,15 @@ impl FIPSCode {
 
     // region Accessors
 
-    /// Returns the FIPS STATE as a `USState` enum variant.
-    /// Returns `Err(())` if [`USState`] cannot represent the state code. Use `FIPSCode::state_code()` to
+    /// Returns the FIPS STATE as a [`USState`] enum variant.
+    /// Returns `Err(())` if [`USState`] cannot represent the state code. Use [`FIPSCode::state_code()`] to
     /// retrieve the state code in this case.
     #[inline(always)]
     pub fn state(&self) -> Result<USState, FIPSError> {
         USState::decode(self.state_code())
     }
 
-    /// Returns the FIPS STATE code as a `StateCode` (a `u8`)
+    /// Returns the FIPS STATE code as a [`StateCode`] (a `u8`)
     #[inline(always)]
     #[must_use]
     pub fn state_code(&self) -> StateCode {
@@ -189,7 +189,7 @@ impl FIPSCode {
         ((self.0.get() >> CATEGORY_OFFSET) as SettingCategoryCode) & FOUR_BIT_MASK
     }
 
-    /// Returns the monotonically increasing ID number as a `u16`
+    /// Returns the monotonically increasing ID number as an [`IdCode`]
     #[inline(always)]
     #[must_use]
     pub fn id(&self) -> IdCode {
@@ -372,13 +372,13 @@ impl Debug for FIPSCode {
     }
 }
 
-/// A struct that holds an expanded version of a `FIPSCode` in which all fields are represented by
+/// A struct that holds an expanded version of a [`FIPSCode`] in which all fields are represented by
 /// their associated numeric types.
 ///
 /// It is up to the client code to ensure the field values are within
 /// range. See the module level docs for range constraints.
 ///
-/// This struct is useful for converting raw data to/from a `FIPSCode` for temporary direct field access.
+/// This struct is useful for converting raw data to/from a [`FIPSCode`] for temporary direct field access.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ExpandedFIPSCode {
     pub state: StateCode,

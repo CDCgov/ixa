@@ -12,7 +12,7 @@ use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
 /// Gets a mutable reference to the random number generator associated with the given
-/// `RngId`. If the Rng has not been used before, one will be created with the base seed
+/// [`RngId`]. If the Rng has not been used before, one will be created with the base seed
 /// you defined in `init`. Note that this will panic if `init` was not called yet.
 fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
     let data_container = context.get_data(RngPlugin);
@@ -58,7 +58,7 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the random number generator associated with the given
-    /// `RngId` by applying the specified sampler function. If the Rng has not been used
+    /// [`RngId`] by applying the specified sampler function. If the Rng has not been used
     /// before, one will be created with the base seed you defined in `set_base_random_seed`.
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample<R: RngId + 'static, T>(
@@ -71,7 +71,7 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given `RngId`. If the Rng has not been used before, one will be
+    /// associated with the given [`RngId`]. If the Rng has not been used before, one will be
     /// created with the base seed you defined in `set_base_random_seed`.
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_distr<R: RngId + 'static, T>(
@@ -87,7 +87,7 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample within the range provided by `range`
-    /// using the generator associated with the given `RngId`.
+    /// using the generator associated with the given [`RngId`].
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
@@ -99,7 +99,7 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random boolean value which is true with probability `p`
-    /// using the generator associated with the given `RngId`.
+    /// using the generator associated with the given [`RngId`].
     /// Note that this will panic if `set_base_random_seed` was not called yet.
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
@@ -110,7 +110,7 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Draws a random entry out of the list provided in `weights`
     /// with the given weights using the generator associated with the
-    /// given `RngId`.  Note that this will panic if
+    /// given [`RngId`].  Note that this will panic if
     /// `set_base_random_seed` was not called yet.
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where

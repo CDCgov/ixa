@@ -1,6 +1,6 @@
 //! A manager for the state of a discrete-event simulation
 //!
-//! Defines a `Context` that is intended to provide the foundational mechanism
+//! Defines a [`Context`] that is intended to provide the foundational mechanism
 //! for storing and manipulating the state of a given simulation.
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
@@ -22,7 +22,7 @@ use crate::progress::update_timeline_progress;
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt, HashMap, HashMapExt};
 
-/// The common callback used by multiple `Context` methods for future events
+/// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
 
 /// A handler for an event type `E`
@@ -62,14 +62,14 @@ impl Display for ExecutionPhase {
 /// * Holding data that can be accessed by simulation modules
 ///
 /// Simulations are constructed out of a series of interacting modules that
-/// take turns manipulating the Context through a mutable reference. Modules
-/// store data in the simulation using the `DataPlugin` trait that allows them
+/// take turns manipulating the [`Context`] through a mutable reference. Modules
+/// store data in the simulation using the [`DataPlugin`] trait that allows them
 /// to retrieve data by type.
 ///
 /// The future event list of the simulation is a queue of `Callback` objects -
-/// called `plans` - that will assume control of the Context at a future point
+/// called `plans` - that will assume control of the [`Context`] at a future point
 /// in time and execute the logic in the associated `FnOnce(&mut Context)`
-/// closure. Modules can add plans to this queue through the `Context`.
+/// closure. Modules can add plans to this queue through the [`Context`].
 ///
 /// The simulation also has a separate callback mechanism. Callbacks
 /// fire before the next timed event (even if it is scheduled for the
@@ -186,7 +186,7 @@ impl Context {
     /// Add a plan to the future event list at the specified time in the normal
     /// phase
     ///
-    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
     /// if needed.
     /// # Panics
     ///
@@ -199,7 +199,7 @@ impl Context {
     /// specified phase (first, normal, or last among plans at the
     /// specified time)
     ///
-    /// Returns a `PlanId` for the newly-added plan that can be used to cancel it
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
     /// if needed.
     /// # Panics
     ///
@@ -291,11 +291,11 @@ impl Context {
     }
 
     /// Retrieve a mutable reference to the data container associated with a
-    /// `DataPlugin`
+    /// [`DataPlugin`]
     ///
-    /// If the data container has not been already added to the `Context` then
-    /// this function will use the `DataPlugin::create_data_container` method
-    /// to construct a new data container and store it in the `Context`.
+    /// If the data container has not been already added to the [`Context`] then
+    /// this function will use the [`DataPlugin::init`] method
+    /// to construct a new data container and store it in the [`Context`].
     ///
     /// Returns a mutable reference to the data container
     #[must_use]
@@ -330,7 +330,7 @@ impl Context {
     }
 
     /// Retrieve a reference to the data container associated with a
-    /// `DataPlugin`
+    /// [`DataPlugin`]
     ///
     /// Returns a reference to the data container if it exists or else `None`
     #[must_use]

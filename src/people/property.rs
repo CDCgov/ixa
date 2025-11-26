@@ -39,21 +39,21 @@ use crate::{Context, PersonId};
 
 /// We factor this out and provide a blanket implementation for all types that
 /// can be value types for properties. This makes it convenient to reference
-/// `PersonPropertyValue` trait constraints.
+/// [`PersonPropertyValue`] trait constraints.
 pub trait PersonPropertyValue: Copy + Debug + PartialEq + Serialize {}
 impl<T> PersonPropertyValue for T where T: Copy + Debug + PartialEq + Serialize {}
 
 /// An individual characteristic or state related to a person, such as age or
 /// disease status.
 ///
-/// Person properties should be defined with the [`define_person_property!()`],
-/// [`define_person_property_with_default!()`] and [`define_derived_property!()`]
-/// macros.
+/// Person properties should be defined with the [`define_person_property!`](crate::define_person_property!),
+/// [`define_person_property_with_default!`](crate::define_person_property_with_default!) and
+/// [`define_derived_property!`](crate::define_derived_property!) macros.
 pub trait PersonProperty: Copy + 'static {
     /// The type of the property's values.
     type Value: PersonPropertyValue;
     /// Some properties might store a transformed version of the value in the index. This is the
-    /// type of the transformed value. For simple properties this will be the same as `Self::Value`.
+    /// type of the transformed value. For simple properties this will be the same as [`Self::Value`].
     type CanonicalValue: PersonPropertyValue;
 
     #[must_use]
@@ -77,20 +77,20 @@ pub trait PersonProperty: Copy + 'static {
 
     fn compute(context: &Context, person_id: PersonId) -> Self::Value;
 
-    /// This transforms a `Self::Value` into a `Self::CanonicalValue`, e.g. for storage in an index.
+    /// This transforms a [`Self::Value`] into a [`Self::CanonicalValue`], e.g. for storage in an index.
     /// For simple properties, this is the identity function.
     #[must_use]
     fn make_canonical(value: Self::Value) -> Self::CanonicalValue;
 
-    /// The inverse transform of `make_canonical`. For simple properties, this is the identity function.
+    /// The inverse transform of [`make_canonical`](Self::make_canonical). For simple properties, this is the identity function.
     #[must_use]
     fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value;
     fn get_instance() -> Self;
     fn name() -> &'static str;
 
     /// Returns a string representation of the property value, e.g. for writing to a CSV file.
-    /// If `make_uncanonical` is nontrivial, this method usually transforms `value` into a
-    /// `Self::Value` first so that the value is formatted in a way the user expects.
+    /// If [`make_uncanonical`](Self::make_uncanonical) is nontrivial, this method usually transforms `value` into a
+    /// [`Self::Value`] first so that the value is formatted in a way the user expects.
     #[must_use]
     fn get_display(value: &Self::CanonicalValue) -> String;
 
@@ -100,7 +100,7 @@ pub trait PersonProperty: Copy + 'static {
         hash_serialized_128(value)
     }
 
-    /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
+    /// Overridden by multi-properties, which use the [`TypeId`](std::any::TypeId) of the ordered tuple so that tuples
     /// with the same component types in a different order will have the same type ID.
     #[must_use]
     fn type_id() -> TypeId {
