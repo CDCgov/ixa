@@ -78,12 +78,14 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging", "debugger", "progress_bar"]
+default = ["logging", "debugger", "progress_bar", "profiling"]
 
 logging = ["log4rs", "fern", "wasm-bindgen",  "web-sys"]
 debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 progress_bar = ["dep:progress_bar", "anyhow"]
+
+profiling = []
 
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
