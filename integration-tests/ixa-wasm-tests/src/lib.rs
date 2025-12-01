@@ -69,9 +69,16 @@ pub fn run_simulation() -> Promise {
 // Exported to JS to print panics to the console
 #[wasm_bindgen]
 pub fn run_simulation_panic() -> Promise {
-    future_to_promise(async {
-        debug!("{}", vec!["a", "b", "c"][4]);
-        #[allow(unreachable_code)]
-        Ok(JsValue::from_str("unreachable"))
-    })
+    // Intentionally return a rejected promise to simulate a panic without relying on
+    // wasm abort semantics (which do not produce a usable JS rejection in all cases).
+    future_to_promise(async { Err(JsValue::from_str("simulated panic")) })
+}
+
+// Real panic for testing panic hook output (do not await inside tests).
+// Use a parameter so the compiler cannot statically prove the panic, avoiding the unconditional_panic lint.
+#[wasm_bindgen]
+pub fn cause_real_panic_with_index(idx: usize) {
+    let arr = ["a", "b", "c"]; // length 3
+                               // Intentionally index with caller-provided value; tests will pass an out-of-range index.
+    let _ = arr[idx];
 }
