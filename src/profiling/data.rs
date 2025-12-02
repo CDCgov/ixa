@@ -224,13 +224,13 @@ mod tests {
         }
 
         {
-            let _span = open_span("test_operation");
+            let _span = open_span("test_operation_basic");
             std::thread::sleep(Duration::from_millis(10));
         }
 
         let data = get_profiling_data();
-        assert!(data.spans.contains_key("test_operation"));
-        let (duration, count) = data.spans.get("test_operation").unwrap();
+        assert!(data.spans.contains_key("test_operation_basic"));
+        let (duration, count) = data.spans.get("test_operation_basic").unwrap();
         assert_eq!(*count, 1);
         assert!(*duration >= Duration::from_millis(10));
     }
@@ -245,12 +245,12 @@ mod tests {
         }
 
         for _ in 0..5 {
-            let _span = open_span("repeated_operation");
+            let _span = open_span("repeated_operation_multi_test");
             std::thread::sleep(Duration::from_millis(5));
         }
 
         let data = get_profiling_data();
-        let (duration, count) = data.spans.get("repeated_operation").unwrap();
+        let (duration, count) = data.spans.get("repeated_operation_multi_test").unwrap();
         assert!(*count >= 4, "expected at least 4 drops, got {}", count);
         assert!(*duration >= Duration::from_millis(15));
     }
@@ -262,12 +262,12 @@ mod tests {
             data.spans.clear();
         }
 
-        let span = open_span("explicit_close");
+        let span = open_span("explicit_close_test");
         std::thread::sleep(Duration::from_millis(10));
         close_span(span);
 
         let data = get_profiling_data();
-        assert!(data.spans.contains_key("explicit_close"));
+        assert!(data.spans.contains_key("explicit_close_test"));
     }
 
     #[test]
@@ -278,21 +278,21 @@ mod tests {
         }
 
         {
-            let _outer = open_span("outer");
+            let _outer = open_span("outer_nesting_test");
             std::thread::sleep(Duration::from_millis(5));
             {
-                let _inner = open_span("inner");
+                let _inner = open_span("inner_nesting_test");
                 std::thread::sleep(Duration::from_millis(5));
             }
             std::thread::sleep(Duration::from_millis(5));
         }
 
         let data = get_profiling_data();
-        assert!(data.spans.contains_key("outer"));
-        assert!(data.spans.contains_key("inner"));
+        assert!(data.spans.contains_key("outer_nesting_test"));
+        assert!(data.spans.contains_key("inner_nesting_test"));
 
-        let (outer_duration, _) = data.spans.get("outer").unwrap();
-        let (inner_duration, _) = data.spans.get("inner").unwrap();
+        let (outer_duration, _) = data.spans.get("outer_nesting_test").unwrap();
+        let (inner_duration, _) = data.spans.get("inner_nesting_test").unwrap();
 
         assert!(*outer_duration > *inner_duration);
         assert!(*outer_duration >= Duration::from_millis(15));
@@ -309,14 +309,14 @@ mod tests {
         }
 
         {
-            let _span1 = open_span("operation1");
+            let _span1 = open_span("operation1_total_measured");
             std::thread::sleep(Duration::from_millis(10));
         }
 
         std::thread::sleep(Duration::from_millis(5));
 
         {
-            let _span2 = open_span("operation2");
+            let _span2 = open_span("operation2_total_measured");
             std::thread::sleep(Duration::from_millis(10));
         }
 
@@ -366,7 +366,7 @@ mod tests {
         }
 
         {
-            let _span = open_span("test_span");
+            let _span = open_span("test_span_table");
             std::thread::sleep(Duration::from_millis(100));
         }
 
@@ -377,7 +377,9 @@ mod tests {
 
         assert!(table.len() >= 2);
 
-        let test_span = table.iter().find(|(label, _, _, _)| label == "test_span");
+        let test_span = table
+            .iter()
+            .find(|(label, _, _, _)| label == "test_span_table");
         assert!(test_span.is_some());
 
         let last = table.last().unwrap();
