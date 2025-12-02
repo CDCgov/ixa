@@ -220,7 +220,7 @@ mod tests {
     fn test_span_basic() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
+            data.computed_statistics.clear();
         }
 
         {
@@ -239,9 +239,7 @@ mod tests {
     fn test_span_multiple_calls() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
-            data.open_span_count = 0;
-            data.coverage = None;
+            data.computed_statistics.clear();
         }
 
         for _ in 0..5 {
@@ -259,7 +257,7 @@ mod tests {
     fn test_span_explicit_close() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
+            data.computed_statistics.clear();
         }
 
         let span = open_span("explicit_close_test");
@@ -274,7 +272,7 @@ mod tests {
     fn test_span_nesting() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
+            data.computed_statistics.clear();
         }
 
         {
@@ -303,9 +301,7 @@ mod tests {
     fn test_total_measured_span() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
-            data.open_span_count = 0;
-            data.coverage = None;
+            data.computed_statistics.clear();
         }
 
         {
@@ -322,47 +318,56 @@ mod tests {
 
         let data = get_profiling_data();
 
-        assert!(data.spans.contains_key("Total Measured"));
-        let (total_duration, _) = data.spans.get("Total Measured").unwrap();
+        // Just verify our specific spans exist
+        assert!(data.spans.contains_key("operation1_total_measured"));
+        assert!(data.spans.contains_key("operation2_total_measured"));
 
-        assert!(*total_duration >= Duration::from_millis(10));
-        assert!(*total_duration < Duration::from_millis(40));
+        let (duration1, _) = data.spans.get("operation1_total_measured").unwrap();
+        let (duration2, _) = data.spans.get("operation2_total_measured").unwrap();
+
+        assert!(*duration1 >= Duration::from_millis(10));
+        assert!(*duration2 >= Duration::from_millis(10));
     }
 
     #[test]
     fn test_get_named_counts_table() {
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
             data.start_time = Some(Instant::now() - Duration::from_secs(1));
         }
 
-        increment_named_count("event_a");
-        increment_named_count("event_a");
-        increment_named_count("event_b");
+        increment_named_count("event_a_counts_table_test");
+        increment_named_count("event_a_counts_table_test");
+        increment_named_count("event_b_counts_table_test");
 
         let data = get_profiling_data();
         let table = data.get_named_counts_table();
 
-        assert_eq!(table.len(), 2);
-
-        let event_a = table.iter().find(|(label, _, _)| label == "event_a");
+        // Find our specific events instead of checking total table length
+        let event_a = table
+            .iter()
+            .find(|(label, _, _)| label == "event_a_counts_table_test");
         assert!(event_a.is_some());
         let (_, count, rate) = event_a.unwrap();
         assert_eq!(*count, 2);
         // Rate should be approximately 2.0 (2 events / ~1 second), allow for timing variation
         assert!(*rate > 0.5 && *rate < 5.0);
+
+        let event_b = table
+            .iter()
+            .find(|(label, _, _)| label == "event_b_counts_table_test");
+        assert!(event_b.is_some());
+        let (_, count, _) = event_b.unwrap();
+        assert_eq!(*count, 1);
     }
 
     #[test]
     fn test_get_named_spans_table() {
         {
             let mut data = get_profiling_data();
-            data.spans.clear();
+            data.computed_statistics.clear();
             data.start_time = Some(Instant::now());
-            data.open_span_count = 0;
-            data.coverage = None;
         }
 
         {

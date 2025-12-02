@@ -189,7 +189,6 @@ mod tests {
     fn test_computed_statistic_usize() {
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
         }
 
@@ -219,7 +218,6 @@ mod tests {
     fn test_computed_statistic_i64() {
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
         }
 
@@ -252,7 +250,6 @@ mod tests {
     fn test_computed_statistic_f64() {
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
             *data.counts.entry("successes_f64_test").or_insert(0) += 3;
             *data.counts.entry("total_f64_test").or_insert(0) += 4;
@@ -281,7 +278,6 @@ mod tests {
     fn test_computed_statistic_returns_none() {
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
         }
 
@@ -323,7 +319,6 @@ mod tests {
 
         {
             let mut data = get_profiling_data();
-            data.counts.clear();
             data.computed_statistics.clear();
         }
 
