@@ -1,8 +1,10 @@
+use std::fmt::Display;
+
+use serde::ser::{Serialize, Serializer};
+
 #[cfg(feature = "profiling")]
 use super::profiling_data;
 use super::ProfilingData;
-use serde::Serialize;
-use std::fmt::Display;
 
 pub type CustomStatisticComputer<T> = Box<dyn (Fn(&ProfilingData) -> Option<T>) + Send + Sync>;
 pub type CustomStatisticPrinter<T> = Box<dyn Fn(T) + Send + Sync>;
@@ -122,11 +124,21 @@ impl ComputableType for f64 {
 }
 
 /// The computed value of a statistic. The "computer" returns a value of this type.
-#[derive(Copy, Clone, PartialEq, Serialize, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) enum ComputedValue {
     USize(usize),
     Int(i64),
     Float(f64),
+}
+
+impl Serialize for ComputedValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ComputedValue::USize(v) => serializer.serialize_u64(*v as u64),
+            ComputedValue::Int(v) => serializer.serialize_i64(*v),
+            ComputedValue::Float(v) => serializer.serialize_f64(*v),
+        }
+    }
 }
 
 impl Display for ComputedValue {
@@ -168,9 +180,10 @@ pub fn add_computed_statistic<T: ComputableType>(
 
 #[cfg(all(test, feature = "profiling"))]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use super::*;
     use crate::profiling::{get_profiling_data, increment_named_count};
-    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_computed_statistic_usize() {
@@ -180,21 +193,24 @@ mod tests {
             data.computed_statistics.clear();
         }
 
-        increment_named_count("events");
-        increment_named_count("events");
-        increment_named_count("events");
+        increment_named_count("events_usize_test");
+        increment_named_count("events_usize_test");
+        increment_named_count("events_usize_test");
 
         add_computed_statistic::<usize>(
             "total_events",
             "Total number of events",
-            Box::new(|data| data.get_named_count("events")),
+            Box::new(|data| data.get_named_count("events_usize_test")),
             Box::new(|value| println!("Total events: {}", value)),
         );
 
         let data = get_profiling_data();
-        assert_eq!(data.computed_statistics.len(), 1);
 
-        let stat = data.computed_statistics[0].as_ref().unwrap();
+        let stat = data
+            .computed_statistics
+            .iter()
+            .find_map(|s| s.as_ref().filter(|stat| stat.label == "total_events"))
+            .expect("total_events statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, Some(ComputedValue::USize(3)));
     }
@@ -207,23 +223,27 @@ mod tests {
             data.computed_statistics.clear();
         }
 
-        increment_named_count("positive");
-        increment_named_count("positive");
-        increment_named_count("negative");
+        increment_named_count("positive_i64_test");
+        increment_named_count("positive_i64_test");
+        increment_named_count("negative_i64_test");
 
         add_computed_statistic::<i64>(
             "difference",
             "Difference between positive and negative",
             Box::new(|data| {
-                let pos = data.get_named_count("positive").unwrap_or(0) as i64;
-                let neg = data.get_named_count("negative").unwrap_or(0) as i64;
+                let pos = data.get_named_count("positive_i64_test").unwrap_or(0) as i64;
+                let neg = data.get_named_count("negative_i64_test").unwrap_or(0) as i64;
                 Some(pos - neg)
             }),
             Box::new(|value| println!("Difference: {}", value)),
         );
 
         let data = get_profiling_data();
-        let stat = data.computed_statistics[0].as_ref().unwrap();
+        let stat = data
+            .computed_statistics
+            .iter()
+            .find_map(|s| s.as_ref().filter(|stat| stat.label == "difference"))
+            .expect("difference statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, Some(ComputedValue::Int(1)));
     }
@@ -234,34 +254,26 @@ mod tests {
             let mut data = get_profiling_data();
             data.counts.clear();
             data.computed_statistics.clear();
-        }
+            *data.counts.entry("successes_f64_test").or_insert(0) += 3;
+            *data.counts.entry("total_f64_test").or_insert(0) += 4;
+            data.add_computed_statistic::<f64>(
+                "success_rate",
+                "Success rate as percentage",
+                Box::new(|data| {
+                    let successes = data.get_named_count("successes_f64_test")? as f64;
+                    let total = data.get_named_count("total_f64_test")? as f64;
+                    Some(successes / total * 100.0)
+                }),
+                Box::new(|value| println!("Success rate: {:.2}%", value)),
+            );
 
-        increment_named_count("successes");
-        increment_named_count("successes");
-        increment_named_count("successes");
-        increment_named_count("total");
-        increment_named_count("total");
-        increment_named_count("total");
-        increment_named_count("total");
-
-        add_computed_statistic::<f64>(
-            "success_rate",
-            "Success rate as percentage",
-            Box::new(|data| {
-                let successes = data.get_named_count("successes")? as f64;
-                let total = data.get_named_count("total")? as f64;
-                Some(successes / total * 100.0)
-            }),
-            Box::new(|value| println!("Success rate: {:.2}%", value)),
-        );
-
-        let data = get_profiling_data();
-        let stat = data.computed_statistics[0].as_ref().unwrap();
-        let computed = stat.functions.compute(&data);
-        if let Some(ComputedValue::Float(value)) = computed {
-            assert!((value - 75.0).abs() < 0.01);
-        } else {
-            panic!("Expected Float value");
+            let stat = data.computed_statistics[0].as_ref().unwrap();
+            let computed = stat.functions.compute(&data);
+            if let Some(ComputedValue::Float(value)) = computed {
+                assert!((value - 75.0).abs() < 0.01);
+            } else {
+                panic!("Expected Float value");
+            }
         }
     }
 
@@ -281,7 +293,11 @@ mod tests {
         );
 
         let data = get_profiling_data();
-        let stat = data.computed_statistics[0].as_ref().unwrap();
+        let stat = data
+            .computed_statistics
+            .iter()
+            .find_map(|s| s.as_ref().filter(|stat| stat.label == "missing_data"))
+            .expect("missing_data statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, None);
     }
@@ -294,13 +310,16 @@ mod tests {
         let int_val = ComputedValue::Int(-100);
         assert_eq!(format!("{}", int_val), "-100");
 
-        let float_val = ComputedValue::Float(3.14159);
-        assert_eq!(format!("{}", float_val), "3.14159");
+        let float_val = ComputedValue::Float(std::f64::consts::PI);
+        assert_eq!(format!("{}", float_val), "3.141592653589793");
     }
 
     #[test]
     fn test_computed_statistic_print_functions() {
         static PRINTED: AtomicBool = AtomicBool::new(false);
+
+        // Reset the static variable
+        PRINTED.store(false, Ordering::SeqCst);
 
         {
             let mut data = get_profiling_data();
@@ -308,19 +327,23 @@ mod tests {
             data.computed_statistics.clear();
         }
 
-        increment_named_count("test");
+        increment_named_count("test_print_func");
 
         add_computed_statistic::<usize>(
             "test_stat",
             "Test statistic",
-            Box::new(|data| data.get_named_count("test")),
+            Box::new(|data| data.get_named_count("test_print_func")),
             Box::new(|_value| {
                 PRINTED.store(true, Ordering::SeqCst);
             }),
         );
 
-        let mut data = get_profiling_data();
-        let stat = data.computed_statistics[0].take().unwrap();
+        let data = get_profiling_data();
+        let stat = data
+            .computed_statistics
+            .iter()
+            .find_map(|s| s.as_ref().filter(|stat| stat.label == "test_stat"))
+            .expect("test_stat statistic not found");
         let value = stat.functions.compute(&data).unwrap();
         stat.functions.print(value);
 

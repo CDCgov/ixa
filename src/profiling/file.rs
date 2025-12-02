@@ -1,10 +1,3 @@
-use super::computed_statistic::{ComputedStatistic, ComputedValue};
-#[cfg(feature = "profiling")]
-use super::profiling_data;
-use ixa::execution_stats::ExecutionStatistics;
-use ixa::HashMap;
-#[cfg(feature = "profiling")]
-use serde::{Serialize, Serializer};
 use std::path::Path;
 #[cfg(feature = "profiling")]
 use std::{
@@ -12,6 +5,15 @@ use std::{
     io::Write,
     time::{Duration, SystemTime},
 };
+
+#[cfg(feature = "profiling")]
+use serde::{Serialize, Serializer};
+
+use super::computed_statistic::{ComputedStatistic, ComputedValue};
+#[cfg(feature = "profiling")]
+use super::profiling_data;
+use crate::execution_stats::ExecutionStatistics;
+use crate::HashMap;
 
 /// A wrapper around Duration the serialization format of which we have control over.
 #[cfg(feature = "profiling")]
@@ -167,11 +169,15 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
 
 #[cfg(all(test, feature = "profiling"))]
 mod tests {
-    use super::*;
-    use crate::profiling::{add_computed_statistic, get_profiling_data, increment_named_count, open_span};
     use std::fs;
     use std::time::Duration;
+
     use tempfile::TempDir;
+
+    use super::*;
+    use crate::profiling::{
+        add_computed_statistic, get_profiling_data, increment_named_count, open_span,
+    };
 
     #[test]
     fn test_write_profiling_data_to_file() {
@@ -216,17 +222,22 @@ mod tests {
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
         let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
 
-        assert!(json["date_time"].is_string());
+        assert!(json["date_time"].is_object());
+        assert!(json["date_time"]["secs_since_epoch"].is_number());
+        assert!(json["date_time"]["nanos_since_epoch"].is_number());
         assert!(json["execution_statistics"].is_object());
         assert!(json["named_counts"].is_array());
         assert!(json["named_spans"].is_array());
         assert!(json["computed_statistics"].is_object());
 
         assert_eq!(json["execution_statistics"]["population"], 1000);
-        assert_eq!(json["execution_statistics"]["max_memory_usage"], 1024 * 1024);
+        assert_eq!(
+            json["execution_statistics"]["max_memory_usage"],
+            1024 * 1024
+        );
 
         let counts = json["named_counts"].as_array().unwrap();
-        assert!(counts.len() >= 1);
+        assert!(!counts.is_empty());
         let test_event = counts
             .iter()
             .find(|c| c["label"] == "test_event")

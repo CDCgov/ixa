@@ -160,15 +160,16 @@ mod data;
 mod display;
 mod file;
 
-use crate::parameters::{ContextParametersExt, Params};
+use std::path::Path;
+#[cfg(feature = "profiling")]
+use std::time::Instant;
+
 pub use computed_statistic::*;
 pub use data::*;
 pub use display::*;
 use file::write_profiling_data_to_file;
-use ixa::{error, Context, ContextReportExt};
-use std::path::Path;
-#[cfg(feature = "profiling")]
-use std::time::Instant;
+
+use crate::{error, Context, ContextReportExt};
 
 #[cfg(test)]
 /// Publicly expose access to profiling data only for testing.
@@ -213,7 +214,7 @@ impl Drop for Span {
 
 /// Writes the execution statistics for the context and all profiling data
 /// to a JSON file.
-pub trait ProfilingContextExt: ContextParametersExt + ContextReportExt {
+pub trait ProfilingContextExt: ContextReportExt {
     fn write_profiling_data(&mut self) {
         let (mut prefix, directory, overwrite) = {
             let report_options = self.report_options();
@@ -225,17 +226,9 @@ pub trait ProfilingContextExt: ContextParametersExt + ContextReportExt {
         };
 
         let execution_statistics = self.get_execution_statistics();
-        let Params {
-            profiling_data_path,
-            ..
-        } = self.get_params();
-
-        if profiling_data_path.is_none() {
-            error!("no profiling data path specified");
-            return;
-        }
-
-        prefix.push_str(profiling_data_path.as_ref().unwrap());
+        // Default filename when not provided via parameters: write under report options
+        // using the current file prefix.
+        prefix.push_str("profiling.json");
         let profiling_data_path = directory.join(prefix);
         let profiling_data_path = Path::new(&profiling_data_path);
 

@@ -1,7 +1,8 @@
 #[cfg(feature = "profiling")]
-use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
-#[cfg(feature = "profiling")]
 use humantime::format_duration;
+
+#[cfg(feature = "profiling")]
+use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
@@ -221,13 +222,12 @@ pub fn format_with_commas_f64(value: f64) -> String {
 #[cfg(all(test, feature = "profiling"))]
 mod tests {
     #![allow(clippy::unreadable_literal)]
-    use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
+    use std::time::Duration;
+
     use crate::profiling::display::{
         format_with_commas, format_with_commas_f64, print_named_counts, print_named_spans,
     };
-    use crate::profiling::increment_named_count;
     use crate::profiling::*;
-    use std::time::Duration;
 
     #[test]
     fn increments_named_count_correctly() {
