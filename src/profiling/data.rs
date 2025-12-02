@@ -219,11 +219,6 @@ mod tests {
     #[test]
     fn test_span_basic() {
         {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
-        {
             let _span = open_span("test_operation_basic");
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -237,11 +232,6 @@ mod tests {
 
     #[test]
     fn test_span_multiple_calls() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
         for _ in 0..5 {
             let _span = open_span("repeated_operation_multi_test");
             std::thread::sleep(Duration::from_millis(5));
@@ -255,11 +245,6 @@ mod tests {
 
     #[test]
     fn test_span_explicit_close() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
         let span = open_span("explicit_close_test");
         std::thread::sleep(Duration::from_millis(10));
         close_span(span);
@@ -270,11 +255,6 @@ mod tests {
 
     #[test]
     fn test_span_nesting() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
         {
             let _outer = open_span("outer_nesting_test");
             std::thread::sleep(Duration::from_millis(5));
@@ -299,11 +279,6 @@ mod tests {
 
     #[test]
     fn test_total_measured_span() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
         {
             let _span1 = open_span("operation1_total_measured");
             std::thread::sleep(Duration::from_millis(10));
@@ -331,15 +306,27 @@ mod tests {
 
     #[test]
     fn test_get_named_counts_table() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-            data.start_time = Some(Instant::now() - Duration::from_secs(1));
-        }
-
+        // Capture container start_time before adding counts
+        let container_start = {
+            let data = get_profiling_data();
+            data.start_time
+        };
         increment_named_count("event_a_counts_table_test");
         increment_named_count("event_a_counts_table_test");
         increment_named_count("event_b_counts_table_test");
+
+        // Sleep to ensure measurable time has passed
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Use the same origin as container rate calculation; if None, fall back to local start
+        let elapsed = if let Some(start_time) = container_start {
+            start_time.elapsed().as_secs_f64()
+        } else {
+            // If profiling hasn't started yet, rate will be based on init at first increment,
+            // so approximate by measuring from the first increment call using a local Instant.
+            // In practice, this path should rarely trigger.
+            0.1
+        };
 
         let data = get_profiling_data();
         let table = data.get_named_counts_table();
@@ -351,8 +338,14 @@ mod tests {
         assert!(event_a.is_some());
         let (_, count, rate) = event_a.unwrap();
         assert_eq!(*count, 2);
-        // Rate should be approximately 2.0 (2 events / ~1 second), allow for timing variation
-        assert!(*rate > 0.5 && *rate < 5.0);
+        // Rate should be approximately 2/elapsed (2 events / ~0.1 second = ~20/sec)
+        let expected_rate = 2.0 / elapsed;
+        println!(
+            "Rate: {}, Expected: {}, Elapsed: {}",
+            rate, expected_rate, elapsed
+        );
+        // Allow 10% margin for timing variations
+        assert!(*rate > expected_rate * 0.9 && *rate < expected_rate * 1.1);
 
         let event_b = table
             .iter()
@@ -364,11 +357,11 @@ mod tests {
 
     #[test]
     fn test_get_named_spans_table() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-            data.start_time = Some(Instant::now());
-        }
+        // Capture container start time without mutating it
+        let container_start = {
+            let data = get_profiling_data();
+            data.start_time
+        };
 
         {
             let _span = open_span("test_span_table");
@@ -391,6 +384,16 @@ mod tests {
         assert_eq!(last.0, "Total Measured");
 
         let (_, _, _, percent) = test_span.unwrap();
-        assert!(*percent > 0.1 && *percent < 99.9);
+        // Compute expected percent from container start time
+        let elapsed = if let Some(start_time) = container_start {
+            start_time.elapsed().as_secs_f64()
+        } else {
+            // If profiling hasn't started yet, approximate with 0.2s total elapsed (100ms span + 100ms idle)
+            0.2
+        };
+        let (duration, _) = data.spans.get("test_span_table").unwrap();
+        let expected_percent = duration.as_secs_f64() / elapsed * 100.0;
+        // Allow reasonable tolerance for timing variations
+        assert!((*percent - expected_percent).abs() < 5.0);
     }
 }

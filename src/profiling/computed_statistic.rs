@@ -187,19 +187,14 @@ mod tests {
 
     #[test]
     fn test_computed_statistic_usize() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
-        increment_named_count("events_usize_test");
-        increment_named_count("events_usize_test");
-        increment_named_count("events_usize_test");
+        increment_named_count("comp_stat_events_usize_test");
+        increment_named_count("comp_stat_events_usize_test");
+        increment_named_count("comp_stat_events_usize_test");
 
         add_computed_statistic::<usize>(
-            "total_events",
+            "comp_stat_total_events",
             "Total number of events",
-            Box::new(|data| data.get_named_count("events_usize_test")),
+            Box::new(|data| data.get_named_count("comp_stat_events_usize_test")),
             Box::new(|value| println!("Total events: {}", value)),
         );
 
@@ -208,7 +203,10 @@ mod tests {
         let stat = data
             .computed_statistics
             .iter()
-            .find_map(|s| s.as_ref().filter(|stat| stat.label == "total_events"))
+            .find_map(|s| {
+                s.as_ref()
+                    .filter(|stat| stat.label == "comp_stat_total_events")
+            })
             .expect("total_events statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, Some(ComputedValue::USize(3)));
@@ -216,21 +214,20 @@ mod tests {
 
     #[test]
     fn test_computed_statistic_i64() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
-        increment_named_count("positive_i64_test");
-        increment_named_count("positive_i64_test");
-        increment_named_count("negative_i64_test");
+        increment_named_count("comp_stat_positive_i64_test");
+        increment_named_count("comp_stat_positive_i64_test");
+        increment_named_count("comp_stat_negative_i64_test");
 
         add_computed_statistic::<i64>(
-            "difference",
+            "comp_stat_difference",
             "Difference between positive and negative",
             Box::new(|data| {
-                let pos = data.get_named_count("positive_i64_test").unwrap_or(0) as i64;
-                let neg = data.get_named_count("negative_i64_test").unwrap_or(0) as i64;
+                let pos = data
+                    .get_named_count("comp_stat_positive_i64_test")
+                    .unwrap_or(0) as i64;
+                let neg = data
+                    .get_named_count("comp_stat_negative_i64_test")
+                    .unwrap_or(0) as i64;
                 Some(pos - neg)
             }),
             Box::new(|value| println!("Difference: {}", value)),
@@ -240,7 +237,10 @@ mod tests {
         let stat = data
             .computed_statistics
             .iter()
-            .find_map(|s| s.as_ref().filter(|stat| stat.label == "difference"))
+            .find_map(|s| {
+                s.as_ref()
+                    .filter(|stat| stat.label == "comp_stat_difference")
+            })
             .expect("difference statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, Some(ComputedValue::Int(1)));
@@ -250,41 +250,45 @@ mod tests {
     fn test_computed_statistic_f64() {
         {
             let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-            *data.counts.entry("successes_f64_test").or_insert(0) += 3;
-            *data.counts.entry("total_f64_test").or_insert(0) += 4;
+            *data
+                .counts
+                .entry("comp_stat_successes_f64_test")
+                .or_insert(0) += 3;
+            *data.counts.entry("comp_stat_total_f64_test").or_insert(0) += 4;
             data.add_computed_statistic::<f64>(
-                "success_rate",
+                "comp_stat_success_rate",
                 "Success rate as percentage",
                 Box::new(|data| {
-                    let successes = data.get_named_count("successes_f64_test")? as f64;
-                    let total = data.get_named_count("total_f64_test")? as f64;
+                    let successes = data.get_named_count("comp_stat_successes_f64_test")? as f64;
+                    let total = data.get_named_count("comp_stat_total_f64_test")? as f64;
                     Some(successes / total * 100.0)
                 }),
                 Box::new(|value| println!("Success rate: {:.2}%", value)),
             );
 
-            let stat = data.computed_statistics[0].as_ref().unwrap();
+            let stat = data
+                .computed_statistics
+                .iter()
+                .find_map(|s| {
+                    s.as_ref()
+                        .filter(|stat| stat.label == "comp_stat_success_rate")
+                })
+                .expect("comp_stat_success_rate statistic not found");
             let computed = stat.functions.compute(&data);
             if let Some(ComputedValue::Float(value)) = computed {
                 assert!((value - 75.0).abs() < 0.01);
             } else {
-                panic!("Expected Float value");
+                panic!("Expected Float value, got {:?}", computed);
             }
         }
     }
 
     #[test]
     fn test_computed_statistic_returns_none() {
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
         add_computed_statistic::<usize>(
-            "missing_data",
+            "comp_stat_missing_data",
             "Statistic with missing data",
-            Box::new(|data| data.get_named_count("nonexistent")),
+            Box::new(|data| data.get_named_count("comp_stat_nonexistent")),
             Box::new(|value| println!("Value: {}", value)),
         );
 
@@ -292,8 +296,11 @@ mod tests {
         let stat = data
             .computed_statistics
             .iter()
-            .find_map(|s| s.as_ref().filter(|stat| stat.label == "missing_data"))
-            .expect("missing_data statistic not found");
+            .find_map(|s| {
+                s.as_ref()
+                    .filter(|stat| stat.label == "comp_stat_missing_data")
+            })
+            .expect("comp_stat_missing_data statistic not found");
         let computed = stat.functions.compute(&data);
         assert_eq!(computed, None);
     }
@@ -317,17 +324,12 @@ mod tests {
         // Reset the static variable
         PRINTED.store(false, Ordering::SeqCst);
 
-        {
-            let mut data = get_profiling_data();
-            data.computed_statistics.clear();
-        }
-
-        increment_named_count("test_print_func");
+        increment_named_count("comp_stat_test_print_func");
 
         add_computed_statistic::<usize>(
-            "test_stat",
+            "comp_stat_test_stat",
             "Test statistic",
-            Box::new(|data| data.get_named_count("test_print_func")),
+            Box::new(|data| data.get_named_count("comp_stat_test_print_func")),
             Box::new(|_value| {
                 PRINTED.store(true, Ordering::SeqCst);
             }),
@@ -337,7 +339,10 @@ mod tests {
         let stat = data
             .computed_statistics
             .iter()
-            .find_map(|s| s.as_ref().filter(|stat| stat.label == "test_stat"))
+            .find_map(|s| {
+                s.as_ref()
+                    .filter(|stat| stat.label == "comp_stat_test_stat")
+            })
             .expect("test_stat statistic not found");
         let value = stat.functions.compute(&data).unwrap();
         stat.functions.print(value);

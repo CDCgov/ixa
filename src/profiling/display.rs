@@ -231,24 +231,24 @@ mod tests {
 
     #[test]
     fn increments_named_count_correctly() {
-        increment_named_count("test_event");
-        increment_named_count("test_event");
-        increment_named_count("another_event");
+        increment_named_count("display_incr_test_event");
+        increment_named_count("display_incr_test_event");
+        increment_named_count("display_incr_another_event");
 
         let data = profiling_data();
-        assert_eq!(data.get_named_count("test_event"), Some(2));
-        assert_eq!(data.get_named_count("another_event"), Some(1));
+        assert_eq!(data.get_named_count("display_incr_test_event"), Some(2));
+        assert_eq!(data.get_named_count("display_incr_another_event"), Some(1));
     }
 
     #[test]
     fn print_named_counts_outputs_expected_format() {
-        {
-            // Inject a fixed start time 1 second ago
-            let mut data = profiling_data();
-            data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
-            data.counts.insert("event1", 5);
-        }
-        print_named_counts(); // should print " event1  5  5.00 per second"
+        // Initialize profiling start_time without mutating it directly
+        increment_named_count("display_event1_print");
+        increment_named_count("display_event1_print");
+        increment_named_count("display_event1_print");
+        increment_named_count("display_event1_print");
+        increment_named_count("display_event1_print");
+        print_named_counts(); // should print the expected format
     }
 
     // region Tests for `format_with_commas()`
@@ -354,14 +354,14 @@ mod tests {
 
     #[test]
     fn print_named_spans_outputs_expected_format() {
+        // Open a span to initialize start_time without mutating it directly
+        {
+            let _init = open_span("display_init_span");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // Add sample spans data
         {
             let mut container = profiling_data();
-
-            // Set a fixed start time 10 seconds ago
-            container.start_time =
-                Some(Instant::now().checked_sub(Duration::from_secs(10)).unwrap());
-
-            // Add sample spans data
             container
                 .spans
                 .insert("database_query", (Duration::from_millis(1500), 42));
@@ -384,19 +384,14 @@ mod tests {
     #[test]
     fn test_print_computed_statistics_integration() {
         use crate::profiling::{add_computed_statistic, increment_named_count};
-        {
-            let mut data = profiling_data();
-            data.counts.clear();
-            data.computed_statistics.clear();
-        }
-
-        increment_named_count("metric");
-        increment_named_count("metric");
+        // Use unique labels; avoid clearing shared profiling data
+        increment_named_count("display_metric_integration");
+        increment_named_count("display_metric_integration");
 
         add_computed_statistic::<usize>(
-            "metric_count",
+            "display_metric_count_integration",
             "Total metrics",
-            Box::new(|data| data.get_named_count("metric")),
+            Box::new(|data| data.get_named_count("display_metric_integration")),
             Box::new(|value| {
                 println!("Metric count: {}", value);
             }),

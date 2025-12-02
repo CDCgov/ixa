@@ -181,24 +181,18 @@ mod tests {
 
     #[test]
     fn test_write_profiling_data_to_file() {
+        // Use unique labels and avoid clearing global profiling data
+        increment_named_count("file_test_event_write");
+        increment_named_count("file_test_event_write");
         {
-            let mut data = get_profiling_data();
-            data.counts.clear();
-            data.spans.clear();
-            data.computed_statistics.clear();
-        }
-
-        increment_named_count("test_event");
-        increment_named_count("test_event");
-        {
-            let _span = open_span("test_span");
+            let _span = open_span("file_test_span_write");
             std::thread::sleep(Duration::from_millis(10));
         }
 
         add_computed_statistic::<usize>(
-            "event_count",
+            "file_event_count_write",
             "Total test events",
-            Box::new(|data| data.get_named_count("test_event")),
+            Box::new(|data| data.get_named_count("file_test_event_write")),
             Box::new(|value| println!("Events: {}", value)),
         );
 
@@ -240,24 +234,22 @@ mod tests {
         assert!(!counts.is_empty());
         let test_event = counts
             .iter()
-            .find(|c| c["label"] == "test_event")
-            .expect("test_event not found");
+            .find(|c| c["label"] == "file_test_event_write")
+            .expect("file_test_event_write not found");
         assert_eq!(test_event["count"], 2);
 
         let computed = &json["computed_statistics"];
-        assert!(computed["event_count"].is_object());
-        assert_eq!(computed["event_count"]["description"], "Total test events");
-        assert_eq!(computed["event_count"]["value"], 2);
+        assert!(computed["file_event_count_write"].is_object());
+        assert_eq!(
+            computed["file_event_count_write"]["description"],
+            "Total test events"
+        );
+        assert_eq!(computed["file_event_count_write"]["value"], 2);
     }
 
     #[test]
     fn test_json_serialization_format() {
-        {
-            let mut data = get_profiling_data();
-            data.counts.clear();
-            data.spans.clear();
-            data.computed_statistics.clear();
-        }
+        // Avoid clearing global profiling data
 
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("format_test.json");
