@@ -34,7 +34,24 @@ use crate::{Context, IxaEvent};
 
 /// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
 pub(crate) trait PartialPropertyChangeEvent {
+    fn emit_in_context(&self, context: &mut Context);
+}
 
+impl <E: Entity, P: Property<E>> PartialPropertyChangeEvent for PartialPropertyChangeEventCore<E, P>{
+    /// Updates the index with the current property value and emits a change event if
+    /// the `current_value` differs from the previous value (stored in `self.0.current_value`)
+    fn emit_in_context(&self, context: &mut Context) {
+        let current_value: P = context.get_property(self.0.entity_id);
+        let property_value_store = context.property_store.get_mut::<E, P>();
+
+        if let Some(index) = &mut property_value_store.index {
+            index.add_entity(&current_value.make_canonical(), self.0.entity_id);
+        }
+
+        if current_value != self.0.current_value {
+            context.emit_event(self.to_event(current_value));
+        }
+    }
 }
 
 /// Represents a partially created `PropertyChangeEvent` of a derived property during the computation of property
@@ -43,7 +60,7 @@ pub(crate) trait PartialPropertyChangeEvent {
 /// A `Box<PartialPropertyChangeEventCore<E, P>>` can be transformed into a `Box<PropertyChangeEvent<E, P>>` in place,
 /// avoiding an allocation.
 #[repr(transparent)]
-pub(super) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(PropertyChangeEvent<E, P>);
+pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(PropertyChangeEvent<E, P>);
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // `PartialPropertyChangeEvent<E, P>` is always `Copy`/`Clone` if we derive them.
 impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P>{
@@ -54,31 +71,21 @@ impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P>{
 impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P>{}
 
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
-    pub fn new(entity_id: EntityId<E>, old_value: P) -> Self {
+    pub fn new(entity_id: EntityId<E>, previous_value: P) -> Self {
         Self(
             PropertyChangeEvent{
                 entity_id,
-                current: old_value,
-                previous: None,
+                current_value: previous_value,
+                previous_value: None,
             }
         )
     }
 
-    pub fn to_event(self, current_value: P) -> PropertyChangeEvent<E, P> {
+    pub fn to_event(&self, current_value: P) -> PropertyChangeEvent<E, P> {
         PropertyChangeEvent{
-            entity_id: self.entity_id,
-            current: current_value,
-            previous: Some(self.old_value),
-        }
-    }
-}
-
-impl<E: Entity, P: Property<E>> From<PartialPropertyChangeEventCore<E, P>> for PropertyChangeEvent<E, P> {
-    fn from(value: PartialPropertyChangeEventCore<E, P>) -> Self {
-        Self{
-            entity_id: value.entity_id,
-            current: value.old_value,
-            previous: Some(value.old_value),
+            entity_id: self.0.entity_id,
+            current_value,
+            previous_value: Some(self.0.current_value),
         }
     }
 }
@@ -115,9 +122,9 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,
     /// The new value
-    pub current: P,
+    pub current_value: P,
     /// The old value, if there is one
-    pub previous: Option<P>,
+    pub previous_value: Option<P>,
 }
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // this type is always `Copy`/`Clone` if we derive them.
@@ -125,8 +132,8 @@ impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
     fn clone(&self) -> Self {
         Self{
             entity_id: self.entity_id,
-            current: self.current,
-            previous: self.previous.clone(),
+            current_value: self.current_value,
+            previous_value: self.previous_value.clone(),
         }
     }
 }
@@ -206,12 +213,12 @@ mod tests {
                 *flag_clone.borrow_mut() = true;
                 assert_eq!(event.entity_id.0, 0, "Entity id is correct");
                 assert_eq!(
-                    event.previous,
+                    event.previous_value,
                     Some(RiskCategory::Low),
                     "Previous value is correct"
                 );
                 assert_eq!(
-                    event.current,
+                    event.current_value,
                     RiskCategory::High,
                     "Current value is correct"
                 );
@@ -254,8 +261,8 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, AgeGroup>| {
                 assert_eq!(event.entity_id.0, 0);
-                assert_eq!(event.previous.unwrap(), AgeGroup::Child);
-                assert_eq!(event.current, AgeGroup::Adult);
+                assert_eq!(event.previous_value.unwrap(), AgeGroup::Child);
+                assert_eq!(event.current_value, AgeGroup::Adult);
                 *flag_clone.borrow_mut() = true;
             },
         );

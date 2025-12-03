@@ -428,6 +428,10 @@ macro_rules! __impl_property_common {
                 ($compute_derived_fn)(_context, _entity_id)
             }
 
+            fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
+              $collect_deps_fn(result)
+            }
+
             fn default_const() -> Self {
                 $default_const
             }
@@ -463,10 +467,6 @@ macro_rules! __impl_property_common {
 
                 // Slow path: initialize it.
                 $crate::entity::property_store::initialize_property_index(&INDEX)
-            }
-
-            fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
-              $collect_deps_fn(result)
             }
         }
 
@@ -665,7 +665,6 @@ macro_rules! define_derived_property {
                 [$($global_dependency),*],
                 |$($param),+| $derive_fn
             ),
-
             collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
                 $(
                     if $dependency::is_derived() {
@@ -674,8 +673,7 @@ macro_rules! define_derived_property {
                         deps.insert($dependency::index());
                     }
                 )*
-            }
-
+            },
             display_impl = |value: &Option<$inner_ty>| {
                 match value {
                     Some(v) => format!("{:?}", v),
@@ -708,7 +706,16 @@ macro_rules! define_derived_property {
                 [$($dependency),*],
                 [$($global_dependency),*],
                 |$($param),+| $derive_fn
-            )
+            ),
+            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                $(
+                    if $dependency::is_derived() {
+                        $dependency::collect_non_derived_dependencies(deps);
+                    } else {
+                        deps.insert($dependency::index());
+                    }
+                )*
+            }
             $(, $($extra)+),*
         );
     };
@@ -735,7 +742,16 @@ macro_rules! define_derived_property {
                 [$($dependency),*],
                 [$($global_dependency),*],
                 |$($param),+| $derive_fn
-            )
+            ),
+            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                $(
+                    if $dependency::is_derived() {
+                        $dependency::collect_non_derived_dependencies(deps);
+                    } else {
+                        deps.insert($dependency::index());
+                    }
+                )*
+            }
             $(, $($extra)+),*
         );
     };
@@ -766,7 +782,16 @@ macro_rules! define_derived_property {
                 [$($dependency),*],
                 [$($global_dependency),*],
                 |$($param),+| $derive_fn
-            )
+            ),
+            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                $(
+                    if $dependency::is_derived() {
+                        $dependency::collect_non_derived_dependencies(deps);
+                    } else {
+                        deps.insert($dependency::index());
+                    }
+                )*
+            }
             $(, $($extra)+),*
         );
     };
@@ -855,6 +880,7 @@ pub use define_multi_property;
 mod tests {
     use crate::prelude::*;
     use crate::define_entity;
+    use crate::entity::property::Property;
 
     define_entity!(Person);
 
@@ -901,6 +927,13 @@ mod tests {
         assert_eq!(senior_group, AgeGroup::Senior);
         assert_eq!(child_group, AgeGroup::Child);
         assert_eq!(adult_group, AgeGroup::Adult);
+
+        println!("{}.index = {}", Age::name(), Age::index());
+        println!("{}.index = {}", AgeGroup::name(), AgeGroup::index());
+        println!("{}.dependencies = {:?}", Age::name(), Age::non_derived_dependencies());
+        println!("{}.dependencies = {:?}", AgeGroup::name(), AgeGroup::non_derived_dependencies());
+        println!("{}.dependents = {:?}", Age::name(), Age::dependents());
+        println!("{}.dependents = {:?}", AgeGroup::name(), AgeGroup::dependents());
     }
 
 }
