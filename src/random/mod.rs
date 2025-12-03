@@ -20,7 +20,7 @@ pub trait RngId: Copy + Clone {
     fn get_name() -> &'static str;
 }
 
-// This is a wrapper which allows for future support for different types of
+// This is a wrapper that allows for future support for different types of
 // random number generators (anything that implements SeedableRng is valid).
 struct RngHolder {
     rng: Box<dyn Any>,

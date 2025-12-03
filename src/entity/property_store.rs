@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 use crate::entity::EntityId;
 use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::property_value_store::PropertyValueStore;
 use super::entity::Entity;
 use super::entity_store::register_property_with_entity;
 use super::property::Property;
@@ -67,7 +68,7 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     let mut dependency_map = PROPERTY_METADATA.lock().unwrap();
     for dependency in P::non_derived_dependencies() {
         // Add `property_index` as a dependent of the dependency
-        let dependents = dependency_map.get_mut(&dependency).unwrap();
+        let dependents = dependency_map.entry(dependency).or_insert_with(|| vec![]);
         dependents.push(property_index);
     }
 }
@@ -151,20 +152,44 @@ impl PropertyStore {
     pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
         let index = P::index();
         self.items
-        .get(index)
-        .unwrap_or_else(|| panic!("No registered property found with index = {index:?}. You must use the `define_property!` macro to create a registered property."))
-        .get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()))
-        .downcast_ref::<PropertyValueStoreCore::<E, P>>()
-        .expect("TypeID does not match registered property type. You must use the `define_property!` macro to create a registered property.")
+            .get(index)
+            .unwrap_or_else(|| panic!("No registered property found with index = {index:?}. You must use the `define_property!` macro to create a registered property."))
+            .get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()))
+            .downcast_ref::<PropertyValueStoreCore::<E, P>>()
+            .expect("TypeID does not match registered property type. You must use the `define_property!` macro to create a registered property.")
+    }
+
+    /// Fetches an immutable reference to the `PropertyValueStore<P>`. This
+    /// implementation lazily instantiates the item if it has not yet been instantiated.
+    #[must_use]
+    pub fn get_mut<E: Entity, P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
+        let index = P::index();
+        let cell = self.items
+                       .get_mut(index)
+                       .unwrap_or_else(|| {
+                           panic!(
+                               "No registered property found with index = {index:?}. \
+                 You must use the `define_property!` macro to create a registered property."
+                           )
+                       });
+        // Make sure the cell is initialized. We do this  because `OnceCell::get_mut_or_init` method is unstable.
+        let _ = cell.get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()));
+
+        cell.get_mut()
+            .unwrap()
+            .downcast_mut::<PropertyValueStoreCore<E, P>>()
+            .expect("TypeID does not match registered property type. \
+                 You must use the `define_property!` macro to create a registered property.")
     }
 
     /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`.
-    pub (super) fn create_partial_property_change<E: Entity>(&self, property_index: usize, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
-        let property_store = self.items
-                                 .get(property_index)
-                                 .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."))
-            .get();
-        property_store.
+    pub (crate) fn create_partial_property_change<E: Entity>(&mut self, property_index: usize, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
+        let property_value_store = self.items
+                                       .get_mut(property_index)
+                                       .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."))
+                                       .get_mut().unwrap();
+        let property_value_store: &mut Box<dyn PropertyValueStore<E>> = property_value_store.downcast_mut().unwrap();
+        property_value_store.create_partial_property_change(entity_id)
     }
 }
 

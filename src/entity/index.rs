@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! An `Index<P: Property>` implements a map from `property_value` to `set_of_entities`,
 //! where the `set_of_entities` is a `HashSet<EntityId<P>>` of entities having the value of
 //! their property `P` equal to `property_value`.
@@ -79,8 +80,8 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
             .insert(entity_id)
     }
 
-    pub fn remove_entity(&mut self, key: &P, entity_id: EntityId<E>) {
-        let hash = P::hash_property_value(&key.make_canonical());
+    pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
+        let hash = P::hash_property_value(&key);
         self.remove_entity_with_hash(hash, entity_id);
     }
 
