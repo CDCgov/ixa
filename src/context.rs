@@ -172,27 +172,14 @@ impl Context {
     }
 
     pub fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
-        // ToDo(RobertJacobsonCDC): An alternative to the following is to always assume
-        //       that `None` means "not set" for "explicit" properties, that is, assume
-        //       that `get` is infallible for properties with a default constant. We
-        //       take a more conservative approach here and check for internal errors.
-        match P::initialization_kind() {
-            PropertyInitializationKind::Explicit => {
-                let property_store = self.property_store.get::<E, P>();
-                // A user error can cause this unwrap to fail.
-                property_store.get(entity_id).expect("attempted to get a property value with \"explicit\" initialization that was not set")
-            }
-
-            PropertyInitializationKind::Derived => P::compute_derived(self, entity_id),
-
-            PropertyInitializationKind::Constant => {
-                let property_store = self.property_store.get::<E, P>();
-                // If this unwrap fails, it is an internal ixa error, not a user error.
-                property_store.get(entity_id).expect(
-                    "getting a property value with \"constant\" initialization should never fail",
-                )
-            }
+        if P::initialization_kind() == PropertyInitializationKind::Derived {
+            return P::compute_derived(self, entity_id);
         }
+
+        let property_store = self.property_store.get::<E, P>();
+        property_store.get(entity_id).unwrap_or_else(|| {
+            panic!("attempted to get a property value with \"explicit\" initialization that was not set")
+        })
     }
 
     /// Set's the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
