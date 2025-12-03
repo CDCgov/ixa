@@ -14,21 +14,9 @@ use crate::HashMap;
 #[cfg(feature = "profiling")]
 static PROFILING_DATA: OnceLock<Mutex<ProfilingData>> = OnceLock::new();
 
-/// During testing, tests that are meant to panic can poison the mutex. Since we don't care
-/// about accuracy of profiling data during tests, we just reset the poison flag.
-#[cfg(all(feature = "profiling", test))]
-pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
-    #[cfg(test)]
-    PROFILING_DATA
-        .get_or_init(|| Mutex::new(ProfilingData::new()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 /// Acquires an exclusive lock on the profiling data, blocking until it's available.
-#[cfg(all(feature = "profiling", not(test)))]
+#[cfg(feature = "profiling")]
 pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
-    #[cfg(not(test))]
     PROFILING_DATA
         .get_or_init(|| Mutex::new(ProfilingData::new()))
         .lock()
