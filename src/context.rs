@@ -12,7 +12,7 @@ use polonius_the_crab::prelude::*;
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
-use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
+use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
@@ -96,7 +96,7 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     entity_store: EntityStore,
-    property_store: PropertyStore,
+    pub(crate) property_store: PropertyStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
@@ -228,30 +228,36 @@ impl Context {
         // We need two passes over the dependents: one pass to compute all the old values and
         // another to compute all the new values. We group the steps for each dependent (and, it
         // turns out, for the main property `P` as well) into two parts:
-        //  1. Before
+        //  1. Before setting the main property `P`, factored out into
+        //     `self.property_store.create_partial_property_change`
+        //  2. After setting the main property `P`, factored out into
+        //     `PartialPropertyChangeEvent::emit_in_context`
 
+        let previous_value = {
+            let property_value_store = self.property_store.get::<E, P>();
+            property_value_store.get(entity_id)
+        };
 
-
-        let property_value_store = self.property_store.get::<E, P>();
-
-        let previous_value = property_value_store.get(entity_id);
-        if Some(property_value) != previous_value {
+        if Some(property_value) == previous_value {
             return;
         }
+        let previous_value = previous_value.unwrap();
+        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>>
+            = vec![Box::new(PartialPropertyChangeEventCore::new(entity_id, previous_value))];
 
-        
 
         for dependent_idx in P::dependents() {
-
+            dependents.push(
+                self.property_store.create_partial_property_change::<E>(*dependent_idx, entity_id)
+            );
         }
 
+        let property_value_store = self.property_store.get::<E, P>();
         property_value_store.set(entity_id, property_value);
 
-        self.emit_event(PropertyChangeEvent {
-            entity_id,
-            current: property_value.clone(),
-            previous: previous_value,
-        });
+        for dependent in dependents.into_iter() {
+            dependent.emit_in_context(self)
+        }
     }
 
     pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>

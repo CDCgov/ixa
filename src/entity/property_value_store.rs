@@ -1,3 +1,4 @@
+#![allow(unused)]
 /*!
 
 The `PropertyValueStore` trait is the type-erased interface to property value storage.
@@ -25,7 +26,7 @@ use crate::{
     Context,
     HashSet
 };
-use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub trait PropertyValueStore<E: Entity> {
@@ -35,7 +36,7 @@ pub trait PropertyValueStore<E: Entity> {
     /// Fetch the existing value of the property for the given `entity_id`, remove the `entity_id`
     /// from the corresponding index bucket, and return a `PartialPropertyChangeEvent` object
     /// wrapping the previous value and `entity_id` that can be used to emit a property change event.
-    fn create_partial_property_change(&self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent>;
+    fn create_partial_property_change(&mut self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent>;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
@@ -51,15 +52,16 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         self
     }
 
-    fn create_partial_property_change(&self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
+    fn create_partial_property_change(&mut self, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
         // 1. Fetch the existing value of the property for the given `entity_id`
         // 2. Remove the `entity_id` from the corresponding index bucket
         // 3. Return a `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
         // ToDo(RobertJacobsonCDC): Is this always `Some`? Is this unwrap justified?
         let previous_value = self.get(entity_id).unwrap();
-        if let Some(index) = self.index {
-            index.remove_entity(previous_value, entity_id);
+        if let Some(index) = &mut self.index {
+            index.remove_entity(&previous_value.make_canonical(), entity_id);
         }
+        Box::new(PartialPropertyChangeEventCore::<E, P>::new(entity_id, previous_value))
     }
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
