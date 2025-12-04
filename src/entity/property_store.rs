@@ -1,57 +1,101 @@
 /*!
 
-A `PropertyStore` implements the registry pattern for property value stores: A `PropertyStore`
+A [`PropertyStore`] implements the registry pattern for property value stores: A [`PropertyStore`]
 wraps a vector of `PropertyValueStore`s, one for each concrete property type. The implementor
-of `Property` is the value type. Sincere there's a 1-1 correspondence between property
-types and their value stores, we implement the `index` method for each property type.
+of [`crate::entity::property::Property`] is the value type. Since there's a 1-1 correspondence between property types
+and their value stores, we implement the `index` method for each property type to make
+property lookup fast. The [`PropertyStore`] stores a list of all properties in the form of
+boxed `PropertyValueStore` instances, which provide a type-erased interface to the backing
+storage (including index) of the property. Storage is only allocated as-needed, so the
+instantiation of a `PropertyValueStore` for a property that is never used is negligible.
+There's no need, then, for lazy initialization of the `PropertyValueStore`s themselves.
+
+This module also implements the initialization of "static" data associated with a property,
+that is, data that is the same across all [`crate::context::Context`] instances, which is computed before `main()`
+using `ctor` magic. (Each property implements a ctor that calls [`add_to_property_registry()`].)
+For simplicity, a property's ctor implementation, supplied by a macro, just calls
+`add_to_property_registry<E: Entity, P: Property<E>>()`, which does all the work. The
+`add_to_property_registry` function adds the following metadata to global metadata stores:
+
+Metadata stored on `PROPERTY_METADATA`, which for each property stores:
+- a list of dependent (derived) properties, and
+- a constructor function to create a new `PropertyValueStore` instance for the property.
+
+Metadata stored on `ENTITY_METADATA`, which for each entity stores:
+- a list of properties associated with the entity, and
+- a list of _required_ properties for the entity. These are properties for
+  which values must be supplied to `add_entity` when creating a new entity.
 
 */
-use std::any::Any;
-use std::cell::OnceCell;
+
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
-use crate::entity::EntityId;
+
+use crate::entity::entity::Entity;
+use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
-use super::entity::Entity;
-use super::entity_store::register_property_with_entity;
-use super::property::Property;
-use super::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::EntityId;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
 static NEXT_PROPERTY_INDEX: Mutex<usize> = Mutex::new(0);
 
+/// A container struct to hold the (global) metadata for a single property.
+///
+/// At program startup (before `main()`, using ctors) we compute metadata for all properties
+/// that are linked into the binary, and this data remains unchanged for the life of the program.
+#[derive(Default)]
+struct PropertyMetadata {
+    /// The (derived) properties that depend on this property, as represented by their
+    /// `Property::index` value. This list is used to update the index (if applicable)
+    /// and emit change events for these properties when this property changes.
+    dependents: Vec<usize>,
+    /// A function that constructs a new `PropertyValueStoreCore<E, P>` instance in a type-erased
+    /// way, used in the constructor of `PropertyStore`. This is an `Option` because this
+    /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
+    /// instance for this property needs to exist (when its dependents are recorded).
+    value_store_constructor: Option<fn() -> Box<dyn Any>>,
+}
+
 /// This maps `property_type_index` to `(vec_of_transitive_dependents)`. This data is actually
-/// written by the property `ctor`s with a call to [`register_property_with_entity()`].
-static PROPERTY_METADATA: LazyLock<Mutex<HashMap<usize, Vec<usize>>>> =
+/// written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
+static PROPERTY_METADATA: LazyLock<Mutex<HashMap<usize, PropertyMetadata>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
-/// The public getter to `PROPERTY_METADATA`.
+/// The public getter for the dependents of a property with index `property_index` (as stored in
+/// `PROPERTY_METADATA`). The `Property<E: Entity>::dependents()` method defers to this.
+///
+/// This function should only be called once `main()` starts, that is, not in `ctors` constructors,
+/// as it assumes `PROPERTY_METADATA` has been correctly initialized. Hence, the "static" suffix.
+///
 /// # Safety
 /// This function assumes that `PROPERTY_METADATA` will never again be mutated after initial
 /// construction. Mutating the `Vec`s after taking these references would cause undefined behavior.
-pub unsafe fn get_property_metadata_static(property_index: usize) -> &'static [usize] {
-    let mut map = PROPERTY_METADATA.lock().unwrap();
+pub(super) unsafe fn get_property_dependents_static(property_index: usize) -> &'static [usize] {
+    let map = PROPERTY_METADATA.lock().unwrap();
 
-    // Insert an empty vector if not already registered
-    let dependents = map
-        .entry(property_index)
-        .or_insert_with(|| Vec::new());
+    // This method should only be called after program start.
+    let property_metadata = map.get(&property_index)
+                               .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
 
     // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
     //        the simplest way to implement this. Make a decision either way about whether additional complexity is
     //        worth eliminating this use of `unsafe`.
     // Transmute to `'static` slice. This assumes the `Vec` will never move or reallocate.
-    let dependents_static: &'static [usize] =
-        unsafe { std::mem::transmute::<&[usize], &'static [usize]>(dependents.as_slice()) };
+    let dependents_static: &'static [usize] = unsafe {
+        std::mem::transmute::<&[usize], &'static [usize]>(property_metadata.dependents.as_slice())
+    };
 
     dependents_static
 }
 
 /// Adds a new item to the registry. The job of this method is to create whatever "singleton"
-/// data/metadata is associated with the [`Property<E>`] if it doesn't already exist. In
+/// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
 /// our use case, this method is called in the `ctor` function of each `Property<E>` type.
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     // Initializes the index for the property type.
@@ -64,12 +108,23 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         P::is_required(),
     );
 
+    let mut property_metadata = PROPERTY_METADATA.lock().unwrap();
+
+    // Register the `PropertyValueStoreCore<E, P>` constructor.
+    {
+        let metadata = property_metadata
+            .entry(property_index)
+            .or_insert_with(PropertyMetadata::default);
+        metadata.value_store_constructor = Some(PropertyValueStoreCore::<E, P>::new_boxed)
+    }
+
     // Construct the dependency graph
-    let mut dependency_map = PROPERTY_METADATA.lock().unwrap();
     for dependency in P::non_derived_dependencies() {
         // Add `property_index` as a dependent of the dependency
-        let dependents = dependency_map.entry(dependency).or_insert_with(|| vec![]);
-        dependents.push(property_index);
+        let dependency_meta = property_metadata
+            .entry(dependency)
+            .or_insert_with(PropertyMetadata::default);
+        dependency_meta.dependents.push(property_index);
     }
 }
 
@@ -117,7 +172,9 @@ pub fn initialize_property_index(index: &AtomicUsize) -> usize {
 
 /// A wrapper around a vector of property value stores.
 pub struct PropertyStore {
-    items: Vec<OnceCell<Box<dyn Any>>>,
+    /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn Any>` and downcast-able to
+    /// `Box<PropertyValueStore<E>>`.
+    items: Vec<Box<dyn Any>>,
 }
 
 impl Default for PropertyStore {
@@ -127,68 +184,97 @@ impl Default for PropertyStore {
 }
 
 impl PropertyStore {
-    /// Creates a new [`PropertyStore`], allocating the exact number of slots as there are registered
-    /// [`Property`]s.
-    ///
-    /// This method assumes all types implementing [`Property`] have been implemented
-    /// _correctly_. This is one of the pitfalls of this pattern: there is
-    /// no guarantee that types implementing [`Property`] followed the rules. We can
-    /// have at least some confidence, though, in their correctness by supplying a
-    /// correct implementation via a macro.
-    ///
-    /// Observe that we create an empty `OnceCell` in each slot in this implementation, but
-    /// we could just as easily eagerly initialize the "RegisteredItem" instances here
-    /// instead (assuming we collected constructors somewhere).
+    /// Creates a new [`PropertyStore`].
     pub fn new() -> Self {
         let num_items = get_registered_property_count();
-        Self {
-            items: (0..num_items).map(|_| OnceCell::new()).collect(),
-        }
+        // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
+        let property_metadata = PROPERTY_METADATA.lock().unwrap();
+
+        // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each index (=`P::index()`).
+        let items = (0..num_items)
+            .map(|idx| {
+                let metadata = property_metadata
+                    .get(&idx)
+                    .unwrap_or_else(|| panic!("No property metadata entry for index {idx}"));
+                let constructor = metadata
+                    .value_store_constructor
+                    .unwrap_or_else(|| panic!("No PropertyValueStore constructor for index {idx}"));
+                constructor()
+            })
+            .collect();
+
+        Self { items }
     }
 
-    /// Fetches an immutable reference to the `PropertyValueStore<P>`. This
-    /// implementation lazily instantiates the item if it has not yet been instantiated.
+    /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
     pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
         let index = P::index();
-        self.items
-            .get(index)
-            .unwrap_or_else(|| panic!("No registered property found with index = {index:?}. You must use the `define_property!` macro to create a registered property."))
-            .get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()))
-            .downcast_ref::<PropertyValueStoreCore::<E, P>>()
-            .expect("TypeID does not match registered property type. You must use the `define_property!` macro to create a registered property.")
+        let property_value_store =
+            self.items
+                .get(index)
+                .unwrap_or_else(||
+                    panic!(
+                        "No registered property found with index = {:?} while trying to get property {}. You must use the `define_property!` macro to create a registered property.",
+                        index,
+                        P::name()
+                    )
+                );
+                // .as_ref(); // The `as_ref` is important, as otherwise this is a trait upcast, not a dereference.
+        let property_value_store: &PropertyValueStoreCore<E, P> = property_value_store
+            .downcast_ref::<PropertyValueStoreCore<E, P>>()
+            .unwrap_or_else(||
+                {
+                    panic!(
+                        "Property type at index {index:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        property_value_store.type_id(),
+                        TypeId::of::<PropertyValueStoreCore<E, P>>()
+                    )
+                }
+            );
+        property_value_store
     }
 
-    /// Fetches an immutable reference to the `PropertyValueStore<P>`. This
-    /// implementation lazily instantiates the item if it has not yet been instantiated.
+    /// Fetches a mutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
     pub fn get_mut<E: Entity, P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
         let index = P::index();
-        let cell = self.items
-                       .get_mut(index)
-                       .unwrap_or_else(|| {
-                           panic!(
-                               "No registered property found with index = {index:?}. \
-                 You must use the `define_property!` macro to create a registered property."
-                           )
-                       });
-        // Make sure the cell is initialized. We do this  because `OnceCell::get_mut_or_init` method is unstable.
-        let _ = cell.get_or_init(|| Box::new(PropertyValueStoreCore::<E, P>::new()));
-
-        cell.get_mut()
-            .unwrap()
+        let property_value_store =
+            self.items
+                .get_mut(index)
+                .unwrap_or_else(||
+                    panic!(
+                        "No registered property found with index = {:?} while trying to get property {}. You must use the `define_property!` macro to create a registered property.",
+                        index,
+                        P::name()
+                    )
+                );
+        let type_id = (&*property_value_store).type_id(); // Only used for error message if error occurs.
+        let property_value_store: &mut PropertyValueStoreCore<E, P> = property_value_store
             .downcast_mut::<PropertyValueStoreCore<E, P>>()
-            .expect("TypeID does not match registered property type. \
-                 You must use the `define_property!` macro to create a registered property.")
+            .unwrap_or_else(||
+                {
+                    panic!(
+                        "Property type at index {index:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        type_id,
+                        TypeId::of::<PropertyValueStoreCore<E, P>>()
+                    )
+                }
+            );
+        property_value_store
     }
 
     /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`.
-    pub (crate) fn create_partial_property_change<E: Entity>(&mut self, property_index: usize, entity_id: EntityId<E>) -> Box<dyn PartialPropertyChangeEvent> {
+    pub(crate) fn create_partial_property_change<E: Entity>(
+        &mut self,
+        property_index: usize,
+        entity_id: EntityId<E>,
+    ) -> Box<dyn PartialPropertyChangeEvent> {
         let property_value_store = self.items
                                        .get_mut(property_index)
-                                       .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."))
-                                       .get_mut().unwrap();
-        let property_value_store: &mut Box<dyn PropertyValueStore<E>> = property_value_store.downcast_mut().unwrap();
+            .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
+        let property_value_store: &mut Box<dyn PropertyValueStore<E>> =
+            property_value_store.downcast_mut().unwrap();
         property_value_store.create_partial_property_change(entity_id)
     }
 }
@@ -236,7 +322,8 @@ mod tests {
             ages.set(EntityId::<Person>::new(1), Age(33));
             ages.set(EntityId::<Person>::new(2), Age(44));
 
-            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> = property_store.get();
+            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> =
+                property_store.get();
             infection_statuses.set(EntityId::<Person>::new(0), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(1), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(2), InfectionStatus::Infected);
@@ -254,7 +341,8 @@ mod tests {
             assert_eq!(ages.get(EntityId::<Person>::new(1)), Some(Age(33)));
             assert_eq!(ages.get(EntityId::<Person>::new(2)), Some(Age(44)));
 
-            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> = property_store.get();
+            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> =
+                property_store.get();
             assert_eq!(
                 infection_statuses.get(EntityId::<Person>::new(0)),
                 Some(InfectionStatus::Susceptible)
