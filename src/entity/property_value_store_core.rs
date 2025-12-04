@@ -13,12 +13,12 @@ implementing the value storage.
 
 */
 
+use std::any::Any;
+
+use super::entity::{Entity, EntityId};
+use super::index::Index;
+use super::property::{Property, PropertyInitializationKind};
 use crate::value_vec::ValueVec;
-use super::{
-    index::Index,
-    entity::{Entity, EntityId},
-    property::{Property, PropertyInitializationKind}
-};
 
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
@@ -41,10 +41,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Self::default()
     }
 
+    pub fn new_boxed() -> Box<dyn Any> {
+        Box::new(Self::new())
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: ValueVec::with_capacity(capacity),
-            index: None
+            index: None,
         }
     }
 
