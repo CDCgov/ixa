@@ -9,10 +9,10 @@ use std::fmt::Debug;
 
 use serde::Serialize;
 
+use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
-use crate::{Context, HashSet};
-use crate::entity::property_store::get_property_metadata_static;
 use crate::hashing::hash_serialized_128;
+use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -87,7 +87,7 @@ pub trait Property<E: Entity>: AnyProperty {
     /// For cases when the property's hash needs to be computed in a special way.
     #[must_use]
     fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
-      hash_serialized_128(value)
+        hash_serialized_128(value)
     }
 
     /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
@@ -117,10 +117,9 @@ pub trait Property<E: Entity>: AnyProperty {
 
     /// Get a list of derived properties that depend on this property. The properties are
     /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
-    fn dependents() -> &'static [usize]{
-        unsafe{ get_property_metadata_static(Self::index()) }
+    fn dependents() -> &'static [usize] {
+        unsafe { get_property_dependents_static(Self::index()) }
     }
-
 }
 
 #[cfg(feature = "disabled")]
