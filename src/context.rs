@@ -426,6 +426,7 @@ impl Context {
             if self.break_requested {
                 enter_debugger(self);
             } else if self.shutdown_requested {
+                self.shutdown_requested = false;
                 break;
             } else {
                 self.execute_single_step();
@@ -435,6 +436,7 @@ impl Context {
 
             #[cfg(not(feature = "debugger"))]
             if self.shutdown_requested {
+                self.shutdown_requested = false;
                 break;
             } else {
                 self.execute_single_step();
