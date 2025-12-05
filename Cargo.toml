@@ -64,7 +64,6 @@ anyhow = "^1.0.28"
 sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
-polonius-the-crab = "^0.4.2"
 hashbrown = "^0.16.0"
 
 [package]
@@ -108,7 +107,6 @@ delegate.workspace = true
 sysinfo.workspace = true
 humantime.workspace = true
 bytesize.workspace = true
-polonius-the-crab.workspace = true
 hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
