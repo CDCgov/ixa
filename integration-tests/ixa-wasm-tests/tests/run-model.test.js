@@ -22,40 +22,60 @@ test('simulation completes successfully', async ({ page }) => {
     expect(result).toContain('Simulation complete');
 });
 
-test('simulation panics as expected', async ({ page }) => {
-    // Capture browser console messages
-    const messages = [];
-    page.on('console', msg => {
-        messages.push({ type: msg.type(), text: msg.text() });
+test('simulation error (simulated panic) as expected', async ({ page }) => {
+    await page.goto('http://localhost:8080');
+
+    const result = await page.evaluate(async () => {
+        let wasm = await window.setupWasm();
+        try {
+            await wasm.run_simulation_panic();
+            return { status: 'resolved' }; // Should not happen if panic propagates
+        } catch (e) {
+            return { status: 'error', message: (e && e.message) ? e.message : String(e) };
+        }
     });
+
+    // Assert only on rejection; message content can vary across environments/builds.
+    expect(result.status).toBe('error');
+});
+
+test('real wasm panic emits console error', async ({ page }) => {
+    const consoleMessages = [];
+    page.on('console', msg => consoleMessages.push(msg.text()));
+    const pageErrors = [];
+    page.on('pageerror', err => pageErrors.push(err.message));
 
     await page.goto('http://localhost:8080');
 
-    // Run the panic function with a timeout to detect a hang/crash
-    const errorInfo = await page.evaluate(async () => {
-        let wasm = await window.setupWasm();
-        function withTimeout(promise, ms) {
-            return Promise.race([
-                promise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
-            ]);
-        }
-        try {
-            await withTimeout(wasm.run_simulation_panic(), 1000);
-            return { result: 'resolved' };
-        } catch (e) {
-            let message = (e && e.message) ? e.message : String(e);
-            let stack = e && e.stack ? e.stack : null;
-            return { result: message, raw: e, stack };
-        }
+    // Invoke real panic (synchronous) without awaiting any Promise.
+    await page.evaluate(() => {
+        window.setupWasm().then(wasm => {
+            wasm.cause_real_panic_with_index(4); // out-of-range index
+        });
     });
 
-    // The panic should either cause a timeout or appear in the browser console
-    const hasPanicMsg = messages.some(m => m.text.includes('panicked') || m.text.includes('index out of bounds'));
-    // Print any message that contains 'index out of bounds'
-    messages.filter(m => m.text.includes('index out of bounds')).forEach(m => {
+    // Wait up to 5s for panic signal in console or pageerror.
+    const detected = await Promise.race([
+        page.waitForEvent('console', {
+            timeout: 5000,
+            predicate: m => m.text().includes('index out of bounds') || m.text().includes('panicked')
+        }).then(() => true).catch(() => false),
+        (async () => {
+            const start = Date.now();
+            while (Date.now() - start < 5000) {
+                if (consoleMessages.some(m => m.includes('index out of bounds') || m.includes('panicked')) ||
+                    pageErrors.some(e => e.includes('index out of bounds') || e.includes('panicked'))) {
+                    return true;
+                }
+                await new Promise(r => setTimeout(r, 100));
+            }
+            return false;
+        })()
+    ]);
+
+    if (!detected) {
         // eslint-disable-next-line no-console
-        console.log('Captured panic message:', m.text);
-    });
-    expect(errorInfo.result === 'timeout' && hasPanicMsg).toBeTruthy();
+        console.log('Panic not detected. Console messages:', consoleMessages, 'Page errors:', pageErrors);
+    }
+    expect(detected).toBeTruthy();
 });
