@@ -29,13 +29,14 @@ test('simulation error (simulated panic) as expected', async ({ page }) => {
         let wasm = await window.setupWasm();
         try {
             await wasm.run_simulation_panic();
-            return { status: 'resolved' }; // Should not happen if panic propagates
+            return { status: 'resolved' }; // Should never reach here; promise rejects
         } catch (e) {
             return { status: 'error', message: (e && e.message) ? e.message : String(e) };
         }
     });
 
-    // Assert only on rejection; message content can vary across environments/builds.
+    // Verify the promise rejection was caught. Don't assert on message content
+    // as it varies across environments and build configurations.
     expect(result.status).toBe('error');
 });
 
@@ -47,14 +48,15 @@ test('real wasm panic emits console error', async ({ page }) => {
 
     await page.goto('http://localhost:8080');
 
-    // Invoke real panic (synchronous) without awaiting any Promise.
+    // Trigger the panic synchronously (not awaited) so the panic hook
+    // can output to console before the promise rejection is handled.
     await page.evaluate(() => {
         window.setupWasm().then(wasm => {
-            wasm.cause_real_panic_with_index(4); // out-of-range index
+            wasm.cause_real_panic_with_index(4); // Pass out-of-bounds index
         });
     });
 
-    // Wait up to 5s for panic signal in console or pageerror.
+    // Wait up to 5 seconds for panic output in console or page errors.
     const detected = await Promise.race([
         page.waitForEvent('console', {
             timeout: 5000,
