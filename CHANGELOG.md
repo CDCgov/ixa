@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- cdc-as81-fix-release-pr-action-to-run-also-on-dispatch ([#631](https://github.com/CDCgov/ixa/pull/631))
 - bump release-plz/action from 0.5.119 to 0.5.120 ([#630](https://github.com/CDCgov/ixa/pull/630))
 - remove polonius ([#625](https://github.com/CDCgov/ixa/pull/625))
 - add profiling feature ([#622](https://github.com/CDCgov/ixa/pull/622))
