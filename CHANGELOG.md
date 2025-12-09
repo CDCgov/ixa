@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3](https://github.com/CDCgov/ixa/compare/ixa-v0.4.2...ixa-v0.4.3) - 2025-12-09
+
+### Fixed
+
+- Reset `context.shutdown_requested` when it is acted upon. Fixes #626. ([#628](https://github.com/CDCgov/ixa/pull/628))
+- use generic types for ConfigReportOptions setters ([#603](https://github.com/CDCgov/ixa/pull/603))
+- doc links ([#616](https://github.com/CDCgov/ixa/pull/616))
+
+### Other
+
+- bump release-plz/action from 0.5.119 to 0.5.120 ([#630](https://github.com/CDCgov/ixa/pull/630))
+- remove polonius ([#625](https://github.com/CDCgov/ixa/pull/625))
+- add profiling feature ([#622](https://github.com/CDCgov/ixa/pull/622))
+- bump release-plz/action from 0.5.118 to 0.5.119 ([#619](https://github.com/CDCgov/ixa/pull/619))
+- Add periodic counts benchmark ([#615](https://github.com/CDCgov/ixa/pull/615))
+- bump actions/checkout from 5 to 6 ([#614](https://github.com/CDCgov/ixa/pull/614))
+
 ## [0.4.2](https://github.com/CDCgov/ixa/compare/ixa-v0.4.1...ixa-v0.4.2) - 2025-11-17
 
 ### Added
