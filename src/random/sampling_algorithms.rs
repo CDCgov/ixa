@@ -225,18 +225,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    use super::*;
 
     #[test]
     fn test_sample_multiple_l_reservoir_basic() {
-        // Create the dataset: 0..1000
         let data: Vec<u32> = (0..1000).collect();
-        let seed: u64 = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+        let seed: u64 = 42;
         let mut rng = StdRng::seed_from_u64(seed);
         let requested = 100;
         let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
@@ -251,8 +248,44 @@ mod tests {
         let unique: HashSet<_> = sample.iter().collect();
         assert_eq!(unique.len(), sample.len());
 
-        // Print seed so failures are reproducible
-        println!("Test seed = {}", seed);
-        println!("{:?}", sample);
+        // ---- Chi-square test of uniformity ----
+
+        // Partition range 0..1000 into 10 equal-width bins
+        let mut counts = [0usize; 10];
+        for &value in &sample {
+            let bin = (value as usize) / 100; // 0..99 → bin 0, ..., 900..999 → bin 9
+            counts[bin] += 1;
+        }
+
+        // Expected count per bin for uniform sampling of 100 numbers from 0..1000
+        let expected = requested as f64 / 10.0; // = 10.0
+
+        // Compute chi-square statistic
+        let chi_square: f64 = counts
+            .iter()
+            .map(|&obs| {
+                let diff = (obs as f64) - expected;
+                diff * diff / expected
+            })
+            .sum();
+
+        // The critical value is just looked up in the chi-square distribution table
+        // or extracted from your favorite CAS. Since we are hard-coding a random
+        // seed, this test is actually deterministic. If you don't touch any of the
+        // code it uses, it should always pass.
+
+        // Degrees of freedom = (#bins - 1) = 9
+        // Critical χ²₀.₉₉₉ (p = 0.001) for df=9 is 27.877
+        // If chi_square > 27.877, reject uniformity at 0.1% level.
+        // (Using strict 0.1% significance keeps false failures very unlikely.)
+        let critical = 27.877;
+
+        assert!(
+            chi_square < critical,
+            "Reservoir sampling fails chi-square test: seed = {},  χ² = {}, counts = {:?}",
+            seed,
+            chi_square,
+            counts
+        );
     }
 }

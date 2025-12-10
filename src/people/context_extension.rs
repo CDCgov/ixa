@@ -477,28 +477,29 @@ impl ContextPeopleExt for Context {
         // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
         // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut position: usize = 0;
-        let mut next_pick_position: usize = 1;
-        let mut selected = Vec::new();
+        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0); // controls skip distance distribution
+        weight = weight.powf(1.0 / requested as f64);
+        let mut position: usize = 0; // current index in data
+        let mut next_pick_position: usize = 1; // index of the next item to pick
+        let mut reservoir = Vec::with_capacity(requested); // the sample reservoir
 
         // ToDo(RobertJacobsonCDC): This will use `iter_query_results` API when it is ready.
         self.query_people_internal(
             |person| {
                 position += 1;
-                if next_pick_position == position {
-                    if selected.len() == requested {
-                        let to_remove = self.sample_range(rng_id, 0..selected.len());
-                        selected.swap_remove(to_remove);
+                if position == next_pick_position {
+                    if reservoir.len() == requested {
+                        let to_remove = self.sample_range(rng_id, 0..reservoir.len());
+                        reservoir.swap_remove(to_remove);
                     }
-                    selected.push(person);
-                    if selected.len() == requested {
-                        // `f32` arithmetic is no faster than `f64` on modern hardware.
-                        next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
-                            / f64::ln(1.0 - weight))
-                        .floor() as usize
-                            + 1;
-                        weight *= self.sample_range(rng_id, 0.0..1.0);
+                    reservoir.push(person);
+
+                    if reservoir.len() == requested {
+                        let uniform_random: f64 = self.sample_range(rng_id, 0.0..1.0);
+                        next_pick_position +=
+                            (f64::ln(uniform_random) / f64::ln(1.0 - weight)).floor() as usize + 1;
+                        let uniform_random: f64 = self.sample_range(rng_id, 0.0..1.0);
+                        weight *= uniform_random.powf(1.0 / requested as f64);
                     } else {
                         next_pick_position += 1;
                     }
@@ -507,7 +508,7 @@ impl ContextPeopleExt for Context {
             query,
         );
 
-        selected
+        reservoir
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -739,6 +740,7 @@ impl ContextPeopleExtInternal for Context {
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
+    use std::collections::HashSet;
     use std::rc::Rc;
 
     use serde_derive::Serialize;
@@ -826,7 +828,7 @@ mod tests {
         #[allow(unused)]
         Infectious,
         #[allow(unused)]
-        Recovered
+        Recovered,
     }
     define_person_property_with_default!(
         InfectionStatus,
@@ -1330,15 +1332,14 @@ mod tests {
     }
 
     #[test]
-    fn test_sample_initial_population_seed(){
+    fn test_sample_initial_population_seed() {
+        // Test that we get a uniformly distributed sample of 100 people from a population of 1000.
         define_rng!(InfectionRng);
 
         let mut context = Context::new();
 
-        let seed: u64 = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+        let seed: u64 = 42;
+        let requested = 100;
 
         context.init_random(seed);
 
@@ -1349,9 +1350,60 @@ mod tests {
         let susceptibles = context.sample_people(
             InfectionRng,
             (InfectionStatus, InfectionStatusValue::Susceptible),
-            100,
+            requested,
         );
-        println!("{:?}", susceptibles)
+        // Unwrap the IDs to get numbers
+        let sample: Vec<u64> = susceptibles.into_iter().map(|p| p.0 as u64).collect();
+
+        // Correct sample size
+        assert_eq!(sample.len(), requested);
+
+        // All sampled values are within the valid range
+        assert!(sample.iter().all(|v| *v < 1000));
+
+        // The sample should not have duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), sample.len());
+
+        // ---- Chi-square test of uniformity ----
+
+        // Partition range 0..1000 into 10 equal-width bins
+        let mut counts = [0usize; 10];
+        for &value in &sample {
+            let bin = (value as usize) / 100; // 0..99 → bin 0, ..., 900..999 → bin 9
+            counts[bin] += 1;
+        }
+
+        // Expected count per bin for uniform sampling of 100 numbers from 0..1000
+        let expected = requested as f64 / 10.0; // = 10.0
+
+        // Compute chi-square statistic
+        let chi_square: f64 = counts
+            .iter()
+            .map(|&obs| {
+                let diff = (obs as f64) - expected;
+                diff * diff / expected
+            })
+            .sum();
+
+        // The critical value is just looked up in the chi-square distribution table
+        // or extracted from your favorite CAS. Since we are hard-coding a random
+        // seed, this test is actually deterministic. If you don't touch any of the
+        // code it uses, it should always pass.
+
+        // Degrees of freedom = (#bins - 1) = 9
+        // Critical χ²₀.₉₉₉ (p = 0.001) for df=9 is 27.877
+        // If chi_square > 27.877, reject uniformity at 0.1% level.
+        // (Using strict 0.1% significance keeps false failures very unlikely.)
+        let critical = 27.877;
+
+        assert!(
+            chi_square < critical,
+            "Reservoir sampling fails chi-square test: seed = {},  χ² = {}, counts = {:?}",
+            seed,
+            chi_square,
+            counts
+        );
     }
 
     mod property_initialization_queries {
