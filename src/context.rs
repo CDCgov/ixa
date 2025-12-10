@@ -261,8 +261,6 @@ impl Context {
             "Period must be greater than 0"
         );
 
-        //
-
         self.add_plan_with_phase(
             0.0,
             move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
@@ -365,11 +363,10 @@ impl Context {
     /// the time of the earliest scheduled plan (if one exists) and 0.0.
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
-        // ToDo(RobertJacobsonCDC):
-        //     We use an `AtomicF64` for `self.current_time` only so that we can initialize
-        //     it without a mutable reference in this method. We can use `Ordering::Relaxed`
-        //     in the load and simplify the initialization code if `self` is guaranteed to be
-        //     thread local only. But there is probably not a measurable performance difference.
+        // We use an `AtomicF64` for `self.current_time` only so that we can initialize
+        // it without a mutable reference in this method. We can use `Ordering::Relaxed`
+        // in the load and simplify the initialization code if `self` is guaranteed to be
+        // thread local only. But there is probably not a measurable performance difference.
 
         // Fast path: already initialized.
         let loaded = self.current_time.load(Ordering::Acquire);
@@ -969,6 +966,16 @@ mod tests {
     }
 
     #[test]
+    fn add_plan_get_current_time() {
+        let mut context = Context::new();
+        let current_time = context.get_current_time();
+        add_plan(&mut context, current_time, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
     fn multiple_negative_plans() {
         let mut context = Context::new();
         add_plan(&mut context, -3.0, 1);
@@ -1020,6 +1027,17 @@ mod tests {
         assert_eq!(context.get_current_time(), 0.0);
         context.execute();
         assert_eq!(context.get_current_time(), 0.0);
+    }
+
+    #[test]
+    fn get_current_time_initializes_to_zero_with_plan() {
+        let mut context = Context::new();
+        // No plans scheduled, should initialize to 0.0
+        assert_eq!(context.get_current_time(), 0.0);
+        add_plan(&mut context, 0.0, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
