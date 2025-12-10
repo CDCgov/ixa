@@ -66,6 +66,7 @@ humantime = "^2.2.0"
 bytesize = "^2.0.1"
 polonius-the-crab = "^0.4.2"
 hashbrown = "^0.16.0"
+atomic_float = "^1.1.0"
 
 [package]
 name = "ixa"
@@ -112,6 +113,7 @@ polonius-the-crab.workspace = true
 hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
+atomic_float.workspace = true
 
 # Building docs
 clap-markdown = { workspace = true, optional = true }

@@ -7,7 +7,9 @@ use std::cell::OnceCell;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 
+use atomic_float::AtomicF64;
 use polonius_the_crab::prelude::*;
 
 use crate::data_plugin::DataPlugin;
@@ -87,7 +89,7 @@ pub struct Context {
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
-    current_time: f64,
+    current_time: AtomicF64,
     shutdown_requested: bool,
     #[cfg(feature = "debugger")]
     break_requested: bool,
@@ -113,7 +115,7 @@ impl Context {
             data_plugins,
             #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
-            current_time: 0.0,
+            current_time: AtomicF64::new(f64::NEG_INFINITY),
             shutdown_requested: false,
             #[cfg(feature = "debugger")]
             break_requested: false,
@@ -211,8 +213,10 @@ impl Context {
         phase: ExecutionPhase,
     ) -> PlanId {
         assert!(
-            !time.is_nan() && !time.is_infinite() && time >= self.current_time,
-            "Time is invalid"
+            !time.is_nan()
+                && !time.is_infinite()
+                && time >= self.current_time.load(Ordering::Acquire),
+            "Time {time} is invalid"
         );
         self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
@@ -225,12 +229,12 @@ impl Context {
     ) {
         trace!(
             "evaluate periodic at {} (period={})",
-            self.current_time,
+            self.current_time.load(Ordering::Acquire),
             period
         );
         callback(self);
         if !self.plan_queue.is_empty() {
-            let next_time = self.current_time + period;
+            let next_time = self.current_time.load(Ordering::Acquire) + period;
             self.add_plan_with_phase(
                 next_time,
                 move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
@@ -352,12 +356,40 @@ impl Context {
         self.shutdown_requested = true;
     }
 
-    /// Get the current time in the simulation
+    /// Get the current time in the simulation.
     ///
-    /// Returns the current time
+    /// Prior to `Context.execute()` or the first call to this method, `self.current_time` is uninitialized. Calling
+    /// this method before `Context.execute()` will initialize the current time to the minimum of
+    /// the time of the earliest scheduled plan (if one exists) and 0.0.
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
-        self.current_time
+        // We use an `AtomicF64` for `self.current_time` only so that we can initialize
+        // it without a mutable reference in this method. We can use `Ordering::Relaxed`
+        // in the load and simplify the initialization code if `self` is guaranteed to be
+        // thread local only. But there is probably not a measurable performance difference.
+
+        // Fast path: already initialized.
+        let loaded = self.current_time.load(Ordering::Acquire);
+        if loaded != f64::NEG_INFINITY {
+            return loaded;
+        }
+
+        // Compute the desired initial time.
+        let init_value = match self.plan_queue.next_time() {
+            Some(t) if t < 0.0 => t,
+            _ => 0.0,
+        };
+
+        // Attempt initialization exactly once.
+        match self.current_time.compare_exchange(
+            f64::NEG_INFINITY, // expected
+            init_value,        // desired
+            Ordering::Release,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => init_value, // we won the race
+            Err(other) => other, // someone else initialized it; use their value
+        }
     }
 
     /// Request to enter a debugger session at next event loop
@@ -415,11 +447,16 @@ impl Context {
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         trace!("entering event loop");
+
+        // Initialize `self.current_time` if necessary. This ensures we always have a finite and monotonic time while
+        // executing even if plans are scheduled at negative time.
+        let _ = self.get_current_time();
+
         // Start plan loop
         loop {
             #[cfg(feature = "progress_bar")]
             if crate::progress::MAX_TIME.get().is_some() {
-                update_timeline_progress(self.current_time);
+                update_timeline_progress(self.current_time.load(Ordering::Relaxed));
             }
 
             #[cfg(feature = "debugger")]
@@ -492,7 +529,7 @@ impl Context {
         // There aren't any callbacks, so look at the first plan.
         else if let Some(plan) = self.plan_queue.get_next_plan() {
             trace!("calling plan at {:.6}", plan.time);
-            self.current_time = plan.time;
+            self.current_time.store(plan.time, Ordering::Relaxed);
             (plan.data)(self);
         } else {
             trace!("No callbacks or plans; exiting event loop");
@@ -605,21 +642,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Time is invalid")]
-    fn negative_plan_time() {
-        let mut context = Context::new();
-        add_plan(&mut context, -1.0, 0);
-    }
-
-    #[test]
-    #[should_panic(expected = "Time is invalid")]
+    #[should_panic(expected = "Time inf is invalid")]
     fn infinite_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::INFINITY, 0);
     }
 
     #[test]
-    #[should_panic(expected = "Time is invalid")]
+    #[should_panic(expected = "Time NaN is invalid")]
     fn nan_plan_time() {
         let mut context = Context::new();
         add_plan(&mut context, f64::NAN, 0);
@@ -922,5 +952,183 @@ mod tests {
         assert_eq!(context.get_current_time(), 2.0);
 
         assert_eq!(*context.get_data(ComponentA), vec![0, 1, 2]); // time 0.0, 1.0, and 2.0
+    }
+
+    // Tests for negative time handling
+
+    #[test]
+    fn negative_plan_time_allowed() {
+        let mut context = Context::new();
+        add_plan(&mut context, -1.0, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), -1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn add_plan_get_current_time() {
+        let mut context = Context::new();
+        let current_time = context.get_current_time();
+        add_plan(&mut context, current_time, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn multiple_negative_plans() {
+        let mut context = Context::new();
+        add_plan(&mut context, -3.0, 1);
+        add_plan(&mut context, -1.0, 3);
+        add_plan(&mut context, -2.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), -1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn negative_and_positive_plans() {
+        let mut context = Context::new();
+        add_plan(&mut context, -1.0, 1);
+        add_plan(&mut context, 1.0, 3);
+        add_plan(&mut context, 0.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn get_current_time_initializes_to_min_negative_plan() {
+        let mut context = Context::new();
+        add_plan(&mut context, -5.0, 1);
+        add_plan(&mut context, 10.0, 2);
+        // Getting current time before execute should initialize to the earliest plan time
+        assert_eq!(context.get_current_time(), -5.0);
+        context.execute();
+        assert_eq!(context.get_current_time(), 10.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn get_current_time_initializes_to_zero_when_all_positive() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        add_plan(&mut context, 2.0, 2);
+        // Should initialize to 0.0 since all plans are positive
+        assert_eq!(context.get_current_time(), 0.0);
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+    }
+
+    #[test]
+    fn get_current_time_initializes_to_zero_when_empty() {
+        let mut context = Context::new();
+        // No plans scheduled, should initialize to 0.0
+        assert_eq!(context.get_current_time(), 0.0);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+    }
+
+    #[test]
+    fn get_current_time_initializes_to_zero_with_plan() {
+        let mut context = Context::new();
+        // No plans scheduled, should initialize to 0.0
+        assert_eq!(context.get_current_time(), 0.0);
+        add_plan(&mut context, 0.0, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Time -1 is invalid")]
+    fn negative_time_from_callback_panics() {
+        let mut context = Context::new();
+        context.queue_callback(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            add_plan(context, -1.0, 2);
+        });
+        add_plan(&mut context, 1.0, 3);
+        context.execute();
+    }
+
+    #[test]
+    fn large_negative_time() {
+        let mut context = Context::new();
+        add_plan(&mut context, -1_000_000.0, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), -1_000_000.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn very_small_negative_time() {
+        let mut context = Context::new();
+        add_plan(&mut context, -1e-10, 1);
+        context.execute();
+        assert_eq!(context.get_current_time(), -1e-10);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn negative_time_ordering_with_phases() {
+        let mut context = Context::new();
+        add_plan_with_phase(&mut context, -1.0, 1, ExecutionPhase::Normal);
+        add_plan_with_phase(&mut context, -1.0, 3, ExecutionPhase::Last);
+        add_plan_with_phase(&mut context, -1.0, 2, ExecutionPhase::First);
+        context.execute();
+        assert_eq!(context.get_current_time(), -1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![2, 1, 3]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Time 4 is invalid")]
+    fn cannot_schedule_plan_before_current_time() {
+        let mut context = Context::new();
+        add_plan(&mut context, 5.0, 1);
+        context.add_plan(5.0, |context| {
+            // At time 5.0, we cannot schedule a plan at time 4.0
+            add_plan(context, 4.0, 2);
+        });
+        context.execute();
+    }
+
+    #[test]
+    fn get_current_time_multiple_calls_before_execute() {
+        let mut context = Context::new();
+        add_plan(&mut context, -2.0, 1);
+        // Multiple calls to get_current_time should return the same value
+        assert_eq!(context.get_current_time(), -2.0);
+        assert_eq!(context.get_current_time(), -2.0);
+        assert_eq!(context.get_current_time(), -2.0);
+        context.execute();
+        assert_eq!(context.get_current_time(), -2.0);
+    }
+
+    #[test]
+    fn negative_plan_can_add_positive_plan() {
+        let mut context = Context::new();
+        add_plan(&mut context, -1.0, 1);
+        context.add_plan(-1.0, |context| {
+            add_plan(context, 2.0, 2);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn negative_periodic_plan() {
+        let mut context = Context::new();
+        let call_count = Rc::new(RefCell::new(0));
+        let call_count_clone = Rc::clone(&call_count);
+
+        context.add_plan(-2.0, move |context| {
+            *call_count_clone.borrow_mut() += 1;
+            context.get_data_mut(ComponentA).push(-2i32 as u32);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), -2.0);
+        assert_eq!(*call_count.borrow(), 1);
     }
 }
