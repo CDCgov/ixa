@@ -190,10 +190,11 @@ pub fn sample_multiple_l_reservoir<'a, Container, R, T>(
 ) -> Vec<T>
 where
     R: Rng,
-    Container: HasLen + HasIter<Item<'a> = &'a T>,
+    Container: HasIter<Item<'a> = &'a T>,
     T: Clone + 'static,
 {
     let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
+    weight = weight.powf(1.0 / requested as f64);
     let mut position: usize = 0; // current index in data
     let mut next_pick_position: usize = 1; // index of the next item to pick
     let mut reservoir = Vec::with_capacity(requested); // the sample reservoir
@@ -211,7 +212,8 @@ where
                 next_pick_position += (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight))
                     .floor() as usize
                     + 1;
-                weight *= rng.random_range(0.0..1.0);
+                let uniform_random: f64 = rng.random_range(0.0..1.0);
+                weight *= uniform_random.powf(1.0 / requested as f64);
             } else {
                 next_pick_position += 1;
             }
@@ -219,4 +221,38 @@ where
     });
 
     reservoir
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{Rng, SeedableRng};
+    use rand::rngs::StdRng;
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_basic() {
+        // Create the dataset: 0..1000
+        let data: Vec<u32> = (0..1000).collect();
+        let seed: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let mut rng = StdRng::seed_from_u64(seed);
+        let requested = 100;
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+        // Correct sample size
+        assert_eq!(sample.len(), requested);
+
+        // All sampled values are within the valid range
+        assert!(sample.iter().all(|v| *v < 1000));
+
+        // The sample should not have duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), sample.len());
+
+        // Print seed so failures are reproducible
+        println!("Test seed = {}", seed);
+        println!("{:?}", sample);
+    }
 }

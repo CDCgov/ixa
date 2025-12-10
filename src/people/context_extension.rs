@@ -819,6 +819,21 @@ mod tests {
         |adult_runner, adult_swimmer| { adult_runner || adult_swimmer }
     );
 
+    #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+    pub enum InfectionStatusValue {
+        #[allow(unused)]
+        Susceptible,
+        #[allow(unused)]
+        Infectious,
+        #[allow(unused)]
+        Recovered
+    }
+    define_person_property_with_default!(
+        InfectionStatus,
+        InfectionStatusValue,
+        InfectionStatusValue::Susceptible
+    );
+
     #[test]
     fn set_get_properties() {
         let mut context = Context::new();
@@ -1312,6 +1327,31 @@ mod tests {
                 && !people3.contains(&person3)
                 && !people3.contains(&person6)
         );
+    }
+
+    #[test]
+    fn test_sample_initial_population_seed(){
+        define_rng!(InfectionRng);
+
+        let mut context = Context::new();
+
+        let seed: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        context.init_random(seed);
+
+        for _ in 0..1000 {
+            let _ = context.add_person(());
+        }
+
+        let susceptibles = context.sample_people(
+            InfectionRng,
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+            100,
+        );
+        println!("{:?}", susceptibles)
     }
 
     mod property_initialization_queries {
