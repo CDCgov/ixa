@@ -6,10 +6,12 @@ Random sampling is a fundamental capability for most simulations. The
 requirement that experiments also need to be _deterministic_ makes randomness a
 subtle issue.
 
-> [!NOTE] Randomness vs. Determinism A _truly random_ number source produces
-> numbers in a sequence than cannot be predicted even in principle. A
+> [!NOTE] Randomness vs. Determinism 
+> 
+> A _truly random_ number source produces
+> numbers in a sequence that cannot be predicted even in principle. A
 > _pseudorandom_ number source produces numbers in a sequence according to a
-> completely deterministic algorithm, so if you know the algorithm you can
+> completely deterministic algorithm, so if you know the algorithm, you can
 > predict the next number in the sequence exactly. However, good pseudorandom
 > number generators can produce sequences that appear indistinguishable from a
 > truly random sequence according to a battery of rigorous statistical tests. We
@@ -51,9 +53,10 @@ giving each module its own RNG, you ensure that changes in one module's random
 behavior don't cascade through the entire simulation, enabling precise scenario
 comparisons and reproducible debugging.
 
-> [!NOTE] Requirements for Determinism The determinism guarantee applies to
+> [!NOTE] Requirements for Determinism 
+> 
+> The determinism guarantee applies to
 > repeated execution of the same model compiled with the same version of Ixa.
->
 > However, you should not expect identical results between different versions of
 > Ixa. When you make changes to your own code, it is very easy to change the
 > simulation behavior even if you don't intend to. Do not be surprised if you
@@ -162,10 +165,12 @@ provide many more.
 let value = context.sample_distr(MyRng, Uniform::new(2.0, 10.0).unwrap());
 ```
 
-> [!WARNING] `rand` Crate Version Compatibility As of this writing, the latest
-> version of the `rand` crate is v0.9.1, but some popular crates in the Rust
+> [!WARNING] `rand` Crate Version Compatibility 
+> 
+> As of this writing, the latest
+> version of the `rand` crate is v0.9.2, but some popular crates in the Rust
 > ecosystem still use `rand@0.8.*`, which is incompatible. Using an incompatible
-> version in your code can result in confusing errors that ends with the
+> version in your code can result in confusing errors that end with the
 > tell-tale line, "Note: there are multiple different versions of crate `rand`
 > in the dependency graph". Always using `rand` that Ixa re-exports at
 > `ixa::rand` will help you avoid this trap.

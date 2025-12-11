@@ -31,14 +31,20 @@ Open the newly created `disease_model` directory in your favorite IDE, like
         └── 📄 Cargo.toml
 ```
 
-> [!INFO] Source Control The `.gitignore` file lists all the files and
+> [!INFO] Source Control 
+> 
+> The `.gitignore` file lists all the files and
 > directories you don't want to include in source control. For a Rust project
 > you should at least have `target` and `Cargo.lock` listed in the `.gitignore`.
 > I also make a habit of listing `.vscode` and `.idea`, the directories VS Code
-> and JetBrains respectively store IDE project settings. [!INFO] Cargo Cargo is
-> Rust's package manager and build system. It is a single tool that plays the
-> role of the multiple different tools you would use in other languages, such as
-> `pip` and `poetry` in the Python ecosystem. We use Cargo to
+> and JetBrains respectively store IDE project settings.
+
+
+> [!INFO] Cargo 
+> 
+> Cargo is Rust's package manager and build system. It is a single tool that plays
+> the role of the multiple different tools you would use in other languages, such
+> as `pip` and `poetry` in the Python ecosystem. We use Cargo to
 >
 > - install tools like ripgrep (`cargo install`)
 > - initialize new projects (`cargo new` and `cargo init`)
@@ -110,7 +116,9 @@ before the simulation is kicked off if necessary. The only setup we do is
 schedule a plan at time 1.0. The plan is itself another closure that prints the
 current simulation time.
 
-> [!INFO] Closures A _closure_ is a small, self-contained block of code that can
+> [!INFO] Closures 
+> 
+> A _closure_ is a small, self-contained block of code that can
 > be passed around and executed later. It can capture and use variables from its
 > surrounding environment, which makes it useful for things like callbacks,
 > event handlers, or any situation where you want to define some logic on the
@@ -160,7 +168,9 @@ the log level:
 cargo run -- --log-level disease_model=trace
 ```
 
-> [!INFO] Logging The `trace!`, `info!`, and `error!` logging macros allow us to
+> [!INFO] Logging 
+> 
+> The `trace!`, `info!`, and `error!` logging macros allow us to
 > print messages to the console, but they are much more powerful than a simple
 > print statement. With log messages, you can:
 >
@@ -170,7 +180,11 @@ cargo run -- --log-level disease_model=trace
 > - Filter messages to show only those emitted from a specific module, like the
 >   `people` module we write in the next section.
 >
-> See the logging documentation for more details. [!INFO] Command Line Arguments
+> See the logging documentation for more details.
+
+
+> [!INFO] Command Line Arguments
+> 
 > The `run_with_args()` function takes care of handling any command line
 > arguments for us, which is why we don't just create a `Context` object and
 > call `context.execute()` ourselves. There are many arguments we can pass to

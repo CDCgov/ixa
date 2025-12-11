@@ -356,7 +356,9 @@ pub fn init(context: &mut Context) {
 
 That is everything needed for the bookkeeping.
 
-> [!INFO] Aggregation Inside The Model The aggregation step often doesn't look
+> [!INFO] Aggregation Inside The Model 
+> 
+> The aggregation step often doesn't look
 > like aggregation inside the model, because we can accumulate values _as events
 > occur_ instead of aggregating values after the fact.
 

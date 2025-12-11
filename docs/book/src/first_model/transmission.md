@@ -92,7 +92,9 @@ accomplishes the three tasks above. A few observations:
   `InfectionStatus` and `InfectionStatusValue`) or the infection manager we are
   about to write.
 
-> [!INFO] Random Number Generators Each module generally defines its own random
+> [!INFO] Random Number Generators 
+> 
+> Each module generally defines its own random
 > number source with `define_rng!`, avoiding interfering with the random number
 > sources used elsewhere in the simulation in order to preserve determinism. In
 > Monte Carlo simulations, _deterministic_ pseudorandom number sequences are
