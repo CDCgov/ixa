@@ -31,20 +31,21 @@ Open the newly created `disease_model` directory in your favorite IDE, like
         └── 📄 Cargo.toml
 ```
 
-> [!INFO] Source Control 
-> 
-> The `.gitignore` file lists all the files and
-> directories you don't want to include in source control. For a Rust project
-> you should at least have `target` and `Cargo.lock` listed in the `.gitignore`.
-> I also make a habit of listing `.vscode` and `.idea`, the directories VS Code
-> and JetBrains respectively store IDE project settings.
+> [!INFO] Source Control
+>
+> The `.gitignore` file lists all the files and directories you don't want to
+> include in source control. For a Rust project you should at least have
+> `target` and `Cargo.lock` listed in the `.gitignore`. I also make a habit of
+> listing `.vscode` and `.idea`, the directories VS Code and JetBrains
+> respectively store IDE project settings.
 
+<!-- markdownlint-disable-next-line MD028 -->
 
-> [!INFO] Cargo 
-> 
-> Cargo is Rust's package manager and build system. It is a single tool that plays
-> the role of the multiple different tools you would use in other languages, such
-> as `pip` and `poetry` in the Python ecosystem. We use Cargo to
+> [!INFO] Cargo
+>
+> Cargo is Rust's package manager and build system. It is a single tool that
+> plays the role of the multiple different tools you would use in other
+> languages, such as `pip` and `poetry` in the Python ecosystem. We use Cargo to
 >
 > - install tools like ripgrep (`cargo install`)
 > - initialize new projects (`cargo new` and `cargo init`)
@@ -116,14 +117,13 @@ before the simulation is kicked off if necessary. The only setup we do is
 schedule a plan at time 1.0. The plan is itself another closure that prints the
 current simulation time.
 
-> [!INFO] Closures 
-> 
-> A _closure_ is a small, self-contained block of code that can
-> be passed around and executed later. It can capture and use variables from its
-> surrounding environment, which makes it useful for things like callbacks,
-> event handlers, or any situation where you want to define some logic on the
-> fly and run it at a later time. In simple terms, a closure is like a mini
-> anonymous function.
+> [!INFO] Closures
+>
+> A _closure_ is a small, self-contained block of code that can be passed around
+> and executed later. It can capture and use variables from its surrounding
+> environment, which makes it useful for things like callbacks, event handlers,
+> or any situation where you want to define some logic on the fly and run it at
+> a later time. In simple terms, a closure is like a mini anonymous function.
 
 The `run_with_args()` function does the following:
 
@@ -168,11 +168,11 @@ the log level:
 cargo run -- --log-level disease_model=trace
 ```
 
-> [!INFO] Logging 
-> 
-> The `trace!`, `info!`, and `error!` logging macros allow us to
-> print messages to the console, but they are much more powerful than a simple
-> print statement. With log messages, you can:
+> [!INFO] Logging
+>
+> The `trace!`, `info!`, and `error!` logging macros allow us to print messages
+> to the console, but they are much more powerful than a simple print statement.
+> With log messages, you can:
 >
 > - Turn log messages on and off as needed.
 > - Enable only messages with a specified priority (for example, only warnings
@@ -182,13 +182,14 @@ cargo run -- --log-level disease_model=trace
 >
 > See the logging documentation for more details.
 
+<!-- markdownlint-disable-next-line MD028 -->
 
 > [!INFO] Command Line Arguments
-> 
+>
 > The `run_with_args()` function takes care of handling any command line
 > arguments for us, which is why we don't just create a `Context` object and
 > call `context.execute()` ourselves. There are many arguments we can pass to
-> our model that affects what is output and where, debugging options,
+> our model that affect what is output and where, debugging options,
 > configuration input, and so forth. See the command line documentation for more
 > details.
 

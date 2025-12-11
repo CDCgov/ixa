@@ -106,16 +106,16 @@ An index in Ixa is just a map between a property _value_ and the list of all
 property value is (almost) as fast as looking up the property value for a given
 `PersonId`.
 
-> [!INFO] Ixa's Intelligent Indexing Strategy 
-> 
-> The picture we have painted of how
-> Ixa implements indexing is necessarily a simplification. Ixa uses a lazy
-> indexing strategy, which means if a property is never queried, then Ixa never
-> actually does the work of computing the index. Ixa also keeps track of whether
-> new people have been added to the simulation since the last time a query was
-> run, so that it only has to update its index for those newly added people.
-> These and other optimizations make Ixa's indexing very fast and memory
-> efficient compared to the simplistic version described in this section.
+> [!INFO] Ixa's Intelligent Indexing Strategy
+>
+> The picture we have painted of how Ixa implements indexing is necessarily a
+> simplification. Ixa uses a lazy indexing strategy, which means if a property
+> is never queried, then Ixa never actually does the work of computing the
+> index. Ixa also keeps track of whether new people have been added to the
+> simulation since the last time a query was run, so that it only has to update
+> its index for those newly added people. These and other optimizations make
+> Ixa's indexing very fast and memory efficient compared to the simplistic
+> version described in this section.
 
 ## The Costs of Creating an Index
 
@@ -131,14 +131,14 @@ There are two costs you have to pay for indexing:
    example) _and_ the `PersonId` values, while the original column only stores
    the `InfectionStatus` (the `PersonId`'s were implicitly the row numbers).
 
-> [!INFO] Creating vs. Maintaining an Index 
-> 
-> Suspiciously missing from this list
-> of costs is the initial cost of scanning through the property column to create
-> the index in the first place, but actually whether you maintain the index from
-> the very beginning or you index it all at once doesn't matter: the sum of all
-> the small efforts to update the index every time a person is added is equal to
-> the cost of creating the index from scratch for an existing set of data.
+> [!INFO] Creating vs. Maintaining an Index
+>
+> Suspiciously missing from this list of costs is the initial cost of scanning
+> through the property column to create the index in the first place, but
+> actually whether you maintain the index from the very beginning or you index
+> it all at once doesn't matter: the sum of all the small efforts to update the
+> index every time a person is added is equal to the cost of creating the index
+> from scratch for an existing set of data.
 >
 > We can, however, save the effort of updating the index when property values
 > _change_ if we wait until we actually run a query that needs to use the index
@@ -160,10 +160,10 @@ production recommend that we have a feel for whether we really need the
 resources we are using.
 
 > [!TIP] A query might be the wrong tool for the job
-> 
-> Sometimes, the best way to address a slow query in your model isn’t to
-> add indexes, but to remove the query entirely. A common scenario is when you
-> want to report on some aggregate statistics, for example, the total number of
+>
+> Sometimes, the best way to address a slow query in your model isn’t to add
+> indexes, but to remove the query entirely. A common scenario is when you want
+> to report on some aggregate statistics, for example, the total number of
 > people having each infectiousness status. It might be much better to just
 > track the aggregate value directly than to run a query for it every time you
 > want to write it to a report. As usual, when it comes to performance issues,
