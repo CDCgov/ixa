@@ -10,7 +10,6 @@ use std::rc::Rc;
 use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF64;
-use polonius_the_crab::prelude::*;
 
 use crate::data_plugin::DataPlugin;
 use crate::execution_stats::{
@@ -306,23 +305,20 @@ impl Context {
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
-        let mut self_shadow = self;
         let index = T::index_within_context();
 
         // If the data plugin is already initialized, return a mutable reference.
-        // Use polonius to address borrow checker limitations.
-        polonius!(|self_shadow| -> &'polonius mut T::DataContainer {
-            if let Some(any) = self_shadow.data_plugins[index].get_mut() {
-                polonius_return!(any
-                    .downcast_mut::<T::DataContainer>()
-                    .expect("TypeID does not match data plugin type"));
-            }
-            // Else, don't return. Fall through and initialize.
-        });
+        if self.data_plugins[index].get().is_some() {
+            return self.data_plugins[index]
+                .get_mut()
+                .unwrap()
+                .downcast_mut::<T::DataContainer>()
+                .expect("TypeID does not match data plugin type");
+        }
 
-        // Initialize the data plugin.
-        let data = T::init(self_shadow);
-        let cell = self_shadow
+        // Initialize the data plugin if not already initialized.
+        let data = T::init(self);
+        let cell = self
             .data_plugins
             .get_mut(index)
             .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."));
@@ -463,6 +459,7 @@ impl Context {
             if self.break_requested {
                 enter_debugger(self);
             } else if self.shutdown_requested {
+                self.shutdown_requested = false;
                 break;
             } else {
                 self.execute_single_step();
@@ -472,6 +469,7 @@ impl Context {
 
             #[cfg(not(feature = "debugger"))]
             if self.shutdown_requested {
+                self.shutdown_requested = false;
                 break;
             } else {
                 self.execute_single_step();
@@ -1130,5 +1128,39 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), -2.0);
         assert_eq!(*call_count.borrow(), 1);
+    }
+
+    #[test]
+    fn shutdown_requested_reset() {
+        // This test verifies that shutdown_requested is properly reset after
+        // being acted upon. This allows the context to be reused after shutdown.
+        let mut context = Context::new();
+        context.add_person(()).unwrap();
+
+        // Schedule a plan at time 0.0 that calls shutdown
+        context.add_plan(0.0, |ctx| {
+            ctx.shutdown();
+        });
+
+        // First execute - should run until shutdown
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(context.get_current_population(), 1);
+
+        // Add a new plan at time 2.0
+        context.add_plan(2.0, |ctx| {
+            ctx.add_person(()).unwrap();
+        });
+
+        // Second execute - should execute the new plan
+        // If shutdown_requested wasn't reset, this would immediately break
+        // without executing the plan, leaving population at 1.
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(
+            context.get_current_population(),
+            2,
+            "If this fails, shutdown_requested was not properly reset"
+        );
     }
 }
