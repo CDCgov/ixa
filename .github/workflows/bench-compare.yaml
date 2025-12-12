@@ -36,7 +36,9 @@ jobs:
           echo '' >> results.md
           echo '#### Hyperfine' >> results.md
           echo '' >> results.md
+          echo '```' >> results.md
           cat hyperfine.md >> results.md
+          echo '```' >> results.md
           echo '' >> results.md
           echo '#### Criterion' >> results.md
           echo '' >> results.md
