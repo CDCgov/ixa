@@ -229,13 +229,12 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-
     #[test]
     fn test_sample_multiple_l_reservoir_basic() {
         let data: Vec<u32> = (0..1000).collect();
+        let requested = 100;
         let seed: u64 = 42;
         let mut rng = StdRng::seed_from_u64(seed);
-        let requested = 100;
         let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
 
         // Correct sample size
@@ -247,45 +246,108 @@ mod tests {
         // The sample should not have duplicates
         let unique: HashSet<_> = sample.iter().collect();
         assert_eq!(unique.len(), sample.len());
+    }
 
-        // ---- Chi-square test of uniformity ----
+    // Verifies that the reservoir sampling algorithm produces uniformly distributed
+    // samples by running it 1000 times and checking that the resulting chi-square
+    // statistics follow the expected chi-square(9) distribution. Note that this
+    // test is only approximately correct, reasonable only when `requested` is small
+    // relative to `population`, because `sample_multiple_l_reservoir` samples
+    // without replacement, while the chi-squared test assumes independent samples.
+    #[test]
+    fn test_sample_multiple_l_reservoir_uniformity() {
+        let population: u32 = 10000;
+        let data: Vec<u32> = (0..population).collect();
+        let requested = 100;
+        let num_runs = 1000;
+        let mut chi_squares = Vec::with_capacity(num_runs);
 
-        // Partition range 0..1000 into 10 equal-width bins
-        let mut counts = [0usize; 10];
-        for &value in &sample {
-            let bin = (value as usize) / 100; // 0..99 → bin 0, ..., 900..999 → bin 9
-            counts[bin] += 1;
+        for run in 0..num_runs {
+            let mut rng = StdRng::seed_from_u64(42 + run as u64);
+            let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+            // Partition range 0..population into 10 equal-width bins
+            let mut counts = [0usize; 10];
+            for &value in &sample {
+                let bin = (value as usize) / (population as usize / 10);
+                counts[bin] += 1;
+            }
+
+            // Expected count per bin for uniform sampling
+            let expected = requested as f64 / 10.0; // = 10.0
+
+            // Compute chi-square statistic
+            let chi_square: f64 = counts
+                .iter()
+                .map(|&obs| {
+                    let diff = (obs as f64) - expected;
+                    diff * diff / expected
+                })
+                .sum();
+
+            chi_squares.push(chi_square);
         }
 
-        // Expected count per bin for uniform sampling of 100 numbers from 0..1000
-        let expected = requested as f64 / 10.0; // = 10.0
+        // Now test that chi_squares follow a chi-square distribution with df=9
+        // We use quantiles of the chi-square(9) distribution to create bins
+        // and check if the observed counts match the expected uniform distribution
 
-        // Compute chi-square statistic
-        let chi_square: f64 = counts
+        // Quantiles of chi-square distribution with df=9 at deciles (10 bins)
+        // These values define the bin boundaries such that each bin should contain
+        // 10% of the observations if they truly follow chi-square(9).
+        // Generate with Mathematica:
+        //     Table[Quantile[ChiSquareDistribution[9], p/10], {p, 0, 10}]//N
+        let quantiles = [
+            0.0,           // 0th percentile (minimum)
+            4.16816,       // 10th percentile
+            5.38005,       // 20th percentile
+            6.39331,       // 30th percentile
+            7.35703,       // 40th percentile
+            8.34283,       // 50th percentile (median)
+            9.41364,       // 60th percentile
+            10.6564,       // 70th percentile
+            12.2421,       // 80th percentile
+            14.6837,       // 90th percentile
+            f64::INFINITY, // 100th percentile (maximum)
+        ];
+
+        let num_bins = quantiles.len() - 1;
+        let mut chi_square_counts = vec![0usize; num_bins];
+
+        for &chi_sq in &chi_squares {
+            // Find which bin this chi-square value falls into
+            for i in 0..num_bins {
+                if chi_sq >= quantiles[i] && chi_sq < quantiles[i + 1] {
+                    chi_square_counts[i] += 1;
+                    break;
+                }
+            }
+        }
+
+        // Each bin should contain approximately num_runs / num_bins observations
+        let expected_per_bin = num_runs as f64 / num_bins as f64;
+        let chi_square_of_chi_squares: f64 = chi_square_counts
             .iter()
             .map(|&obs| {
-                let diff = (obs as f64) - expected;
-                diff * diff / expected
+                let diff = (obs as f64) - expected_per_bin;
+                diff * diff / expected_per_bin
             })
             .sum();
 
-        // The critical value is just looked up in the chi-square distribution table
-        // or extracted from your favorite CAS. Since we are hard-coding a random
-        // seed, this test is actually deterministic. If you don't touch any of the
-        // code it uses, it should always pass.
-
         // Degrees of freedom = (#bins - 1) = 9
-        // Critical χ²₀.₉₉₉ (p = 0.001) for df=9 is 27.877
-        // If chi_square > 27.877, reject uniformity at 0.1% level.
-        // (Using strict 0.1% significance keeps false failures very unlikely.)
+        // Critical χ²₀.₉₉₉ for df=9 is 27.877
         let critical = 27.877;
 
+        println!(
+            "χ² = {}, counts = {:?}",
+            chi_square_of_chi_squares, chi_square_counts
+        );
+
         assert!(
-            chi_square < critical,
-            "Reservoir sampling fails chi-square test: seed = {},  χ² = {}, counts = {:?}",
-            seed,
-            chi_square,
-            counts
+            chi_square_of_chi_squares < critical,
+            "Chi-square statistics fail to follow chi-square(9) distribution: χ² = {}, counts = {:?}",
+            chi_square_of_chi_squares,
+            chi_square_counts
         );
     }
 }
