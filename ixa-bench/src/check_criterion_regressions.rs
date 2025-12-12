@@ -13,6 +13,8 @@ struct Est {
     ub: f64,
 }
 
+type TableRow = (String, String, String, String, String);
+
 fn find_change_files(base: &Path) -> Vec<(String, String, std::path::PathBuf)> {
     let mut results = Vec::new();
     if !base.exists() {
@@ -93,39 +95,24 @@ fn is_recent(path: &Path, recent_seconds: u64) -> bool {
     }
 }
 
-fn print_table(title: &str, rows: &[(String, String, String, String, String)]) {
+fn print_table(
+    title: &str,
+    rows: &[(String, String, String, String, String)],
+    widths: &[usize; 5],
+) {
     if rows.is_empty() {
         println!("{}: (none)", title);
         return;
     }
-    let headers = ("Group", "Bench", "Change", "CI Lower", "CI Upper");
-    let mut cols: Vec<Vec<String>> = vec![
-        vec![headers.0.to_string()],
-        vec![headers.1.to_string()],
-        vec![headers.2.to_string()],
-        vec![headers.3.to_string()],
-        vec![headers.4.to_string()],
-    ];
-    for r in rows {
-        cols[0].push(r.0.clone());
-        cols[1].push(r.1.clone());
-        cols[2].push(r.2.clone());
-        cols[3].push(r.3.clone());
-        cols[4].push(r.4.clone());
-    }
-    let widths: Vec<usize> = cols
-        .iter()
-        .map(|c| c.iter().map(|s| s.len()).max().unwrap_or(0))
-        .collect();
 
     println!("{}:", title);
     println!(
         "  {}  {}  {}  {}  {}",
-        headers.0.pad_to_width(widths[0]),
-        headers.1.pad_to_width(widths[1]),
-        headers.2.pad_left_to_width(widths[2]),
-        headers.3.pad_left_to_width(widths[3]),
-        headers.4.pad_left_to_width(widths[4])
+        "Group".pad_to_width(widths[0]),
+        "Bench".pad_to_width(widths[1]),
+        "Change".pad_left_to_width(widths[2]),
+        "CI Lower".pad_left_to_width(widths[3]),
+        "CI Upper".pad_left_to_width(widths[4]),
     );
     println!(
         "  {}  {}  {}  {}  {}",
@@ -259,7 +246,7 @@ fn main() {
 
     // Prepare rows
     let format_pct = |v: f64| format!("{:.3}%", v * 100.0);
-    let reg_rows: Vec<_> = regressions
+    let reg_rows: Vec<TableRow> = regressions
         .iter()
         .map(|e| {
             (
@@ -275,7 +262,7 @@ fn main() {
             )
         })
         .collect();
-    let imp_rows: Vec<_> = improvements
+    let imp_rows: Vec<TableRow> = improvements
         .iter()
         .map(|e| {
             (
@@ -291,7 +278,7 @@ fn main() {
             )
         })
         .collect();
-    let un_rows: Vec<_> = unchanged
+    let un_rows: Vec<TableRow> = unchanged
         .iter()
         .map(|e| {
             (
@@ -308,8 +295,30 @@ fn main() {
         })
         .collect();
 
-    // Print three tables
-    print_table("Regressions", &reg_rows);
-    print_table("Improvements", &imp_rows);
-    print_table("Unchanged", &un_rows);
+    let widths = compute_global_widths(&[&reg_rows, &imp_rows, &un_rows]);
+    print_table("Regressions", &reg_rows, &widths);
+    print_table("Improvements", &imp_rows, &widths);
+    print_table("Unchanged", &un_rows, &widths);
+}
+
+fn compute_global_widths(tables: &[&[TableRow]]) -> [usize; 5] {
+    let mut widths = [
+        "Group".len(),
+        "Bench".len(),
+        "Change".len(),
+        "CI Lower".len(),
+        "CI Upper".len(),
+    ];
+
+    for table in tables {
+        for row in *table {
+            widths[0] = widths[0].max(row.0.len());
+            widths[1] = widths[1].max(row.1.len());
+            widths[2] = widths[2].max(row.2.len());
+            widths[3] = widths[3].max(row.3.len());
+            widths[4] = widths[4].max(row.4.len());
+        }
+    }
+
+    widths
 }
