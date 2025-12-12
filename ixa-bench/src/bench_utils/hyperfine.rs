@@ -8,6 +8,8 @@ use clap::{arg, Parser};
 use ixa_bench::bench_utils::registry::{list_benches, list_groups};
 
 const STYLE_FLAGS: [&str; 2] = ["--show-output", "--style"];
+const HYPERFINE_HEADER: &str = "| Group | Bench | Mean [ms] | Min [ms] | Max [ms] | Relative |";
+const HYPERFINE_SEPARATOR: &str = "|:---|:---|---:|---:|---:|---:|";
 
 #[derive(Parser)]
 struct HyperfineArgs {
@@ -204,11 +206,26 @@ fn append_markdown(
     let content = fs::read_to_string(group_path)?;
 
     if is_first {
-        // Write the first table, ensuring it ends with a newline but not multiple
-        let trimmed = content.trim_end();
+        let lines: Vec<&str> = content.lines().collect();
+        if lines.len() < 2 {
+            fs::write(aggregate_path, content)?;
+            return Ok(());
+        }
+
         let mut file = fs::File::create(aggregate_path)?;
-        file.write_all(trimmed.as_bytes())?;
+        file.write_all(HYPERFINE_HEADER.as_bytes())?;
         file.write_all(b"\n")?;
+        file.write_all(HYPERFINE_SEPARATOR.as_bytes())?;
+        file.write_all(b"\n")?;
+
+        for line in &lines[2..] {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let transformed = transform_row_to_group_bench(line);
+            file.write_all(transformed.as_bytes())?;
+            file.write_all(b"\n")?;
+        }
     } else {
         // Parse the new content to extract data rows only (skip header and separator)
         let new_rows: Vec<&str> = content
@@ -217,13 +234,40 @@ fn append_markdown(
             .filter(|line| !line.trim().is_empty())
             .collect();
 
-        // Append new rows to existing content
+        // Append transformed rows to existing content
         let mut file = OpenOptions::new().append(true).open(aggregate_path)?;
 
         for row in new_rows {
-            file.write_all(row.as_bytes())?;
+            let transformed = transform_row_to_group_bench(row);
+            file.write_all(transformed.as_bytes())?;
             file.write_all(b"\n")?;
         }
     }
     Ok(())
+}
+
+fn transform_row_to_group_bench(row: &str) -> String {
+    // Row format: | `group::bench` | mean | min | max | relative |
+    // Transform to: | group | bench | mean | min | max | relative |
+    let mut parts: Vec<&str> = row
+        .split('|')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if parts.is_empty() {
+        return row.to_string();
+    }
+
+    let command_cell = parts.remove(0);
+    let command = command_cell.trim_matches('`').trim();
+    if let Some(double_colon_pos) = command.find("::") {
+        let group = &command[..double_colon_pos];
+        let bench = &command[double_colon_pos + 2..];
+        let rest = parts.join(" | ");
+        return format!("| {} | {} | {}", group, bench, rest);
+    }
+
+    // If parsing fails, return original row
+    row.to_string()
 }
