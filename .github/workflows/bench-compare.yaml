@@ -44,7 +44,9 @@ jobs:
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
             mise run bench:criterion 2>&1
           else
+            echo '```' >> results.md
             cargo run -q -p ixa-bench --bin check_criterion_regressions >> results.md
+            echo '```' >> results.md
           fi
 
       - name: Add comment to PR
