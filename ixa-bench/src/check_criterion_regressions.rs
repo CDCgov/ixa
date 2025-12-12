@@ -95,93 +95,24 @@ fn is_recent(path: &Path, recent_seconds: u64) -> bool {
 
 fn print_table(title: &str, rows: &[(String, String, String, String, String)]) {
     if rows.is_empty() {
-        println!("{}: (none)", title);
+        println!("**{}**: (none)\n", title);
         return;
     }
-    // headers
-    let headers = ("Group", "Bench", "Change", "CI Lower", "CI Upper");
-    // compute widths
-    let mut cols: Vec<Vec<String>> = vec![
-        vec![headers.0.to_string()],
-        vec![headers.1.to_string()],
-        vec![headers.2.to_string()],
-        vec![headers.3.to_string()],
-        vec![headers.4.to_string()],
-    ];
+    println!("**{}**:\n", title);
+    // Print markdown table header
+    println!("| Group | Bench | Change | CI Lower | CI Upper |");
+    println!("|:---|:---|---:|---:|---:|");
+
+    // Print rows
     for r in rows {
-        cols[0].push(r.0.clone());
-        cols[1].push(r.1.clone());
-        cols[2].push(r.2.clone());
-        cols[3].push(r.3.clone());
-        cols[4].push(r.4.clone());
-    }
-    let widths: Vec<usize> = cols
-        .iter()
-        .map(|c| c.iter().map(|s| s.len()).max().unwrap_or(0))
-        .collect();
-    println!("{}:", title);
-    // header line
-    println!(
-        "  {}  {}  {}  {}  {}",
-        headers.0.pad_to_width(widths[0]),
-        headers.1.pad_to_width(widths[1]),
-        headers.2.pad_left_to_width(widths[2]),
-        headers.3.pad_left_to_width(widths[3]),
-        headers.4.pad_left_to_width(widths[4])
-    );
-    println!(
-        "  {}  {}  {}  {}  {}",
-        "-".repeat(widths[0]),
-        "-".repeat(widths[1]),
-        "-".repeat(widths[2]),
-        "-".repeat(widths[3]),
-        "-".repeat(widths[4])
-    );
-    for r in rows {
-        println!(
-            "  {}  {}  {}  {}  {}",
-            r.0.pad_to_width(widths[0]),
-            r.1.pad_to_width(widths[1]),
-            r.2.pad_left_to_width(widths[2]),
-            r.3.pad_left_to_width(widths[3]),
-            r.4.pad_left_to_width(widths[4])
-        );
+        let group = if r.0.is_empty() || r.0 == "(no group)" {
+            ""
+        } else {
+            &r.0
+        };
+        println!("| {} | {} | {} | {} | {} |", group, r.1, r.2, r.3, r.4);
     }
     println!();
-}
-
-trait Pad {
-    fn pad_to_width(&self, w: usize) -> String;
-    fn pad_left_to_width(&self, w: usize) -> String;
-}
-
-impl Pad for &str {
-    fn pad_to_width(&self, w: usize) -> String {
-        let mut s = self.to_string();
-        if s.len() < w {
-            s.push_str(&" ".repeat(w - s.len()));
-        }
-        s
-    }
-
-    fn pad_left_to_width(&self, w: usize) -> String {
-        let s = self.to_string();
-        if s.len() < w {
-            format!("{}{}", " ".repeat(w - s.len()), s)
-        } else {
-            s
-        }
-    }
-}
-
-impl Pad for String {
-    fn pad_to_width(&self, w: usize) -> String {
-        self.as_str().pad_to_width(w)
-    }
-
-    fn pad_left_to_width(&self, w: usize) -> String {
-        self.as_str().pad_left_to_width(w)
-    }
 }
 
 fn main() {

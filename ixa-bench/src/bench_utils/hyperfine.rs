@@ -202,15 +202,28 @@ fn append_markdown(
     is_first: bool,
 ) -> std::io::Result<()> {
     let content = fs::read_to_string(group_path)?;
+
     if is_first {
-        fs::write(aggregate_path, content)?;
+        // Write the first table, ensuring it ends with a newline but not multiple
+        let trimmed = content.trim_end();
+        let mut file = fs::File::create(aggregate_path)?;
+        file.write_all(trimmed.as_bytes())?;
+        file.write_all(b"\n")?;
     } else {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(aggregate_path)?;
-        file.write_all(b"\n\n")?;
-        file.write_all(content.as_bytes())?;
+        // Parse the new content to extract data rows only (skip header and separator)
+        let new_rows: Vec<&str> = content
+            .lines()
+            .skip(2) // Skip header and separator line
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+
+        // Append new rows to existing content
+        let mut file = OpenOptions::new().append(true).open(aggregate_path)?;
+
+        for row in new_rows {
+            file.write_all(row.as_bytes())?;
+            file.write_all(b"\n")?;
+        }
     }
     Ok(())
 }
