@@ -243,65 +243,76 @@ fn write_hyperfine_table(rows: &[HyperfineRow], path: &Path) -> std::io::Result<
         return Ok(());
     }
 
-    let headers = (
+    let headers = [
         "Group",
         "Bench",
         "Mean [ms]",
         "Min [ms]",
         "Max [ms]",
         "Relative",
-    );
-    let mut cols: Vec<Vec<String>> = vec![
-        vec![headers.0.to_string()],
-        vec![headers.1.to_string()],
-        vec![headers.2.to_string()],
-        vec![headers.3.to_string()],
-        vec![headers.4.to_string()],
-        vec![headers.5.to_string()],
     ];
-    for row in rows {
-        cols[0].push(row.group.clone());
-        cols[1].push(row.bench.clone());
-        cols[2].push(row.mean.clone());
-        cols[3].push(row.min.clone());
-        cols[4].push(row.max.clone());
-        cols[5].push(row.relative.clone());
+
+    let mut widths = vec![0; headers.len()];
+    for (i, header) in headers.iter().enumerate() {
+        widths[i] = header.len();
     }
-    let widths: Vec<usize> = cols
-        .iter()
-        .map(|c| c.iter().map(|s| s.len()).max().unwrap_or(0))
-        .collect();
+    for row in rows {
+        widths[0] = widths[0].max(row.group.len());
+        widths[1] = widths[1].max(row.bench.len());
+        widths[2] = widths[2].max(row.mean.len());
+        widths[3] = widths[3].max(row.min.len());
+        widths[4] = widths[4].max(row.max.len());
+        widths[5] = widths[5].max(row.relative.len());
+    }
 
     writeln!(
         file,
-        "  {}  {}  {}  {}  {}  {}",
-        headers.0.pad_to_width(widths[0]),
-        headers.1.pad_to_width(widths[1]),
-        headers.2.pad_left_to_width(widths[2]),
-        headers.3.pad_left_to_width(widths[3]),
-        headers.4.pad_left_to_width(widths[4]),
-        headers.5.pad_left_to_width(widths[5])
+        "  {:width0$}  {:width1$}  {:>width2$}  {:>width3$}  {:>width4$}  {:>width5$}",
+        headers[0],
+        headers[1],
+        headers[2],
+        headers[3],
+        headers[4],
+        headers[5],
+        width0 = widths[0],
+        width1 = widths[1],
+        width2 = widths[2],
+        width3 = widths[3],
+        width4 = widths[4],
+        width5 = widths[5]
     )?;
     writeln!(
         file,
-        "  {}  {}  {}  {}  {}  {}",
+        "  {:width0$}  {:width1$}  {:>width2$}  {:>width3$}  {:>width4$}  {:>width5$}",
         "-".repeat(widths[0]),
         "-".repeat(widths[1]),
         "-".repeat(widths[2]),
         "-".repeat(widths[3]),
         "-".repeat(widths[4]),
-        "-".repeat(widths[5])
+        "-".repeat(widths[5]),
+        width0 = widths[0],
+        width1 = widths[1],
+        width2 = widths[2],
+        width3 = widths[3],
+        width4 = widths[4],
+        width5 = widths[5]
     )?;
     for row in rows {
         writeln!(
             file,
-            "  {}  {}  {}  {}  {}  {}",
-            row.group.pad_to_width(widths[0]),
-            row.bench.pad_to_width(widths[1]),
-            row.mean.pad_left_to_width(widths[2]),
-            row.min.pad_left_to_width(widths[3]),
-            row.max.pad_left_to_width(widths[4]),
-            row.relative.pad_left_to_width(widths[5])
+            "  {:width0$}  {:width1$}  {:>width2$}  {:>width3$}  {:>width4$}  {:>width5$}",
+            row.group,
+            row.bench,
+            row.mean,
+            row.min,
+            row.max,
+            row.relative,
+            width0 = widths[0],
+            width1 = widths[1],
+            width2 = widths[2],
+            width3 = widths[3],
+            width4 = widths[4],
+            width5 = widths[5]
         )?;
     }
     Ok(())
@@ -314,38 +325,4 @@ struct HyperfineRow {
     min: String,
     max: String,
     relative: String,
-}
-
-trait Pad {
-    fn pad_to_width(&self, w: usize) -> String;
-    fn pad_left_to_width(&self, w: usize) -> String;
-}
-
-impl Pad for &str {
-    fn pad_to_width(&self, w: usize) -> String {
-        let mut s = self.to_string();
-        if s.len() < w {
-            s.push_str(&" ".repeat(w - s.len()));
-        }
-        s
-    }
-
-    fn pad_left_to_width(&self, w: usize) -> String {
-        let s = self.to_string();
-        if s.len() < w {
-            format!("{}{}", " ".repeat(w - s.len()), s)
-        } else {
-            s
-        }
-    }
-}
-
-impl Pad for String {
-    fn pad_to_width(&self, w: usize) -> String {
-        self.as_str().pad_to_width(w)
-    }
-
-    fn pad_left_to_width(&self, w: usize) -> String {
-        self.as_str().pad_left_to_width(w)
-    }
 }
