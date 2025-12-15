@@ -66,7 +66,13 @@ pub fn run_simulation() -> Promise {
     })
 }
 
-// Simulates a panic by returning a rejected promise.
+// Simulates a panic by returning a rejected promise instead of triggering a
+// native panic. WebAssembly panics typically abort the module, and JavaScript
+// runtimes often fail to translate that abort into a rejected `Promise`, which
+// makes it hard for the JS test harness to observe the failure. Returning `Err`
+// inside `future_to_promise` forces the exported promise to reject, so tests
+// can reliably detect and inspect the simulated failure without depending on
+// wasm panic semantics.
 #[wasm_bindgen]
 pub fn run_simulation_panic() -> Promise {
     future_to_promise(async { Err(JsValue::from_str("simulated panic")) })
