@@ -67,8 +67,6 @@ pub fn run_simulation() -> Promise {
 }
 
 // Simulates a panic by returning a rejected promise.
-// Returns rejection instead of a true panic to avoid wasm abort semantics,
-// which don't reliably propagate to JS as rejections in all environments.
 #[wasm_bindgen]
 pub fn run_simulation_panic() -> Promise {
     future_to_promise(async { Err(JsValue::from_str("simulated panic")) })
