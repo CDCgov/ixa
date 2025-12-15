@@ -352,16 +352,17 @@ impl Context {
         self.shutdown_requested = true;
     }
 
-    /// Get the current time in the simulation.
-    #[must_use]
+    /// Get the current time in the simulation
+    ///
+    /// Returns the current time    #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
     }
 
     /// Set the start time for the simulation. Must be finite.
     ///
-    /// This should be called before `Context.execute()`. If called multiple times,
-    /// the last call wins.
+    /// This should be called before `Context.execute()`.
+    /// Can be called only once.
     ///
     /// # Panics
     ///
