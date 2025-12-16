@@ -32,14 +32,13 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
-
+use crate::Context;
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
 use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::EntityId;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
@@ -59,7 +58,7 @@ struct PropertyMetadata {
     /// way, used in the constructor of `PropertyStore`. This is an `Option` because this
     /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
     /// instance for this property needs to exist (when its dependents are recorded).
-    value_store_constructor: Option<fn() -> Box<dyn Any>>,
+    value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore>>,
 }
 
 /// This maps `property_type_index` to `(vec_of_transitive_dependents)`. This data is actually
@@ -174,7 +173,7 @@ pub fn initialize_property_index(index: &AtomicUsize) -> usize {
 pub struct PropertyStore {
     /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn Any>` and downcast-able to
     /// `Box<PropertyValueStore<E>>`.
-    items: Vec<Box<dyn Any>>,
+    items: Vec<Box<dyn PropertyValueStore>>,
 }
 
 impl Default for PropertyStore {
@@ -220,8 +219,9 @@ impl PropertyStore {
                         P::name()
                     )
                 );
-                // .as_ref(); // The `as_ref` is important, as otherwise this is a trait upcast, not a dereference.
+        // .as_ref(); // The `as_ref` is important, as otherwise this is a trait upcast, not a dereference.
         let property_value_store: &PropertyValueStoreCore<E, P> = property_value_store
+            .as_any()
             .downcast_ref::<PropertyValueStoreCore<E, P>>()
             .unwrap_or_else(||
                 {
@@ -251,6 +251,7 @@ impl PropertyStore {
                 );
         let type_id = (&*property_value_store).type_id(); // Only used for error message if error occurs.
         let property_value_store: &mut PropertyValueStoreCore<E, P> = property_value_store
+            .as_any_mut()
             .downcast_mut::<PropertyValueStoreCore<E, P>>()
             .unwrap_or_else(||
                 {
@@ -264,18 +265,20 @@ impl PropertyStore {
         property_value_store
     }
 
-    /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`.
-    pub(crate) fn create_partial_property_change<E: Entity>(
-        &mut self,
+    /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`. This method is only
+    /// called for derived dependents of some property that has changed (one of `P`'s non-derived dependencies).
+    pub(crate) fn create_partial_property_change(
+        &self,
         property_index: usize,
-        entity_id: EntityId<E>,
+        // This `entity_id` is guaranteed by the caller to be a valid `EntityId<E>` for the current entity `E`.
+        entity_id: usize,
+        context: &Context,
     ) -> Box<dyn PartialPropertyChangeEvent> {
         let property_value_store = self.items
-                                       .get_mut(property_index)
+                                       .get(property_index)
             .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
-        let property_value_store: &mut Box<dyn PropertyValueStore<E>> =
-            property_value_store.downcast_mut().unwrap();
-        property_value_store.create_partial_property_change(entity_id)
+
+        property_value_store.create_partial_property_change(entity_id, context)
     }
 }
 

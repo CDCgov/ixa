@@ -241,6 +241,8 @@ impl Context {
         if Some(property_value) == previous_value {
             return;
         }
+
+        // If the following unwrap fails, it must be because the value was never set and does not have a default value.
         let previous_value = previous_value.unwrap();
         let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>>
             = vec![Box::new(PartialPropertyChangeEventCore::new(entity_id, previous_value))];
@@ -248,7 +250,7 @@ impl Context {
 
         for dependent_idx in P::dependents() {
             dependents.push(
-                self.property_store.create_partial_property_change::<E>(*dependent_idx, entity_id)
+                self.property_store.create_partial_property_change(*dependent_idx, entity_id.0, self)
             );
         }
 

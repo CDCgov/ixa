@@ -40,7 +40,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     }
 
     /// Assigns the given entity the property values in `self` in the `property_store`.
-    /// This method does NOT emit property change events.
+    /// This method does NOT emit property change events, as it is called upon entity creation.
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore);
 }
 

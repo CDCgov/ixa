@@ -45,7 +45,7 @@ impl <E: Entity, P: Property<E>> PartialPropertyChangeEvent for PartialPropertyC
         let property_value_store = context.property_store.get_mut::<E, P>();
 
         if let Some(index) = &mut property_value_store.index {
-            index.add_entity(&current_value.make_canonical(), self.0.entity_id);
+            index.borrow_mut().add_entity(&current_value.make_canonical(), self.0.entity_id);
         }
 
         if current_value != self.0.current_value {
@@ -243,8 +243,9 @@ mod tests {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        let person_id = context.add_entity(()).unwrap();
-        // Initializer called as a side effect of set, so event fires.
+        // Does not emit a change event.
+        let person_id = context.add_entity((RunningShoes(33),)).unwrap();
+        // Emits a change event.
         context.set_property(person_id, RunningShoes(42));
         context.execute();
         assert!(*flag.borrow());
