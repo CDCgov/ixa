@@ -220,14 +220,14 @@ impl PropertyStore {
                         P::name()
                     )
                 );
-        // .as_ref(); // The `as_ref` is important, as otherwise this is a trait upcast, not a dereference.
         let property_value_store: &PropertyValueStoreCore<E, P> = property_value_store
             .as_any()
             .downcast_ref::<PropertyValueStoreCore<E, P>>()
             .unwrap_or_else(||
                 {
                     panic!(
-                        "Property type at index {index:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        "Property type at index {:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        index,
                         property_value_store.type_id(),
                         TypeId::of::<PropertyValueStoreCore<E, P>>()
                     )
@@ -257,7 +257,8 @@ impl PropertyStore {
             .unwrap_or_else(||
                 {
                     panic!(
-                        "Property type at index {index:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        "Property type at index {:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
+                        index,
                         type_id,
                         TypeId::of::<PropertyValueStoreCore<E, P>>()
                     )
@@ -294,7 +295,7 @@ mod tests {
 
     // The primary advantage of the `define_property!` macro is that you don't have to remember the list of traits you
     // need to put in the `derive` clause for a property.
-    define_property!(struct Age(u8), Person);
+    define_property!(struct Age(u8), Person, is_required = true);
 
     // The `define_property` macro also lets you specify the default value.
     define_property!(
