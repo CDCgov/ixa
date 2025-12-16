@@ -152,7 +152,7 @@ mod tests {
 
     define_entity!(Person);
 
-    define_property!(struct Age(u8), Person);
+    define_property!(struct Age(u8), Person, is_required = true );
 
     // define_global_property!(Threshold, u8);
 
@@ -180,12 +180,13 @@ mod tests {
             High,
             Low,
         },
-        Person
+        Person,
+        is_required = true
     );
 
     define_property!(struct IsRunner(bool), Person, default_const = IsRunner(false));
 
-    define_property!(struct RunningShoes(u8), Person);
+    define_property!(struct RunningShoes(u8), Person, is_required = true );
 
     #[test]
     fn observe_entity_addition() {
@@ -198,7 +199,9 @@ mod tests {
             assert_eq!(event.entity_id.0, 0);
         });
 
-        let _ = context.add_entity::<Person, _>(()).unwrap();
+        let _ = context
+            .add_entity::<Person, _>((Age(18), RunningShoes(33), RiskCategory::Low))
+            .unwrap();
         context.execute();
         assert!(*flag.borrow());
     }
@@ -226,7 +229,9 @@ mod tests {
             },
         );
 
-        let person_id = context.add_entity((RiskCategory::Low,)).unwrap();
+        let person_id = context
+            .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
+            .unwrap();
 
         context.set_property(person_id, RiskCategory::High);
         context.execute();
@@ -245,7 +250,9 @@ mod tests {
             },
         );
         // Does not emit a change event.
-        let person_id = context.add_entity((RunningShoes(33),)).unwrap();
+        let person_id = context
+            .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
+            .unwrap();
         // Emits a change event.
         context.set_property(person_id, RunningShoes(42));
         context.execute();
@@ -255,7 +262,9 @@ mod tests {
     #[test]
     fn get_entity_property_change_event() {
         let mut context = Context::new();
-        let person = context.add_entity((Age(17),)).unwrap();
+        let person = context
+            .add_entity((Age(17), RunningShoes(33), RiskCategory::Low))
+            .unwrap();
 
         let flag = Rc::new(RefCell::new(false));
 
