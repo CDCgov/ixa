@@ -33,15 +33,15 @@ static variable `index`. Each concrete `Entity` type is thus assigned a unique i
 
 mod entity;
 mod entity_impl;
-mod index;
 pub mod entity_store;
 pub mod events;
+mod index;
 pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
-pub mod property_value_store_core;
 mod property_value_store;
+pub mod property_value_store_core;
 
 // Flatten the module hierarchy.
 pub use entity::*;

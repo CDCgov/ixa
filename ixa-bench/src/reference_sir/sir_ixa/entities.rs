@@ -5,8 +5,11 @@ use indexmap::IndexSet;
 use ixa::prelude::*;
 use ixa::{define_entity, define_property};
 use rand_distr::Exp;
+
+use crate::reference_sir::sir_ixa::{
+    ModelOptions, ModelStatsPlugin, NextEventRng, NextPersonRng, Options, Params,
+};
 use crate::reference_sir::{ModelStats, Parameters};
-use crate::reference_sir::sir_ixa::{ModelOptions, ModelStatsPlugin, NextEventRng, NextPersonRng, Options, Params};
 
 define_data_plugin!(
     NonQueryInfectionTracker,
@@ -24,7 +27,6 @@ define_property!(
     Person,
     default_const = InfectionStatus::Susceptible
 );
-
 
 trait InfectionLoop {
     fn get_params(&self) -> &Parameters;
@@ -85,7 +87,7 @@ impl InfectionLoop for Context {
         // }
     }
     fn infect_person(&mut self, p: PersonId, t: Option<f64>) {
-        if self.get_property::<_,InfectionStatus >(p) != InfectionStatus::Susceptible {
+        if self.get_property::<_, InfectionStatus>(p) != InfectionStatus::Susceptible {
             return;
         }
 
@@ -233,8 +235,9 @@ impl Model {
 #[cfg(test)]
 mod test {
     use approx::assert_relative_eq;
-    use crate::reference_sir::ParametersBuilder;
+
     use super::*;
+    use crate::reference_sir::ParametersBuilder;
 
     fn model_variants() -> Vec<Model> {
         vec![
@@ -247,28 +250,28 @@ mod test {
         .map(|options| Model::new(Parameters::default(), options))
         .collect()
     }
-/*
-    #[test]
-    fn infected_counts() {
-        for mut model in model_variants() {
-            model.ctx.setup();
-            assert_eq!(model.ctx.infected_people(), 5);
-            let p = model
-                .ctx
-                .sample_person(
-                    NextPersonRng,
-                    (InfectionStatus, InfectionStatusValue::Susceptible),
-                )
-                .unwrap();
-            model.ctx.infect_person(p, Some(0.0));
-            assert_eq!(model.ctx.infected_people(), 6);
-            assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
-            model.ctx.recover_person(p, 0.0);
-            assert_eq!(model.ctx.infected_people(), 5);
-            assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
+    /*
+        #[test]
+        fn infected_counts() {
+            for mut model in model_variants() {
+                model.ctx.setup();
+                assert_eq!(model.ctx.infected_people(), 5);
+                let p = model
+                    .ctx
+                    .sample_person(
+                        NextPersonRng,
+                        (InfectionStatus, InfectionStatusValue::Susceptible),
+                    )
+                    .unwrap();
+                model.ctx.infect_person(p, Some(0.0));
+                assert_eq!(model.ctx.infected_people(), 6);
+                assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
+                model.ctx.recover_person(p, 0.0);
+                assert_eq!(model.ctx.infected_people(), 5);
+                assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
+            }
         }
-    }
-*/
+    */
     #[test]
     fn get_random_infected_person() {
         for mut model in model_variants() {
@@ -298,7 +301,7 @@ mod test {
         let expected = population as f64 * 0.58;
         assert_relative_eq!(incidence, expected, max_relative = 0.04);
     }
-/*
+    /*
     #[test]
     fn run_model_disable_queries() {
         use ixa::prelude::*;
