@@ -5,7 +5,8 @@ Macros for implementing properties.
 # [`define_property!`]
 
 For the most common cases, use the `define_property!` macro. This macro defines a struct or enum
-with the standard derives required by the `Property` trait and implements `Property` (via `impl_property!`) for you.
+with the standard derives required by the `Property` trait and implements `Property` (via
+`impl_property!`) for you.
 
 ```rust,ignore
 define_property!(struct Age(u8), Person);
@@ -36,7 +37,8 @@ specify the visibility. A `pub` visibility is added automatically in the expansi
 You might want to implement your own property type yourself if
 - you want a visibility other than `pub`
 - you want to derive additional traits
-- your type definition requires attribute proc-macros or other special syntax (for example, deriving `Default` on an enum requires an attribute on one of the variants)
+- your type definition requires attribute proc-macros or other special syntax (for example, deriving
+  `Default` on an enum requires an attribute on one of the variants)
 
 You can implement `Property` for existing types using the `impl_property!` macro. This macro
 defines the `Property` trait implementation for you but doesn't take care of the `#[derive(..)]`
@@ -47,7 +49,8 @@ define_entity!(Person);
 
 // The `define_property!` automatically adds `pub` visibility. If we want to restrict the
 // visibility of our `Property` type, we can use the `impl_property!` macro instead. The only
-// catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`. (Note that we don't have a default value in this case.)
+// catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
+// (Note that we don't have a default value in this case.)
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 struct Age(u8);
 impl_property!(Age, Person);
@@ -598,7 +601,6 @@ macro_rules! __define_derived_property_common {
 }
 */
 
-
 /// An internal macro that expands to the correct implementation for the `compute_derived` function of a derived property.
 #[macro_export]
 macro_rules! __derived_property_compute_fn {
@@ -624,7 +626,6 @@ macro_rules! __derived_property_compute_fn {
         }
     };
 }
-
 
 /// The "derived" variant of [`define_property!`] for defining simple derived property types.
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
@@ -798,7 +799,6 @@ macro_rules! define_derived_property {
 }
 pub use define_derived_property;
 
-
 /*
 #[macro_export]
 macro_rules! define_multi_property {
@@ -875,12 +875,11 @@ macro_rules! define_multi_property {
 pub use define_multi_property;
 */
 
-
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use crate::define_entity;
     use crate::entity::property::Property;
+    use crate::prelude::*;
 
     define_entity!(Person);
 
@@ -894,11 +893,11 @@ mod tests {
         enum AgeGroup {
             Child,
             Adult,
-            Senior
+            Senior,
         },
         Person,
         [Age], // Depends only on age
-        [], // No global dependencies
+        [],    // No global dependencies
         |age| {
             let age: Age = age;
             if age.0 < 18 {
@@ -910,7 +909,6 @@ mod tests {
             }
         }
     );
-
 
     #[test]
     fn test_derived_property() {
@@ -930,10 +928,21 @@ mod tests {
 
         println!("{}.index = {}", Age::name(), Age::index());
         println!("{}.index = {}", AgeGroup::name(), AgeGroup::index());
-        println!("{}.dependencies = {:?}", Age::name(), Age::non_derived_dependencies());
-        println!("{}.dependencies = {:?}", AgeGroup::name(), AgeGroup::non_derived_dependencies());
+        println!(
+            "{}.dependencies = {:?}",
+            Age::name(),
+            Age::non_derived_dependencies()
+        );
+        println!(
+            "{}.dependencies = {:?}",
+            AgeGroup::name(),
+            AgeGroup::non_derived_dependencies()
+        );
         println!("{}.dependents = {:?}", Age::name(), Age::dependents());
-        println!("{}.dependents = {:?}", AgeGroup::name(), AgeGroup::dependents());
+        println!(
+            "{}.dependents = {:?}",
+            AgeGroup::name(),
+            AgeGroup::dependents()
+        );
     }
-
 }

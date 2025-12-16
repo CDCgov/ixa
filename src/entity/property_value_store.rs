@@ -12,21 +12,15 @@ Responsibilities:
 
 use std::any::Any;
 use std::cell::{Ref, RefCell};
+
 use log::{error, trace};
 
-use crate::{
-    entity::{
-        index::Index,
-        property::Property,
-        property_value_store_core::PropertyValueStoreCore,
-        Entity,
-        EntityId,
-        HashValueType
-    },
-    Context,
-    HashSet
-};
 use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
+use crate::entity::index::Index;
+use crate::entity::property::Property;
+use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::{Entity, EntityId, HashValueType};
+use crate::{Context, HashSet};
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub(crate) trait PropertyValueStore: Any {
@@ -37,7 +31,11 @@ pub(crate) trait PropertyValueStore: Any {
     /// Fetch the existing value of the property for the given `entity_id`, remove the `entity_id`
     /// from the corresponding index bucket, and return a `PartialPropertyChangeEvent` object
     /// wrapping the previous value and `entity_id` that can be used to emit a property change event.
-    fn create_partial_property_change(&self, entity_id: usize, context: &Context) -> Box<dyn PartialPropertyChangeEvent>;
+    fn create_partial_property_change(
+        &self,
+        entity_id: usize,
+        context: &Context,
+    ) -> Box<dyn PartialPropertyChangeEvent>;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: usize);
@@ -57,7 +55,11 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
         self
     }
 
-    fn create_partial_property_change(&self, entity_id: usize, context: &Context) -> Box<dyn PartialPropertyChangeEvent> {
+    fn create_partial_property_change(
+        &self,
+        entity_id: usize,
+        context: &Context,
+    ) -> Box<dyn PartialPropertyChangeEvent> {
         // 1. Compute the existing value of the property for the given `entity_id`
         // 2. Remove the `entity_id` from the corresponding index bucket (if its indexed)
         // 3. Return a `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
@@ -70,7 +72,10 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
             let mut index = index.borrow_mut();
             index.remove_entity(&previous_value.make_canonical(), entity_id);
         }
-        Box::new(PartialPropertyChangeEventCore::<E, P>::new(entity_id, previous_value))
+        Box::new(PartialPropertyChangeEventCore::<E, P>::new(
+            entity_id,
+            previous_value,
+        ))
     }
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: usize) {
@@ -111,7 +116,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
 
     fn set_indexed(&mut self, is_indexed: bool) {
         if is_indexed && !self.is_indexed() {
-            self.index = Some( RefCell::new(Index::new()) );
+            self.index = Some(RefCell::new(Index::new()));
         } else if !is_indexed {
             self.index = None;
         }

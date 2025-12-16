@@ -32,13 +32,14 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
-use crate::Context;
+
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
 use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::Context;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.

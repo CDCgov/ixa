@@ -37,7 +37,9 @@ pub(crate) trait PartialPropertyChangeEvent {
     fn emit_in_context(&self, context: &mut Context);
 }
 
-impl <E: Entity, P: Property<E>> PartialPropertyChangeEvent for PartialPropertyChangeEventCore<E, P>{
+impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
+    for PartialPropertyChangeEventCore<E, P>
+{
     /// Updates the index with the current property value and emits a change event if
     /// the `current_value` differs from the previous value (stored in `self.0.current_value`)
     fn emit_in_context(&self, context: &mut Context) {
@@ -45,7 +47,9 @@ impl <E: Entity, P: Property<E>> PartialPropertyChangeEvent for PartialPropertyC
         let property_value_store = context.property_store.get_mut::<E, P>();
 
         if let Some(index) = &mut property_value_store.index {
-            index.borrow_mut().add_entity(&current_value.make_canonical(), self.0.entity_id);
+            index
+                .borrow_mut()
+                .add_entity(&current_value.make_canonical(), self.0.entity_id);
         }
 
         if current_value != self.0.current_value {
@@ -60,36 +64,35 @@ impl <E: Entity, P: Property<E>> PartialPropertyChangeEvent for PartialPropertyC
 /// A `Box<PartialPropertyChangeEventCore<E, P>>` can be transformed into a `Box<PropertyChangeEvent<E, P>>` in place,
 /// avoiding an allocation.
 #[repr(transparent)]
-pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(PropertyChangeEvent<E, P>);
+pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(
+    PropertyChangeEvent<E, P>,
+);
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // `PartialPropertyChangeEvent<E, P>` is always `Copy`/`Clone` if we derive them.
-impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P>{
+impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
-impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P>{}
+impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P> {}
 
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
     pub fn new(entity_id: EntityId<E>, previous_value: P) -> Self {
-        Self(
-            PropertyChangeEvent{
-                entity_id,
-                current_value: previous_value,
-                previous_value: None,
-            }
-        )
+        Self(PropertyChangeEvent {
+            entity_id,
+            current_value: previous_value,
+            previous_value: None,
+        })
     }
 
     pub fn to_event(&self, current_value: P) -> PropertyChangeEvent<E, P> {
-        PropertyChangeEvent{
+        PropertyChangeEvent {
             entity_id: self.0.entity_id,
             current_value,
             previous_value: Some(self.0.current_value),
         }
     }
 }
-
 
 /// Emitted when a new entity is created.
 /// These should not be emitted outside this module.
@@ -130,7 +133,7 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
 // this type is always `Copy`/`Clone` if we derive them.
 impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
     fn clone(&self) -> Self {
-        Self{
+        Self {
             entity_id: self.entity_id,
             current_value: self.current_value,
             previous_value: self.previous_value.clone(),
@@ -139,14 +142,13 @@ impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
 }
 impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
 
-
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
     use super::*;
-    use crate::{define_entity, define_property, define_derived_property, Context};
+    use crate::{define_derived_property, define_entity, define_property, Context};
 
     define_entity!(Person);
 
@@ -158,11 +160,11 @@ mod tests {
     define_derived_property!(
         enum AgeGroup {
             Child,
-            Adult
+            Adult,
         },
         Person,
         [Age], // Depends only on age
-        [], // No global dependencies
+        [],    // No global dependencies
         |age| {
             let age: Age = age;
             if age.0 < 18 {
@@ -172,7 +174,6 @@ mod tests {
             }
         }
     );
-
 
     define_property!(
         enum RiskCategory {

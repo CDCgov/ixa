@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
 use ixa::{define_data_plugin, define_global_property, define_rng};
+use serde::{Deserialize, Serialize};
+
 use crate::reference_sir::{ModelStats, Parameters};
 
 pub mod entities;
 pub mod legacy;
-
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ModelOptions {
@@ -20,7 +20,6 @@ impl Default for ModelOptions {
 
 define_global_property!(Params, Parameters);
 define_global_property!(Options, ModelOptions);
-
 
 define_rng!(NextPersonRng);
 define_rng!(NextEventRng);
