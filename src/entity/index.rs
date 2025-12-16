@@ -21,15 +21,9 @@
 use hashbrown::HashTable;
 use log::{error, trace};
 
-use crate::{
-    entity::{
-        property::Property,
-        Entity,
-        EntityId,
-        HashValueType
-    },
-    HashSet
-};
+use crate::entity::property::Property;
+use crate::entity::{Entity, EntityId, HashValueType};
+use crate::HashSet;
 
 /// The typed index.
 #[derive(Default)]
@@ -136,9 +130,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
             .find(hash as u64, hash128_equality)
             .map(|(_, set)| set)
     }
-
 }
-
 
 #[cfg(feature = "disabled")]
 mod test {

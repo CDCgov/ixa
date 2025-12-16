@@ -30,7 +30,6 @@ impl<E: Entity> PartialEq for EntityId<E> {
 }
 impl<E: Entity> Eq for EntityId<E> {}
 
-
 // Otherwise the compiler isn't smart enough to know `EntityId<E>` is always `Clone`
 impl<E: Entity> Clone for EntityId<E> {
     #[inline]

@@ -10,7 +10,9 @@ use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
-use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
+use crate::entity::events::{
+    EntityCreatedEvent, PartialPropertyChangeEvent, PartialPropertyChangeEventCore,
+};
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
@@ -244,14 +246,16 @@ impl Context {
 
         // If the following unwrap fails, it must be because the value was never set and does not have a default value.
         let previous_value = previous_value.unwrap();
-        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>>
-            = vec![Box::new(PartialPropertyChangeEventCore::new(entity_id, previous_value))];
-
+        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![Box::new(
+            PartialPropertyChangeEventCore::new(entity_id, previous_value),
+        )];
 
         for dependent_idx in P::dependents() {
-            dependents.push(
-                self.property_store.create_partial_property_change(*dependent_idx, entity_id.0, self)
-            );
+            dependents.push(self.property_store.create_partial_property_change(
+                *dependent_idx,
+                entity_id.0,
+                self,
+            ));
         }
 
         let property_value_store = self.property_store.get::<E, P>();

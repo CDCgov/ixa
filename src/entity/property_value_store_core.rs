@@ -14,10 +14,11 @@ implementing the value storage.
 */
 
 use std::cell::RefCell;
-use crate::entity::property_value_store::PropertyValueStore;
+
 use super::entity::{Entity, EntityId};
 use super::index::Index;
 use super::property::{Property, PropertyInitializationKind};
+use crate::entity::property_value_store::PropertyValueStore;
 use crate::value_vec::ValueVec;
 
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
