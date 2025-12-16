@@ -13,8 +13,8 @@ implementing the value storage.
 
 */
 
-use std::any::Any;
-
+use std::cell::RefCell;
+use crate::entity::property_value_store::PropertyValueStore;
 use super::entity::{Entity, EntityId};
 use super::index::Index;
 use super::property::{Property, PropertyInitializationKind};
@@ -24,7 +24,11 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: ValueVec<Option<P>>,
     /// An index mapping `property_value` to `set_of_entities`.
-    pub(super) index: Option<Index<E, P>>,
+    // Note that while we use a `RefCell` here, most of the time we don't incur the overhead of dynamic borrow checking,
+    // because we use `index.get_mut()` instead of `index.borrow_mut()`. We only need `index.borrow_mut()` for
+    // updating the index during setting of a property, at which time the compiler guarantees no other borrows of
+    // `context` exist because `Context::set_property` takes `&mut self`.
+    pub(super) index: Option<RefCell<Index<E, P>>>,
 }
 
 impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
@@ -37,11 +41,11 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn new_boxed() -> Box<dyn Any> {
+    pub(crate) fn new_boxed() -> Box<dyn PropertyValueStore> {
         Box::new(Self::new())
     }
 
