@@ -87,6 +87,10 @@ pub struct Context {
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: f64,
     start_time: Option<f64>,
+    /// Tracks whether `current_time` has been initialized via `set_start_time` or the first `execute`.
+    time_initialized: bool,
+    /// Tracks whether `execute` has been called at least once; prevents late `set_start_time` calls.
+    execute_called: bool,
     shutdown_requested: bool,
     #[cfg(feature = "debugger")]
     break_requested: bool,
@@ -114,6 +118,8 @@ impl Context {
             breakpoints_scheduled: Queue::new(),
             current_time: 0.0,
             start_time: None,
+            time_initialized: false,
+            execute_called: false,
             shutdown_requested: false,
             #[cfg(feature = "debugger")]
             break_requested: false,
@@ -246,6 +252,11 @@ impl Context {
     /// continuously repeat the plan at the specified period, stopping
     /// only once there are no other plans scheduled.
     ///
+    /// Notes:
+    /// * The first periodic plan is scheduled at time `0.0`. If `set_start_time` was
+    ///   set to a positive value, this will currently panic because the first plan
+    ///   occurs before the start time (see issue #634 for future behavior).
+    ///
     /// # Panics
     ///
     /// Panics if plan period is negative, infinite, or NaN.
@@ -354,19 +365,27 @@ impl Context {
 
     /// Get the current time in the simulation
     ///
-    /// Returns the current time    #[must_use]
+    /// Returns the current time
+    #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time
     }
 
     /// Set the start time for the simulation. Must be finite.
     ///
-    /// This should be called before `Context.execute()`.
-    /// Can be called only once.
+    /// * Call before `Context.execute()`.
+    /// * `start_time` must be finite (not NaN or infinite).
+    /// * May be called only once.
+    /// * If plans are already scheduled, `start_time` must be earlier than or equal to
+    ///   the earliest scheduled plan time.
     ///
     /// # Panics
     ///
-    /// Panics if `start_time` is infinite or NaN.
+    /// Panics if:
+    /// * `start_time` is NaN or infinite.
+    /// * the start time was already set.
+    /// * `Context::execute()` has been called.
+    /// * `start_time` is later than the earliest scheduled plan time.
     pub fn set_start_time(&mut self, start_time: f64) {
         assert!(
             !start_time.is_nan() && !start_time.is_infinite(),
@@ -376,16 +395,21 @@ impl Context {
             self.start_time.is_none(),
             "Start time has already been set. It can only be set once."
         );
+        assert!(
+            !self.execute_called,
+            "Start time cannot be set after execution has begun."
+        );
         if let Some(next_time) = self.plan_queue.next_time() {
             assert!(
-                start_time >= next_time,
-                "Start time {} is earlier than the earliest scheduled plan time {}. Remove or reschedule existing plans first.",
+                start_time <= next_time,
+                "Start time {} is later than the earliest scheduled plan time {}. Remove or reschedule existing plans first.",
                 start_time,
                 next_time
             );
         }
         self.start_time = Some(start_time);
         self.current_time = start_time;
+        self.time_initialized = true;
     }
 
     /// Get the start time that was set via `set_start_time`, or `None` if not set.
@@ -450,15 +474,11 @@ impl Context {
     pub fn execute(&mut self) {
         trace!("entering event loop");
 
-        // Initialize `self.current_time` based on start_time or earliest plan
-        if let Some(start_time) = self.start_time {
-            self.current_time = start_time;
-        } else {
-            self.current_time = match self.plan_queue.next_time() {
-                Some(t) if t < 0.0 => t,
-                _ => 0.0,
-            };
+        if !self.time_initialized {
+            self.current_time = self.start_time.unwrap_or(0.0);
+            self.time_initialized = true;
         }
+        self.execute_called = true;
 
         // Start plan loop
         loop {
@@ -1011,23 +1031,24 @@ mod tests {
     }
 
     #[test]
-    fn get_current_time_initializes_to_min_negative_plan() {
+    fn get_current_time_before_execute_defaults() {
         let mut context = Context::new();
-        context.set_start_time(-5.0);
-        add_plan(&mut context, -5.0, 1);
-        add_plan(&mut context, 10.0, 2);
-        context.execute();
-        assert_eq!(context.get_current_time(), 10.0);
-        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+        assert_eq!(context.get_current_time(), 0.0);
+
+        context.set_start_time(-2.0);
+        assert_eq!(context.get_current_time(), -2.0);
     }
 
     #[test]
     fn get_current_time_initializes_to_zero_when_all_positive() {
         let mut context = Context::new();
-        add_plan(&mut context, 1.0, 1);
-        add_plan(&mut context, 2.0, 2);
+        let seen_time = Rc::new(RefCell::new(f64::NAN));
+        let seen_time_clone = Rc::clone(&seen_time);
+        context.queue_callback(move |ctx| {
+            *seen_time_clone.borrow_mut() = ctx.get_current_time();
+        });
         context.execute();
-        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*seen_time.borrow(), 0.0);
     }
 
     #[test]
@@ -1125,19 +1146,16 @@ mod tests {
     }
 
     #[test]
-    fn negative_periodic_plan() {
+    fn negative_plan_can_schedule_negative_plan() {
         let mut context = Context::new();
         context.set_start_time(-2.0);
-        let call_count = Rc::new(RefCell::new(0));
-        let call_count_clone = Rc::clone(&call_count);
-
-        context.add_plan(-2.0, move |context| {
-            *call_count_clone.borrow_mut() += 1;
-            context.get_data_mut(ComponentA).push(-2i32 as u32);
+        add_plan(&mut context, -2.0, 1);
+        context.add_plan(-2.0, |context| {
+            add_plan(context, -1.0, 2);
         });
         context.execute();
-        assert_eq!(context.get_current_time(), -2.0);
-        assert_eq!(*call_count.borrow(), 1);
+        assert_eq!(context.get_current_time(), -1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
     }
 
     #[test]
@@ -1146,14 +1164,6 @@ mod tests {
         let mut context = Context::new();
         context.set_start_time(1.0);
         context.set_start_time(2.0);
-    }
-
-    #[test]
-    #[should_panic(expected = "Start time 0 is earlier than the earliest scheduled plan time 1")]
-    fn set_start_time_rejects_earlier_than_existing_plans() {
-        let mut context = Context::new();
-        add_plan(&mut context, 1.0, 1);
-        context.set_start_time(0.0);
     }
 
     // Additional coverage around time and plans
