@@ -300,7 +300,111 @@ pub use impl_property;
 ///   - `make_uncanonical = <expr>` — Function converting from `CanonicalValue` to `Self`; defaults to `|v| v`.
 #[macro_export]
 macro_rules! impl_property_with_options {
+    // Case 1: default_const is supplied => always OK
     (
+        $property:ident,
+        $entity:ident
+        $(, initialization_kind = $initialization_kind:expr)?
+        $(, is_required = $is_required:expr)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        , default_const = $default_const:expr
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+    ) => {
+        $crate::impl_property_with_options!(@impl
+            $property,
+            $entity
+            $(, initialization_kind = $initialization_kind)?
+            $(, is_required = $is_required)?
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            , default_const = $default_const
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+        );
+    };
+
+    // Case 2: compute_derived_fn is supplied (derived property) => OK
+    (
+        $property:ident,
+        $entity:ident
+        $(, initialization_kind = $initialization_kind:expr)?
+        $(, is_required = $is_required:expr)?
+        , compute_derived_fn = $compute_derived_fn:expr
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, default_const = $default_const:expr)? // allowed, but not required here
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+    ) => {
+        $crate::impl_property_with_options!(@impl
+            $property,
+            $entity
+            $(, initialization_kind = $initialization_kind)?
+            $(, is_required = $is_required)?
+            , compute_derived_fn = $compute_derived_fn
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+        );
+    };
+
+    // Case 3: no default_const and no compute_derived_fn, but is_required is explicitly true => OK
+    (
+        $property:ident,
+        $entity:ident
+        $(, initialization_kind = $initialization_kind:expr)?
+        , is_required = true
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+    ) => {
+        $crate::impl_property_with_options!(@impl
+            $property,
+            $entity
+            $(, initialization_kind = $initialization_kind)?
+            , is_required = true
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+        );
+    };
+
+    // Case 4: none of the three conditions are met => hard error
+    (
+        $property:ident,
+        $entity:ident
+        $(, initialization_kind = $initialization_kind:expr)?
+        $(, is_required = $is_required:expr)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+    ) => {
+        compile_error!(
+            "impl_property_with_options!: you must supply at least one of: \
+             `is_required = true`, `default_const = ...`, or `compute_derived_fn = ...`."
+        );
+    };
+
+    // Shared implementation (this is essentially your original macro body)
+    (@impl
         $property:ident,
         $entity:ident
         $(, initialization_kind = $initialization_kind:expr)?
@@ -320,8 +424,7 @@ macro_rules! impl_property_with_options {
             // canonical value
             $crate::impl_property_with_options!(@unwrap_or_ty $($canonical_value)?, $property),
 
-            // If `initialization_kind` is not specified, use `Constant` if a constant is given, or `Explicit` otherwise.
-            // (The `Derived` case always supplies an explicit `$initialization_kind` parameter.)
+            // initialization_kind
             $crate::impl_property_with_options!(@unwrap_or
                 $($initialization_kind)?,
                 $crate::impl_property_with_options!(@unwrap_or_default_kind $($default_const)?)
@@ -345,7 +448,11 @@ macro_rules! impl_property_with_options {
             ),
 
             // default_const
-            $crate::impl_property_with_options!(@unwrap_or $($default_const)?, panic!("property {} has no default value", stringify!($property))),
+            $crate::impl_property_with_options!(
+                @unwrap_or
+                $($default_const)?,
+                panic!("property {} has no default value", stringify!($property))
+            ),
 
             // display_impl
             $crate::impl_property_with_options!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
@@ -365,9 +472,6 @@ macro_rules! impl_property_with_options {
     (@unwrap_or_ty $ty:ty, $_default:ty) => { $ty };
     (@unwrap_or_ty, $default:ty) => { $default };
 
-    // This special case of `@unwrap_or*` ignores the contents of `$expr`.
-    // If `default_const` is present (matched by `$expr`), use `Constant`.
-    // If it's absent, fall back to `Explicit`.
     (@unwrap_or_default_kind $expr:expr) => {
         $crate::entity::property::PropertyInitializationKind::Constant
     };
@@ -885,7 +989,8 @@ mod tests {
 
     define_property!(
         struct Age(u8),
-        Person
+        Person,
+        is_required = true
     );
 
     // An enum
