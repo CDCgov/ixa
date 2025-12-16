@@ -85,12 +85,8 @@ pub struct Context {
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
-    current_time: f64,
+    current_time: Option<f64>,
     start_time: Option<f64>,
-    /// Tracks whether `current_time` has been initialized via `set_start_time` or the first `execute`.
-    time_initialized: bool,
-    /// Tracks whether `execute` has been called at least once; prevents late `set_start_time` calls.
-    execute_called: bool,
     shutdown_requested: bool,
     #[cfg(feature = "debugger")]
     break_requested: bool,
@@ -116,10 +112,8 @@ impl Context {
             data_plugins,
             #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
-            current_time: 0.0,
+            current_time: None,
             start_time: None,
-            time_initialized: false,
-            execute_called: false,
             shutdown_requested: false,
             #[cfg(feature = "debugger")]
             break_requested: false,
@@ -216,12 +210,13 @@ impl Context {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId {
+        let current = self.get_current_time();
         assert!(
             !time.is_nan()
                 && !time.is_infinite()
-                && time >= self.current_time,
+                && time >= current,
             "Time {time} is invalid: must be finite and not less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
-            self.current_time
+            current
         );
         self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
@@ -234,12 +229,12 @@ impl Context {
     ) {
         trace!(
             "evaluate periodic at {} (period={})",
-            self.current_time,
+            self.get_current_time(),
             period
         );
         callback(self);
         if !self.plan_queue.is_empty() {
-            let next_time = self.current_time + period;
+            let next_time = self.get_current_time() + period;
             self.add_plan_with_phase(
                 next_time,
                 move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
@@ -368,7 +363,7 @@ impl Context {
     /// Returns the current time
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
-        self.current_time
+        self.current_time.or(self.start_time).unwrap_or(0.0)
     }
 
     /// Set the start time for the simulation. Must be finite.
@@ -396,7 +391,7 @@ impl Context {
             "Start time has already been set. It can only be set once."
         );
         assert!(
-            !self.execute_called,
+            self.current_time.is_none(),
             "Start time cannot be set after execution has begun."
         );
         if let Some(next_time) = self.plan_queue.next_time() {
@@ -408,8 +403,6 @@ impl Context {
             );
         }
         self.start_time = Some(start_time);
-        self.current_time = start_time;
-        self.time_initialized = true;
     }
 
     /// Get the start time that was set via `set_start_time`, or `None` if not set.
@@ -474,17 +467,15 @@ impl Context {
     pub fn execute(&mut self) {
         trace!("entering event loop");
 
-        if !self.time_initialized {
-            self.current_time = self.start_time.unwrap_or(0.0);
-            self.time_initialized = true;
+        if self.current_time.is_none() {
+            self.current_time = Some(self.start_time.unwrap_or(0.0));
         }
-        self.execute_called = true;
 
         // Start plan loop
         loop {
             #[cfg(feature = "progress_bar")]
             if crate::progress::MAX_TIME.get().is_some() {
-                update_timeline_progress(self.current_time);
+                update_timeline_progress(self.get_current_time());
             }
 
             #[cfg(feature = "debugger")]
@@ -559,7 +550,7 @@ impl Context {
         // There aren't any callbacks, so look at the first plan.
         else if let Some(plan) = self.plan_queue.get_next_plan() {
             trace!("calling plan at {:.6}", plan.time);
-            self.current_time = plan.time;
+            self.current_time = Some(plan.time);
             (plan.data)(self);
         } else {
             trace!("No callbacks or plans; exiting event loop");
