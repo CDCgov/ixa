@@ -347,6 +347,12 @@ impl Context {
         self.shutdown_requested = true;
     }
 
+    /// Returns whether execution statistics should be printed
+    #[must_use]
+    pub fn should_print_execution_statistics(&self) -> bool {
+        self.print_execution_statistics
+    }
+
     /// Get the current time in the simulation
     ///
     /// Returns the current time
@@ -529,6 +535,7 @@ pub trait ContextBase: Sized {
     fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
     fn get_current_time(&self) -> f64;
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+    fn should_print_execution_statistics(&self) -> bool;
 }
 impl ContextBase for Context {
     delegate::delegate! {
@@ -544,6 +551,7 @@ impl ContextBase for Context {
             fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
             fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+            fn should_print_execution_statistics(&self) -> bool;
         }
     }
 }

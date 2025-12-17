@@ -107,7 +107,11 @@ impl ProfilingData {
     /// Constructs a table of ("Event Label", "Count", "Rate (per sec)"). Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_counts_table(&self) -> Vec<(String, usize, f64)> {
-        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
+        // If no start_time is set (no spans have been opened), return empty or 0 rates
+        let elapsed = self
+            .start_time
+            .map(|t| t.elapsed().as_secs_f64())
+            .unwrap_or(1.0); // Use 1.0 to avoid division by zero
 
         let mut rows = vec![];
 
@@ -125,7 +129,11 @@ impl ProfilingData {
     /// Constructs a table of "Span Label", "Count", "Duration", "% runtime". Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_spans_table(&self) -> Vec<(String, usize, Duration, f64)> {
-        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
+        // If no start_time is set (no spans have been opened), return empty
+        let Some(start_time) = self.start_time else {
+            return vec![];
+        };
+        let elapsed = start_time.elapsed().as_secs_f64();
 
         let mut rows = vec![];
 
