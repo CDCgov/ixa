@@ -66,12 +66,26 @@ pub fn run_simulation() -> Promise {
     })
 }
 
-// Exported to JS to print panics to the console
+// Simulates a panic by returning a rejected promise instead of triggering a
+// native panic. WebAssembly panics typically abort the module, and JavaScript
+// runtimes often fail to translate that abort into a rejected `Promise`, which
+// makes it hard for the JS test harness to observe the failure. Returning `Err`
+// inside `future_to_promise` forces the exported promise to reject, so tests
+// can reliably detect and inspect the simulated failure without depending on
+// wasm panic semantics.
 #[wasm_bindgen]
 pub fn run_simulation_panic() -> Promise {
-    future_to_promise(async {
-        debug!("{}", vec!["a", "b", "c"][4]);
-        #[allow(unreachable_code)]
-        Ok(JsValue::from_str("unreachable"))
-    })
+    future_to_promise(async { Err(JsValue::from_str("simulated panic")) })
+}
+
+// Triggers a real panic to test the wasm panic hook.
+// Must be called synchronously (not awaited) to catch the panic before
+// the test framework can suppress it. Uses an index parameter to prevent
+// the compiler from detecting the panic statically (which would trigger
+// unconditional_panic lint and potentially be optimized away).
+#[wasm_bindgen]
+pub fn cause_real_panic_with_index(idx: usize) {
+    let arr = ["a", "b", "c"];
+    // Intentionally access out-of-bounds to trigger panic
+    let _ = arr[idx];
 }
