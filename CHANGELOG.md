@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/CDCgov/ixa/compare/ixa-v0.4.3...ixa-v0.4.4) - 2025-12-17
+
+### Fixed
+
+- wasm tests ([#621](https://github.com/CDCgov/ixa/pull/621))
+- wasm build in test action ([#642](https://github.com/CDCgov/ixa/pull/642))
+- Fixed copy+paste error in the implementation of `sample_people`. Fixes #638. ([#640](https://github.com/CDCgov/ixa/pull/640))
+- Fixed mangled callout formatting. Fixes #641. ([#644](https://github.com/CDCgov/ixa/pull/644))
+
+### Other
+
+- hyperfine benchmarks, groups output should not override in md file ([#648](https://github.com/CDCgov/ixa/pull/648))
+- Pinned MDBook to version 0.4.52 for compatibility with the callouts plugin we use. ([#645](https://github.com/CDCgov/ixa/pull/645))
+
 ## [0.4.3](https://github.com/CDCgov/ixa/compare/ixa-v0.4.2...ixa-v0.4.3) - 2025-12-09
 
 ### Fixed
