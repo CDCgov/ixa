@@ -99,7 +99,9 @@ pub mod numeric;
 pub mod web_api;
 
 // Re-export for macros
-pub use ixa_derive::{impl_make_canonical, sorted_tag, sorted_value_type};
+pub use ixa_derive::{
+    impl_make_canonical, impl_people_make_canonical, sorted_tag, sorted_value_type,
+};
 pub use {bincode, csv, ctor, paste, rand, serde};
 
 // Deterministic hashing data structures

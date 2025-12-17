@@ -19,7 +19,7 @@ fn inverse_indices(indices: &[usize]) -> Vec<usize> {
     inv
 }
 
-pub fn reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
+pub fn people_reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
     let person_property_path = resolved_person_property_path();
     let indices = reorder_indices(&tag.0);
 
@@ -48,7 +48,7 @@ pub fn reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
     }
 }
 
-pub fn unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
+pub fn people_unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
     let person_property_path = resolved_person_property_path();
     let indices = reorder_indices(&tag.0);
     let inverse = inverse_indices(&indices);
@@ -79,6 +79,75 @@ pub fn unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
 }
 
 /// Expands to an `impl $struct_name` block that defines make_canonical and make_uncanonical methods.
+pub fn impl_people_reorder_fns(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as ImplMakeCanonicalInput);
+    let ImplMakeCanonicalInput { struct_name, tag } = input;
+
+    let reorder = people_reorder_fn(&tag);
+    let unreorder = people_unreorder_fn(&tag);
+
+    let output = quote! {
+        impl #struct_name {
+            #reorder
+            #unreorder
+        }
+    };
+    output.into()
+}
+
+pub fn reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
+    // let property_path = resolved_path("ixa", &["entity", "property", "Property"]);
+    let indices = reorder_indices(&tag.0);
+
+    let vars: Vec<_> = (0..tag.0.len()).map(|i| format_ident!("v{}", i)).collect();
+    let reordered = indices.iter().map(|&i| &vars[i]);
+
+    // Types in tag order = Value
+    let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
+
+    // Types in sorted tag order = CanonicalValue
+    let mut sorted_idents = tag.0.clone();
+    sorted_idents.sort_by_key(|a| a.to_string());
+    let value_types_sorted: Vec<_> = sorted_idents
+        .iter()
+        .map(|ident| quote! { #ident })
+        .collect();
+
+    quote! {
+        fn reorder_by_tag((#( #vars ),*): (#( #value_types_unsorted ),*)) -> (#( #value_types_sorted ),*) {
+            ( #( #reordered ),* )
+        }
+    }
+}
+
+pub fn unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
+    // let property_path = resolved_path("ixa", &["entity", "property", "Property"]);
+    let indices = reorder_indices(&tag.0);
+    let inverse = inverse_indices(&indices);
+
+    let vars: Vec<_> = (0..tag.0.len()).map(|i| format_ident!("v{}", i)).collect();
+    let unreordered = inverse.iter().map(|&i| &vars[i]);
+
+    // Types in tag order = Value
+    let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
+
+    // Types in sorted tag order = CanonicalValue
+    let mut sorted_idents = tag.0.clone();
+    sorted_idents.sort_by_key(|a| a.to_string());
+    let value_types_sorted: Vec<_> = sorted_idents
+        .iter()
+        .map(|ident| quote! { #ident })
+        .collect();
+
+    quote! {
+        fn unreorder_by_tag((#( #vars ),*): (#( #value_types_sorted ),*)) -> (#( #value_types_unsorted ),*) {
+            ( #( #unreordered ),* )
+        }
+    }
+}
+
+/// Expands to an `impl $struct_name` block that defines variants of `make_canonical` and `make_uncanonical` methods
+/// that take and produce pure tuples.
 pub fn impl_reorder_fns(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as ImplMakeCanonicalInput);
     let ImplMakeCanonicalInput { struct_name, tag } = input;

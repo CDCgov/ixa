@@ -2,7 +2,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
-use ixa::define_multi_property;
+use ixa::define_person_multi_property;
 use ixa::prelude::*;
 use ixa_bench::generate_population::generate_population_with_seed;
 use serde::Serialize;
@@ -53,7 +53,7 @@ fn bench_query_population_derived_property(context: &mut Context) {
 }
 
 pub fn criterion_benchmark(criterion: &mut Criterion) {
-    define_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
+    define_person_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
     let mut context = Context::new();
     // Seed context RNGs for deterministic derived properties / sampling
     context.init_random(SEED);

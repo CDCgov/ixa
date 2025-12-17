@@ -36,16 +36,19 @@ mod entity_impl;
 pub mod entity_store;
 pub mod events;
 mod index;
+mod multi_property;
 pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
 mod property_value_store;
 pub mod property_value_store_core;
+// mod query;
 
 // Flatten the module hierarchy.
 pub use entity::*;
 pub use entity_impl::*;
+// pub use query::Query;
 
 /// The type used in the indexing infrastructure. This type alias is
 /// public, because it is used by any implementor of `Property<E: Entity>`.
