@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use clap::builder::PossibleValuesParser;
-use clap::{arg, Parser};
+use clap::Parser;
 use ixa_bench::bench_utils::registry::{list_benches, list_groups};
 
 const STYLE_FLAGS: [&str; 2] = ["--show-output", "--style"];
