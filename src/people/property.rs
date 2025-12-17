@@ -122,9 +122,9 @@ mod tests {
     define_person_property!(Age, u8);
     define_person_property!(Weight, f64);
 
-    define_multi_property!(ProfileNAW, (Name, Age, Weight));
-    define_multi_property!(ProfileAWN, (Age, Weight, Name));
-    define_multi_property!(ProfileWAN, (Weight, Age, Name));
+    define_person_multi_property!(ProfileNAW, (Name, Age, Weight));
+    define_person_multi_property!(ProfileAWN, (Age, Weight, Name));
+    define_person_multi_property!(ProfileWAN, (Weight, Age, Name));
 
     #[test]
     fn test_multi_property_ordering() {

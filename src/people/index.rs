@@ -239,14 +239,14 @@ mod test {
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::people::index::Index;
     use crate::prelude::*;
-    use crate::{define_multi_property, set_log_level, set_module_filter, PersonProperty};
+    use crate::{define_person_multi_property, set_log_level, set_module_filter, PersonProperty};
 
     define_person_property!(Age, u8);
     define_person_property!(Weight, u8);
     define_person_property!(Height, u8);
 
-    define_multi_property!(AWH, (Age, Weight, Height));
-    define_multi_property!(WHA, (Weight, Height, Age));
+    define_person_multi_property!(AWH, (Age, Weight, Height));
+    define_person_multi_property!(WHA, (Weight, Height, Age));
 
     #[test]
     fn test_multi_property_index_typed_api() {

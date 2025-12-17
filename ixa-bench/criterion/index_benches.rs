@@ -2,7 +2,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
-use ixa::{define_multi_property, PersonId};
+use ixa::{define_person_multi_property, PersonId};
 
 define_rng!(IndexBenchRng);
 
@@ -20,7 +20,7 @@ define_person_property!(MProperty100, u8, |context: &Context, _person: PersonId|
     context.sample_range(IndexBenchRng, 0..100)
 });
 
-define_multi_property!(MProperty, (MProperty10, MProperty100));
+define_person_multi_property!(MProperty, (MProperty10, MProperty100));
 
 pub fn criterion_benchmark(criterion: &mut Criterion) {
     let mut criterion = criterion.benchmark_group("indexing");
