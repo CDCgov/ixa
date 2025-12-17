@@ -211,11 +211,14 @@ impl Context {
         phase: ExecutionPhase,
     ) -> PlanId {
         let current = self.get_current_time();
+        assert!(!time.is_nan(), "Time {time} is invalid: cannot be NaN");
         assert!(
-            !time.is_nan()
-                && !time.is_infinite()
-                && time >= current,
-            "Time {time} is invalid: must be finite and not less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
+            !time.is_infinite(),
+            "Time {time} is invalid: cannot be infinite"
+        );
+        assert!(
+            time >= current,
+            "Time {time} is invalid: cannot be less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
             current
         );
         self.plan_queue.add_plan(time, Box::new(callback), phase)
@@ -358,9 +361,13 @@ impl Context {
         self.shutdown_requested = true;
     }
 
-    /// Get the current time in the simulation
+    /// Get the current simulation time
     ///
-    /// Returns the current time
+    /// Returns the current time in the simulation. The behavior depends on execution state:
+    /// * During execution: returns the time of the currently executing plan or callback
+    /// * Before execution: returns the start time (if set via [`set_start_time`]), or `0.0`
+    ///
+    /// The time can be negative if a negative start time was set before execution.
     #[must_use]
     pub fn get_current_time(&self) -> f64 {
         self.current_time.or(self.start_time).unwrap_or(0.0)
