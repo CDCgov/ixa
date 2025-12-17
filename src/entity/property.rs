@@ -1,6 +1,6 @@
 /*!
 
-A `Property` is the newtype value type for properties associated to an `Entity`.
+A `Property` is the value type for properties associated to an `Entity`.
 
 */
 
@@ -79,8 +79,6 @@ pub trait Property<E: Entity>: AnyProperty {
     fn name() -> &'static str;
 
     /// Returns a string representation of the property value, e.g. for writing to a CSV file.
-    /// If `make_uncanonical` is nontrivial, this method usually transforms `value` into a
-    /// `Self` first so that the value is formatted in a way the user expects.
     #[must_use]
     fn get_display(&self) -> String;
 
@@ -122,35 +120,17 @@ pub trait Property<E: Entity>: AnyProperty {
     }
 }
 
-#[cfg(feature = "disabled")]
+// #[cfg(feature = "disabled")]
 mod tests {
     use super::*;
     use crate::{define_entity, define_property};
 
-    #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
-    struct Person;
-
     define_entity!(Person);
-
-    #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-    pub struct Pu32(u32);
-    define_property!(Pu32, Person);
-
-    #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-    pub struct POu32(Option<u32>);
-    define_property!(POu32, Person);
-
-    #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-    pub struct Name(&'static str);
-    define_property!(Name, Person);
-
-    #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-    pub struct Age(u8);
-    define_property!(Age, Person);
-
-    #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-    pub struct Weight(f64);
-    define_property!(Weight, Person);
+    define_property!(struct Pu32(u32), Person, default_const = Pu32(0));
+    define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
+    define_property!(struct Name(&'static str), Person, default_const = Name(""));
+    define_property!(struct Age(u8), Person, default_const = Age(0));
+    define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
 
     /*
         define_multi_property!(ProfileNAW, (Name, Age, Weight));
@@ -242,26 +222,26 @@ mod tests {
     #[test]
     fn test_get_display() {
         let mut context = Context::new();
-        let person = context.add_person(((POu32, Some(42)), (Pu32, 22))).unwrap();
+        let person = context.add_entity((POu32(Some(42)), Pu32(22))).unwrap();
         assert_eq!(
             format!(
                 "{:}",
-                POu32::get_display(&context.get_property(person, POu32))
+                POu32::get_display(&context.get_property::<_, POu32>(person))
             ),
             "42"
         );
         assert_eq!(
             format!(
                 "{:}",
-                Pu32::get_display(&context.get_property(person, Pu32))
+                Pu32::get_display(&context.get_property::<_, Pu32>(person))
             ),
-            "22"
+            "Pu32(22)"
         );
-        let person2 = context.add_person(((POu32, None), (Pu32, 11))).unwrap();
+        let person2 = context.add_entity((POu32(None), Pu32(11))).unwrap();
         assert_eq!(
             format!(
                 "{:}",
-                POu32::get_display(&context.get_property(person2, POu32))
+                POu32::get_display(&context.get_property::<_, POu32>(person2))
             ),
             "None"
         );
@@ -269,12 +249,12 @@ mod tests {
 
     #[test]
     fn test_debug_trait() {
-        let property = Pu32;
+        let property = Pu32(11);
         let debug_str = format!("{:?}", property);
-        assert_eq!(debug_str, "Pu32");
+        assert_eq!(debug_str, "Pu32(11)");
 
-        let property = POu32;
+        let property = POu32(Some(22));
         let debug_str = format!("{:?}", property);
-        assert_eq!(debug_str, "POu32");
+        assert_eq!(debug_str, "POu32(Some(22))");
     }
 }

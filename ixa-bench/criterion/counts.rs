@@ -2,7 +2,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::context::Context;
-use ixa::define_multi_property;
+use ixa::define_person_multi_property;
 use ixa::prelude::*;
 use ixa_bench::generate_population::generate_population_with_seed;
 
@@ -23,7 +23,7 @@ define_derived_person_property!(AgeGroupFoi, u8, [Age], |age| {
     }
 });
 
-define_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
+define_person_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
 
 fn populate_context(context: &mut Context, n: usize) {
     // Ensure context RNGs are deterministic as well

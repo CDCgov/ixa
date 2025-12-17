@@ -213,7 +213,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
         pub struct $name(Option<$inner_ty>);
 
         // Use impl_property_with_options! to provide a custom display implementation
@@ -221,8 +221,8 @@ macro_rules! define_property {
             $name,
             $entity
             $(, $($extra)+)*
-            , display_impl = |value: &Option<$inner_ty>| {
-                match value {
+            , display_impl = |value: &Self| {
+                match value.0 {
                     Some(v) => format!("{:?}", v),
                     None => "None".to_string(),
                 }
@@ -236,7 +236,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
         pub struct $name($($field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
@@ -247,7 +247,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
         pub struct $name { $($field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
@@ -260,7 +260,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
         pub enum $name {
             $($variant),*
         }
@@ -313,6 +313,8 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+
     ) => {
         $crate::impl_property_with_options!(@impl
             $property,
@@ -326,6 +328,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, ctor_registration = $ctor_registration)?
         );
     };
 
@@ -342,6 +345,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::impl_property_with_options!(@impl
             $property,
@@ -355,6 +359,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, ctor_registration = $ctor_registration)?
         );
     };
 
@@ -369,6 +374,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::impl_property_with_options!(@impl
             $property,
@@ -380,6 +386,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, ctor_registration = $ctor_registration)?
         );
     };
 
@@ -396,6 +403,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         compile_error!(
             "impl_property_with_options!: you must supply at least one of: \
@@ -403,7 +411,7 @@ macro_rules! impl_property_with_options {
         );
     };
 
-    // Shared implementation (this is essentially your original macro body)
+    // Shared implementation
     (@impl
         $property:ident,
         $entity:ident
@@ -416,6 +424,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::__impl_property_common!(
             $property,
@@ -461,7 +470,10 @@ macro_rules! impl_property_with_options {
             $crate::impl_property_with_options!(@unwrap_or $($make_canonical)?, std::convert::identity),
 
             // make_uncanonical
-            $crate::impl_property_with_options!(@unwrap_or $($make_uncanonical)?, std::convert::identity)
+            $crate::impl_property_with_options!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
+
+            // ctor_registration
+            $crate::impl_property_with_options!(@unwrap_or $($ctor_registration)?, {/*empty*/}),
         );
     };
 
@@ -511,11 +523,12 @@ macro_rules! __impl_property_common {
         $initialization_kind:expr, // The kind of initialization this property has
         $is_required:expr,         // Do we require that new entities have this property explicitly set?
         $compute_derived_fn:expr,  // If the property is derived, the function that computes the value
-        $collect_deps_fn:expr,  // If the property is derived, the function that computes the value
+        $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $default_const:expr,       // If the property has a constant default initial value, the default value
-        $display_impl:expr,         // A function that takes a canonical value and returns a string representation of this property
+        $display_impl:expr,        // A function that takes a canonical value and returns a string representation of this property
         $make_canonical:expr,      // A function that takes a value and returns a canonical value
-        $make_uncanonical:expr     // A function that takes a canonical value and returns a value
+        $make_uncanonical:expr,    // A function that takes a canonical value and returns a value
+        $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
         impl $crate::entity::property::Property<$entity> for $property {
             type CanonicalValue = $canonical_value;
@@ -531,7 +544,7 @@ macro_rules! __impl_property_common {
             fn compute_derived(
                 _context: &$crate::Context,
                 _entity_id: $crate::entity::EntityId<$entity>,
-            ) -> Self::CanonicalValue {
+            ) -> Self {
                 ($compute_derived_fn)(_context, _entity_id)
             }
 
@@ -588,122 +601,13 @@ macro_rules! __impl_property_common {
                 #[ctor]
                 fn [<_register_property_ $entity:snake _ $property:snake>]() {
                     $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+                    $ctor_registration
                 }
             }
         }
     };
 }
 pub use __impl_property_common;
-
-/*
-/// Defines a derived property with the following parameters:
-/// * `$property`: A name for the identifier type of the property
-/// * `$value`: The type of the property's value
-/// * `[$($dependency),+]`: A list of person properties the derived property depends on
-/// * `[$($dependency),*]`: A list of global properties the derived property depends on (optional)
-/// * `$calculate`: A closure that takes the values of each dependency and returns the derived value
-/// * `$display`: A closure that takes the value of the derived property and returns a string representation
-/// * `$hash_fn`: A function that can compute the hash of values of this property
-#[macro_export]
-macro_rules! __define_derived_property_common {
-    (
-        $derived_property:ident,
-        $entity:ty,
-        $value:ty,
-        $canonical_value:ty,
-        $compute_canonical_impl:expr,
-        $compute_uncanonical_impl:expr,
-
-        $at_dependency_registration:expr,
-
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
-
-        |$($param:ident),+| $derive_fn:expr,
-
-        $display_impl:expr,
-
-        $hash_fn:expr,
-
-        $type_id_impl:expr
-    ) => {
-        #[derive(Debug, Copy, Clone)]
-        pub struct $derived_property;
-
-        impl $crate::people::Property for $derived_property {
-            type Value = $value;
-            type CanonicalValue = $canonical_value;
-
-            fn initialization_kind() -> $crate::people::PropertyInitializationKind {
-                $crate::people::PropertyInitializationKind::Derived
-            }
-
-            fn compute(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
-                #[allow(unused_imports)]
-                use $crate::global_properties::ContextGlobalPropertiesExt;
-                #[allow(unused_parens)]
-                let ($($param,)*) = (
-                    $(context.get_property(person_id, $dependency)),*,
-                    $(
-                        context.get_global_property_value($global_dependency)
-                            .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
-                    ),*
-                );
-                #[allow(non_snake_case)]
-                (|$($param),+| $derive_fn)($($param),+)
-            }
-
-            fn compute_immutable(context: &$crate::context::Context, person_id: $crate::people::PersonId) -> Self::Value {
-                #[allow(unused_imports)]
-                use $crate::global_properties::ContextGlobalPropertiesExt;
-                #[allow(unused_parens)]
-                let ($($param,)*) = (
-                    $(context.get_property_immutable(person_id, $dependency)),*,
-                    $(
-                        // Right now `get_global_property_value` is always an immutable operation.
-                        context.get_global_property_value($global_dependency)
-                            .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
-                    ),*
-                );
-                #[allow(non_snake_case)]
-                (|$($param),+| $derive_fn)($($param),+)
-            }
-
-            fn make_canonical(value: Self::Value) -> Self::CanonicalValue {
-                ($compute_canonical_impl)(value)
-            }
-            fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value {
-                ($compute_uncanonical_impl)(value)
-            }
-            fn is_derived() -> bool { true }
-            fn dependencies() -> Vec<Box<dyn $crate::people::PropertyHolder>> {
-                vec![$(
-                    Box::new($dependency) as Box<dyn $crate::people::PropertyHolder>
-                ),*]
-            }
-            fn register_dependencies(context: &$crate::context::Context) {
-                $at_dependency_registration
-                $(context.register_property::<$dependency>();)+
-            }
-            fn get_instance() -> Self {
-                $derived_property
-            }
-            fn name() -> &'static str {
-                stringify!($derived_property)
-            }
-            fn get_display(value: &Self::CanonicalValue) -> String {
-                $display_impl(value)
-            }
-            fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
-                ($hash_fn)(value)
-            }
-            fn type_id() -> std::any::TypeId {
-                $type_id_impl
-            }
-        }
-    };
-}
-*/
 
 /// An internal macro that expands to the correct implementation for the `compute_derived` function of a derived property.
 #[macro_export]
@@ -903,81 +807,94 @@ macro_rules! define_derived_property {
 }
 pub use define_derived_property;
 
-/*
+/// Defines a derived property consisting of a (named) tuple of other properties. The primary use case
+/// is for indexing and querying properties jointly.
+///
+/// The index subsystem is smart enough to reuse indexes for multi-properties that are equivalent up to
+/// reordering of the component properties. The querying subsystem is able to detect when its multiple
+/// component properties are equivalent to an indexed multi-property and use that index to perform the
+/// query.
 #[macro_export]
 macro_rules! define_multi_property {
-    (
-        $property:ident,
-        ( $($dependency:ident),+ )
-    ) => {
-        // $crate::sorted_property_impl!(( $($dependency),+ ));
-        $crate::paste::paste! {
-            $crate::__define_derived_property_common!(
-                // Name
-                $property,
+        (
+            $property:ident( $($dependency:ident),+ ),
+            $entity:ident
+        ) => {
+            $crate::paste::paste! {
+                #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
+                pub struct $property( $($dependency),+ );
 
-                // `Property::Value` type
-                ( $(<$dependency as $crate::people::Property>::Value),+ ),
+                $crate::impl_property_with_options!(
+                    $property,
+                    $entity,
+                    initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
+                    compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
+                        $property(
+                            $(context.get_property::<$entity, $dependency>(entity_id)),+
+                        )
+                    },
+                    collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                        $(
+                            if $dependency::is_derived() {
+                                $dependency::collect_non_derived_dependencies(deps);
+                            } else {
+                                deps.insert($dependency::index());
+                            }
+                        )*
+                    },
+                    display_impl = |val: &$property| {
+                        let $property( $( [<_ $dependency:lower>] ),+ ) = val;
+                        let mut displayed = format!("{}(", to_string!($property));
+                        $(
+                            displayed.push_str(
+                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
+                            );
+                            displayed.push_str(", ");
+                        )+
+                        displayed.truncate(displayed.len() - 2);
+                        displayed.push_str(")");
+                        displayed
+                    },
+                    canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
+                    make_canonical = |val: $property| {
+                        $property::reorder_by_tag(val.into())
+                    },
+                    make_uncanonical = |val| {
+                        $property::unreorder_by_tag(val).into()
+                    },
 
-                // `Property::CanonicalValue` type
-                $crate::sorted_value_type!(( $($dependency),+ )),
+                    ctor_registration = {
+                        let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
+                        type_ids.sort();
+                        $crate::entity::multi_property::register_type_ids_to_muli_property_id(
+                            &type_ids,
+                            std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
+                        );
+                    }
+                );
 
-                // Function to transform a `Property::Value` to a `Property::CanonicalValue`
-                $property::reorder_by_tag,
+                $crate::impl_make_canonical!($property, ( $($dependency),+ ));
 
-                // Function to transform a `Property::CanonicalValue` to a `Property::Value`
-                $property::unreorder_by_tag,
+                // Convert from a raw tuple
+                impl From<( $($dependency),+ )> for $property {
+                    fn from(tuple: ( $($dependency),+ )) -> Self {
+                        let ( $( [<_ $dependency:lower>] ),+ ) = tuple;
+                        $property( $( [<_ $dependency:lower>] ),+ )
+                    }
+                }
 
-                // Code that runs at dependency registration time
-                {
-                    let type_ids = &mut [$($dependency::type_id()),+ ];
-                    type_ids.sort();
-                    $crate::people::register_type_ids_to_multi_property_id(type_ids, Self::type_id());
-                },
+                // Convert to a raw tuple
+                impl From<$property> for ( $($dependency),+ ) {
+                    fn from(val: $property) -> Self {
+                        let $property( $( [<_ $dependency:lower>] ),+ ) = val;
+                        ( $( [<_ $dependency:lower>] ),+ )
+                    }
+                }
 
-                // Property dependency list
-                [$($dependency),+],
-
-                // Global property dependency list
-                [],
-
-                // A function that takes the values of each dependency and returns the derived value
-                |$( [<_ $dependency:lower>] ),+| {
-                    ( $( [<_ $dependency:lower>] ),+ )
-                },
-
-                // A function that takes a canonical value and returns a string representation of it.
-                |values_tuple: &Self::CanonicalValue| {
-                    // ice tThe string representation uses the original (unsorted) ordering.
-                    let values_tuple: Self::Value = Self::unreorder_by_tag(*values_tuple);
-                    let mut displayed = String::from("(");
-                    let ( $( [<_ $dependency:lower>] ),+ ) = values_tuple;
-                    $(
-                        displayed.push_str(<$dependency as $crate::Property>::get_display(
-                            & <$dependency as $crate::Property>::make_canonical([<_ $dependency:lower>])
-                        ).as_str());
-                        displayed.push_str(", ");
-                    )+
-                    displayed.truncate(displayed.len() - 2);
-                    displayed.push_str(")");
-                    displayed
-                },
-
-                // A function that computes the hash of a value of this property
-                $crate::hashing::hash_serialized_128,
-
-                // The Type ID of the property.
-                // The type ID of a multi-property is the type ID of the SORTED tuple of its
-                // components. This is so that tuples with the same component types in a different
-                // order will have the same type ID.
-                std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
-            );
-            $crate::impl_make_canonical!($property, ( $($dependency),+ ));
-        }
-    };
-}
+            }
+        };
+    }
 pub use define_multi_property;
-*/
 
 #[cfg(test)]
 mod tests {
@@ -1014,6 +931,20 @@ mod tests {
             }
         }
     );
+
+    // Dummy properties for a multi-property
+    define_property!(
+        struct PropA(u8),
+        Person,
+        default_const = PropA(0)
+    );
+    define_property!(
+        struct PropB(u8),
+        Person,
+        default_const = PropB(0)
+    );
+
+    define_multi_property!(PropertySubset(Age, PropB, PropA), Person);
 
     #[test]
     fn test_derived_property() {

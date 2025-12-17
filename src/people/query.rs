@@ -205,8 +205,8 @@ mod tests {
 
     use crate::people::PeoplePlugin;
     use crate::{
-        define_derived_person_property, define_multi_property, define_person_property, Context,
-        ContextPeopleExt, HashSetExt, PersonProperty,
+        define_derived_person_property, define_person_multi_property, define_person_property,
+        Context, ContextPeopleExt, HashSetExt, PersonProperty,
     };
 
     define_person_property!(Age, u8);
@@ -525,8 +525,8 @@ mod tests {
     }
 
     // create a multi-property index
-    define_multi_property!(ACH, (Age, County, Height));
-    define_multi_property!(CH, (County, Height));
+    define_person_multi_property!(ACH, (Age, County, Height));
+    define_person_multi_property!(CH, (County, Height));
 
     #[test]
     fn query_derived_prop_with_optimized_index() {

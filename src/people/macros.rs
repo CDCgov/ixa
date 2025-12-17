@@ -257,7 +257,7 @@ pub use define_derived_person_property;
 /// - `( $($dependency),+ )`: A non-empty, comma-separated, ordered list of existing
 ///   property identifiers that this multi-property is composed from.
 #[macro_export]
-macro_rules! define_multi_property {
+macro_rules! define_person_multi_property {
     (
         $person_property:ident,
         ( $($dependency:ident),+ )
@@ -324,8 +324,8 @@ macro_rules! define_multi_property {
                 // order will have the same type ID.
                 std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
             );
-            $crate::impl_make_canonical!($person_property, ( $($dependency),+ ));
+            $crate::impl_people_make_canonical!($person_property, ( $($dependency),+ ));
         }
     };
 }
-pub use define_multi_property;
+pub use define_person_multi_property;
