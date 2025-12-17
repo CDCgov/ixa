@@ -29,6 +29,8 @@ jobs:
 
       - name: WASM tests
         run: mise run test:wasm
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
 
       - name: Check single run for hyperfine
         run: mise run test:hyperfine
