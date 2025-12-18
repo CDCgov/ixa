@@ -92,7 +92,7 @@ pub struct Context {
     #[cfg(feature = "debugger")]
     breakpoints_enabled: bool,
     execution_profiler: ExecutionProfilingCollector,
-    pub print_execution_statistics: bool,
+    pub(crate) print_execution_statistics: bool,
 }
 
 impl Context {
@@ -447,6 +447,8 @@ impl Context {
         let stats = self.get_execution_statistics();
         if self.print_execution_statistics {
             print_execution_statistics(&stats);
+            #[cfg(feature = "profiling")]
+            crate::profiling::print_profiling_data();
         } else {
             log_execution_statistics(&stats);
         }

@@ -15,9 +15,6 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use web_sys::window;
 
-#[cfg(feature = "profiling")]
-use crate::profiling::print_profiling_data;
-
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 /// How frequently we update the max memory used value.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
@@ -255,9 +252,6 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
             format_duration(summary.wall_time_per_person)
         );
     }
-
-    #[cfg(feature = "profiling")]
-    print_profiling_data();
 }
 /// Logs execution statistics with the logging system.
 ///

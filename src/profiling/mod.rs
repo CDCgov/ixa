@@ -216,11 +216,6 @@ impl Drop for Span {
 /// to a JSON file.
 pub trait ProfilingContextExt: ContextReportExt {
     fn write_profiling_data(&mut self) {
-        // Don't write profiling data if stats are disabled
-        if !self.should_print_execution_statistics() {
-            return;
-        }
-
         let (mut prefix, directory, overwrite) = {
             let report_options = self.report_options();
             (
@@ -250,45 +245,3 @@ pub trait ProfilingContextExt: ContextReportExt {
     }
 }
 impl ProfilingContextExt for Context {}
-
-#[cfg(all(test, feature = "profiling"))]
-mod tests {
-    use std::path::PathBuf;
-
-    use tempfile::TempDir;
-
-    use super::*;
-    use crate::{ConfigReportOptions, Context, ContextReportExt};
-
-    #[test]
-    fn test_write_profiling_data_respects_no_stats_flag() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut context = Context::new();
-
-        // Configure report options
-        context
-            .report_options()
-            .directory(temp_dir.path().to_path_buf())
-            .file_prefix("test_".to_string())
-            .overwrite(true);
-
-        // Test 1: When print_execution_statistics is false (--no-stats), file should NOT be written
-        context.print_execution_statistics = false;
-        context.write_profiling_data();
-
-        let profiling_file = temp_dir.path().join("test_profiling.json");
-        assert!(
-            !profiling_file.exists(),
-            "profiling.json should not be written when --no-stats is set"
-        );
-
-        // Test 2: When print_execution_statistics is true, file SHOULD be written
-        context.print_execution_statistics = true;
-        context.write_profiling_data();
-
-        assert!(
-            profiling_file.exists(),
-            "profiling.json should be written when --no-stats is not set"
-        );
-    }
-}
