@@ -817,19 +817,18 @@ pub use define_derived_property;
 #[macro_export]
 macro_rules! define_multi_property {
         (
-            $property:ident( $($dependency:ident),+ ),
+            ( $($dependency:ident),+ ),
             $entity:ident
         ) => {
             $crate::paste::paste! {
-                #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
-                pub struct $property( $($dependency),+ );
+                type [<$($dependency)*>] = ( $($dependency),+ );
 
                 $crate::impl_property_with_options!(
-                    $property,
+                    [<$($dependency)*>],
                     $entity,
                     initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
-                        $property(
+                        (
                             $(context.get_property::<$entity, $dependency>(entity_id)),+
                         )
                     },
@@ -842,9 +841,9 @@ macro_rules! define_multi_property {
                             }
                         )*
                     },
-                    display_impl = |val: &$property| {
-                        let $property( $( [<_ $dependency:lower>] ),+ ) = val;
-                        let mut displayed = format!("{}(", stringify!($property));
+                    display_impl = |val: &( $($dependency),+ )| {
+                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
+                        let mut displayed = String::from("(");
                         $(
                             displayed.push_str(
                                 &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
@@ -856,12 +855,8 @@ macro_rules! define_multi_property {
                         displayed
                     },
                     canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
-                    make_canonical = |val: $property| {
-                        $property::reorder_by_tag(val.into())
-                    },
-                    make_uncanonical = |val| {
-                        $property::unreorder_by_tag(val).into()
-                    },
+                    make_canonical = reorder_closure!(( $($dependency),+ )),
+                    make_uncanonical = unreorder_closure!(( $($dependency),+ )),
 
                     ctor_registration = {
                         let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
@@ -873,24 +868,6 @@ macro_rules! define_multi_property {
                     }
                 );
 
-                $crate::impl_make_canonical!($property, ( $($dependency),+ ));
-
-                // Convert from a raw tuple
-                impl From<( $($dependency),+ )> for $property {
-                    fn from(tuple: ( $($dependency),+ )) -> Self {
-                        let ( $( [<_ $dependency:lower>] ),+ ) = tuple;
-                        $property( $( [<_ $dependency:lower>] ),+ )
-                    }
-                }
-
-                // Convert to a raw tuple
-                impl From<$property> for ( $($dependency),+ ) {
-                    fn from(val: $property) -> Self {
-                        let $property( $( [<_ $dependency:lower>] ),+ ) = val;
-                        ( $( [<_ $dependency:lower>] ),+ )
-                    }
-                }
-
             }
         };
     }
@@ -898,6 +875,8 @@ pub use define_multi_property;
 
 #[cfg(test)]
 mod tests {
+    use ixa_derive::{reorder_closure, unreorder_closure};
+
     use crate::entity::property_value_store_core::PropertyValueStoreCore;
     use crate::prelude::*;
 
@@ -912,18 +891,18 @@ mod tests {
     define_property!(
         struct Innocculation {
             time: f64,
-            dose: u8
+            dose: u8,
         },
         Person,
-        default_const = Innocculation {time: 0.0, dose: 0}
+        default_const = Innocculation { time: 0.0, dose: 0 }
     );
 
     // An enum non-derived property
     define_property!(
-        enum InfectionStatus{
+        enum InfectionStatus {
             Susceptible,
             Infected,
-            Recovered
+            Recovered,
         },
         Person,
         default_const = InfectionStatus::Susceptible
@@ -951,15 +930,19 @@ mod tests {
         }
     );
 
-    define_multi_property!(ProfileNAW(Name, Age, Weight), Person);
-    define_multi_property!(ProfileAWN(Age, Weight, Name), Person);
-    define_multi_property!(ProfileWAN(Weight, Age, Name), Person);
+    define_multi_property!((Name, Age, Weight), Person);
+    define_multi_property!((Age, Weight, Name), Person);
+    define_multi_property!((Weight, Age, Name), Person);
 
     #[test]
     fn test_multi_property_ordering() {
-        let a: ProfileNAW = ProfileNAW(Name("Jane"), Age(22), Weight(180.5));
-        let b: ProfileAWN = ProfileAWN(Age(22), Weight(180.5), Name("Jane"));
-        let c: ProfileWAN = ProfileWAN(Weight(180.5), Age(22), Name("Jane"));
+        let a = (Name("Jane"), Age(22), Weight(180.5));
+        let b = (Age(22), Weight(180.5), Name("Jane"));
+        let c = (Weight(180.5), Age(22), Name("Jane"));
+
+        type ProfileNAW = (Name, Age, Weight);
+        type ProfileAWN = (Age, Weight, Name);
+        type ProfileWAN = (Weight, Age, Name);
 
         assert_eq!(ProfileNAW::type_id(), ProfileAWN::type_id());
         assert_eq!(ProfileNAW::type_id(), ProfileWAN::type_id());
@@ -1009,11 +992,14 @@ mod tests {
             .add_entity((Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
 
+        type ProfileNAW = (Name, Age, Weight);
+
         context.index_property::<_, ProfileNAW>();
 
         {
             // Check that `ProfileNAW` has an index.
-            let property_value_store: &PropertyValueStoreCore<Person, ProfileNAW> = context.property_store.get::<Person,ProfileNAW >();
+            let property_value_store: &PropertyValueStoreCore<Person, ProfileNAW> =
+                context.property_store.get::<Person, ProfileNAW>();
             assert!(property_value_store.index.is_some());
         }
 

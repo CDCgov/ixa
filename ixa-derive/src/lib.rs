@@ -37,6 +37,16 @@ pub fn impl_make_canonical(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
+pub fn reorder_closure(input: TokenStream) -> TokenStream {
+    reorder_fn::reorder_closure(input)
+}
+
+#[proc_macro]
+pub fn unreorder_closure(input: TokenStream) -> TokenStream {
+    reorder_fn::unreorder_closure(input)
+}
+
+#[proc_macro]
 pub fn impl_people_make_canonical(input: TokenStream) -> TokenStream {
     reorder_fn::impl_people_reorder_fns(input)
 }
