@@ -16,8 +16,7 @@ use crate::entity::events::{
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
-use crate::entity::PropertyValueStore;
-use crate::entity::{Entity, EntityId};
+use crate::entity::{Entity, EntityId, PropertyValueStore};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,

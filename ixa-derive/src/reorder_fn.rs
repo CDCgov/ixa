@@ -146,6 +146,57 @@ pub fn unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
     }
 }
 
+pub fn reorder_closure(input: TokenStream) -> TokenStream {
+    let tag = syn::parse_macro_input!(input as TypeTuple);
+    let indices = reorder_indices(&tag.0);
+    let vars: Vec<_> = (0..tag.0.len()).map(|i| format_ident!("v{}", i)).collect();
+    let reordered = indices.iter().map(|&i| &vars[i]);
+
+    // Types in tag order = Value
+    let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
+
+    // Types in sorted tag order = CanonicalValue
+    let mut sorted_idents = tag.0.clone();
+    sorted_idents.sort_by_key(|a| a.to_string());
+    let value_types_sorted: Vec<_> = sorted_idents
+        .iter()
+        .map(|ident| quote! { #ident })
+        .collect();
+
+    let output = quote! {
+        |(#( #vars ),*): (#( #value_types_unsorted ),*)| {
+            ( #( #reordered ),* )
+        }
+    };
+    output.into()
+}
+
+pub fn unreorder_closure(input: TokenStream) -> TokenStream {
+    let tag = syn::parse_macro_input!(input as TypeTuple);
+    let indices = reorder_indices(&tag.0);
+    let inverse = inverse_indices(&indices);
+    let vars: Vec<_> = (0..tag.0.len()).map(|i| format_ident!("v{}", i)).collect();
+    let unreordered = inverse.iter().map(|&i| &vars[i]);
+
+    // Types in tag order = Value
+    let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
+
+    // Types in sorted tag order = CanonicalValue
+    let mut sorted_idents = tag.0.clone();
+    sorted_idents.sort_by_key(|a| a.to_string());
+    let value_types_sorted: Vec<_> = sorted_idents
+        .iter()
+        .map(|ident| quote! { #ident })
+        .collect();
+
+    let output = quote! {
+        |(#( #vars ),*): (#( #value_types_sorted ),*)| {
+            ( #( #unreordered ),* )
+        }
+    };
+    output.into()
+}
+
 /// Expands to an `impl $struct_name` block that defines variants of `make_canonical` and `make_uncanonical` methods
 /// that take and produce pure tuples.
 pub fn impl_reorder_fns(input: TokenStream) -> TokenStream {
