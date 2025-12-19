@@ -155,8 +155,8 @@ mod test {
         set_log_level(LevelFilter::Trace);
         set_module_filter("ixa", LevelFilter::Trace);
 
-        context.index_property(WHA);
-        context.index_property(AWH);
+        context.index_person_property(WHA);
+        context.index_person_property(AWH);
 
         context
             .add_person(((Age, 1u8), (Weight, 2u8), (Height, 3u8)))

@@ -57,7 +57,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Indexed single property
-    context.index_property(HomeId);
+    context.index_person_property(HomeId);
     group.bench_function("single_property_indexed", |bencher| {
         bencher.iter(|| {
             let _ = black_box(context.query_people_count((HomeId, home_val)));
@@ -72,7 +72,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Indexed multi-property
-    context.index_property(ASW);
+    context.index_person_property(ASW);
     group.bench_function("multi_property_indexed", |bencher| {
         bencher.iter(|| {
             let _ = black_box(context.query_people_count((
@@ -94,7 +94,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             },
             |mut ctx| {
                 // action: index a property (this should index existing people)
-                ctx.index_property(HomeId);
+                ctx.index_person_property(HomeId);
                 // touch query to ensure index is used
                 let _ = black_box(ctx.query_people_count((HomeId, home_val)));
             },
@@ -107,7 +107,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || {
                 let mut ctx = Context::new();
                 populate_context(&mut ctx, 5_000);
-                ctx.index_property(HomeId);
+                ctx.index_person_property(HomeId);
                 // Trigger indexing for the existing people by running a query
                 let _ = black_box(ctx.query_people_count((HomeId, home_val)));
                 ctx
@@ -116,7 +116,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 // Add more people (unindexed until index_unindexed_people is run)
                 populate_context(&mut ctx, 2_000);
                 // Re-run indexing which will pick up the new people
-                ctx.index_property(HomeId);
+                ctx.index_person_property(HomeId);
                 // Trigger indexing for the newly added people
                 let _ = black_box(ctx.query_people_count((HomeId, home_val)));
             },

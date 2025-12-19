@@ -13,3 +13,15 @@ pub use crate::{
     define_person_multi_property, define_person_property, define_person_property_with_default,
     define_report, define_rng, PluginContext,
 };
+
+pub use crate::entity::{
+    Entity,
+    EntityId,
+    property::Property,
+};
+pub use crate::{
+    define_derived_property,
+    define_entity,
+    define_multi_property, 
+    define_property, 
+};

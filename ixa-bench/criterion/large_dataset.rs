@@ -66,7 +66,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         });
     });
 
-    context.index_property(HomeId);
+    context.index_person_property(HomeId);
     criterion.bench_function("bench_query_population_indexed_property", |bencher| {
         bencher.iter_with_large_drop(|| {
             bench_query_population_property(&mut context);
@@ -89,7 +89,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             ));
         });
     });
-    context.index_property(ASW);
+    context.index_person_property(ASW);
     criterion.bench_function("bench_query_population_multi_indexed", |bencher| {
         bencher.iter_with_large_drop(|| {
             context.query_people_count((

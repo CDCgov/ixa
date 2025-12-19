@@ -63,8 +63,8 @@ pub fn init(context: &mut Context) -> Vec<PersonId> {
         people.push(create_person_from_record(context, &record));
     }
 
-    context.index_property(Id);
-    context.index_property(HouseholdId);
+    context.index_person_property(Id);
+    context.index_person_property(HouseholdId);
 
     people
 }

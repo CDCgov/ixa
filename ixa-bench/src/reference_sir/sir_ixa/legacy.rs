@@ -165,7 +165,7 @@ impl InfectionLoop for Context {
         self.init_random(seed);
 
         if queries_enabled {
-            self.index_property(InfectionStatus);
+            self.index_person_property(InfectionStatus);
         }
 
         // Set up population
