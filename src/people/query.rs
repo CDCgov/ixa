@@ -271,7 +271,7 @@ mod tests {
         let _ = context
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
         assert!(is_property_indexed::<RiskCategory>(&context));
 
         context.with_query_results((RiskCategory, RiskCategoryValue::High), &mut |people| {
@@ -299,7 +299,7 @@ mod tests {
         });
         assert!(!is_property_indexed::<RiskCategory>(&context));
 
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
         assert!(is_property_indexed::<RiskCategory>(&context));
 
         context.with_query_results((RiskCategory, RiskCategoryValue::High), &mut |people| {
@@ -338,7 +338,7 @@ mod tests {
         let _ = context
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
         assert!(is_property_indexed::<RiskCategory>(&context));
         context.with_query_results((RiskCategory, RiskCategoryValue::High), &mut |people| {
             assert_eq!(people.len(), 1);
@@ -351,7 +351,7 @@ mod tests {
         let _ = context
             .add_person((RiskCategory, RiskCategoryValue::High))
             .unwrap();
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
         assert!(is_property_indexed::<RiskCategory>(&context));
         context.with_query_results((RiskCategory, RiskCategoryValue::High), &mut |people| {
             assert_eq!(people.len(), 1);
@@ -370,7 +370,7 @@ mod tests {
     fn add_after_index_without_query() {
         let mut context = Context::new();
         let _ = context.add_person(()).unwrap();
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
     }
 
     #[test]
@@ -379,7 +379,7 @@ mod tests {
     fn with_query_results_add_after_index_panic() {
         let mut context = Context::new();
         context.add_person(()).unwrap();
-        context.index_property(RiskCategory);
+        context.index_person_property(RiskCategory);
         context.with_query_results((RiskCategory, RiskCategoryValue::High), &mut |_people| {});
     }
 
@@ -449,7 +449,7 @@ mod tests {
             .add_person(((Age, 40), (RiskCategory, RiskCategoryValue::Low)))
             .unwrap();
 
-        context.index_property(Age);
+        context.index_person_property(Age);
         context.with_query_results(
             ((Age, 42), (RiskCategory, RiskCategoryValue::High)),
             &mut |people| {
@@ -495,7 +495,7 @@ mod tests {
         let mut context = Context::new();
         define_derived_person_property!(Senior, bool, [Age], |age| age >= 65);
 
-        context.index_property(Senior);
+        context.index_person_property(Senior);
         let person = context.add_person((Age, 64)).unwrap();
         let _ = context.add_person((Age, 88));
 

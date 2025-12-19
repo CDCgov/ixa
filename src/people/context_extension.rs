@@ -58,9 +58,9 @@ pub trait ContextPeopleExt {
     /// If an index is available [`Context::query_people()`] will use it, so this is
     /// intended to allow faster querying of commonly used properties.
     /// Ixa may choose to create an index for its own reasons even if
-    /// [`Context::index_property()`] is not called, so this function just ensures
+    /// [`Context::index_person_property()`] is not called, so this function just ensures
     /// that one is created.
-    fn index_property<T: PersonProperty>(&mut self, property: T);
+    fn index_person_property<T: PersonProperty>(&mut self, property: T);
 
     /// Query for all people matching a given set of criteria, calling the `scope`
     /// callback with an immutable reference to the fully realized result set.
@@ -268,7 +268,7 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn index_property<T: PersonProperty>(&mut self, property: T) {
+    fn index_person_property<T: PersonProperty>(&mut self, property: T) {
         trace!("indexing property {}", T::name());
         self.register_property::<T>();
 

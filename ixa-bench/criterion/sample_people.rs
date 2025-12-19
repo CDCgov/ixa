@@ -24,8 +24,8 @@ fn setup() -> (Context, Vec<u8>) {
     // Seed context RNGs for deterministic property generation
     context.init_random(SEED);
 
-    context.index_property(Property10);
-    context.index_property(Property100);
+    context.index_person_property(Property10);
+    context.index_person_property(Property100);
 
     // The number of items to choose out of the data set for multiple sampling
     let mut counts: Vec<u8> = Vec::with_capacity(1000);

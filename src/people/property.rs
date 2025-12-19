@@ -180,7 +180,7 @@ mod tests {
             .add_person(((Name, "Alice"), (Age, 22), (Weight, 170.5)))
             .unwrap();
 
-        context.index_property(ProfileNAW);
+        context.index_person_property(ProfileNAW);
 
         {
             let data = context.get_data(PeoplePlugin);

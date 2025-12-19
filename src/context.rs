@@ -18,6 +18,7 @@ use crate::entity::events::{
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
+use crate::entity::PropertyValueStore;
 use crate::entity::{Entity, EntityId};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
@@ -264,6 +265,17 @@ impl Context {
         for dependent in dependents.into_iter() {
             dependent.emit_in_context(self)
         }
+    }
+
+    /// Enables indexing of property values for the property `P`.
+    ///
+    /// This method is called with the turbo-fish syntax:
+    ///     `context.index_property::<Person, Age>()`
+    /// The actual computation of the index is done lazily as needed upon execution of queries,
+    /// not when this method is called.
+    pub fn index_property<E: Entity, P: Property<E>>(&mut self) {
+        let property_store = self.property_store.get_mut::<E, P>();
+        property_store.set_indexed(true);
     }
 
     pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>

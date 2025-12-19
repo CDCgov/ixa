@@ -248,7 +248,7 @@ macro_rules! define_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name { $($field_name : $field_ty),* }
+        pub struct $name { pub $($field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
@@ -844,7 +844,7 @@ macro_rules! define_multi_property {
                     },
                     display_impl = |val: &$property| {
                         let $property( $( [<_ $dependency:lower>] ),+ ) = val;
-                        let mut displayed = format!("{}(", to_string!($property));
+                        let mut displayed = format!("{}(", stringify!($property));
                         $(
                             displayed.push_str(
                                 &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
@@ -898,19 +898,38 @@ pub use define_multi_property;
 
 #[cfg(test)]
 mod tests {
-    use crate::define_entity;
-    use crate::entity::property::Property;
+    use crate::entity::property_value_store_core::PropertyValueStoreCore;
     use crate::prelude::*;
 
     define_entity!(Person);
+    define_property!(struct Pu32(u32), Person, default_const = Pu32(0));
+    define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
+    define_property!(struct Name(&'static str), Person, default_const = Name(""));
+    define_property!(struct Age(u8), Person, default_const = Age(0));
+    define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
 
+    // A struct with named fields
     define_property!(
-        struct Age(u8),
+        struct Innocculation {
+            time: f64,
+            dose: u8
+        },
         Person,
-        is_required = true
+        default_const = Innocculation {time: 0.0, dose: 0}
     );
 
-    // An enum
+    // An enum non-derived property
+    define_property!(
+        enum InfectionStatus{
+            Susceptible,
+            Infected,
+            Recovered
+        },
+        Person,
+        default_const = InfectionStatus::Susceptible
+    );
+
+    // An enum derived property
     define_derived_property!(
         enum AgeGroup {
             Child,
@@ -932,19 +951,89 @@ mod tests {
         }
     );
 
-    // Dummy properties for a multi-property
-    define_property!(
-        struct PropA(u8),
-        Person,
-        default_const = PropA(0)
-    );
-    define_property!(
-        struct PropB(u8),
-        Person,
-        default_const = PropB(0)
-    );
+    define_multi_property!(ProfileNAW(Name, Age, Weight), Person);
+    define_multi_property!(ProfileAWN(Age, Weight, Name), Person);
+    define_multi_property!(ProfileWAN(Weight, Age, Name), Person);
 
-    define_multi_property!(PropertySubset(Age, PropB, PropA), Person);
+    #[test]
+    fn test_multi_property_ordering() {
+        let a: ProfileNAW = ProfileNAW(Name("Jane"), Age(22), Weight(180.5));
+        let b: ProfileAWN = ProfileAWN(Age(22), Weight(180.5), Name("Jane"));
+        let c: ProfileWAN = ProfileWAN(Weight(180.5), Age(22), Name("Jane"));
+
+        assert_eq!(ProfileNAW::type_id(), ProfileAWN::type_id());
+        assert_eq!(ProfileNAW::type_id(), ProfileWAN::type_id());
+
+        let a_canonical: <ProfileNAW as Property<_>>::CanonicalValue =
+            ProfileNAW::make_canonical(a);
+        let b_canonical: <ProfileAWN as Property<_>>::CanonicalValue =
+            ProfileAWN::make_canonical(b);
+        let c_canonical: <ProfileWAN as Property<_>>::CanonicalValue =
+            ProfileWAN::make_canonical(c);
+
+        assert_eq!(a_canonical, b_canonical);
+        assert_eq!(a_canonical, c_canonical);
+
+        // Actually, all of the `Profile***::hash_property_value` methods should be the same,
+        // so we could use any single one.
+        assert_eq!(
+            ProfileNAW::hash_property_value(&a_canonical),
+            ProfileAWN::hash_property_value(&b_canonical)
+        );
+        assert_eq!(
+            ProfileNAW::hash_property_value(&a_canonical),
+            ProfileWAN::hash_property_value(&c_canonical)
+        );
+
+        // Since the canonical values are the same, we could have used any single one, but this
+        // demonstrates that we can convert from one order to another.
+        assert_eq!(ProfileNAW::make_uncanonical(b_canonical), a);
+        assert_eq!(ProfileAWN::make_uncanonical(c_canonical), b);
+        assert_eq!(ProfileWAN::make_uncanonical(a_canonical), c);
+    }
+
+    #[test]
+    fn test_multi_property_vs_property_query() {
+        let mut context = Context::new();
+
+        context
+            .add_entity((Name("John"), Age(42), Weight(220.5)))
+            .unwrap();
+        context
+            .add_entity((Name("Jane"), Age(22), Weight(180.5)))
+            .unwrap();
+        context
+            .add_entity((Name("Bob"), Age(32), Weight(190.5)))
+            .unwrap();
+        context
+            .add_entity((Name("Alice"), Age(22), Weight(170.5)))
+            .unwrap();
+
+        context.index_property::<_, ProfileNAW>();
+
+        {
+            // Check that `ProfileNAW` has an index.
+            let property_value_store: &PropertyValueStoreCore<Person, ProfileNAW> = context.property_store.get::<Person,ProfileNAW >();
+            assert!(property_value_store.index.is_some());
+        }
+
+        // ToDo(RobertJacobsonCDC): Uncomment the following when queries are implemented for entities.
+
+        // {
+        //     let example_query = (Name("Alice"), Age(22), Weight(170.5));
+        //     let query_multi_property_type_id = Query::multi_property_type_id(&example_query);
+        //     assert!(query_multi_property_type_id.is_some());
+        //     assert_eq!(ProfileNAW::type_id(), query_multi_property_type_id.unwrap());
+        //     assert_eq!(
+        //         Query::multi_property_value_hash(&example_query),
+        //         ProfileNAW::hash_property_value(&ProfileNAW(Name("Alice"), Age(22), Weight(170.5)).make_canonical())
+        //     );
+        // }
+        //
+        // context.with_query_results((ProfileNAW(Name("John"), Age(42), Weight(220.5)),), &mut |results| {
+        //     assert_eq!(results.len(), 1);
+        // });
+    }
 
     #[test]
     fn test_derived_property() {
@@ -980,5 +1069,44 @@ mod tests {
             AgeGroup::name(),
             AgeGroup::dependents()
         );
+    }
+
+    #[test]
+    fn test_get_display() {
+        let mut context = Context::new();
+        let person = context.add_entity((POu32(Some(42)), Pu32(22))).unwrap();
+        assert_eq!(
+            format!(
+                "{:}",
+                POu32::get_display(&context.get_property::<_, POu32>(person))
+            ),
+            "42"
+        );
+        assert_eq!(
+            format!(
+                "{:}",
+                Pu32::get_display(&context.get_property::<_, Pu32>(person))
+            ),
+            "Pu32(22)"
+        );
+        let person2 = context.add_entity((POu32(None), Pu32(11))).unwrap();
+        assert_eq!(
+            format!(
+                "{:}",
+                POu32::get_display(&context.get_property::<_, POu32>(person2))
+            ),
+            "None"
+        );
+    }
+
+    #[test]
+    fn test_debug_trait() {
+        let property = Pu32(11);
+        let debug_str = format!("{:?}", property);
+        assert_eq!(debug_str, "Pu32(11)");
+
+        let property = POu32(Some(22));
+        let debug_str = format!("{:?}", property);
+        assert_eq!(debug_str, "POu32(Some(22))");
     }
 }

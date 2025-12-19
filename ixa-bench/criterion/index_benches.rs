@@ -35,9 +35,9 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         numbers.push(context.sample_range(IndexBenchRng, 0..10));
     }
 
-    context.index_property(Property10);
-    context.index_property(Property100);
-    context.index_property(MProperty);
+    context.index_person_property(Property10);
+    context.index_person_property(Property100);
+    context.index_person_property(MProperty);
 
     criterion.bench_function("with_query_results_single_indexed_property", |bencher| {
         bencher.iter(|| {
