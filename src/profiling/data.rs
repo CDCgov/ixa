@@ -107,14 +107,16 @@ impl ProfilingData {
     /// Constructs a table of ("Event Label", "Count", "Rate (per sec)"). Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_counts_table(&self) -> Vec<(String, usize, f64)> {
-        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
-
+        let elapsed = match self.start_time {
+            Some(start_time) => start_time.elapsed().as_secs_f64(),
+            None => 0.0,
+        };
         let mut rows = vec![];
 
         // Collect data rows
         for (key, count) in &self.counts {
             #[allow(clippy::cast_precision_loss)]
-            let rate = (*count as f64) / elapsed;
+            let rate = (*count as f64) / elapsed; // Just allow this to be `inf`/`nan` if `elapsed == 0.0`.
 
             rows.push(((*key).to_string(), *count, rate));
         }
@@ -125,7 +127,10 @@ impl ProfilingData {
     /// Constructs a table of "Span Label", "Count", "Duration", "% runtime". Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_spans_table(&self) -> Vec<(String, usize, Duration, f64)> {
-        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
+        let elapsed = match self.start_time {
+            Some(start_time) => start_time.elapsed().as_secs_f64(),
+            None => 0.0,
+        };
 
         let mut rows = vec![];
 

@@ -93,7 +93,7 @@ pub struct Context {
     #[cfg(feature = "debugger")]
     breakpoints_enabled: bool,
     execution_profiler: ExecutionProfilingCollector,
-    pub print_execution_statistics: bool,
+    pub(crate) print_execution_statistics: bool,
 }
 
 impl Context {
@@ -365,7 +365,7 @@ impl Context {
     ///
     /// Returns the current time in the simulation. The behavior depends on execution state:
     /// * During execution: returns the time of the currently executing plan or callback
-    /// * Before execution: returns the start time (if set via [`set_start_time`]), or `0.0`
+    /// * Before execution: returns the start time (if set via [`Context::set_start_time`]), or `0.0`
     ///
     /// The time can be negative if a negative start time was set before execution.
     #[must_use]
@@ -509,6 +509,8 @@ impl Context {
         let stats = self.get_execution_statistics();
         if self.print_execution_statistics {
             print_execution_statistics(&stats);
+            #[cfg(feature = "profiling")]
+            crate::profiling::print_profiling_data();
         } else {
             log_execution_statistics(&stats);
         }

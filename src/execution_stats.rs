@@ -253,7 +253,6 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
         );
     }
 }
-
 /// Logs execution statistics with the logging system.
 ///
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
