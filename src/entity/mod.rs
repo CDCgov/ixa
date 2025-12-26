@@ -41,14 +41,13 @@ pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
-mod property_value_store;
-pub mod property_value_store_core;
+pub(crate) mod property_value_store;
+mod property_value_store_core;
 // mod query;
 
 // Flatten the module hierarchy.
 pub use entity::*;
 pub use entity_impl::*;
-pub use property_value_store::*;
 // pub use query::Query;
 
 /// The type used in the indexing infrastructure. This type alias is

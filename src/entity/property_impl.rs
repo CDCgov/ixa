@@ -298,6 +298,8 @@ pub use impl_property;
 ///   - `canonical_value = <type>` — If the type stored in the index differs from the property's value type.
 ///   - `make_canonical = <expr>` — Function converting from `Self` to `CanonicalValue`; defaults to `|s: &Self| *s`.
 ///   - `make_uncanonical = <expr>` — Function converting from `CanonicalValue` to `Self`; defaults to `|v| v`.
+///   - `index_id_fn = <expr>` — Function used to initialize the property index id; defaults to `Self::id()`.
+///   - `ctor_registration = <expr>` — Code run in the `ctor`.
 #[macro_export]
 macro_rules! impl_property_with_options {
     // Case 1: default_const is supplied => always OK
@@ -313,6 +315,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
 
     ) => {
@@ -328,6 +331,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
             $(, ctor_registration = $ctor_registration)?
         );
     };
@@ -345,6 +349,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::impl_property_with_options!(@impl
@@ -359,6 +364,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
             $(, ctor_registration = $ctor_registration)?
         );
     };
@@ -374,6 +380,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::impl_property_with_options!(@impl
@@ -386,6 +393,7 @@ macro_rules! impl_property_with_options {
             $(, canonical_value = $canonical_value)?
             $(, make_canonical = $make_canonical)?
             $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
             $(, ctor_registration = $ctor_registration)?
         );
     };
@@ -403,6 +411,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         compile_error!(
@@ -424,6 +433,7 @@ macro_rules! impl_property_with_options {
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::__impl_property_common!(
@@ -472,8 +482,15 @@ macro_rules! impl_property_with_options {
             // make_uncanonical
             $crate::impl_property_with_options!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
 
+            // index_id_fn
+            $crate::impl_property_with_options!(@unwrap_or $($index_id_fn)?, {
+                Self::id()
+            }),
+
             // ctor_registration
-            $crate::impl_property_with_options!(@unwrap_or $($ctor_registration)?, {/*empty*/}),
+            $crate::impl_property_with_options!(@unwrap_or $($ctor_registration)?, {
+                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+            }),
         );
     };
 
@@ -514,6 +531,8 @@ pub use impl_property_with_options;
 ///   string representation of the property.
 /// * `$make_canonical` — A function that takes a `Self` and converts it to a `Self::CanonicalValue`.
 /// * `$make_uncanonical` — A function that takes a `Self::CanonicalValue` and converts it to a `Self`.
+/// * `$index_id_fn` — Code that returns the unique index for this property.
+/// * `$ctor_registration` — Code run in the `ctor`.
 #[macro_export]
 macro_rules! __impl_property_common {
     (
@@ -528,6 +547,7 @@ macro_rules! __impl_property_common {
         $display_impl:expr,        // A function that takes a canonical value and returns a string representation of this property
         $make_canonical:expr,      // A function that takes a value and returns a canonical value
         $make_uncanonical:expr,    // A function that takes a canonical value and returns a value
+        $index_id_fn:expr,            // Code that returns the unique index for this property
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
         impl $crate::entity::property::Property<$entity> for $property {
@@ -549,7 +569,7 @@ macro_rules! __impl_property_common {
             }
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
-              $collect_deps_fn(result)
+                $collect_deps_fn(result)
             }
 
             fn default_const() -> Self {
@@ -572,7 +592,7 @@ macro_rules! __impl_property_common {
                 $display_impl(self)
             }
 
-            fn index() -> usize {
+            fn id() -> usize {
                 // This static must be initialized with a compile-time constant expression.
                 // We use `usize::MAX` as a sentinel to mean "uninitialized". This
                 // static variable is shared among all instances of this concrete item type.
@@ -588,6 +608,10 @@ macro_rules! __impl_property_common {
                 // Slow path: initialize it.
                 $crate::entity::property_store::initialize_property_index(&INDEX)
             }
+
+            fn index_id() -> usize {
+                $index_id_fn
+            }
         }
 
         // Using `ctor` to initialize properties at program start-up means we know how many properties
@@ -600,7 +624,6 @@ macro_rules! __impl_property_common {
             $crate::ctor::declarative::ctor!{
                 #[ctor]
                 fn [<_register_property_ $entity:snake _ $property:snake>]() {
-                    $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
                     $ctor_registration
                 }
             }
@@ -679,7 +702,7 @@ macro_rules! define_derived_property {
                     if $dependency::is_derived() {
                         $dependency::collect_non_derived_dependencies(deps);
                     } else {
-                        deps.insert($dependency::index());
+                        deps.insert($dependency::id());
                     }
                 )*
             },
@@ -721,7 +744,7 @@ macro_rules! define_derived_property {
                     if $dependency::is_derived() {
                         $dependency::collect_non_derived_dependencies(deps);
                     } else {
-                        deps.insert($dependency::index());
+                        deps.insert($dependency::id());
                     }
                 )*
             }
@@ -757,7 +780,7 @@ macro_rules! define_derived_property {
                     if $dependency::is_derived() {
                         $dependency::collect_non_derived_dependencies(deps);
                     } else {
-                        deps.insert($dependency::index());
+                        deps.insert($dependency::id());
                     }
                 )*
             }
@@ -797,7 +820,7 @@ macro_rules! define_derived_property {
                     if $dependency::is_derived() {
                         $dependency::collect_non_derived_dependencies(deps);
                     } else {
-                        deps.insert($dependency::index());
+                        deps.insert($dependency::id());
                     }
                 )*
             }
@@ -837,7 +860,7 @@ macro_rules! define_multi_property {
                             if $dependency::is_derived() {
                                 $dependency::collect_non_derived_dependencies(deps);
                             } else {
-                                deps.insert($dependency::index());
+                                deps.insert($dependency::id());
                             }
                         )*
                     },
@@ -858,13 +881,49 @@ macro_rules! define_multi_property {
                     make_canonical = reorder_closure!(( $($dependency),+ )),
                     make_uncanonical = unreorder_closure!(( $($dependency),+ )),
 
-                    ctor_registration = {
+                    index_id_fn = {
+                        // This static must be initialized with a compile-time constant expression.
+                        // We use `usize::MAX` as a sentinel to mean "uninitialized". This
+                        // static variable is shared among all instances of this concrete item type.
+                        static INDEX_ID: std::sync::atomic::AtomicUsize =
+                            std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+                        // Fast path: already initialized.
+                        let index_id = INDEX_ID.load(std::sync::atomic::Ordering::Relaxed);
+                        if index_id != usize::MAX {
+                            return index_id;
+                        }
+
+                        // Slow path: initialize it.
+                        // Multi-properties report a single index ID for all equivalent multi-properties,
+                        // because they share a single `Index<E, P>` instance.
                         let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
                         type_ids.sort();
-                        $crate::entity::multi_property::register_type_ids_to_muli_property_id(
-                            &type_ids,
-                            std::any::TypeId::of::<$crate::sorted_tag!(( $($dependency),+ ))>()
-                        );
+                        // Check if an index has already been assigned to this property set.
+                        match $crate::entity::multi_property::type_ids_to_multi_property_index(&type_ids) {
+                            Some(index) => {
+                                // An index exists. Reuse it for our own index.
+                                INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
+                                index
+                            },
+                            None => {
+                                // An index ID is not yet assigned. We will use our own index for this property.
+                                let index = Self::id();
+                                INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
+                                // And register the new index with this property set.
+                                $crate::entity::multi_property::register_type_ids_to_muli_property_index(
+                                    &type_ids,
+                                    index
+                                );
+                                index
+                            }
+                        }
+                    },
+
+                    ctor_registration = {
+                        // Ensure `Self::index_id()` is initialized at startup.
+                        let _ = [<$($dependency)*>]::index_id();
+                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
                     }
                 );
 
@@ -875,9 +934,11 @@ pub use define_multi_property;
 
 #[cfg(test)]
 mod tests {
+    // We define unused properties to test macro implementation.
+    #![allow(dead_code)]
+
     use ixa_derive::{reorder_closure, unreorder_closure};
 
-    use crate::entity::property_value_store_core::PropertyValueStoreCore;
     use crate::prelude::*;
 
     define_entity!(Person);
@@ -934,18 +995,20 @@ mod tests {
     define_multi_property!((Age, Weight, Name), Person);
     define_multi_property!((Weight, Age, Name), Person);
 
+    // For convenience
+    type ProfileNAW = (Name, Age, Weight);
+    type ProfileAWN = (Age, Weight, Name);
+    type ProfileWAN = (Weight, Age, Name);
+
     #[test]
     fn test_multi_property_ordering() {
         let a = (Name("Jane"), Age(22), Weight(180.5));
         let b = (Age(22), Weight(180.5), Name("Jane"));
         let c = (Weight(180.5), Age(22), Name("Jane"));
 
-        type ProfileNAW = (Name, Age, Weight);
-        type ProfileAWN = (Age, Weight, Name);
-        type ProfileWAN = (Weight, Age, Name);
-
-        assert_eq!(ProfileNAW::type_id(), ProfileAWN::type_id());
-        assert_eq!(ProfileNAW::type_id(), ProfileWAN::type_id());
+        // Multi-properties share the same index
+        assert_eq!(ProfileNAW::index_id(), ProfileAWN::index_id());
+        assert_eq!(ProfileNAW::index_id(), ProfileWAN::index_id());
 
         let a_canonical: <ProfileNAW as Property<_>>::CanonicalValue =
             ProfileNAW::make_canonical(a);
@@ -992,16 +1055,45 @@ mod tests {
             .add_entity((Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
 
-        type ProfileNAW = (Name, Age, Weight);
-
         context.index_property::<_, ProfileNAW>();
 
+        // Check that all equivalent multi-properties are indexed...
+        assert!(context
+            .property_store
+            .is_property_indexed::<Person, ProfileNAW>());
+        assert!(context
+            .property_store
+            .is_property_indexed::<Person, ProfileAWN>());
+        assert!(context
+            .property_store
+            .is_property_indexed::<Person, ProfileWAN>());
+        // ...but only one `Index<E, P>` instance was created.
+        let mut indexed_count = 0;
+        if context
+            .property_store
+            .get::<_, ProfileNAW>()
+            .index
+            .is_some()
         {
-            // Check that `ProfileNAW` has an index.
-            let property_value_store: &PropertyValueStoreCore<Person, ProfileNAW> =
-                context.property_store.get::<Person, ProfileNAW>();
-            assert!(property_value_store.index.is_some());
+            indexed_count += 1;
         }
+        if context
+            .property_store
+            .get::<_, ProfileAWN>()
+            .index
+            .is_some()
+        {
+            indexed_count += 1;
+        }
+        if context
+            .property_store
+            .get::<_, ProfileWAN>()
+            .index
+            .is_some()
+        {
+            indexed_count += 1;
+        }
+        assert_eq!(indexed_count, 1);
 
         // ToDo(RobertJacobsonCDC): Uncomment the following when queries are implemented for entities.
 
@@ -1037,24 +1129,20 @@ mod tests {
         assert_eq!(child_group, AgeGroup::Child);
         assert_eq!(adult_group, AgeGroup::Adult);
 
-        println!("{}.index = {}", Age::name(), Age::index());
-        println!("{}.index = {}", AgeGroup::name(), AgeGroup::index());
-        println!(
-            "{}.dependencies = {:?}",
-            Age::name(),
-            Age::non_derived_dependencies()
-        );
-        println!(
-            "{}.dependencies = {:?}",
-            AgeGroup::name(),
-            AgeGroup::non_derived_dependencies()
-        );
-        println!("{}.dependents = {:?}", Age::name(), Age::dependents());
-        println!(
-            "{}.dependents = {:?}",
-            AgeGroup::name(),
-            AgeGroup::dependents()
-        );
+        // Age has no dependencies (only dependents)
+        assert!(Age::non_derived_dependencies().is_empty());
+        // AgeGroup depends only on Age
+        assert_eq!(AgeGroup::non_derived_dependencies(), [Age::id()]);
+
+        // Age has several dependents. This assert may break if you add or remove the properties in this test module.
+        let mut expected_dependents = [
+            AgeGroup::id(),
+            ProfileNAW::id(),
+            ProfileAWN::id(),
+            ProfileWAN::id(),
+        ];
+        expected_dependents.sort();
+        assert_eq!(Age::dependents(), expected_dependents);
     }
 
     #[test]
