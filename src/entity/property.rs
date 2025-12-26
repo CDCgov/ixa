@@ -17,9 +17,7 @@ use crate::{Context, HashSet};
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PropertyInitializationKind {
-    /// The property is not derived and has no initial value. Its initialization is _explicit_, meaning if client
-    /// code doesn't set the value explicitly, then the value is not set, and attempts to read the value will result
-    /// in an error.
+    /// The property is not derived and has no initial value. Its initialization is _explicit_, meaning it must be set by client code at time of creation.
     ///
     /// Note that a "required" property is explicit, but an explicit property need not be required.
     /// A non-required explicit property can be left unset.
@@ -96,7 +94,12 @@ pub trait Property<E: Entity>: AnyProperty {
     }
 
     /// For implementing the registry pattern
-    fn index() -> usize;
+    fn id() -> usize;
+
+    /// For properties that use the index of some other property, e.g. multi-properties.
+    fn index_id() -> usize {
+        Self::id()
+    }
 
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
     /// Vec will be empty. The dependencies are represented by their `Property<E>::index()` value.
@@ -116,6 +119,6 @@ pub trait Property<E: Entity>: AnyProperty {
     /// Get a list of derived properties that depend on this property. The properties are
     /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
     fn dependents() -> &'static [usize] {
-        unsafe { get_property_dependents_static(Self::index()) }
+        unsafe { get_property_dependents_static(Self::id()) }
     }
 }

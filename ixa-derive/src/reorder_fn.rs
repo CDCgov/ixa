@@ -154,15 +154,6 @@ pub fn reorder_closure(input: TokenStream) -> TokenStream {
 
     // Types in tag order = Value
     let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
-
-    // Types in sorted tag order = CanonicalValue
-    let mut sorted_idents = tag.0.clone();
-    sorted_idents.sort_by_key(|a| a.to_string());
-    let value_types_sorted: Vec<_> = sorted_idents
-        .iter()
-        .map(|ident| quote! { #ident })
-        .collect();
-
     let output = quote! {
         |(#( #vars ),*): (#( #value_types_unsorted ),*)| {
             ( #( #reordered ),* )
@@ -177,9 +168,6 @@ pub fn unreorder_closure(input: TokenStream) -> TokenStream {
     let inverse = inverse_indices(&indices);
     let vars: Vec<_> = (0..tag.0.len()).map(|i| format_ident!("v{}", i)).collect();
     let unreordered = inverse.iter().map(|&i| &vars[i]);
-
-    // Types in tag order = Value
-    let value_types_unsorted: Vec<_> = tag.0.iter().map(|ident| quote! { #ident }).collect();
 
     // Types in sorted tag order = CanonicalValue
     let mut sorted_idents = tag.0.clone();

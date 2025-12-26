@@ -33,16 +33,27 @@ pub(crate) trait PropertyValueStore: Any {
     /// wrapping the previous value and `entity_id` that can be used to emit a property change event.
     fn create_partial_property_change(
         &self,
+        // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
         entity_id: usize,
         context: &Context,
     ) -> Box<dyn PartialPropertyChangeEvent>;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
+
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: usize);
     fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: usize);
     // fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>>;
+
+    /// Returns whether this `PropertyValueStore` instance has an `Index<E, P>`. Note that this is not the same as
+    /// asking whether the property itself is indexed, as some properties might use the index of some other
+    /// `PropertyValueStore`, as in the case of multi-properties.
     fn is_indexed(&self) -> bool;
+
+    /// If `is_indexed` is `true`, constructs an `Index<E, P>` if one doesn't already exist. If `is_indexed` is `false`,
+    /// sets `self.index` to `None`, dropping any existing index.
     fn set_indexed(&mut self, is_indexed: bool);
+
+    /// Updates the index for any entities that have been added to the context since the last time the index was updated.
     fn index_unindexed_entities(&mut self, context: &Context);
 }
 
