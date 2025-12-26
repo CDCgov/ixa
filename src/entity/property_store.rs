@@ -98,8 +98,8 @@ pub(super) unsafe fn get_property_dependents_static(property_index: usize) -> &'
 /// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
 /// our use case, this method is called in the `ctor` function of each `Property<E>` type.
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
-    // Initializes the index for the property type.
-    let property_index = P::index();
+    // Ensure the ID of the property type is initialized.
+    let property_index = P::id();
 
     // Registers the property with the entity type.
     register_property_with_entity(
@@ -115,7 +115,9 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let metadata = property_metadata
             .entry(property_index)
             .or_insert_with(PropertyMetadata::default);
-        metadata.value_store_constructor = Some(PropertyValueStoreCore::<E, P>::new_boxed)
+        metadata
+            .value_store_constructor
+            .get_or_insert_with(|| PropertyValueStoreCore::<E, P>::new_boxed);
     }
 
     // Construct the dependency graph
@@ -209,7 +211,7 @@ impl PropertyStore {
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
     pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
-        let index = P::index();
+        let index = P::id();
         let property_value_store =
             self.items
                 .get(index)
@@ -239,7 +241,7 @@ impl PropertyStore {
     /// Fetches a mutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
     pub fn get_mut<E: Entity, P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
-        let index = P::index();
+        let index = P::id();
         let property_value_store =
             self.items
                 .get_mut(index)
@@ -281,6 +283,31 @@ impl PropertyStore {
             .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
 
         property_value_store.create_partial_property_change(entity_id, context)
+    }
+
+    /// Returns whether or not the property `P` is indexed.
+    ///
+    /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,
+    /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
+    /// share a single index.
+    #[cfg(test)]
+    pub fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
+        self.items
+            .get(P::index_id())
+            .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
+            .is_indexed()
+    }
+
+    /// If `is_indexed` is `true`, creates an index for `P` if one does not exist. If `is_indexed` is `false`,
+    /// removes any existing index for `P`.
+    ///
+    /// Note that the index might not live in the `PropertyValueStore` associated with `P` itself, as in the case
+    /// of multi-properties which share a single index among all equivalent multi-properties.
+    pub fn set_property_indexed<E: Entity, P: Property<E>>(&mut self, is_indexed: bool) {
+        let property_value_store = self.items
+            .get_mut(P::index_id())
+            .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
+        property_value_store.set_indexed(is_indexed);
     }
 }
 
