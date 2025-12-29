@@ -37,7 +37,7 @@ pub(crate) trait ContextPeopleExtCrate: ContextBase + ContextPeopleExt {
         Ok(())
     }
 
-    fn index_property_by_id(&self, type_id: TypeId) {
+    fn index_person_property_by_id(&self, type_id: TypeId) {
         let data_container = self.get_data(PeoplePlugin);
 
         let mut index = data_container.get_index_ref_mut(type_id).unwrap();

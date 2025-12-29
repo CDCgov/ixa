@@ -42,7 +42,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("with_query_results_single_indexed_property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
-                let _: () = context.with_query_results(
+                let _: () = context.with_query_people_results(
                     black_box((Property10, number % 10)),
                     black_box(&mut |_| {}),
                 );
@@ -56,7 +56,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         |bencher| {
             bencher.iter(|| {
                 for number in &numbers {
-                    let _: () = context.with_query_results(
+                    let _: () = context.with_query_people_results(
                         black_box(((Property10, number * 3 % 10), (Property100, *number))),
                         black_box(&mut |people_set| {
                             black_box(people_set);
@@ -71,7 +71,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("with_query_results_indexed_multi-property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
-                let _: () = context.with_query_results(
+                let _: () = context.with_query_people_results(
                     black_box((MProperty, (number * 3 % 10, *number))),
                     black_box(&mut |people_set| {
                         black_box(people_set);

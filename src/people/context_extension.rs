@@ -42,7 +42,7 @@ pub trait ContextPeopleExt {
         -> T::Value;
 
     #[doc(hidden)]
-    fn register_property<T: PersonProperty>(&self);
+    fn register_person_property<T: PersonProperty>(&self);
 
     /// Given a [`PersonId`], sets the value of a defined person property
     /// Panics if the property is not initialized. Fires a change event.
@@ -67,11 +67,15 @@ pub trait ContextPeopleExt {
     ///
     /// If you only need to count the results, use [`Context::query_people_count`]
     ///
+<<<<<<< HEAD
     /// [`Context::with_query_results()`] takes any type that implements [`Query`], but
+=======
+    /// [`Context::with_query_people_results()`] takes any type that implements [Query], but
+>>>>>>> b5c410b (Renamed `with_query_results` to `with_query_people_results` and updated associated method and macro names for consistency within the `people` module.)
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
+    fn with_query_people_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
 
     #[deprecated(
         since = "0.3.4",
@@ -165,7 +169,7 @@ impl ContextPeopleExt for Context {
 
     fn get_person_property<T: PersonProperty>(&self, person_id: PersonId, property: T) -> T::Value {
         let data_container = self.get_data(PeoplePlugin);
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         if T::is_derived() {
             return T::compute(self, person_id);
@@ -190,7 +194,7 @@ impl ContextPeopleExt for Context {
         property: T,
         value: T::Value,
     ) {
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         assert!(!T::is_derived(), "Cannot set a derived property");
 
@@ -268,7 +272,7 @@ impl ContextPeopleExt for Context {
 
     fn index_person_property<T: PersonProperty>(&mut self, property: T) {
         trace!("indexing property {}", T::name());
-        self.register_property::<T>();
+        self.register_person_property::<T>();
 
         let data_container = self.get_data(PeoplePlugin);
         data_container.set_property_indexed(true, property);
@@ -326,7 +330,7 @@ impl ContextPeopleExt for Context {
         }
     }
 
-    fn register_property<T: PersonProperty>(&self) {
+    fn register_person_property<T: PersonProperty>(&self) {
         let data_container = self.get_data(PeoplePlugin);
         if data_container
             .registered_properties
@@ -584,7 +588,7 @@ impl ContextPeopleExt for Context {
         selected
     }
 
-    fn with_query_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
+    fn with_query_people_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             let mut people_set =
@@ -1123,7 +1127,7 @@ mod tests {
         let _ = context.add_person((Age, 42)).unwrap();
         let mut all_people = Vec::new();
 
-        context.with_query_results((), &mut |results| {
+        context.with_query_people_results((), &mut |results| {
             all_people = results.to_owned_vec();
         });
 
