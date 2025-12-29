@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/CDCgov/ixa/compare/ixa-v0.4.4...ixa-v0.5.0) - 2025-12-29
+
+### Added
+
+- enable negative time ([#633](https://github.com/CDCgov/ixa/pull/633))
+
+### Other
+
+- profiling should not print if --no-stats flag is set. ([#654](https://github.com/CDCgov/ixa/pull/654))
+
 ## [0.4.4](https://github.com/CDCgov/ixa/compare/ixa-v0.4.3...ixa-v0.4.4) - 2025-12-17
 
 ### Fixed
