@@ -35,7 +35,7 @@ fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f6
 pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Value>> {
     let mut edges = Vec::new();
 
-    context.with_query_results((DiseaseStatus, DiseaseStatusValue::I), &mut |infected| {
+    context.with_query_people_results((DiseaseStatus, DiseaseStatusValue::I), &mut |infected| {
         for i in infected {
             edges.extend(context.get_matching_edges::<T>(*i, |context, edge| {
                 context.match_person(edge.neighbor, (DiseaseStatus, DiseaseStatusValue::S))
@@ -189,7 +189,7 @@ mod tests {
         network::init(&mut context, &people);
 
         let mut to_infect = Vec::<PersonId>::new();
-        context.with_query_results((Id, 71), &mut |people| {
+        context.with_query_people_results((Id, 71), &mut |people| {
             for p in people {
                 to_infect.push(*p);
             }

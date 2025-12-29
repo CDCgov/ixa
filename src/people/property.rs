@@ -202,7 +202,7 @@ mod tests {
             );
         }
 
-        context.with_query_results((ProfileNAW, ("John", 42, 220.5)), &mut |results| {
+        context.with_query_people_results((ProfileNAW, ("John", 42, 220.5)), &mut |results| {
             assert_eq!(results.len(), 1);
         });
     }

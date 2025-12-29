@@ -14,8 +14,8 @@ pub trait Tabulator {
 
 impl<T: PersonProperty> Tabulator for (T,) {
     fn setup(&self, context: &Context) -> Result<(), IxaError> {
-        context.register_property::<T>();
-        context.index_property_by_id(T::type_id());
+        context.register_person_property::<T>();
+        context.index_person_property_by_id(T::type_id());
         Ok(())
     }
     fn get_typelist(&self) -> Vec<TypeId> {
@@ -41,8 +41,8 @@ macro_rules! impl_tabulator {
             {
                 fn setup(&self, context: &Context) -> Result<(), IxaError> {
                     #(
-                        context.register_property::<T~N>();
-                        context.index_property_by_id(T~N::type_id());
+                        context.register_person_property::<T~N>();
+                        context.index_person_property_by_id(T~N::type_id());
                     )*
                     Ok(())
                 }
@@ -77,7 +77,7 @@ impl Tabulator for Vec<(TypeId, String)> {
     #[allow(clippy::missing_errors_doc)]
     fn setup(&self, context: &Context) -> Result<(), IxaError> {
         for (t, _) in self {
-            context.index_property_by_id(*t);
+            context.index_person_property_by_id(*t);
         }
         Ok(())
     }
