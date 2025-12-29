@@ -262,13 +262,13 @@ mod test {
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_people_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
+        context.with_query_people_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);
@@ -281,13 +281,13 @@ mod test {
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_people_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
+        context.with_query_people_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);

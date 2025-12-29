@@ -27,7 +27,7 @@ pub struct PersonPropertyChangeEvent<T: PersonProperty> {
 impl<T: PersonProperty> IxaEvent for PersonPropertyChangeEvent<T> {
     fn on_subscribe(context: &mut Context) {
         if T::is_derived() {
-            context.register_property::<T>();
+            context.register_person_property::<T>();
         }
     }
 }

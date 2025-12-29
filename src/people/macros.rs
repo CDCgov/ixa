@@ -175,7 +175,7 @@ macro_rules! __define_derived_person_property_common {
             }
             fn register_dependencies(context: &$crate::context::Context) {
                 $at_dependency_registration
-                $(context.register_property::<$dependency>();)+
+                $(context.register_person_property::<$dependency>();)+
             }
             fn get_instance() -> Self {
                 $derived_property
