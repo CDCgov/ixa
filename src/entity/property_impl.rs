@@ -652,8 +652,7 @@ macro_rules! __derived_property_compute_fn {
                         .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
                 ),*
             );
-            #[allow(non_snake_case)]
-            (|$($param),+| $derive_fn)($($param),+)
+            $derive_fn
         }
     };
 }
@@ -727,7 +726,7 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name(Option<$inner_ty>);
+        pub struct $name( $($field_ty),* );
 
         $crate::impl_property_with_options!(
             $name,
@@ -991,6 +990,11 @@ mod tests {
         }
     );
 
+    // Derived property - computed from other properties
+    define_derived_property!(struct DerivedProp(bool), Person, [Age], [], |age| {
+        DerivedProp(age.0 % 2 == 0)
+    });
+
     define_multi_property!((Name, Age, Weight), Person);
     define_multi_property!((Age, Weight, Name), Person);
     define_multi_property!((Weight, Age, Name), Person);
@@ -1137,6 +1141,7 @@ mod tests {
         // Age has several dependents. This assert may break if you add or remove the properties in this test module.
         let mut expected_dependents = [
             AgeGroup::id(),
+            DerivedProp::id(),
             ProfileNAW::id(),
             ProfileAWN::id(),
             ProfileWAN::id(),

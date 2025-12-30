@@ -96,7 +96,11 @@ pub trait Property<E: Entity>: AnyProperty {
     /// For implementing the registry pattern
     fn id() -> usize;
 
-    /// For properties that use the index of some other property, e.g. multi-properties.
+    /// For properties that use the index of some other property, e.g. multi-properties, this
+    /// method gives the ID of the property index to use.
+    ///
+    /// Note that this is independent of whether or not the property actually is being indexed,
+    /// which is a property of the `Context` instance, not of the `Property<E>` type itself.
     fn index_id() -> usize {
         Self::id()
     }

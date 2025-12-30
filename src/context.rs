@@ -18,7 +18,7 @@ use crate::entity::events::{
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
-use crate::entity::{Entity, EntityId};
+use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
@@ -334,9 +334,14 @@ impl Context {
         selected
     }
 
-    #[inline]
+    /// Returns a total count of all created entities of type `E`.
     pub fn get_entity_count<E: Entity>(&self) -> usize {
         self.entity_store.get_entity_count::<E>()
+    }
+
+    /// Returns an iterator over all created entities of type `E`.
+    pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
+        self.entity_store.get_entity_iterator::<E>()
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.
