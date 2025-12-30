@@ -75,7 +75,11 @@ pub trait ContextPeopleExt {
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
-    fn with_query_people_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>));
+    fn with_query_people_results<Q: Query>(
+        &self,
+        query: Q,
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
+    );
 
     #[deprecated(
         since = "0.3.4",
@@ -588,7 +592,11 @@ impl ContextPeopleExt for Context {
         selected
     }
 
-    fn with_query_people_results<Q: Query>(&self, query: Q, callback: &mut dyn FnMut(&HashSet<PersonId>)) {
+    fn with_query_people_results<Q: Query>(
+        &self,
+        query: Q,
+        callback: &mut dyn FnMut(&HashSet<PersonId>),
+    ) {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             let mut people_set =

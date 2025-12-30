@@ -17,7 +17,7 @@ use std::sync::{LazyLock, Mutex};
 
 use polonius_the_crab::{polonius, polonius_return};
 
-use crate::entity::{Entity, EntityId};
+use crate::entity::{Entity, EntityId, EntityIterator};
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
@@ -231,10 +231,18 @@ impl EntityStore {
         EntityId::new(id)
     }
 
+    /// Returns a total count of all created entities of type `E`.
+    #[must_use]
     pub fn get_entity_count<E: Entity>(&self) -> usize {
         let index = E::index();
         let record = &self.items[index];
         record.entity_count
+    }
+
+    /// Returns an iterator over all valid `EntityId<E>`s
+    pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
+        let count = self.get_entity_count::<E>();
+        EntityIterator::new(count)
     }
 }
 
@@ -249,6 +257,7 @@ mod tests {
         add_to_entity_registry, get_registered_entity_count, initialize_entity_index, EntityStore,
     };
     use crate::entity::{impl_entity, Entity};
+    use crate::Context;
 
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
@@ -643,5 +652,50 @@ mod tests {
                 .value,
             42
         );
+    }
+
+    #[test]
+    fn test_entity_iterator() {
+        let mut context = Context::new();
+
+        // Add different numbers of entities for each type
+        // Note: add_entity returns Result<EntityId<E>, ...>, we unwrap for the test.
+        for _ in 0..5 {
+            context.add_entity::<TestItem1, _>(()).unwrap();
+        }
+        for _ in 0..3 {
+            context.add_entity::<TestItem2, _>(()).unwrap();
+        }
+        // TestItem3 remains at 0 for now
+
+        // 1. Verify counts
+        assert_eq!(context.get_entity_count::<TestItem1>(), 5);
+        assert_eq!(context.get_entity_count::<TestItem2>(), 3);
+        assert_eq!(context.get_entity_count::<TestItem3>(), 0);
+
+        // 2. Verify iterators
+        let iter1 = context.get_entity_iterator::<TestItem1>();
+        let results1: Vec<_> = iter1.collect();
+        assert_eq!(results1.len(), 5);
+        // Verify ID sequence (starts at 0)
+        for (i, id) in results1.into_iter().enumerate() {
+            assert_eq!(id.0, i);
+        }
+
+        let iter2 = context.get_entity_iterator::<TestItem2>();
+        assert_eq!(iter2.count(), 3);
+
+        let mut iter3 = context.get_entity_iterator::<TestItem3>();
+        assert!(iter3.next().is_none());
+
+        // 3. Verify iterator snapshot behavior
+        // Iterators created now should not see entities added later
+        let snapshot_iter = context.get_entity_iterator::<TestItem1>();
+
+        context.add_entity::<TestItem1, _>(()).unwrap();
+
+        assert_eq!(context.get_entity_count::<TestItem1>(), 6);
+        assert_eq!(snapshot_iter.count(), 5); // Still sees original population
+        assert_eq!(context.get_entity_iterator::<TestItem1>().count(), 6); // New iterator sees 6
     }
 }
