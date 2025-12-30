@@ -380,7 +380,8 @@ mod tests {
         let mut context = Context::new();
         context.add_person(()).unwrap();
         context.index_person_property(RiskCategory);
-        context.with_query_people_results((RiskCategory, RiskCategoryValue::High), &mut |_people| {});
+        context
+            .with_query_people_results((RiskCategory, RiskCategoryValue::High), &mut |_people| {});
     }
 
     #[test]
