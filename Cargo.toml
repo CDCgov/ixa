@@ -65,6 +65,7 @@ sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
 hashbrown = "^0.16.0"
+ouroboros = "^0.18.5"
 
 [package]
 name = "ixa"
@@ -114,6 +115,7 @@ rustc-hash.workspace = true
 
 # Building docs
 clap-markdown = { workspace = true, optional = true }
+ouroboros.workspace = true
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

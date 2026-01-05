@@ -36,7 +36,7 @@ use crate::hashing::{one_shot_128, HashMap, HashValueType};
 /// A map from a list of `TypeId`s to the index ID of the equivalent multi-property
 /// type. The list of `TypeId`s is assumed to be sorted.
 ///
-/// Use `register_type_ids_to_muli_property_index()` to register a multi-property.
+/// Use `register_type_ids_to_multi_property_index()` to register a multi-property.
 /// We could instead just rely on `TypeId::of::<P::CanonicalValue>()`, but this
 /// allows us to determine the type dynamically, e.g. for the web API or debug
 /// console.
@@ -59,7 +59,7 @@ pub fn type_ids_to_multi_property_index(type_ids: &[TypeId]) -> Option<usize> {
 /// list of `TypeId`s as its properties.
 ///
 /// Use `type_ids_to_muli_property_index()` to look up an index ID.
-pub fn register_type_ids_to_muli_property_index(type_ids: &[TypeId], index: usize) {
+pub fn register_type_ids_to_multi_property_index(type_ids: &[TypeId], index: usize) {
     let hash = one_shot_128(&type_ids);
     MULTI_PROPERTY_INDEX_MAP
         .lock()

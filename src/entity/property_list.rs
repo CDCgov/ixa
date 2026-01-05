@@ -57,11 +57,21 @@ impl<E: Entity> PropertyList<E> for () {
     }
 }
 
-// ToDo: Why does the following trigger a "conflicting implementation" error?
+// ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
+//     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
+//     whether the conflict actually exists.
 // A single `Property` is a `PropertyList` of length 1
 // impl<E: Entity, P: Property<E>> PropertyList<E> for P {
 //     fn validate() -> Result<(), String> {
 //         Ok(())
+//     }
+//     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
+//         property_type_ids.len() == 0
+//             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
+//     }
+//     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
+//         let property_value_store = property_store.get::<P>();
+//         property_value_store.set(entity_id, *self);
 //     }
 // }
 
@@ -113,9 +123,7 @@ macro_rules! impl_property_list {
                 fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>){
                     #({
                         let property_value_store = property_store.get::<P~N>();
-                        // The compiler isn't smart enough to know that `entity_id` is `Copy` when this is
-                        // borrow-checked, so we clone it.
-                        property_value_store.set(entity_id.clone(), self.N);
+                        property_value_store.set(entity_id, self.N);
                     })*
                 }
             }

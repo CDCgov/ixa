@@ -16,7 +16,8 @@ use crate::entity::events::{
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::entity::query::QueryResultIterator;
+use crate::entity::{Entity, EntityId, EntityIterator, Query};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
@@ -30,7 +31,7 @@ use crate::rand::Rng;
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{
     get_data_plugin_count, trace, warn, ContextPeopleExt, ContextRandomExt, HashMap, HashMapExt,
-    RngId,
+    HashSet, RngId,
 };
 
 /// The common callback used by multiple `Context` methods for future events
@@ -95,7 +96,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
-    entity_store: EntityStore,
+    pub(crate) entity_store: EntityStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
@@ -140,11 +141,7 @@ impl Context {
     pub fn add_entity<E: Entity, PL: PropertyList<E>>(
         &mut self,
         property_list: PL,
-    ) -> Result<EntityId<E>, String>
-    // This constraint is always satisfied, but the compiler can't determine this.
-    where
-        EntityCreatedEvent<E>: Copy,
-    {
+    ) -> Result<EntityId<E>, String> {
         // Check that the properties in the list are distinct.
         if let Err(msg) = PL::validate() {
             return Err(format!("invalid property list: {}", msg));
@@ -160,10 +157,8 @@ impl Context {
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
-        property_list.set_values_for_entity(
-            new_entity_id.clone(),
-            self.entity_store.get_property_store::<E>(),
-        );
+        property_list
+            .set_values_for_entity(new_entity_id, self.entity_store.get_property_store::<E>());
 
         // Emit an `EntityCreatedEvent<Entity>`.
         self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
@@ -300,6 +295,88 @@ impl Context {
             .get_mut::<P>()
     }
 
+    /// This method gives client code direct immutable access to the fully realized set of
+    /// entity IDs. This is especially efficient for indexed queries, as this method reduces
+    /// to a simple lookup of a hash bucket. Otherwise, the set is allocated and computed.
+    pub fn with_query_results<E: Entity, Q: Query<E>>(
+        &self,
+        query: Q,
+        callback: &mut dyn FnMut(&HashSet<EntityId<E>>),
+    ) {
+        // The fast path for indexed queries.
+        //
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
+        // The difference is, we access the index set if we find it.
+        if let Some(multi_property_id) = query.multi_property_id() {
+            let property_store = self.entity_store.get_property_store::<E>();
+            // The `index_unindexed_people` method returns `false` if the property is not indexed.
+            if property_store.index_unindexed_entities_for_property_id(self, multi_property_id) {
+                // Fetch the right hash bucket from the index and return it.
+                let property_value_store = property_store.get_with_id(multi_property_id);
+                if let Some(people_set) =
+                    property_value_store.get_index_set_with_hash(query.multi_property_value_hash())
+                {
+                    callback(&people_set);
+                } else {
+                    // Since we already checked that this multi-property is indexed, it must be that
+                    // there are no entities having this property value.
+                    let people_set = HashSet::default();
+                    callback(&people_set);
+                }
+                return;
+            }
+            // If the property is not indexed, we fall through.
+        }
+
+        // ToDo(RobertJacobsonCDC): Should we warn in the case that it's not just a hash
+        //     hash bucket lookup? I'm inclined to say yes, because otherwise the query
+        //     result iterator is always a better choice.
+
+        // Special case the empty query, which creates a set containing the entire population.
+        if query.type_id() == TypeId::of::<()>() {
+            warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
+            let entity_set = self.get_entity_iterator::<E>().collect::<HashSet<_>>();
+            callback(&entity_set);
+            return;
+        }
+
+        // The slow path of computing the full query set.
+
+        warn!("Called Context::with_query_results() with an unindexed query. It's almost always better to use Context::query_result_iterator() for unindexed queries.");
+
+        // Fall back to `QueryResultIterator`.
+        let people_set = query
+            .new_query_result_iterator(self)
+            .collect::<HashSet<_>>();
+        callback(&people_set);
+    }
+
+    pub fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
+        // The fast path for indexed queries.
+        //
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
+        if let Some(multi_property_id) = query.multi_property_id() {
+            let property_store = self.entity_store.get_property_store::<E>();
+            // The `index_unindexed_people` method returns `false` if the property is not indexed.
+            if property_store.index_unindexed_entities_for_property_id(self, multi_property_id) {
+                // Fetch the right hash bucket from the index and return it.
+                let property_value_store = property_store.get_with_id(multi_property_id);
+                if let Some(people_set) =
+                    property_value_store.get_index_set_with_hash(query.multi_property_value_hash())
+                {
+                    return people_set.len();
+                } else {
+                    // Since we already checked that this multi-property is indexed, it must be that
+                    // there are no entities having this property value.
+                    return 0;
+                }
+            }
+            // If the property is not indexed, we fall through.
+        }
+
+        self.query_result_iterator(query).count()
+    }
+
     pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>
     where
         R::RngType: Rng,
@@ -366,6 +443,14 @@ impl Context {
     /// Returns an iterator over all created entities of type `E`.
     pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
         self.entity_store.get_entity_iterator::<E>()
+    }
+
+    /// Generates an iterator over the results of the query.
+    pub fn query_result_iterator<E: Entity, Q: Query<E>>(
+        &self,
+        query: Q,
+    ) -> QueryResultIterator<E> {
+        query.new_query_result_iterator(self)
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.

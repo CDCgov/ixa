@@ -100,7 +100,8 @@ pub mod web_api;
 
 // Re-export for macros
 pub use ixa_derive::{
-    impl_make_canonical, impl_people_make_canonical, sorted_tag, sorted_value_type,
+    impl_make_canonical, impl_people_make_canonical, reorder_closure, sorted_tag,
+    sorted_value_type, unreorder_closure,
 };
 pub use {bincode, csv, ctor, paste, rand, serde};
 
