@@ -606,7 +606,7 @@ macro_rules! __impl_property_common {
                 }
 
                 // Slow path: initialize it.
-                $crate::entity::property_store::initialize_property_index::<$entity>(&INDEX)
+                $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
             }
 
             fn index_id() -> usize {
@@ -877,8 +877,8 @@ macro_rules! define_multi_property {
                         displayed
                     },
                     canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
-                    make_canonical = reorder_closure!(( $($dependency),+ )),
-                    make_uncanonical = unreorder_closure!(( $($dependency),+ )),
+                    make_canonical = $crate::reorder_closure!(( $($dependency),+ )),
+                    make_uncanonical = $crate::unreorder_closure!(( $($dependency),+ )),
 
                     index_id_fn = {
                         // This static must be initialized with a compile-time constant expression.
@@ -910,7 +910,7 @@ macro_rules! define_multi_property {
                                 let index = Self::id();
                                 INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
                                 // And register the new index with this property set.
-                                $crate::entity::multi_property::register_type_ids_to_muli_property_index(
+                                $crate::entity::multi_property::register_type_ids_to_multi_property_index(
                                     &type_ids,
                                     index
                                 );
@@ -935,8 +935,6 @@ pub use define_multi_property;
 mod tests {
     // We define unused properties to test macro implementation.
     #![allow(dead_code)]
-
-    use ixa_derive::{reorder_closure, unreorder_closure};
 
     use crate::prelude::*;
 

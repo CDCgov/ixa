@@ -258,6 +258,12 @@ impl<V: Copy> IntoIterator for ValueVec<V> {
     }
 }
 
+impl<V: Copy> FromIterator<V> for ValueVec<V> {
+    fn from_iter<I: IntoIterator<Item = V>>(iter: I) -> Self {
+        Self::from(Vec::from_iter(iter))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::ValueVec;
@@ -378,5 +384,14 @@ mod tests {
         let collected_from_iter: Vec<_> = vv1.into_iter().collect();
         let collected_from_into: Vec<_> = vv2.into();
         assert_eq!(collected_from_iter, collected_from_into);
+    }
+
+    #[test]
+    fn from_iterator_collect() {
+        let source = vec![1, 2, 3, 4, 5];
+        let vv: ValueVec<i32> = source.iter().copied().collect();
+        assert_eq!(vv.len(), 5);
+        assert_eq!(vv.at(0), 1);
+        assert_eq!(vv.at(4), 5);
     }
 }

@@ -49,7 +49,7 @@ use crate::Context;
 /// Note: The mechanism to assign property IDs needs to be distinct from the rest of property registration, because
 /// properties often need to have an ID assigned _before_ its registration proper so that it can be recorded as a
 /// dependency of some other property.
-static NEXT_PROPERTY_INDEX: LazyLock<Mutex<HashMap<usize, usize>>> =
+static NEXT_PROPERTY_ID: LazyLock<Mutex<HashMap<usize, usize>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
 /// A container struct to hold the (global) metadata for a single property.
@@ -148,15 +148,15 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
 pub fn get_registered_property_count<E: Entity>() -> usize {
-    let map = NEXT_PROPERTY_INDEX.lock().unwrap();
+    let map = NEXT_PROPERTY_ID.lock().unwrap();
     *map.get(&E::id()).unwrap_or(&0)
 }
 
 /// Encapsulates the synchronization logic for initializing an item's index.
 ///
-/// Acquires a global lock on the next available item index, but only increments
-/// it if we successfully initialize the provided index. The `index` of a registered
-/// item is assigned at runtime but only once per type. It's possible for a single
+/// Acquires a global lock on the next available property ID, but only increments
+/// it if we successfully initialize the provided ID. The ID of a property is
+/// assigned at runtime but only once per type. It's possible for a single
 /// type to attempt to initialize its index multiple times from different threads,
 /// which is why all this synchronization is required. However, the overhead
 /// is negligible, as this initialization only happens once upon first access.
@@ -164,9 +164,9 @@ pub fn get_registered_property_count<E: Entity>() -> usize {
 /// In fact, for our use case we know we are calling this function
 /// once for each type in each `Property`'s `ctor` function, which
 /// should be the only time this method is ever called for the type.
-pub fn initialize_property_index<E: Entity>(index: &AtomicUsize) -> usize {
+pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_PROPERTY_INDEX.lock().unwrap();
+    let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
     let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
     // Try to claim the candidate index. Here we guard against the potential race condition that
@@ -175,7 +175,8 @@ pub fn initialize_property_index<E: Entity>(index: &AtomicUsize) -> usize {
     // NEXT_PROPERTY_INDEX, we just return the value `index` was initialized to.
     // For a justification of the data ordering, see:
     //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
-    match index.compare_exchange(usize::MAX, *candidate, Ordering::AcqRel, Ordering::Acquire) {
+    match property_id.compare_exchange(usize::MAX, *candidate, Ordering::AcqRel, Ordering::Acquire)
+    {
         Ok(_) => {
             // We won the race — increment the global next plugin index and return the new index
             *candidate += 1;
@@ -228,6 +229,12 @@ impl<E: Entity> PropertyStore<E> {
             .collect();
 
         Self { items }
+    }
+
+    /// Fetches an immutable reference to the type-erased `PropertyValueStore<E>`.
+    #[must_use]
+    pub(crate) fn get_with_id(&self, property_id: usize) -> &dyn PropertyValueStore<E> {
+        self.items[property_id].as_ref()
     }
 
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
@@ -329,6 +336,17 @@ impl<E: Entity> PropertyStore<E> {
             .get_mut(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
         property_value_store.set_indexed(is_indexed);
+    }
+
+    /// Updates the index of the property having the given ID for any entities that have been added to the context
+    /// since the last time the index was updated. As a convenience, returns `false` if this property is not indexed,
+    /// `true` otherwise.
+    pub fn index_unindexed_entities_for_property_id(
+        &self,
+        context: &Context,
+        property_id: usize,
+    ) -> bool {
+        self.items[property_id].index_unindexed_entities(context)
     }
 }
 

@@ -236,6 +236,13 @@ impl EntityStore {
         record.entity_count
     }
 
+    /// Returns a total count of all created entities of type `E`.
+    #[must_use]
+    pub fn get_entity_count_by_id(&self, id: usize) -> usize {
+        let record = &self.items[id];
+        record.entity_count
+    }
+
     /// Returns an iterator over all valid `EntityId<E>`s
     pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
         let count = self.get_entity_count::<E>();

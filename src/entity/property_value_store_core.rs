@@ -21,9 +21,12 @@ use super::property::{Property, PropertyInitializationKind};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::value_vec::ValueVec;
 
+/// The underlying storage type for property values.
+pub(crate) type RawPropertyValueVec<P> = ValueVec<Option<P>>;
+
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
-    pub(super) data: ValueVec<Option<P>>,
+    pub(super) data: RawPropertyValueVec<P>,
     /// An index mapping `property_value` to `set_of_entities`.
     // Note that while we use a `RefCell` here, most of the time we don't incur the overhead of dynamic borrow checking,
     // because we use `index.get_mut()` instead of `index.borrow_mut()`. We only need `index.borrow_mut()` for
