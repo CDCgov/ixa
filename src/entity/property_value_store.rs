@@ -42,7 +42,9 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
     fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
-    // fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>>;
+    /// Fetches the hash bucket corresponding to the provided hash value. Returns `None` if either the
+    /// property is not indexed or there is no bucket corresponding to the hash value.
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>>;
 
     /// Returns whether this `PropertyValueStore` instance has an `Index<E, P>`. Note that this is not the same as
     /// asking whether the property itself is indexed, as some properties might use the index of some other
@@ -53,8 +55,9 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     /// sets `self.index` to `None`, dropping any existing index.
     fn set_indexed(&mut self, is_indexed: bool);
 
-    /// Updates the index for any entities that have been added to the context since the last time the index was updated.
-    fn index_unindexed_entities(&mut self, context: &Context);
+    /// Updates the index for any entities that have been added to the context since the last time the index was
+    /// updated. As a convenience, returns `false` if this property is not indexed.
+    fn index_unindexed_entities(&self, context: &Context) -> bool;
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
@@ -102,15 +105,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         }
     }
 
-    // fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>> {
-    //     if let Some(index) = &self.index {
-    //         let index = index.borrow();
-    //         Ref::filter_map(index, |idx| idx.get_with_hash(hash)).ok()
-    //     } else {
-    //         error!("attempted to add an entity to a property index for an unindexed property");
-    //         None
-    //     }
-    // }
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>> {
+        if let Some(index) = &self.index {
+            let index = index.borrow();
+            Ref::filter_map(index, |idx| idx.get_with_hash(hash)).ok()
+        } else {
+            None
+        }
+    }
 
     fn is_indexed(&self) -> bool {
         self.index.is_some()
@@ -124,9 +126,9 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         }
     }
 
-    fn index_unindexed_entities(&mut self, context: &Context) {
-        if let Some(index) = &mut self.index {
-            let index = index.get_mut();
+    fn index_unindexed_entities(&self, context: &Context) -> bool {
+        if let Some(index) = &self.index {
+            let mut index = index.borrow_mut();
             let current_pop = context.get_entity_count::<E>();
             trace!(
                 "{}: indexing unindexed entity {}..<{}",
@@ -141,6 +143,9 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
                 index.add_entity(&P::make_canonical(value), entity_id);
             }
             index.max_indexed = current_pop;
+            true
+        } else {
+            false
         }
     }
 }
