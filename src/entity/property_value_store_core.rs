@@ -46,7 +46,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Self::default()
     }
 
-    pub(crate) fn new_boxed() -> Box<dyn PropertyValueStore> {
+    pub(crate) fn new_boxed() -> Box<dyn PropertyValueStore<E>> {
         Box::new(Self::new())
     }
 
