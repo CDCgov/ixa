@@ -23,7 +23,7 @@ use crate::entity::{Entity, EntityId, HashValueType};
 use crate::{Context, HashSet};
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
-pub(crate) trait PropertyValueStore: Any {
+pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn as_any(&self) -> &dyn Any;
 
@@ -34,14 +34,14 @@ pub(crate) trait PropertyValueStore: Any {
     fn create_partial_property_change(
         &self,
         // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
-        entity_id: usize,
+        entity_id: EntityId<E>,
         context: &Context,
     ) -> Box<dyn PartialPropertyChangeEvent>;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
 
-    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: usize);
-    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: usize);
+    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
+    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
     // fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>>;
 
     /// Returns whether this `PropertyValueStore` instance has an `Index<E, P>`. Note that this is not the same as
@@ -57,7 +57,7 @@ pub(crate) trait PropertyValueStore: Any {
     fn index_unindexed_entities(&mut self, context: &Context);
 }
 
-impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E, P> {
+impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -68,15 +68,12 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
 
     fn create_partial_property_change(
         &self,
-        entity_id: usize,
+        entity_id: EntityId<E>,
         context: &Context,
     ) -> Box<dyn PartialPropertyChangeEvent> {
         // 1. Compute the existing value of the property for the given `entity_id`
         // 2. Remove the `entity_id` from the corresponding index bucket (if its indexed)
         // 3. Return a `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
-
-        // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
-        let entity_id = EntityId::<E>::new(entity_id);
 
         let previous_value = P::compute_derived(context, entity_id);
         if let Some(index) = &self.index {
@@ -89,10 +86,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
         ))
     }
 
-    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: usize) {
-        // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
-        let entity_id = EntityId::<E>::new(entity_id);
-
+    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
         if let Some(index) = &mut self.index {
             index.get_mut().add_entity_with_hash(hash, entity_id);
         } else {
@@ -100,10 +94,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
         }
     }
 
-    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: usize) {
-        // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
-        let entity_id = EntityId::<E>::new(entity_id);
-
+    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
         if let Some(index) = &mut self.index {
             index.get_mut().remove_entity_with_hash(hash, entity_id);
         } else {
@@ -146,7 +137,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore for PropertyValueStoreCore<E,
 
             for id in index.max_indexed..current_pop {
                 let entity_id = EntityId::new(id);
-                let value = context.get_property(entity_id);
+                let value = context.get_property::<E, P>(entity_id);
                 index.add_entity(&P::make_canonical(value), entity_id);
             }
             index.max_indexed = current_pop;

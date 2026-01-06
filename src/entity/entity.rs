@@ -98,7 +98,7 @@ pub trait Entity: Any + Default {
     /// The index of this item in the owner, which is initialized globally per type
     /// upon first access. We explicitly initialize this in a `ctor` in order to know
     /// how many [`Entity`] types exist globally when we construct any `EntityStore`.
-    fn index() -> usize
+    fn id() -> usize
     where
         Self: Sized;
 
@@ -119,7 +119,7 @@ pub type BxEntity = Box<dyn Entity>;
 /// If entities are added _after_ this iterator has been created, this iterator will _not_ produce the `EntityId<E>`s
 /// of the newly added entities.
 #[derive(Copy, Clone)]
-pub(crate) struct EntityIterator<E: Entity> {
+pub struct EntityIterator<E: Entity> {
     /// The total count of all entities of this type at the time this iterator was created
     population: usize,
     /// The next `EntityId<E>` this iterator will produce (assuming `entity_id < population`)

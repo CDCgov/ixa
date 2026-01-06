@@ -123,6 +123,6 @@ pub trait Property<E: Entity>: AnyProperty {
     /// Get a list of derived properties that depend on this property. The properties are
     /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
     fn dependents() -> &'static [usize] {
-        unsafe { get_property_dependents_static(Self::id()) }
+        unsafe { get_property_dependents_static::<E>(Self::id()) }
     }
 }

@@ -39,32 +39,40 @@ use crate::entity::events::PartialPropertyChangeEvent;
 use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::EntityId;
 use crate::Context;
 
-/// Global item index counter; keeps track of the index that will be assigned to the next entity that
-/// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
-static NEXT_PROPERTY_INDEX: Mutex<usize> = Mutex::new(0);
+/// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
+/// equivalent to the next property ID that will be assigned to the next property that requests an ID. Each `Entity`
+/// type has its own series of increasing property IDs.
+///
+/// Note: The mechanism to assign property IDs needs to be distinct from the rest of property registration, because
+/// properties often need to have an ID assigned _before_ its registration proper so that it can be recorded as a
+/// dependency of some other property.
+static NEXT_PROPERTY_INDEX: LazyLock<Mutex<HashMap<usize, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::default()));
 
 /// A container struct to hold the (global) metadata for a single property.
 ///
 /// At program startup (before `main()`, using ctors) we compute metadata for all properties
 /// that are linked into the binary, and this data remains unchanged for the life of the program.
 #[derive(Default)]
-struct PropertyMetadata {
+pub(super) struct PropertyMetadata<E: Entity> {
     /// The (derived) properties that depend on this property, as represented by their
     /// `Property::index` value. This list is used to update the index (if applicable)
     /// and emit change events for these properties when this property changes.
-    dependents: Vec<usize>,
+    pub dependents: Vec<usize>,
     /// A function that constructs a new `PropertyValueStoreCore<E, P>` instance in a type-erased
     /// way, used in the constructor of `PropertyStore`. This is an `Option` because this
     /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
     /// instance for this property needs to exist (when its dependents are recorded).
-    value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore>>,
+    pub value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore<E>>>,
 }
 
-/// This maps `property_type_index` to `(vec_of_transitive_dependents)`. This data is actually
-/// written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
-static PROPERTY_METADATA: LazyLock<Mutex<HashMap<usize, PropertyMetadata>>> =
+/// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector of dependents (as IDs)
+/// and a function pointer to the constructor that constucts a `PropertyValueStoreCore<E, P>` type erased as
+/// a `Box<dyn PropertyValueStore<E>>`. This data is actually written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
+static PROPERTY_METADATA: LazyLock<Mutex<HashMap<(usize, usize), Box<dyn Any + Send>>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
 /// The public getter for the dependents of a property with index `property_index` (as stored in
@@ -76,12 +84,18 @@ static PROPERTY_METADATA: LazyLock<Mutex<HashMap<usize, PropertyMetadata>>> =
 /// # Safety
 /// This function assumes that `PROPERTY_METADATA` will never again be mutated after initial
 /// construction. Mutating the `Vec`s after taking these references would cause undefined behavior.
-pub(super) unsafe fn get_property_dependents_static(property_index: usize) -> &'static [usize] {
+pub(super) unsafe fn get_property_dependents_static<E: Entity>(
+    property_index: usize,
+) -> &'static [usize] {
     let map = PROPERTY_METADATA.lock().unwrap();
-
-    // This method should only be called after program start.
-    let property_metadata = map.get(&property_index)
+    let property_metadata = map.get(&(E::id(), property_index))
                                .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
+    let property_metadata: &PropertyMetadata<E> = property_metadata.downcast_ref().unwrap_or_else(
+        || panic!(
+            "Property type at index {:?} does not match registered property type. You must use the `define_property!` macro to create a registered property.",
+            property_index
+        )
+    );
 
     // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
     //        the simplest way to implement this. Make a decision either way about whether additional complexity is
@@ -113,8 +127,9 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     // Register the `PropertyValueStoreCore<E, P>` constructor.
     {
         let metadata = property_metadata
-            .entry(property_index)
-            .or_insert_with(PropertyMetadata::default);
+            .entry((E::id(), property_index))
+            .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
+        let metadata: &mut PropertyMetadata<E> = metadata.downcast_mut().unwrap();
         metadata
             .value_store_constructor
             .get_or_insert_with(|| PropertyValueStoreCore::<E, P>::new_boxed);
@@ -124,15 +139,17 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     for dependency in P::non_derived_dependencies() {
         // Add `property_index` as a dependent of the dependency
         let dependency_meta = property_metadata
-            .entry(dependency)
-            .or_insert_with(PropertyMetadata::default);
+            .entry((E::id(), dependency))
+            .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
+        let dependency_meta: &mut PropertyMetadata<E> = dependency_meta.downcast_mut().unwrap();
         dependency_meta.dependents.push(property_index);
     }
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
-pub fn get_registered_property_count() -> usize {
-    *NEXT_PROPERTY_INDEX.lock().unwrap()
+pub fn get_registered_property_count<E: Entity>() -> usize {
+    let map = NEXT_PROPERTY_INDEX.lock().unwrap();
+    *map.get(&E::id()).unwrap_or(&0)
 }
 
 /// Encapsulates the synchronization logic for initializing an item's index.
@@ -147,10 +164,10 @@ pub fn get_registered_property_count() -> usize {
 /// In fact, for our use case we know we are calling this function
 /// once for each type in each `Property`'s `ctor` function, which
 /// should be the only time this method is ever called for the type.
-pub fn initialize_property_index(index: &AtomicUsize) -> usize {
+pub fn initialize_property_index<E: Entity>(index: &AtomicUsize) -> usize {
     // Acquire a global lock.
     let mut guard = NEXT_PROPERTY_INDEX.lock().unwrap();
-    let candidate = *guard;
+    let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
     // Try to claim the candidate index. Here we guard against the potential race condition that
     // another instance of this plugin in another thread just initialized the index prior to us
@@ -158,11 +175,11 @@ pub fn initialize_property_index(index: &AtomicUsize) -> usize {
     // NEXT_PROPERTY_INDEX, we just return the value `index` was initialized to.
     // For a justification of the data ordering, see:
     //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
-    match index.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire) {
+    match index.compare_exchange(usize::MAX, *candidate, Ordering::AcqRel, Ordering::Acquire) {
         Ok(_) => {
             // We won the race — increment the global next plugin index and return the new index
-            *guard += 1;
-            candidate
+            *candidate += 1;
+            *candidate - 1
         }
         Err(existing) => {
             // Another thread beat us — don’t increment the global next plugin index,
@@ -173,22 +190,21 @@ pub fn initialize_property_index(index: &AtomicUsize) -> usize {
 }
 
 /// A wrapper around a vector of property value stores.
-pub struct PropertyStore {
-    /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn Any>` and downcast-able to
-    /// `Box<PropertyValueStore<E>>`.
-    items: Vec<Box<dyn PropertyValueStore>>,
+pub struct PropertyStore<E: Entity> {
+    /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn PropertyValueStore<E>>`
+    items: Vec<Box<dyn PropertyValueStore<E>>>,
 }
 
-impl Default for PropertyStore {
+impl<E: Entity> Default for PropertyStore<E> {
     fn default() -> Self {
         PropertyStore::new()
     }
 }
 
-impl PropertyStore {
+impl<E: Entity> PropertyStore<E> {
     /// Creates a new [`PropertyStore`].
     pub fn new() -> Self {
-        let num_items = get_registered_property_count();
+        let num_items = get_registered_property_count::<E>();
         // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
         let property_metadata = PROPERTY_METADATA.lock().unwrap();
 
@@ -196,8 +212,14 @@ impl PropertyStore {
         let items = (0..num_items)
             .map(|idx| {
                 let metadata = property_metadata
-                    .get(&idx)
-                    .unwrap_or_else(|| panic!("No property metadata entry for index {idx}"));
+                    .get(&(E::id(), idx))
+                    .unwrap_or_else(|| panic!("No property metadata entry for index {idx}"))
+                    .downcast_ref::<PropertyMetadata<E>>()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Property metadata entry for index {idx} does not match expexted type"
+                        )
+                    });
                 let constructor = metadata
                     .value_store_constructor
                     .unwrap_or_else(|| panic!("No PropertyValueStore constructor for index {idx}"));
@@ -210,7 +232,7 @@ impl PropertyStore {
 
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
-    pub fn get<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
+    pub fn get<P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
         let index = P::id();
         let property_value_store =
             self.items
@@ -240,7 +262,7 @@ impl PropertyStore {
 
     /// Fetches a mutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
-    pub fn get_mut<E: Entity, P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
+    pub fn get_mut<P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
         let index = P::id();
         let property_value_store =
             self.items
@@ -274,8 +296,7 @@ impl PropertyStore {
     pub(crate) fn create_partial_property_change(
         &self,
         property_index: usize,
-        // This `entity_id` is guaranteed by the caller to be a valid `EntityId<E>` for the current entity `E`.
-        entity_id: usize,
+        entity_id: EntityId<E>,
         context: &Context,
     ) -> Box<dyn PartialPropertyChangeEvent> {
         let property_value_store = self.items
@@ -291,7 +312,7 @@ impl PropertyStore {
     /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
     /// share a single index.
     #[cfg(test)]
-    pub fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
+    pub fn is_property_indexed<P: Property<E>>(&self) -> bool {
         self.items
             .get(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
@@ -303,7 +324,7 @@ impl PropertyStore {
     ///
     /// Note that the index might not live in the `PropertyValueStore` associated with `P` itself, as in the case
     /// of multi-properties which share a single index among all equivalent multi-properties.
-    pub fn set_property_indexed<E: Entity, P: Property<E>>(&mut self, is_indexed: bool) {
+    pub fn set_property_indexed<P: Property<E>>(&mut self, is_indexed: bool) {
         let property_value_store = self.items
             .get_mut(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));

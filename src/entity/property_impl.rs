@@ -606,7 +606,7 @@ macro_rules! __impl_property_common {
                 }
 
                 // Slow path: initialize it.
-                $crate::entity::property_store::initialize_property_index(&INDEX)
+                $crate::entity::property_store::initialize_property_index::<$entity>(&INDEX)
             }
 
             fn index_id() -> usize {
@@ -1062,36 +1062,27 @@ mod tests {
         context.index_property::<_, ProfileNAW>();
 
         // Check that all equivalent multi-properties are indexed...
-        assert!(context
-            .property_store
-            .is_property_indexed::<Person, ProfileNAW>());
-        assert!(context
-            .property_store
-            .is_property_indexed::<Person, ProfileAWN>());
-        assert!(context
-            .property_store
-            .is_property_indexed::<Person, ProfileWAN>());
+        assert!(context.is_property_indexed::<Person, ProfileNAW>());
+        assert!(context.is_property_indexed::<Person, ProfileAWN>());
+        assert!(context.is_property_indexed::<Person, ProfileWAN>());
         // ...but only one `Index<E, P>` instance was created.
         let mut indexed_count = 0;
         if context
-            .property_store
-            .get::<_, ProfileNAW>()
+            .get_property_value_store::<Person, ProfileNAW>()
             .index
             .is_some()
         {
             indexed_count += 1;
         }
         if context
-            .property_store
-            .get::<_, ProfileAWN>()
+            .get_property_value_store::<Person, ProfileAWN>()
             .index
             .is_some()
         {
             indexed_count += 1;
         }
         if context
-            .property_store
-            .get::<_, ProfileWAN>()
+            .get_property_value_store::<Person, ProfileWAN>()
             .index
             .is_some()
         {

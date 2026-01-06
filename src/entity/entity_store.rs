@@ -15,8 +15,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use polonius_the_crab::{polonius, polonius_return};
-
+use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, EntityId, EntityIterator};
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
@@ -82,7 +81,7 @@ pub unsafe fn get_entity_metadata_static(
 /// `EntityStore` itself when an `Entity` is accessed for the first time. (The
 /// `OnceCell` itself handles the interior mutability required for initialization.)
 pub fn add_to_entity_registry<R: Entity>() {
-    let _ = R::index();
+    let _ = R::id();
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
@@ -134,6 +133,8 @@ pub struct EntityRecord {
     pub(crate) entity_count: usize,
     /// Lazily initialized `Entity` instance.
     pub(crate) entity: OnceCell<Box<dyn Any>>,
+    /// A type-erased `Box<PropertyStore<E>>`, lazily initialized.
+    pub(crate) property_store: OnceCell<Box<dyn Any>>,
 }
 
 impl EntityRecord {
@@ -141,6 +142,7 @@ impl EntityRecord {
         Self {
             entity_count: 0,
             entity: OnceCell::new(),
+            property_store: OnceCell::new(),
         }
     }
 }
@@ -175,56 +177,51 @@ impl EntityStore {
         }
     }
 
-    /// Fetches an immutable reference to the item `R` from the registry. This
+    /// Fetches an immutable reference to the entity `E` from the registry. This
     /// implementation lazily instantiates the item if it has not yet been instantiated.
     #[must_use]
-    pub fn get<R: Entity>(&self) -> &R {
-        let index = R::index();
+    pub fn get<E: Entity>(&self) -> &E {
+        let index = E::id();
         self.items
         .get(index)
-        .unwrap_or_else(|| panic!("No registered item found with index = {index:?}. You must use the `define_registered_item!` macro to create a registered item."))
+        .unwrap_or_else(|| panic!("No registered entity found with index = {index:?}. You must use the `define_entity!` macro to create an entity."))
         .entity
-        .get_or_init(|| R::new_boxed())
-        .downcast_ref::<R>()
-        .expect("TypeID does not match registered item type. You must use the `define_registered_item!` macro to create a registered item.")
+        .get_or_init(|| E::new_boxed())
+        .downcast_ref::<E>()
+        .expect("TypeID does not match registered entity type. You must use the `define_entity!` macro to create an entity.")
     }
 
     /// Fetches a mutable reference to the item `E` from the registry. This
     /// implementation lazily instantiates the item if it has not yet been instantiated.
     #[must_use]
     pub fn get_mut<E: Entity>(&mut self) -> &mut E {
-        let mut self_shadow = self;
-        let index = E::index();
+        let index = E::id();
 
         // If the item is already initialized, return a mutable reference.
-        // Use polonius to address borrow checker limitations.
-        polonius!(|self_shadow| -> &'polonius mut E {
-            if let Some(any) = self_shadow.items[index].entity.get_mut() {
-                polonius_return!(any
-                    .downcast_mut::<E>()
-                    .expect("TypeID does not match registered item type"));
-            }
-            // Else, don't return. Fall through and initialize.
-        });
+        if self.items[index].entity.get().is_some() {
+            return self.items[index]
+                .entity
+                .get_mut()
+                .unwrap()
+                .downcast_mut()
+                .expect("TypeID does not match registered entity type. You must use the `define_entity!` macro to create an entity.");
+        }
 
         // Initialize the item.
-        let record = self_shadow
-            .items
-            .get_mut(index)
-            .unwrap_or_else(|| panic!("No registered item found with index = {index:?}. You must use the `define_registered_item!` macro to create a registered item."));
+        let record = &mut self.items[index];
         let _ = record.entity.set(E::new_boxed());
         record
             .entity
             .get_mut()
             .unwrap()
             .downcast_mut::<E>()
-            .expect("TypeID does not match the registered item type. You must use the `define_registered_item!` macro to create a registered item.")
+            .expect("TypeID does not match registered entity type. You must use the `define_entity!` macro to create an entity.")
     }
 
     /// Creates a new `EntityId` for the given `Entity` type `E`.
     /// Increments the entity counter and returns the next valid ID.
     pub(crate) fn new_entity_id<E: Entity>(&mut self) -> EntityId<E> {
-        let index = E::index();
+        let index = E::id();
         let record = &mut self.items[index];
         let id = record.entity_count;
         record.entity_count += 1;
@@ -234,7 +231,7 @@ impl EntityStore {
     /// Returns a total count of all created entities of type `E`.
     #[must_use]
     pub fn get_entity_count<E: Entity>(&self) -> usize {
-        let index = E::index();
+        let index = E::id();
         let record = &self.items[index];
         record.entity_count
     }
@@ -243,6 +240,31 @@ impl EntityStore {
     pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
         let count = self.get_entity_count::<E>();
         EntityIterator::new(count)
+    }
+
+    pub fn get_property_store<E: Entity>(&self) -> &PropertyStore<E> {
+        let index = E::id();
+        let record = self.items
+                         .get(index)
+                         .unwrap_or_else(|| panic!("No registered entity found with index = {index:?}. You must use the `define_entity!` macro to create an entity."));
+        let property_store = record
+            .property_store
+            .get_or_init(|| Box::new(PropertyStore::<E>::new()));
+        property_store.downcast_ref::<PropertyStore<E>>()
+                      .expect("TypeID does not match registered item type. You must use the `define_registered_item!` macro to create a registered item.")
+    }
+
+    pub fn get_property_store_mut<E: Entity>(&mut self) -> &mut PropertyStore<E> {
+        let index = E::id();
+        let record = self.items
+                         .get_mut(index)
+                         .unwrap_or_else(|| panic!("No registered entity found with index = {index:?}. You must use the `define_entity!` macro to create an entity."));
+        let _ = record
+            .property_store
+            .get_or_init(|| Box::new(PropertyStore::<E>::new()));
+        let property_store = record.property_store.get_mut().unwrap();
+        property_store.downcast_mut::<PropertyStore<E>>()
+                      .expect("TypeID does not match registered item type. You must use the `define_registered_item!` macro to create a registered item.")
     }
 }
 
@@ -459,9 +481,9 @@ mod tests {
     // Registering items is idempotent
     #[test]
     fn test_add_to_registry_idempotent() {
-        let index1 = TestItem1::index();
-        let index2 = TestItem2::index();
-        let index3 = TestItem3::index();
+        let index1 = TestItem1::id();
+        let index2 = TestItem2::id();
+        let index3 = TestItem3::id();
 
         // All should be initialized (uninitialized indices are `usize::MAX`)
         assert_ne!(index1, usize::MAX);
@@ -478,9 +500,9 @@ mod tests {
         add_to_entity_registry::<TestItem1>();
         add_to_entity_registry::<TestItem1>();
 
-        let index_from_registry_1 = TestItem1::index();
-        let index_from_registry_2 = TestItem2::index();
-        let index_from_registry_3 = TestItem3::index();
+        let index_from_registry_1 = TestItem1::id();
+        let index_from_registry_2 = TestItem2::id();
+        let index_from_registry_3 = TestItem3::id();
 
         assert_eq!(index1, index_from_registry_1);
         assert_eq!(index2, index_from_registry_2);
@@ -587,7 +609,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No registered item found with index")]
+    #[should_panic(expected = "No registered entity found with index")]
     fn test_registered_items_invalid_index() {
         #[derive(Debug, Default)]
         struct UnregisteredEntity;
@@ -601,7 +623,7 @@ mod tests {
                 "UnregisteredItem"
             }
 
-            fn index() -> usize
+            fn id() -> usize
             where
                 Self: Sized,
             {

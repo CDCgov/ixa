@@ -45,7 +45,7 @@ macro_rules! impl_entity {
                 stringify!($entity_name)
             }
 
-            fn index() -> usize {
+            fn id() -> usize {
                 // This static must be initialized with a compile-time constant expression.
                 // We use `usize::MAX` as a sentinel to mean "uninitialized". This
                 // static variable is shared among all instances of this concrete item type.

@@ -44,7 +44,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
     /// the `current_value` differs from the previous value (stored in `self.0.current_value`)
     fn emit_in_context(&self, context: &mut Context) {
         let current_value: P = context.get_property(self.0.entity_id);
-        let property_value_store = context.property_store.get_mut::<E, P>();
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
 
         if let Some(index) = &mut property_value_store.index {
             index
