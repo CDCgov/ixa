@@ -15,7 +15,7 @@ use crate::entity::events::{
 };
 use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_list::PropertyList;
-use crate::entity::property_store::PropertyStore;
+use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
@@ -96,7 +96,6 @@ pub struct Context {
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     entity_store: EntityStore,
-    pub(crate) property_store: PropertyStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     #[cfg(feature = "debugger")]
     breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
@@ -125,7 +124,6 @@ impl Context {
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
             entity_store: EntityStore::new(),
-            property_store: PropertyStore::new(),
             data_plugins,
             #[cfg(feature = "debugger")]
             breakpoints_scheduled: Queue::new(),
@@ -164,11 +162,13 @@ impl Context {
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
-        property_list.set_values_for_entity(new_entity_id.clone(), &self.property_store);
+        property_list.set_values_for_entity(
+            new_entity_id.clone(),
+            self.entity_store.get_property_store::<E>(),
+        );
 
-        // Emit an `EntityCreatedEvent<Entity>`. Note that `EntityCreatedEvent::<E>` and
-        // `EntityId<E>` is always `Copy`, but the compiler cannot determine this itself.
-        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id.clone()));
+        // Emit an `EntityCreatedEvent<Entity>`.
+        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
 
         Ok(new_entity_id)
     }
@@ -180,7 +180,7 @@ impl Context {
         //       take a more conservative approach here and check for internal errors.
         match P::initialization_kind() {
             PropertyInitializationKind::Explicit => {
-                let property_store = self.property_store.get::<E, P>();
+                let property_store = self.get_property_value_store::<E, P>();
                 // A user error can cause this unwrap to fail.
                 property_store.get(entity_id).expect("attempted to get a property value with \"explicit\" initialization that was not set")
             }
@@ -188,7 +188,7 @@ impl Context {
             PropertyInitializationKind::Derived => P::compute_derived(self, entity_id),
 
             PropertyInitializationKind::Constant => {
-                let property_store = self.property_store.get::<E, P>();
+                let property_store = self.get_property_value_store::<E, P>();
                 // If this unwrap fails, it is an internal ixa error, not a user error.
                 property_store.get(entity_id).expect(
                     "getting a property value with \"constant\" initialization should never fail",
@@ -235,10 +235,7 @@ impl Context {
         //  2. After setting the main property `P`, factored out into
         //     `PartialPropertyChangeEvent::emit_in_context`
 
-        let previous_value = {
-            let property_value_store = self.property_store.get::<E, P>();
-            property_value_store.get(entity_id)
-        };
+        let previous_value = { self.get_property_value_store::<E, P>().get(entity_id) };
 
         if Some(property_value) == previous_value {
             return;
@@ -251,14 +248,15 @@ impl Context {
         )];
 
         for dependent_idx in P::dependents() {
-            dependents.push(self.property_store.create_partial_property_change(
+            let property_store = self.entity_store.get_property_store::<E>();
+            dependents.push(property_store.create_partial_property_change(
                 *dependent_idx,
-                entity_id.0,
+                entity_id,
                 self,
             ));
         }
 
-        let property_value_store = self.property_store.get::<E, P>();
+        let property_value_store = self.get_property_value_store::<E, P>();
         property_value_store.set(entity_id, property_value);
 
         for dependent in dependents.into_iter() {
@@ -273,7 +271,35 @@ impl Context {
     /// The actual computation of the index is done lazily as needed upon execution of queries,
     /// not when this method is called.
     pub fn index_property<E: Entity, P: Property<E>>(&mut self) {
-        self.property_store.set_property_indexed::<E, P>(true);
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        property_store.set_property_indexed::<P>(true);
+    }
+
+    /// Checks if a property `P` is indexed.
+    ///
+    /// This method is called with the turbo-fish syntax:
+    ///     `context.index_property::<Person, Age>()`
+    ///
+    /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,
+    /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
+    /// share a single index.
+    #[cfg(test)]
+    pub fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
+        let property_store = self.entity_store.get_property_store::<E>();
+        property_store.is_property_indexed::<P>()
+    }
+    pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
+        &self,
+    ) -> &PropertyValueStoreCore<E, P> {
+        self.entity_store.get_property_store::<E>().get::<P>()
+    }
+
+    pub(crate) fn get_property_value_store_mut<E: Entity, P: Property<E>>(
+        &mut self,
+    ) -> &mut PropertyValueStoreCore<E, P> {
+        self.entity_store
+            .get_property_store_mut::<E>()
+            .get_mut::<P>()
     }
 
     pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>
@@ -531,7 +557,6 @@ impl Context {
     ///
     /// Returns a mutable reference to the data container
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let index = T::index_within_context();
