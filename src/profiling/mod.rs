@@ -159,6 +159,7 @@ mod computed_statistic;
 mod data;
 mod display;
 mod file;
+mod reporting;
 
 use std::path::Path;
 #[cfg(feature = "profiling")]
@@ -168,6 +169,7 @@ pub use computed_statistic::*;
 pub use data::*;
 pub use display::*;
 use file::write_profiling_data_to_file;
+pub use reporting::*;
 
 use crate::{error, Context, ContextReportExt};
 
@@ -212,36 +214,4 @@ impl Drop for Span {
     }
 }
 
-/// Writes the execution statistics for the context and all profiling data
-/// to a JSON file.
-pub trait ProfilingContextExt: ContextReportExt {
-    fn write_profiling_data(&mut self) {
-        let (mut prefix, directory, overwrite) = {
-            let report_options = self.report_options();
-            (
-                report_options.file_prefix.clone(),
-                report_options.output_dir.clone(),
-                report_options.overwrite,
-            )
-        };
-
-        let execution_statistics = self.get_execution_statistics();
-        // Default filename when not provided via parameters: write under report options
-        // using the current file prefix.
-        prefix.push_str("profiling.json");
-        let profiling_data_path = directory.join(prefix);
-        let profiling_data_path = Path::new(&profiling_data_path);
-
-        if !overwrite && profiling_data_path.exists() {
-            error!(
-                "profiling output file already exists: {}",
-                profiling_data_path.display()
-            );
-            return;
-        }
-
-        write_profiling_data_to_file(profiling_data_path, execution_statistics)
-            .expect("could not write profiling data to file");
-    }
-}
-impl ProfilingContextExt for Context {}
+// ProfilingContextExt moved to reports.rs
