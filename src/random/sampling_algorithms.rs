@@ -595,9 +595,10 @@ mod tests {
             })
             .sum();
 
-        // Degrees of freedom = population - 1 = 99
-        // Critical χ²₀.₉₉₉ for df=99 is approximately 140.169
-        let critical = 140.169;
+        // Degrees of freedom = population - 1 = 99.
+        // Critical value uses p = 0.999 (alpha = 0.001): χ²_{0.999, 99} ≈ 148.23
+        // from the inverse chi-square CDF.
+        let critical = 148.23;
 
         println!(
             "χ² = {}, expected = {}, min = {}, max = {}",
