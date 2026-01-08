@@ -213,5 +213,3 @@ impl Drop for Span {
         container.close_span(self);
     }
 }
-
-// ProfilingContextExt moved to reports.rs
