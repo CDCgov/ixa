@@ -193,6 +193,10 @@ where
     Container: HasIter<Item<'a> = &'a T>,
     T: Clone + 'static,
 {
+    if requested == 0 {
+        return Vec::new();
+    }
+
     let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
     weight = weight.powf(1.0 / requested as f64);
     let mut position: usize = 0; // current index in data
@@ -229,6 +233,106 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
+    use crate::hashing::{HashSet, HashSetExt};
+
+    // ========== Tests for sample_single_l_reservoir ==========
+
+    #[test]
+    fn test_sample_single_l_reservoir_basic() {
+        let data: Vec<u32> = (0..1000).collect();
+        let seed: u64 = 42;
+        let mut rng = StdRng::seed_from_u64(seed);
+        let sample = sample_single_l_reservoir(&mut rng, &data);
+
+        // Should return Some value
+        assert!(sample.is_some());
+
+        // Value should be in valid range
+        let value = sample.unwrap();
+        assert!(value < 1000);
+    }
+
+    #[test]
+    fn test_sample_single_l_reservoir_empty() {
+        let data: Vec<u32> = Vec::new();
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_single_l_reservoir(&mut rng, &data);
+
+        // Should return None for empty container
+        assert!(sample.is_none());
+    }
+
+    #[test]
+    fn test_sample_single_l_reservoir_single_element() {
+        let data: Vec<u32> = vec![42];
+        let mut rng = StdRng::seed_from_u64(1);
+        let sample = sample_single_l_reservoir(&mut rng, &data);
+
+        // Should return the only element
+        assert_eq!(sample, Some(42));
+    }
+
+    #[test]
+    fn test_sample_single_l_reservoir_uniformity() {
+        let population: u32 = 1000;
+        let data: Vec<u32> = (0..population).collect();
+        let num_runs = 10000;
+        let num_bins = 10;
+        let mut counts = vec![0usize; num_bins];
+
+        for run in 0..num_runs {
+            let mut rng = StdRng::seed_from_u64(42 + run as u64);
+            let sample = sample_single_l_reservoir(&mut rng, &data);
+
+            if let Some(value) = sample {
+                let bin = (value as usize) / (population as usize / num_bins);
+                counts[bin] += 1;
+            }
+        }
+
+        // Expected count per bin for uniform sampling
+        let expected = num_runs as f64 / num_bins as f64;
+
+        // Compute chi-square statistic
+        let chi_square: f64 = counts
+            .iter()
+            .map(|&obs| {
+                let diff = (obs as f64) - expected;
+                diff * diff / expected
+            })
+            .sum();
+
+        // Degrees of freedom = num_bins - 1 = 9
+        // Critical χ²₀.₉₉₉ for df=9 is 27.877
+        let critical = 27.877;
+
+        println!("χ² = {}, counts = {:?}", chi_square, counts);
+
+        assert!(
+            chi_square < critical,
+            "Single sample fails uniformity test: χ² = {}, counts = {:?}",
+            chi_square,
+            counts
+        );
+    }
+
+    #[test]
+    fn test_sample_single_l_reservoir_hashset() {
+        let mut data = HashSet::new();
+        for i in 0..100 {
+            data.insert(i);
+        }
+
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_single_l_reservoir(&mut rng, &data);
+
+        assert!(sample.is_some());
+        let value = sample.unwrap();
+        assert!(data.contains(&value));
+    }
+
+    // ========== Tests for sample_multiple_l_reservoir ==========
+
     #[test]
     fn test_sample_multiple_l_reservoir_basic() {
         let data: Vec<u32> = (0..1000).collect();
@@ -246,6 +350,115 @@ mod tests {
         // The sample should not have duplicates
         let unique: HashSet<_> = sample.iter().collect();
         assert_eq!(unique.len(), sample.len());
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_empty() {
+        let data: Vec<u32> = Vec::new();
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, 10);
+
+        // Should return empty vector for empty container
+        assert_eq!(sample.len(), 0);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_zero_requested() {
+        let data: Vec<u32> = (0..100).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, 0);
+
+        // Should return empty vector when 0 requested
+        assert_eq!(sample.len(), 0);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_requested_exceeds_population() {
+        let data: Vec<u32> = (0..50).collect();
+        let requested = 100;
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+        // Should return all available items when requested > population
+        assert_eq!(sample.len(), 50);
+
+        // All elements should be unique
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), 50);
+
+        // All elements should be from the original data
+        assert!(sample.iter().all(|v| *v < 50));
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_exact_population() {
+        let data: Vec<u32> = (0..100).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, 100);
+
+        // Should return all elements when requested == population
+        assert_eq!(sample.len(), 100);
+
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), 100);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_single_element() {
+        let data: Vec<u32> = vec![42];
+        let mut rng = StdRng::seed_from_u64(1);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, 1);
+
+        assert_eq!(sample.len(), 1);
+        assert_eq!(sample[0], 42);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_hashset() {
+        let mut data = HashSet::new();
+        for i in 0..100 {
+            data.insert(i);
+        }
+
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, 10);
+
+        assert_eq!(sample.len(), 10);
+
+        // All sampled values should be in the original set
+        assert!(sample.iter().all(|v| data.contains(v)));
+
+        // No duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), 10);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_small_sample() {
+        let data: Vec<u32> = (0..1000).collect();
+        let requested = 5;
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+        assert_eq!(sample.len(), requested);
+
+        // No duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), requested);
+    }
+
+    #[test]
+    fn test_sample_multiple_l_reservoir_large_sample() {
+        let data: Vec<u32> = (0..1000).collect();
+        let requested = 900;
+        let mut rng = StdRng::seed_from_u64(42);
+        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+        assert_eq!(sample.len(), requested);
+
+        // No duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), requested);
     }
 
     // Verifies that the reservoir sampling algorithm produces uniformly distributed
@@ -349,5 +562,111 @@ mod tests {
             chi_square_of_chi_squares,
             chi_square_counts
         );
+    }
+
+    // Test that each element has equal probability of being selected
+    #[test]
+    fn test_sample_multiple_l_reservoir_element_probability() {
+        let population: u32 = 100;
+        let data: Vec<u32> = (0..population).collect();
+        let requested = 10;
+        let num_runs = 10000;
+        let mut selection_counts = vec![0usize; population as usize];
+
+        for run in 0..num_runs {
+            let mut rng = StdRng::seed_from_u64(42 + run as u64);
+            let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+
+            for &value in &sample {
+                selection_counts[value as usize] += 1;
+            }
+        }
+
+        // Each element should be selected with probability requested/population
+        // Expected count per element
+        let expected = (num_runs * requested) as f64 / population as f64;
+
+        // Compute chi-square statistic
+        let chi_square: f64 = selection_counts
+            .iter()
+            .map(|&obs| {
+                let diff = (obs as f64) - expected;
+                diff * diff / expected
+            })
+            .sum();
+
+        // Degrees of freedom = population - 1 = 99.
+        // Critical value uses p = 0.999 (alpha = 0.001): χ²_{0.999, 99} ≈ 148.23
+        // from the inverse chi-square CDF.
+        let critical = 148.23;
+
+        println!(
+            "χ² = {}, expected = {}, min = {}, max = {}",
+            chi_square,
+            expected,
+            selection_counts.iter().min().unwrap(),
+            selection_counts.iter().max().unwrap()
+        );
+
+        assert!(
+            chi_square < critical,
+            "Element selection probabilities are not uniform: χ² = {}",
+            chi_square
+        );
+    }
+
+    // Test reproducibility with same seed
+    #[test]
+    fn test_sample_multiple_l_reservoir_reproducibility() {
+        let data: Vec<u32> = (0..1000).collect();
+        let test_sizes = [1, 2, 5, 10, 100, 500];
+
+        for &requested in &test_sizes {
+            let seed: u64 = 12345;
+
+            let mut rng1 = StdRng::seed_from_u64(seed);
+            let sample1 = sample_multiple_l_reservoir(&mut rng1, &data, requested);
+
+            let mut rng2 = StdRng::seed_from_u64(seed);
+            let sample2 = sample_multiple_l_reservoir(&mut rng2, &data, requested);
+
+            // Verify correct sample size
+            assert_eq!(
+                sample1.len(),
+                requested,
+                "Sample size {} doesn't match requested size {}",
+                sample1.len(),
+                requested
+            );
+            assert_eq!(
+                sample2.len(),
+                requested,
+                "Sample size {} doesn't match requested size {}",
+                sample2.len(),
+                requested
+            );
+
+            // Same seed should produce identical samples
+            assert_eq!(
+                sample1, sample2,
+                "Reproducibility failed for requested={}",
+                requested
+            );
+        }
+    }
+
+    #[test]
+    fn test_sample_single_l_reservoir_reproducibility() {
+        let data: Vec<u32> = (0..1000).collect();
+        let seed: u64 = 12345;
+
+        let mut rng1 = StdRng::seed_from_u64(seed);
+        let sample1 = sample_single_l_reservoir(&mut rng1, &data);
+
+        let mut rng2 = StdRng::seed_from_u64(seed);
+        let sample2 = sample_single_l_reservoir(&mut rng2, &data);
+
+        // Same seed should produce identical samples
+        assert_eq!(sample1, sample2);
     }
 }
