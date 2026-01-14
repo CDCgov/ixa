@@ -179,7 +179,7 @@ macro_rules! impl_query {
                         (T~N::id(), T~N::hash_property_value(&T~N::make_canonical(self.N))),
                     )*
                     ];
-                    ordered_items.sort_by(|a, b| a.0.cmp(&b.0));
+                    ordered_items.sort_unstable_by(|a, b| a.0.cmp(&b.0));
                     ordered_items
                 }
 

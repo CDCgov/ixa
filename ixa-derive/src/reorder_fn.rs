@@ -7,7 +7,7 @@ use crate::utilities::{resolved_person_property_path, TypeTuple};
 
 fn reorder_indices(tag: &[Ident]) -> Vec<usize> {
     let mut sorted: Vec<_> = tag.iter().enumerate().collect();
-    sorted.sort_by(|(_, a), (_, b)| a.to_string().cmp(&b.to_string()));
+    sorted.sort_unstable_by(|(_, a), (_, b)| a.to_string().cmp(&b.to_string()));
     sorted.iter().map(|(i, _)| *i).collect()
 }
 
@@ -35,7 +35,7 @@ pub fn people_reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
 
     // Types in sorted tag order = CanonicalValue
     let mut sorted_idents = tag.0.clone();
-    sorted_idents.sort_by_key(|a| a.to_string());
+    sorted_idents.sort_unstable_by_key(|a| a.to_string());
     let value_types_sorted: Vec<_> = sorted_idents
         .iter()
         .map(|ident| quote! { <#ident as #person_property_path>::Value })
@@ -65,7 +65,7 @@ pub fn people_unreorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
 
     // Types in sorted tag order = CanonicalValue
     let mut sorted_idents = tag.0.clone();
-    sorted_idents.sort_by_key(|a| a.to_string());
+    sorted_idents.sort_unstable_by_key(|a| a.to_string());
     let value_types_sorted: Vec<_> = sorted_idents
         .iter()
         .map(|ident| quote! { <#ident as #person_property_path>::Value })
@@ -107,7 +107,7 @@ pub fn reorder_fn(tag: &TypeTuple) -> proc_macro2::TokenStream {
 
     // Types in sorted tag order = CanonicalValue
     let mut sorted_idents = tag.0.clone();
-    sorted_idents.sort_by_key(|a| a.to_string());
+    sorted_idents.sort_unstable_by_key(|a| a.to_string());
     let value_types_sorted: Vec<_> = sorted_idents
         .iter()
         .map(|ident| quote! { #ident })
