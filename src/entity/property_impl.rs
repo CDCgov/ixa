@@ -569,7 +569,7 @@ macro_rules! __impl_property_common {
             }
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
-                $collect_deps_fn(result)
+                ($collect_deps_fn)(result)
             }
 
             fn default_const() -> Self {
@@ -577,11 +577,11 @@ macro_rules! __impl_property_common {
             }
 
             fn make_canonical(self) -> Self::CanonicalValue {
-                $make_canonical(self)
+                ($make_canonical)(self)
             }
 
             fn make_uncanonical(value: Self::CanonicalValue) -> Self {
-                $make_uncanonical(value)
+                ($make_uncanonical)(value)
             }
 
             fn name() -> &'static str {
@@ -589,7 +589,7 @@ macro_rules! __impl_property_common {
             }
 
             fn get_display(&self) -> String {
-                $display_impl(self)
+                ($display_impl)(self)
             }
 
             fn id() -> usize {
@@ -897,7 +897,7 @@ macro_rules! define_multi_property {
                         // Multi-properties report a single index ID for all equivalent multi-properties,
                         // because they share a single `Index<E, P>` instance.
                         let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
-                        type_ids.sort();
+                        type_ids.sort_unstable();
                         // Check if an index has already been assigned to this property set.
                         match $crate::entity::multi_property::type_ids_to_multi_property_index(&type_ids) {
                             Some(index) => {
@@ -1135,7 +1135,7 @@ mod tests {
             ProfileAWN::id(),
             ProfileWAN::id(),
         ];
-        expected_dependents.sort();
+        expected_dependents.sort_unstable();
         assert_eq!(Age::dependents(), expected_dependents);
     }
 

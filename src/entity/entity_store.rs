@@ -474,7 +474,7 @@ mod tests {
         ];
 
         let mut sorted_indices = indices.clone();
-        sorted_indices.sort();
+        sorted_indices.sort_unstable();
         // As before, we account for the fact that some entities have been
         // initialized in their `ctors`, so the indices we created don't start at 0.
         let expected_indices = vec![

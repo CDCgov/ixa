@@ -92,7 +92,7 @@ const fn make_indices<const N: usize>() -> [usize; N] {
 /// known size, avoiding `Vec` allocations.
 pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N] {
     let mut indices = make_indices::<N>();
-    indices.sort_by_key(|&i| &keys[i]);
+    indices.sort_unstable_by_key(|&i| &keys[i]);
     indices
 }
 
