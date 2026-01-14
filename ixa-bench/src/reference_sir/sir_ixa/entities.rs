@@ -61,7 +61,7 @@ impl InfectionLoop for Context {
         // }
     }
     fn random_person(&mut self) -> Option<PersonId> {
-        self.sample_entity(NextPersonRng)
+        self.sample_entity(NextPersonRng, ())
     }
     fn random_infected_person(&mut self) -> Option<PersonId> {
         let infected = self.get_data(NonQueryInfectionTracker);
@@ -182,10 +182,11 @@ impl InfectionLoop for Context {
         }
 
         // Seed infections
-        let sampled_entities = self.sample_entities::<_, Person>(
+        let sampled_entities = self.sample_entities::<_, Person, _>(
             NextPersonRng,
             // Aren't they all susceptible initially?
             // (InfectionStatus, InfectionStatusValue::Susceptible),
+            (),
             initial_infections,
         );
         for p in sampled_entities {

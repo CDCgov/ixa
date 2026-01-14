@@ -25,7 +25,6 @@ use crate::execution_stats::{
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
-use crate::rand::seq::index::sample as choose_range;
 use crate::rand::Rng;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
@@ -377,62 +376,35 @@ impl Context {
         self.query_result_iterator(query).count()
     }
 
-    pub fn sample_entity<R: RngId + 'static, E: Entity>(&self, rng_id: R) -> Option<EntityId<E>>
+    /// Sample a single entity uniformly from the query results. Returns `None` if the
+    /// query's result set is empty.
+    ///
+    /// To sample from the entire population, pass in the empty query `()`.
+    pub fn sample_entity<R, E, Q>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
+        R: RngId + 'static,
         R::RngType: Rng,
+        E: Entity,
+        Q: Query<E>,
     {
-        let entity_count = self.entity_store.get_entity_count::<E>();
-
-        if entity_count == 0 {
-            warn!("Requested a sample entity from an empty population");
-            return None;
-        }
-
-        let result = self.sample_range(rng_id, 0..entity_count);
-        Some(EntityId::new(result))
+        let query_result = self.query_result_iterator(query);
+        self.sample(rng_id, move |rng| query_result.sample_entity(rng))
     }
 
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    pub fn sample_entities<R: RngId + 'static, E: Entity>(
-        &self,
-        rng_id: R,
-        // query: Q,
-        n: usize,
-    ) -> Vec<EntityId<E>>
+    /// Sample up to `requested` entities uniformly from the query results. If the
+    /// query's result set has fewer than `requested` entities, the entire result
+    /// set is returned.
+    ///
+    /// To sample from the entire population, pass in the empty query `()`.
+    pub fn sample_entities<R, E, Q>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
+        R: RngId + 'static,
         R::RngType: Rng,
+        E: Entity,
+        Q: Query<E>,
     {
-        if n == 1 {
-            return match self.sample_entity(rng_id) {
-                None => {
-                    vec![]
-                }
-                Some(entity_id) => {
-                    vec![entity_id]
-                }
-            };
-        }
-
-        let entity_count = self.entity_store.get_entity_count::<E>();
-
-        let requested = std::cmp::min(n, entity_count);
-        if requested == 0 {
-            warn!(
-                "Requested a sample of {} entities from a population of {}",
-                n, entity_count
-            );
-            return Vec::new();
-        }
-
-        let selected = self
-            .sample(rng_id, |rng| {
-                choose_range(rng, entity_count, requested)
-                    .into_iter()
-                    .map(EntityId::<E>::new)
-            })
-            .collect();
-
-        selected
+        let query_result = self.query_result_iterator(query);
+        self.sample(rng_id, move |rng| query_result.sample_entities(rng, n))
     }
 
     /// Returns a total count of all created entities of type `E`.
