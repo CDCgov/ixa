@@ -132,7 +132,7 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let metadata: &mut PropertyMetadata<E> = metadata.downcast_mut().unwrap();
         metadata
             .value_store_constructor
-            .get_or_insert_with(|| PropertyValueStoreCore::<E, P>::new_boxed);
+            .get_or_insert(PropertyValueStoreCore::<E, P>::new_boxed);
     }
 
     // Construct the dependency graph

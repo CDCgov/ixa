@@ -305,7 +305,7 @@ impl Context {
         callback: &mut dyn FnMut(&HashSet<EntityId<E>>),
     ) {
         // The fast path for indexed queries.
-        //
+
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
@@ -329,10 +329,6 @@ impl Context {
             // If the property is not indexed, we fall through.
         }
 
-        // ToDo(RobertJacobsonCDC): Should we warn in the case that it's not just a hash
-        //     hash bucket lookup? I'm inclined to say yes, because otherwise the query
-        //     result iterator is always a better choice.
-
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
@@ -342,7 +338,6 @@ impl Context {
         }
 
         // The slow path of computing the full query set.
-
         warn!("Called Context::with_query_results() with an unindexed query. It's almost always better to use Context::query_result_iterator() for unindexed queries.");
 
         // Fall back to `QueryResultIterator`.
@@ -930,12 +925,14 @@ impl Default for Context {
 #[allow(clippy::float_cmp)]
 mod tests {
     #![allow(dead_code)]
-    use std::cell::RefCell;
+    use std::cell::{Ref, RefCell};
 
     use ixa_derive::IxaEvent;
 
     use super::*;
-    use crate::{define_data_plugin, define_entity, define_property};
+    use crate::{
+        define_data_plugin, define_entity, define_multi_property, define_property, HashSet,
+    };
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -1684,5 +1681,70 @@ mod tests {
             2,
             "If this fails, shutdown_requested was not properly reset"
         );
+    }
+
+    // Tests related to queries and indexing
+
+    define_multi_property!((InfectionStatus, Vaccinated), Person);
+    define_multi_property!((Vaccinated, InfectionStatus), Person);
+
+    #[test]
+    fn with_query_results_finds_multi_index() {
+        use crate::rand::seq::IndexedRandom;
+        let mut rng = crate::rand::rng();
+        let mut context = Context::new();
+
+        for _ in 0..10_000usize {
+            let infection_status = *[
+                InfectionStatus::Susceptible,
+                InfectionStatus::Infected,
+                InfectionStatus::Recovered,
+            ]
+            .choose(&mut rng)
+            .unwrap();
+            let vaccination_status: bool = rng.random_bool(0.5);
+            let age: u8 = rng.random_range(0..100);
+            context
+                .add_entity((Age(age), infection_status, Vaccinated(vaccination_status)))
+                .unwrap();
+        }
+        context.index_property::<Person, InfectionStatusVaccinated>();
+        // Force an index build by running a query.
+        let _ = context.query_result_iterator((InfectionStatus::Susceptible, Vaccinated(true)));
+
+        // Capture the address of the has set given by `with_query_result`
+        let mut address: *const HashSet<EntityId<Person>> = std::ptr::null();
+        context.with_query_results(
+            (InfectionStatus::Susceptible, Vaccinated(true)),
+            &mut |result_set| {
+                address = result_set as *const _;
+            },
+        );
+
+        // Check that the order doesn't matter.
+        assert_eq!(
+            InfectionStatusVaccinated::index_id(),
+            VaccinatedInfectionStatus::index_id()
+        );
+        assert_eq!(
+            InfectionStatusVaccinated::index_id(),
+            (InfectionStatus::Susceptible, Vaccinated(true))
+                .multi_property_id()
+                .unwrap()
+        );
+
+        // Check if it matches the expected bucket.
+        let index_id = InfectionStatusVaccinated::index_id();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        let property_value_store = property_store.get_with_id(index_id);
+        let bucket: Ref<HashSet<EntityId<Person>>> = property_value_store
+            .get_index_set_with_hash(
+                (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
+            )
+            .unwrap();
+
+        let address2 = &*bucket as *const _;
+        assert_eq!(address2, address);
     }
 }

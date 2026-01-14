@@ -283,7 +283,7 @@ macro_rules! define_person_multi_property {
                 // Code that runs at dependency registration time
                 {
                     let type_ids = &mut [$($dependency::type_id()),+ ];
-                    type_ids.sort();
+                    type_ids.sort_unstable();
                     $crate::people::register_type_ids_to_multi_property_id(type_ids, Self::type_id());
                 },
 

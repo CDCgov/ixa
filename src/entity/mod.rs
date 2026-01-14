@@ -36,7 +36,7 @@ mod entity_impl;
 pub mod entity_store;
 pub mod events;
 mod index;
-mod multi_property;
+pub mod multi_property;
 pub mod property;
 pub mod property_impl;
 pub mod property_list;

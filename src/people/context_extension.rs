@@ -719,7 +719,7 @@ impl ContextPeopleExtInternal for Context {
         let to_check: Box<dyn Iterator<Item = PersonId>> = if indexes.is_empty() {
             Box::new(data_container.people_iterator())
         } else {
-            indexes.sort_by_key(|x| x.len());
+            indexes.sort_unstable_by_key(|x| x.len());
 
             holder = indexes.remove(0);
             Box::new(holder.iter().copied())
@@ -1060,8 +1060,8 @@ mod tests {
     fn test_resolve_dependencies() {
         let mut actual = SeniorRunner.non_derived_dependencies();
         let mut expected = vec![Age::type_id(), IsRunner::type_id()];
-        actual.sort();
-        expected.sort();
+        actual.sort_unstable();
+        expected.sort_unstable();
         assert_eq!(actual, expected);
     }
 
