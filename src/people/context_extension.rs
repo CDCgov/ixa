@@ -67,11 +67,7 @@ pub trait ContextPeopleExt {
     ///
     /// If you only need to count the results, use [`Context::query_people_count`]
     ///
-<<<<<<< HEAD
-    /// [`Context::with_query_results()`] takes any type that implements [`Query`], but
-=======
     /// [`Context::with_query_people_results()`] takes any type that implements [Query], but
->>>>>>> b5c410b (Renamed `with_query_results` to `with_query_people_results` and updated associated method and macro names for consistency within the `people` module.)
     /// instead of implementing query yourself it is best to use the automatic
     /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
@@ -476,7 +472,11 @@ impl ContextPeopleExt for Context {
                     // This is slightly faster than "Algorithm L" reservoir sampling when requested << ~5
                     // and always much faster than the reservoir sampling algorithm in `rand`.
                     return self.sample(rng_id, |rng| {
-                        sample_multiple_from_known_length(rng, people_set, requested)
+                        sample_multiple_from_known_length(
+                            rng,
+                            people_set.iter().cloned(),
+                            requested,
+                        )
                     });
                 }
             }
@@ -555,7 +555,7 @@ impl ContextPeopleExt for Context {
 
                 if let Some(people_set) = index.get_with_hash(query.multi_property_value_hash()) {
                     return self.sample(rng_id, |rng| {
-                        sample_single_from_known_length(rng, people_set)
+                        sample_single_from_known_length(rng, people_set.iter().cloned())
                     });
                 }
             }

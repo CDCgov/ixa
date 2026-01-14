@@ -61,7 +61,7 @@ impl InfectionLoop for Context {
         // }
     }
     fn random_person(&mut self) -> Option<PersonId> {
-        self.sample_entity(NextPersonRng)
+        self.sample_entity(NextPersonRng, ())
     }
     fn random_infected_person(&mut self) -> Option<PersonId> {
         let infected = self.get_data(NonQueryInfectionTracker);
@@ -182,10 +182,11 @@ impl InfectionLoop for Context {
         }
 
         // Seed infections
-        let sampled_entities = self.sample_entities::<_, Person>(
+        let sampled_entities = self.sample_entities::<_, Person, _>(
             NextPersonRng,
             // Aren't they all susceptible initially?
             // (InfectionStatus, InfectionStatusValue::Susceptible),
+            (),
             initial_infections,
         );
         for p in sampled_entities {
@@ -299,11 +300,7 @@ mod test {
         // Final size relation is ~58%
         let incidence = model.get_stats().get_cum_incidence() as f64;
         let expected = population as f64 * 0.58;
-<<<<<<< HEAD:ixa-bench/src/reference_sir/sir_ixa.rs
-        assert_relative_eq!(incidence, expected, max_relative = 0.05);
-=======
         assert_relative_eq!(incidence, expected, max_relative = 0.04);
->>>>>>> 82e2e74 (Added SIR model using Entities.):ixa-bench/src/reference_sir/sir_ixa/entities.rs
     }
     /*
     #[test]
