@@ -166,6 +166,11 @@ impl<E: Entity> Iterator for EntityIterator<E> {
         self.entity_id = (self.entity_id + n).min(self.population);
         self.next()
     }
+
+    // Fast consuming count
+    fn count(self) -> usize {
+        self.len()
+    }
 }
 
 impl<E: Entity> ExactSizeIterator for EntityIterator<E> {

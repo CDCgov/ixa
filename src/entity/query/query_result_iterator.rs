@@ -20,8 +20,12 @@
 
 use std::cell::Ref;
 
+use log::warn;
+use rand::Rng;
+
 use crate::entity::query::source_set::{SourceIterator, SourceSet};
 use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::random::{sample_multiple_l_reservoir, sample_single_l_reservoir};
 use crate::HashSet;
 
 /// An iterator over the results of a query, producing `EntityId<E>`s until exhausted.
@@ -67,6 +71,38 @@ impl<'c, E: Entity> QueryResultIterator<'c, E> {
             sources: vec![],
         }
     }
+
+    /// Sample a single entity uniformly from the query results. Returns `None` if the
+    /// query's result set is empty.
+    pub fn sample_entity<R>(mut self, rng: &mut R) -> Option<EntityId<E>>
+    where
+        R: Rng,
+    {
+        // The known length case
+        let (lower, upper) = self.size_hint();
+        if Some(lower) == upper {
+            if lower == 0 {
+                warn!("Requested a sample entity from an empty population");
+                return None;
+            }
+            // This little trick with `u32` makes this function 30% faster.
+            let index = rng.random_range(0..lower as u32);
+            return self.nth(index as usize);
+        }
+
+        // Slow path
+        sample_single_l_reservoir(rng, self)
+    }
+
+    /// Sample up to `requested` entities uniformly from the query results. If the
+    /// query's result set has fewer than `requested` entities, the entire result
+    /// set is returned.
+    pub fn sample_entities<R>(self, rng: &mut R, requested: usize) -> Vec<EntityId<E>>
+    where
+        R: Rng,
+    {
+        sample_multiple_l_reservoir(rng, self, requested)
+    }
 }
 
 impl<'a, E: Entity> Iterator for QueryResultIterator<'a, E> {
@@ -108,6 +144,21 @@ impl<'a, E: Entity> Iterator for QueryResultIterator<'a, E> {
             self.source.count()
         } else {
             self.fold(0, |n, _| n + 1)
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if self.sources.is_empty() {
+            // Fast path: delegate to the underlying source iterator,
+            // which may have an optimized `nth` implementation.
+            self.source.nth(n)
+        } else {
+            // General path: advance through the filtered iterator.
+            // `nth(n)` is equivalent to skipping `n` items and returning the next.
+            for _ in 0..n {
+                self.next()?;
+            }
+            self.next()
         }
     }
 }
