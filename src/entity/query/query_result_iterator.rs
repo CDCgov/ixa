@@ -192,7 +192,7 @@ mod tests {
     */
 
     use crate::prelude::*;
-    use crate::{define_derived_property, define_property};
+    use crate::{define_derived_property, define_property, HashSet};
 
     define_entity!(Person);
 
@@ -236,8 +236,6 @@ mod tests {
         }
     );
 
-    define_rng!(PeopleRng);
-
     // Helper function to create a population for testing
     fn setup_test_population(context: &mut Context, size: usize) -> Vec<EntityId<Person>> {
         let mut people = Vec::new();
@@ -249,6 +247,8 @@ mod tests {
         }
         people
     }
+
+    // region: Test Matrix Tests
 
     // Test 1: Explicit property, non-default value, not indexed, initial source position = Yes
     #[test]
@@ -610,46 +610,42 @@ mod tests {
         assert_eq!(results.len(), 15);
     }
 
-    #[test]
-    fn test_constant_not_indexed_with_derived_property() {
-        let mut context = Context::new();
-        let age_group = AgeGroupRisk::General;
-        const MAX_AGE: u8 = 100;
+    // endregion Test Matrix Tests
 
-        for _ in 0..1000 {
-            let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-            let _person = context
-                .add_entity((Age(age), ExplicitProp(0), ExplicitProp2(false)))
+    #[test]
+    fn test_multiple_query_result_iterators() {
+        let mut context = Context::new();
+        context.index_property::<Person, Age>();
+
+        for age in 0..100 {
+            context
+                .add_entity((
+                    Age(age),
+                    ExplicitProp(age.wrapping_mul(7) % 100),
+                    ExplicitProp2(false),
+                ))
+                .unwrap();
+        }
+        for age in 0..100 {
+            context
+                .add_entity((
+                    Age(age),
+                    ExplicitProp(age.wrapping_mul(14) % 100),
+                    ExplicitProp2(false),
+                ))
                 .unwrap();
         }
 
-        let results = context
-            .query_result_iterator((Alive(true), age_group))
-            .collect::<Vec<_>>();
+        // Since both queries include `Age`, both will attempt to index unindexed entities. This tests that there is
+        // no double borrow error.
+        let results = context.query_result_iterator((Age(25),));
+        let more_results = context.query_result_iterator((Age(25), ExplicitProp(75)));
 
-        println!("results.len(): {}", results.len());
+        let collected_results = results.collect::<HashSet<_>>();
+        let other_collected_results = more_results.collect::<HashSet<_>>();
+        let intersection_count = collected_results
+            .intersection(&other_collected_results)
+            .count();
+        assert_eq!(intersection_count, 1);
     }
-    /*
-
-    ToDo(RobertJacobsonCDC): Uncomment this when sample_entity can take a query.
-
-            #[test]
-            fn test_query_result_iterator() {
-                let mut context = Context::new();
-                const MAX_AGE: u8 = 100;
-
-                for _ in 0..1000 {
-                    let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-                    let _person = context.add_entity((Age(age), )).unwrap();
-                }
-
-                let found_person = context
-                    .sample_entity(
-                        TransmissionRng,
-                        (Alive(true), AgeGroupRisk::General),
-                    );
-
-                assert!(found_person.is_some());
-            }
-        */
 }

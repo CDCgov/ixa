@@ -128,8 +128,16 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
 
     fn index_unindexed_entities(&self, context: &Context) -> bool {
         if let Some(index) = &self.index {
-            let mut index = index.borrow_mut();
             let current_pop = context.get_entity_count::<E>();
+            {
+                // Prevent a double borrow.
+                let mut index = index.borrow();
+                if index.max_indexed >= current_pop {
+                    return true;
+                }
+            }
+
+            let mut index = index.borrow_mut();
             trace!(
                 "{}: indexing unindexed entity {}..<{}",
                 P::name(),
