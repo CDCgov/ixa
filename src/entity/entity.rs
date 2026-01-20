@@ -7,7 +7,7 @@ Right now an `Entity` type is just a zero-sized marker type. The static data ass
 */
 
 use std::any::{Any, TypeId};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
@@ -18,6 +18,7 @@ use super::entity_store::get_entity_metadata_static;
 /// A type that can be named and used (copied, cloned) but not created outside of this crate.
 /// In the `define_entity!` macro we define the alias `pub type MyEntityId = EntityId<MyEntity>`.
 #[derive(Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct EntityId<E: Entity>(pub(crate) usize, PhantomData<E>);
 // Note: The generics on `EntityId<E>` prevent the compiler from "seeing" the derived traits in some client code,
 //       so we provide blanket implementations below.
@@ -41,10 +42,17 @@ impl<E: Entity> Clone for EntityId<E> {
 // Otherwise the compiler isn't smart enough to know `EntityId<E>` is always `Copy`
 impl<E: Entity> Copy for EntityId<E> {}
 
+// The value `EntityId<Person>(7, PhantomData<Person>)` has `Debug` display "PersonId(7)".
 impl<E: Entity> Debug for EntityId<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let name = format!("{}Id", E::name());
         f.debug_tuple(name.as_str()).field(&self.0).finish()
+    }
+}
+// The value `EntityId<Person>(7, PhantomData<Person>)` will display as "7".
+impl<E: Entity> Display for EntityId<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -57,8 +65,7 @@ impl<E: Entity> Hash for EntityId<E> {
 
 impl<E: Entity> EntityId<E> {
     /// Only constructible from this crate.
-    // pub(crate)
-    pub fn new(index: usize) -> Self {
+    pub(crate) fn new(index: usize) -> Self {
         Self(index, PhantomData)
     }
 }
