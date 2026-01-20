@@ -1,27 +1,25 @@
 use ixa::prelude::*;
 use ixa::trace;
-use serde::{Deserialize, Serialize};
 
 use crate::POPULATION;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum InfectionStatusValue {
-    S,
-    I,
-    R,
-}
+define_entity!(Person);
 
 // In this model, people only have a single property, their infection status.
-define_person_property_with_default!(
-    InfectionStatus,
-    InfectionStatusValue,
-    InfectionStatusValue::S
+define_property!(
+    enum InfectionStatus {
+        S,
+        I,
+        R,
+    },
+    Person,
+    default_const = InfectionStatus::S
 );
 
 /// Populates the "world" with the `POPULATION` number of people.
 pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
-        context.add_person(()).unwrap();
+        context.add_entity::<Person, _>(()).unwrap();
     }
 }

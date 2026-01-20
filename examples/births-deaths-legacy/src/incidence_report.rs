@@ -1,36 +1,37 @@
 use std::path::Path;
 
+use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
-use ixa::serde::Serialize;
-use ixa::entity::events::PropertyChangeEvent;
+use serde::{Deserialize, Serialize};
+
 use crate::population_manager::{
-    Person, Age, AgeGroupRisk, InfectionStatus,
+    Age, AgeGroupFoi, AgeGroupRisk, InfectionStatus, InfectionStatusValue,
 };
 use crate::Parameters;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct IncidenceReportItem {
     time: f64,
     person_id: String,
     age_group: AgeGroupRisk,
     age: u8,
-    infection_status: InfectionStatus,
+    infection_status: InfectionStatusValue,
 }
 
 define_report!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PropertyChangeEvent<Person, InfectionStatus>,
+    event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
-    let age_person: Age = context.get_property(event.entity_id);
-    let age_group_person: AgeGroupRisk = context.get_property(event.entity_id);
+    let age_person = context.get_person_property(event.person_id, Age);
+    let age_group_person = context.get_person_property(event.person_id, AgeGroupFoi);
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
-        person_id: format!("{}", event.entity_id),
+        person_id: format!("{}", event.person_id),
         age_group: age_group_person,
-        age: age_person.0,
-        infection_status: event.current_value,
+        age: age_person,
+        infection_status: event.current,
     });
 }
 
@@ -47,7 +48,7 @@ pub fn init(context: &mut Context, output_path: &Path) -> Result<(), IxaError> {
 
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
     context.subscribe_to_event(
-        |context, event: PropertyChangeEvent<Person, InfectionStatus>| {
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             handle_infection_status_change(context, event);
         },
     );
