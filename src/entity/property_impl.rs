@@ -209,12 +209,12 @@ impl_property_with_options!(
 macro_rules! define_property {
     // Struct (tuple) with single Option<T> field (special case)
     (
-        struct $name:ident ( Option<$inner_ty:ty> ),
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name(Option<$inner_ty>);
+        pub struct $name($visibility Option<$inner_ty>);
 
         // Use impl_property_with_options! to provide a custom display implementation
         $crate::impl_property_with_options!(
@@ -232,23 +232,23 @@ macro_rules! define_property {
 
     // Struct (tuple)
     (
-        struct $name:ident ( $($field_ty:ty),* $(,)? ),
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name($($field_ty),*);
+        pub struct $name($($visibility $field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
     // Struct (named fields)
     (
-        struct $name:ident { $($field_name:ident : $field_ty:ty),* $(,)? },
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name { pub $($field_name : $field_ty),* }
+        pub struct $name { $($visibility $field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
@@ -632,7 +632,8 @@ macro_rules! __impl_property_common {
 }
 pub use __impl_property_common;
 
-/// An internal macro that expands to the correct implementation for the `compute_derived` function of a derived property.
+/// An internal macro that expands to the correct implementation
+/// for the `compute_derived` function of a derived property.
 #[macro_export]
 macro_rules! __derived_property_compute_fn {
     (
@@ -669,12 +670,12 @@ macro_rules! __derived_property_compute_fn {
 /// * $calculate: A closure that takes the values of each dependency and returns the derived value
 #[macro_export]
 macro_rules! define_derived_property {
-    // The calls to `$crate::impl_property_with_options!` are all the same except for
+    // The calls to `$crate::impl_derived_property!` are all the same except for
     // this first case of a newtype for an `Option<T>`, which has a special `display_impl`.
 
     // Struct (tuple) with single Option<T> field (special case)
     (
-        struct $name:ident ( Option<$inner_ty:ty> ),
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
         [$($dependency:ident),*],
         [$($global_dependency:ident),*],
@@ -683,41 +684,28 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name(Option<$inner_ty>);
+        pub struct $name($visibility Option<$inner_ty>);
 
-        // Use impl_property_with_options! to provide a custom display implementation
-        $crate::impl_property_with_options!(
+        // Use impl_derived_property! to provide a custom display implementation
+        $crate::impl_derived_property!(
             $name,
             $entity,
-            initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
-            compute_derived_fn = $crate::__derived_property_compute_fn!(
-                $entity,
-                [$($dependency),*],
-                [$($global_dependency),*],
-                |$($param),+| $derive_fn
-            ),
-            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                $(
-                    if $dependency::is_derived() {
-                        $dependency::collect_non_derived_dependencies(deps);
-                    } else {
-                        deps.insert($dependency::id());
-                    }
-                )*
-            },
+            [$($dependency),*],
+            [$($global_dependency),*],
+            |$($param),+| $derive_fn,
             display_impl = |value: &Option<$inner_ty>| {
                 match value {
                     Some(v) => format!("{:?}", v),
                     None => "None".to_string(),
                 }
             }
-            $(, $($extra)+),*
+            $(, $($extra)+)*
         );
     };
 
     // Struct (tuple)
     (
-        struct $name:ident ( $($field_ty:ty),* $(,)? ),
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident,
         [$($dependency:ident),*],
         [$($global_dependency:ident),*],
@@ -726,34 +714,21 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name( $($field_ty),* );
+        pub struct $name( $($visibility $field_ty),* );
 
-        $crate::impl_property_with_options!(
+        $crate::impl_derived_property!(
             $name,
             $entity,
-            initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
-            compute_derived_fn = $crate::__derived_property_compute_fn!(
-                $entity,
-                [$($dependency),*],
-                [$($global_dependency),*],
-                |$($param),+| $derive_fn
-            ),
-            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                $(
-                    if $dependency::is_derived() {
-                        $dependency::collect_non_derived_dependencies(deps);
-                    } else {
-                        deps.insert($dependency::id());
-                    }
-                )*
-            }
-            $(, $($extra)+),*
+            [$($dependency),*],
+            [$($global_dependency),*],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
         );
     };
 
     // Struct (named fields)
     (
-        struct $name:ident { $($field_name:ident : $field_ty:ty),* $(,)? },
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident,
         [$($dependency:ident),*],
         [$($global_dependency:ident),*],
@@ -762,28 +737,15 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
-        pub struct $name { $($field_name : $field_ty),* }
+        pub struct $name { $($visibility $field_name : $field_ty),* }
 
-        $crate::impl_property_with_options!(
+        $crate::impl_derived_property!(
             $name,
             $entity,
-            initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
-            compute_derived_fn = $crate::__derived_property_compute_fn!(
-                $entity,
-                [$($dependency),*],
-                [$($global_dependency),*],
-                |$($param),+| $derive_fn
-            ),
-            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                $(
-                    if $dependency::is_derived() {
-                        $dependency::collect_non_derived_dependencies(deps);
-                    } else {
-                        deps.insert($dependency::id());
-                    }
-                )*
-            }
-            $(, $($extra)+),*
+            [$($dependency),*],
+            [$($global_dependency),*],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
         );
     };
 
@@ -804,30 +766,58 @@ macro_rules! define_derived_property {
             $($variant),*
         }
 
-        $crate::impl_property_with_options!(
+        $crate::impl_derived_property!(
             $name,
             $entity,
-            initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
-            compute_derived_fn = $crate::__derived_property_compute_fn!(
-                $entity,
-                [$($dependency),*],
-                [$($global_dependency),*],
-                |$($param),+| $derive_fn
-            ),
-            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                $(
-                    if $dependency::is_derived() {
-                        $dependency::collect_non_derived_dependencies(deps);
-                    } else {
-                        deps.insert($dependency::id());
-                    }
-                )*
-            }
-            $(, $($extra)+),*
+            [$($dependency),*],
+            [$($global_dependency),*],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
         );
     };
 }
 pub use define_derived_property;
+
+
+/// Implements the `Property` trait for an existing type as a derived property.
+///
+/// This macro takes the name of a type (assumed to already be declared) and calls
+/// [`impl_property_with_options!`] with the appropriate derived property parameters.
+#[macro_export]
+macro_rules! impl_derived_property {
+        (
+            $name:ident,
+            $entity:ident,
+            [$($dependency:ident),*],
+            [$($global_dependency:ident),*],
+            |$($param:ident),+| $derive_fn:expr
+            $(, $($extra:tt)+)*
+        ) => {
+            $crate::impl_property_with_options!(
+                $name,
+                $entity,
+                initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
+                compute_derived_fn = $crate::__derived_property_compute_fn!(
+                    $entity,
+                    [$($dependency),*],
+                    [$($global_dependency),*],
+                    |$($param),+| $derive_fn
+                ),
+                collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                    $(
+                        if $dependency::is_derived() {
+                            $dependency::collect_non_derived_dependencies(deps);
+                        } else {
+                            deps.insert($dependency::id());
+                        }
+                    )*
+                }
+                $(, $($extra)+)*
+            );
+        };
+    }
+pub use impl_derived_property;
+
 
 /// Defines a derived property consisting of a (named) tuple of other properties. The primary use case
 /// is for indexing and querying properties jointly.
