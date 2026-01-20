@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
 use ixa::prelude::*;
-use ixa::trace;
+use ixa::{trace, PersonId};
 use serde::Serialize;
 
 use crate::infection_manager::InfectionStatusEvent;
-use crate::people::{InfectionStatus, PersonId};
+use crate::people::InfectionStatusValue;
 
 #[derive(Serialize)]
 struct IncidenceReportItem {
     time: f64,
     person_id: PersonId,
-    infection_status: InfectionStatus,
+    infection_status: InfectionStatusValue,
 }
 
 define_report!(IncidenceReportItem);
@@ -19,14 +19,14 @@ define_report!(IncidenceReportItem);
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     trace!(
         "Handling infection status change from {:?} to {:?} for {:?}",
-        event.previous_value,
-        event.current_value,
-        event.entity_id
+        event.previous,
+        event.current,
+        event.person_id
     );
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
-        person_id: event.entity_id,
-        infection_status: event.current_value,
+        person_id: event.person_id,
+        infection_status: event.current,
     });
 }
 
