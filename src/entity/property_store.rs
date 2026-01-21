@@ -361,7 +361,7 @@ mod tests {
 
     // The primary advantage of the `define_property!` macro is that you don't have to remember the list of traits you
     // need to put in the `derive` clause for a property.
-    define_property!(struct Age(u8), Person, is_required = true);
+    define_property!(struct Age(u8), Person);
 
     // The `define_property` macro also lets you specify the default value.
     define_property!(

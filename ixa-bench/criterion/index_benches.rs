@@ -25,10 +25,10 @@ define_person_multi_property!(MProperty, (MProperty10, MProperty100));
 
 // Entity and Properties
 define_entity!(Animal);
-define_property!(struct AProperty10(u8), Animal, is_required = true);
-define_property!(struct AProperty100(u8), Animal, is_required = true);
-define_property!(struct AMProperty10(u8), Animal, is_required = true);
-define_property!(struct AMProperty100(u8), Animal, is_required = true);
+define_property!(struct AProperty10(u8), Animal);
+define_property!(struct AProperty100(u8), Animal);
+define_property!(struct AMProperty10(u8), Animal);
+define_property!(struct AMProperty100(u8), Animal);
 define_multi_property!((AMProperty10, AMProperty100), Animal);
 
 pub fn criterion_benchmark(criterion: &mut Criterion) {

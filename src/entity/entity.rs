@@ -72,31 +72,23 @@ impl<E: Entity> EntityId<E> {
 
 /// All entities must implement this trait using the `define_entity!` macro.
 pub trait Entity: Any + Default {
-    fn name() -> &'static str
-    where
-        Self: Sized;
+    fn name() -> &'static str {
+        let full = std::any::type_name::<Self>();
+        full.rsplit("::").next().unwrap()
+    }
 
-    fn type_id() -> TypeId
-    where
-        Self: Sized,
-    {
+    fn type_id() -> TypeId {
         TypeId::of::<Self>()
     }
 
     /// Get a list of all properties this `Entity` has. This list is static, computed in with `ctor` magic.
-    fn property_ids() -> &'static [TypeId]
-    where
-        Self: Sized,
-    {
+    fn property_ids() -> &'static [TypeId] {
         let (property_ids, _) = unsafe { get_entity_metadata_static(<Self as Entity>::type_id()) };
         property_ids
     }
 
     /// Get a list of all properties of this `Entity` that _must_ be supplied when a new entity is created.
-    fn required_property_ids() -> &'static [TypeId]
-    where
-        Self: Sized,
-    {
+    fn required_property_ids() -> &'static [TypeId] {
         let (_, required_property_ids) =
             unsafe { get_entity_metadata_static(<Self as Entity>::type_id()) };
         required_property_ids
@@ -105,9 +97,7 @@ pub trait Entity: Any + Default {
     /// The index of this item in the owner, which is initialized globally per type
     /// upon first access. We explicitly initialize this in a `ctor` in order to know
     /// how many [`Entity`] types exist globally when we construct any `EntityStore`.
-    fn id() -> usize
-    where
-        Self: Sized;
+    fn id() -> usize;
 
     /// Creates a new boxed instance of the item.
     fn new_boxed() -> Box<Self> {

@@ -38,13 +38,6 @@ macro_rules! impl_entity {
         }
 
         impl $crate::entity::Entity for $entity_name {
-            fn name() -> &'static str
-            where
-                Self: Sized,
-            {
-                stringify!($entity_name)
-            }
-
             fn id() -> usize {
                 // This static must be initialized with a compile-time constant expression.
                 // We use `usize::MAX` as a sentinel to mean "uninitialized". This

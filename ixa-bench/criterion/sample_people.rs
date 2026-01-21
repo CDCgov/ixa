@@ -19,8 +19,8 @@ define_person_property!(Property100, u8, |context: &Context, _person: PersonId| 
 
 // Entity Properties
 define_entity!(Animal);
-define_property!(struct AProperty10(u8), Animal, is_required = true);
-define_property!(struct AProperty100(u8), Animal, is_required = true);
+define_property!(struct AProperty10(u8), Animal);
+define_property!(struct AProperty100(u8), Animal);
 
 fn setup() -> (Context, Vec<u8>) {
     let mut rng = StdRng::seed_from_u64(SEED);

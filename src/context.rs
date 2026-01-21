@@ -866,7 +866,7 @@ mod tests {
 
     define_entity!(Person);
 
-    define_property!(struct Age(u8), Person, is_required = true);
+    define_property!(struct Age(u8), Person);
 
     define_property!(
         enum InfectionStatus {
