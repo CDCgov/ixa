@@ -152,7 +152,7 @@ mod tests {
 
     define_entity!(Person);
 
-    define_property!(struct Age(u8), Person, is_required = true );
+    define_property!(struct Age(u8), Person );
 
     // define_global_property!(Threshold, u8);
 
@@ -180,13 +180,12 @@ mod tests {
             High,
             Low,
         },
-        Person,
-        is_required = true
+        Person
     );
 
     define_property!(struct IsRunner(bool), Person, default_const = IsRunner(false));
 
-    define_property!(struct RunningShoes(u8), Person, is_required = true );
+    define_property!(struct RunningShoes(u8), Person );
 
     #[test]
     fn observe_entity_addition() {

@@ -2,6 +2,10 @@
 
 A `Property` is the value type for properties associated to an `Entity`.
 
+The `Property` trait should be implemented only with one of the macros `define_property!`, `impl_property!`,
+`define_derived_property!`, `impl_derived_property!`, or `define_multi_property!` to ensure correct and consistent
+implementation.
+
 */
 
 use std::any::TypeId;
@@ -17,13 +21,13 @@ use crate::{Context, HashSet};
 /// The kind of initialization that a property has.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PropertyInitializationKind {
-    /// The property is not derived and has no initial value. Its initialization is _explicit_, meaning it must be set by client code at time of creation.
-    ///
-    /// Note that a "required" property is explicit, but an explicit property need not be required.
-    /// A non-required explicit property can be left unset.
+    /// The property is not derived and has no initial value. Its initialization is _explicit_, meaning it must be set
+    /// by client code at time of creation. Initialization is _explicit_ if and only if the property is _required_,
+    /// that is, if a value for the property must be supplied at time of entity creation.
     Explicit,
 
-    /// The property is a derived property (it's value is computed dynamically from other property values)
+    /// The property is a derived property (it's value is computed dynamically from other property values). It cannot
+    /// be set explicitly.
     Derived,
 
     /// The property is given a constant initial value. Its initialization does not
@@ -41,11 +45,15 @@ pub trait Property<E: Entity>: AnyProperty {
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;
 
+    fn name() -> &'static str {
+        let full = std::any::type_name::<Self>();
+        full.rsplit("::").next().unwrap()
+    }
+
     /// The kind of initialization this property has.
     #[must_use]
     fn initialization_kind() -> PropertyInitializationKind;
 
-    /// Whether this property is derived.
     #[must_use]
     #[inline]
     fn is_derived() -> bool {
@@ -53,8 +61,9 @@ pub trait Property<E: Entity>: AnyProperty {
     }
 
     #[must_use]
+    #[inline]
     fn is_required() -> bool {
-        false
+        Self::initialization_kind() == PropertyInitializationKind::Explicit
     }
 
     /// Compute the value of the property, possibly by accessing the context and using the entity's ID.
@@ -73,8 +82,6 @@ pub trait Property<E: Entity>: AnyProperty {
     /// The inverse transform of `make_canonical`. For simple properties, this is the identity function.
     #[must_use]
     fn make_uncanonical(value: Self::CanonicalValue) -> Self;
-
-    fn name() -> &'static str;
 
     /// Returns a string representation of the property value, e.g. for writing to a CSV file.
     #[must_use]

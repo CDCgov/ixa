@@ -4,9 +4,9 @@ Macros for implementing properties.
 
 # [`define_property!`]
 
-For the most common cases, use the `define_property!` macro. This macro defines a struct or enum
-with the standard derives required by the `Property` trait and implements `Property` (via
-`impl_property!`) for you.
+For the most common cases, use the [`define_property!`] macro. This macro defines a struct or enum
+with the standard derives required by the [`Property`] trait and implements [`Property`] (via
+[`impl_property!`]) for you.
 
 ```rust,ignore
 define_property!(struct Age(u8), Person);
@@ -24,9 +24,10 @@ define_property!(
 
 Notice the convenient `default_const = <default_value>` keyword argument that allows you to
 define a compile-time constant default value for the property. This is an optional argument.
+If it is omitted, a value for the property must be supplied upon entity creation.
 
 The primary advantage of using this macro is that it automatically derives the list of traits every
-`Property` needs to derive for you. You don't have to remember them. You also get a cute syntax for
+[`Property`] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
@@ -34,15 +35,11 @@ specify the visibility. A `pub` visibility is added automatically in the expansi
 
 # [`impl_property!`]
 
-You might want to implement your own property type yourself if
-- you want a visibility other than `pub`
-- you want to derive additional traits
-- your type definition requires attribute proc-macros or other special syntax (for example, deriving
-  `Default` on an enum requires an attribute on one of the variants)
+You can implement [`Property`] for existing types using the [`impl_property!`] macro. This macro defines the
+[`Property`] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
+have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
 
-You can implement `Property` for existing types using the `impl_property!` macro. This macro
-defines the `Property` trait implementation for you but doesn't take care of the `#[derive(..)]`
-boilerplate, so you have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
+Some examples:
 
 ```rust,ignore
 define_entity!(Person);
@@ -50,9 +47,8 @@ define_entity!(Person);
 // The `define_property!` automatically adds `pub` visibility. If we want to restrict the
 // visibility of our `Property` type, we can use the `impl_property!` macro instead. The only
 // catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
-// (Note that we don't have a default value in this case.)
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-struct Age(u8);
+struct Age(pub u8);
 impl_property!(Age, Person);
 
 // Here we derive `Default`, which also requires an attribute on one
@@ -69,31 +65,28 @@ enum InfectionStatus {
 impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Susceptible);
 
 // Exactly equivalent to
-//    `define_property!(struct Vaccinated(bool) = Vaccinated(false), Person);`
+//    `define_property!(struct Vaccinated(pub bool), Person, default_const = Vaccinated(false));`
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
-pub struct Vaccinated(bool);
+pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 ```
 
-# [`impl_property_with_options`]
+# [`impl_property!`] with options
 
-The `impl_property_with_options` macro gives you much more control over the
-implementation of your property type. It takes optional keyword arguments
-for things like the default value, initialization strategy, and whether the
-property is required, and how the property is converted to a string for display.
+The [`impl_property!`] macro gives you much more control over the implementation of your
+property type. It takes optional keyword arguments for things like the default value,
+initialization strategy, and how the property is converted to a string for display.
+
+Non-derived properties either have a default constant value for new entities
+(`default_const = ...`), or a value is required to be provided for new entities
+(no `default_const`).
 
 ```rust,ignore
-impl_property_with_options!(
+impl_property!(
     InfectionStatus,
     Person,
     default_const = InfectionStatus::Susceptible,
     display_impl = |v| format!("status: {v:?}")
-);
-impl_property_with_options!(
-    ImmunityLevel,
-    Person,
-    initialization_kind = PropertyInitializationKind::Derived,
-    compute_derived_fn = |entity, _| entity.get_property::<ExposureScore>().map(|e| e / 2)
 );
 ```
 
@@ -114,7 +107,7 @@ pub struct DegreesFahrenheit(pub f64);
 pub struct DegreesCelsius(pub f64);
 
 // Custom canonical type
-impl_property_with_options!(
+impl_property!(
     DegreesFahrenheit,
     WeatherStation,
     canonical_value = DegreesCelsius,
@@ -196,15 +189,11 @@ impl_property_with_options!(
 /// ### Notes
 ///
 /// - The generated type always derives the following traits:
-///   `Default`, `Debug`, `PartialEq`, `Eq`, `Clone`, `Copy`, and `Serialize`.
+///   `Debug`, `PartialEq`, `Eq`, `Clone`, `Copy`, and `Serialize`.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
-/// - Trailing commas in field or variant lists are allowed.
-/// - If you need a more complex type definition (e.g., generics, attributes, or
-///   non-`Copy` fields), define the type manually and then call
-///   [`impl_property!`] or
-///   [`impl_property_with_options!`]
-///   directly.
+/// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
+///   fields), define the type manually and then call [`impl_property!`] directly.
 #[macro_export]
 macro_rules! define_property {
     // Struct (tuple) with single Option<T> field (special case)
@@ -216,8 +205,8 @@ macro_rules! define_property {
         #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
         pub struct $name($visibility Option<$inner_ty>);
 
-        // Use impl_property_with_options! to provide a custom display implementation
-        $crate::impl_property_with_options!(
+        // Use impl_property! to provide a custom display implementation
+        $crate::impl_property!(
             $name,
             $entity
             $(, $($extra)+)*
@@ -269,229 +258,165 @@ macro_rules! define_property {
 }
 pub use define_property;
 
-/// Defines a property with the following parameters:
-/// * `$property`: A name for the identifier type of the property
-/// * `$entity`: The entity type this property is associated with
-/// * `default_const`: (Optional) A constant initial value. If it is not defined, calling `get_property`
-///   on the property without explicitly setting a value first will panic.
-#[macro_export]
-macro_rules! impl_property {
-    // T without constant default value
-    ($property:ident, $entity:ident $(, $($extra:tt)+),*) => {
-        $crate::impl_property_with_options!($property, $entity $(, $($extra)+)*);
-    };
-}
-pub use impl_property;
 
-/// Defines a property type with optional named configuration parameters. The named parameters
-/// need to be supplied in the order listed below even if some of them are not used.
+/// Implements the [`Property`] trait for the given property type and entity.
+///
+/// Use this macro when you want to implement the `Property<E: Entity>` trait for a type you have declared yourself.
+/// You might want to declare your own property type yourself instead of using the [`define_property!`] macro if
+/// - you want a visibility other than `pub`
+/// - you want to derive additional traits
+/// - your type definition requires attribute proc-macros or other special syntax (for example, deriving
+///   `Default` on an enum requires an attribute on one of the variants)
+///
+/// Example:
+///
+/// In this example, in addition to the set of derives required for all property types, we also derive the `Default`
+/// trait for an enum type, which requires the proc-macro attribute `#[default]` on one of the variants.
+///
+/// ```rust
+/// # use ixa::{impl_property, define_entity, serde::Serialize};
+/// # define_entity!(Person);
+/// #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// pub enum InfectionStatus {
+///     #[default]
+///     Susceptible,
+///     Infectious,
+///     Recovered,
+/// }
+/// // We also specify that this property is assigned a default value for new entities if a value isn't provided.
+/// // Here we have it coincide with `Default::default()`, but this isn't required.
+/// impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Susceptible);
+/// ```
 ///
 /// # Parameters
-/// - `$property`: The identifier for the type implementing [`Property`].
-/// - `$entity`: The entity type this property is associated with.
-/// - Optional parameters (each may be omitted; defaults will be used):
-///   - `initialization_kind = <expr>` — Initialization strategy; defaults to `PropertyInitializationKind::Explicit`.
-///   - `is_required = <bool>` — Whether new entities must explicitly set this property; defaults to `false`.
-///   - `compute_derived_fn = <expr>` — Function used to compute derived properties; defaults to `None`.
-///   - `default_const = <expr>` — Constant default value if the property has one; defaults to `None`.
-///   - `display_impl = <expr>` — Function converting the canonical value to a string; defaults to `|v| format!("{v:?}")`.
-///   - `canonical_value = <type>` — If the type stored in the index differs from the property's value type.
-///   - `make_canonical = <expr>` — Function converting from `Self` to `CanonicalValue`; defaults to `|s: &Self| *s`.
-///   - `make_uncanonical = <expr>` — Function converting from `CanonicalValue` to `Self`; defaults to `|v| v`.
-///   - `index_id_fn = <expr>` — Function used to initialize the property index id; defaults to `Self::id()`.
-///   - `ctor_registration = <expr>` — Code run in the `ctor`.
+///
+/// Parameters must be given in the correct order.
+///
+/// * `$property`: The identifier for the type implementing [`Property`].
+/// * `$entity`: The entity type this property is associated with.
+/// * Optional parameters (each may be omitted; defaults will be used):
+///   * `compute_derived_fn = <expr>` — Function used to compute derived properties. Use `define_derived_property!` or
+///     `impl_derived_property!` instead of using this option directly.
+///   * `default_const = <expr>` — Constant default value if the property has one; implies a non-derived property.
+///   * `display_impl = <expr>` — Function converting the property value to a string; defaults to `|v| format!("{v:?}")`.
+///   * `canonical_value = <type>` — If the type stored in the index differs from the property's value type; defaults to
+///     `Self`. If this option is supplied, you will also want to supply `make_canonical` and `make_uncanonical`.
+///   * `make_canonical = <expr>` — Function converting from `Self` to `CanonicalValue`; defaults to `std::convert::identity`.
+///   * `make_uncanonical = <expr>` — Function converting from `CanonicalValue` to `Self`; defaults to `std::convert::identity`.
+/// * Optional parameters that should generally be left alone, used internally to implement derived properties and
+///   multi-properties:
+///   * `index_id_fn = <expr>` — Function used to initialize the property index id; defaults to `Self::id()`.
+///   * `collect_deps_fn = <expr>` — Function used to collect property dependencies; defaults to an empty implementation.
+///   * `ctor_registration = <expr>` — Code run in the `ctor` for property registration.
+///
+/// # Semantics
+/// - If `compute_derived_fn` is provided, the property is derived. In this case, `default_const` must be absent, and
+///   calling `Property::default_const()` results in a panic. Use `define_derived_property!` or `impl_derived_property!`
+///   instead of using this option directly.
+/// - If `default_const` is provided, the property is a non-derived constant property. In this case,
+///   `compute_derived_fn` must be absent, and calling `Property::compute_derived()` results in a panic.
+/// - If neither is provided, the property is non-derived and required/explicit; both `Property::default_const()` and
+///   `Property::compute_derived()` panic.
+/// - If both are provided, a compile-time error is emitted.
 #[macro_export]
-macro_rules! impl_property_with_options {
-    // Case 1: default_const is supplied => always OK
+macro_rules! impl_property {
     (
         $property:ident,
         $entity:ident
-        $(, initialization_kind = $initialization_kind:expr)?
-        $(, is_required = $is_required:expr)?
         $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        , default_const = $default_const:expr
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-
-    ) => {
-        $crate::impl_property_with_options!(@impl
-            $property,
-            $entity
-            $(, initialization_kind = $initialization_kind)?
-            $(, is_required = $is_required)?
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            , default_const = $default_const
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    // Case 2: compute_derived_fn is supplied (derived property) => OK
-    (
-        $property:ident,
-        $entity:ident
-        $(, initialization_kind = $initialization_kind:expr)?
-        $(, is_required = $is_required:expr)?
-        , compute_derived_fn = $compute_derived_fn:expr
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, default_const = $default_const:expr)? // allowed, but not required here
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::impl_property_with_options!(@impl
-            $property,
-            $entity
-            $(, initialization_kind = $initialization_kind)?
-            $(, is_required = $is_required)?
-            , compute_derived_fn = $compute_derived_fn
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    // Case 3: no default_const and no compute_derived_fn, but is_required is explicitly true => OK
-    (
-        $property:ident,
-        $entity:ident
-        $(, initialization_kind = $initialization_kind:expr)?
-        , is_required = true
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::impl_property_with_options!(@impl
-            $property,
-            $entity
-            $(, initialization_kind = $initialization_kind)?
-            , is_required = true
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    // Case 4: none of the three conditions are met => hard error
-    (
-        $property:ident,
-        $entity:ident
-        $(, initialization_kind = $initialization_kind:expr)?
-        $(, is_required = $is_required:expr)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, default_const = $default_const:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
         $(, index_id_fn = $index_id_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        compile_error!(
-            "impl_property_with_options!: you must supply at least one of: \
-             `is_required = true`, `default_const = ...`, or `compute_derived_fn = ...`."
-        );
-    };
-
-    // Shared implementation
-    (@impl
-        $property:ident,
-        $entity:ident
-        $(, initialization_kind = $initialization_kind:expr)?
-        $(, is_required = $is_required:expr)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
-        $crate::__impl_property_common!(
+        // Enforce mutual exclusivity at compile time.
+        $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
+
+        $crate::impl_property!(
+            @__impl_property_common
             $property,
             $entity,
 
             // canonical value
-            $crate::impl_property_with_options!(@unwrap_or_ty $($canonical_value)?, $property),
+            $crate::impl_property!(@unwrap_or_ty $($canonical_value)?, $property),
 
-            // initialization_kind
-            $crate::impl_property_with_options!(@unwrap_or
-                $($initialization_kind)?,
-                $crate::impl_property_with_options!(@unwrap_or_default_kind $($default_const)?)
-            ),
+            // initialization_kind (implicit)
+            $crate::impl_property!(@select_initialization_kind $($compute_derived_fn)? ; $($default_const)?),
 
-            // is_required
-            $crate::impl_property_with_options!(@unwrap_or $($is_required)?, false),
-
-            // compute_derived_fn
-            $crate::impl_property_with_options!(
+            // compute_derived_fn (panic unless explicitly provided)
+            $crate::impl_property!(
                 @unwrap_or
                 $($compute_derived_fn)?,
                 |_, _| panic!("property {} is not derived", stringify!($property))
             ),
 
-            // collect_deps_fn
-            $crate::impl_property_with_options!(
-                @unwrap_or
-                $($collect_deps_fn)?,
-                |_| {/* Do nothing */}
-            ),
-
-            // default_const
-            $crate::impl_property_with_options!(
+            // default_const (panic unless explicitly provided)
+            $crate::impl_property!(
                 @unwrap_or
                 $($default_const)?,
                 panic!("property {} has no default value", stringify!($property))
             ),
 
-            // display_impl
-            $crate::impl_property_with_options!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
-
             // make_canonical
-            $crate::impl_property_with_options!(@unwrap_or $($make_canonical)?, std::convert::identity),
+            $crate::impl_property!(@unwrap_or $($make_canonical)?, std::convert::identity),
 
             // make_uncanonical
-            $crate::impl_property_with_options!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
+            $crate::impl_property!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
+
+            // display_impl
+            $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
 
             // index_id_fn
-            $crate::impl_property_with_options!(@unwrap_or $($index_id_fn)?, {
+            $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
                 Self::id()
             }),
 
+            // collect_deps_fn
+            $crate::impl_property!(
+                @unwrap_or
+                $($collect_deps_fn)?,
+                |_| {/* Do nothing */}
+            ),
+
             // ctor_registration
-            $crate::impl_property_with_options!(@unwrap_or $($ctor_registration)?, {
+            $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
             }),
         );
+    };
+
+    // Compile-time mutual exclusivity check.
+    (@assert_not_both $compute_derived_fn:expr ; $default_const:expr) => {
+        compile_error!(
+            "impl_property!: `compute_derived_fn = ...` (derived property) and `default_const = ...` \
+             (non-derived property default constant) are mutually exclusive. Remove one of them."
+        );
+    };
+    (@assert_not_both $compute_derived_fn:expr ; ) => {};
+    (@assert_not_both ; $default_const:expr) => {};
+    (@assert_not_both ; ) => {};
+
+    // Select initialization kind (implicit).
+    (@select_initialization_kind $compute_derived_fn:expr ; $default_const:expr) => {
+        // This arm should be unreachable because @assert_not_both triggers first, but keep it
+        // as a backstop if the macro is used incorrectly.
+        compile_error!(
+            "impl_property!: cannot select initialization kind because both `compute_derived_fn` \
+             and `default_const` are present"
+        )
+    };
+    (@select_initialization_kind $compute_derived_fn:expr ; ) => {
+        $crate::entity::property::PropertyInitializationKind::Derived
+    };
+    (@select_initialization_kind ; $default_const:expr) => {
+        $crate::entity::property::PropertyInitializationKind::Constant
+    };
+    (@select_initialization_kind ; ) => {
+        $crate::entity::property::PropertyInitializationKind::Explicit
     };
 
     // Helpers for defaults, a pair per macro parameter type (`expr`, `ty`).
@@ -501,53 +426,20 @@ macro_rules! impl_property_with_options {
     (@unwrap_or_ty $ty:ty, $_default:ty) => { $ty };
     (@unwrap_or_ty, $default:ty) => { $default };
 
-    (@unwrap_or_default_kind $expr:expr) => {
-        $crate::entity::property::PropertyInitializationKind::Constant
-    };
-    (@unwrap_or_default_kind) => {
-        $crate::entity::property::PropertyInitializationKind::Explicit
-    };
-}
-pub use impl_property_with_options;
-
-/// Internal macro used to define common boilerplate for property types that
-/// implement the [`Property`] trait. The `impl_property_with_options`
-/// macro provides a more ergonomic interface for this macro.
-///
-/// # Parameters
-///
-/// * `$property` — The name of the concrete type implementing [`Property`].
-/// * `$entity` — The entity type this property is associated with.
-/// * `$canonical_value` — The canonical type stored in the index if it differs
-///   from the property’s own value type.
-/// * `$initialization_kind` — The [`PropertyInitializationKind`] describing how
-///   this property is initialized (e.g. `Constant`, `Dynamic`, `Derived`, etc.).
-/// * `$is_required` — A boolean indicating whether new entities must have this
-///   property explicitly set at creation time.
-/// * `$compute_derived_fn` — A function or closure used to compute the property’s
-///   value if it is derived from other properties.
-/// * `$default_const` — The constant default value if the property has one.
-/// * `$display_impl` — A function that takes a canonical value and returns a
-///   string representation of the property.
-/// * `$make_canonical` — A function that takes a `Self` and converts it to a `Self::CanonicalValue`.
-/// * `$make_uncanonical` — A function that takes a `Self::CanonicalValue` and converts it to a `Self`.
-/// * `$index_id_fn` — Code that returns the unique index for this property.
-/// * `$ctor_registration` — Code run in the `ctor`.
-#[macro_export]
-macro_rules! __impl_property_common {
+    // This is the purely syntactic implementation.
     (
+        @__impl_property_common
         $property:ident,           // The name of the type we are implementing `Property` for
         $entity:ident,             // The entity type this property is associated with
         $canonical_value:ty,       // If the type stored in the index is different from Self, the name of that type
-        $initialization_kind:expr, // The kind of initialization this property has
-        $is_required:expr,         // Do we require that new entities have this property explicitly set?
+        $initialization_kind:expr, // The kind of initialization this property has (implicit selection)
         $compute_derived_fn:expr,  // If the property is derived, the function that computes the value
-        $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $default_const:expr,       // If the property has a constant default initial value, the default value
-        $display_impl:expr,        // A function that takes a canonical value and returns a string representation of this property
         $make_canonical:expr,      // A function that takes a value and returns a canonical value
         $make_uncanonical:expr,    // A function that takes a canonical value and returns a value
-        $index_id_fn:expr,            // Code that returns the unique index for this property
+        $display_impl:expr,        // A function that takes a canonical value and returns a string representation of this property
+        $index_id_fn:expr,         // Code that returns the unique index for this property
+        $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
         impl $crate::entity::property::Property<$entity> for $property {
@@ -557,19 +449,11 @@ macro_rules! __impl_property_common {
                 $initialization_kind
             }
 
-            fn is_required() -> bool {
-                $is_required
-            }
-
             fn compute_derived(
                 _context: &$crate::Context,
                 _entity_id: $crate::entity::EntityId<$entity>,
             ) -> Self {
                 ($compute_derived_fn)(_context, _entity_id)
-            }
-
-            fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
-                ($collect_deps_fn)(result)
             }
 
             fn default_const() -> Self {
@@ -582,10 +466,6 @@ macro_rules! __impl_property_common {
 
             fn make_uncanonical(value: Self::CanonicalValue) -> Self {
                 ($make_uncanonical)(value)
-            }
-
-            fn name() -> &'static str {
-                stringify!($property)
             }
 
             fn get_display(&self) -> String {
@@ -612,14 +492,12 @@ macro_rules! __impl_property_common {
             fn index_id() -> usize {
                 $index_id_fn
             }
+
+            fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
+                ($collect_deps_fn)(result)
+            }
         }
 
-        // Using `ctor` to initialize properties at program start-up means we know how many properties
-        // there are at the time any `PropertyStore` is created, which means we never have
-        // to mutate `PropertyStore` to initialize a `Property` that hasn't yet been accessed.
-        // (The mutation happens inside of a `OnceCell`, which we can already have ready
-        // when we construct `PropertyStore`.) In other words, we could do away with `ctor`
-        // if we were willing to have a mechanism for interior mutability for `PropertyStore`.
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
                 #[ctor]
@@ -630,44 +508,20 @@ macro_rules! __impl_property_common {
         }
     };
 }
-pub use __impl_property_common;
+pub use impl_property;
 
-/// An internal macro that expands to the correct implementation
-/// for the `compute_derived` function of a derived property.
-#[macro_export]
-macro_rules! __derived_property_compute_fn {
-    (
-        $entity:ident,
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
-        |$($param:ident),+| $derive_fn:expr
-    ) => {
-        |context: &crate::Context, entity_id| {
-            #[allow(unused_imports)]
-            use $crate::global_properties::ContextGlobalPropertiesExt;
-            #[allow(unused_parens)]
-            let ($($param,)*) = (
-                $(context.get_property::<$entity, $dependency>(entity_id)),*,
-                $(
-                    context.get_global_property_value($global_dependency)
-                        .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
-                ),*
-            );
-            $derive_fn
-        }
-    };
-}
 
 /// The "derived" variant of [`define_property!`] for defining simple derived property types.
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
-/// [`impl_property!`] for it.
+/// [`impl_derived_property!`] for it.
 ///
 /// Defines a derived property with the following parameters:
-/// * `$property`: A name for the identifier type of the property
-/// * `$value`: The type of the property's value
-/// * `[$($dependency),+]`: A list of person properties the derived property depends on
-/// * `[$($dependency),*]`: A list of global properties the derived property depends on (optional)
-/// * $calculate: A closure that takes the values of each dependency and returns the derived value
+/// * Property type declaration: A struct or enum declaration.
+/// * `$entity`: The name of the entity of which the new type is a property.
+/// * `[$($dependency),+]`: A list of person properties the derived property depends on.
+/// * `[$(global_dependency),*]`: A list of global properties the derived property depends on. Can optionally be omitted if empty.
+/// * `$calculate`: A closure that takes the values of each dependency and returns the derived value.
+/// * Optional parameters: The same optional parameters accepted by [`impl_property!`].
 #[macro_export]
 macro_rules! define_derived_property {
     // The calls to `$crate::impl_derived_property!` are all the same except for
@@ -677,8 +531,8 @@ macro_rules! define_derived_property {
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
@@ -691,7 +545,7 @@ macro_rules! define_derived_property {
             $name,
             $entity,
             [$($dependency),*],
-            [$($global_dependency),*],
+            [$($($global_dependency),*)?],
             |$($param),+| $derive_fn,
             display_impl = |value: &Option<$inner_ty>| {
                 match value {
@@ -707,8 +561,8 @@ macro_rules! define_derived_property {
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident,
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
@@ -720,7 +574,7 @@ macro_rules! define_derived_property {
             $name,
             $entity,
             [$($dependency),*],
-            [$($global_dependency),*],
+            [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
@@ -730,8 +584,8 @@ macro_rules! define_derived_property {
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident,
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
@@ -743,20 +597,20 @@ macro_rules! define_derived_property {
             $name,
             $entity,
             [$($dependency),*],
-            [$($global_dependency),*],
+            [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
     };
 
-    // Enum without default
+    // Enum
     (
         enum $name:ident {
             $($variant:ident),* $(,)?
         },
         $entity:ident,
-        [$($dependency:ident),*],
-        [$($global_dependency:ident),*],
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
@@ -770,37 +624,61 @@ macro_rules! define_derived_property {
             $name,
             $entity,
             [$($dependency),*],
-            [$($global_dependency),*],
+            [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+    };
+
+    // Internal branch to construct the compute function.
+    (
+        @construct_compute_fn
+        $entity:ident,
+        [$($dependency:ident),*],
+        [$($global_dependency:ident),*],
+        |$($param:ident),+| $derive_fn:expr
+    ) => {
+        |context: &$crate::Context, entity_id| {
+            #[allow(unused_imports)]
+            use $crate::global_properties::ContextGlobalPropertiesExt;
+            #[allow(unused_parens)]
+            let ($($param,)*) = (
+                $(context.get_property::<$entity, $dependency>(entity_id)),*,
+                $(
+                    context.get_global_property_value($global_dependency)
+                        .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
+                ),*
+            );
+            $derive_fn
+        }
     };
 }
 pub use define_derived_property;
 
 
-/// Implements the `Property` trait for an existing type as a derived property.
+/// Implements the [`Property`] trait for an existing type as a derived property.
 ///
-/// This macro takes the name of a type (assumed to already be declared) and calls
-/// [`impl_property_with_options!`] with the appropriate derived property parameters.
+/// Accepts the same parameters as [`define_derived_property!`], except the first parameter is the name of a
+/// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
+/// of [`impl_property!`]. It calls [`impl_property!`] with the appropriate derived property parameters.
 #[macro_export]
 macro_rules! impl_derived_property {
         (
             $name:ident,
             $entity:ident,
-            [$($dependency:ident),*],
-            [$($global_dependency:ident),*],
+            [$($dependency:ident),*]
+            $(, [$($global_dependency:ident),*])?,
             |$($param:ident),+| $derive_fn:expr
             $(, $($extra:tt)+)*
         ) => {
-            $crate::impl_property_with_options!(
+            $crate::impl_property!(
                 $name,
                 $entity,
-                initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
-                compute_derived_fn = $crate::__derived_property_compute_fn!(
+                compute_derived_fn = $crate::impl_derived_property!(
+                    @construct_compute_fn
                     $entity,
                     [$($dependency),*],
-                    [$($global_dependency),*],
+                    [$($($global_dependency),*)?],
                     |$($param),+| $derive_fn
                 ),
                 collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
@@ -814,6 +692,29 @@ macro_rules! impl_derived_property {
                 }
                 $(, $($extra)+)*
             );
+        };
+
+        // Internal branch to construct the compute function.
+        (
+            @construct_compute_fn
+            $entity:ident,
+            [$($dependency:ident),*],
+            [$($global_dependency:ident),*],
+            |$($param:ident),+| $derive_fn:expr
+        ) => {
+            |context: &$crate::Context, entity_id| {
+                #[allow(unused_imports)]
+                use $crate::global_properties::ContextGlobalPropertiesExt;
+                #[allow(unused_parens)]
+                let ($($param,)*) = (
+                    $(context.get_property::<$entity, $dependency>(entity_id)),*,
+                    $(
+                        context.get_global_property_value($global_dependency)
+                            .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
+                    ),*
+                );
+                $derive_fn
+            }
         };
     }
 pub use impl_derived_property;
@@ -835,23 +736,13 @@ macro_rules! define_multi_property {
             $crate::paste::paste! {
                 type [<$($dependency)*>] = ( $($dependency),+ );
 
-                $crate::impl_property_with_options!(
+                $crate::impl_property!(
                     [<$($dependency)*>],
                     $entity,
-                    initialization_kind = $crate::entity::property::PropertyInitializationKind::Derived,
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
                         (
                             $(context.get_property::<$entity, $dependency>(entity_id)),+
                         )
-                    },
-                    collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                        $(
-                            if $dependency::is_derived() {
-                                $dependency::collect_non_derived_dependencies(deps);
-                            } else {
-                                deps.insert($dependency::id());
-                            }
-                        )*
                     },
                     display_impl = |val: &( $($dependency),+ )| {
                         let ( $( [<_ $dependency:lower>] ),+ ) = val;
@@ -907,6 +798,16 @@ macro_rules! define_multi_property {
                                 index
                             }
                         }
+                    },
+
+                    collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                        $(
+                            if $dependency::is_derived() {
+                                $dependency::collect_non_derived_dependencies(deps);
+                            } else {
+                                deps.insert($dependency::id());
+                            }
+                        )*
                     },
 
                     ctor_registration = {
@@ -965,7 +866,6 @@ mod tests {
         },
         Person,
         [Age], // Depends only on age
-        [],    // No global dependencies
         |age| {
             let age: Age = age;
             if age.0 < 18 {
@@ -979,9 +879,11 @@ mod tests {
     );
 
     // Derived property - computed from other properties
-    define_derived_property!(struct DerivedProp(bool), Person, [Age], [], |age| {
-        DerivedProp(age.0 % 2 == 0)
-    });
+    define_derived_property!(struct DerivedProp(bool), Person, [Age],
+        |age| {
+            DerivedProp(age.0 % 2 == 0)
+        }
+    );
 
     define_multi_property!((Name, Age, Weight), Person);
     define_multi_property!((Age, Weight, Name), Person);

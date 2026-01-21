@@ -70,8 +70,7 @@ mod tests {
             High,
             Low,
         },
-        Person,
-        is_required = true
+        Person
     );
 
     #[test]
@@ -238,7 +237,7 @@ mod tests {
     #[test]
     fn query_derived_prop() {
         let mut context = Context::new();
-        define_derived_property!(struct Senior(bool), Person, [Age], [], |age| Senior(age.0 >= 65));
+        define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
 
         let person = context.add_entity((Age(64), RiskCategory::High)).unwrap();
         context.add_entity((Age(88), RiskCategory::High)).unwrap();
@@ -270,7 +269,7 @@ mod tests {
     #[test]
     fn query_derived_prop_with_index() {
         let mut context = Context::new();
-        define_derived_property!(struct Senior(bool), Person, [Age], [], |age| Senior(age.0 >= 65));
+        define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
 
         context.index_property::<Person, Senior>();
         let person = context.add_entity((Age(64), RiskCategory::Low)).unwrap();
