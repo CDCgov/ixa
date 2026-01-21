@@ -22,8 +22,7 @@ define_property!(
 );
 define_property!(
     struct Age(pub u8),
-    Person,
-    is_required = true
+    Person
 );
 define_property!(
     struct Alive(pub bool),

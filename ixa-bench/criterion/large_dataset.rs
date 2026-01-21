@@ -36,10 +36,10 @@ define_person_multi_property!(ASW, (Age, SchoolId, WorkplaceId));
 // Entity and Properties
 // We use different names to avoid confusion.
 define_entity!(Person);
-define_property!(struct EAge(u8), Person, is_required = true );
-define_property!(struct EHomeId(u32), Person, is_required = true );
-define_property!(struct ESchoolId(u32), Person, is_required = true );
-define_property!(struct EWorkplaceId(u32), Person, is_required = true );
+define_property!(struct EAge(u8), Person );
+define_property!(struct EHomeId(u32), Person );
+define_property!(struct ESchoolId(u32), Person );
+define_property!(struct EWorkplaceId(u32), Person );
 define_derived_property!(
     enum EAgeGroupRisk {
         Newborn,

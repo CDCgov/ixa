@@ -199,19 +199,19 @@ mod tests {
     // Test properties covering different initialization kinds
 
     // Explicit (Normal) property - no default, requires explicit initialization
-    define_property!(struct ExplicitProp(u8), Person, is_required = true);
+    define_property!(struct ExplicitProp(u8), Person);
 
     // Constant property - has a constant default value
     define_property!(struct ConstantProp(u8), Person, default_const = ConstantProp(42));
 
     // Derived property - computed from other properties
-    define_derived_property!(struct DerivedProp(bool), Person, [ExplicitProp], [], |explicit| {
+    define_derived_property!(struct DerivedProp(bool), Person, [ExplicitProp], |explicit| {
         DerivedProp(explicit.0 % 2 == 0)
     });
 
     // Additional properties for multi-property queries
     define_property!(struct ConstantProp2(u16), Person, default_const = ConstantProp2(100));
-    define_property!(struct ExplicitProp2(bool), Person, is_required = true);
+    define_property!(struct ExplicitProp2(bool), Person);
 
     define_property!(struct Age(u8), Person, default_const = Age(0));
     define_property!(struct Alive(bool), Person, default_const = Alive(true));
