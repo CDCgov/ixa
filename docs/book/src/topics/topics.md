@@ -1,5 +1,6 @@
 # Topics
 
-- [`random` module](random-module-md)
 - [Indexing](indexing.md)
 - [Performance and Profiling](performance.md)
+- [`random` module](random-module.md)
+- [Reports](reports.md)

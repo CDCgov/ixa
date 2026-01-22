@@ -1,27 +1,29 @@
-use ixa::{prelude::*, PersonId, PersonPropertyChangeEvent};
-
+use ixa::prelude::*;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, InfectionStatusValue};
 use crate::INFECTION_DURATION;
+use crate::people::{InfectionStatus, Person, PersonId};
 
 // ANCHOR: infection_status_event
-pub type InfectionStatusEvent = PersonPropertyChangeEvent<InfectionStatus>;
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
 // ANCHOR_END: infection_status_event
+
 define_rng!(InfectionRng);
 
 // ANCHOR: schedule_recovery
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     trace!("Scheduling recovery");
-    let recovery_time = context.get_current_time()
-        + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
-    context.add_plan(recovery_time, move |context| {
-        context.set_person_property::<InfectionStatus>(
-            person_id,
-            InfectionStatus,
-            InfectionStatusValue::R,
-        );
-    });
+    let current_time = context.get_current_time();
+    let sampled_infection_duration =
+        context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
+    let recovery_time = current_time + sampled_infection_duration;
+
+    context.add_plan(
+        recovery_time,
+        move |context| {
+            context.set_property(person_id, InfectionStatus::R);
+        }
+    );
 }
 // ANCHOR_END: schedule_recovery
 
@@ -29,12 +31,10 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     trace!(
         "Handling infection status change from {:?} to {:?} for {:?}",
-        event.previous,
-        event.current,
-        event.person_id
+        event.previous_value, event.current_value, event.entity_id
     );
-    if event.current == InfectionStatusValue::I {
-        schedule_recovery(context, event.person_id);
+    if event.current_value == InfectionStatus::I {
+        schedule_recovery(context, event.entity_id);
     }
 }
 // ANCHOR_END: handle_infection_status_change

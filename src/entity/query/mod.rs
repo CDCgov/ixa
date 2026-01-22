@@ -14,7 +14,7 @@ use crate::Context;
 
 /// Encapsulates a query.
 ///
-/// [`Context::query_entity`] actually takes an instance of [`Query`], but because
+/// [`Context::query_result_iterator`] actually takes an instance of [`Query`], but because
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
 pub trait Query<E: Entity>: Copy + 'static {

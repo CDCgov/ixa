@@ -1,8 +1,9 @@
 use std::fmt;
 
+use ixa::impl_derived_property;
 use ixa::prelude::*;
 use rand_distr::{Exp, Uniform};
-use ixa::impl_derived_property;
+
 use crate::parameters_loader::Parameters;
 
 define_rng!(PeopleRng);
@@ -31,28 +32,24 @@ define_property!(
 );
 
 // We declare the type ourselves so we can derive `Hash`.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, ixa::serde::Serialize, ixa::serde::Deserialize, Hash)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Copy, ixa::serde::Serialize, ixa::serde::Deserialize, Hash,
+)]
 pub enum AgeGroupRisk {
     NewBorn,
     General,
     OldAdult,
 }
 
-impl_derived_property!(
-    AgeGroupRisk,
-    Person,
-    [Age],
-    [],
-    |age| {
-        if age.0 <= 1 {
-            AgeGroupRisk::NewBorn
-        } else if age.0 <= 65 {
-            AgeGroupRisk::General
-        } else {
-            AgeGroupRisk::OldAdult
-        }
+impl_derived_property!(AgeGroupRisk, Person, [Age], [], |age| {
+    if age.0 <= 1 {
+        AgeGroupRisk::NewBorn
+    } else if age.0 <= 65 {
+        AgeGroupRisk::General
+    } else {
+        AgeGroupRisk::OldAdult
     }
-);
+});
 
 impl fmt::Display for AgeGroupRisk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -77,7 +74,7 @@ fn schedule_birth(context: &mut Context) {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    let person = context.add_entity((Age(0), )).unwrap();
+    let person = context.add_entity((Age(0),)).unwrap();
     context.add_plan(context.get_current_time() + 365.0, move |context| {
         schedule_aging(context, person);
     });
@@ -95,7 +92,7 @@ fn schedule_death(context: &mut Context) {
         .unwrap()
         .clone();
 
-    if let Some(person) = context.sample_entity(PeopleRng, (Alive(true), )) {
+    if let Some(person) = context.sample_entity(PeopleRng, (Alive(true),)) {
         context.set_property(person, Alive(false));
 
         let next_death_event = context.get_current_time()
@@ -115,7 +112,7 @@ pub fn init(context: &mut Context) {
 
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-        let person = context.add_entity((Age(age), )).unwrap();
+        let person = context.add_entity((Age(age),)).unwrap();
         let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0).unwrap());
         context.add_plan(365.0 + birthday, move |context| {
             schedule_aging(context, person);
@@ -151,22 +148,22 @@ mod test {
     fn test_birth_death() {
         let mut context = Context::new();
 
-        let person1 = context.add_entity((Age(10), )).unwrap();
+        let person1 = context.add_entity((Age(10),)).unwrap();
         let person2 = Rc::<RefCell<Option<PersonId>>>::new(RefCell::new(None));
         let person2_clone = Rc::clone(&person2);
 
         context.add_plan(380.0, move |context| {
-            *person2_clone.borrow_mut() = Some(context.add_entity((Age(0), )).unwrap());
+            *person2_clone.borrow_mut() = Some(context.add_entity((Age(0),)).unwrap());
         });
         context.add_plan(400.0, move |context| {
             context.set_property(person1, Alive(false));
         });
         context.add_plan(390.0, |context| {
-            let pop = context.query_entity_count((Alive(true), ));
+            let pop = context.query_entity_count((Alive(true),));
             assert_eq!(pop, 2);
         });
         context.add_plan(401.0, |context| {
-            let pop = context.query_entity_count((Alive(true), ));
+            let pop = context.query_entity_count((Alive(true),));
             assert_eq!(pop, 1);
         });
         context.execute();
@@ -226,7 +223,7 @@ mod test {
             .set_global_property_value(Parameters, p_values.clone())
             .unwrap();
         context.init_random(p_values.seed);
-        let _person = context.add_entity((Age(0), )).unwrap();
+        let _person = context.add_entity((Age(0),)).unwrap();
         schedule_death(&mut context);
     }
 
@@ -243,7 +240,7 @@ mod test {
         ];
         let mut people = Vec::<PersonId>::new();
         for age in &age_vec {
-            people.push(context.add_entity((Age(*age), )).unwrap());
+            people.push(context.add_entity((Age(*age),)).unwrap());
         }
 
         for i in 0..people.len() {

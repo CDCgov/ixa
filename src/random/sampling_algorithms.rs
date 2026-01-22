@@ -108,7 +108,6 @@ where
 ///
 /// This algorithm is significantly faster than the reservoir algorithm in `rand` and is
 /// on par with the "known length" algorithm for large `requested` values.
-// ToDo(RobertJacobsonCDC): This function will take an iterator once the `iter_query_results` API is ready.
 pub fn sample_multiple_l_reservoir<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
@@ -254,6 +253,7 @@ mod tests {
 
     // ========== Tests for sample_multiple_l_reservoir ==========
 
+    use crate::HashSet;
     #[test]
     fn test_sample_multiple_l_reservoir_basic() {
         let data: Vec<u32> = (0..1000).collect();

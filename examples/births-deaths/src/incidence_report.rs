@@ -1,11 +1,10 @@
 use std::path::Path;
 
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
 use ixa::serde::Serialize;
-use ixa::entity::events::PropertyChangeEvent;
-use crate::population_manager::{
-    Person, Age, AgeGroupRisk, InfectionStatus,
-};
+
+use crate::population_manager::{Age, AgeGroupRisk, InfectionStatus, Person};
 use crate::Parameters;
 
 #[derive(Serialize, Clone)]

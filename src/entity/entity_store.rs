@@ -166,10 +166,6 @@ impl EntityStore {
     /// This is one of the pitfalls of this pattern: there is no guarantee that types
     /// implementing `Entity` followed the rules. We can have at least some confidence,
     /// though, in their correctness by supplying a correct implementation via a macro.
-    ///
-    /// Observe that we create an empty `OnceCell` in each slot in this implementation, but
-    /// we could just as easily eagerly initialize the [`RegisteredItem`] instances here
-    /// instead (assuming we collected constructors somewhere).
     pub fn new() -> Self {
         let num_items = get_registered_entity_count();
         Self {

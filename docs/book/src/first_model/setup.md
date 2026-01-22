@@ -77,7 +77,6 @@ command makes this easy.
 
 ```bash
 cargo add rand_distr@0.4.3
-cargo add serde --features derive
 cargo add csv
 ```
 

@@ -1,9 +1,10 @@
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::plan::PlanId;
 use ixa::prelude::*;
 use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
 use rand_distr::Exp;
-use ixa::entity::events::PropertyChangeEvent;
-use crate::population_manager::{Person, Alive, InfectionStatus, PersonId};
+
+use crate::population_manager::{Alive, InfectionStatus, Person, PersonId};
 use crate::Parameters;
 
 define_rng!(InfectionRng1);
@@ -140,7 +141,7 @@ mod test {
 
         let population_size: usize = 10;
         for index in 0..population_size {
-            let person = context.add_entity((Age(0), )).unwrap();
+            let person = context.add_entity((Age(0),)).unwrap();
 
             context.add_plan(1.0, move |context| {
                 context.set_property(person, InfectionStatus::I);
@@ -167,7 +168,7 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        let person = context.add_entity((Age(0), )).unwrap();
+        let person = context.add_entity((Age(0),)).unwrap();
         context.add_plan(1.1, move |context| {
             cancel_recovery_plans(context, person);
         });
