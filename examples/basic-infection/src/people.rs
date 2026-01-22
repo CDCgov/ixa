@@ -20,6 +20,6 @@ define_property!(
 pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
-        context.add_entity::<Person, _>(()).unwrap();
+        let _: PersonId = context.add_entity(()).unwrap();
     }
 }

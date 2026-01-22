@@ -1311,36 +1311,36 @@ mod tests {
 
     #[test]
     fn shutdown_requested_reset() {
-      // This test verifies that shutdown_requested is properly reset after
-      // being acted upon. This allows the context to be reused after shutdown.
-      let mut context = Context::new();
-      context.add_person(()).unwrap();
+        // This test verifies that shutdown_requested is properly reset after
+        // being acted upon. This allows the context to be reused after shutdown.
+        let mut context = Context::new();
+        context.add_person(()).unwrap();
 
-      // Schedule a plan at time 0.0 that calls shutdown
-      context.add_plan(0.0, |ctx| {
-        ctx.shutdown();
-      });
+        // Schedule a plan at time 0.0 that calls shutdown
+        context.add_plan(0.0, |ctx| {
+            ctx.shutdown();
+        });
 
-      // First execute - should run until shutdown
-      context.execute();
-      assert_eq!(context.get_current_time(), 0.0);
-      assert_eq!(context.get_current_population(), 1);
+        // First execute - should run until shutdown
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(context.get_current_population(), 1);
 
-      // Add a new plan at time 2.0
-      context.add_plan(2.0, |ctx| {
-        ctx.add_person(()).unwrap();
-      });
+        // Add a new plan at time 2.0
+        context.add_plan(2.0, |ctx| {
+            ctx.add_person(()).unwrap();
+        });
 
-      // Second execute - should execute the new plan
-      // If shutdown_requested wasn't reset, this would immediately break
-      // without executing the plan, leaving population at 1.
-      context.execute();
-      assert_eq!(context.get_current_time(), 2.0);
-      assert_eq!(
-        context.get_current_population(),
-        2,
-        "If this fails, shutdown_requested was not properly reset"
-      );
+        // Second execute - should execute the new plan
+        // If shutdown_requested wasn't reset, this would immediately break
+        // without executing the plan, leaving population at 1.
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(
+            context.get_current_population(),
+            2,
+            "If this fails, shutdown_requested was not properly reset"
+        );
     }
 
     // Tests related to queries and indexing

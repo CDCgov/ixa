@@ -6,6 +6,9 @@ members = [
     "examples/births-deaths",
     "integration-tests/ixa-*"
 ]
+exclude = [
+    "docs/book/models/disease_model"
+]
 
 [workspace.package]
 edition = "2021"
@@ -64,7 +67,6 @@ anyhow = "^1.0.28"
 sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
-polonius-the-crab = "^0.4.2"
 hashbrown = "^0.16.0"
 ouroboros = "^0.18.5"
 

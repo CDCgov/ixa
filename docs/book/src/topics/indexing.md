@@ -5,9 +5,15 @@
 Syntax:
 
 ```rust
-// Somewhere during the initialization of `context`
-context.index_property(Age); // For single property indexes
-define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
+// For single property indexes
+// Somewhere during the initialization of `context`:
+context.index_property::<Person, Age>();
+
+// For multi-indexes
+// Where properties are defined:
+define_multi_property!((Name, Age, Weight), Person);
+// Somewhere during the initialization of `context`:
+context.index_property::<Person, (Name, Age, Weight)>();
 ```
 
 Best practices:
@@ -18,11 +24,10 @@ Best practices:
 - The cost of creating indexes is increased memory use, which can be significant
   for large populations. So it is best to only create indexes / multi-indexes
   that actually improve model performance.
-- It may be best to call `context.index_property` and
-  `define_multi_property_index!` in the `init()` method of the module in which
-  the property is defined, or you can put all of your `index_property` calls
-  together in a main initialization function if you prefer.
-- It is not an error to call `context.index_property(…)` in the middle of a
+- It may be best to call `context.index_property::<Entity, Property<Entity>>()` in the
+  `init()` method of the module in which the property is defined, or you can put all of
+  your `Context::index_property` calls together in a main initialization function if you prefer.
+- It is not an error to call `Context::index_property` in the middle of a
   running simulation or to call it twice for the same property, but it makes
   little sense to do so.
 
@@ -177,7 +182,7 @@ Suppose we have the properties `AgeGroup` and `InfectionStatus`, and we want to
 speed up queries of these two properties:
 
 ```rust
-let age_and_status = context.query_people(((AgeGroup, 30), (InfectionStatus, susceptible))); // Bottleneck
+let age_and_status = context.query_result_iterator((AgeGroup(30), InfectionStatus::Susceptible)); // Bottleneck
 ```
 
 We could index `AgeGroup` and `InfectionStatus` individually, but in this case
@@ -198,11 +203,10 @@ might look like this:
 | `(30, recovered)`             | `\[4, 8, 35, 36]`                |
 
 Ixa hides the boilerplate required for creating a multi-index with the macro
-`define_multi_property_index!`:
+`define_multi_property!`:
 
 ```rust
-// Somewhere during the initialization of `context`
-define_multi_property_index!(AgeGroup, InfectionStatus);
+define_multi_property!((AgeGroup, InfectionStatus), Person);
 ```
 
 Creating a multi-index _does not_ automatically create indexes for each of the
@@ -247,7 +251,7 @@ Let's index the `InfectionStatus` property. In
 `initialize()` function:
 
 ```rust
-context.index_property(InfectionStatus);
+context.index_property::<Person, InfectionStatus>();
 ```
 
 We also need to import `InfectionStatus` by putting

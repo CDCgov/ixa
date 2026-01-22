@@ -10,7 +10,7 @@
 //! of the same set of component properties are considered equivalent, regardless of their
 //! definition order. The system achieves this by:
 //! 1.  **Canonicalization**: Component properties are sorted based on their unique identifiers.
-//! 2.  **Shared Indexes**: The index subsystem reuses a single [`Index`] instance for all
+//! 2.  **Shared Indexes**: The index subsystem reuses a single `Index` instance for all
 //!     multi-properties that are equivalent up to reordering.
 //!
 //! ## Query Integration
@@ -22,9 +22,9 @@
 //!
 //! ## Implementation Details
 //!
-//! Multi-properties are defined using the [`define_multi_property!`] macro, which
+//! Multi-properties are defined using the [`define_multi_property!`](crate::define_multi_property) macro, which
 //! handles the registration and mapping between the property set and its canonical
-//! index ID. This module provides the runtime registry ([`MULTI_PROPERTY_INDEX_MAP`])
+//! index ID. This module provides the runtime registry (`MULTI_PROPERTY_INDEX_MAP`)
 //! and reordering logic used by both the macro-generated code and the query engine.
 
 use std::any::TypeId;

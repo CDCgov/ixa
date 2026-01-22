@@ -18,8 +18,8 @@ Ixa that will be called in response to a change in a particular property.
 ```
 
 This line isn't defining a new struct or even a new type. Rather, it defines an
-alias for `PersonPropertyChangeEvent\<T>` with the generic type `T` instantiated
-with the property we want to monitor, `InfectionStatus`. This is effectively the
+alias for `PropertyChangeEvent\<E: Entity, P: Property\<E>>` with the generic types instantiated
+for the property we want to monitor, `InfectionStatus`. This is effectively the
 name of the event we subscribe to in the module's `init()` function:
 
 ```rust
@@ -29,8 +29,8 @@ name of the event we subscribe to in the module's `init()` function:
 
 The event handler is just a regular Rust function that takes a `Context` and an
 `InfectionStatusEvent`, the latter of which holds the `PersonId` of the person
-whose `InfectionStatus` changed, the current `InfectionStatusValue`, and the
-previous `InfectionStatusValue`.
+whose `InfectionStatus` changed, the current `InfectionStatus` value, and the
+previous `InfectionStatus` value.
 
 ```rust
 // in infection_manager.rs
@@ -41,26 +41,23 @@ We only care about new infections in this model.
 
 ## Scheduling Recovery
 
-As in `attempt_infection()`, we sample the recovery time from the exponential
-distribution with mean `INFECTION_DURATION`. We define a random number source
-for this module's exclusive use with `define_rng!(InfectionRng)`.
+As in `attempt_infection()`, we sample the recovery time from the exponential distribution
+with mean `INFECTION_DURATION`, a constant we define in `main.rs`. We define a random number
+source for this module's exclusive use with `define_rng!(InfectionRng)` as we did before.
 
 ```rust
 {{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:schedule_recovery}}
 ```
 
 Notice that the plan is again just a Rust function, but this time it takes the
-form of a closure rather than a traditionally define function. This is
+form of a closure rather than a traditionally defined function. This is
 convenient when the function is only a line or two.
 
 > [!INFO] Closures and Captured Variables
 >
-> The `move` keyword in Rust closures instructs the closure to take ownership of
-> any variables it uses from its surrounding context—these are known as captured
-> variables. Normally, when a closure refers to variables defined outside of its
-> own body, it borrows them, which means it uses references to those values.
-> However, with `move`, the closure takes full ownership by moving the variables
-> into its own scope. This is especially useful when the closure must outlive
-> the current scope or be passed to another thread, as it ensures that the
-> closure has its own independent copy of the data without relying on references
-> that might become invalid.
+> The `move` keyword in the syntax for Rust closures instructs the closure to take ownership of any variables it
+> uses from its surrounding context—these are known as captured variables. Normally, when a closure refers to
+> variables defined outside of its own body, it borrows them, which means it uses references to those values.
+> However, with `move`, the closure takes full ownership by moving the variables into its own scope. This is
+> especially useful when the closure must outlive the current scope or be passed to another thread, as it ensures
+> that the closure has its own independent copy of the data without relying on references that might become invalid.
