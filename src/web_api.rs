@@ -45,7 +45,7 @@ struct ApiData {
     handlers: HashMap<String, Box<WebApiHandler>>,
 }
 
-/// This wrapper method allows simultaneous mutable access to the `ApiPlugin` and `context` at the
+/// This wrapper method allows simultaneous mutable access to the [`ApiPlugin`] and `context` at the
 /// same time.
 pub(crate) fn handle_web_api_with_plugin(context: &mut Context) {
     // We temporarily swap out the `ApiPlugin` so we can have simultaneous mutable access to
@@ -200,7 +200,7 @@ pub trait ContextWebApiExt: PluginContext {
     /// Set up the Web API and start the Web server.
     ///
     /// # Errors
-    /// `IxaError` on failure to bind to `port`
+    /// [`IxaError`] on failure to bind to `port`
     fn setup_web_api(&mut self, port: u16) -> Result<String, IxaError> {
         // TODO(cym4@cdc.gov): Check on the limits here.
         let (api_to_ctx_send, api_to_ctx_recv) = mpsc::unbounded_channel::<ApiRequest>();
@@ -254,7 +254,7 @@ pub trait ContextWebApiExt: PluginContext {
 
     /// Add an API point.
     /// # Errors
-    /// `IxaError` when the Web API has not been set up yet.
+    /// [`IxaError`] when the Web API has not been set up yet.
     fn add_web_api_handler(
         &mut self,
         name: &str,

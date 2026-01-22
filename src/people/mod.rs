@@ -3,8 +3,8 @@
 //! We have a set of people indexed by [`PersonId`] and then each person
 //! can have an arbitrary number of person properties
 //! [`PersonProperty`], which are values keyed by a type. Person
-//! properties are defined with a macro ([`define_person_property!()`]
-//! or [`define_person_property_with_default!()`])
+//! properties are defined with a macro ([`define_person_property!`](crate::define_person_property)
+//! or [`define_person_property_with_default!`](crate::define_person_property_with_default))
 //!
 //! # Initializing Person Properties
 //!
@@ -46,7 +46,7 @@
 //! Whenever a person property `E` has potentially changed, either
 //! because it was set directly or because it is a derived property
 //! and one of its dependencies changed, a
-//! [`PersonPropertyChangeEvent<E>`] will be emitted. Note that Ixa does
+//! [`PersonPropertyChangeEvent`]`<E>` will be emitted. Note that Ixa does
 //! not currently check that the new value is actually different from the old value,
 //! so calling [`Context::set_person_property()`] will always emit an event.
 //! Initialization is not considered a change, but [`Context::set_person_property()`]

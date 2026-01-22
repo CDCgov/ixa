@@ -36,13 +36,15 @@ impl ConfigReportOptions {
         }
     }
     /// Sets the file prefix option (e.g., "report_")
-    pub fn file_prefix(&mut self, file_prefix: String) -> &mut ConfigReportOptions {
+    pub fn file_prefix(&mut self, file_prefix: impl Into<String>) -> &mut ConfigReportOptions {
+        let file_prefix = file_prefix.into();
         trace!("setting report prefix to {file_prefix}");
         self.file_prefix = file_prefix;
         self
     }
     /// Sets the directory where reports will be output
-    pub fn directory(&mut self, directory: PathBuf) -> &mut ConfigReportOptions {
+    pub fn directory(&mut self, directory: impl Into<PathBuf>) -> &mut ConfigReportOptions {
+        let directory = directory.into();
         trace!("setting report directory to {directory:?}");
         self.output_dir = directory;
         self
@@ -122,7 +124,7 @@ pub trait ContextReportExt: ContextBase {
         directory.join(basename).with_extension("csv")
     }
 
-    /// Add a report file keyed by a `TypeId`.
+    /// Add a report file keyed by a [`TypeId`].
     /// The `short_name` is used for file naming to distinguish what data each
     /// output file points to.
     /// # Errors

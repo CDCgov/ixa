@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
@@ -29,6 +29,8 @@ jobs:
 
       - name: WASM tests
         run: mise run test:wasm
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
 
       - name: Check single run for hyperfine
         run: mise run test:hyperfine

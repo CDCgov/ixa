@@ -33,7 +33,7 @@ pub trait ContextPeopleExt {
     /// Will return [`IxaError`] if a required initializer is not provided.
     fn add_person<T: InitializationList>(&mut self, props: T) -> Result<PersonId, IxaError>;
 
-    /// Given a `PersonId` returns the value of a defined person property,
+    /// Given a [`PersonId`] returns the value of a defined person property,
     /// initializing it if it hasn't been set yet. If no initializer is
     /// provided, and the property is not set this will panic, as long
     /// as the property has been set or subscribed to at least once before.
@@ -55,23 +55,21 @@ pub trait ContextPeopleExt {
 
     /// Create an index for property `T`.
     ///
-    /// If an index is available [`Context::query_people()`] will use it, so this is
+    /// If an index is available, [`Context::query_people()`] will use it, so this is
     /// intended to allow faster querying of commonly used properties.
     /// Ixa may choose to create an index for its own reasons even if
     /// [`Context::index_person_property()`] is not called, so this function just ensures
     /// that one is created.
     fn index_person_property<T: PersonProperty>(&mut self, property: T);
 
-    /// Query for all people matching a given set of criteria, calling the `scope`
-    /// callback with an immutable reference to the fully realized result set.
+    /// Query for all people matching a given set of criteria, calling the `callback`
+    /// with an immutable reference to the fully realized result set.
     ///
-    /// If you don't need the entire result set, consider using [`Context::query_result_iterator`],
-    /// which gives an iterator that computes the results as needed. If you
-    /// only need to count the results, use [`Context::query_people_count`]
+    /// If you only need to count the results, use [`Context::query_people_count`]
     ///
     /// [`Context::with_query_people_results()`] takes any type that implements [Query], but
     /// instead of implementing query yourself it is best to use the automatic
-    /// syntax that implements [Query] for a tuple of pairs of (property,
+    /// syntax that implements [`Query`] for a tuple of pairs of (property,
     /// value), like so: `context.query_people(((Age, 30), (Gender, Female)))`.
     fn with_query_people_results<Q: Query>(
         &self,
@@ -85,18 +83,18 @@ pub trait ContextPeopleExt {
     )]
     /// Query for all people matching a given set of criteria.
     ///
-    /// [`Context::query_people()`] takes any type that implements [Query],
+    /// [`Context::query_people()`] takes any type that implements [`Query`],
     /// but instead of implementing query yourself it is best
-    /// to use the automatic syntax that implements [Query] for
+    /// to use the automatic syntax that implements [`Query`] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     fn query_people<Q: Query>(&self, query: Q) -> Vec<PersonId>;
 
     /// Get the count of all people matching a given set of criteria.
     ///
-    /// [`Context::query_people_count()`] takes any type that implements [Query],
+    /// [`Context::query_people_count()`] takes any type that implements [`Query`],
     /// but instead of implementing query yourself it is best
-    /// to use the automatic syntax that implements [Query] for
+    /// to use the automatic syntax that implements [`Query`] for
     /// a tuple of pairs of (property, value), like so:
     /// `context.query_people(((Age, 30), (Gender, Female)))`.
     ///
@@ -110,7 +108,7 @@ pub trait ContextPeopleExt {
     /// The syntax here is the same as with [`Context::query_people()`].
     fn match_person<Q: Query>(&self, person_id: PersonId, query: Q) -> bool;
 
-    /// Similar to `match_person`, but more efficient, it removes people
+    /// Similar to [`match_person`](Self::match_person), but more efficient, it removes people
     /// from a list who do not match the given query. Note that this
     /// method modifies the vector in-place, so it is up to the caller
     /// to clone the vector if they don't want to modify their original
@@ -489,28 +487,29 @@ impl ContextPeopleExt for Context {
         // This implements "Algorithm L" from KIM-HUNG LI, Reservoir-
         // Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
         // https://dl.acm.org/doi/pdf/10.1145/198429.198435
-        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0);
-        let mut position: usize = 0;
-        let mut next_pick_position: usize = 1;
-        let mut selected = Vec::new();
+        let mut weight: f64 = self.sample_range(rng_id, 0.0..1.0); // controls skip distance distribution
+        weight = weight.powf(1.0 / requested as f64);
+        let mut position: usize = 0; // current index in data
+        let mut next_pick_position: usize = 1; // index of the next item to pick
+        let mut reservoir = Vec::with_capacity(requested); // the sample reservoir
 
         // ToDo(RobertJacobsonCDC): This will use `iter_query_results` API when it is ready.
         self.query_people_internal(
             |person| {
                 position += 1;
-                if next_pick_position == position {
-                    if selected.len() == requested {
-                        let to_remove = self.sample_range(rng_id, 0..selected.len());
-                        selected.swap_remove(to_remove);
+                if position == next_pick_position {
+                    if reservoir.len() == requested {
+                        let to_remove = self.sample_range(rng_id, 0..reservoir.len());
+                        reservoir.swap_remove(to_remove);
                     }
-                    selected.push(person);
-                    if selected.len() == requested {
-                        // `f32` arithmetic is no faster than `f64` on modern hardware.
-                        next_pick_position += (f64::ln(self.sample_range(rng_id, 0.0..1.0))
-                            / f64::ln(1.0 - weight))
-                        .floor() as usize
-                            + 1;
-                        weight *= self.sample_range(rng_id, 0.0..1.0);
+                    reservoir.push(person);
+
+                    if reservoir.len() == requested {
+                        let uniform_random: f64 = self.sample_range(rng_id, 0.0..1.0);
+                        next_pick_position +=
+                            (f64::ln(uniform_random) / f64::ln(1.0 - weight)).floor() as usize + 1;
+                        let uniform_random: f64 = self.sample_range(rng_id, 0.0..1.0);
+                        weight *= uniform_random.powf(1.0 / requested as f64);
                     } else {
                         next_pick_position += 1;
                     }
@@ -519,7 +518,7 @@ impl ContextPeopleExt for Context {
             query,
         );
 
-        selected
+        reservoir
     }
 
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -764,7 +763,7 @@ mod tests {
     use crate::{
         define_derived_person_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
+        HashSet, HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
 
     define_person_property!(Age, u8);
@@ -833,6 +832,21 @@ mod tests {
         bool,
         [AdultRunner, AdultSwimmer],
         |adult_runner, adult_swimmer| { adult_runner || adult_swimmer }
+    );
+
+    #[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
+    pub enum InfectionStatusValue {
+        #[allow(unused)]
+        Susceptible,
+        #[allow(unused)]
+        Infectious,
+        #[allow(unused)]
+        Recovered,
+    }
+    define_person_property_with_default!(
+        InfectionStatus,
+        InfectionStatusValue,
+        InfectionStatusValue::Susceptible
     );
 
     #[test]
@@ -1327,6 +1341,81 @@ mod tests {
             !people3.contains(&person1)
                 && !people3.contains(&person3)
                 && !people3.contains(&person6)
+        );
+    }
+
+    #[test]
+    fn test_sample_initial_population_seed() {
+        // Test that we get a uniformly distributed sample of 100 people from a population of 1000.
+        define_rng!(InfectionRng);
+
+        let mut context = Context::new();
+
+        let seed: u64 = 42;
+        let requested = 100;
+
+        context.init_random(seed);
+
+        for _ in 0..1000 {
+            let _ = context.add_person(());
+        }
+
+        let susceptibles = context.sample_people(
+            InfectionRng,
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+            requested,
+        );
+        // Unwrap the IDs to get numbers
+        let sample: Vec<u64> = susceptibles.into_iter().map(|p| p.0 as u64).collect();
+
+        // Correct sample size
+        assert_eq!(sample.len(), requested);
+
+        // All sampled values are within the valid range
+        assert!(sample.iter().all(|v| *v < 1000));
+
+        // The sample should not have duplicates
+        let unique: HashSet<_> = sample.iter().collect();
+        assert_eq!(unique.len(), sample.len());
+
+        // ---- Chi-square test of uniformity ----
+
+        // Partition range 0..1000 into 10 equal-width bins
+        let mut counts = [0usize; 10];
+        for &value in &sample {
+            let bin = (value as usize) / 100; // 0..99 → bin 0, ..., 900..999 → bin 9
+            counts[bin] += 1;
+        }
+
+        // Expected count per bin for uniform sampling of 100 numbers from 0..1000
+        let expected = requested as f64 / 10.0; // = 10.0
+
+        // Compute chi-square statistic
+        let chi_square: f64 = counts
+            .iter()
+            .map(|&obs| {
+                let diff = (obs as f64) - expected;
+                diff * diff / expected
+            })
+            .sum();
+
+        // The critical value is just looked up in the chi-square distribution table
+        // or extracted from your favorite CAS. Since we are hard-coding a random
+        // seed, this test is actually deterministic. If you don't touch any of the
+        // code it uses, it should always pass.
+
+        // Degrees of freedom = (#bins - 1) = 9
+        // Critical χ²₀.₉₉₉ (p = 0.001) for df=9 is 27.877
+        // If chi_square > 27.877, reject uniformity at 0.1% level.
+        // (Using strict 0.1% significance keeps false failures very unlikely.)
+        let critical = 27.877;
+
+        assert!(
+            chi_square < critical,
+            "Reservoir sampling fails chi-square test: seed = {},  χ² = {}, counts = {:?}",
+            seed,
+            chi_square,
+            counts
         );
     }
 

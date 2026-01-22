@@ -6,7 +6,7 @@ pnpm = "latest"
 "npm:markdownlint-cli" = "0.45.0"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
-"cargo:mdbook" = "latest"
+"cargo:mdbook" = "0.4.52"
 "cargo:mdbook-callouts" = "latest"
 "cargo:mdbook-inline-highlighting" = "latest"
 

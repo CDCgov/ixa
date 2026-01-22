@@ -9,12 +9,12 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Checkout base branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           # This fetches all branches so we can compare the PR branch with the base branch
@@ -33,15 +33,22 @@ jobs:
       - name: Run benchmarks on head branch and format output
         run: |
           echo '### Benchmark Results' > results.md
-          echo '#### Hyperfine'
-          cat hyperfine.md >> results.md
-          echo '#### Criterion'
+          echo '' >> results.md
+          echo '#### Hyperfine' >> results.md
+          echo '' >> results.md
           echo '```' >> results.md
+          cat hyperfine.md >> results.md
+          echo '```' >> results.md
+          echo '' >> results.md
+          echo '#### Criterion' >> results.md
+          echo '' >> results.md
           if ! cargo bench -p ixa-bench -- --baseline base 2>&1; then
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
             mise run bench:criterion 2>&1
           else
+            echo '```' >> results.md
             cargo run -q -p ixa-bench --bin check_criterion_regressions >> results.md
+            echo '```' >> results.md
           fi
 
       - name: Add comment to PR

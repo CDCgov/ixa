@@ -36,7 +36,9 @@ jobs:
           echo "current_date: $current_date" >> $GITHUB_STEP_SUMMARY
           echo "weekdiff: $weekdiff" >> $GITHUB_STEP_SUMMARY
           echo "weekindex: $weekindex" >> $GITHUB_STEP_SUMMARY
-          if [ $weekindex -eq 0 ]; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "🟣 Manually triggered via workflow_dispatch. The action will run regardless of the cycle." >> $GITHUB_STEP_SUMMARY
+          elif [ $weekindex -eq 0 ]; then
             echo "🟢 It's the first week of the bi-weekly cycle. The action is going to run." >> $GITHUB_STEP_SUMMARY
           else
             echo "🔴 It's the second week of the bi-weekly cycle. The action is going to be skipped." >> $GITHUB_STEP_SUMMARY
@@ -45,7 +47,9 @@ jobs:
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
     name: Release-plz PR
-    if: ${{ needs.weekindex.outputs.weekindex == 0 }}
+    if:
+      ${{ needs.weekindex.outputs.weekindex == 0 || github.event_name ==
+      'workflow_dispatch' }}
     needs:
       - weekindex
     runs-on: ubuntu-latest
@@ -67,14 +71,14 @@ jobs:
           # GitHub App private key secret name
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Checkout repository
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.1
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.generate-token.outputs.token }}
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Run release-plz
-        uses: release-plz/action@d529f731ae3e89610ada96eda34e5c6ba3b12214 # v0.5.118
+        uses: release-plz/action@487eb7b5c085a664d5c5ca05f4159bd9b591182a # v0.5.120
         with:
           command: release-pr
         env:

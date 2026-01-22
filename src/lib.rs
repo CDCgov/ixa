@@ -123,6 +123,7 @@ pub mod prelude_for_plugins {
 pub mod entity;
 pub mod execution_stats;
 mod value_vec;
+pub mod profiling;
 
 #[cfg(all(target_arch = "wasm32", feature = "debugger"))]
 compile_error!(

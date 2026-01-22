@@ -72,7 +72,7 @@ static LOG_CONFIGURATION: LazyLock<Mutex<LogConfiguration>> = LazyLock::new(Mute
 
 /// Different log level filters can be applied to the log messages emitted from different modules
 /// according to the module path (e.g. `"ixa::people"`). These are stored in the global
-/// `LogConfiguration`.
+/// [`LogConfiguration`].
 #[derive(Debug, PartialEq)]
 struct ModuleLogConfiguration {
     /// The module path this configuration applies to
@@ -228,7 +228,7 @@ pub fn set_module_filters<S: ToString>(module_filters: &[(&S, LevelFilter)]) {
     log_configuration.set_module_filters(module_filters);
 }
 
-/// Fetches a mutable reference to the global `LogConfiguration`.
+/// Fetches a mutable reference to the global [`LogConfiguration`].
 fn get_log_configuration() -> MutexGuard<'static, LogConfiguration> {
     LOG_CONFIGURATION.lock().expect("Mutex poisoned")
 }

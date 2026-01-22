@@ -18,7 +18,7 @@ impl From<&ModuleLogConfiguration> for Logger {
 }
 
 impl LogConfiguration {
-    /// Sets the global logger to conform to this `LogConfiguration`.
+    /// Sets the global logger to conform to this [`LogConfiguration`].
     pub(in crate::log) fn set_config(&mut self) {
         let encoder = Box::new(PatternEncoder::new(DEFAULT_LOG_PATTERN));
         // Appends an ANSI escape code to clear to end of line.

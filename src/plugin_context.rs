@@ -4,8 +4,8 @@ use crate::{
     ContextReportExt,
 };
 
-/// A supertrait that exposes useful methods from `Context`
-/// for plugins implementing Context extensions.
+/// A supertrait that exposes useful methods from [`Context`]
+/// for plugins implementing [`Context`] extensions.
 ///
 /// Usage:
 // This example triggers the error "#[ctor]/#[dtor] is not supported

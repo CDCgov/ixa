@@ -24,7 +24,7 @@ serde_derive = "^1.0.217"
 serde_json = "^1.0.135"
 bincode = { version = "^2.0.1", default-features = false, features = ["std", "serde"] }
 reikna = "^0.12.3"
-ixa-derive = { version = "0.0.3", path = "ixa-derive" }
+ixa-derive = { version = "0.0.4", path = "ixa-derive" }
 seq-macro = "^0.3.5"
 paste = "^1.0.15"
 ctor = "^0.5.0"
@@ -56,7 +56,7 @@ proc-macro2 = "1.0.93"
 proc-macro-crate = "3.3.0"
 delegate = "^0.13.3"
 web-sys = "^0.3.77"
-getrandom = "0.3.3"
+getrandom = "0.3.4"
 fern = "^0.7.1"
 wasm-bindgen = "^0.2.100"
 progress_bar = "^1.2.1"
@@ -64,12 +64,13 @@ anyhow = "^1.0.28"
 sysinfo = "^0.37.0"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
+polonius-the-crab = "^0.4.2"
 hashbrown = "^0.16.0"
 ouroboros = "^0.18.5"
 
 [package]
 name = "ixa"
-version = "0.4.1"
+version = "0.4.4"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
@@ -78,12 +79,14 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging", "debugger", "progress_bar"]
+default = ["logging", "debugger", "progress_bar", "profiling"]
 
 logging = ["log4rs", "fern", "wasm-bindgen",  "web-sys"]
 debugger = ["shlex", "rustyline"]
 web_api = ["debugger", "mime", "tower-http", "axum", "tokio", "uuid"]
 progress_bar = ["dep:progress_bar", "anyhow"]
+
+profiling = []
 
 # Remove before PR.
 disabled = []

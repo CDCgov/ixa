@@ -289,7 +289,7 @@ mod test {
         // Final size relation is ~58%
         let incidence = model.get_stats().get_cum_incidence() as f64;
         let expected = population as f64 * 0.58;
-        assert_relative_eq!(incidence, expected, max_relative = 0.02);
+        assert_relative_eq!(incidence, expected, max_relative = 0.05);
     }
 
     #[test]

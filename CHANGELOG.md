@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/CDCgov/ixa/compare/ixa-v0.4.3...ixa-v0.4.4) - 2025-12-17
+
+### Fixed
+
+- wasm tests ([#621](https://github.com/CDCgov/ixa/pull/621))
+- wasm build in test action ([#642](https://github.com/CDCgov/ixa/pull/642))
+- Fixed copy+paste error in the implementation of `sample_people`. Fixes #638. ([#640](https://github.com/CDCgov/ixa/pull/640))
+- Fixed mangled callout formatting. Fixes #641. ([#644](https://github.com/CDCgov/ixa/pull/644))
+
+### Other
+
+- hyperfine benchmarks, groups output should not override in md file ([#648](https://github.com/CDCgov/ixa/pull/648))
+- Pinned MDBook to version 0.4.52 for compatibility with the callouts plugin we use. ([#645](https://github.com/CDCgov/ixa/pull/645))
+
+## [0.4.3](https://github.com/CDCgov/ixa/compare/ixa-v0.4.2...ixa-v0.4.3) - 2025-12-09
+
+### Fixed
+
+- Reset `context.shutdown_requested` when it is acted upon. Fixes #626. ([#628](https://github.com/CDCgov/ixa/pull/628))
+- use generic types for ConfigReportOptions setters ([#603](https://github.com/CDCgov/ixa/pull/603))
+- doc links ([#616](https://github.com/CDCgov/ixa/pull/616))
+
+### Other
+
+- bump release-plz/action from 0.5.119 to 0.5.120 ([#630](https://github.com/CDCgov/ixa/pull/630))
+- remove polonius ([#625](https://github.com/CDCgov/ixa/pull/625))
+- add profiling feature ([#622](https://github.com/CDCgov/ixa/pull/622))
+- bump release-plz/action from 0.5.118 to 0.5.119 ([#619](https://github.com/CDCgov/ixa/pull/619))
+- Add periodic counts benchmark ([#615](https://github.com/CDCgov/ixa/pull/615))
+- bump actions/checkout from 5 to 6 ([#614](https://github.com/CDCgov/ixa/pull/614))
+
+## [0.4.2](https://github.com/CDCgov/ixa/compare/ixa-v0.4.1...ixa-v0.4.2) - 2025-11-17
+
+### Added
+
+- added mise task for test:features ([#573](https://github.com/CDCgov/ixa/pull/573))
+
+### Fixed
+
+- now using assert_cmd::cargo::cargo_bin_cmd! insted of deprecated assert_cmd::Command::cargo_bin ([#597](https://github.com/CDCgov/ixa/pull/597))
+
+### Other
+
+- Add log and PersonId PersonChangeEvent/PersonCreateEvent to ixa prelude ([#604](https://github.com/CDCgov/ixa/pull/604))
+- Added `cli-usage.md` to the ixa book. Fixes #577.
+- move macros to macros files ([#589](https://github.com/CDCgov/ixa/pull/589))
+- fix benchamarks output to PR ([#590](https://github.com/CDCgov/ixa/pull/590))
+- bump release-plz/action from 0.5.117 to 0.5.118 ([#575](https://github.com/CDCgov/ixa/pull/575))
+- *(deps)* bump playwright and @playwright/test in /integration-tests/ixa-wasm-tests ([#583](https://github.com/CDCgov/ixa/pull/583))
+- added rust fmt rules for imports ([#586](https://github.com/CDCgov/ixa/pull/586))
+- Add integration tests for ixa macros ([#579](https://github.com/CDCgov/ixa/pull/579))
+- benchmarks action is broken ([#585](https://github.com/CDCgov/ixa/pull/585))
+
 ## [0.4.1](https://github.com/CDCgov/ixa/compare/ixa-v0.4.0...ixa-v0.4.1) - 2025-10-08
 
 ### Added

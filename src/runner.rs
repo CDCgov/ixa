@@ -157,7 +157,7 @@ fn create_ixa_cli() -> Command {
 /// This function allows you to define custom arguments and a setup function
 ///
 /// # Parameters
-/// - `setup_fn`: A function that takes a mutable reference to a `Context`, a `BaseArgs` struct,
+/// - `setup_fn`: A function that takes a mutable reference to a [`Context`], a [`BaseArgs`] struct,
 ///   a `Option<A>` where `A` is the custom cli arguments struct
 ///
 /// # Errors
@@ -182,7 +182,7 @@ where
 /// This function parses command line arguments allows you to define a setup function
 ///
 /// # Parameters
-/// - `setup_fn`: A function that takes a mutable reference to a `Context` and `BaseArgs` struct
+/// - `setup_fn`: A function that takes a mutable reference to a [`Context`] and [`BaseArgs`] struct
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails

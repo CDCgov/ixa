@@ -5,7 +5,7 @@
 use log::Record;
 use log4rs::encode::{Encode, Write};
 
-/// Wraps a `PatternEncoder` and prepends whatever is written to it to clear the current line.
+/// Wraps a [`PatternEncoder`](log4rs::encode::pattern::PatternEncoder) and prepends whatever is written to it to clear the current line.
 #[derive(Debug)]
 pub struct PBWrapperEncoder {
     inner: Box<dyn Encode>,

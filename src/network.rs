@@ -173,7 +173,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     ///
     /// # Errors
     ///
-    /// Returns `IxaError` if:
+    /// Returns [`IxaError`] if:
     ///
     /// * `person` and `neighbor` are the same or an edge already
     ///   exists between them.
@@ -192,12 +192,12 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     /// Add a pair of edges of type `T` between `person1` and
     /// `neighbor2` with a given `weight`, one edge in each
     /// direction. `inner` is a value of whatever type is associated
-    /// with `T`. This is syntactic sugar for calling `add_edge()`
+    /// with `T`. This is syntactic sugar for calling [`add_edge`](Self::add_edge)
     /// twice.
     ///
     /// # Errors
     ///
-    /// Returns `IxaError` if:
+    /// Returns [`IxaError`] if:
     ///
     /// * `person` and `neighbor` are the same or an edge already
     ///   exists between them.
@@ -218,7 +218,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     /// if one exists.
     ///
     /// # Errors
-    /// Returns `IxaError` if no edge exists.
+    /// Returns [`IxaError`] if no edge exists.
     fn remove_edge<T: EdgeType + 'static>(
         &mut self,
         person: PersonId,
@@ -245,9 +245,9 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
 
     /// Get all edges of type `T` from `person` that match the predicate
     /// provided in `filter`. Note that because `filter` has access to
-    /// both the edge, which contains the neighbor and `Context`, it is
+    /// both the edge, which contains the neighbor and [`Context`], it is
     /// possible to filter on properties of the neighbor. The function
-    /// `context.matching_person()` might be helpful here.
+    /// [`match_person`](crate::people::ContextPeopleExt::match_person) might be helpful here.
     ///
     fn get_matching_edges<T: EdgeType + 'static>(
         &self,
@@ -265,7 +265,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     /// `T` from `person_id`, weighted by the edge weights.
     ///
     /// # Errors
-    /// Returns `IxaError` if there are no edges.
+    /// Returns [`IxaError`] if there are no edges.
     fn select_random_edge<T: EdgeType + 'static, R: RngId + 'static>(
         &self,
         rng_id: R,

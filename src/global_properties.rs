@@ -5,7 +5,7 @@
 //! simulation parameters.
 //! A global property can be of any type, and is is just a value
 //! stored in the context. Global properties are defined by the
-//! [`define_global_property!()`] macro and can then be
+//! [`crate::define_global_property!()`] macro and can then be
 //! set in one of two ways:
 //!
 //! * Directly by using [`Context::set_global_property_value()`]
@@ -94,7 +94,7 @@ fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
 
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
-/// [`define_global_property`]
+/// [`define_global_property!`](crate::define_global_property!)
 pub trait GlobalProperty: Any {
     type Value: Any; // The actual type of the data.
 
@@ -180,7 +180,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     ///
-    /// Will return an `IxaError` if the property does not exist
+    /// Will return an [`IxaError`] if the property does not exist
     fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
 
     /// Given a file path for a valid json file, deserialize parameter values
@@ -188,7 +188,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     ///
-    /// Will return an `IxaError` if the `file_path` does not exist or
+    /// Will return an [`IxaError`] if the `file_path` does not exist or
     /// cannot be deserialized
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
@@ -209,14 +209,14 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// serde deserialize into the relevant struct.
     ///
     /// # Errors
-    /// Will return an `IxaError` if:
+    /// Will return an [`IxaError`] if:
     /// * The `file_path` doesn't exist
     /// * The file isn't valid JSON
     /// * A specified object doesn't correspond to an existing global property.
     /// * There are two values for the same object.
     ///
     /// Ixa automatically knows about any property defined with
-    /// [`define_global_property!()`] so you don't need to register them
+    /// [`define_global_property!`](crate::define_global_property) so you don't need to register them
     /// explicitly.
     ///
     /// It is possible to call [`Context::load_global_properties()`] multiple

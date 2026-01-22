@@ -3,8 +3,10 @@
 In Ixa we organize our models into _modules_ each of which is responsible for a
 single aspect of the model.
 
-> [!INFO] Modules In fact, the code of Ixa itself is organized into modules in
-> just the same way models are.
+> [!INFO] Modules
+>
+> In fact, the code of Ixa itself is organized into modules in just the same way
+> models are.
 
 Ixa is a framework for developing _agent_-based models. In most of our models,
 the agents will represent people. So let's create a module that is responsible
@@ -52,11 +54,13 @@ is not enough to define this enum. We have to tell Ixa that it will be a
 {{#rustdoc_include ../../models/disease_model/src/people.rs:define_person_property}}
 ```
 
-> [!NOTE] Name Tags and Values Notice that there are two types associated to
-> infection status, `InfectionStatus` and `InfectionStatusValue`. The first,
-> `InfectionStatus`, is a tag that we will use to fetch and store values of the
-> property, while `InfectionStatusValue` is the type of the values themselves.
-> [!INFO] Default or No Default
+> [!NOTE] Name Tags and Values
+>
+> Notice that there are two types associated with infection status,
+> `InfectionStatus` and `InfectionStatusValue`. The first, `InfectionStatus`, is
+> a tag that we will use to fetch and store values of the property, while
+> `InfectionStatusValue` is the type of the values themselves. [!INFO] Default
+> or No Default
 
 ## The module's `init()` function
 
