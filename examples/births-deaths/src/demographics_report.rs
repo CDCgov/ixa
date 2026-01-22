@@ -1,9 +1,10 @@
 use std::path::Path;
 
+use ixa::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
-use ixa::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
-use crate::population_manager::{Person, Age, AgeGroupRisk, Alive};
+
+use crate::population_manager::{Age, AgeGroupRisk, Alive, Person};
 use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]

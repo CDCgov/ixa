@@ -1,7 +1,8 @@
-use ixa::prelude::*;
-use ixa::{trace};
-use rand_distr::Exp;
 use ixa::entity::events::PropertyChangeEvent;
+use ixa::prelude::*;
+use ixa::trace;
+use rand_distr::Exp;
+
 use crate::people::{InfectionStatus, Person, PersonId};
 use crate::INFECTION_DURATION;
 
@@ -67,9 +68,7 @@ mod test {
 
         let population_size = 10;
         for _ in 0..population_size {
-            let person_id = context
-                .add_entity((InfectionStatus::S, ))
-                .unwrap();
+            let person_id = context.add_entity((InfectionStatus::S,)).unwrap();
             context.set_property(person_id, InfectionStatus::I);
         }
 

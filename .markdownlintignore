@@ -1,6 +1,7 @@
 docs/book/src/cli-usage.md
 integration-tests/ixa-wasm-tests/node_modules
 integration-tests/ixa-wasm-tests/pkg
+integration-tests/ixa-wasm-tests/test-results
 website
 CHANGELOG.md
 target

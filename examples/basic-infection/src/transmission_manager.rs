@@ -1,8 +1,8 @@
 use ixa::prelude::*;
-use ixa::{trace};
+use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, PersonId, Person};
+use crate::people::{InfectionStatus, Person, PersonId};
 use crate::{FOI, MAX_TIME};
 
 define_rng!(TransmissionRng);
@@ -15,9 +15,7 @@ fn attempt_infection(context: &mut Context) {
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
     if person_status == InfectionStatus::S {
-        context.set_property(person_to_infect,
-            InfectionStatus::I,
-        );
+        context.set_property(person_to_infect, InfectionStatus::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection), each _person_ experiences an

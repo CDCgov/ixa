@@ -42,7 +42,7 @@ _infected_ persons; they are not _infectious_.)
 
 This diagram gives a high-level view of how Ixa works:
 
-![An Agent Based Model](../assets/AnAgentBasedModel.svg)\_\_
+![An Agent Based Model](../assets/AnAgentBasedModel.svg)
 
 Don't expect to understand everything in this diagram straight away. The major
 concepts we need to understand about models in Ixa are:
@@ -56,8 +56,8 @@ concepts we need to understand about models in Ixa are:
 3. **Plan:** A piece of logic scheduled to execute at a certain time on the
    timeline. Plans are added to the timeline through the `Context`.
 4. **Agents:** Generally people in a disease model, agents are the entities
-   which dynamically interact over the course of the simulation. Data can be
-   associated to agents as properties—"people properties" in our case.
+   that dynamically interact over the course of the simulation. Data can be
+   associated with agents as properties—"people properties" in our case.
 5. **Property:** Data attached to an agent.
 6. **Module:** An organizational unit of functionality. Simulations are
    constructed out of a series of interacting modules that take turns

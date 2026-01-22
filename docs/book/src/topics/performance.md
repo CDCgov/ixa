@@ -11,9 +11,15 @@ Just include the following method call(s) during the initialization of
 `context`, replacing the example property names with your own:
 
 ```rust
-// Somewhere during the initialization of `context`
-context.index_property(Age); // For single property indexes
-define_multi_property_index!(AgeGroup, InfectionStatus); // For multi-indexes
+// For single property indexes
+// Somewhere during the initialization of `context`:
+context.index_property::<Person, Age>();
+
+// For multi-indexes
+// Where properties are defined:
+define_multi_property!((Name, Age, Weight), Person);
+// Somewhere during the initialization of `context`:
+context.index_property::<Person, (Name, Age, Weight)>();
 ```
 
 The cost of creating indexes is increased memory use, which can be significant
@@ -217,7 +223,7 @@ change event.
 use crate::progress_bar::{increment_custom_progress};
 
 // You might already have this event defined for other purposes.
-pub type InfectionStatusEvent = PersonPropertyChangeEvent<InfectionStatus>;
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
 
 // This will handle the status change event, updating the progress bar
 // if there is a new infection.

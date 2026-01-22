@@ -13,14 +13,19 @@ the agents will represent people. So let's create a module that is responsible
 for people and their properties—the data that is attached to each person. Create
 a new file in the `src` directory called `people.rs`.
 
-## `PersonProperty`
+## Defining an Entity and Property
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:InfectionStatusValue}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs:define_property}}
 ```
 
+We have to define the `Person` entity before we can associate properties with it. The
+`define_entity!(Person)` macro invocation automatically defines the `Person` type, implements the
+`Entity` trait for `Person`, and creates the type alias `PersonId = EntityId<Person>`, which is the
+type we can use to represent specific instances of our entity, a single person, in our simulation.
+
 To each person we will associate a value of the enum (short for “enumeration”)
-named `InfectionStatusValue`. An enum is a way to create a type that can be one
+named `InfectionStatus`. An enum is a way to create a type that can be one
 of several predefined values. Here, we have three values:
 
 - **S**: Represents someone who is susceptible to infection.
@@ -31,37 +36,6 @@ Each value in the enum corresponds to a stage in our simple model. The enum
 value for a person's `InfectionStatus` property will refer to an individual’s
 health status in our simulation.
 
-The attributes written above the enum declaration, such as
-`#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]`,
-automatically add useful functionality to the enum:
-
-- **`Debug`**: Allows the value to be printed for debugging purposes.
-
-- **`Hash, Eq, PartialEq`**: Enable the enum to be compared and used in data
-  structures like hash maps.
-
-- **`Clone, Copy`**: Allow the values to be duplicated easily.
-
-- **`Serialize, Deserialize`**: Make it possible to convert the enum to and from
-  a format that can be stored or transmitted (for example, when saving data to a
-  CSV file).
-
-All of our "person properties" in our models will "derive" these attributes. It
-is not enough to define this enum. We have to tell Ixa that it will be a
-`PersonProperty`:
-
-```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:define_person_property}}
-```
-
-> [!NOTE] Name Tags and Values
->
-> Notice that there are two types associated with infection status,
-> `InfectionStatus` and `InfectionStatusValue`. The first, `InfectionStatus`, is
-> a tag that we will use to fetch and store values of the property, while
-> `InfectionStatusValue` is the type of the values themselves. [!INFO] Default
-> or No Default
-
 ## The module's `init()` function
 
 While not strictly enforced by Ixa, the general formula for an Ixa module is:
@@ -70,33 +44,37 @@ While not strictly enforced by Ixa, the general formula for an Ixa module is:
 2. "private" data types and functions
 
 The `init()` function is how your module will insert any data into the context
-and setup whatever initial conditions it requires before the simulation begins.
+and set up whatever initial conditions it requires before the simulation begins.
 For our `people` module, the `init()` function just inserts people into the
 `Context`.
 
 ```rust
 /// Populates the "world" with people.
 pub fn init(context: &mut Context) {
+   trace!("Initializing people");
 
-    trace!("Initializing people");
-
-    for _ in 0..1000 {
-
-        context.add_person(()).expect("failed to add person");
-
-    }
+   for _ in 0..1000 {
+      let _: PersonId = context.add_entity(()).expect("failed to add person");
+   }
 }
 ```
 
-The `context.add_person()` method call might look a little odd, because we are
+The `context.add_entity()` method call might look a little odd, because we are
 not giving `context` any data to insert, but that is because our one and only
-`PersonProperty` was defined to have a default value of
-`InfectionStatusValue::S` (susceptible)—so `context.add_person()` doesn't need
+`Property` was defined to have a default value of
+`InfectionStatus::S` (susceptible)—so `context.add_entity()` doesn't need
 any information to create a new person. Another odd thing is the
 `.expect("failed to add person")` method call. In more complicated scenarios
 adding a person can fail. We can intercept that failure if we wanted, but in
 this simple case we will just let the program crash with a message about the
 reason: "failed to add person".
+
+Finally, the `Context::add_entity` method returns an entity ID wrapped in a `Result`, which the `expect` method
+unwraps. We can use this ID if we need to refer to this newly created person. Since we don't need it, we assign
+the value to the special "don't care" variable `_` (underscore), which just throws the value away. Why assign
+it to anything, though? So that the compiler can infer that it is a `Person` we are creating, as opposed to
+some other entity we may have defined. If we just omitted the `let _: PersonId =` part completely, we would
+need to explicitly specify the entity type using [turbo fish notation](../appendix_rust/turbo-fish.md).
 
 ## Constants
 

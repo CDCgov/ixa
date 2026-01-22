@@ -32,7 +32,7 @@ pub fn initialize(context: &mut Context, output_path: &Path) {
     incidence_report::init(context, &output_path_buff).unwrap_or_else(|e| {
         eprintln!("failed to init incidence_report: {}", e);
     });
-    
+
     population_manager::init(context);
     transmission_manager::init(context);
     infection_manager::init(context);

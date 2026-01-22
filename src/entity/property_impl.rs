@@ -5,7 +5,7 @@ Macros for implementing properties.
 # [`define_property!`]
 
 For the most common cases, use the [`define_property!`] macro. This macro defines a struct or enum
-with the standard derives required by the [`Property`] trait and implements [`Property`] (via
+with the standard derives required by the [`Property`][crate::entity::property::Property] trait and implements [`Property`][crate::entity::property::Property] (via
 [`impl_property!`]) for you.
 
 ```rust,ignore
@@ -27,7 +27,7 @@ define a compile-time constant default value for the property. This is an option
 If it is omitted, a value for the property must be supplied upon entity creation.
 
 The primary advantage of using this macro is that it automatically derives the list of traits every
-[`Property`] needs to derive for you. You don't have to remember them. You also get a cute syntax for
+[`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
@@ -35,8 +35,8 @@ specify the visibility. A `pub` visibility is added automatically in the expansi
 
 # [`impl_property!`]
 
-You can implement [`Property`] for existing types using the [`impl_property!`] macro. This macro defines the
-[`Property`] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
+You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`] macro. This macro defines the
+[`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
 have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
 
 Some examples:
@@ -258,8 +258,7 @@ macro_rules! define_property {
 }
 pub use define_property;
 
-
-/// Implements the [`Property`] trait for the given property type and entity.
+/// Implements the [`Property`][crate::entity::property::Property] trait for the given property type and entity.
 ///
 /// Use this macro when you want to implement the `Property<E: Entity>` trait for a type you have declared yourself.
 /// You might want to declare your own property type yourself instead of using the [`define_property!`] macro if
@@ -292,7 +291,7 @@ pub use define_property;
 ///
 /// Parameters must be given in the correct order.
 ///
-/// * `$property`: The identifier for the type implementing [`Property`].
+/// * `$property`: The identifier for the type implementing [`Property`][crate::entity::property::Property].
 /// * `$entity`: The entity type this property is associated with.
 /// * Optional parameters (each may be omitted; defaults will be used):
 ///   * `compute_derived_fn = <expr>` — Function used to compute derived properties. Use `define_derived_property!` or
@@ -510,7 +509,6 @@ macro_rules! impl_property {
 }
 pub use impl_property;
 
-
 /// The "derived" variant of [`define_property!`] for defining simple derived property types.
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
 /// [`impl_derived_property!`] for it.
@@ -655,8 +653,7 @@ macro_rules! define_derived_property {
 }
 pub use define_derived_property;
 
-
-/// Implements the [`Property`] trait for an existing type as a derived property.
+/// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
 ///
 /// Accepts the same parameters as [`define_derived_property!`], except the first parameter is the name of a
 /// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
@@ -718,7 +715,6 @@ macro_rules! impl_derived_property {
         };
     }
 pub use impl_derived_property;
-
 
 /// Defines a derived property consisting of a (named) tuple of other properties. The primary use case
 /// is for indexing and querying properties jointly.

@@ -6,6 +6,9 @@ members = [
     "examples/births-deaths",
     "integration-tests/ixa-*",
 ]
+exclude = [
+    "docs/book/models/disease_model"
+]
 
 [workspace.package]
 edition = "2021"
