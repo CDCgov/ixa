@@ -829,6 +829,20 @@ pub trait ContextBase: Sized {
     fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> Result<EntityId<E>, String>;
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
     fn set_property<E: Entity, P: Property<E>>(&mut self, entity_id: EntityId<E>, property_value: P);
+    fn sample_entity<R, E, Q>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
+    where
+        R: RngId + 'static,
+        R::RngType: Rng,
+        E: Entity,
+        Q: Query<E>;
+    fn sample_entities<R, E, Q>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
+    where
+        R: RngId + 'static,
+        R::RngType: Rng,
+        E: Entity,
+        Q: Query<E>;
+    fn get_entity_count<E: Entity>(&self) -> usize;
+    fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E>;
 }
 impl ContextBase for Context {
     delegate::delegate! {
@@ -847,8 +861,22 @@ impl ContextBase for Context {
             fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> Result<EntityId<E>, String>;
             fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
             fn set_property<E: Entity, P: Property<E>>(&mut self, entity_id: EntityId<E>, property_value: P);
-        }
+            fn sample_entity<R, E, Q>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
+            where
+                R: RngId + 'static,
+                R::RngType: Rng,
+                E: Entity,
+                Q: Query<E>;
+            fn sample_entities<R, E, Q>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
+            where
+                R: RngId + 'static,
+                R::RngType: Rng,
+                E: Entity,
+                Q: Query<E>;
+            fn get_entity_count<E: Entity>(&self) -> usize;
+            fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E>;
     }
+}
 }
 
 impl Default for Context {
