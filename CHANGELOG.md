@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/CDCgov/ixa/compare/ixa-v0.5.1...ixa-v0.5.2) - 2026-01-26
+
+### Other
+
+- bump release-plz/action from 0.5.120 to 0.5.121 ([#666](https://github.com/CDCgov/ixa/pull/666))
+
 ## [0.5.1](https://github.com/CDCgov/ixa/compare/ixa-v0.5.0...ixa-v0.5.1) - 2026-01-12
 
 ### Other

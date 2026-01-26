@@ -68,7 +68,7 @@ hashbrown = "^0.16.0"
 
 [package]
 name = "ixa"
-version = "0.5.1"
+version = "0.5.2"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
