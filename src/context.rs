@@ -826,6 +826,9 @@ pub trait ContextBase: Sized {
     fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
     fn get_current_time(&self) -> f64;
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+    fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> Result<EntityId<E>, String>;
+    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
+    fn set_property<E: Entity, P: Property<E>>(&mut self, entity_id: EntityId<E>, property_value: P);
 }
 impl ContextBase for Context {
     delegate::delegate! {
@@ -841,6 +844,9 @@ impl ContextBase for Context {
             fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
             fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+            fn add_entity<E: Entity, PL: PropertyList<E>>(&mut self, property_list: PL) -> Result<EntityId<E>, String>;
+            fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
+            fn set_property<E: Entity, P: Property<E>>(&mut self, entity_id: EntityId<E>, property_value: P);
         }
     }
 }
