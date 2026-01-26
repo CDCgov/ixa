@@ -1,6 +1,7 @@
 pub use crate::context::Context;
 pub use crate::entity::property::Property;
 pub use crate::entity::{Entity, EntityId};
+pub use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 pub use crate::error::IxaError;
 pub use crate::global_properties::ContextGlobalPropertiesExt;
 pub use crate::log::{debug, error, info, trace, warn};
