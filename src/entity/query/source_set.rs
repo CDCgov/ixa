@@ -168,15 +168,12 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     }
 
     fn contains(&self, person_id: EntityId<E>) -> bool {
-        // Recall that the outer "Option" indicates whether `person_id.0` is
-        // in bounds while the inner option indicates whether the value is set.
+        // Recall that the "Option" indicates whether `person_id.0` is in bounds.
         if let Some(found_value) = self.values.get(person_id.0) {
-            found_value == Some(self.value) || (self.is_default_value && found_value.is_none())
-        } else if self.is_default_value {
-            // Unset values are implicitly equal to the default value.
-            true
+            found_value == self.value
         } else {
-            false
+            // Unset values are implicitly equal to the default value.
+            self.is_default_value
         }
     }
 
@@ -195,9 +192,7 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
             self.next_index += 1;
             if let Some(found_value) = self.values.get(self.next_index - 1) {
                 // The vector is not exhausted...
-                if found_value == Some(self.value)
-                    || (self.is_default_value && found_value.is_none())
-                {
+                if found_value == self.value {
                     return Some(EntityId::new(self.next_index - 1));
                 }
             } else {
@@ -375,10 +370,8 @@ mod tests {
 
     #[test]
     fn test_iterators() {
-        let values: RawPropertyValueVec<Age> = [0u8, 3, 2, 3, 4, 5, 3]
-            .into_iter()
-            .map(|v| Some(Age(v)))
-            .collect();
+        let values: RawPropertyValueVec<Age> =
+            [0u8, 3, 2, 3, 4, 5, 3].into_iter().map(Age).collect();
         let people_set = HashSet::from_iter([
             EntityId::new(0),
             EntityId::new(2),
