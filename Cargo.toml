@@ -90,9 +90,6 @@ progress_bar = ["dep:progress_bar", "anyhow"]
 
 profiling = []
 
-# Remove before PR.
-disabled = []
-
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
 
@@ -175,6 +172,7 @@ mismatched_lifetime_syntaxes = "allow"
 # https://rust-lang.github.io/rust-clippy/master/index.html
 [workspace.lints.clippy]
 module-name-repetitions = "allow"
+module_inception = "allow"
 result_unit_err = "allow"
 uninlined_format_args = "allow"
 upper-case-acronyms = "allow"

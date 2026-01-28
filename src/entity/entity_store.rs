@@ -11,12 +11,12 @@ create or destructure `EntityId<Entity>` values directly. Instead,
 
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::HashMap;
 
 /// Global item index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
@@ -26,6 +26,7 @@ static NEXT_ENTITY_INDEX: Mutex<usize> = Mutex::new(0);
 /// `entity_type_id` to `(vec_of_all_property_type_ids, vec_of_required_property_type_ids)`.
 /// This data is actually written by the property ctors with a call to
 /// [`register_property_with_entity()`].
+#[allow(clippy::type_complexity)]
 static ENTITY_METADATA: LazyLock<Mutex<HashMap<TypeId, (Vec<TypeId>, Vec<TypeId>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
@@ -282,7 +283,7 @@ mod tests {
         add_to_entity_registry, get_registered_entity_count, initialize_entity_index, EntityStore,
     };
     use crate::entity::{impl_entity, Entity};
-    use crate::Context;
+    use crate::{Context, HashMap};
 
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
@@ -439,7 +440,7 @@ mod tests {
         let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
         // Count occurrences of each index
-        let mut counts = std::collections::HashMap::new();
+        let mut counts = HashMap::default();
         for &result in &results {
             *counts.entry(result).or_insert(0) += 1;
         }
@@ -474,7 +475,7 @@ mod tests {
         // As before, we account for the fact that some entities have been
         // initialized in their `ctors`, so the indices we created don't start at 0.
         let expected_indices = vec![
-            0 + initial_registered_items_count,
+            initial_registered_items_count,
             1 + initial_registered_items_count,
             2 + initial_registered_items_count,
         ];

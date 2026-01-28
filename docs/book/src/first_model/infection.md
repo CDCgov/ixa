@@ -18,9 +18,10 @@ Ixa that will be called in response to a change in a particular property.
 ```
 
 This line isn't defining a new struct or even a new type. Rather, it defines an
-alias for `PropertyChangeEvent\<E: Entity, P: Property\<E>>` with the generic types instantiated
-for the property we want to monitor, `InfectionStatus`. This is effectively the
-name of the event we subscribe to in the module's `init()` function:
+alias for `PropertyChangeEvent\<E: Entity, P: Property\<E>>` with the generic
+types instantiated for the property we want to monitor, `InfectionStatus`. This
+is effectively the name of the event we subscribe to in the module's `init()`
+function:
 
 ```rust
 // in infection_manager.rs
@@ -41,9 +42,10 @@ We only care about new infections in this model.
 
 ## Scheduling Recovery
 
-As in `attempt_infection()`, we sample the recovery time from the exponential distribution
-with mean `INFECTION_DURATION`, a constant we define in `main.rs`. We define a random number
-source for this module's exclusive use with `define_rng!(InfectionRng)` as we did before.
+As in `attempt_infection()`, we sample the recovery time from the exponential
+distribution with mean `INFECTION_DURATION`, a constant we define in `main.rs`.
+We define a random number source for this module's exclusive use with
+`define_rng!(InfectionRng)` as we did before.
 
 ```rust
 {{#rustdoc_include ../../models/disease_model/src/infection_manager.rs:schedule_recovery}}
@@ -55,9 +57,12 @@ convenient when the function is only a line or two.
 
 > [!INFO] Closures and Captured Variables
 >
-> The `move` keyword in the syntax for Rust closures instructs the closure to take ownership of any variables it
-> uses from its surrounding context—these are known as captured variables. Normally, when a closure refers to
-> variables defined outside of its own body, it borrows them, which means it uses references to those values.
-> However, with `move`, the closure takes full ownership by moving the variables into its own scope. This is
-> especially useful when the closure must outlive the current scope or be passed to another thread, as it ensures
-> that the closure has its own independent copy of the data without relying on references that might become invalid.
+> The `move` keyword in the syntax for Rust closures instructs the closure to
+> take ownership of any variables it uses from its surrounding context—these are
+> known as captured variables. Normally, when a closure refers to variables
+> defined outside of its own body, it borrows them, which means it uses
+> references to those values. However, with `move`, the closure takes full
+> ownership by moving the variables into its own scope. This is especially
+> useful when the closure must outlive the current scope or be passed to another
+> thread, as it ensures that the closure has its own independent copy of the
+> data without relying on references that might become invalid.

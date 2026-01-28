@@ -55,8 +55,8 @@ concepts we need to understand about models in Ixa are:
    `Context` at a future point in time and execute the logic in the plan.
 3. **Plan:** A piece of logic scheduled to execute at a certain time on the
    timeline. Plans are added to the timeline through the `Context`.
-4. **Agents:** Generally people in a disease model, agents are the entities
-   that dynamically interact over the course of the simulation. Data can be
+4. **Agents:** Generally people in a disease model, agents are the entities that
+   dynamically interact over the course of the simulation. Data can be
    associated with agents as properties—"people properties" in our case.
 5. **Property:** Data attached to an agent.
 6. **Module:** An organizational unit of functionality. Simulations are

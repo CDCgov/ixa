@@ -7,8 +7,8 @@ pnpm = "latest"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
 "cargo:mdbook" = "0.4.52"
-"cargo:mdbook-callouts" = "latest"
-"cargo:mdbook-inline-highlighting" = "latest"
+"cargo:mdbook-callouts" = "0.2.2"
+"cargo:mdbook-inline-highlighting" = "1.0.0"
 
 [settings]
 # Note: If you have cargo-binstall installed, this will make tool installs much faster
@@ -40,7 +40,10 @@ run = '''
 
 [tasks.test]
 description = "Run all tests"
-depends = "test:*"
+depends = [
+  "test:unit",
+  "test:wasm"
+]
 
 [tasks.'test:unit']
 description = "Run all unit tests"
