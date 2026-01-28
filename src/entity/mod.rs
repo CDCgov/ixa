@@ -41,6 +41,7 @@ pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
+pub mod context_extension;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;
@@ -49,6 +50,7 @@ pub mod query;
 pub use entity::*;
 pub use entity_impl::*;
 pub(crate) use query::Query;
+pub use context_extension::ContextEntitiesExt;
 
 /// The type used in the indexing infrastructure. This type alias is
 /// public, because it is used by any implementor of `Property<E: Entity>`.

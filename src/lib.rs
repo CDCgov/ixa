@@ -121,6 +121,8 @@ pub mod prelude_for_plugins {
 }
 
 pub mod entity;
+pub use entity::ContextEntitiesExt;
+
 pub mod execution_stats;
 pub mod profiling;
 mod value_vec;
