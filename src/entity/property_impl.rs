@@ -371,7 +371,7 @@ macro_rules! impl_property {
 
             // index_id_fn
             $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
-                Self::id()
+                <Self as Property<$entity>>::id()
             }),
 
             // collect_deps_fn
@@ -784,7 +784,7 @@ macro_rules! define_multi_property {
                             },
                             None => {
                                 // An index ID is not yet assigned. We will use our own index for this property.
-                                let index = Self::id();
+                                let index = <Self as Property<$entity>>::id();
                                 INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
                                 // And register the new index with this property set.
                                 $crate::entity::multi_property::register_type_ids_to_multi_property_index(
@@ -824,8 +824,11 @@ mod tests {
     #![allow(dead_code)]
 
     use crate::prelude::*;
+    use crate::serde::Serialize;
 
     define_entity!(Person);
+    define_entity!(Group);
+
     define_property!(struct Pu32(u32), Person, default_const = Pu32(0));
     define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
     define_property!(struct Name(&'static str), Person, default_const = Name(""));
@@ -879,6 +882,24 @@ mod tests {
         |age| {
             DerivedProp(age.0 % 2 == 0)
         }
+    );
+
+    // A property type for two distinct entities.
+    #[derive(Debug, PartialEq, Clone, Copy, Serialize)]
+    pub enum InfectionKind {
+        Respiratory,
+        Genetic,
+        Superficial,
+    }
+    impl_property!(
+        InfectionKind,
+        Person,
+        default_const = InfectionKind::Respiratory
+    );
+    impl_property!(
+        InfectionKind,
+        Group,
+        default_const = InfectionKind::Genetic
     );
 
     define_multi_property!((Name, Age, Weight), Person);
