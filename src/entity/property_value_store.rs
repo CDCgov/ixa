@@ -19,7 +19,7 @@ use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEve
 use crate::entity::index::Index;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::{Entity, EntityId, HashValueType};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
 use crate::{Context, HashSet};
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
