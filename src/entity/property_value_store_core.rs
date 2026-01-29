@@ -100,7 +100,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             self.data.reserve(index + 1 - len);
 
             // Fill any missing slots up to (but not including) `idx`
-            self.data.resize_with(index, || default_value.clone());
+            self.data.resize(index, default_value);
             // ...and finally push the provided value
             self.data.push(Some(value));
         } else {
@@ -130,7 +130,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             self.data.reserve(index + 1 - len);
 
             // Fill any missing slots up to (but not including) `idx`
-            self.data.resize_with(index, || default_value.clone());
+            self.data.resize(index, default_value);
             // ...and finally push the provided value
             self.data.push(Some(value));
 

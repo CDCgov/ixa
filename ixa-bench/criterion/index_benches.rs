@@ -94,7 +94,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     context.with_query_people_results(
-                        black_box(((Property10, number * 3 % 10), (Property100, *number))),
+                        black_box((
+                            (Property10, number.wrapping_mul(3) % 10),
+                            (Property100, *number),
+                        )),
                         &mut |people_set| {
                             black_box(people_set.len());
                         },
@@ -109,7 +112,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     context.with_query_results(
-                        black_box((AProperty10((number * 3) % 10), AProperty100(*number))),
+                        black_box((
+                            AProperty10(number.wrapping_mul(3) % 10),
+                            AProperty100(*number),
+                        )),
                         &mut |people_set| {
                             black_box(people_set.len());
                         },
@@ -123,7 +129,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             for number in &numbers {
                 context.with_query_people_results(
-                    black_box((MProperty, ((number * 3) % 10, *number))),
+                    black_box((MProperty, (number.wrapping_mul(3) % 10, *number))),
                     &mut |people_set| {
                         black_box(people_set.len());
                     },
@@ -138,7 +144,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for number in &numbers {
                     context.with_query_results(
                         // We are using the fact that a query detects when it is equivalent to a multi-property.
-                        black_box((AMProperty10((number * 3) % 10), AMProperty100(*number))),
+                        black_box((
+                            AMProperty10(number.wrapping_mul(3) % 10),
+                            AMProperty100(*number),
+                        )),
                         &mut |people_set| {
                             black_box(people_set.len());
                         },
@@ -172,7 +181,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     black_box(context.query_people_count(black_box((
-                        (Property10, (number * 3) % 10),
+                        (Property10, number.wrapping_mul(3) % 10),
                         (Property100, *number),
                     ))));
                 }
@@ -185,7 +194,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     black_box(context.query_entity_count(black_box((
-                        AProperty10((number * 3) % 10),
+                        AProperty10(number.wrapping_mul(3) % 10),
                         AProperty100(*number),
                     ))));
                 }
@@ -196,9 +205,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("query_people_count_indexed_multi-property", |bencher| {
         bencher.iter(|| {
             for number in &numbers {
-                black_box(
-                    context.query_people_count(black_box((MProperty, (number * 3 % 10, *number)))),
-                );
+                black_box(context.query_people_count(black_box((
+                    MProperty,
+                    (number.wrapping_mul(3) % 10, *number),
+                ))));
             }
         });
     });
@@ -210,7 +220,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                     black_box(
                         // We are using the fact that a query detects when it is equivalent to a multi-property.
                         context.query_entity_count(black_box((
-                            AMProperty10((number * 3) % 10),
+                            AMProperty10(number.wrapping_mul(3) % 10),
                             AMProperty100(*number),
                         ))),
                     );
@@ -246,7 +256,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for number in &numbers {
                     #[allow(deprecated)]
                     black_box(context.query_people(black_box((
-                        (Property10, number * 3 % 10),
+                        (Property10, number.wrapping_mul(3) % 10),
                         (Property100, *number),
                     ))));
                 }
@@ -273,7 +283,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             for number in &numbers {
                 #[allow(deprecated)]
-                black_box(context.query_people(black_box((MProperty, (number * 3 % 10, *number)))));
+                black_box(context.query_people(black_box((
+                    MProperty,
+                    (number.wrapping_mul(3) % 10, *number),
+                ))));
             }
         });
     });

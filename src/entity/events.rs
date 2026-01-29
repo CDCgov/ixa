@@ -71,7 +71,7 @@ pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(
 // `PartialPropertyChangeEvent<E, P>` is always `Copy`/`Clone` if we derive them.
 impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        *self
     }
 }
 impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P> {}
@@ -85,7 +85,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
         })
     }
 
-    pub fn to_event(&self, current_value: P) -> PropertyChangeEvent<E, P> {
+    pub fn to_event(self, current_value: P) -> PropertyChangeEvent<E, P> {
         PropertyChangeEvent {
             entity_id: self.0.entity_id,
             current_value,
@@ -133,11 +133,7 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
 // this type is always `Copy`/`Clone` if we derive them.
 impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
     fn clone(&self) -> Self {
-        Self {
-            entity_id: self.entity_id,
-            current_value: self.current_value,
-            previous_value: self.previous_value.clone(),
-        }
+        *self
     }
 }
 impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}

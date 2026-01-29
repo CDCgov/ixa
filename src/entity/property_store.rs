@@ -66,12 +66,14 @@ pub(super) struct PropertyMetadata<E: Entity> {
     /// way, used in the constructor of `PropertyStore`. This is an `Option` because this
     /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
     /// instance for this property needs to exist (when its dependents are recorded).
+    #[allow(clippy::type_complexity)]
     pub value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore<E>>>,
 }
 
 /// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector of dependents (as IDs)
 /// and a function pointer to the constructor that constucts a `PropertyValueStoreCore<E, P>` type erased as
 /// a `Box<dyn PropertyValueStore<E>>`. This data is actually written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
+#[allow(clippy::type_complexity)]
 static PROPERTY_METADATA: LazyLock<Mutex<HashMap<(usize, usize), Box<dyn Any + Send>>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
@@ -259,7 +261,7 @@ impl<E: Entity> PropertyStore<E> {
                     panic!(
                         "Property type at index {:?} does not match registered property type. Found type_id {:?} while getting type_id {:?}. You must use the `define_property!` macro to create a registered property.",
                         index,
-                        property_value_store.type_id(),
+                        (**property_value_store).type_id(),
                         TypeId::of::<PropertyValueStoreCore<E, P>>()
                     )
                 }
@@ -281,7 +283,7 @@ impl<E: Entity> PropertyStore<E> {
                         P::name()
                     )
                 );
-        let type_id = (&*property_value_store).type_id(); // Only used for error message if error occurs.
+        let type_id = (**property_value_store).type_id(); // Only used for error message if error occurs.
         let property_value_store: &mut PropertyValueStoreCore<E, P> = property_value_store
             .as_any_mut()
             .downcast_mut::<PropertyValueStoreCore<E, P>>()

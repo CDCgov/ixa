@@ -75,7 +75,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
     }
 
     pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
-        let hash = P::hash_property_value(&key);
+        let hash = P::hash_property_value(key);
         self.remove_entity_with_hash(hash, entity_id);
     }
 
@@ -132,44 +132,43 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
     }
 }
 
-#[cfg(feature = "disabled")]
 mod test {
     // Tests in `src/entity/query.rs` also exercise indexing code.
-
-    use log::LevelFilter;
-
+    use super::Index;
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
-    use crate::{define_person_multi_property, set_log_level, set_module_filter};
+    use crate::{define_entity, define_multi_property, define_property};
 
-    define_person_property!(Age, u8);
-    define_person_property!(Weight, u8);
-    define_person_property!(Height, u8);
+    define_entity!(Person);
+    define_property!(struct Age(pub u8), Person, default_const = Age(0));
+    define_property!(struct Weight(pub u8), Person, default_const = Weight(0));
+    define_property!(struct Height(pub u8), Person, default_const = Height(0));
 
-    define_person_multi_property!(AWH, (Age, Weight, Height));
-    define_person_multi_property!(WHA, (Weight, Height, Age));
+    define_multi_property!((Age, Weight, Height), Person);
+    define_multi_property!((Weight, Height, Age), Person);
+
+    type AWH = (Age, Weight, Height);
+    type WHA = (Weight, Height, Age);
 
     #[test]
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
-        set_log_level(LevelFilter::Trace);
-        set_module_filter("ixa", LevelFilter::Trace);
 
-        context.index_person_property(WHA);
-        context.index_person_property(AWH);
+        context.index_property::<Person, WHA>();
+        context.index_property::<Person, AWH>();
 
         context
-            .add_person(((Age, 1u8), (Weight, 2u8), (Height, 3u8)))
+            .add_entity((Age(1u8), Weight(2u8), Height(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_people_results((AWH, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_results((Age(1u8), Weight(2u8), Height(3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_people_results((WHA, (2u8, 3u8, 1u8)), &mut |results| {
+        context.with_query_results((Weight(2u8), Height(3u8), Age(1u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);
@@ -178,17 +177,17 @@ mod test {
         println!("Results: {:?}", results_a);
 
         context
-            .add_person(((Weight, 1u8), (Height, 2u8), (Age, 3u8)))
+            .add_entity((Weight(1u8), Height(2u8), Age(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_people_results((WHA, (1u8, 2u8, 3u8)), &mut |results| {
+        context.with_query_results((Weight(1u8), Height(2u8), Age(3u8)), &mut |results| {
             results_a = results.clone()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_people_results((AWH, (3u8, 1u8, 2u8)), &mut |results| {
+        context.with_query_results((Age(3u8), Weight(1u8), Height(2u8)), &mut |results| {
             results_b = results.clone()
         });
         assert_eq!(results_b.len(), 1);
@@ -196,14 +195,11 @@ mod test {
         assert_eq!(results_a, results_b);
 
         println!("Results: {:?}", results_a);
-
-        set_module_filter("ixa", LevelFilter::Info);
-        set_log_level(LevelFilter::Off);
     }
 
     #[test]
     fn index_name() {
-        let index = Index::<Age>::new();
+        let index = Index::<Person, Age>::new();
         assert!(index.name.contains("Age"));
     }
 
@@ -216,11 +212,11 @@ mod test {
 
     #[test]
     fn test_index_value_compute_different_values() {
-        let value1 = 42;
-        let value2 = 43;
+        let value1 = Age(42);
+        let value2 = Age(43);
         assert_ne!(
-            <Age as PersonProperty>::hash_property_value(&value1),
-            <Age as PersonProperty>::hash_property_value(&value2)
+            <Age as Property<Person>>::hash_property_value(&value1),
+            <Age as Property<Person>>::hash_property_value(&value2)
         );
     }
 }
