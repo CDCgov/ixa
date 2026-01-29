@@ -7,14 +7,10 @@ pub mod entities;
 pub mod legacy;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct ModelOptions {
-    pub queries_enabled: bool,
-}
+pub struct ModelOptions {}
 impl Default for ModelOptions {
     fn default() -> Self {
-        ModelOptions {
-            queries_enabled: true,
-        }
+        ModelOptions {}
     }
 }
 
