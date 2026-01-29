@@ -31,6 +31,7 @@ static variable `index`. Each concrete `Entity` type is thus assigned a unique i
 
 */
 
+pub mod context_extension;
 mod entity;
 mod entity_impl;
 pub mod entity_store;
@@ -41,16 +42,15 @@ pub mod property;
 pub mod property_impl;
 pub mod property_list;
 pub mod property_store;
-pub mod context_extension;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;
 
 // Flatten the module hierarchy.
+pub use context_extension::ContextEntitiesExt;
 pub use entity::*;
 pub use entity_impl::*;
 pub(crate) use query::Query;
-pub use context_extension::ContextEntitiesExt;
 
 /// The type used in the indexing infrastructure. This type alias is
 /// public, because it is used by any implementor of `Property<E: Entity>`.

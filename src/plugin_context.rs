@@ -1,7 +1,7 @@
 use crate::context::{Context, ContextBase};
 use crate::{
-    ContextGlobalPropertiesExt, ContextNetworkExt, ContextPeopleExt, ContextRandomExt,
-    ContextReportExt, ContextEntitiesExt,
+    ContextEntitiesExt, ContextGlobalPropertiesExt, ContextNetworkExt, ContextPeopleExt,
+    ContextRandomExt, ContextReportExt,
 };
 
 /// A supertrait that exposes useful methods from [`Context`]

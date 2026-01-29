@@ -21,9 +21,8 @@ use std::marker::PhantomData;
 
 use ouroboros::self_referencing;
 
-use crate::entity::ContextEntitiesExt;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
-use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
 use crate::hashing::HashSet;
 use crate::prelude::Property;
 use crate::Context;

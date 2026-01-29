@@ -128,7 +128,9 @@ impl Context {
         }
     }
 
-    pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
+    pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
+        &self,
+    ) -> &PropertyValueStoreCore<E, P> {
         self.entity_store.get_property_store::<E>().get::<P>()
     }
     pub(crate) fn get_property_value_store_mut<E: Entity, P: Property<E>>(
@@ -992,5 +994,4 @@ mod tests {
             "If this fails, shutdown_requested was not properly reset"
         );
     }
-
 }

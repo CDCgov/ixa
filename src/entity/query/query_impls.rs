@@ -2,12 +2,11 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
-use crate::entity::ContextEntitiesExt;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
 use crate::entity::query::query_result_iterator::QueryResultIterator;
 use crate::entity::query::source_set::SourceSet;
-use crate::entity::{Entity, HashValueType, Query};
+use crate::entity::{ContextEntitiesExt, Entity, HashValueType, Query};
 use crate::hashing::one_shot_128;
 use crate::Context;
 
