@@ -328,7 +328,6 @@ impl ContextEntitiesExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
-    #![allow(dead_code)]
     use std::cell::Ref;
 
     use super::*;
