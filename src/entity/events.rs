@@ -29,7 +29,7 @@ because a non-derived p
 use ixa_derive::IxaEvent;
 
 use crate::entity::property::Property;
-use crate::entity::{Entity, EntityId};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, IxaEvent};
 
 /// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
