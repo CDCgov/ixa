@@ -284,7 +284,7 @@ mod tests {
     };
     use crate::entity::{impl_entity, Entity};
     use crate::{Context, HashMap};
-
+    use crate::entity::ContextEntitiesExt;
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
     pub struct TestItem1 {

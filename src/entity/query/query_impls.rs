@@ -2,6 +2,7 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
+use crate::entity::ContextEntitiesExt;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
 use crate::entity::query::query_result_iterator::QueryResultIterator;
