@@ -8,7 +8,7 @@ use crate::rand::Rng;
 ///
 /// We do not assume the container is randomly indexable, only that it can be iterated over.
 /// This algorithm is used when the property is indexed, and thus we know the length of the result set.
-pub fn sample_single_from_known_length<'a, I, R, T>(rng: &mut R, mut iter: I) -> Option<T>
+pub fn sample_single_from_known_length<I, R, T>(rng: &mut R, mut iter: I) -> Option<T>
 where
     R: Rng,
     I: Iterator<Item = T> + ExactSizeIterator<Item = T>,
@@ -67,11 +67,7 @@ where
 /// This algorithm can be used when the property is indexed, and thus we know the length of the result set.
 /// For very small `requested` values (<=5), this algorithm is faster than reservoir because it doesn't
 /// iterate over the entire set.
-pub fn sample_multiple_from_known_length<'a, I, R, T>(
-    rng: &mut R,
-    iter: I,
-    requested: usize,
-) -> Vec<T>
+pub fn sample_multiple_from_known_length<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
     I: IntoIterator<Item = T> + ExactSizeIterator<Item = T>,

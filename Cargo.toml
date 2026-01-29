@@ -179,6 +179,7 @@ mismatched_lifetime_syntaxes = "allow"
 # https://rust-lang.github.io/rust-clippy/master/index.html
 [workspace.lints.clippy]
 module-name-repetitions = "allow"
+module_inception = "allow"
 result_unit_err = "allow"
 uninlined_format_args = "allow"
 upper-case-acronyms = "allow"

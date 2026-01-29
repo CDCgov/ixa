@@ -35,7 +35,7 @@ impl<E: Entity> Eq for EntityId<E> {}
 impl<E: Entity> Clone for EntityId<E> {
     #[inline]
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        *self
     }
 }
 
@@ -101,7 +101,7 @@ pub trait Entity: Any + Default {
 
     /// Creates a new boxed instance of the item.
     fn new_boxed() -> Box<Self> {
-        Box::new(Default::default())
+        Box::default()
     }
 
     /// Standard pattern for downcasting to concrete types.

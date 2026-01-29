@@ -24,9 +24,10 @@ Best practices:
 - The cost of creating indexes is increased memory use, which can be significant
   for large populations. So it is best to only create indexes / multi-indexes
   that actually improve model performance.
-- It may be best to call `context.index_property::<Entity, Property<Entity>>()` in the
-  `init()` method of the module in which the property is defined, or you can put all of
-  your `Context::index_property` calls together in a main initialization function if you prefer.
+- It may be best to call `context.index_property::<Entity, Property<Entity>>()`
+  in the `init()` method of the module in which the property is defined, or you
+  can put all of your `Context::index_property` calls together in a main
+  initialization function if you prefer.
 - It is not an error to call `Context::index_property` in the middle of a
   running simulation or to call it twice for the same property, but it makes
   little sense to do so.

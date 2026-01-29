@@ -379,15 +379,12 @@ mod tests {
             .into_iter()
             .map(|v| Some(Age(v)))
             .collect();
-        let people_set = HashSet::from_iter(
-            [
-                EntityId::new(0),
-                EntityId::new(2),
-                EntityId::new(3),
-                EntityId::new(6),
-            ]
-            .into_iter(),
-        );
+        let people_set = HashSet::from_iter([
+            EntityId::new(0),
+            EntityId::new(2),
+            EntityId::new(3),
+            EntityId::new(6),
+        ]);
         let people_set = RefCell::new(people_set);
         let people_set_ref = people_set.borrow();
         {

@@ -165,6 +165,10 @@ impl<V: Copy> ValueVec<V> {
         self.with_vec(|v| v.extend(iter));
     }
 
+    pub fn resize(&self, new_len: usize, value: V) {
+        self.with_vec(|v| v.resize(new_len, value));
+    }
+
     pub fn resize_with<F>(&self, new_len: usize, f: F)
     where
         F: FnMut() -> V,
@@ -388,7 +392,7 @@ mod tests {
 
     #[test]
     fn from_iterator_collect() {
-        let source = vec![1, 2, 3, 4, 5];
+        let source = [1, 2, 3, 4, 5];
         let vv: ValueVec<i32> = source.iter().copied().collect();
         assert_eq!(vv.len(), 5);
         assert_eq!(vv.at(0), 1);
