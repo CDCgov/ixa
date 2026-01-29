@@ -19,14 +19,15 @@ a new file in the `src` directory called `people.rs`.
 {{#rustdoc_include ../../models/disease_model/src/people.rs:define_property}}
 ```
 
-We have to define the `Person` entity before we can associate properties with it. The
-`define_entity!(Person)` macro invocation automatically defines the `Person` type, implements the
-`Entity` trait for `Person`, and creates the type alias `PersonId = EntityId<Person>`, which is the
-type we can use to represent specific instances of our entity, a single person, in our simulation.
+We have to define the `Person` entity before we can associate properties with
+it. The `define_entity!(Person)` macro invocation automatically defines the
+`Person` type, implements the `Entity` trait for `Person`, and creates the type
+alias `PersonId = EntityId<Person>`, which is the type we can use to represent
+specific instances of our entity, a single person, in our simulation.
 
 To each person we will associate a value of the enum (short for “enumeration”)
-named `InfectionStatus`. An enum is a way to create a type that can be one
-of several predefined values. Here, we have three values:
+named `InfectionStatus`. An enum is a way to create a type that can be one of
+several predefined values. Here, we have three values:
 
 - **S**: Represents someone who is susceptible to infection.
 - **I**: Represents someone who is currently infected.
@@ -61,20 +62,22 @@ pub fn init(context: &mut Context) {
 
 The `context.add_entity()` method call might look a little odd, because we are
 not giving `context` any data to insert, but that is because our one and only
-`Property` was defined to have a default value of
-`InfectionStatus::S` (susceptible)—so `context.add_entity()` doesn't need
-any information to create a new person. Another odd thing is the
-`.expect("failed to add person")` method call. In more complicated scenarios
-adding a person can fail. We can intercept that failure if we wanted, but in
-this simple case we will just let the program crash with a message about the
-reason: "failed to add person".
+`Property` was defined to have a default value of `InfectionStatus::S`
+(susceptible)—so `context.add_entity()` doesn't need any information to create a
+new person. Another odd thing is the `.expect("failed to add person")` method
+call. In more complicated scenarios adding a person can fail. We could intercept
+that failure if we wanted, but in this simple case we will just let the program
+crash with a message about the reason: "failed to add person".
 
-Finally, the `Context::add_entity` method returns an entity ID wrapped in a `Result`, which the `expect` method
-unwraps. We can use this ID if we need to refer to this newly created person. Since we don't need it, we assign
-the value to the special "don't care" variable `_` (underscore), which just throws the value away. Why assign
-it to anything, though? So that the compiler can infer that it is a `Person` we are creating, as opposed to
-some other entity we may have defined. If we just omitted the `let _: PersonId =` part completely, we would
-need to explicitly specify the entity type using [turbo fish notation](../appendix_rust/turbo-fish.md).
+Finally, the `Context::add_entity` method returns an entity ID wrapped in a
+`Result`, which the `expect` method unwraps. We can use this ID if we need to
+refer to this newly created person. Since we don't need it, we assign the value
+to the special "don't care" variable `_` (underscore), which just throws the
+value away. Why assign it to anything, though? So that the compiler can infer
+that it is a `Person` we are creating, as opposed to some other entity we may
+have defined. If we just omitted the `let _: PersonId =` part completely, we
+would need to explicitly specify the entity type using
+[turbo fish notation](../appendix_rust/turbo-fish.md).
 
 ## Constants
 

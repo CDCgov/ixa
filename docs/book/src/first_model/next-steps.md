@@ -19,8 +19,8 @@ Exercises:
    with each `InfectionStatus` on the same axis to see how they change over the
    course of the simulation. Are the curves what we expect to see given our
    abstract model?
-3. Add another property that moderates the risk of infection of the
-   individual. (Imagine, for example, people wearing face masks for an airborne
-   illness.) Give a randomly sampled subpopulation that intervention and add a
-   check to the transmission module to see if the person that we are attempting
-   to infect has that property. Change the probability of infection accordingly.
+3. Add another property that moderates the risk of infection of the individual.
+   (Imagine, for example, people wearing face masks for an airborne illness.)
+   Give a randomly sampled subpopulation that intervention and add a check to
+   the transmission module to see if the person that we are attempting to infect
+   has that property. Change the probability of infection accordingly.

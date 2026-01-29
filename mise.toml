@@ -40,7 +40,10 @@ run = '''
 
 [tasks.test]
 description = "Run all tests"
-depends = "test:*"
+depends = [
+  "test:unit",
+  "test:wasm"
+]
 
 [tasks.'test:unit']
 description = "Run all unit tests"

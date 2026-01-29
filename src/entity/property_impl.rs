@@ -371,7 +371,7 @@ macro_rules! impl_property {
 
             // index_id_fn
             $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
-                <Self as Property<$entity>>::id()
+                <Self as $crate::entity::property::Property<$entity>>::id()
             }),
 
             // collect_deps_fn
@@ -784,7 +784,7 @@ macro_rules! define_multi_property {
                             },
                             None => {
                                 // An index ID is not yet assigned. We will use our own index for this property.
-                                let index = <Self as Property<$entity>>::id();
+                                let index = <Self as $crate::entity::property::Property<$entity>>::id();
                                 INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
                                 // And register the new index with this property set.
                                 $crate::entity::multi_property::register_type_ids_to_multi_property_index(
@@ -896,11 +896,7 @@ mod tests {
         Person,
         default_const = InfectionKind::Respiratory
     );
-    impl_property!(
-        InfectionKind,
-        Group,
-        default_const = InfectionKind::Genetic
-    );
+    impl_property!(InfectionKind, Group, default_const = InfectionKind::Genetic);
 
     define_multi_property!((Name, Age, Weight), Person);
     define_multi_property!((Age, Weight, Name), Person);
