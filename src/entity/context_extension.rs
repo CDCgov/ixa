@@ -1,9 +1,7 @@
 use std::any::{Any, TypeId};
 
-use crate::entity::events::{
-    EntityCreatedEvent, PartialPropertyChangeEvent, PartialPropertyChangeEventCore,
-};
-use crate::entity::property::{Property, PropertyInitializationKind};
+use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
+use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::{Query, QueryResultIterator};
 use crate::entity::{Entity, EntityId, EntityIterator};
@@ -18,6 +16,12 @@ pub trait ContextEntitiesExt {
         property_list: PL,
     ) -> Result<EntityId<E>, String>;
 
+    /// Fetches the property value set for the given `entity_id`.
+    ///
+    /// The easiest way to call this method is by assigning it to a variable with an explicit type:
+    /// ```rust, ignore
+    /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
+    /// ```
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
@@ -55,6 +59,10 @@ pub trait ContextEntitiesExt {
         callback: &mut dyn FnMut(&HashSet<EntityId<E>>),
     );
 
+    /// Gives the count of distinct entity IDs satisfying the query. This is especially
+    /// efficient for indexed queries.
+    ///
+    /// Supplying an empty query `()` is equivalent to calling `get_entity_count::<E>()`.
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
@@ -120,26 +128,11 @@ impl ContextEntitiesExt for Context {
     }
 
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
-        // ToDo(RobertJacobsonCDC): An alternative to the following is to always assume
-        //       that `None` means "not set" for "explicit" properties, that is, assume
-        //       that `get` is infallible for properties with a default constant. We
-        //       take a more conservative approach here and check for internal errors.
-        match P::initialization_kind() {
-            PropertyInitializationKind::Explicit => {
-                let property_store = self.get_property_value_store::<E, P>();
-                // A user error can cause this unwrap to fail.
-                property_store.get(entity_id).expect("attempted to get a property value with \"explicit\" initialization that was not set")
-            }
-
-            PropertyInitializationKind::Derived => P::compute_derived(self, entity_id),
-
-            PropertyInitializationKind::Constant => {
-                let property_store = self.get_property_value_store::<E, P>();
-                // If this unwrap fails, it is an internal ixa error, not a user error.
-                property_store.get(entity_id).expect(
-                    "getting a property value with \"constant\" initialization should never fail",
-                )
-            }
+        if P::is_derived() {
+            P::compute_derived(self, entity_id)
+        } else {
+            let property_store = self.get_property_value_store::<E, P>();
+            property_store.get(entity_id)
         }
     }
 
@@ -148,10 +141,7 @@ impl ContextEntitiesExt for Context {
         entity_id: EntityId<E>,
         property_value: P,
     ) {
-        debug_assert!(
-            P::initialization_kind() != PropertyInitializationKind::Derived,
-            "cannot set a derived property"
-        );
+        debug_assert!(!P::is_derived(), "cannot set a derived property");
 
         // The algorithm is as follows
         // 1. Get the previous value of the property.
@@ -180,20 +170,26 @@ impl ContextEntitiesExt for Context {
         //  2. After setting the main property `P`, factored out into
         //     `PartialPropertyChangeEvent::emit_in_context`
 
-        let previous_value = { self.get_property_value_store::<E, P>().get(entity_id) };
+        // We decided not to do the following check:
+        // ```rust
+        // let previous_value = { self.get_property_value_store::<E, P>().get(entity_id) };
+        // if property_value == previous_value {
+        //     return;
+        // }
+        // ```
+        // The reasoning is:
+        // - It should be rare that we ever set a property to its present value.
+        // - It's not a significant burden on client code to check `property_value == previous_value` on
+        //   their own if they need to.
+        // - There may be use cases for listening to "writes" that don't actually change values.
 
-        if Some(property_value) == previous_value {
-            return;
-        }
+        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![];
+        let property_store = self.entity_store.get_property_store::<E>();
 
-        // If the following unwrap fails, it must be because the value was never set and does not have a default value.
-        let previous_value = previous_value.unwrap();
-        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![Box::new(
-            PartialPropertyChangeEventCore::new(entity_id, previous_value),
-        )];
-
+        // Create the partial property change for this value.
+        dependents.push(property_store.create_partial_property_change(P::id(), entity_id, self));
+        // Now create partial property change events for each dependent.
         for dependent_idx in P::dependents() {
-            let property_store = self.entity_store.get_property_store::<E>();
             dependents.push(property_store.create_partial_property_change(
                 *dependent_idx,
                 entity_id,
@@ -201,9 +197,11 @@ impl ContextEntitiesExt for Context {
             ));
         }
 
+        // Update the value
         let property_value_store = self.get_property_value_store::<E, P>();
         property_value_store.set(entity_id, property_value);
 
+        // After updating the value
         for dependent in dependents.into_iter() {
             dependent.emit_in_context(self)
         }
@@ -326,12 +324,11 @@ impl ContextEntitiesExt for Context {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod tests {
     use std::cell::Ref;
 
     use super::*;
-    use crate::{define_entity, define_multi_property, define_property};
+    use crate::{define_derived_property, define_entity, define_multi_property, define_property};
 
     define_entity!(Person);
 
@@ -351,6 +348,25 @@ mod tests {
         struct Vaccinated(bool),
         Person,
         default_const = Vaccinated(false)
+    );
+
+    define_derived_property!(
+        enum AgeGroup {
+            Child,
+            Adult,
+            Senior,
+        },
+        Person,
+        [Age],
+        |age| {
+            if age.0 <= 18 {
+                AgeGroup::Child
+            } else if age.0 <= 65 {
+                AgeGroup::Adult
+            } else {
+                AgeGroup::Senior
+            }
+        }
     );
 
     #[test]
@@ -484,5 +500,67 @@ mod tests {
 
         let address2 = &*bucket as *const _;
         assert_eq!(address2, address);
+    }
+
+    #[test]
+    fn set_property_correctly_maintains_index() {
+        let mut context = Context::new();
+        context.index_property::<Person, InfectionStatus>();
+        context.index_property::<Person, AgeGroup>();
+
+        let person1 = context.add_entity((Age(22),)).unwrap();
+        let person2 = context.add_entity((Age(22),)).unwrap();
+        for _ in 0..4 {
+            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+        }
+
+        // Check non-derived property index is correctly maintained
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            6
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+
+        context.set_property(person1, InfectionStatus::Infected);
+
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            5
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 1);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+
+        context.set_property(person1, InfectionStatus::Recovered);
+
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            5
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 1);
+
+        // Check derived property index is correctly maintained.
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 6);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+
+        context.set_property(person2, Age(12));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 5);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+
+        context.set_property(person1, Age(75));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 1);
+
+        context.set_property(person2, Age(77));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 2);
     }
 }
