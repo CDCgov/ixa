@@ -1,15 +1,10 @@
 /*!
 
-A
-`PropertyValueStoreCore<E: Entity, P: Property<E>>` is the concrete type
-implementing the value storage.
+A `PropertyValueStoreCore<E: Entity, P: Property<E>>` is the concrete type implementing the value storage.
 
-- Gets values
-- Sets values while:
-    - maintaining the index and
-    - emitting property change events
-- Gives access to iterators over query results (`SourceSet` instances that abstract over index set vs. non-index set)
-- Integrates the functionality of `TypeErasedIndex`.
+This concrete type exists primarily to own the backing storage for non-derived properties and the `Index<E, P>`
+instance, if there is one. It implements only the lowest level getters and setters for the property storage.
+A higher level interface to the `Index` is provided through the `PropertyValueStore<E>` trait.
 
 */
 
@@ -22,7 +17,7 @@ use crate::entity::property_value_store::PropertyValueStore;
 use crate::value_vec::ValueVec;
 
 /// The underlying storage type for property values.
-pub(crate) type RawPropertyValueVec<P> = ValueVec<Option<P>>;
+pub(crate) type RawPropertyValueVec<P> = ValueVec<P>;
 
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
@@ -65,80 +60,103 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         self.data.reserve(additional);
     }
 
-    /// Returns the property value for the given entity. Returns `None`
-    /// if the property is both not set and has no default value.
-    pub fn get(&self, entity_id: EntityId<E>) -> Option<P> {
-        self.data.get(entity_id.0).unwrap_or_else(|| {
-            // `None` means index was out of bounds, which means the property is not set.
-            // Return the default if there is one.
-            if P::initialization_kind() == PropertyInitializationKind::Constant {
-                Some(P::default_const())
-            } else {
-                None
-            }
-        })
+    /// Returns the property value for the given entity.
+    pub fn get(&self, entity_id: EntityId<E>) -> P {
+        debug_assert!(
+            !P::is_derived(),
+            "Tried to get a derived property value from property value store."
+        );
+        self.data.get(entity_id.0).unwrap_or_else(
+            // `None` means index was out of bounds, which means the property has not been set.
+            // Return the default.
+            P::default_const,
+        )
     }
 
     /// Sets the value for `entity_id` to `value`.
     pub fn set(&self, entity_id: EntityId<E>, value: P) {
+        debug_assert!(
+            !P::is_derived(),
+            "Tried to set a derived property value in property value store."
+        );
         let index = entity_id.0;
         let len = self.data.len();
 
-        if index >= len {
-            // The index is out of bounds. We potentially expand the backing storage with default values.
-            let default_value = match P::initialization_kind() {
-                PropertyInitializationKind::Constant => Some(P::default_const()),
-                _ => None,
-            };
+        if index < len {
+            // The index is in bounds, so we can just set the value directly.
+            self.data.set(index, value);
+            return;
+        }
+
+        // The index is out of bounds.
+
+        if P::initialization_kind() == PropertyInitializationKind::Constant {
+            // When a default constant value exists, we implement the optimization that we don't have to store those
+            // default values.
+            let default_value = P::default_const();
 
             // If we are trying to set the same value as the default, don't bother doing anything.
-            if Some(value) == default_value {
+            if value == default_value {
                 return;
             }
 
             // Pre-reserve exact capacity to avoid reallocations
             self.data.reserve(index + 1 - len);
 
-            // Fill any missing slots up to (but not including) `idx`
+            // Fill any missing slots up to (but not including) `index`
             self.data.resize(index, default_value);
             // ...and finally push the provided value
-            self.data.push(Some(value));
+            self.data.push(value);
+        } else if index == len {
+            // This case occurs when adding a new entity. The optimization for default constants does not apply.
+            self.data.push(value);
         } else {
-            // The index is in bounds, so we can just set the value directly.
-            self.data.set(index, Some(value));
+            // No default property value, and we are trying to set a value for an index past the end of the vector.
+            // This is an internal error, as we enforce the invariant that every property must have a value.
+            unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
         }
     }
 
-    /// Sets the value for `entity_id` to `value`, returning the previous value if it exists.
-    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> Option<P> {
+    /// Sets the value for `entity_id` to `value`, returning the previous value.
+    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> P {
+        debug_assert!(
+            !P::is_derived(),
+            "Tried to replace a derived property value in property value store."
+        );
         let index = entity_id.0;
         let len = self.data.len();
 
-        if index >= len {
-            // The index is out of bounds. We potentially expand the backing storage with default values.
-            let default_value = match P::initialization_kind() {
-                PropertyInitializationKind::Constant => Some(P::default_const()),
-                _ => None,
-            };
+        if index < len {
+            // The index is in bounds, so we can just set the value directly.
+            return self.data.replace(index, value);
+        }
+
+        // The index is out of bounds.
+
+        if P::initialization_kind() == PropertyInitializationKind::Constant {
+            // When a default constant value exists, we implement the optimization that we don't have to store those
+            // default values.
+            let default_value = P::default_const();
 
             // If we are trying to set the same value as the default, don't bother doing anything.
-            if Some(value) == default_value {
-                return Some(value);
+            if value == default_value {
+                return default_value;
             }
 
             // Pre-reserve exact capacity to avoid reallocations
             self.data.reserve(index + 1 - len);
 
-            // Fill any missing slots up to (but not including) `idx`
+            // Fill any missing slots up to (but not including) `index`
             self.data.resize(index, default_value);
             // ...and finally push the provided value
-            self.data.push(Some(value));
+            self.data.push(value);
 
             // The "existing value" is the default.
             default_value
         } else {
-            // The index is in bounds, so we can just set the value directly.
-            self.data.replace(index, Some(value))
+            // No default property value, and we are trying to set a value for an index past the end of the vector.
+            // This is an internal error, as we enforce the invariant that every property must have a value.
+            unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
         }
     }
 }

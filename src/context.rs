@@ -574,7 +574,6 @@ impl Default for Context {
 
 #[cfg(test)]
 mod tests {
-    // #![allow(clippy::float_cmp)]
     // We allow defining items that are never used to test macros.
     #![allow(dead_code)]
     use std::cell::RefCell;
