@@ -140,6 +140,8 @@ impl Model {
         }
 
         self.stats.check_extinction();
+        // Print final stats
+        println!("Cumulative incidence: {}", self.stats.get_cum_incidence());
     }
 }
 

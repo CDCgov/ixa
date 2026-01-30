@@ -1,7 +1,3 @@
-// Remove before merge
-#![allow(unused)]
-
-use indexmap::IndexSet;
 use ixa::prelude::*;
 use ixa::{define_entity, define_property};
 use rand_distr::Exp;
@@ -10,12 +6,6 @@ use crate::reference_sir::sir_ixa::{
     ModelOptions, ModelStatsPlugin, NextEventRng, NextPersonRng, Options, Params,
 };
 use crate::reference_sir::{ModelStats, Parameters};
-
-define_data_plugin!(
-    NonQueryInfectionTracker,
-    IndexSet<PersonId>,
-    IndexSet::new()
-);
 
 define_entity!(Person);
 define_property!(
@@ -30,7 +20,6 @@ define_property!(
 
 trait InfectionLoop {
     fn get_params(&self) -> &Parameters;
-    fn get_options(&self) -> &ModelOptions;
     fn get_stats(&self) -> &ModelStats;
     fn infected_people(&self) -> usize;
     fn random_person(&mut self) -> Option<PersonId>;
@@ -45,46 +34,17 @@ impl InfectionLoop for Context {
     fn get_params(&self) -> &Parameters {
         self.get_global_property_value(Params).unwrap()
     }
-    fn get_options(&self) -> &ModelOptions {
-        self.get_global_property_value(Options).unwrap()
-    }
     fn get_stats(&self) -> &ModelStats {
         self.get_data(ModelStatsPlugin)
     }
     fn infected_people(&self) -> usize {
-        self.get_data(NonQueryInfectionTracker).len()
-        // if self.get_options().queries_enabled {
-        //     #[allow(deprecated)]
-        //     self.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
-        // } else {
-        //     self.get_data(NonQueryInfectionTracker).len()
-        // }
+        self.query_entity_count::<Person, _>((InfectionStatus::Infectious,))
     }
     fn random_person(&mut self) -> Option<PersonId> {
         self.sample_entity(NextPersonRng, ())
     }
     fn random_infected_person(&mut self) -> Option<PersonId> {
-        let infected = self.get_data(NonQueryInfectionTracker);
-        if infected.is_empty() {
-            None
-        } else {
-            let index = self.sample_range(NextPersonRng, 0..infected.len());
-            Some(infected[index])
-        }
-        // if self.get_options().queries_enabled {
-        //     self.sample_person(
-        //         NextPersonRng,
-        //         (InfectionStatus, InfectionStatusValue::Infectious),
-        //     )
-        // } else {
-        //     let infected = self.get_data(NonQueryInfectionTracker);
-        //     if infected.is_empty() {
-        //         None
-        //     } else {
-        //         let index = self.sample_range(NextPersonRng, 0..infected.len());
-        //         Some(infected[index])
-        //     }
-        // }
+        self.sample_entity(NextPersonRng, (InfectionStatus::Infectious,))
     }
     fn infect_person(&mut self, p: PersonId, t: Option<f64>) {
         if self.get_property::<_, InfectionStatus>(p) != InfectionStatus::Susceptible {
@@ -98,20 +58,21 @@ impl InfectionLoop for Context {
             let stats_data = self.get_data_mut(ModelStatsPlugin);
             stats_data.record_infection(current_t);
         }
-
-        // Update the non-query index
-        self.get_data_mut(NonQueryInfectionTracker).insert(p);
     }
 
     fn recover_person(&mut self, p: PersonId, _t: f64) {
+        assert_eq!(
+            self.get_property::<_, InfectionStatus>(p),
+            InfectionStatus::Infectious
+        );
         self.set_property(p, InfectionStatus::Recovered);
+        assert_eq!(
+            self.get_property::<_, InfectionStatus>(p),
+            InfectionStatus::Recovered
+        );
 
         let stats_data = self.get_data_mut(ModelStatsPlugin);
         stats_data.record_recovery();
-
-        // Update the non-query index
-        self.get_data_mut(NonQueryInfectionTracker)
-            .retain(|&x| x != p);
     }
     fn next_event(&mut self) {
         let params = self.get_params();
@@ -168,13 +129,9 @@ impl InfectionLoop for Context {
             max_time,
             ..
         } = self.get_params();
-        // let &ModelOptions { queries_enabled } = self.get_options();
-
         self.init_random(seed);
 
-        // if queries_enabled {
-        //     self.index_property(InfectionStatus);
-        // }
+        self.index_property::<Person, InfectionStatus>();
 
         // Set up population
         for _ in 0..population {
@@ -182,11 +139,9 @@ impl InfectionLoop for Context {
         }
 
         // Seed infections
-        let sampled_entities = self.sample_entities::<_, Person, _>(
+        let sampled_entities: Vec<PersonId> = self.sample_entities(
             NextPersonRng,
-            // Aren't they all susceptible initially?
-            // (InfectionStatus, InfectionStatusValue::Susceptible),
-            (),
+            (InfectionStatus::Susceptible,),
             initial_infections,
         );
         for p in sampled_entities {
@@ -202,6 +157,7 @@ impl InfectionLoop for Context {
             initial_infections,
             "should have infected people at start"
         );
+
         assert_eq!(
             self.get_stats().get_current_infected(),
             initial_infections,
@@ -230,6 +186,11 @@ impl Model {
         self.ctx.next_event();
         self.ctx.execute();
         self.ctx.get_stats().check_extinction();
+        // Print final stats
+        println!(
+            "Cumulative incidence: {}",
+            self.ctx.get_stats().get_cum_incidence()
+        );
     }
 }
 
@@ -240,46 +201,29 @@ mod test {
     use super::*;
     use crate::reference_sir::ParametersBuilder;
 
-    fn model_variants() -> Vec<Model> {
-        vec![
-            ModelOptions::default(),
-            ModelOptions {
-                queries_enabled: true,
-            },
-        ]
-        .into_iter()
-        .map(|options| Model::new(Parameters::default(), options))
-        .collect()
+    #[test]
+    fn infected_counts() {
+        let mut model = Model::new(Parameters::default(), ModelOptions::default());
+        model.ctx.setup();
+        assert_eq!(model.ctx.infected_people(), 5);
+        let p = model
+            .ctx
+            .sample_entity(NextPersonRng, (InfectionStatus::Susceptible,))
+            .unwrap();
+        model.ctx.infect_person(p, Some(0.0));
+        assert_eq!(model.ctx.infected_people(), 6);
+        assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
+        model.ctx.recover_person(p, 0.0);
+        assert_eq!(model.ctx.infected_people(), 5);
+        assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
     }
-    /*
-        #[test]
-        fn infected_counts() {
-            for mut model in model_variants() {
-                model.ctx.setup();
-                assert_eq!(model.ctx.infected_people(), 5);
-                let p = model
-                    .ctx
-                    .sample_person(
-                        NextPersonRng,
-                        (InfectionStatus, InfectionStatusValue::Susceptible),
-                    )
-                    .unwrap();
-                model.ctx.infect_person(p, Some(0.0));
-                assert_eq!(model.ctx.infected_people(), 6);
-                assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
-                model.ctx.recover_person(p, 0.0);
-                assert_eq!(model.ctx.infected_people(), 5);
-                assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
-            }
-        }
-    */
+
     #[test]
     fn get_random_infected_person() {
-        for mut model in model_variants() {
-            model.ctx.setup();
-            let p = model.ctx.random_infected_person();
-            assert!(p.is_some());
-        }
+        let mut model = Model::new(Parameters::default(), ModelOptions::default());
+        model.ctx.setup();
+        let p = model.ctx.random_infected_person();
+        assert!(p.is_some());
     }
 
     #[test]
@@ -290,10 +234,7 @@ mod test {
                 .population(population)
                 .build()
                 .unwrap(),
-            ModelOptions {
-                // Faster
-                queries_enabled: false,
-            },
+            ModelOptions::default(),
         );
         model.run();
 
@@ -302,33 +243,4 @@ mod test {
         let expected = population as f64 * 0.58;
         assert_relative_eq!(incidence, expected, max_relative = 0.04);
     }
-    /*
-    #[test]
-    fn run_model_disable_queries() {
-        use ixa::prelude::*;
-        let mut no_queries = Model::new(
-            Parameters::default(),
-            ModelOptions {
-                queries_enabled: false,
-            },
-        );
-        let mut with_queries = Model::new(
-            Parameters::default(),
-            ModelOptions {
-                queries_enabled: true,
-            },
-        );
-
-        assert_eq!(
-            no_queries.ctx.infected_people(),
-            no_queries
-                .ctx
-                .query_people_count((InfectionStatus, InfectionStatusValue::Infectious)),
-            "no queries variant should compute infected people correctly",
-        );
-
-        no_queries.run();
-        with_queries.run();
-    }
-    */
 }
