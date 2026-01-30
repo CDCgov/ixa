@@ -184,7 +184,10 @@ impl Model {
         self.ctx.execute();
         self.ctx.get_stats().check_extinction();
         // Print final stats
-        println!("Cumulative incidence: {}", self.ctx.get_stats().get_cum_incidence());
+        println!(
+            "Cumulative incidence: {}",
+            self.ctx.get_stats().get_cum_incidence()
+        );
     }
 }
 

@@ -25,7 +25,7 @@ hyperfine_group!(
         },
 
         entities => {
-            sir_ixa::entities::Model::new(build_params(), sir_ixa::ModelOptions::default()).run(); 
+            sir_ixa::entities::Model::new(build_params(), sir_ixa::ModelOptions::default()).run();
         }
     }
 );

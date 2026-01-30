@@ -61,9 +61,15 @@ impl InfectionLoop for Context {
     }
 
     fn recover_person(&mut self, p: PersonId, _t: f64) {
-        assert_eq!(self.get_property::<_, InfectionStatus>(p), InfectionStatus::Infectious);
+        assert_eq!(
+            self.get_property::<_, InfectionStatus>(p),
+            InfectionStatus::Infectious
+        );
         self.set_property(p, InfectionStatus::Recovered);
-        assert_eq!(self.get_property::<_, InfectionStatus>(p), InfectionStatus::Recovered);
+        assert_eq!(
+            self.get_property::<_, InfectionStatus>(p),
+            InfectionStatus::Recovered
+        );
 
         let stats_data = self.get_data_mut(ModelStatsPlugin);
         stats_data.record_recovery();
@@ -151,7 +157,7 @@ impl InfectionLoop for Context {
             initial_infections,
             "should have infected people at start"
         );
-        
+
         assert_eq!(
             self.get_stats().get_current_infected(),
             initial_infections,
@@ -180,8 +186,11 @@ impl Model {
         self.ctx.next_event();
         self.ctx.execute();
         self.ctx.get_stats().check_extinction();
-         // Print final stats
-         println!("Cumulative incidence: {}", self.ctx.get_stats().get_cum_incidence());
+        // Print final stats
+        println!(
+            "Cumulative incidence: {}",
+            self.ctx.get_stats().get_cum_incidence()
+        );
     }
 }
 
@@ -197,7 +206,10 @@ mod test {
         let mut model = Model::new(Parameters::default(), ModelOptions::default());
         model.ctx.setup();
         assert_eq!(model.ctx.infected_people(), 5);
-        let p = model.ctx.sample_entity(NextPersonRng, (InfectionStatus::Susceptible,)).unwrap();
+        let p = model
+            .ctx
+            .sample_entity(NextPersonRng, (InfectionStatus::Susceptible,))
+            .unwrap();
         model.ctx.infect_person(p, Some(0.0));
         assert_eq!(model.ctx.infected_people(), 6);
         assert_eq!(model.ctx.get_stats().get_cum_incidence(), 1);
