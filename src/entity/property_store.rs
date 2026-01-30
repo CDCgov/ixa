@@ -31,7 +31,7 @@ Metadata stored on `ENTITY_METADATA`, which for each entity stores:
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
@@ -74,23 +74,36 @@ pub(super) struct PropertyMetadata<E: Entity> {
 /// and a function pointer to the constructor that constucts a `PropertyValueStoreCore<E, P>` type erased as
 /// a `Box<dyn PropertyValueStore<E>>`. This data is actually written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
 #[allow(clippy::type_complexity)]
-static PROPERTY_METADATA: LazyLock<Mutex<HashMap<(usize, usize), Box<dyn Any + Send>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::default()));
+static PROPERTY_METADATA_BUILDER: LazyLock<
+    Mutex<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>>,
+> = LazyLock::new(|| Mutex::new(HashMap::default()));
+
+/// The frozen property metadata registry, created exactly once on first read.
+///
+/// This is derived from `PROPERTY_METADATA_BUILDER` by moving the builder `HashMap` out. After this point,
+/// registration is no longer allowed.
+#[allow(clippy::type_complexity)]
+static PROPERTY_METADATA: OnceLock<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>> =
+    OnceLock::new();
+
+/// Private helper to fetch or initialize the frozen metadata.
+fn property_metadata() -> &'static HashMap<(usize, usize), Box<dyn Any + Send + Sync>> {
+    PROPERTY_METADATA.get_or_init(|| {
+        let mut builder = PROPERTY_METADATA_BUILDER.lock().unwrap();
+        std::mem::take(&mut *builder)
+    })
+}
 
 /// The public getter for the dependents of a property with index `property_index` (as stored in
 /// `PROPERTY_METADATA`). The `Property<E: Entity>::dependents()` method defers to this.
 ///
 /// This function should only be called once `main()` starts, that is, not in `ctors` constructors,
 /// as it assumes `PROPERTY_METADATA` has been correctly initialized. Hence, the "static" suffix.
-///
-/// # Safety
-/// This function assumes that `PROPERTY_METADATA` will never again be mutated after initial
-/// construction. Mutating the `Vec`s after taking these references would cause undefined behavior.
-pub(super) unsafe fn get_property_dependents_static<E: Entity>(
-    property_index: usize,
-) -> &'static [usize] {
-    let map = PROPERTY_METADATA.lock().unwrap();
-    let property_metadata = map.get(&(E::id(), property_index))
+#[must_use]
+pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -> &'static [usize] {
+    let map = property_metadata();
+    let property_metadata = map
+        .get(&(E::id(), property_index))
                                .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
     let property_metadata: &PropertyMetadata<E> = property_metadata.downcast_ref().unwrap_or_else(
         || panic!(
@@ -99,15 +112,7 @@ pub(super) unsafe fn get_property_dependents_static<E: Entity>(
         )
     );
 
-    // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
-    //        the simplest way to implement this. Make a decision either way about whether additional complexity is
-    //        worth eliminating this use of `unsafe`.
-    // Transmute to `'static` slice. This assumes the `Vec` will never move or reallocate.
-    let dependents_static: &'static [usize] = unsafe {
-        std::mem::transmute::<&[usize], &'static [usize]>(property_metadata.dependents.as_slice())
-    };
-
-    dependents_static
+    property_metadata.dependents.as_slice()
 }
 
 /// Adds a new item to the registry. The job of this method is to create whatever "singleton"
@@ -124,7 +129,12 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         P::is_required(),
     );
 
-    let mut property_metadata = PROPERTY_METADATA.lock().unwrap();
+    let mut property_metadata = PROPERTY_METADATA_BUILDER.lock().unwrap();
+    if PROPERTY_METADATA.get().is_some() {
+        panic!(
+            "`add_to_property_registry()` called after property metadata was frozen; registration must occur during startup/ctors."
+        );
+    }
 
     // Register the `PropertyValueStoreCore<E, P>` constructor.
     {
@@ -209,7 +219,7 @@ impl<E: Entity> PropertyStore<E> {
     pub fn new() -> Self {
         let num_items = get_registered_property_count::<E>();
         // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
-        let property_metadata = PROPERTY_METADATA.lock().unwrap();
+        let property_metadata = property_metadata();
 
         // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each index (=`P::index()`).
         let items = (0..num_items)
@@ -220,7 +230,7 @@ impl<E: Entity> PropertyStore<E> {
                     .downcast_ref::<PropertyMetadata<E>>()
                     .unwrap_or_else(|| {
                         panic!(
-                            "Property metadata entry for index {idx} does not match expexted type"
+                            "Property metadata entry for index {idx} does not match expected type"
                         )
                     });
                 let constructor = metadata
