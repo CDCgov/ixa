@@ -40,6 +40,7 @@ static ENTITY_METADATA_BUILDER: LazyLock<Mutex<HashMap<TypeId, (Vec<TypeId>, Vec
 static ENTITY_METADATA: OnceLock<HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)>> = OnceLock::new();
 
 /// Private helper to fetch or initialize the frozen metadata.
+#[allow(clippy::type_complexity)]
 fn entity_metadata() -> &'static HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)> {
     ENTITY_METADATA.get_or_init(|| {
         let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
@@ -83,7 +84,9 @@ pub fn register_property_with_entity(
 /// This registry is built during startup by property ctors calling
 /// [`register_property_with_entity()`], then frozen exactly once on first read.
 #[must_use]
-pub fn get_entity_metadata_static(entity_type_id: TypeId) -> (&'static [TypeId], &'static [TypeId]) {
+pub fn get_entity_metadata_static(
+    entity_type_id: TypeId,
+) -> (&'static [TypeId], &'static [TypeId]) {
     match entity_metadata().get(&entity_type_id) {
         Some((props, reqs)) => (props.as_ref(), reqs.as_ref()),
         None => (&[], &[]),
