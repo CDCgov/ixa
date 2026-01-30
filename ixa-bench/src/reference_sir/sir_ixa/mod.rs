@@ -6,17 +6,8 @@ use crate::reference_sir::{ModelStats, Parameters};
 pub mod entities;
 pub mod legacy;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct ModelOptions {
-    pub queries_enabled: bool,
-}
-impl Default for ModelOptions {
-    fn default() -> Self {
-        ModelOptions {
-            queries_enabled: true,
-        }
-    }
-}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
+pub struct ModelOptions {}
 
 define_global_property!(Params, Parameters);
 define_global_property!(Options, ModelOptions);
