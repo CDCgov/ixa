@@ -157,16 +157,16 @@ impl<E: Entity> Iterator for EntityIterator<E> {
         (remaining, Some(remaining))
     }
 
+    // Fast consuming count
+    fn count(self) -> usize {
+        self.len()
+    }
+
     // Fast "seeking" operation.
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         // `self.entity_id` saturates to `self.population`.
         self.entity_id = (self.entity_id + n).min(self.population);
         self.next()
-    }
-
-    // Fast consuming count
-    fn count(self) -> usize {
-        self.len()
     }
 }
 
