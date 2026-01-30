@@ -34,7 +34,7 @@ use crate::{Context, IxaEvent};
 
 /// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
 pub(crate) trait PartialPropertyChangeEvent {
-    fn emit_in_context(&self, context: &mut Context);
+    fn emit_in_context(self: Box<Self>, context: &mut Context);
 }
 
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
@@ -42,7 +42,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 {
     /// Updates the index with the current property value and emits a change event if
     /// the `current_value` differs from the previous value (stored in `self.0.current_value`)
-    fn emit_in_context(&self, context: &mut Context) {
+    fn emit_in_context(self: Box<Self>, context: &mut Context) {
         let current_value: P = context.get_property(self.0.entity_id);
         let property_value_store = context.get_property_value_store_mut::<E, P>();
 
