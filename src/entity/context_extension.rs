@@ -324,12 +324,11 @@ impl ContextEntitiesExt for Context {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod tests {
     use std::cell::Ref;
 
     use super::*;
-    use crate::{define_entity, define_multi_property, define_property};
+    use crate::{define_derived_property, define_entity, define_multi_property, define_property};
 
     define_entity!(Person);
 
@@ -349,6 +348,25 @@ mod tests {
         struct Vaccinated(bool),
         Person,
         default_const = Vaccinated(false)
+    );
+
+    define_derived_property!(
+        enum AgeGroup {
+            Child,
+            Adult,
+            Senior,
+        },
+        Person,
+        [Age],
+        |age| {
+            if age.0 <= 18 {
+                AgeGroup::Child
+            } else if age.0 <= 65 {
+                AgeGroup::Adult
+            } else {
+                AgeGroup::Senior
+            }
+        }
     );
 
     #[test]
@@ -482,5 +500,67 @@ mod tests {
 
         let address2 = &*bucket as *const _;
         assert_eq!(address2, address);
+    }
+
+    #[test]
+    fn set_property_correctly_maintains_index() {
+        let mut context = Context::new();
+        context.index_property::<Person, InfectionStatus>();
+        context.index_property::<Person, AgeGroup>();
+
+        let person1 = context.add_entity((Age(22),)).unwrap();
+        let person2 = context.add_entity((Age(22),)).unwrap();
+        for _ in 0..4 {
+            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+        }
+
+        // Check non-derived property index is correctly maintained
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            6
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+
+        context.set_property(person1, InfectionStatus::Infected);
+
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            5
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 1);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+
+        context.set_property(person1, InfectionStatus::Recovered);
+
+        assert_eq!(
+            context.query_entity_count((InfectionStatus::Susceptible,)),
+            5
+        );
+        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
+        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 1);
+
+        // Check derived property index is correctly maintained.
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 6);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+
+        context.set_property(person2, Age(12));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 5);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+
+        context.set_property(person1, Age(75));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 1);
+
+        context.set_property(person2, Age(77));
+
+        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
+        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
+        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 2);
     }
 }
