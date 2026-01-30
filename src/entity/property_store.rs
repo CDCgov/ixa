@@ -410,37 +410,37 @@ mod tests {
         // Verify that `get` returns the expected values
         {
             let ages: &PropertyValueStoreCore<_, Age> = property_store.get();
-            assert_eq!(ages.get(EntityId::<Person>::new(0)), Some(Age(12)));
-            assert_eq!(ages.get(EntityId::<Person>::new(1)), Some(Age(33)));
-            assert_eq!(ages.get(EntityId::<Person>::new(2)), Some(Age(44)));
+            assert_eq!(ages.get(EntityId::<Person>::new(0)), Age(12));
+            assert_eq!(ages.get(EntityId::<Person>::new(1)), Age(33));
+            assert_eq!(ages.get(EntityId::<Person>::new(2)), Age(44));
 
             let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> =
                 property_store.get();
             assert_eq!(
                 infection_statuses.get(EntityId::<Person>::new(0)),
-                Some(InfectionStatus::Susceptible)
+                InfectionStatus::Susceptible
             );
             assert_eq!(
                 infection_statuses.get(EntityId::<Person>::new(1)),
-                Some(InfectionStatus::Susceptible)
+                InfectionStatus::Susceptible
             );
             assert_eq!(
                 infection_statuses.get(EntityId::<Person>::new(2)),
-                Some(InfectionStatus::Infected)
+                InfectionStatus::Infected
             );
 
             let vaccine_status: &PropertyValueStoreCore<_, Vaccinated> = property_store.get();
             assert_eq!(
                 vaccine_status.get(EntityId::<Person>::new(0)),
-                Some(Vaccinated(true))
+                Vaccinated(true)
             );
             assert_eq!(
                 vaccine_status.get(EntityId::<Person>::new(1)),
-                Some(Vaccinated(false))
+                Vaccinated(false)
             );
             assert_eq!(
                 vaccine_status.get(EntityId::<Person>::new(2)),
-                Some(Vaccinated(true))
+                Vaccinated(true)
             );
         }
     }

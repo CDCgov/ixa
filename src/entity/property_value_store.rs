@@ -78,7 +78,11 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         // 2. Remove the `entity_id` from the corresponding index bucket (if its indexed)
         // 3. Return a `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
 
-        let previous_value = P::compute_derived(context, entity_id);
+        let previous_value = if P::is_derived() {
+            P::compute_derived(context, entity_id)
+        } else {
+            self.get(entity_id)
+        };
         if let Some(index) = &self.index {
             let mut index = index.borrow_mut();
             index.remove_entity(&previous_value.make_canonical(), entity_id);
