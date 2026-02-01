@@ -187,6 +187,13 @@ mod tests {
     define_entity!(DummyEntity);
 
     #[test]
+    fn entity_id_debug_display() {
+        let entity_id = DummyEntityId::new(137);
+        assert_eq!(format!("{:?}", entity_id), "DummyEntityId(137)");
+        assert_eq!(format!("{}", entity_id), "137");
+    }
+
+    #[test]
     fn test_entity_iterator_basic() {
         let mut iter = EntityIterator::<DummyEntity>::new(3);
 
