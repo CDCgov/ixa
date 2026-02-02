@@ -129,17 +129,15 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
 
     let computed_statistics = container.computed_statistics.iter().filter_map(|stat| {
         let stat = stat.as_ref().unwrap();
-        if stat.value.is_none() {
-            None
-        } else {
-            Some((
+        stat.value.map(|value| {
+            (
                 stat.label,
                 ComputedStatisticRecord {
                     description: stat.description,
-                    value: stat.value.unwrap(),
+                    value,
                 },
-            ))
-        }
+            )
+        })
     });
     let computed_statistics = computed_statistics.collect::<HashMap<_, _>>();
 
