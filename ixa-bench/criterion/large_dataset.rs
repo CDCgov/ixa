@@ -1,6 +1,6 @@
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ixa::context::Context;
 use ixa::define_person_multi_property;
 use ixa::prelude::*;
@@ -173,6 +173,86 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             black_box(context.query_entity_count((EAge(30), ESchoolId(1), EWorkplaceId(1))));
         });
     });
+
+    {
+        #[allow(deprecated)]
+        let people_set = context.query_people(());
+        let total_population = people_set.len();
+        let mut person_idx = 0usize;
+        criterion.bench_function("bench_match_person", |bencher| {
+            bencher.iter(|| {
+                black_box(context.match_person(
+                    people_set[person_idx % total_population],
+                    ((Age, 30u8), (SchoolId, 1u32), (WorkplaceId, 1u32)),
+                ));
+                person_idx += 1;
+            });
+        });
+    }
+
+    {
+        let people_set: Vec<EntityId<Person>> = context.get_entity_iterator().collect();
+        let total_population = people_set.len();
+        let mut person_idx = 0usize;
+        criterion.bench_function("bench_match_entity", |bencher| {
+            bencher.iter(|| {
+                black_box(context.match_entity(
+                    people_set[person_idx % total_population],
+                    (EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)),
+                ));
+                person_idx += 1;
+            });
+        });
+    }
+
+    {
+        #[allow(deprecated)]
+        let people_set = context.query_people(());
+        criterion.bench_function("bench_filter_people", |bencher| {
+            bencher.iter_batched(
+                || people_set.clone(),
+                |mut people| {
+                    context.filter_people(
+                        &mut people,
+                        ((Age, 30u8), (SchoolId, 1u32), (WorkplaceId, 1u32)),
+                    );
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    {
+        let people_set: Vec<EntityId<Person>> = context.get_entity_iterator().collect();
+        criterion.bench_function("bench_filter_indexed_entity", |bencher| {
+            bencher.iter_batched(
+                || people_set.clone(),
+                |mut people| {
+                    context.filter_entities(
+                        &mut people,
+                        (EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)),
+                    );
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    {
+        let people_set: Vec<EntityId<Person>> = context.get_entity_iterator().collect();
+        criterion.bench_function("bench_filter_unindexed_entity", |bencher| {
+            bencher.iter_batched(
+                || people_set.clone(),
+                |mut people| {
+                    context.filter_entities(
+                        &mut people,
+                        (EAge(30u8), EHomeId(1u32), EWorkplaceId(1u32)),
+                    );
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
 
     criterion.finish();
 }

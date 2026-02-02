@@ -96,6 +96,12 @@ pub trait ContextEntitiesExt {
 
     /// Generates an iterator over the results of the query.
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> QueryResultIterator<E>;
+
+    /// Determines if the given person matches this query.
+    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
+
+    /// Removes all `EntityId`s from the given vector that do not match the given query.
+    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q);
 }
 
 impl ContextEntitiesExt for Context {
@@ -318,8 +324,17 @@ impl ContextEntitiesExt for Context {
     fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
         self.entity_store.get_entity_iterator::<E>()
     }
+
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> QueryResultIterator<E> {
         query.new_query_result_iterator(self)
+    }
+
+    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
+        query.match_entity(entity_id, self)
+    }
+
+    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
+        query.filter_entities(entities, self);
     }
 }
 
