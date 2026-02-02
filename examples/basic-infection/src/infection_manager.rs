@@ -24,11 +24,11 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     trace!(
         "Handling infection status change from {:?} to {:?} for {:?}",
-        event.previous_value,
-        event.current_value,
+        event.previous,
+        event.current,
         event.entity_id
     );
-    if event.current_value == InfectionStatus::I {
+    if event.current == InfectionStatus::I {
         schedule_recovery(context, event.entity_id);
     }
 }
@@ -50,7 +50,7 @@ mod test {
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
-        if event.current_value == InfectionStatus::R {
+        if event.current == InfectionStatus::R {
             *context.get_data_mut(RecoveryPlugin) += 1;
         }
     }
