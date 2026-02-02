@@ -6,7 +6,7 @@ use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
 use crate::entity::query::query_result_iterator::QueryResultIterator;
 use crate::entity::query::source_set::SourceSet;
-use crate::entity::{ContextEntitiesExt, Entity, HashValueType, Query};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
 use crate::hashing::one_shot_128;
 use crate::Context;
 
@@ -32,72 +32,16 @@ impl<E: Entity> Query<E> for () {
         let population_iterator = context.get_entity_iterator::<E>();
         QueryResultIterator::from_population_iterator(population_iterator)
     }
-}
 
-// ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
-//     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
-//     whether the conflict actually exists.
-// Implement the query version with one parameter.
-/*
-impl<E: Entity, P1: Property<E>> Query<E> for P1 {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        let value = P1::make_canonical(*self);
-        vec![(P1::id(), P1::hash_property_value(&value))]
+    fn match_entity(&self, _entity_id: EntityId<E>, _context: &Context) -> bool {
+        // Every entity matches the empty query.
+        true
     }
 
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        vec![P1::type_id()]
-    }
-
-    fn multi_property_id(&self) -> Option<usize> {
-        // While not a "true" multi-property, it is convenient to have this method return the
-        // `TypeId` of the singleton property.
-        Some(P1::index_id())
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        P1::hash_property_value(&P1::make_canonical(*self))
-    }
-
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
-        let property_store = context.entity_store.get_property_store::<E>();
-
-        // The case of an indexed multi-property.
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
-        // multi-property is unindexed, we fall through to create `SourceSet`s for the components
-        // rather than wrapping a `DerivedPropertySource`.
-        if let Some(multi_property_id) = self.multi_property_id() {
-            // The `index_unindexed_people` method returns `false` if the property is not indexed.
-            if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
-                // Fetch the right hash bucket from the index and return it.
-                let property_value_store = property_store.get_with_id(multi_property_id);
-                if let Some(people_set) =
-                    property_value_store.get_index_set_with_hash(self.multi_property_value_hash())
-                {
-                    return QueryResultIterator::from_index_set(people_set);
-                } else {
-                    // Since we already checked that this multi-property is indexed, it must be that
-                    // there are no entities having this property value.
-                    return QueryResultIterator::empty();
-                }
-            }
-            // If the property is not indexed, we fall through.
-        }
-
-        // We create a source set for each property.
-        let mut sources: Vec<SourceSet<E>> = Vec::new();
-
-        if let Some(source_set) = SourceSet::new::<P1>(*self, context) {
-            sources.push(source_set);
-        } else {
-            // If a single source set is empty, the intersection of all sources is empty.
-            return QueryResultIterator::empty();
-        }
-
-        QueryResultIterator::from_sources(sources)
+    fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
+        // Nothing to do.
     }
 }
-*/
 
 // Implement the query version with one parameter.
 impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
@@ -156,6 +100,16 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         }
 
         QueryResultIterator::from_sources(sources)
+    }
+
+    fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
+        let found_value: P1 = context.get_property(entity_id);
+        found_value == self.0
+    }
+
+    fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
+        let property_value_store = context.get_property_value_store::<E, P1>();
+        entities.retain(|entity| self.0 == property_value_store.get(*entity));
     }
 }
 
@@ -225,21 +179,20 @@ macro_rules! impl_query {
                 }
 
                 fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
-                    let property_store = context.entity_store.get_property_store::<E>();
-
                     // The case of an indexed multi-property.
                     // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
                     // multi-property is unindexed, we fall through to create `SourceSet`s for the components
                     // rather than wrapping a `DerivedPropertySource`.
                     if let Some(multi_property_id) = self.multi_property_id() {
+                        let property_store = context.entity_store.get_property_store::<E>();
                         // The `index_unindexed_people` method returns `false` if the property is not indexed.
                         if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
                             // Fetch the right hash bucket from the index and return it.
                             let property_value_store = property_store.get_with_id(multi_property_id);
-                            if let Some(people_set) = property_value_store.get_index_set_with_hash(
+                            if let Some(entity_set) = property_value_store.get_index_set_with_hash(
                                 self.multi_property_value_hash(),
                             ) {
-                                return QueryResultIterator::from_index_set(people_set);
+                                return QueryResultIterator::from_index_set(entity_set);
                             } else {
                                 // Since we already checked that this multi-property is indexed, it must be that
                                 // there are no entities having this property value.
@@ -262,6 +215,53 @@ macro_rules! impl_query {
                     )*
 
                     QueryResultIterator::from_sources(sources)
+                }
+
+                fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
+                    #(
+                        {
+                            let found_value: T~N = context.get_property(entity_id);
+                            if found_value != self.N {
+                                return false
+                            }
+                        }
+                    )*
+                    true
+                }
+
+                fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
+                    // The fast path: If this query is indexed, we only have to do one pass over the entities.
+                    if let Some(multi_property_id) = self.multi_property_id() {
+                        let property_store = context.entity_store.get_property_store::<E>();
+                        // The `index_unindexed_people` method returns `false` if the property is not indexed.
+                        if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
+                            // Fetch the right hash bucket from the index and return it.
+                            let property_value_store = property_store.get_with_id(multi_property_id);
+                            if let Some(entity_set) = property_value_store.get_index_set_with_hash(
+                                self.multi_property_value_hash(),
+                            ) {
+                                entities.retain(|entity_id| entity_set.contains(entity_id) );
+                            } else {
+                                // Since we already checked that this multi-property is indexed, it must be that
+                                // there are no entities having this property value.
+                                entities.clear();
+                            }
+                            return;
+                        }
+                        // If the property is not indexed, we fall through.
+                    }
+
+                    // The slow path: Check each property of the query separately.
+                    #(
+                        {
+                            let property_value_store = context.get_property_value_store::<E, T~N>();
+                            entities.retain(
+                                |entity|{
+                                    self.N == property_value_store.get(*entity)
+                                }
+                            );
+                        }
+                    )*
                 }
             }
         });
