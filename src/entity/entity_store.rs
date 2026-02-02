@@ -1,24 +1,26 @@
 /*!
 
-The `EntityStore` maintains all registered entities and
-tracks their counts (valid `EntityId<Entity>` values).
+The `EntityStore` maintains all registered entities in the form of [`EntityRecord`]s,
+`EntityRecord`s track the count of the instances of the [`Entity`] (valid [`EntityId<Entity>`]
+values) and owns the [`PropertyStore<E>`], which manages the entity's properties.
 
-Although each Entity type may own its own data, client code cannot
-create or destructure `EntityId<Entity>` values directly. Instead,
-`EntityStore` centrally manages entity counts for all registered types.
+Although each Entity type may own its own data, client code cannot create or destructure
+`EntityId<Entity>` values directly. Instead, `EntityStore` centrally manages entity counts
+for all registered types so that only valid (existing) `EntityId<E>` values are ever created.
+
 
 */
 
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::HashMap;
 
-/// Global item index counter; keeps track of the index that will be assigned to the next entity that
+/// Global entity index counter; keeps track of the index that will be assigned to the next entity that
 /// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
 static NEXT_ENTITY_INDEX: Mutex<usize> = Mutex::new(0);
 
@@ -27,17 +29,48 @@ static NEXT_ENTITY_INDEX: Mutex<usize> = Mutex::new(0);
 /// This data is actually written by the property ctors with a call to
 /// [`register_property_with_entity()`].
 #[allow(clippy::type_complexity)]
-static ENTITY_METADATA: LazyLock<Mutex<HashMap<TypeId, (Vec<TypeId>, Vec<TypeId>)>>> =
+static ENTITY_METADATA_BUILDER: LazyLock<Mutex<HashMap<TypeId, (Vec<TypeId>, Vec<TypeId>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
-/// The public interface to `ENTITY_METADATA`.
+/// The frozen entity->property registry, created exactly once on first read.
+///
+/// This is derived from `ENTITY_METADATA_BUILDER` by moving the builder `HashMap` out and
+/// converting the `Vec`s to boxed slices to prevent further mutation.
+#[allow(clippy::type_complexity)]
+static ENTITY_METADATA: OnceLock<HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)>> = OnceLock::new();
+
+/// Private helper to fetch or initialize the frozen metadata.
+#[allow(clippy::type_complexity)]
+fn entity_metadata() -> &'static HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)> {
+    ENTITY_METADATA.get_or_init(|| {
+        let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
+        let builder = std::mem::take(&mut *builder);
+        builder
+            .into_iter()
+            .map(|(entity_type_id, (props, reqs))| {
+                (
+                    entity_type_id,
+                    (props.into_boxed_slice(), reqs.into_boxed_slice()),
+                )
+            })
+            .collect()
+    })
+}
+
+/// The public setter interface to `ENTITY_METADATA`.
 pub fn register_property_with_entity(
     entity_type_id: TypeId,
     property_type_id: TypeId,
     required: bool,
 ) {
-    let mut entity_metadata = ENTITY_METADATA.lock().unwrap();
-    let (property_type_ids, required_property_type_ids) = entity_metadata
+    let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
+    if ENTITY_METADATA.get().is_some() {
+        panic!(
+            "`register_property_with_entity()` called after entity metadata was frozen; registration must occur during startup/ctors."
+        );
+    }
+
+    let (property_type_ids, required_property_type_ids) = builder
         .entry(entity_type_id)
         .or_insert_with(|| (Vec::new(), Vec::new()));
     property_type_ids.push(property_type_id);
@@ -46,41 +79,29 @@ pub fn register_property_with_entity(
     }
 }
 
-/// The public getter to `ENTITY_METADATA`.
-/// # Safety
-/// This function assumes that `ENTITY_METADATA` will never again be mutated after initial
-/// construction.  Mutating the `Vec`s after taking these references would cause undefined behavior.
-pub unsafe fn get_entity_metadata_static(
+/// Returns the pre-computed, frozen metadata for an entity type.
+///
+/// This registry is built during startup by property ctors calling
+/// [`register_property_with_entity()`], then frozen exactly once on first read.
+#[must_use]
+pub fn get_entity_metadata_static(
     entity_type_id: TypeId,
 ) -> (&'static [TypeId], &'static [TypeId]) {
-    let mut map = ENTITY_METADATA.lock().unwrap();
-
-    // Insert empty vectors if not already registered
-    let (props, reqs) = map
-        .entry(entity_type_id)
-        .or_insert_with(|| (Vec::new(), Vec::new()));
-
-    // ToDo(RobertJacobsonCDC): There are various ways to eliminate the following uses of `unsafe`, but this is by far
-    //        the simplest way to implement this. Make a decision either way about whether additional complexity is
-    //        worth eliminating this use of `unsafe`.
-    // Transmute to `'static` slices. This assumes these `Vec`s will never move or reallocate.
-    let props_static: &'static [TypeId] =
-        unsafe { std::mem::transmute::<&[TypeId], &'static [TypeId]>(props.as_slice()) };
-    let reqs_static: &'static [TypeId] =
-        unsafe { std::mem::transmute::<&[TypeId], &'static [TypeId]>(reqs.as_slice()) };
-
-    (props_static, reqs_static)
+    match entity_metadata().get(&entity_type_id) {
+        Some((props, reqs)) => (props.as_ref(), reqs.as_ref()),
+        None => (&[], &[]),
+    }
 }
 
-/// Adds a new item to the registry. The job of this method is to create whatever
+/// Adds a new entity to the registry. The job of this method is to create whatever
 /// "singleton" data/metadata is associated with the [`Entity`] if it doesn't already
-/// exist.
+/// exist, which in this case is only the value of `Entity::id()`.
 ///
 /// In our use case, this method is called in the `ctor` function of each `Entity`
-/// type and ultimately exists only so that we know how many `OnceCell`s to
+/// type and ultimately exists only so that we know how many `EntityRecord`s to
 /// construct in the constructor of `EntityStore`, so that we never have to mutate
 /// `EntityStore` itself when an `Entity` is accessed for the first time. (The
-/// `OnceCell` itself handles the interior mutability required for initialization.)
+/// `OnceCell`s handle the interior mutability required for initialization.)
 pub fn add_to_entity_registry<R: Entity>() {
     let _ = R::id();
 }
@@ -90,7 +111,7 @@ pub fn get_registered_entity_count() -> usize {
     *NEXT_ENTITY_INDEX.lock().unwrap()
 }
 
-/// Encapsulates the synchronization logic for initializing an item's index.
+/// Encapsulates the synchronization logic for initializing an entity's index.
 ///
 /// Acquires a global lock on the next available item index, but only increments
 /// it if we successfully initialize the provided index. The `index` of a registered
