@@ -60,53 +60,10 @@ The
 describes a few more settings that can affect runtime performance, but these are
 the most important.
 
-## Ixa Built-in Profiling (Counts, Spans, JSON)
+## Ixa Profiling Module
 
-In addition to using external profilers (see the flame graph section below), Ixa
-includes a lightweight, feature-gated profiling module that you can use to:
-
-- Count named events (and compute event rates)
-- Time named operations ("spans")
-- Print the results to the console
-- Write results to a JSON file along with execution statistics
-
-The API lives under `ixa::profiling` and is behind the `profiling` Cargo feature
-(enabled by default). If you disable the feature, the API becomes a no-op so you
-can leave profiling calls in your code.
-
-Here is a minimal example:
-
-```rust
-use ixa::prelude::*;
-use ixa::profiling::{increment_named_count, open_span, print_profiling_data, ProfilingContextExt};
-
-fn main() {
-    let mut context = Context::new();
-
-    context.add_plan(0.0, |context| {
-        increment_named_count("my_model:event");
-        {
-            let _span = open_span("my_model:expensive_step");
-            // ... do work ...
-        } // span auto-closes on drop
-
-        context.shutdown();
-    });
-
-    context.execute();
-
-    // Console output (spans, counts, computed statistics).
-    print_profiling_data();
-
-    // Writes JSON to: <output_dir>/<file_prefix>profiling.json
-    // using the same report options configuration as CSV reports.
-    context.write_profiling_data();
-}
-```
-
-See `examples/profiling` in the repository for a more complete example,
-including configuring `report_options()` to control the output directory, file
-prefix, and overwrite behavior.
+For Ixa's built-in profiling (named counts, spans, and JSON output), see the
+[Profiling Module](profiling-module.md) topic.
 
 ## Visualizing Execution with Flame Graphs
 
