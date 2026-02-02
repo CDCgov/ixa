@@ -1,0 +1,21 @@
+[package]
+name = "ixa_example_profiling"
+version = "0.1.0"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+publish = false
+
+[dependencies]
+ixa = { path = "../../../ixa" }
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "profiling"
+path = "main.rs"

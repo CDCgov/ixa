@@ -10,12 +10,13 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-ixa = { path = "../../", features = ["logging", "debugger", "progress_bar"] }
+ixa = { path = "../../", features = ["logging", "debugger", "progress_bar", "profiling"] }
 clap.workspace = true
 
 [dev-dependencies]
 assert_cmd = "^2.1.1"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
 tempfile = "3"
 
 [lints]
@@ -29,4 +30,9 @@ bench = false
 [[bin]]
 name = "runner_test_debug"
 path = "bin/runner_test_debug.rs"
+bench = false
+
+[[bin]]
+name = "runner_test_profiling"
+path = "bin/runner_test_profiling.rs"
 bench = false
