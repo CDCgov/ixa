@@ -1,6 +1,18 @@
 /*!
 
-An implementor of `Entity` is a type that names a collection of related properties in analogy to a table in a database. The properties are analogous to the columns in the table, and the `EntityId<E>` type is analogous to the primary key of the table, the row number.
+An implementor of [`Entity`] is a type that names a collection of related properties in
+analogy to a table in a database. The properties are analogous to the columns in the table,
+and the [`EntityId<E>`] type is analogous to the primary key of the table, the row number.
+
+[`Entity`]s are declared with the [`define_entity!`] macro:
+
+```rust
+use ixa::define_entity;
+define_entity!(Person);
+```
+
+Once an [`Entity`] is defined, [`Property`]s can be defined for the [`Entity`]. See the
+[`property`](crate::entity::property) module.
 
 Right now an `Entity` type is just a zero-sized marker type. The static data associated with the type isn't used yet.
 
@@ -83,14 +95,13 @@ pub trait Entity: Any + Default {
 
     /// Get a list of all properties this `Entity` has. This list is static, computed in with `ctor` magic.
     fn property_ids() -> &'static [TypeId] {
-        let (property_ids, _) = unsafe { get_entity_metadata_static(<Self as Entity>::type_id()) };
+        let (property_ids, _) = get_entity_metadata_static(<Self as Entity>::type_id());
         property_ids
     }
 
     /// Get a list of all properties of this `Entity` that _must_ be supplied when a new entity is created.
     fn required_property_ids() -> &'static [TypeId] {
-        let (_, required_property_ids) =
-            unsafe { get_entity_metadata_static(<Self as Entity>::type_id()) };
+        let (_, required_property_ids) = get_entity_metadata_static(<Self as Entity>::type_id());
         required_property_ids
     }
 
