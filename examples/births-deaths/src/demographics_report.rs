@@ -40,13 +40,13 @@ fn handle_person_aging(context: &mut Context, event: PropertyChangeEvent<Person,
         person_id: format!("{person}"),
         age_group: age_group_person,
         property: "Age".to_string(),
-        property_prev: format!("{:?}", event.previous_value),
-        property_current: format!("{:?}", event.current_value),
+        property_prev: format!("{:?}", event.previous),
+        property_current: format!("{:?}", event.current),
     });
 }
 
 fn handle_death_events(context: &mut Context, event: PropertyChangeEvent<Person, Alive>) {
-    if !event.current_value.0 {
+    if !event.current.0 {
         let person = event.entity_id;
         let age_group_person: AgeGroupRisk = context.get_property(person);
         context.send_report(PersonReportItem {
@@ -54,8 +54,8 @@ fn handle_death_events(context: &mut Context, event: PropertyChangeEvent<Person,
             person_id: format!("{person}"),
             age_group: age_group_person,
             property: "Alive".to_string(),
-            property_prev: format!("{:?}", event.previous_value),
-            property_current: format!("{:?}", event.current_value),
+            property_prev: format!("{:?}", event.previous),
+            property_current: format!("{:?}", event.current),
         });
     }
 }

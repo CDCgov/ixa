@@ -604,8 +604,8 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, RiskLevel>| {
                 assert_eq!(event.entity_id, expected_high_id);
-                assert_eq!(event.previous_value, Some(RiskLevel::High));
-                assert_eq!(event.current_value, RiskLevel::Medium);
+                assert_eq!(event.previous, RiskLevel::High);
+                assert_eq!(event.current, RiskLevel::Medium);
                 *risk_flag_clone.borrow_mut() += 1;
             },
         );
@@ -615,8 +615,8 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, AgeGroup>| {
                 assert_eq!(event.entity_id, expected_high_id);
-                assert_eq!(event.previous_value, Some(AgeGroup::Senior));
-                assert_eq!(event.current_value, AgeGroup::Adult);
+                assert_eq!(event.previous, AgeGroup::Senior);
+                assert_eq!(event.current, AgeGroup::Adult);
                 *age_group_flag_clone.borrow_mut() += 1;
             },
         );
@@ -668,8 +668,8 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, AdultAthlete>| {
                 assert_eq!(event.entity_id, person);
-                assert_eq!(event.previous_value, Some(AdultAthlete(false)));
-                assert_eq!(event.current_value, AdultAthlete(true));
+                assert_eq!(event.previous, AdultAthlete(false));
+                assert_eq!(event.current, AdultAthlete(true));
                 *flag_clone.borrow_mut() += 1;
             },
         );
