@@ -40,8 +40,7 @@ pub(crate) trait PartialPropertyChangeEvent {
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
     for PartialPropertyChangeEventCore<E, P>
 {
-    /// Updates the index with the current property value and emits a change event if
-    /// the `current_value` differs from the previous value (stored in `self.0.current_value`)
+    /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(self: Box<Self>, context: &mut Context) {
         let current_value: P = context.get_property(self.0.entity_id);
         let property_value_store = context.get_property_value_store_mut::<E, P>();
@@ -52,9 +51,13 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
                 .add_entity(&current_value.make_canonical(), self.0.entity_id);
         }
 
-        if current_value != self.0.current_value {
-            context.emit_event(self.to_event(current_value));
-        }
+        // We decided not to do the following check.
+        // See `src/entity/context_extension::ContextEntitiesExt::set_property`.
+        // if current_value != self.0.previous {
+        //     context.emit_event(self.to_event(current_value));
+        // }
+
+        context.emit_event(self.to_event(current_value));
     }
 }
 
@@ -80,17 +83,14 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
     pub fn new(entity_id: EntityId<E>, previous_value: P) -> Self {
         Self(PropertyChangeEvent {
             entity_id,
-            current_value: previous_value,
-            previous_value: None,
+            current: previous_value,
+            previous: previous_value,
         })
     }
 
-    pub fn to_event(self, current_value: P) -> PropertyChangeEvent<E, P> {
-        PropertyChangeEvent {
-            entity_id: self.0.entity_id,
-            current_value,
-            previous_value: Some(self.0.current_value),
-        }
+    pub fn to_event(mut self, current_value: P) -> PropertyChangeEvent<E, P> {
+        self.0.current = current_value;
+        self.0
     }
 }
 
@@ -125,9 +125,9 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,
     /// The new value
-    pub current_value: P,
-    /// The old value, if there is one
-    pub previous_value: Option<P>,
+    pub current: P,
+    /// The old value
+    pub previous: P,
 }
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // this type is always `Copy`/`Clone` if we derive them.
@@ -212,12 +212,12 @@ mod tests {
                 *flag_clone.borrow_mut() = true;
                 assert_eq!(event.entity_id.0, 0, "Entity id is correct");
                 assert_eq!(
-                    event.previous_value,
-                    Some(RiskCategory::Low),
+                    event.previous,
+                    RiskCategory::Low,
                     "Previous value is correct"
                 );
                 assert_eq!(
-                    event.current_value,
+                    event.current,
                     RiskCategory::High,
                     "Current value is correct"
                 );
@@ -267,8 +267,8 @@ mod tests {
         context.subscribe_to_event(
             move |_context, event: PropertyChangeEvent<Person, AgeGroup>| {
                 assert_eq!(event.entity_id.0, 0);
-                assert_eq!(event.previous_value.unwrap(), AgeGroup::Child);
-                assert_eq!(event.current_value, AgeGroup::Adult);
+                assert_eq!(event.previous, AgeGroup::Child);
+                assert_eq!(event.current, AgeGroup::Adult);
                 *flag_clone.borrow_mut() = true;
             },
         );
