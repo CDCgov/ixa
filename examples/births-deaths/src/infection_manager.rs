@@ -68,7 +68,7 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PropertyChangeEvent<Person, InfectionStatus>,
 ) {
-    match event.current_value {
+    match event.current {
         InfectionStatus::I => {
             schedule_recovery(context, event.entity_id);
         }
@@ -80,7 +80,7 @@ fn handle_infection_status_change(
 }
 
 fn handle_person_removal(context: &mut Context, event: PropertyChangeEvent<Person, Alive>) {
-    if !event.current_value.0 {
+    if !event.current.0 {
         cancel_recovery_plans(context, event.entity_id);
     }
 }
@@ -133,7 +133,7 @@ mod test {
 
         context.subscribe_to_event(
             move |context, event: PropertyChangeEvent<Person, InfectionStatus>| {
-                if event.current_value == InfectionStatus::R {
+                if event.current == InfectionStatus::R {
                     *context.get_data_mut(RecoveryPlugin) += 1;
                 }
             },
