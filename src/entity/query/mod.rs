@@ -10,6 +10,7 @@ pub use query_result_iterator::QueryResultIterator;
 use crate::entity::multi_property::type_ids_to_multi_property_index;
 use crate::entity::{Entity, HashValueType};
 use crate::hashing::HashMap;
+use crate::prelude::EntityId;
 use crate::Context;
 
 /// Encapsulates a query.
@@ -49,6 +50,12 @@ pub trait Query<E: Entity>: Copy + 'static {
 
     /// Creates a new `QueryResultIterator`
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E>;
+
+    /// Determines if the given person matches this query.
+    fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool;
+
+    /// Removes all `EntityId`s from the given vector that do not match this query.
+    fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
 }
 
 #[cfg(test)]
@@ -72,6 +79,8 @@ mod tests {
         },
         Person
     );
+
+    define_multi_property!((Age, County), Person);
 
     #[test]
     fn with_query_results() {
@@ -378,5 +387,62 @@ mod tests {
             assert!(people.contains(&p2));
             assert!(people.contains(&p3));
         });
+    }
+
+    #[test]
+    fn test_match_entity() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity((Age(28), County(2), Height(160), RiskCategory::Low))
+            .unwrap();
+        assert!(context.match_entity(person, (Age(28), County(2), Height(160))));
+        assert!(!context.match_entity(person, (Age(13), County(2), Height(160))));
+        assert!(!context.match_entity(person, (Age(28), County(33), Height(160))));
+        assert!(!context.match_entity(person, (Age(28), County(2), Height(9))));
+    }
+
+    #[test]
+    fn filter_entities_for_unindexed_query() {
+        let mut context = Context::new();
+        let mut people = Vec::new();
+
+        for idx in 0..10 {
+            let person = context
+                .add_entity((Age(28), County(idx % 2), Height(160), RiskCategory::Low))
+                .unwrap();
+            people.push(person);
+        }
+
+        context.filter_entities(
+            &mut people,
+            (Age(28), County(0), Height(160), RiskCategory::Low),
+        );
+
+        let expected = (0..5)
+            .map(|idx| PersonId::new(idx * 2))
+            .collect::<Vec<PersonId>>();
+        assert_eq!(people, expected);
+    }
+
+    #[test]
+    fn filter_entities_for_indexed_query() {
+        let mut context = Context::new();
+        let mut people = Vec::new();
+
+        context.index_property::<Person, (Age, County)>();
+
+        for idx in 0..10 {
+            let person = context
+                .add_entity((Age(28), County(idx % 2), Height(160), RiskCategory::Low))
+                .unwrap();
+            people.push(person);
+        }
+
+        context.filter_entities(&mut people, (County(0), Age(28)));
+
+        let expected = (0..5)
+            .map(|idx| PersonId::new(idx * 2))
+            .collect::<Vec<PersonId>>();
+        assert_eq!(people, expected);
     }
 }
