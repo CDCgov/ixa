@@ -29,7 +29,7 @@ fn handle_infection_status_change(
         person_id: format!("{}", event.entity_id),
         age_group: age_group_person,
         age: age_person.0,
-        infection_status: event.current_value,
+        infection_status: event.current,
     });
 }
 
