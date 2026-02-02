@@ -92,3 +92,8 @@ harness = false
 name = "counts"
 path = "criterion/counts.rs"
 harness = false
+
+[[bench]]
+name = "sample_entity_scaling"
+path = "criterion/sample_entity_scaling.rs"
+harness = false
