@@ -364,7 +364,7 @@ impl<E: Entity> PropertyStore<E> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(dead_code)]
+    #![allow(dead_code, unused_macros)]
     use super::*;
     use crate::entity::EntityId;
     use crate::{define_entity, define_property, impl_property};

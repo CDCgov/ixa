@@ -12,7 +12,7 @@ define_rng!(TransmissionRng);
 // ANCHOR: attempt_infection
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
+    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, person![]).unwrap();
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
     if person_status == InfectionStatus::S {

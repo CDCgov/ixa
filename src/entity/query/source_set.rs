@@ -379,6 +379,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     use std::cell::RefCell;
 
     use super::*;

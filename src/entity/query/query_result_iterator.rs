@@ -166,6 +166,7 @@ impl<'c, E: Entity> std::iter::FusedIterator for QueryResultIterator<'c, E> {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     /*!
     ## Test Matrix
 
@@ -259,7 +260,7 @@ mod tests {
         setup_test_population(&mut context, 100);
 
         let results = context
-            .query_result_iterator((ExplicitProp(5),))
+            .query_result_iterator(person![ExplicitProp(5)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5); // 5, 25, 45, 65, 85
@@ -279,7 +280,7 @@ mod tests {
         setup_test_population(&mut context, 100);
 
         let results = context
-            .query_result_iterator((ExplicitProp(7),))
+            .query_result_iterator(person![ExplicitProp(7)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5); // 7, 27, 47, 67, 87
@@ -303,7 +304,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(42), ExplicitProp2(false)))
+            .query_result_iterator(person![ConstantProp(42), ExplicitProp2(false)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 50);
@@ -328,7 +329,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(42),))
+            .query_result_iterator(person![ConstantProp(42)])
             .collect::<Vec<_>>();
         assert_eq!(results.len(), 50);
     }
@@ -351,7 +352,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99),))
+            .query_result_iterator(person![ConstantProp(99)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -382,7 +383,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99),))
+            .query_result_iterator(person![ConstantProp(99)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -400,7 +401,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((DerivedProp(true),))
+            .query_result_iterator(person![DerivedProp(true)])
             .collect::<Vec<_>>();
 
         // DerivedProp is true when ExplicitProp is even
@@ -426,7 +427,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((DerivedProp(false),))
+            .query_result_iterator(person![DerivedProp(false)])
             .collect::<Vec<_>>();
 
         // DerivedProp is false when ExplicitProp is odd
@@ -453,7 +454,7 @@ mod tests {
                 .unwrap();
         }
 
-        let results = context.query_result_iterator(()).collect::<Vec<_>>();
+        let results = context.query_result_iterator(person![]).collect::<Vec<_>>();
         for person in results {
             let explicit_prop = context.get_property::<Person, ExplicitProp>(person);
             let explicit_prop2 = context.get_property::<Person, ExplicitProp2>(person);
@@ -462,7 +463,7 @@ mod tests {
 
         // ExplicitProp2 has only 2 values, so it will be the smaller source
         let results = context
-            .query_result_iterator((ExplicitProp(5), ExplicitProp2(false)))
+            .query_result_iterator(person![ExplicitProp(5), ExplicitProp2(false)])
             .collect::<Vec<_>>();
 
         // Looking for ExplicitProp=5 AND ExplicitProp2=true
@@ -506,7 +507,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp(7), ConstantProp2(200)))
+            .query_result_iterator(person![ExplicitProp(7), ConstantProp2(200)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -531,7 +532,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp(99), ConstantProp(42)))
+            .query_result_iterator(person![ExplicitProp(99), ConstantProp(42)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5);
@@ -563,7 +564,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99), ExplicitProp2(true)))
+            .query_result_iterator(person![ConstantProp(99), ExplicitProp2(true)])
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -582,7 +583,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp2(true), DerivedProp(true)))
+            .query_result_iterator(person![ExplicitProp2(true), DerivedProp(true)])
             .collect::<Vec<_>>();
 
         // ExplicitProp2=true for i<50, DerivedProp=true when ExplicitProp is even
@@ -604,7 +605,7 @@ mod tests {
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp2(true), DerivedProp(false)))
+            .query_result_iterator(person![ExplicitProp2(true), DerivedProp(false)])
             .collect::<Vec<_>>();
 
         // ExplicitProp2=true for i<30, DerivedProp=false when ExplicitProp is odd
@@ -640,8 +641,8 @@ mod tests {
 
         // Since both queries include `Age`, both will attempt to index unindexed entities. This tests that there is
         // no double borrow error.
-        let results = context.query_result_iterator((Age(25),));
-        let more_results = context.query_result_iterator((Age(25), ExplicitProp(75)));
+        let results = context.query_result_iterator(person![Age(25)]);
+        let more_results = context.query_result_iterator(person![Age(25), ExplicitProp(75)]);
 
         let collected_results = results.collect::<IndexSet<_>>();
         let other_collected_results = more_results.collect::<IndexSet<_>>();

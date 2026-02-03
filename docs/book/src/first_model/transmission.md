@@ -76,12 +76,13 @@ The function `attempt_infection()` needs to do the following:
 Read through this implementation and make sure you understand how it
 accomplishes the three tasks above. A few observations:
 
-- The method call `context.sample_entity(TransmissionRng, ())` takes the name of
-  a random number source and a query and returns an `Option\<PersonId>`, which
-  can have the value of `Some(PersonId)` or `None`. In this case, we give it the
-  "empty query" `()`, which means we want to sample from the entire population.
-  The population will never be empty, so the result will never be `None`, and so
-  we just call `unwrap()` on the `Some(PersonId)` value to get the `PersonId`.
+- The method call `context.sample_entity(TransmissionRng, person![])` takes the
+  name of a random number source and a query and returns an `Option\<PersonId>`,
+  which can have the value of `Some(PersonId)` or `None`. In this case, we give
+  it the "empty query" `person![]`, which means we want to sample from the
+  entire population. The population will never be empty, so the result will
+  never be `None`, and so we just call `unwrap()` on the `Some(PersonId)` value
+  to get the `PersonId`.
 - The `#[allow(clippy::cast_precision_loss)]` is optional; without it the
   compiler will warn you about converting `population` 's integral type `usize`
   to the floating point type `f64`, but we know that this conversion is safe to

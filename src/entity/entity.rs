@@ -192,6 +192,7 @@ impl<E: Entity> std::iter::FusedIterator for EntityIterator<E> {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     use super::*;
     use crate::define_entity;
 

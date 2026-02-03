@@ -97,7 +97,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
     group.bench_function("single_property_unindexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((EHomeId(HOME_VAL),))));
+            black_box(context.query_entity_count(black_box(person![EHomeId(HOME_VAL)])));
         });
     });
 
@@ -111,7 +111,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     context.index_property::<Person, EHomeId>();
     group.bench_function("single_property_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((EHomeId(HOME_VAL),))));
+            black_box(context.query_entity_count(black_box(person![EHomeId(HOME_VAL)])));
         });
     });
 
@@ -123,7 +123,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
     group.bench_function("multi_property_unindexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((EAge(30), ESchoolId(1)))));
+            black_box(context.query_entity_count(black_box(person![EAge(30), ESchoolId(1)])));
         });
     });
 
@@ -141,11 +141,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     context.index_property::<Person, (EAge, ESchoolId, EWorkplaceId)>();
     group.bench_function("multi_property_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((
+            black_box(context.query_entity_count(black_box(person![
                 EAge(30),
                 ESchoolId(1),
-                EWorkplaceId(1),
-            ))));
+                EWorkplaceId(1)
+            ])));
         });
     });
 
@@ -175,7 +175,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             },
             |mut ctx| {
                 ctx.index_property::<Person, EHomeId>();
-                black_box(ctx.query_entity_count(black_box((EHomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(person![EHomeId(HOME_VAL)])));
             },
         );
     });
@@ -207,13 +207,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut ctx = Context::new();
                 populate_entities(&mut ctx, 5_000);
                 ctx.index_property::<Person, EHomeId>();
-                black_box(ctx.query_entity_count(black_box((EHomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(person![EHomeId(HOME_VAL)])));
                 ctx
             },
             |mut ctx| {
                 populate_entities(&mut ctx, 2_000);
                 ctx.index_property::<Person, EHomeId>();
-                black_box(ctx.query_entity_count(black_box((EHomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(person![EHomeId(HOME_VAL)])));
             },
         );
     });

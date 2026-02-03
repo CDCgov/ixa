@@ -77,6 +77,60 @@ macro_rules! impl_entity {
                 }
             }
         }
+
+        // Generate entity-specific query macro (e.g., `person!` for `Person` entity)
+        $crate::paste::paste! {
+            /// Creates a query for this entity type.
+            ///
+            /// # Examples
+            /// ```ignore
+            #[doc = concat!("// Empty query (matches all ", stringify!($entity_name), " entities)")]
+            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![], ...)")]
+            ///
+            #[doc = concat!("// Single property query")]
+            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![Age(42)], ...)")]
+            ///
+            #[doc = concat!("// Multi-property query")]
+            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![Age(42), Name(\"Alice\")], ...)")]
+            /// ```
+            macro_rules! [<$entity_name:snake>] {
+                () => {
+                    $crate::entity::query::PropertyEntityValues0::<$entity_name>::new()
+                };
+                ($p0:expr) => {
+                    $crate::entity::query::PropertyEntityValues1::<$entity_name, _>::new($p0)
+                };
+                ($p0:expr, $p1:expr) => {
+                    $crate::entity::query::PropertyEntityValues2::<$entity_name, _, _>::new($p0, $p1)
+                };
+                ($p0:expr, $p1:expr, $p2:expr) => {
+                    $crate::entity::query::PropertyEntityValues3::<$entity_name, _, _, _>::new($p0, $p1, $p2)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr) => {
+                    $crate::entity::query::PropertyEntityValues4::<$entity_name, _, _, _, _>::new($p0, $p1, $p2, $p3)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr) => {
+                    $crate::entity::query::PropertyEntityValues5::<$entity_name, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr) => {
+                    $crate::entity::query::PropertyEntityValues6::<$entity_name, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr) => {
+                    $crate::entity::query::PropertyEntityValues7::<$entity_name, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr) => {
+                    $crate::entity::query::PropertyEntityValues8::<$entity_name, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr) => {
+                    $crate::entity::query::PropertyEntityValues9::<$entity_name, _, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8)
+                };
+                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr, $p9:expr) => {
+                    $crate::entity::query::PropertyEntityValues10::<$entity_name, _, _, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9)
+                };
+            }
+            #[allow(unused)]
+            pub(crate) use [<$entity_name:snake>];
+        }
     };
 }
 pub use impl_entity;

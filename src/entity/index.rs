@@ -133,6 +133,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
 }
 
 mod test {
+    #![allow(unused_macros)]
     // Tests in `src/entity/query.rs` also exercise indexing code.
     use super::Index;
     use crate::hashing::{hash_serialized_128, one_shot_128};
@@ -162,15 +163,17 @@ mod test {
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((Age(1u8), Weight(2u8), Height(3u8)), &mut |results| {
-            results_a = results.clone()
-        });
+        context.with_query_results(
+            person![Age(1u8), Weight(2u8), Height(3u8)],
+            &mut |results| results_a = results.clone(),
+        );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((Weight(2u8), Height(3u8), Age(1u8)), &mut |results| {
-            results_b = results.clone()
-        });
+        context.with_query_results(
+            person![Weight(2u8), Height(3u8), Age(1u8)],
+            &mut |results| results_b = results.clone(),
+        );
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
@@ -181,15 +184,17 @@ mod test {
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((Weight(1u8), Height(2u8), Age(3u8)), &mut |results| {
-            results_a = results.clone()
-        });
+        context.with_query_results(
+            person![Weight(1u8), Height(2u8), Age(3u8)],
+            &mut |results| results_a = results.clone(),
+        );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((Age(3u8), Weight(1u8), Height(2u8)), &mut |results| {
-            results_b = results.clone()
-        });
+        context.with_query_results(
+            person![Age(3u8), Weight(1u8), Height(2u8)],
+            &mut |results| results_b = results.clone(),
+        );
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);

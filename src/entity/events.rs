@@ -140,6 +140,7 @@ impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     use std::cell::RefCell;
     use std::rc::Rc;
 

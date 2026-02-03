@@ -38,13 +38,13 @@ impl InfectionLoop for Context {
         self.get_data(ModelStatsPlugin)
     }
     fn infected_people(&self) -> usize {
-        self.query_entity_count::<Person, _>((InfectionStatus::Infectious,))
+        self.query_entity_count(person![InfectionStatus::Infectious])
     }
     fn random_person(&mut self) -> Option<PersonId> {
-        self.sample_entity(NextPersonRng, ())
+        self.sample_entity(NextPersonRng, person![])
     }
     fn random_infected_person(&mut self) -> Option<PersonId> {
-        self.sample_entity(NextPersonRng, (InfectionStatus::Infectious,))
+        self.sample_entity(NextPersonRng, person![InfectionStatus::Infectious])
     }
     fn infect_person(&mut self, p: PersonId, t: Option<f64>) {
         if self.get_property::<_, InfectionStatus>(p) != InfectionStatus::Susceptible {
@@ -141,7 +141,7 @@ impl InfectionLoop for Context {
         // Seed infections
         let sampled_entities: Vec<PersonId> = self.sample_entities(
             NextPersonRng,
-            (InfectionStatus::Susceptible,),
+            person![InfectionStatus::Susceptible],
             initial_infections,
         );
         for p in sampled_entities {
@@ -208,7 +208,7 @@ mod test {
         assert_eq!(model.ctx.infected_people(), 5);
         let p = model
             .ctx
-            .sample_entity(NextPersonRng, (InfectionStatus::Susceptible,))
+            .sample_entity(NextPersonRng, person![InfectionStatus::Susceptible])
             .unwrap();
         model.ctx.infect_person(p, Some(0.0));
         assert_eq!(model.ctx.infected_people(), 6);

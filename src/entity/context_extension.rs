@@ -341,6 +341,7 @@ impl ContextEntitiesExt for Context {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     use std::cell::{Ref, RefCell};
     use std::rc::Rc;
 
@@ -714,16 +715,14 @@ mod tests {
         }
         context.index_property::<Person, InfectionStatusVaccinated>();
         // Force an index build by running a query.
-        let _ = context.query_result_iterator((InfectionStatus::Susceptible, Vaccinated(true)));
+        let query = person![InfectionStatus::Susceptible, Vaccinated(true)];
+        let _ = context.query_result_iterator(query);
 
         // Capture the address of the has set given by `with_query_result`
         let mut address: *const IndexSet<EntityId<Person>> = std::ptr::null();
-        context.with_query_results(
-            (InfectionStatus::Susceptible, Vaccinated(true)),
-            &mut |result_set| {
-                address = result_set as *const _;
-            },
-        );
+        context.with_query_results(query, &mut |result_set| {
+            address = result_set as *const _;
+        });
 
         // Check that the order doesn't matter.
         assert_eq!(
@@ -732,9 +731,7 @@ mod tests {
         );
         assert_eq!(
             InfectionStatusVaccinated::index_id(),
-            (InfectionStatus::Susceptible, Vaccinated(true))
-                .multi_property_id()
-                .unwrap()
+            query.multi_property_id().unwrap()
         );
 
         // Check if it matches the expected bucket.
@@ -743,9 +740,7 @@ mod tests {
         let property_store = context.entity_store.get_property_store::<Person>();
         let property_value_store = property_store.get_with_id(index_id);
         let bucket: Ref<IndexSet<EntityId<Person>>> = property_value_store
-            .get_index_set_with_hash(
-                (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
-            )
+            .get_index_set_with_hash(query.multi_property_value_hash())
             .unwrap();
 
         let address2 = &*bucket as *const _;
@@ -766,52 +761,70 @@ mod tests {
 
         // Check non-derived property index is correctly maintained
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(person![InfectionStatus::Susceptible]),
             6
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Infected]),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Recovered]),
+            0
+        );
 
         context.set_property(person1, InfectionStatus::Infected);
 
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(person![InfectionStatus::Susceptible]),
             5
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 1);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Infected]),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Recovered]),
+            0
+        );
 
         context.set_property(person1, InfectionStatus::Recovered);
 
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(person![InfectionStatus::Susceptible]),
             5
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 1);
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Infected]),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Recovered]),
+            1
+        );
 
         // Check derived property index is correctly maintained.
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 6);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 0);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 6);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 0);
 
         context.set_property(person2, Age(12));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 5);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 1);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 5);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 0);
 
         context.set_property(person1, Age(75));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 1);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 1);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 4);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 1);
 
         context.set_property(person2, Age(77));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 2);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 0);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 4);
+        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 2);
     }
 
     #[test]
@@ -833,9 +846,12 @@ mod tests {
             let _: PersonId = context.add_entity((Age(22),)).unwrap();
         }
 
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 5);
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(person![InfectionStatus::Recovered]),
+            5
+        );
+        assert_eq!(
+            context.query_entity_count(person![InfectionStatus::Susceptible]),
             15
         );
     }
@@ -848,6 +864,6 @@ mod tests {
             let _: PersonId = context.add_entity((Age(22),)).unwrap();
         }
 
-        assert_eq!(context.query_entity_count((AdultAthlete(false),)), 10);
+        assert_eq!(context.query_entity_count(person![AdultAthlete(false)]), 10);
     }
 }

@@ -295,6 +295,7 @@ impl EntityStore {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_macros)]
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};

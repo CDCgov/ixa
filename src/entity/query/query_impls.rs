@@ -4,13 +4,14 @@ use seq_macro::seq;
 
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
+use crate::entity::query::property_entity_values::{PropertyEntityValues0, PropertyEntityValues1};
 use crate::entity::query::query_result_iterator::QueryResultIterator;
 use crate::entity::query::source_set::SourceSet;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
 use crate::hashing::one_shot_128;
 use crate::Context;
 
-impl<E: Entity> Query<E> for () {
+impl<E: Entity> Query<E> for PropertyEntityValues0<E> {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         Vec::new()
     }
@@ -44,24 +45,24 @@ impl<E: Entity> Query<E> for () {
 }
 
 // Implement the query version with one parameter.
-impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
+impl<E: Entity, P0: Property<E>> Query<E> for PropertyEntityValues1<E, P0> {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        let value = P1::make_canonical(self.0);
-        vec![(P1::id(), P1::hash_property_value(&value))]
+        let value = P0::make_canonical(self._0);
+        vec![(P0::id(), P0::hash_property_value(&value))]
     }
 
     fn get_type_ids(&self) -> Vec<TypeId> {
-        vec![P1::type_id()]
+        vec![P0::type_id()]
     }
 
     fn multi_property_id(&self) -> Option<usize> {
         // While not a "true" multi-property, it is convenient to have this method return the
         // `TypeId` of the singleton property.
-        Some(P1::index_id())
+        Some(P0::index_id())
     }
 
     fn multi_property_value_hash(&self) -> HashValueType {
-        P1::hash_property_value(&P1::make_canonical(self.0))
+        P0::hash_property_value(&P0::make_canonical(self._0))
     }
 
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
@@ -92,7 +93,7 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         // We create a source set for each property.
         let mut sources: Vec<SourceSet<E>> = Vec::new();
 
-        if let Some(source_set) = SourceSet::new::<P1>(self.0, context) {
+        if let Some(source_set) = SourceSet::new::<P0>(self._0, context) {
             sources.push(source_set);
         } else {
             // If a single source set is empty, the intersection of all sources is empty.
@@ -103,34 +104,35 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
     }
 
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-        let found_value: P1 = context.get_property(entity_id);
-        found_value == self.0
+        let found_value: P0 = context.get_property(entity_id);
+        found_value == self._0
     }
 
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
-        let property_value_store = context.get_property_value_store::<E, P1>();
-        entities.retain(|entity| self.0 == property_value_store.get(*entity));
+        let property_value_store = context.get_property_value_store::<E, P0>();
+        entities.retain(|entity| self._0 == property_value_store.get(*entity));
     }
 }
 
 macro_rules! impl_query {
-    ($ct:expr) => {
+    ($struct_name:ident, $ct:expr) => {
         seq!(N in 0..$ct {
             impl<
                 E: Entity,
                 #(
                     T~N : Property<E>,
                 )*
-            > Query<E> for (
+            > Query<E> for $struct_name<
+                E,
                 #(
                     T~N,
                 )*
-            )
+            >
             {
                 fn get_query(&self) -> Vec<(usize, HashValueType)> {
                     let mut ordered_items = vec![
                     #(
-                        (T~N::id(), T~N::hash_property_value(&T~N::make_canonical(self.N))),
+                        (T~N::id(), T~N::hash_property_value(&T~N::make_canonical(self._~N))),
                     )*
                     ];
                     ordered_items.sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -169,7 +171,7 @@ macro_rules! impl_query {
                     // keep the referenced value in scope.)
                     let mut values: [&Vec<u8>; $ct] = [
                         #(
-                            &$crate::bincode::serde::encode_to_vec(self.N, bincode::config::standard()).unwrap(),
+                            &$crate::bincode::serde::encode_to_vec(self._~N, bincode::config::standard()).unwrap(),
                         )*
                     ];
                     static_reorder_by_keys(&keys, &mut values);
@@ -206,7 +208,7 @@ macro_rules! impl_query {
                     let mut sources: Vec<SourceSet<E>> = Vec::new();
 
                     #(
-                        if let Some(source_set) = SourceSet::new::<T~N>(self.N, context) {
+                        if let Some(source_set) = SourceSet::new::<T~N>(self._~N, context) {
                             sources.push(source_set);
                         } else {
                             // If a single source set is empty, the intersection of all sources is empty.
@@ -221,7 +223,7 @@ macro_rules! impl_query {
                     #(
                         {
                             let found_value: T~N = context.get_property(entity_id);
-                            if found_value != self.N {
+                            if found_value != self._~N {
                                 return false
                             }
                         }
@@ -257,7 +259,7 @@ macro_rules! impl_query {
                             let property_value_store = context.get_property_value_store::<E, T~N>();
                             entities.retain(
                                 |entity|{
-                                    self.N == property_value_store.get(*entity)
+                                    self._~N == property_value_store.get(*entity)
                                 }
                             );
                         }
@@ -268,7 +270,20 @@ macro_rules! impl_query {
     }
 }
 
-// Implement the versions with 2..10 parameters. (The 1 case is implemented above.)
-seq!(Z in 2..10 {
-    impl_query!(Z);
-});
+// Import the PropertyEntityValues types for 2-10 properties
+use crate::entity::query::property_entity_values::{
+    PropertyEntityValues10, PropertyEntityValues2, PropertyEntityValues3, PropertyEntityValues4,
+    PropertyEntityValues5, PropertyEntityValues6, PropertyEntityValues7, PropertyEntityValues8,
+    PropertyEntityValues9,
+};
+
+// Implement Query for PropertyEntityValues2..10
+impl_query!(PropertyEntityValues2, 2);
+impl_query!(PropertyEntityValues3, 3);
+impl_query!(PropertyEntityValues4, 4);
+impl_query!(PropertyEntityValues5, 5);
+impl_query!(PropertyEntityValues6, 6);
+impl_query!(PropertyEntityValues7, 7);
+impl_query!(PropertyEntityValues8, 8);
+impl_query!(PropertyEntityValues9, 9);
+impl_query!(PropertyEntityValues10, 10);

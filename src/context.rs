@@ -575,7 +575,7 @@ impl Default for Context {
 #[cfg(test)]
 mod tests {
     // We allow defining items that are never used to test macros.
-    #![allow(dead_code)]
+    #![allow(dead_code, unused_macros)]
     use std::cell::RefCell;
 
     use ixa_derive::IxaEvent;

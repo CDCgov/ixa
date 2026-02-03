@@ -2,14 +2,15 @@ use ixa::prelude::*;
 use rand_distr::Exp;
 
 use crate::parameters_loader::Foi;
-use crate::population_manager::{AgeGroupRisk, Alive, InfectionStatus};
+use crate::population_manager::{person, AgeGroupRisk, Alive, InfectionStatus, Person};
 use crate::Parameters;
 
 define_rng!(TransmissionRng1);
 
 //Attempt infection for specific age group risk (meaning different forces of infection)
 fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
-    let population_size: usize = context.query_entity_count((Alive(true), age_group));
+    let query = person![Alive(true), age_group];
+    let population_size: usize = context.query_entity_count(query);
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -20,9 +21,7 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         .get(&age_group)
         .unwrap();
     if population_size > 0 {
-        let person_to_infect = context
-            .sample_entity(TransmissionRng1, (Alive(true), age_group))
-            .unwrap();
+        let person_to_infect = context.sample_entity(TransmissionRng1, query).unwrap();
 
         let person_status: InfectionStatus = context.get_property(person_to_infect);
 
