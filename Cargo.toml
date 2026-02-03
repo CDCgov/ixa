@@ -119,6 +119,7 @@ rustc-hash.workspace = true
 clap-markdown = { workspace = true, optional = true }
 ouroboros.workspace = true
 indexmap = "2.13.0"
+cliclack = "0.3.8"
 
 # Non-WASM targets
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

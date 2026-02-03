@@ -205,3 +205,6 @@ run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
 [tasks.'install:hooks']
 run = "pre-commit install"
+
+[tasks.'install:cli']
+run = "cargo install --path . --locked --force"
