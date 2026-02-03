@@ -11,19 +11,6 @@ The API lives under `ixa::profiling` and is behind the `profiling` Cargo feature
 (enabled by default). If you disable the feature, the API becomes a no-op so you
 can leave profiling calls in your code.
 
-## API overview
-
-Core functions:
-
-- `increment_named_count`
-- `open_span`
-- `close_span`
-- `print_profiling_data`
-- `print_named_counts`
-- `print_named_spans`
-- `print_computed_statistics`
-- `add_computed_statistic`
-
 ## Example console output
 
 ```text
@@ -94,7 +81,7 @@ individually.
 
 ```rust
 use ixa::prelude::*;
-use ixa::profiling::{increment_named_count, open_span, print_profiling_data, ProfilingContextExt};
+use ixa::profiling::*;
 
 fn main() {
     let mut context = Context::new();
