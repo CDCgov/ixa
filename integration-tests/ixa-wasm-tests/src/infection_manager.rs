@@ -1,13 +1,14 @@
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
-use ixa::{trace, PersonId, PersonPropertyChangeEvent};
+use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, InfectionStatusValue};
+use crate::people::{InfectionStatus, Person, PersonId};
 use crate::INFECTION_DURATION;
 
 // Wherever we want to take action based on a person's status change, we need
 // to listen to this event.
-pub type InfectionStatusEvent = PersonPropertyChangeEvent<InfectionStatus>;
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
 
 define_rng!(InfectionRng);
 
@@ -16,11 +17,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
     context.add_plan(recovery_time, move |context| {
-        context.set_person_property::<InfectionStatus>(
-            person_id,
-            InfectionStatus,
-            InfectionStatusValue::R,
-        );
+        context.set_property(person_id, InfectionStatus::R);
     });
 }
 
@@ -29,10 +26,10 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
         "Handling infection status change from {:?} to {:?} for {:?}",
         event.previous,
         event.current,
-        event.person_id
+        event.entity_id
     );
-    if event.current == InfectionStatusValue::I {
-        schedule_recovery(context, event.person_id);
+    if event.current == InfectionStatus::I {
+        schedule_recovery(context, event.entity_id);
     }
 }
 
@@ -48,12 +45,12 @@ mod test {
     use ixa::prelude::*;
 
     use crate::infection_manager::InfectionStatusEvent;
-    use crate::people::{InfectionStatus, InfectionStatusValue};
+    use crate::people::InfectionStatus;
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
     fn handle_recovery_event(context: &mut Context, event: InfectionStatusEvent) {
-        if event.current == InfectionStatusValue::R {
+        if event.current == InfectionStatus::R {
             *context.get_data_mut(RecoveryPlugin) += 1;
         }
     }
@@ -71,14 +68,8 @@ mod test {
 
         let population_size = 10;
         for _ in 0..population_size {
-            let person_id = context
-                .add_person((InfectionStatus, InfectionStatusValue::S))
-                .unwrap();
-            context.set_person_property::<InfectionStatus>(
-                person_id,
-                InfectionStatus,
-                InfectionStatusValue::I,
-            );
+            let person_id = context.add_entity((InfectionStatus::S,)).unwrap();
+            context.set_property(person_id, InfectionStatus::I);
         }
 
         context.execute();

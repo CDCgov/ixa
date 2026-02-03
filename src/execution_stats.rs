@@ -27,19 +27,12 @@ pub fn get_high_res_time() -> f64 {
     perf.now() // Returns time in milliseconds as f64
 }
 
-/// A container struct for computed final statistics. Note that if population size
-/// is zero, then the per person statistics are also zero, as they are meaningless.
+/// A container struct for computed final statistics.
 #[derive(Serialize)]
 pub struct ExecutionStatistics {
     pub max_memory_usage: u64,
     pub cpu_time: Duration,
     pub wall_time: Duration,
-
-    // Per person stats
-    pub population: usize,
-    pub cpu_time_per_person: Duration,
-    pub wall_time_per_person: Duration,
-    pub memory_per_person: u64,
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -154,7 +147,7 @@ impl ExecutionProfilingCollector {
     }
 
     /// Computes the final summary statistics
-    pub fn compute_final_statistics(&mut self, population: usize) -> ExecutionStatistics {
+    pub fn compute_final_statistics(&mut self) -> ExecutionStatistics {
         let mut cpu_time_millis = 0;
 
         if let Some(pid) = self.process_id {
@@ -173,30 +166,6 @@ impl ExecutionProfilingCollector {
         #[cfg(not(target_arch = "wasm32"))]
         let wall_time = self.start_time.elapsed();
 
-        // For the per person stats, it's not clear what scale this should be at. Duration can
-        // be constructed from seconds in `f64`, which is probably good enough for our purposes.
-        // For memory, we can just round to the nearest byte.
-
-        let cpu_time_per_person = if population > 0 {
-            Duration::from_secs_f64(cpu_time_millis as f64 / population as f64 / 1000.0)
-        } else {
-            Duration::new(0, 0)
-        };
-        let wall_time_per_person = if population > 0 {
-            #[cfg(not(target_arch = "wasm32"))]
-            let wall_time = wall_time.as_secs_f64();
-            #[cfg(target_arch = "wasm32")]
-            let wall_time = wall_time / 1000.0;
-            Duration::from_secs_f64(wall_time / population as f64)
-        } else {
-            Duration::new(0, 0)
-        };
-        let memory_per_person = if population > 0 {
-            self.max_memory_usage / population as u64
-        } else {
-            0
-        };
-
         #[cfg(target_arch = "wasm32")]
         let wall_time = Duration::from_millis(wall_time as u64);
 
@@ -204,12 +173,6 @@ impl ExecutionProfilingCollector {
             max_memory_usage: self.max_memory_usage,
             cpu_time,
             wall_time,
-
-            // Per person stats
-            population,
-            cpu_time_per_person,
-            wall_time_per_person,
-            memory_per_person,
         }
     }
 }
@@ -231,27 +194,6 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
     }
 
     println!("{:<25}{}", "Wall time:", format_duration(summary.wall_time));
-
-    if summary.population > 0 {
-        println!("{:<25}{}", "Population:", summary.population);
-        if summary.max_memory_usage > 0 {
-            println!(
-                "{:<25}{}",
-                "Memory per person:",
-                ByteSize::b(summary.memory_per_person)
-            );
-            println!(
-                "{:<25}{}",
-                "CPU time per person:",
-                format_duration(summary.cpu_time_per_person)
-            );
-        }
-        println!(
-            "{:<25}{}",
-            "Wall time per person:",
-            format_duration(summary.wall_time_per_person)
-        );
-    }
 }
 
 /// Logs execution statistics with the logging system.
@@ -266,24 +208,6 @@ pub fn log_execution_statistics(stats: &ExecutionStatistics) {
         info!("CPU time: {}", format_duration(stats.cpu_time));
     }
     info!("Wall time: {}", format_duration(stats.wall_time));
-
-    if stats.population > 0 {
-        info!("Population: {}", stats.population);
-        if stats.max_memory_usage > 0 {
-            info!(
-                "Memory per person: {}",
-                ByteSize::b(stats.memory_per_person)
-            );
-            info!(
-                "CPU time per person: {}",
-                format_duration(stats.cpu_time_per_person)
-            );
-        }
-        info!(
-            "Wall time per person: {}",
-            format_duration(stats.wall_time_per_person)
-        );
-    }
 }
 
 #[cfg(test)]
@@ -323,24 +247,11 @@ mod tests {
         let mut collector = ExecutionProfilingCollector::new();
 
         thread::sleep(Duration::from_millis(100));
-        let stats = collector.compute_final_statistics(10);
+        let stats = collector.compute_final_statistics();
 
         // Fields should be non-zero
         assert!(stats.max_memory_usage > 0);
         assert!(stats.wall_time > Duration::ZERO);
-        assert_eq!(stats.population, 10);
-    }
-
-    #[test]
-    fn test_zero_population_results() {
-        let mut collector = ExecutionProfilingCollector::new();
-
-        let stats = collector.compute_final_statistics(0);
-
-        assert_eq!(stats.population, 0);
-        assert_eq!(stats.cpu_time_per_person, Duration::ZERO);
-        assert_eq!(stats.wall_time_per_person, Duration::ZERO);
-        assert_eq!(stats.memory_per_person, 0);
     }
 
     #[test]

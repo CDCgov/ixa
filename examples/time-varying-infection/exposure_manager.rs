@@ -8,21 +8,24 @@ use reikna::integral::integrate;
 use roots::find_root_brent;
 
 use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
+use crate::population_loader::{DiseaseStatus, InfectionTime, Person, PersonId};
 
 define_rng!(ExposureRng);
 
-fn expose_person_to_deviled_eggs(context: &mut Context, person_created_event: PersonCreatedEvent) {
+fn expose_person_to_deviled_eggs(
+    context: &mut Context,
+    person_created_event: EntityCreatedEvent<Person>,
+) {
     // When the person is exposed to deviled eggs, make a plan for them to fall
     // sick based on foi(t), where inverse sampling is used to draw times from
     // the corresponding distribution.
     let t = inverse_sampling_infection(context);
-    let person_id = person_created_event.person_id;
+    let person_id: PersonId = person_created_event.entity_id;
     context.add_plan(t, move |context| {
-        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
+        context.set_property(person_id, DiseaseStatus::I);
         // For reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected.
-        context.set_person_property(person_id, InfectionTime, Some(t));
+        context.set_property(person_id, InfectionTime(Some(t)));
     });
 }
 
@@ -58,7 +61,7 @@ pub fn init(context: &mut Context) {
     // Let deviled eggs be our foodborne illness. As soon as a person
     // enters the simulation, they are exposed to deviled eggs based on
     // foi(t), and they will have their infection planned at a given time.
-    context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
+    context.subscribe_to_event(move |context, event: EntityCreatedEvent<Person>| {
         expose_person_to_deviled_eggs(context, event);
     });
 }
@@ -69,7 +72,7 @@ mod test {
 
     use super::*;
     use crate::parameters_loader::ParametersValues;
-    use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
+    use crate::population_loader::{DiseaseStatus, InfectionTime};
 
     #[test]
     fn test_attempt_infection() {
@@ -94,12 +97,12 @@ mod test {
             .clone();
         context.init_random(parameters.seed);
         init(&mut context);
-        let person = context.add_person(()).unwrap();
+        let person: PersonId = context.add_entity(()).unwrap();
         context.execute();
-        let person_status = context.get_person_property(person, DiseaseStatus);
-        assert_eq!(person_status, DiseaseStatusValue::I);
-        let infection_time = context.get_person_property(person, InfectionTime).unwrap();
-        assert_eq!(infection_time, context.get_current_time());
+        let person_status: DiseaseStatus = context.get_property(person);
+        assert_eq!(person_status, DiseaseStatus::I);
+        let InfectionTime(infection_time) = context.get_property(person);
+        assert_eq!(infection_time.unwrap(), context.get_current_time());
     }
 
     #[test]

@@ -7,20 +7,17 @@ mod infection_manager;
 mod parameters_loader;
 mod transmission_manager;
 
-use serde::{Deserialize, Serialize};
-
 use crate::parameters_loader::Parameters;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum InfectionStatusValue {
-    S,
-    I,
-    R,
-}
-define_person_property_with_default!(
-    InfectionStatus,
-    InfectionStatusValue,
-    InfectionStatusValue::S
+define_entity!(Person);
+define_property!(
+    enum InfectionStatus {
+        S,
+        I,
+        R,
+    },
+    Person,
+    default_const = InfectionStatus::S
 );
 
 fn example_dir() -> PathBuf {
@@ -41,7 +38,7 @@ fn initialize() -> Result<Context, IxaError> {
     context.init_random(parameters.seed);
 
     for _ in 0..parameters.population {
-        context.add_person(()).unwrap();
+        let _: PersonId = context.add_entity(()).unwrap();
     }
 
     transmission_manager::init(&mut context);

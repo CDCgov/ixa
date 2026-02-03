@@ -224,17 +224,3 @@ pub fn init(context: &mut Context) {
     });
 }
 ```
-
-## Renamed Methods provided by `ContextPeopleExt`
-
-| Old                                      | New                                             | Description                                                            |
-| ---------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
-| `register_property<T: PersonProperty>()` | `register_person_property<T: PersonProperty>()` |                                                                        |
-| `index_property<T: PersonProperty>()`    | `index_person_property<T: PersonProperty>()`    | The new `index_property` method works for `Property<E: Entity>` types. |
-| `with_query_results<Q: Query>()`         | `with_query_people_results<Q: Query>()`         | The new `with_query_results` method queries entity storage.            |
-
-## Renamed Macros
-
-| Old                        | New                               | Description                                                                  |
-| -------------------------- | --------------------------------- | ---------------------------------------------------------------------------- |
-| `define_derived_property!` | `define_derived_person_property!` | The new `define_derived_property!` defines a new `Property<E: Entity>` type. |

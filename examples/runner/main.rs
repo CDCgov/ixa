@@ -20,6 +20,8 @@ struct CustomArgs {
 
 define_global_property!(Name, String);
 
+define_entity!(Person);
+
 fn main() {
     // The runner reads arguments from the command line.
     // args refer to `BaseArgs` (see runner.rs for all available args)
@@ -47,20 +49,20 @@ fn main() {
 
         if let Some(population) = custom_args.starting_population {
             for _ in 0..population {
-                context.add_person(()).unwrap();
+                let _: PersonId = context.add_entity(()).unwrap();
             }
         }
 
         context.add_plan(2.0, |context| {
             println!("Adding two people at t=2");
-            context.add_person(()).unwrap();
-            context.add_person(()).unwrap();
+            let _: PersonId = context.add_entity(()).unwrap();
+            let _: PersonId = context.add_entity(()).unwrap();
         });
 
         Ok(())
     })
     .unwrap();
 
-    let final_count = context.get_current_population();
+    let final_count = context.get_entity_count::<Person>();
     println!("Simulation complete. The number of people is: {final_count}");
 }

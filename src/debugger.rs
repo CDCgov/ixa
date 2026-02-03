@@ -3,9 +3,7 @@ use std::fmt::Write;
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
 
-use crate::external_api::{
-    breakpoint, global_properties, halt, next, people, population, run_ext_api, EmptyArgs,
-};
+use crate::external_api::{breakpoint, global_properties, halt, next, run_ext_api};
 use crate::{define_data_plugin, trace, Context, HashMap, HashMapExt, IxaError};
 
 trait DebuggerCommand {
@@ -32,8 +30,6 @@ define_data_plugin!(DebuggerPlugin, Option<Debugger>, |_context| {
     commands.insert("global", Box::new(GlobalPropertyCommand));
     commands.insert("halt", Box::new(HaltCommand));
     commands.insert("next", Box::new(NextCommand));
-    commands.insert("people", Box::new(PeopleCommand));
-    commands.insert("population", Box::new(PopulationCommand));
 
     let mut cli = Command::new("repl")
         .multicall(true)
@@ -85,81 +81,8 @@ impl Debugger {
     }
 }
 
-struct PopulationCommand;
-impl DebuggerCommand for PopulationCommand {
-    fn handle(
-        &self,
-        context: &mut Context,
-        _matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
-        let output = format!(
-            "{}",
-            run_ext_api::<population::Api>(context, &EmptyArgs {})
-                .unwrap()
-                .population
-        );
-        Ok((false, Some(output)))
-    }
-    fn extend(&self, command: Command) -> Command {
-        population::Args::augment_subcommands(command)
-    }
-}
-
-struct PeopleCommand;
-impl DebuggerCommand for PeopleCommand {
-    fn extend(&self, command: Command) -> Command {
-        people::Args::augment_subcommands(command)
-    }
-    fn handle(
-        &self,
-        context: &mut Context,
-        matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
-        let args = people::Args::from_arg_matches(matches).unwrap();
-        match run_ext_api::<people::Api>(context, &args) {
-            Ok(people::Retval::Properties(props)) => Ok((
-                false,
-                Some(
-                    props
-                        .into_iter()
-                        .map(|(k, v)| format!("{k}: {v}"))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                ),
-            )),
-            Ok(people::Retval::PropertyNames(names)) => Ok((
-                false,
-                Some(format!("Available properties:\n{}", names.join("\n"))),
-            )),
-            Ok(people::Retval::Tabulated(rows)) => Ok((
-                false,
-                Some(
-                    rows.into_iter()
-                        .map(|(props, count)| {
-                            format!(
-                                "{}: {}",
-                                count,
-                                props
-                                    .into_iter()
-                                    .map(|(k, v)| format!("{k}={v}"))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                ),
-            )),
-            Err(e) => Ok((false, Some(format!("error: {e}")))),
-        }
-    }
-}
-
 struct GlobalPropertyCommand;
 impl DebuggerCommand for GlobalPropertyCommand {
-    fn extend(&self, command: Command) -> Command {
-        global_properties::Args::augment_subcommands(command)
-    }
     fn handle(
         &self,
         context: &mut Context,
@@ -180,6 +103,9 @@ impl DebuggerCommand for GlobalPropertyCommand {
             )),
             Ok(global_properties::Retval::Value(value)) => Ok((false, Some(value))),
         }
+    }
+    fn extend(&self, command: Command) -> Command {
+        global_properties::Args::augment_subcommands(command)
     }
 }
 
@@ -330,10 +256,7 @@ mod tests {
     use assert_approx_eq::assert_approx_eq;
 
     use super::{enter_debugger, DebuggerPlugin};
-    use crate::{
-        define_global_property, define_person_property, Context, ContextGlobalPropertiesExt,
-        ContextPeopleExt, ExecutionPhase,
-    };
+    use crate::{define_global_property, Context, ContextGlobalPropertiesExt, ExecutionPhase};
 
     fn process_line(line: &str, context: &mut Context) -> (bool, Option<String>) {
         // Temporarily take the data container out of context so that
@@ -349,8 +272,6 @@ mod tests {
 
     define_global_property!(FooGlobal, String);
     define_global_property!(BarGlobal, u32);
-    define_person_property!(Age, u8);
-    define_person_property!(Smile, u32);
 
     #[test]
     fn test_cli_debugger_breakpoint_set() {
@@ -434,61 +355,6 @@ mod tests {
         let (quits, _output) = process_line("breakpoint enable\n", context);
         assert!(!quits, "should not exit");
         assert!(context.breakpoints_are_enabled());
-    }
-
-    #[test]
-    fn test_cli_debugger_population() {
-        let context = &mut Context::new();
-        // Add 2 people
-        context.add_person(()).unwrap();
-        context.add_person(()).unwrap();
-
-        let (quits, output) = process_line("population\n", context);
-
-        assert!(!quits, "should not exit");
-        assert!(output.unwrap().contains('2'));
-    }
-
-    #[test]
-    fn test_cli_debugger_people_get() {
-        let context = &mut Context::new();
-        // Add 2 people
-        context.add_person((Age, 10)).unwrap();
-        context.add_person((Age, 5)).unwrap();
-        assert_eq!(context.remaining_plan_count(), 0);
-        let (_, output) = process_line("people get 0 Age", context);
-        assert_eq!(output.unwrap(), "Age: 10");
-        let (_, output) = process_line("people get 1 Age", context);
-        assert_eq!(output.unwrap(), "Age: 5");
-    }
-
-    #[test]
-    fn test_cli_debugger_people_properties() {
-        let context = &mut Context::new();
-        // Add 2 people
-        context.add_person(((Age, 10), (Smile, 50))).unwrap();
-        context.add_person(((Age, 5), (Smile, 60))).unwrap();
-        let (_, output) = process_line("people get 0 Smile", context);
-        assert_eq!(output.unwrap(), "Smile: 50");
-        let (_, output) = process_line("people properties", context);
-        let properties = output.unwrap();
-        assert!(properties.contains("Smile"));
-        assert!(properties.contains("Age"));
-    }
-
-    #[test]
-    fn test_cli_debugger_people_tabulate() {
-        let context = &mut Context::new();
-        // Add 3 people
-        context.add_person(((Age, 10), (Smile, 50))).unwrap();
-        context.add_person(((Age, 10), (Smile, 60))).unwrap();
-        context.add_person(((Age, 10), (Smile, 60))).unwrap();
-        let (_, output) = process_line("people tabulate Age", context);
-        assert_eq!(output.unwrap(), "3: Age=10");
-        let (_, output) = process_line("people tabulate Smile", context);
-        let results = output.unwrap();
-        assert!(results.contains("1: Smile=50"));
-        assert!(results.contains("2: Smile=60"));
     }
 
     #[test]
