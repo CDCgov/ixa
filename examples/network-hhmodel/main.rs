@@ -1,6 +1,5 @@
 use ixa::prelude::*;
 use ixa::runner::run_with_args;
-use ixa::PersonId;
 mod incidence_report;
 mod loader;
 mod network;
@@ -8,6 +7,7 @@ mod parameters;
 mod seir;
 use std::path::PathBuf;
 
+define_entity!(Person);
 define_rng!(MainRng);
 
 fn main() {
@@ -40,7 +40,7 @@ fn initialize(context: &mut Context) {
     incidence_report::init(context).unwrap();
 
     // Initialize infected person with InfectedBy value equal to their own PersonId
-    let to_infect: Vec<PersonId> = vec![context.sample_person(MainRng, ()).unwrap()];
+    let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, ()).unwrap()];
 
     #[allow(clippy::vec_init_then_push)]
     seir::init(context, &to_infect);
