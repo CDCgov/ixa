@@ -4,11 +4,12 @@
 /// have a type defined (struct, enum, etc.), you can use the `impl_entity!` macro instead.
 #[macro_export]
 macro_rules! define_entity {
-    ($entity_name:ident) => {
+    ($entity_name:ident $(,)? $($id_alias: ident)?) => {
+        
         #[allow(unused)]
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
         pub struct $entity_name;
-
+        
         impl $entity_name {
             #[allow(unused)]
             pub fn new() -> Self {
@@ -16,7 +17,7 @@ macro_rules! define_entity {
             }
         }
 
-        $crate::impl_entity!($entity_name);
+        $crate::impl_entity!($entity_name $(, $id_alias)?);
     };
 }
 pub use define_entity;
@@ -30,12 +31,12 @@ pub use define_entity;
 /// _correctness via macro_.
 #[macro_export]
 macro_rules! impl_entity {
-    ($entity_name:ident) => {
-        // Alias of the form `MyEntityId = EntityId<MyEntity>`
-        $crate::paste::paste! {
+    ($entity_name:ident $(,)? $($id_alias: ident)?) => {
+        $(
+            // Alias of the form `MyEntityId = EntityId<MyEntity>`
             #[allow(unused)]
-            pub type [<$entity_name Id>] = $crate::entity::EntityId<$entity_name>;
-        }
+            pub type $id_alias = $crate::entity::EntityId<$entity_name>;
+        )?
 
         impl $crate::entity::Entity for $entity_name {
             fn id() -> usize {
