@@ -326,6 +326,15 @@ pub(crate) enum SourceIterator<'a, E: Entity> {
 impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
     type Item = EntityId<E>;
 
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self {
+            SourceIterator::IndexIter(iter) => iter.with_iter_mut(|iter| iter.nth(n).copied()),
+            SourceIterator::PropertyVecIter(iter) => iter.nth(n),
+            SourceIterator::WholePopulation(iter) => iter.nth(n),
+            SourceIterator::Empty => None,
+        }
+    }
+
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             SourceIterator::IndexIter(index_set_iter) => {
