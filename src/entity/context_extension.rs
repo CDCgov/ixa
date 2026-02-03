@@ -1,12 +1,14 @@
 use std::any::{Any, TypeId};
 
+use indexmap::IndexSet;
+
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::{Query, QueryResultIterator};
 use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::rand::Rng;
-use crate::{warn, Context, ContextRandomExt, HashSet, RngId};
+use crate::{warn, Context, ContextRandomExt, RngId};
 
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
@@ -56,7 +58,7 @@ pub trait ContextEntitiesExt {
     fn with_query_results<E: Entity, Q: Query<E>>(
         &self,
         query: Q,
-        callback: &mut dyn FnMut(&HashSet<EntityId<E>>),
+        callback: &mut dyn FnMut(&IndexSet<EntityId<E>>),
     );
 
     /// Gives the count of distinct entity IDs satisfying the query. This is especially
@@ -225,7 +227,7 @@ impl ContextEntitiesExt for Context {
     fn with_query_results<E: Entity, Q: Query<E>>(
         &self,
         query: Q,
-        callback: &mut dyn FnMut(&HashSet<EntityId<E>>),
+        callback: &mut dyn FnMut(&IndexSet<EntityId<E>>),
     ) {
         // The fast path for indexed queries.
 
@@ -244,7 +246,7 @@ impl ContextEntitiesExt for Context {
                 } else {
                     // Since we already checked that this multi-property is indexed, it must be that
                     // there are no entities having this property value.
-                    let people_set = HashSet::default();
+                    let people_set = IndexSet::default();
                     callback(&people_set);
                 }
                 return;
@@ -255,7 +257,7 @@ impl ContextEntitiesExt for Context {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
-            let entity_set = self.get_entity_iterator::<E>().collect::<HashSet<_>>();
+            let entity_set = self.get_entity_iterator::<E>().collect::<IndexSet<_>>();
             callback(&entity_set);
             return;
         }
@@ -266,7 +268,7 @@ impl ContextEntitiesExt for Context {
         // Fall back to `QueryResultIterator`.
         let people_set = query
             .new_query_result_iterator(self)
-            .collect::<HashSet<_>>();
+            .collect::<IndexSet<_>>();
         callback(&people_set);
     }
 
@@ -342,6 +344,8 @@ impl ContextEntitiesExt for Context {
 mod tests {
     use std::cell::{Ref, RefCell};
     use std::rc::Rc;
+
+    use indexmap::IndexSet;
 
     use super::*;
     use crate::prelude::PropertyChangeEvent;
@@ -715,7 +719,7 @@ mod tests {
         let _ = context.query_result_iterator((InfectionStatus::Susceptible, Vaccinated(true)));
 
         // Capture the address of the has set given by `with_query_result`
-        let mut address: *const HashSet<EntityId<Person>> = std::ptr::null();
+        let mut address: *const IndexSet<EntityId<Person>> = std::ptr::null();
         context.with_query_results(
             (InfectionStatus::Susceptible, Vaccinated(true)),
             &mut |result_set| {
@@ -740,7 +744,7 @@ mod tests {
 
         let property_store = context.entity_store.get_property_store::<Person>();
         let property_value_store = property_store.get_with_id(index_id);
-        let bucket: Ref<HashSet<EntityId<Person>>> = property_value_store
+        let bucket: Ref<IndexSet<EntityId<Person>>> = property_value_store
             .get_index_set_with_hash(
                 (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
             )

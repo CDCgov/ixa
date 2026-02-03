@@ -20,13 +20,13 @@
 
 use std::cell::Ref;
 
+use indexmap::IndexSet;
 use log::warn;
 use rand::Rng;
 
 use crate::entity::query::source_set::{SourceIterator, SourceSet};
 use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::random::{sample_multiple_l_reservoir, sample_single_l_reservoir};
-use crate::HashSet;
 
 /// An iterator over the results of a query, producing `EntityId<E>`s until exhausted.
 pub struct QueryResultIterator<'c, E: Entity> {
@@ -65,7 +65,7 @@ impl<'c, E: Entity> QueryResultIterator<'c, E> {
         QueryResultIterator { source, sources }
     }
 
-    pub fn from_index_set(set: Ref<'c, HashSet<EntityId<E>>>) -> QueryResultIterator<'c, E> {
+    pub fn from_index_set(set: Ref<'c, IndexSet<EntityId<E>>>) -> QueryResultIterator<'c, E> {
         QueryResultIterator {
             source: SourceSet::IndexSet(set).into_iter(),
             sources: vec![],
@@ -191,8 +191,10 @@ mod tests {
     set", making the tested property NOT the initial source position.
     */
 
+    use indexmap::IndexSet;
+
     use crate::prelude::*;
-    use crate::{define_derived_property, define_property, HashSet};
+    use crate::{define_derived_property, define_property};
 
     define_entity!(Person);
 
@@ -641,8 +643,8 @@ mod tests {
         let results = context.query_result_iterator((Age(25),));
         let more_results = context.query_result_iterator((Age(25), ExplicitProp(75)));
 
-        let collected_results = results.collect::<HashSet<_>>();
-        let other_collected_results = more_results.collect::<HashSet<_>>();
+        let collected_results = results.collect::<IndexSet<_>>();
+        let other_collected_results = more_results.collect::<IndexSet<_>>();
         let intersection_count = collected_results
             .intersection(&other_collected_results)
             .count();

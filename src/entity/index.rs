@@ -19,11 +19,11 @@
 //!    type-erased API.
 
 use hashbrown::HashTable;
+use indexmap::IndexSet;
 use log::{error, trace};
 
 use crate::entity::property::Property;
 use crate::entity::{Entity, EntityId, HashValueType};
-use crate::HashSet;
 
 /// The typed index.
 #[derive(Default)]
@@ -35,7 +35,7 @@ pub struct Index<E: Entity, P: Property<E>> {
     // We store a copy of the value here so that we can iterate over
     // it in the typed API, and so that the type-erased API can
     // access some serialization of it.
-    data: HashTable<(P::CanonicalValue, HashSet<EntityId<E>>)>,
+    data: HashTable<(P::CanonicalValue, IndexSet<EntityId<E>>)>,
 
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
@@ -68,7 +68,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
         #[allow(clippy::cast_possible_truncation)]
         self.data
             .entry(hash as u64, hash128_equality, hasher)
-            .or_insert_with(|| (*key, HashSet::default()))
+            .or_insert_with(|| (*key, IndexSet::default()))
             .get_mut()
             .1
             .insert(entity_id)
@@ -107,7 +107,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
         #[allow(clippy::cast_possible_truncation)]
         if let Ok(mut entry) = self.data.find_entry(hash as u64, hash128_equality) {
             let (_, set) = entry.get_mut();
-            set.remove(&entity_id);
+            set.swap_remove(&entity_id);
             // Clean up the entry if there are no entities
             if set.is_empty() {
                 entry.remove();
@@ -121,7 +121,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
     }
 
     /// Fetching a set only requires the hash.
-    pub fn get_with_hash(&self, hash: HashValueType) -> Option<&HashSet<EntityId<E>>> {
+    pub fn get_with_hash(&self, hash: HashValueType) -> Option<&IndexSet<EntityId<E>>> {
         // Equality is determined by comparing the full 128-bit hashes. We do not expect
         // any collisions before the heat death of the universe.
         let hash128_equality = |(stored_value, _): &_| P::hash_property_value(stored_value) == hash;
