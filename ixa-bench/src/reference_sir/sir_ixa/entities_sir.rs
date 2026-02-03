@@ -18,7 +18,7 @@ define_property!(
     default_const = InfectionStatus::Susceptible
 );
 
-trait InfectionLoop {
+pub trait InfectionLoop {
     fn get_params(&self) -> &Parameters;
     fn get_stats(&self) -> &ModelStats;
     fn infected_people(&self) -> usize;
@@ -47,9 +47,9 @@ impl InfectionLoop for Context {
         self.sample_entity(NextPersonRng, (InfectionStatus::Infectious,))
     }
     fn infect_person(&mut self, p: PersonId, t: Option<f64>) {
-        if self.get_property::<_, InfectionStatus>(p) != InfectionStatus::Susceptible {
-            return;
-        }
+        // if self.get_property::<_, InfectionStatus>(p) != InfectionStatus::Susceptible {
+        //     return;
+        // }
 
         self.set_property(p, InfectionStatus::Infectious);
 
@@ -92,8 +92,8 @@ impl InfectionLoop for Context {
         let recovery_event_time =
             self.sample_distr(NextEventRng, Exp::new(recovery_event_rate).unwrap());
 
-        let p = self.random_person().unwrap();
         if infection_event_time < recovery_event_time {
+            let p = self.random_person().unwrap();
             if self.get_property::<_, InfectionStatus>(p) == InfectionStatus::Susceptible {
                 self.add_plan(
                     self.get_current_time() + infection_event_time,

@@ -5,6 +5,7 @@ use crate::reference_sir::{ModelStats, Parameters};
 
 pub mod entities_sir;
 pub mod legacy;
+pub mod properties;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 pub struct ModelOptions {}

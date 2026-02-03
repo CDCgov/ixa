@@ -5,6 +5,7 @@ pub use stats::*;
 
 pub mod periodic_counts;
 pub mod sir_baseline;
+pub mod sir_baseline_alt;
 pub mod sir_ixa;
 
 pub mod bench;
