@@ -13,6 +13,7 @@ Responsibilities:
 use std::any::Any;
 use std::cell::{Ref, RefCell};
 
+use indexmap::IndexSet;
 use log::{error, trace};
 
 use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
@@ -20,7 +21,7 @@ use crate::entity::index::Index;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
-use crate::{Context, HashSet};
+use crate::Context;
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub(crate) trait PropertyValueStore<E: Entity>: Any {
@@ -44,7 +45,7 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
     /// Fetches the hash bucket corresponding to the provided hash value. Returns `None` if either the
     /// property is not indexed or there is no bucket corresponding to the hash value.
-    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>>;
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<IndexSet<EntityId<E>>>>;
 
     /// Returns whether this `PropertyValueStore` instance has an `Index<E, P>`. Note that this is not the same as
     /// asking whether the property itself is indexed, as some properties might use the index of some other
@@ -109,7 +110,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         }
     }
 
-    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<HashSet<EntityId<E>>>> {
+    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<IndexSet<EntityId<E>>>> {
         if let Some(index) = &self.index {
             let index = index.borrow();
             Ref::filter_map(index, |idx| idx.get_with_hash(hash)).ok()
