@@ -19,11 +19,11 @@
 //!    type-erased API.
 
 use hashbrown::HashTable;
-use indexmap::IndexSet;
 use log::{error, trace};
 
 use crate::entity::property::Property;
 use crate::entity::{Entity, EntityId, HashValueType};
+use crate::hashing::IndexSet;
 
 /// The typed index.
 #[derive(Default)]

@@ -62,10 +62,10 @@ pub trait Query<E: Entity>: Copy + 'static {
 #[cfg(test)]
 mod tests {
 
+    use crate::hashing::HashSetExt;
     use crate::prelude::*;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, Context,
-        HashSetExt,
     };
 
     define_entity!(Person);
@@ -254,7 +254,7 @@ mod tests {
 
         let mut not_seniors = Vec::new();
         context.with_query_results((Senior(false),), &mut |people| {
-            not_seniors = people.to_owned_vec()
+            not_seniors = people.to_owned_vec();
         });
         let mut seniors = Vec::new();
         context.with_query_results((Senior(true),), &mut |people| {
