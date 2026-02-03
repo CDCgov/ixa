@@ -16,14 +16,15 @@
 //! in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
 
 use std::cell::Ref;
-use std::collections::hash_set::Iter as HashSetIter;
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
+use indexmap::set::Iter as IndexSetIter;
+use indexmap::IndexSet;
 use ouroboros::self_referencing;
 
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
-use crate::hashing::HashSet;
 use crate::prelude::Property;
 use crate::Context;
 
@@ -217,14 +218,14 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
 /// iterator in the `Iterator` implementation on `SourceIterator`.
 #[self_referencing]
 pub(super) struct IndexSetIterator<'a, E: Entity> {
-    index_set: Ref<'a, HashSet<EntityId<E>>>,
+    index_set: Ref<'a, IndexSet<EntityId<E>>>,
     #[borrows(index_set)]
     #[covariant]
-    iter: HashSetIter<'this, EntityId<E>>,
+    iter: IndexSetIter<'this, EntityId<E>>,
 }
 
 impl<'a, E: Entity> IndexSetIterator<'a, E> {
-    pub fn from_index_set(index_set: Ref<'a, HashSet<EntityId<E>>>) -> Self {
+    pub fn from_index_set(index_set: Ref<'a, IndexSet<EntityId<E>>>) -> Self {
         IndexSetIteratorBuilder {
             index_set,
             iter_builder: |index_set| index_set.iter(),
@@ -235,7 +236,7 @@ impl<'a, E: Entity> IndexSetIterator<'a, E> {
 
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
 pub enum SourceSet<'a, E: Entity> {
-    IndexSet(Ref<'a, HashSet<EntityId<E>>>),
+    IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
     PropertySet(BxPropertySource<'a, E>),
 }
 
@@ -310,7 +311,6 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         }
     }
 }
-
 /// Kinds of iterators that are used as a basis for `QueryResultIterator`
 pub(crate) enum SourceIterator<'a, E: Entity> {
     /// An iterator over an index set
@@ -321,6 +321,17 @@ pub(crate) enum SourceIterator<'a, E: Entity> {
     WholePopulation(EntityIterator<E>),
     /// An empty iterator
     Empty,
+}
+
+impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceIterator::IndexIter(_iter) => write!(f, "IndexIter"),
+            SourceIterator::PropertyVecIter(_iter) => write!(f, "PropertyVecIter"),
+            SourceIterator::WholePopulation(_iter) => write!(f, "WholePopulation"),
+            SourceIterator::Empty => write!(f, "Empty"),
+        }
+    }
 }
 
 impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
@@ -372,7 +383,7 @@ mod tests {
     fn test_iterators() {
         let values: RawPropertyValueVec<Age> =
             [0u8, 3, 2, 3, 4, 5, 3].into_iter().map(Age).collect();
-        let people_set = HashSet::from_iter([
+        let people_set = IndexSet::from_iter([
             EntityId::new(0),
             EntityId::new(2),
             EntityId::new(3),

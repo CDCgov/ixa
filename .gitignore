@@ -38,3 +38,5 @@ examples/**/output/**
 
 #exceptions:
 !examples/**/output/.gitkeep
+
+profile.json.gz
