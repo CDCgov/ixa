@@ -20,12 +20,12 @@
 
 use std::cell::Ref;
 
-use indexmap::IndexSet;
 use log::warn;
 use rand::Rng;
 
 use crate::entity::query::source_set::{SourceIterator, SourceSet};
 use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::hashing::IndexSet;
 use crate::random::{sample_multiple_l_reservoir, sample_single_l_reservoir};
 
 /// An iterator over the results of a query, producing `EntityId<E>`s until exhausted.

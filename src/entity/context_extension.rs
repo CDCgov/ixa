@@ -1,12 +1,11 @@
 use std::any::{Any, TypeId};
 
-use indexmap::IndexSet;
-
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::{Query, QueryResultIterator};
 use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::hashing::IndexSet;
 use crate::rand::Rng;
 use crate::{warn, Context, ContextRandomExt, RngId};
 
@@ -345,9 +344,8 @@ mod tests {
     use std::cell::{Ref, RefCell};
     use std::rc::Rc;
 
-    use indexmap::IndexSet;
-
     use super::*;
+    use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
     use crate::{define_derived_property, define_entity, define_multi_property, define_property};
 

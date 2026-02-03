@@ -19,12 +19,11 @@ use std::cell::Ref;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
-use indexmap::set::Iter as IndexSetIter;
-use indexmap::IndexSet;
 use ouroboros::self_referencing;
 
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
+use crate::hashing::{IndexSet, IndexSetIter};
 use crate::prelude::Property;
 use crate::Context;
 
