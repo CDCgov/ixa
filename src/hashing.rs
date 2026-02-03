@@ -13,12 +13,18 @@
 //! in scope.
 //!
 
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 
 use bincode::serde::encode_to_vec as serialize_to_vec;
-pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+pub use indexmap::set::Iter as IndexSetIter;
+use indexmap::IndexSet as RawIndexSet;
+pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher};
 use serde::Serialize;
 use xxhash_rust::xxh3::Xxh3Default;
+
+type FxBuildHasher = BuildHasherDefault<FxHasher>;
+
+pub type IndexSet<T> = RawIndexSet<T, FxBuildHasher>;
 
 pub type HashValueType = u128;
 
@@ -57,11 +63,11 @@ impl<T: Clone> HashSetExt for HashSet<T> {
     }
 }
 
-impl<T: Clone> HashSetExt for indexmap::IndexSet<T> {
+impl<T: Clone> HashSetExt for IndexSet<T> {
     type Item = T;
 
     fn new() -> Self {
-        indexmap::IndexSet::default()
+        IndexSet::default()
     }
 
     fn to_owned_vec(&self) -> Vec<Self::Item> {
