@@ -13,7 +13,6 @@ Responsibilities:
 use std::any::Any;
 use std::cell::{Ref, RefCell};
 
-use indexmap::IndexSet;
 use log::{error, trace};
 
 use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
@@ -21,6 +20,7 @@ use crate::entity::index::Index;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
+use crate::hashing::IndexSet;
 use crate::Context;
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
