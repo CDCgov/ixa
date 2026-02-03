@@ -61,12 +61,12 @@ impl InfectionLoop for Context {
     }
 
     fn recover_person(&mut self, p: PersonId, _t: f64) {
-        assert_eq!(
+        debug_assert_eq!(
             self.get_property::<_, InfectionStatus>(p),
             InfectionStatus::Infectious
         );
         self.set_property(p, InfectionStatus::Recovered);
-        assert_eq!(
+        debug_assert_eq!(
             self.get_property::<_, InfectionStatus>(p),
             InfectionStatus::Recovered
         );
@@ -152,13 +152,13 @@ impl InfectionLoop for Context {
             context.shutdown();
         });
 
-        assert_eq!(
+        debug_assert_eq!(
             self.infected_people(),
             initial_infections,
             "should have infected people at start"
         );
 
-        assert_eq!(
+        debug_assert_eq!(
             self.get_stats().get_current_infected(),
             initial_infections,
             "stats should be initialized with initial infections"
