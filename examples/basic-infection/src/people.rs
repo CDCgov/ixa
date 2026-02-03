@@ -3,7 +3,7 @@ use ixa::trace;
 
 use crate::POPULATION;
 
-define_entity!(Person);
+define_entity!(Person, PersonId);
 
 // In this model, people only have a single property, their infection status.
 define_property!(

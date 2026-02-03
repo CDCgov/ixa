@@ -5,11 +5,11 @@
 #[macro_export]
 macro_rules! define_entity {
     ($entity_name:ident $(,)? $($id_alias: ident)?) => {
-        
+
         #[allow(unused)]
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
         pub struct $entity_name;
-        
+
         impl $entity_name {
             #[allow(unused)]
             pub fn new() -> Self {

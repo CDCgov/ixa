@@ -195,7 +195,7 @@ mod tests {
     use super::*;
     use crate::define_entity;
 
-    define_entity!(DummyEntity);
+    define_entity!(DummyEntity, DummyEntityId);
 
     #[test]
     fn entity_id_debug_display() {

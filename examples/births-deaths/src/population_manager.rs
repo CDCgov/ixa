@@ -10,7 +10,7 @@ define_rng!(PeopleRng);
 
 static MAX_AGE: u8 = 100;
 
-define_entity!(Person);
+define_entity!(Person, PersonId);
 
 define_property!(
     enum InfectionStatus {

@@ -347,10 +347,10 @@ mod tests {
     use crate::prelude::PropertyChangeEvent;
     use crate::{define_derived_property, define_entity, define_multi_property, define_property};
 
-    define_entity!(Animal);
+    define_entity!(Animal, AnimalId);
     define_property!(struct Legs(u8), Animal, default_const = Legs(4));
 
-    define_entity!(Person);
+    define_entity!(Person, PersonId);
 
     define_property!(struct Age(u8), Person);
 

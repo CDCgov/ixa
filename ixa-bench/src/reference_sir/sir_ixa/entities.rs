@@ -7,7 +7,7 @@ use crate::reference_sir::sir_ixa::{
 };
 use crate::reference_sir::{ModelStats, Parameters};
 
-define_entity!(Person);
+define_entity!(Person, PersonId);
 define_property!(
     enum InfectionStatus {
         Susceptible,

@@ -68,7 +68,7 @@ mod tests {
         HashSetExt,
     };
 
-    define_entity!(Person);
+    define_entity!(Person, PersonId);
 
     define_property!(struct Age(u8), Person, default_const = Age(0));
     define_property!(struct County(u32), Person, default_const = County(0));
