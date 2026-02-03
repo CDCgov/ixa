@@ -57,6 +57,18 @@ impl<T: Clone> HashSetExt for HashSet<T> {
     }
 }
 
+impl<T: Clone> HashSetExt for indexmap::IndexSet<T> {
+    type Item = T;
+
+    fn new() -> Self {
+        indexmap::IndexSet::default()
+    }
+
+    fn to_owned_vec(&self) -> Vec<Self::Item> {
+        self.iter().cloned().collect()
+    }
+}
+
 /// A convenience method to compute the hash of a `&str`.
 pub fn hash_str(data: &str) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();

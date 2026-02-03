@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::reference_sir::{ModelStats, Parameters};
 
-pub mod entities;
+pub mod entities_sir;
 pub mod legacy;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
