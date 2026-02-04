@@ -391,7 +391,7 @@ mod tests {
     // `define_property!` macro. In that case, you can use the `impl_property!` macro for
     // a type that has already been defined. The downside is that you have to manually
     // specify the traits that all properties need to implement in the `derive` clause.
-    #[derive(Copy, Clone, Debug, PartialEq, crate::serde::Serialize)]
+    #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize)]
     struct Vaccinated(bool);
     impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 

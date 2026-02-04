@@ -32,9 +32,7 @@ define_property!(
 );
 
 // We declare the type ourselves so we can derive `Hash`.
-#[derive(
-    Debug, PartialEq, Eq, Clone, Copy, ixa::serde::Serialize, ixa::serde::Deserialize, Hash,
-)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
 pub enum AgeGroupRisk {
     NewBorn,
     General,

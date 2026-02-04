@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 use ixa::prelude::*;
-use ixa::serde::Serialize;
+use serde::Serialize;
 use ixa::trace;
 
 use crate::infection_manager::InfectionStatusEvent;
