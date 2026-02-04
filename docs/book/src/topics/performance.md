@@ -60,6 +60,11 @@ The
 describes a few more settings that can affect runtime performance, but these are
 the most important.
 
+## Ixa Profiling Module
+
+For Ixa's built-in profiling (named counts, spans, and JSON output), see the
+[Profiling Module](profiling-module.md) topic.
+
 ## Visualizing Execution with Flame Graphs
 
 [Samply](https://github.com/mstange/samply/) and
