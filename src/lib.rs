@@ -58,7 +58,6 @@ pub mod network;
 pub use network::{ContextNetworkExt, Edge, EdgeType};
 
 pub mod macros;
-//pub use macros::*;
 
 pub mod people;
 pub use people::{
