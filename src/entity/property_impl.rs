@@ -202,7 +202,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
         pub struct $name($visibility Option<$inner_ty>);
 
         // Use impl_property! to provide a custom display implementation
@@ -225,7 +225,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
         pub struct $name($($visibility $field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
@@ -236,7 +236,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
         pub struct $name { $($visibility $field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
@@ -249,7 +249,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
         pub enum $name {
             $($variant),*
         }
@@ -535,7 +535,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
         pub struct $name($visibility Option<$inner_ty>);
 
         // Use impl_derived_property! to provide a custom display implementation
@@ -565,7 +565,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
         pub struct $name( $($visibility $field_ty),* );
 
         $crate::impl_derived_property!(
@@ -588,7 +588,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
         pub struct $name { $($visibility $field_name : $field_ty),* }
 
         $crate::impl_derived_property!(
@@ -613,7 +613,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, $crate::serde::Serialize)]
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
         pub enum $name {
             $($variant),*
         }
@@ -823,9 +823,10 @@ mod tests {
     // We define unused properties to test macro implementation.
     #![allow(dead_code)]
 
+    use serde::Serialize;
+
     use crate::entity::Query;
     use crate::prelude::*;
-    use crate::serde::Serialize;
 
     define_entity!(Person);
     define_entity!(Group);
