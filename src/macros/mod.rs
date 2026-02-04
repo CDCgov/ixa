@@ -1,3 +1,4 @@
+mod all;
 mod assert_almost_eq;
 mod define_data_plugin;
 mod define_edge_type;
