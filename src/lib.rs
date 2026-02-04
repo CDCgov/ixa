@@ -103,7 +103,7 @@ pub use ixa_derive::{
     impl_make_canonical, impl_people_make_canonical, reorder_closure, sorted_tag,
     sorted_value_type, unreorder_closure,
 };
-pub use {bincode, csv, ctor, paste, rand, serde};
+pub use {bincode, csv, ctor, paste, rand};
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};

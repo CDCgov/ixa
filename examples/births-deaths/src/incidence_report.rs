@@ -2,7 +2,7 @@ use std::path::Path;
 
 use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
-use ixa::serde::Serialize;
+use serde::Serialize;
 
 use crate::population_manager::{Age, AgeGroupRisk, InfectionStatus, Person};
 use crate::Parameters;
