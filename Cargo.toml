@@ -4,11 +4,10 @@ members = [
     "ixa-*",
     "examples/basic-infection",
     "examples/births-deaths",
+    "examples/profiling",
     "integration-tests/ixa-*",
 ]
-exclude = [
-    "docs/book/models/disease_model"
-]
+exclude = ["docs/book/models/disease_model"]
 
 [workspace.package]
 edition = "2021"
