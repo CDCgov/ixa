@@ -13,6 +13,7 @@
 - [Topics](topics/topics.md)
   - [Indexing](topics/indexing.md)
   - [Performance and Profiling](topics/performance.md)
+  - [Profiling Module](topics/profiling-module.md)
   - [`random` module](topics/random-module.md)
   - [Reports](topics/reports.md)
 - [Migrating to ixa 2.0](migration_guide.md)

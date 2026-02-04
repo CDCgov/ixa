@@ -83,7 +83,11 @@ The configuration options are:
 | `directory(PathBuf)`  | The directory where CSV files will be written. Defaults to the current working directory.                    |
 | `overwrite(bool)`     | Whether to overwrite existing files with the same name. Defaults to `false` to prevent accidental data loss. |
 
-Note that all reports defined the the `Context` share this configuration.
+Note that all reports defined in the `Context` share this configuration.
+
+This configuration is also used by other outputs that integrate with report
+options, such as the profiling JSON written by
+`ixa::profiling::ProfilingContextExt::write_profiling_data()`.
 
 ## Case Study 1: A Basic Report
 
