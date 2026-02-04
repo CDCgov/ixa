@@ -45,9 +45,10 @@ fn setup() -> (Context, Vec<u8>) {
     for _ in 0..100_000 {
         let _ = context.add_person(());
         context
-            .add_entity((
+            .add_entity(all!(
+                Animal,
                 AProperty10(context.sample_range(SampleBenchRng, 0..10)),
-                AProperty100(context.sample_range(SampleBenchRng, 0..100)),
+                AProperty100(context.sample_range(SampleBenchRng, 0..100))
             ))
             .unwrap();
     }

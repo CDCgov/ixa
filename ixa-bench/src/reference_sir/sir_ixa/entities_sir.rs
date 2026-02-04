@@ -135,7 +135,7 @@ impl InfectionLoop for Context {
 
         // Set up population
         for _ in 0..population {
-            self.add_entity::<Person, _>(()).unwrap();
+            self.add_entity(all!(Person)).unwrap();
         }
 
         // Seed infections

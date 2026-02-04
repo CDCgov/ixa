@@ -159,7 +159,7 @@ mod test {
         context.index_property::<Person, AWH>();
 
         context
-            .add_entity((Age(1u8), Weight(2u8), Height(3u8)))
+            .add_entity(all!(Person, Age(1u8), Weight(2u8), Height(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
@@ -180,7 +180,7 @@ mod test {
         println!("Results: {:?}", results_a);
 
         context
-            .add_entity((Weight(1u8), Height(2u8), Age(3u8)))
+            .add_entity(all!(Person, Weight(1u8), Height(2u8), Age(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();

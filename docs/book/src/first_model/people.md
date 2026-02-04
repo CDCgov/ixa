@@ -55,19 +55,19 @@ pub fn init(context: &mut Context) {
    trace!("Initializing people");
 
    for _ in 0..1000 {
-      let _: PersonId = context.add_entity(()).expect("failed to add person");
+      let _: PersonId = context.add_entity(all!(Person)).expect("failed to add person");
    }
 }
 ```
 
-The `context.add_entity()` method call might look a little odd, because we are
-not giving `context` any data to insert, but that is because our one and only
-`Property` was defined to have a default value of `InfectionStatus::S`
-(susceptible)—so `context.add_entity()` doesn't need any information to create a
-new person. Another odd thing is the `.expect("failed to add person")` method
-call. In more complicated scenarios adding a person can fail. We could intercept
-that failure if we wanted, but in this simple case we will just let the program
-crash with a message about the reason: "failed to add person".
+The `context.add_entity(all!(Person))` call uses the `all!` macro to specify
+that we're creating a `Person` entity. Since our one and only `Property` was
+defined to have a default value of `InfectionStatus::S` (susceptible), we don't
+need to provide any property values—just the entity type. Another odd thing is
+the `.expect("failed to add person")` method call. In more complicated scenarios
+adding a person can fail. We could intercept that failure if we wanted, but in
+this simple case we will just let the program crash with a message about the
+reason: "failed to add person".
 
 Finally, the `Context::add_entity` method returns an entity ID wrapped in a
 `Result`, which the `expect` method unwraps. We can use this ID if we need to

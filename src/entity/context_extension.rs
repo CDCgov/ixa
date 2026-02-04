@@ -466,22 +466,30 @@ mod tests {
         let mut context = Context::new();
 
         let _person1 = context
-            .add_entity((Age(12), InfectionStatus::Susceptible, Vaccinated(true)))
+            .add_entity(all!(
+                Person,
+                Age(12),
+                InfectionStatus::Susceptible,
+                Vaccinated(true)
+            ))
             .unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 1);
 
-        let _person2 = context.add_entity((Age(34), Vaccinated(true))).unwrap();
+        let _person2 = context
+            .add_entity(all!(Person, Age(34), Vaccinated(true)))
+            .unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 2);
 
         // Age is the only required property
-        let _person3 = context.add_entity((Age(120),)).unwrap();
+        let _person3 = context.add_entity(all!(Person, Age(120))).unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 3);
     }
 
     #[test]
     fn add_an_entity_without_required_properties() {
         let mut context = Context::new();
-        let result = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
+        let result =
+            context.add_entity(all!(Person, InfectionStatus::Susceptible, Vaccinated(true)));
 
         assert_eq!(
             result,
@@ -494,7 +502,7 @@ mod tests {
         let mut context = Context::new();
 
         // Create a person with required Age property
-        let person = context.add_entity((Age(25),)).unwrap();
+        let person = context.add_entity(all!(Person, Age(25))).unwrap();
 
         // Retrieve and check their values
         let age: Age = context.get_property(person);
@@ -524,7 +532,12 @@ mod tests {
 
         // Create a person with explicit property values
         let person = context
-            .add_entity((Age(25), InfectionStatus::Recovered, Vaccinated(true)))
+            .add_entity(all!(
+                Person,
+                Age(25),
+                InfectionStatus::Recovered,
+                Vaccinated(true)
+            ))
             .unwrap();
 
         // Retrieve and check their values
@@ -558,17 +571,17 @@ mod tests {
 
         // Create entities of different kinds
         for _ in 0..7 {
-            let _: PersonId = context.add_entity((Age(25),)).unwrap();
+            let _: PersonId = context.add_entity(all!(Person, Age(25))).unwrap();
         }
         for _ in 0..5 {
-            let _: AnimalId = context.add_entity((Legs(2),)).unwrap();
+            let _: AnimalId = context.add_entity(all!(Animal, Legs(2))).unwrap();
         }
 
         assert_eq!(context.get_entity_count::<Animal>(), 5);
         assert_eq!(context.get_entity_count::<Person>(), 7);
 
-        let _: PersonId = context.add_entity((Age(30),)).unwrap();
-        let _: AnimalId = context.add_entity((Legs(8),)).unwrap();
+        let _: PersonId = context.add_entity(all!(Person, Age(30))).unwrap();
+        let _: AnimalId = context.add_entity(all!(Animal, Legs(8))).unwrap();
 
         assert_eq!(context.get_entity_count::<Animal>(), 6);
         assert_eq!(context.get_entity_count::<Person>(), 8);
@@ -579,13 +592,28 @@ mod tests {
         let mut context = Context::new();
 
         let expected_high_id: PersonId = context
-            .add_entity((Age(77), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(all!(
+                Person,
+                Age(77),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
         let expected_med_id: PersonId = context
-            .add_entity((Age(30), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(all!(
+                Person,
+                Age(30),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
         let expected_low_id: PersonId = context
-            .add_entity((Age(3), Vaccinated(true), InfectionStatus::Recovered))
+            .add_entity(all!(
+                Person,
+                Age(3),
+                Vaccinated(true),
+                InfectionStatus::Recovered
+            ))
             .unwrap();
 
         let actual_high: RiskLevel = context.get_property(expected_high_id);
@@ -628,7 +656,12 @@ mod tests {
 
         // Should not emit change events
         let expected_high_id: PersonId = context
-            .add_entity((Age(77), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(all!(
+                Person,
+                Age(77),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
 
         // Should emit change events
@@ -649,8 +682,8 @@ mod tests {
         let mut context = Context::new();
 
         context.set_global_property_value(GlobalDummy, 18).unwrap();
-        let child = context.add_entity((Age(17),)).unwrap();
-        let adult = context.add_entity((Age(19),)).unwrap();
+        let child = context.add_entity(all!(Person, Age(17))).unwrap();
+        let adult = context.add_entity(all!(Person, Age(19))).unwrap();
 
         let child_computed: MyDerivedProperty = context.get_property(child);
         assert_eq!(child_computed, MyDerivedProperty(17+18));
@@ -663,7 +696,9 @@ mod tests {
     #[test]
     fn observe_diamond_property_change() {
         let mut context = Context::new();
-        let person = context.add_entity((Age(17), IsSwimmer(true))).unwrap();
+        let person = context
+            .add_entity(all!(Person, Age(17), IsSwimmer(true)))
+            .unwrap();
 
         let is_adult_athlete: AdultAthlete = context.get_property(person);
         assert!(!is_adult_athlete.0);
@@ -712,7 +747,12 @@ mod tests {
             let vaccination_status: bool = rng.random_bool(0.5);
             let age: u8 = rng.random_range(0..100);
             context
-                .add_entity((Age(age), infection_status, Vaccinated(vaccination_status)))
+                .add_entity(all!(
+                    Person,
+                    Age(age),
+                    infection_status,
+                    Vaccinated(vaccination_status)
+                ))
                 .unwrap();
         }
         context.index_property::<Person, InfectionStatusVaccinated>();
@@ -755,10 +795,10 @@ mod tests {
         context.index_property::<Person, InfectionStatus>();
         context.index_property::<Person, AgeGroup>();
 
-        let person1 = context.add_entity((Age(22),)).unwrap();
-        let person2 = context.add_entity((Age(22),)).unwrap();
+        let person1 = context.add_entity(all!(Person, Age(22))).unwrap();
+        let person2 = context.add_entity(all!(Person, Age(22))).unwrap();
         for _ in 0..4 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(all!(Person, Age(22))).unwrap();
         }
 
         // Check non-derived property index is correctly maintained
@@ -848,16 +888,16 @@ mod tests {
         // Half will have the default value.
         for idx in 0..10 {
             if idx % 2 == 0 {
-                context.add_entity((Age(22),)).unwrap();
+                context.add_entity(all!(Person, Age(22))).unwrap();
             } else {
                 context
-                    .add_entity((Age(22), InfectionStatus::Recovered))
+                    .add_entity(all!(Person, Age(22), InfectionStatus::Recovered))
                     .unwrap();
             }
         }
         // The tail also has the default value
         for _ in 0..10 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(all!(Person, Age(22))).unwrap();
         }
 
         assert_eq!(
@@ -875,7 +915,7 @@ mod tests {
         let mut context = Context::new();
 
         for _ in 0..10 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(all!(Person, Age(22))).unwrap();
         }
 
         assert_eq!(

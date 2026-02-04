@@ -54,7 +54,7 @@ mod test {
     fn test_attempt_infection() {
         let mut context = Context::new();
         context.init_random(SEED);
-        let person_id: PersonId = context.add_entity(()).unwrap();
+        let person_id: PersonId = context.add_entity(all!(Person)).unwrap();
         attempt_infection(&mut context);
         let person_status: InfectionStatus = context.get_property(person_id);
         assert_eq!(person_status, InfectionStatus::I);

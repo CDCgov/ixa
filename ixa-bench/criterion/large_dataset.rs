@@ -77,11 +77,12 @@ fn initialize_people(context: &mut Context) {
 fn initialize_entities(context: &mut Context) {
     for person in generate_population_with_seed(10_000, 0.2, 10.0, Some(SEED)) {
         context
-            .add_entity((
+            .add_entity(all!(
+                Person,
                 EAge(person.age),
                 EHomeId(person.home_id as u32),
                 ESchoolId(person.school_id as u32),
-                EWorkplaceId(person.workplace_id as u32),
+                EWorkplaceId(person.workplace_id as u32)
             ))
             .unwrap();
     }

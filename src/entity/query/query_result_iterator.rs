@@ -244,7 +244,11 @@ mod tests {
         let mut people = Vec::new();
         for i in 0..size {
             let person = context
-                .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(i % 2 == 0)))
+                .add_entity(all!(
+                    Person,
+                    ExplicitProp((i % 20) as u8),
+                    ExplicitProp2(i % 2 == 0)
+                ))
                 .unwrap();
             people.push(person);
         }
@@ -299,7 +303,7 @@ mod tests {
         // Create people without setting ConstantProp - they'll use default value 42
         for _ in 0..50 {
             context
-                .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                .add_entity(all!(Person, ExplicitProp(1), ExplicitProp2(false)))
                 .unwrap();
         }
 
@@ -324,7 +328,7 @@ mod tests {
 
         for _ in 0..50 {
             context
-                .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                .add_entity(all!(Person, ExplicitProp(1), ExplicitProp2(false)))
                 .unwrap();
         }
 
@@ -342,11 +346,16 @@ mod tests {
         for i in 0..50 {
             if i < 10 {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false), ConstantProp(99)))
+                    .add_entity(all!(
+                        Person,
+                        ExplicitProp(1),
+                        ExplicitProp2(false),
+                        ConstantProp(99)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                    .add_entity(all!(Person, ExplicitProp(1), ExplicitProp2(false)))
                     .unwrap();
             }
         }
@@ -373,11 +382,16 @@ mod tests {
         for i in 0..50 {
             if i < 10 {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false), ConstantProp(99)))
+                    .add_entity(all!(
+                        Person,
+                        ExplicitProp(1),
+                        ExplicitProp2(false),
+                        ConstantProp(99)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                    .add_entity(all!(Person, ExplicitProp(1), ExplicitProp2(false)))
                     .unwrap();
             }
         }
@@ -396,7 +410,7 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(false)))
+                .add_entity(all!(Person, ExplicitProp(i as u8), ExplicitProp2(false)))
                 .unwrap();
         }
 
@@ -422,7 +436,7 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(false)))
+                .add_entity(all!(Person, ExplicitProp(i as u8), ExplicitProp2(false)))
                 .unwrap();
         }
 
@@ -450,7 +464,11 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(i % 2 == 0)))
+                .add_entity(all!(
+                    Person,
+                    ExplicitProp((i % 20) as u8),
+                    ExplicitProp2(i % 2 == 0)
+                ))
                 .unwrap();
         }
 
@@ -495,15 +513,20 @@ mod tests {
         for i in 0..100 {
             if i < 10 {
                 context
-                    .add_entity((
+                    .add_entity(all!(
+                        Person,
                         ExplicitProp(7),
                         ExplicitProp2(false),
-                        ConstantProp2(200), // Non-default for smaller source
+                        ConstantProp2(200) // Non-default for smaller source
                     ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(false)))
+                    .add_entity(all!(
+                        Person,
+                        ExplicitProp((i % 20) as u8),
+                        ExplicitProp2(false)
+                    ))
                     .unwrap();
             }
         }
@@ -524,11 +547,15 @@ mod tests {
         for i in 0..100 {
             if i < 5 {
                 context
-                    .add_entity((ExplicitProp(99), ExplicitProp2(false)))
+                    .add_entity(all!(Person, ExplicitProp(99), ExplicitProp2(false)))
                     .unwrap(); // ConstantProp uses default
             } else {
                 context
-                    .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(false)))
+                    .add_entity(all!(
+                        Person,
+                        ExplicitProp((i % 20) as u8),
+                        ExplicitProp2(false)
+                    ))
                     .unwrap();
             }
         }
@@ -556,11 +583,16 @@ mod tests {
         for i in 0..100 {
             if i < 10 {
                 context
-                    .add_entity((ConstantProp(99), ExplicitProp(0), ExplicitProp2(true)))
+                    .add_entity(all!(
+                        Person,
+                        ConstantProp(99),
+                        ExplicitProp(0),
+                        ExplicitProp2(true)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(0), ExplicitProp2(false)))
+                    .add_entity(all!(Person, ExplicitProp(0), ExplicitProp2(false)))
                     .unwrap();
             }
         }
@@ -580,7 +612,7 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(i < 50)))
+                .add_entity(all!(Person, ExplicitProp(i as u8), ExplicitProp2(i < 50)))
                 .unwrap();
         }
 
@@ -602,7 +634,7 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(i < 30)))
+                .add_entity(all!(Person, ExplicitProp(i as u8), ExplicitProp2(i < 30)))
                 .unwrap();
         }
 
@@ -624,19 +656,21 @@ mod tests {
 
         for age in 0..100 {
             context
-                .add_entity((
+                .add_entity(all!(
+                    Person,
                     Age(age),
                     ExplicitProp(age.wrapping_mul(7) % 100),
-                    ExplicitProp2(false),
+                    ExplicitProp2(false)
                 ))
                 .unwrap();
         }
         for age in 0..100 {
             context
-                .add_entity((
+                .add_entity(all!(
+                    Person,
                     Age(age),
                     ExplicitProp(age.wrapping_mul(14) % 100),
-                    ExplicitProp2(false),
+                    ExplicitProp2(false)
                 ))
                 .unwrap();
         }

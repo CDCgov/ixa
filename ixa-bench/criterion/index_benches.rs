@@ -39,11 +39,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         context.add_person(()).unwrap();
         // An entity's properties cannot be computed dynamically in the same way as Person Properties.
         context
-            .add_entity((
+            .add_entity(all!(
+                Animal,
                 AProperty10(context.sample_range(IndexBenchRng, 0..10)),
                 AProperty100(context.sample_range(IndexBenchRng, 0..100)),
                 AMProperty10(context.sample_range(IndexBenchRng, 0..10)),
-                AMProperty100(context.sample_range(IndexBenchRng, 0..100)),
+                AMProperty100(context.sample_range(IndexBenchRng, 0..100))
             ))
             .unwrap();
     }

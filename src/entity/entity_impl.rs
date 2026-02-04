@@ -63,6 +63,24 @@ macro_rules! all {
 }
 pub use all;
 
+/// Alias for [`all!`] - creates a property list for use with `add_entity` or queries.
+///
+/// # Examples
+/// ```ignore
+/// // Single property
+/// context.add_entity(with!(Person, Age(42)));
+///
+/// // Multiple properties
+/// context.add_entity(with!(Person, Age(42), Name("Alice")));
+/// ```
+#[macro_export]
+macro_rules! with {
+    ($($args:tt)*) => {
+        $crate::all!($($args)*)
+    };
+}
+pub use with;
+
 /// Defines a zero-sized struct with the right derived traits and implements the `Entity` trait. If you already
 /// have a type defined (struct, enum, etc.), you can use the `impl_entity!` macro instead.
 #[macro_export]

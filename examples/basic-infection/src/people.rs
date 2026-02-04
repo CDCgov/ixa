@@ -1,5 +1,5 @@
 use ixa::prelude::*;
-use ixa::trace;
+use ixa::{all, trace};
 
 use crate::POPULATION;
 
@@ -20,6 +20,6 @@ define_property!(
 pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
-        let _: PersonId = context.add_entity(()).unwrap();
+        let _: PersonId = context.add_entity(all!(Person)).unwrap();
     }
 }

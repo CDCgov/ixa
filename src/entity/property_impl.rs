@@ -951,16 +951,16 @@ mod tests {
         let mut context = Context::new();
 
         context
-            .add_entity((Name("John"), Age(42), Weight(220.5)))
+            .add_entity(all!(Person, Name("John"), Age(42), Weight(220.5)))
             .unwrap();
         context
-            .add_entity((Name("Jane"), Age(22), Weight(180.5)))
+            .add_entity(all!(Person, Name("Jane"), Age(22), Weight(180.5)))
             .unwrap();
         context
-            .add_entity((Name("Bob"), Age(32), Weight(190.5)))
+            .add_entity(all!(Person, Name("Bob"), Age(32), Weight(190.5)))
             .unwrap();
         context
-            .add_entity((Name("Alice"), Age(22), Weight(170.5)))
+            .add_entity(all!(Person, Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
 
         context.index_property::<_, ProfileNAW>();
@@ -1019,9 +1019,9 @@ mod tests {
     fn test_derived_property() {
         let mut context = Context::new();
 
-        let senior = context.add_entity::<Person, _>((Age(92),)).unwrap();
-        let child = context.add_entity::<Person, _>((Age(12),)).unwrap();
-        let adult = context.add_entity::<Person, _>((Age(44),)).unwrap();
+        let senior = context.add_entity(all!(Person, Age(92))).unwrap();
+        let child = context.add_entity(all!(Person, Age(12))).unwrap();
+        let adult = context.add_entity(all!(Person, Age(44))).unwrap();
 
         let senior_group: AgeGroup = context.get_property(senior);
         let child_group: AgeGroup = context.get_property(child);
@@ -1051,7 +1051,9 @@ mod tests {
     #[test]
     fn test_get_display() {
         let mut context = Context::new();
-        let person = context.add_entity((POu32(Some(42)), Pu32(22))).unwrap();
+        let person = context
+            .add_entity(all!(Person, POu32(Some(42)), Pu32(22)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",
@@ -1066,7 +1068,9 @@ mod tests {
             ),
             "Pu32(22)"
         );
-        let person2 = context.add_entity((POu32(None), Pu32(11))).unwrap();
+        let person2 = context
+            .add_entity(all!(Person, POu32(None), Pu32(11)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",

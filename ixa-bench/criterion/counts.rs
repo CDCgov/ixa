@@ -69,11 +69,12 @@ fn populate_entities(context: &mut Context, n: usize) {
     context.init_random(SEED);
 
     for person in generate_population_with_seed(n, 0.2, 10.0, Some(SEED)) {
-        let _ = context.add_entity((
+        let _ = context.add_entity(all!(
+            Person,
             EAge(person.age),
             EHomeId(person.home_id as u32),
             ESchoolId(person.school_id as u32),
-            EWorkplaceId(person.workplace_id as u32),
+            EWorkplaceId(person.workplace_id as u32)
         ));
     }
 }

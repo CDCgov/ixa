@@ -28,9 +28,10 @@ fn setup_context(population_size: usize) -> Context {
 
     for _ in 0..population_size {
         context
-            .add_entity((
+            .add_entity(all!(
+                Mosquito,
                 Species(context.sample_range(SampleScalingRng, 0..10)),
-                Region(context.sample_range(SampleScalingRng, 0..10)),
+                Region(context.sample_range(SampleScalingRng, 0..10))
             ))
             .unwrap();
     }
