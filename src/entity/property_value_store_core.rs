@@ -27,7 +27,7 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     // because we use `index.get_mut()` instead of `index.borrow_mut()`. We only need `index.borrow_mut()` for
     // updating the index during setting of a property, at which time the compiler guarantees no other borrows of
     // `context` exist because `Context::set_property` takes `&mut self`.
-    pub(super) index: Option<RefCell<Index<E, P>>>,
+    pub(crate) index: Option<RefCell<Index<E, P>>>,
 }
 
 impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
