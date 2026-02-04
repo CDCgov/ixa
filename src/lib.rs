@@ -120,7 +120,7 @@ pub mod prelude_for_plugins {
 }
 
 pub mod entity;
-pub use entity::ContextEntitiesExt;
+pub use entity::{ContextEntitiesExt, EntityPropertyTuple};
 
 pub mod execution_stats;
 pub mod profiling;
