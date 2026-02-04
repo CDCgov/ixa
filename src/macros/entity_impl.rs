@@ -19,7 +19,6 @@ macro_rules! define_entity {
         $crate::impl_entity!($entity_name);
     };
 }
-pub use define_entity;
 
 /// Implements the `Entity` trait for the given existing type and defines a type alias
 /// of the form `MyEntityId = EntityId<MyEntity>`. For simple zero-sized types, use the
@@ -79,4 +78,3 @@ macro_rules! impl_entity {
         }
     };
 }
-pub use impl_entity;

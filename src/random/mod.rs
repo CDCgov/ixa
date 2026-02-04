@@ -1,17 +1,16 @@
 mod context_ext;
-mod macros;
 mod sampling_algorithms;
 
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 
 pub use context_ext::ContextRandomExt;
-pub use macros::define_rng;
 pub use sampling_algorithms::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
 };
 
+pub use crate::define_rng;
 use crate::rand::SeedableRng;
 use crate::{define_data_plugin, HashMap, HashMapExt};
 
