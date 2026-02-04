@@ -43,5 +43,5 @@ cargo run -- --log-level=trace
 To run with logging enabled for just `ixa_model`:
 
 ```bash
-cargo run -- --log-level=ixa_model:trace
+cargo run -- --log-level ixa_model=trace
 ```
