@@ -13,5 +13,5 @@ pub use crate::{
     define_data_plugin, define_derived_person_property, define_derived_property, define_edge_type,
     define_entity, define_global_property, define_multi_property, define_person_multi_property,
     define_person_property, define_person_property_with_default, define_property, define_report,
-    define_rng, PluginContext,
+    define_rng, impl_entity, impl_property, PluginContext,
 };
