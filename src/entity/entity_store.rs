@@ -303,8 +303,8 @@ mod tests {
     use crate::entity::entity_store::{
         add_to_entity_registry, get_registered_entity_count, initialize_entity_index, EntityStore,
     };
-    use crate::entity::{impl_entity, ContextEntitiesExt, Entity};
-    use crate::{Context, HashMap};
+    use crate::entity::Entity;
+    use crate::{impl_entity, Context, ContextEntitiesExt, HashMap};
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
     pub struct TestItem1 {
