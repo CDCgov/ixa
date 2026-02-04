@@ -47,6 +47,7 @@ pub mod query;
 // Flatten the module hierarchy.
 pub use context_extension::ContextEntitiesExt;
 pub use entity::*;
+pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
 
 /// The type used in the indexing infrastructure. This type alias is
