@@ -256,7 +256,6 @@ macro_rules! define_property {
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 }
-pub use define_property;
 
 /// Implements the [`Property`][crate::entity::property::Property] trait for the given property type and entity.
 ///
@@ -507,7 +506,6 @@ macro_rules! impl_property {
         }
     };
 }
-pub use impl_property;
 
 /// The "derived" variant of [`define_property!`] for defining simple derived property types.
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
@@ -651,7 +649,6 @@ macro_rules! define_derived_property {
         }
     };
 }
-pub use define_derived_property;
 
 /// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
 ///
@@ -714,7 +711,6 @@ macro_rules! impl_derived_property {
             }
         };
     }
-pub use impl_derived_property;
 
 /// Defines a derived property consisting of a (named) tuple of other properties. The primary use case
 /// is for indexing and querying properties jointly.
@@ -816,7 +812,6 @@ macro_rules! define_multi_property {
             }
         };
     }
-pub use define_multi_property;
 
 #[cfg(test)]
 mod tests {
