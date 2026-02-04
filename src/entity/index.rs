@@ -164,14 +164,14 @@ mod test {
 
         let mut results_a = Default::default();
         context.with_query_results(
-            person![Age(1u8), Weight(2u8), Height(3u8)],
+            all!(Person, Age(1u8), Weight(2u8), Height(3u8)),
             &mut |results| results_a = results.clone(),
         );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
         context.with_query_results(
-            person![Weight(2u8), Height(3u8), Age(1u8)],
+            all!(Person, Weight(2u8), Height(3u8), Age(1u8)),
             &mut |results| results_b = results.clone(),
         );
         assert_eq!(results_b.len(), 1);
@@ -185,14 +185,14 @@ mod test {
 
         let mut results_a = Default::default();
         context.with_query_results(
-            person![Weight(1u8), Height(2u8), Age(3u8)],
+            all!(Person, Weight(1u8), Height(2u8), Age(3u8)),
             &mut |results| results_a = results.clone(),
         );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
         context.with_query_results(
-            person![Age(3u8), Weight(1u8), Height(2u8)],
+            all!(Person, Age(3u8), Weight(1u8), Height(2u8)),
             &mut |results| results_b = results.clone(),
         );
         assert_eq!(results_b.len(), 1);

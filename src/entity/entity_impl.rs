@@ -1,5 +1,68 @@
 //! Macros to correctly define and implement the `Entity` trait.
 
+/// Creates a query for an entity type with optional property filters.
+///
+/// # Examples
+/// ```ignore
+/// // Empty query (matches all Person entities)
+/// context.with_query_results(all!(Person), ...)
+///
+/// // Single property query
+/// context.with_query_results(all!(Person, Age(42)), ...)
+///
+/// // Multi-property query
+/// context.with_query_results(all!(Person, Age(42), Name("Alice")), ...)
+/// ```
+#[macro_export]
+macro_rules! all {
+    ($entity:ty) => {
+        $crate::entity::query::PropertyEntityValues0::<$entity>::new()
+    };
+    ($entity:ty, $p0:expr) => {
+        $crate::entity::query::PropertyEntityValues1::<$entity, _>::new($p0)
+    };
+    ($entity:ty, $p0:expr, $p1:expr) => {
+        $crate::entity::query::PropertyEntityValues2::<$entity, _, _>::new($p0, $p1)
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr) => {
+        $crate::entity::query::PropertyEntityValues3::<$entity, _, _, _>::new($p0, $p1, $p2)
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr) => {
+        $crate::entity::query::PropertyEntityValues4::<$entity, _, _, _, _>::new($p0, $p1, $p2, $p3)
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr) => {
+        $crate::entity::query::PropertyEntityValues5::<$entity, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4,
+        )
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr) => {
+        $crate::entity::query::PropertyEntityValues6::<$entity, _, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4, $p5,
+        )
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr) => {
+        $crate::entity::query::PropertyEntityValues7::<$entity, _, _, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4, $p5, $p6,
+        )
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr) => {
+        $crate::entity::query::PropertyEntityValues8::<$entity, _, _, _, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7,
+        )
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr) => {
+        $crate::entity::query::PropertyEntityValues9::<$entity, _, _, _, _, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8,
+        )
+    };
+    ($entity:ty, $p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr, $p9:expr) => {
+        $crate::entity::query::PropertyEntityValues10::<$entity, _, _, _, _, _, _, _, _, _, _>::new(
+            $p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9,
+        )
+    };
+}
+pub use all;
+
 /// Defines a zero-sized struct with the right derived traits and implements the `Entity` trait. If you already
 /// have a type defined (struct, enum, etc.), you can use the `impl_entity!` macro instead.
 #[macro_export]
@@ -76,60 +139,6 @@ macro_rules! impl_entity {
                     $crate::entity::entity_store::add_to_entity_registry::<$entity_name>();
                 }
             }
-        }
-
-        // Generate entity-specific query macro (e.g., `person!` for `Person` entity)
-        $crate::paste::paste! {
-            /// Creates a query for this entity type.
-            ///
-            /// # Examples
-            /// ```ignore
-            #[doc = concat!("// Empty query (matches all ", stringify!($entity_name), " entities)")]
-            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![], ...)")]
-            ///
-            #[doc = concat!("// Single property query")]
-            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![Age(42)], ...)")]
-            ///
-            #[doc = concat!("// Multi-property query")]
-            #[doc = concat!("context.with_query_results(", stringify!([<$entity_name:snake>]), "![Age(42), Name(\"Alice\")], ...)")]
-            /// ```
-            macro_rules! [<$entity_name:snake>] {
-                () => {
-                    $crate::entity::query::PropertyEntityValues0::<$entity_name>::new()
-                };
-                ($p0:expr) => {
-                    $crate::entity::query::PropertyEntityValues1::<$entity_name, _>::new($p0)
-                };
-                ($p0:expr, $p1:expr) => {
-                    $crate::entity::query::PropertyEntityValues2::<$entity_name, _, _>::new($p0, $p1)
-                };
-                ($p0:expr, $p1:expr, $p2:expr) => {
-                    $crate::entity::query::PropertyEntityValues3::<$entity_name, _, _, _>::new($p0, $p1, $p2)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr) => {
-                    $crate::entity::query::PropertyEntityValues4::<$entity_name, _, _, _, _>::new($p0, $p1, $p2, $p3)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr) => {
-                    $crate::entity::query::PropertyEntityValues5::<$entity_name, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr) => {
-                    $crate::entity::query::PropertyEntityValues6::<$entity_name, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr) => {
-                    $crate::entity::query::PropertyEntityValues7::<$entity_name, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr) => {
-                    $crate::entity::query::PropertyEntityValues8::<$entity_name, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr) => {
-                    $crate::entity::query::PropertyEntityValues9::<$entity_name, _, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8)
-                };
-                ($p0:expr, $p1:expr, $p2:expr, $p3:expr, $p4:expr, $p5:expr, $p6:expr, $p7:expr, $p8:expr, $p9:expr) => {
-                    $crate::entity::query::PropertyEntityValues10::<$entity_name, _, _, _, _, _, _, _, _, _, _>::new($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9)
-                };
-            }
-            #[allow(unused)]
-            pub(crate) use [<$entity_name:snake>];
         }
     };
 }

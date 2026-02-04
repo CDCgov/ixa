@@ -85,9 +85,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let counts = black_box(&counts);
 
             for value in counts {
-                let _selected = black_box(
-                    context.sample_entity(SampleBenchRng, black_box(animal![AProperty100(*value)])),
-                );
+                let _selected = black_box(context.sample_entity(
+                    SampleBenchRng,
+                    black_box(all!(Animal, AProperty100(*value))),
+                ));
             }
         });
     });
@@ -113,7 +114,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entity(
                     SampleBenchRng,
-                    black_box(animal![AProperty10(*value % 10), AProperty100(*value)]),
+                    black_box(all!(Animal, AProperty10(*value % 10), AProperty100(*value))),
                 ));
             }
         });
@@ -140,7 +141,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
-                    black_box(animal![AProperty100(*value)]),
+                    black_box(all!(Animal, AProperty100(*value))),
                     *black_box(value) as usize,
                 ));
             }
@@ -169,7 +170,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
-                    black_box(animal![AProperty10(*value % 10), AProperty100(*value)]),
+                    black_box(all!(Animal, AProperty10(*value % 10), AProperty100(*value))),
                     *black_box(value) as usize,
                 ));
             }

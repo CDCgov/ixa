@@ -995,7 +995,7 @@ mod tests {
         assert_eq!(indexed_count, 1);
 
         {
-            let example_query = person![Name("Alice"), Age(22), Weight(170.5)];
+            let example_query = all!(Person, Name("Alice"), Age(22), Weight(170.5));
             let query_multi_property_id = example_query.multi_property_id();
             assert!(query_multi_property_id.is_some());
             assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
@@ -1008,7 +1008,7 @@ mod tests {
         }
 
         context.with_query_results(
-            person![Name("John"), Age(42), Weight(220.5)],
+            all!(Person, Name("John"), Age(42), Weight(220.5)),
             &mut |results| {
                 assert_eq!(results.len(), 1);
             },

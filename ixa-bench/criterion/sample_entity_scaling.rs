@@ -100,7 +100,7 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
                 let _: Option<EntityId<Mosquito>> =
-                    context.sample_entity(SampleScalingRng, mosquito![]);
+                    context.sample_entity(SampleScalingRng, all!(Mosquito));
             });
 
             results
@@ -122,7 +122,7 @@ pub fn bench_sample_entity_single_property_indexed(c: &mut Criterion, results: R
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _ = context.sample_entity(SampleScalingRng, mosquito![Species(5)]);
+                let _ = context.sample_entity(SampleScalingRng, all!(Mosquito, Species(5)));
             });
 
             results
@@ -144,7 +144,8 @@ pub fn bench_sample_entity_multi_property_indexed(c: &mut Criterion, results: Re
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _ = context.sample_entity(SampleScalingRng, mosquito![Species(5), Region(3)]);
+                let _ =
+                    context.sample_entity(SampleScalingRng, all!(Mosquito, Species(5), Region(3)));
             });
 
             results

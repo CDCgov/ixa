@@ -348,7 +348,9 @@ mod tests {
     use super::*;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
-    use crate::{define_derived_property, define_entity, define_multi_property, define_property};
+    use crate::{
+        all, define_derived_property, define_entity, define_multi_property, define_property,
+    };
 
     define_entity!(Animal);
     define_property!(struct Legs(u8), Animal, default_const = Legs(4));
@@ -715,7 +717,7 @@ mod tests {
         }
         context.index_property::<Person, InfectionStatusVaccinated>();
         // Force an index build by running a query.
-        let query = person![InfectionStatus::Susceptible, Vaccinated(true)];
+        let query = all!(Person, InfectionStatus::Susceptible, Vaccinated(true));
         let _ = context.query_result_iterator(query);
 
         // Capture the address of the has set given by `with_query_result`
@@ -761,70 +763,82 @@ mod tests {
 
         // Check non-derived property index is correctly maintained
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Susceptible]),
+            context.query_entity_count(all!(Person, InfectionStatus::Susceptible)),
             6
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Infected]),
+            context.query_entity_count(all!(Person, InfectionStatus::Infected)),
             0
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Recovered]),
+            context.query_entity_count(all!(Person, InfectionStatus::Recovered)),
             0
         );
 
         context.set_property(person1, InfectionStatus::Infected);
 
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Susceptible]),
+            context.query_entity_count(all!(Person, InfectionStatus::Susceptible)),
             5
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Infected]),
+            context.query_entity_count(all!(Person, InfectionStatus::Infected)),
             1
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Recovered]),
+            context.query_entity_count(all!(Person, InfectionStatus::Recovered)),
             0
         );
 
         context.set_property(person1, InfectionStatus::Recovered);
 
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Susceptible]),
+            context.query_entity_count(all!(Person, InfectionStatus::Susceptible)),
             5
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Infected]),
+            context.query_entity_count(all!(Person, InfectionStatus::Infected)),
             0
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Recovered]),
+            context.query_entity_count(all!(Person, InfectionStatus::Recovered)),
             1
         );
 
         // Check derived property index is correctly maintained.
-        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 0);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 6);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 0);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Child)), 0);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Adult)), 6);
+        assert_eq!(
+            context.query_entity_count(all!(Person, AgeGroup::Senior)),
+            0
+        );
 
         context.set_property(person2, Age(12));
 
-        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 1);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 5);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 0);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Child)), 1);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Adult)), 5);
+        assert_eq!(
+            context.query_entity_count(all!(Person, AgeGroup::Senior)),
+            0
+        );
 
         context.set_property(person1, Age(75));
 
-        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 1);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 4);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 1);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Child)), 1);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Adult)), 4);
+        assert_eq!(
+            context.query_entity_count(all!(Person, AgeGroup::Senior)),
+            1
+        );
 
         context.set_property(person2, Age(77));
 
-        assert_eq!(context.query_entity_count(person![AgeGroup::Child]), 0);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Adult]), 4);
-        assert_eq!(context.query_entity_count(person![AgeGroup::Senior]), 2);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Child)), 0);
+        assert_eq!(context.query_entity_count(all!(Person, AgeGroup::Adult)), 4);
+        assert_eq!(
+            context.query_entity_count(all!(Person, AgeGroup::Senior)),
+            2
+        );
     }
 
     #[test]
@@ -847,11 +861,11 @@ mod tests {
         }
 
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Recovered]),
+            context.query_entity_count(all!(Person, InfectionStatus::Recovered)),
             5
         );
         assert_eq!(
-            context.query_entity_count(person![InfectionStatus::Susceptible]),
+            context.query_entity_count(all!(Person, InfectionStatus::Susceptible)),
             15
         );
     }
@@ -864,6 +878,9 @@ mod tests {
             let _: PersonId = context.add_entity((Age(22),)).unwrap();
         }
 
-        assert_eq!(context.query_entity_count(person![AdultAthlete(false)]), 10);
+        assert_eq!(
+            context.query_entity_count(all!(Person, AdultAthlete(false))),
+            10
+        );
     }
 }

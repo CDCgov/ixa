@@ -92,7 +92,7 @@ fn schedule_death(context: &mut Context) {
         .unwrap()
         .clone();
 
-    if let Some(person) = context.sample_entity(PeopleRng, person![Alive(true)]) {
+    if let Some(person) = context.sample_entity(PeopleRng, all!(Person, Alive(true))) {
         context.set_property(person, Alive(false));
 
         let next_death_event = context.get_current_time()
@@ -159,11 +159,11 @@ mod test {
             context.set_property(person1, Alive(false));
         });
         context.add_plan(390.0, |context| {
-            let pop = context.query_entity_count(person![Alive(true)]);
+            let pop = context.query_entity_count(all!(Person, Alive(true)));
             assert_eq!(pop, 2);
         });
         context.add_plan(401.0, |context| {
-            let pop = context.query_entity_count(person![Alive(true)]);
+            let pop = context.query_entity_count(all!(Person, Alive(true)));
             assert_eq!(pop, 1);
         });
         context.execute();

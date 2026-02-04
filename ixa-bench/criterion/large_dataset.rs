@@ -104,7 +104,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     });
     criterion.bench_function("bench_query_population_property_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(person![EHomeId(1)]));
+            black_box(context.query_entity_count(all!(Person, EHomeId(1))));
         });
     });
 
@@ -119,7 +119,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_indexed_property_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count(person![EHomeId(1)]));
+                black_box(context.query_entity_count(all!(Person, EHomeId(1))));
             });
         },
     );
@@ -133,7 +133,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_derived_property_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count(person![EAgeGroupRisk::Senior]));
+                black_box(context.query_entity_count(all!(Person, EAgeGroupRisk::Senior)));
             });
         },
     );
@@ -152,11 +152,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_multi_unindexed_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count(person![
+                black_box(context.query_entity_count(all!(
+                    Person,
                     EAge(30),
                     ESchoolId(1),
                     EWorkplaceId(1)
-                ]));
+                )));
             });
         },
     );
@@ -174,7 +175,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     context.index_property::<Person, (EAge, ESchoolId, EWorkplaceId)>();
     criterion.bench_function("bench_query_population_multi_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(person![EAge(30), ESchoolId(1), EWorkplaceId(1)]));
+            black_box(context.query_entity_count(all!(
+                Person,
+                EAge(30),
+                ESchoolId(1),
+                EWorkplaceId(1)
+            )));
         });
     });
 
@@ -202,7 +208,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 black_box(context.match_entity(
                     people_set[person_idx % total_population],
-                    person![EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)],
+                    all!(Person, EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)),
                 ));
                 person_idx += 1;
             });
@@ -234,7 +240,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 |mut people| {
                     context.filter_entities(
                         &mut people,
-                        person![EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)],
+                        all!(Person, EAge(30u8), ESchoolId(1u32), EWorkplaceId(1u32)),
                     );
                 },
                 BatchSize::SmallInput,
@@ -250,7 +256,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 |mut people| {
                     context.filter_entities(
                         &mut people,
-                        person![EAge(30u8), EHomeId(1u32), EWorkplaceId(1u32)],
+                        all!(Person, EAge(30u8), EHomeId(1u32), EWorkplaceId(1u32)),
                     );
                 },
                 BatchSize::SmallInput,
