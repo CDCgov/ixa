@@ -151,14 +151,12 @@ mod tests {
     use super::*;
     use crate::hashing::{HashSet, HashSetExt};
 
-    // ========== Tests for sample_single_l_reservoir ==========
-
     #[test]
     fn test_sample_single_l_reservoir_basic() {
         let data: Vec<u32> = (0..1000).collect();
         let seed: u64 = 42;
         let mut rng = StdRng::seed_from_u64(seed);
-        let sample = sample_single_l_reservoir(&mut rng, &data);
+        let sample = sample_single_l_reservoir(&mut rng, data);
 
         // Should return Some value
         assert!(sample.is_some());
@@ -172,7 +170,7 @@ mod tests {
     fn test_sample_single_l_reservoir_empty() {
         let data: Vec<u32> = Vec::new();
         let mut rng = StdRng::seed_from_u64(42);
-        let sample = sample_single_l_reservoir(&mut rng, &data);
+        let sample = sample_single_l_reservoir(&mut rng, data);
 
         // Should return None for empty container
         assert!(sample.is_none());
@@ -182,7 +180,7 @@ mod tests {
     fn test_sample_single_l_reservoir_single_element() {
         let data: Vec<u32> = vec![42];
         let mut rng = StdRng::seed_from_u64(1);
-        let sample = sample_single_l_reservoir(&mut rng, &data);
+        let sample = sample_single_l_reservoir(&mut rng, data);
 
         // Should return the only element
         assert_eq!(sample, Some(42));
@@ -198,7 +196,7 @@ mod tests {
 
         for run in 0..num_runs {
             let mut rng = StdRng::seed_from_u64(42 + run as u64);
-            let sample = sample_single_l_reservoir(&mut rng, &data);
+            let sample = sample_single_l_reservoir(&mut rng, data.iter().cloned());
 
             if let Some(value) = sample {
                 let bin = (value as usize) / (population as usize / num_bins);
@@ -244,19 +242,16 @@ mod tests {
 
         assert!(sample.is_some());
         let value = sample.unwrap();
-        assert!(data.contains(&value));
+        assert!(data.contains(value));
     }
 
-    // ========== Tests for sample_multiple_l_reservoir ==========
-
-    use crate::HashSet;
     #[test]
     fn test_sample_multiple_l_reservoir_basic() {
         let data: Vec<u32> = (0..1000).collect();
         let requested = 100;
         let seed: u64 = 42;
         let mut rng = StdRng::seed_from_u64(seed);
-        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+        let sample = sample_multiple_l_reservoir(&mut rng, data, requested);
 
         // Correct sample size
         assert_eq!(sample.len(), requested);
@@ -294,7 +289,7 @@ mod tests {
         let data: Vec<u32> = (0..50).collect();
         let requested = 100;
         let mut rng = StdRng::seed_from_u64(42);
-        let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+        let sample = sample_multiple_l_reservoir(&mut rng, data, requested);
 
         // Should return all available items when requested > population
         assert_eq!(sample.len(), 50);
@@ -311,7 +306,7 @@ mod tests {
     fn test_sample_multiple_l_reservoir_exact_population() {
         let data: Vec<u32> = (0..100).collect();
         let mut rng = StdRng::seed_from_u64(42);
-        let sample = sample_multiple_l_reservoir(&mut rng, &data, 100);
+        let sample = sample_multiple_l_reservoir(&mut rng, data, 100);
 
         // Should return all elements when requested == population
         assert_eq!(sample.len(), 100);
@@ -324,7 +319,7 @@ mod tests {
     fn test_sample_multiple_l_reservoir_single_element() {
         let data: Vec<u32> = vec![42];
         let mut rng = StdRng::seed_from_u64(1);
-        let sample = sample_multiple_l_reservoir(&mut rng, &data, 1);
+        let sample = sample_multiple_l_reservoir(&mut rng, data, 1);
 
         assert_eq!(sample.len(), 1);
         assert_eq!(sample[0], 42);
@@ -394,7 +389,7 @@ mod tests {
 
         for run in 0..num_runs {
             let mut rng = StdRng::seed_from_u64(42 + run as u64);
-            let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+            let sample = sample_multiple_l_reservoir(&mut rng, data.iter().cloned(), requested);
 
             // Partition range 0..population into 10 equal-width bins
             let mut counts = [0usize; 10];
@@ -492,7 +487,7 @@ mod tests {
 
         for run in 0..num_runs {
             let mut rng = StdRng::seed_from_u64(42 + run as u64);
-            let sample = sample_multiple_l_reservoir(&mut rng, &data, requested);
+            let sample = sample_multiple_l_reservoir(&mut rng, data.iter().cloned(), requested);
 
             for &value in &sample {
                 selection_counts[value as usize] += 1;
