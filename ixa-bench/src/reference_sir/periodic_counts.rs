@@ -78,7 +78,6 @@ impl InfectionLoop for Context {
         println!("Setting up model: population={}, initial_infections={}, max_time={}, periodic_reporting={}",
             population, initial_infections, max_time, periodic_reporting);
         self.init_random(seed);
-        self.index_property(InfectionStatus);
 
         // Set up population with ages using the population generator
         // Use small, sensible defaults for schools/workplaces percent of population
