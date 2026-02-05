@@ -15,4 +15,4 @@ can be found at [https://ixa.rs/doc/ixa](https://ixa.rs/doc/ixa).
 This book assumes you have a basic familiarity with the command line and at
 least some experience with programming.
 
-<img alt="Ixa crab" src="/ixa_logo.svg" width="200px" />
+<img alt="Ixa crab" src="../assets/ixa_logo.svg" width="200px" />
