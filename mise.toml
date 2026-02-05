@@ -1,7 +1,7 @@
 [tools]
 node = "latest"
 pnpm = "latest"
-"pipx:pre-commit" = "4.3.0"
+"pre-commit" = "4.3.0"
 "prettier" = "3.6.2"
 "npm:markdownlint-cli" = "0.45.0"
 "cargo:wasm-pack" = "latest"
@@ -53,10 +53,7 @@ run = "cargo test -p ixa"
 [tasks.'test:wasm']
 description = "Run wasm integration tests"
 dir = "integration-tests/ixa-wasm-tests"
-depends = [
-  "wasm:pnpm",
-  "wasm:compile"
-  ]
+depends = ["wasm:pnpm", "wasm:compile"]
 run = "pnpm exec playwright test"
 
 [tasks.'test:features']
@@ -65,33 +62,20 @@ run = "cargo test --no-default-features --features 'web_api'"
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
-run = [
-  "pnpm install",
-  "pnpm exec playwright install"
-  ]
-sources = [
-  'package.json',
-  'pnpm-lock.yaml',
-  'mise.toml'
-  ]
+run = ["pnpm install", "pnpm exec playwright install"]
+sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
 outputs = 'node_modules/.pnpm/lock.yaml'
 
 [tasks.'wasm:compile']
 env.RUSTFLAGS = '--cfg getrandom_backend="wasm_js"'
 dir = "integration-tests/ixa-wasm-tests"
 run = "wasm-pack build --target web"
-sources = [
-  "src/*.rs",
-  "Cargo.toml"
-  ]
+sources = ["src/*.rs", "Cargo.toml"]
 outputs = "pkg"
 
 [tasks.'bench']
 description = "Run all benchmarks"
-run = [
-  "mise run bench:hyperfine",
-  "mise run bench:criterion"
-]
+run = ["mise run bench:hyperfine", "mise run bench:criterion"]
 
 [tasks.'bench:criterion']
 description = "Run all Criterion benchmarks (optionally pass a specific name)"
@@ -104,17 +88,14 @@ run = "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-basel
 [tasks.'bench:compare']
 description = "Compare benchmarks against a Criterion baseline"
 run = [
-    "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline {{arg(name='baseline')}}",
-    "cargo run -q -p ixa-bench --bin check_criterion_regressions"
-  ]
+  "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline {{arg(name='baseline')}}",
+  "cargo run -q -p ixa-bench --bin check_criterion_regressions",
+]
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
 run = "cargo build -p ixa-bench --release"
-sources = [
-  "ixa-bench/src/**/*.rs", 'Cargo.toml',
-  "ixa-bench/Cargo.toml"
-  ]
+sources = ["ixa-bench/src/**/*.rs", 'Cargo.toml', "ixa-bench/Cargo.toml"]
 outputs = "target/release/hyperfine"
 
 [tasks.'test:hyperfine']
@@ -136,7 +117,7 @@ run = [
   "cargo check --all-targets --workspace --all-features",
   "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
   "cargo +nightly fmt --check",
-  "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
 [tasks.prettier]
@@ -147,10 +128,7 @@ run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,y
 '''
 
 [tasks.'check:markdown']
-run = [
-  "markdownlint '**/*.md'",
-  "mise prettier check"
-  ]
+run = ["markdownlint '**/*.md'", "mise prettier check"]
 
 [tasks.fix]
 description = "Auto-fix formatting and linting issues"
@@ -163,7 +141,7 @@ run = "mise prettier write"
 run = [
   "cargo clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
   "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
-  "cargo +nightly fmt"
+  "cargo +nightly fmt",
 ]
 
 [tasks.'fix:markdown']
@@ -186,12 +164,7 @@ depends = "check"
 [tasks.prepush]
 description = "Check everything before pushing"
 env.RUSTFLAGS = "-D warnings"
-run = [
-  "mise precommit",
-  "mise examples",
-  "mise docs",
-  "mise test"
-  ]
+run = ["mise precommit", "mise examples", "mise docs", "mise test"]
 
 [tasks.'docker:build']
 run = "docker build -t ixa-bench ."
