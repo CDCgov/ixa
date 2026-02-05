@@ -137,7 +137,6 @@ mod test {
     use super::Index;
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
-    use crate::{define_entity, define_multi_property, define_property};
 
     define_entity!(Person);
     define_property!(struct Age(pub u8), Person, default_const = Age(0));

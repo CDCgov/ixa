@@ -241,7 +241,7 @@ macro_rules! define_property {
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
-    // Enum without default
+    // Enum
     (
         enum $name:ident {
             $($variant:ident),* $(,)?

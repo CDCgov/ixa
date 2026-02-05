@@ -1,18 +1,18 @@
 use std::fs;
 use std::path::PathBuf;
 
-use ixa::people::PersonPropertyChangeEvent;
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::parameters::Parameters;
-use crate::seir::{DiseaseStatus, DiseaseStatusValue, InfectedBy};
+use crate::seir::{DiseaseStatus, InfectedBy};
+use crate::Person;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct IncidenceReportItem {
     time: f64,
     person_id: String,
-    infection_status: DiseaseStatusValue,
+    infection_status: DiseaseStatus,
     infected_by: String,
 }
 
@@ -20,29 +20,23 @@ define_report!(IncidenceReportItem);
 
 fn handle_infection_status_change(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<DiseaseStatus>,
+    event: PropertyChangeEvent<Person, DiseaseStatus>,
 ) {
     // check event to make sure it's a new infection
-    if !(event.current == DiseaseStatusValue::E && event.previous == DiseaseStatusValue::S) {
+    if !(event.current == DiseaseStatus::E && event.previous == DiseaseStatus::S) {
         return;
     }
 
     // figure out who infected whom
-    let infected_by_val = if context
-        .get_person_property(event.person_id, InfectedBy)
-        .is_none()
-    {
-        "NA".to_string()
-    } else {
-        context
-            .get_person_property(event.person_id, InfectedBy)
-            .unwrap()
-            .to_string()
+    let infected_by: InfectedBy = context.get_property(event.entity_id);
+    let infected_by_val = match infected_by.0 {
+        None => "NA".to_string(),
+        Some(id) => id.to_string(),
     };
 
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
-        person_id: event.person_id.to_string(),
+        person_id: event.entity_id.to_string(),
         infection_status: event.current,
         infected_by: infected_by_val,
     });
@@ -61,7 +55,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .overwrite(true);
     context.add_report::<IncidenceReportItem>("incidence.csv")?;
     context.subscribe_to_event(
-        |context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
+        |context: &mut Context, event: PropertyChangeEvent<Person, DiseaseStatus>| {
             handle_infection_status_change(context, event);
         },
     );
@@ -94,30 +88,24 @@ mod test {
 
     fn test_infected_by(
         context: &mut Context,
-        event: PersonPropertyChangeEvent<DiseaseStatus>,
+        event: PropertyChangeEvent<Person, DiseaseStatus>,
         infected_by_out: &Rc<RefCell<Vec<IncidenceReportItem>>>,
     ) {
         // check event to make sure it's a new infection
-        if !(event.current == DiseaseStatusValue::E && event.previous == DiseaseStatusValue::S) {
+        if !(event.current == DiseaseStatus::E && event.previous == DiseaseStatus::S) {
             return;
         }
 
-        let infected_by_val = if context
-            .get_person_property(event.person_id, InfectedBy)
-            .is_none()
-        {
-            "NA".to_string()
-        } else {
-            context
-                .get_person_property(event.person_id, InfectedBy)
-                .unwrap()
-                .to_string()
+        let infected_by: InfectedBy = context.get_property(event.entity_id);
+        let infected_by_val = match infected_by.0 {
+            None => "NA".to_string(),
+            Some(id) => id.to_string(),
         };
 
         // save to a reportItem
         let infected_by_entry = IncidenceReportItem {
             time: context.get_current_time(),
-            person_id: event.person_id.to_string(),
+            person_id: event.entity_id.to_string(),
             infection_status: event.current,
             infected_by: infected_by_val,
         };
@@ -162,12 +150,12 @@ mod test {
             incidence_report::init(&mut context).unwrap();
 
             context.subscribe_to_event(
-                move |context: &mut Context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
+                move |context: &mut Context, event: PropertyChangeEvent<Person, DiseaseStatus>| {
                     test_infected_by(context, event, &infected_by_copy);
                 },
             );
 
-            let to_infect: Vec<PersonId> = vec![context.sample_person(MainRng, ()).unwrap()];
+            let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, ()).unwrap()];
 
             #[allow(clippy::vec_init_then_push)]
             seir::init(&mut context, &to_infect);

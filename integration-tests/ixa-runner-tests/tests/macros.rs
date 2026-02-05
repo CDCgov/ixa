@@ -3,21 +3,35 @@ mod tests {
     use ixa::prelude::*;
     use serde::{Deserialize, Serialize};
 
-    // Test define_person_property / derived / multi property macros
-    define_person_property!(TestPropU32, u32);
-    define_person_property!(TestPropU32b, u32);
-    define_person_property_with_default!(TestPropDefault, u32, 7u32);
-    define_person_property!(TestPropOpt, Option<u8>);
+    define_entity!(Person);
 
-    define_derived_person_property!(DerivedProp, u32, [TestPropU32], |v| v + 1);
+    // Test entity property / derived / multi-property macros
+    define_property!(struct TestPropU32(pub u32), Person);
+    define_property!(struct TestPropU32b(pub u32), Person);
+    define_property!(
+        struct TestPropDefault(pub u32),
+        Person,
+        default_const = TestPropDefault(7u32)
+    );
+    define_property!(
+        struct TestPropOpt(pub Option<u8>),
+        Person,
+        default_const = TestPropOpt(None)
+    );
 
-    define_person_multi_property!(MultiProp, (TestPropU32, TestPropU32b));
+    define_derived_property!(struct DerivedProp(pub u32), Person, [TestPropU32], |v| {
+        let v: TestPropU32 = v;
+        DerivedProp(v.0 + 1)
+    });
+
+    type MultiProp = (TestPropU32, TestPropU32b);
+    define_multi_property!((TestPropU32, TestPropU32b), Person);
 
     // Test global property macro
     define_global_property!(TestGlobal, u32);
 
     // Test edge type macro
-    define_edge_type!(TestEdge, ());
+    define_edge_type!(struct TestEdge, Person);
 
     // Test report macro
     #[derive(Serialize, Deserialize)]
@@ -41,35 +55,46 @@ mod tests {
         let v = *ctx.get_global_property_value(TestGlobal).unwrap();
         assert_eq!(v, 42u32);
 
-        // Person properties: add a person with TestPropU32
-        let pid = ctx
-            .add_person(((TestPropU32, 10u32), (TestPropOpt, Some(3u8))))
+        // Entity properties: add a Person with TestPropU32
+        let pid: EntityId<Person> = ctx
+            .add_entity((
+                TestPropU32(10u32),
+                TestPropU32b(20u32),
+                TestPropOpt(Some(3u8)),
+            ))
             .unwrap();
-        let val = ctx.get_person_property(pid, TestPropU32);
-        assert_eq!(val, 10u32);
+        let val: TestPropU32 = ctx.get_property(pid);
+        assert_eq!(val.0, 10u32);
         // Verify default property value is set for TestPropDefault
-        let default_val = ctx.get_person_property(pid, TestPropDefault);
-        assert_eq!(default_val, 7u32);
+        let default_val: TestPropDefault = ctx.get_property(pid);
+        assert_eq!(default_val.0, 7u32);
 
         // Derived property should compute from TestPropU32
-        let d = ctx.get_person_property(pid, DerivedProp);
-        assert_eq!(d, 11u32);
+        let d: DerivedProp = ctx.get_property(pid);
+        assert_eq!(d.0, 11u32);
 
         // Multi property - basic sanity (canonical value types)
-        let multi = <MultiProp as ixa::people::PersonProperty>::make_canonical((10u32, 20u32));
-        let disp = <MultiProp as ixa::people::PersonProperty>::get_display(&multi);
+        let multi = <MultiProp as Property<Person>>::make_canonical((
+            TestPropU32(10u32),
+            TestPropU32b(20u32),
+        ));
+        let disp = <MultiProp as Property<Person>>::get_display(&multi);
         assert!(disp.contains("10"));
 
-        // Edge type: create a second person and add an edge of type TestEdge between them
-        let pid2 = ctx
-            .add_person(((TestPropU32, 20u32), (TestPropOpt, Some(4u8))))
+        // Edge type (entity-based network): create two people and add an edge of type TestEdge
+        let p1 = ctx
+            .add_entity((TestPropU32(1u32), TestPropU32b(1u32)))
             .unwrap();
-        ctx.add_edge::<TestEdge>(pid, pid2, 1.0, ()).unwrap();
-        let e = ctx.get_edge::<TestEdge>(pid, pid2).unwrap();
+        let p2 = ctx
+            .add_entity((TestPropU32(2u32), TestPropU32b(2u32)))
+            .unwrap();
+        ctx.add_edge::<Person, TestEdge>(p1, p2, 1.0, TestEdge)
+            .unwrap();
+        let e = ctx.get_edge::<Person, TestEdge>(p1, p2).unwrap();
         assert_eq!(e.weight, 1.0);
         // Now remove the edge and ensure it's gone
-        ctx.remove_edge::<TestEdge>(pid, pid2).unwrap();
-        assert!(ctx.get_edge::<TestEdge>(pid, pid2).is_none());
+        ctx.remove_edge::<Person, TestEdge>(p1, p2);
+        assert!(ctx.get_edge::<Person, TestEdge>(p1, p2).is_none());
 
         // Data plugin access
         let data: &Vec<u8> = ctx.get_data(TestDataPlugin);
