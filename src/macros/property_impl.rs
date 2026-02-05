@@ -133,7 +133,7 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity, serde::Serialize};
+/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub struct Age(u8);
@@ -153,7 +153,7 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity, serde::Serialize};
+/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
@@ -175,7 +175,7 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity, serde::Serialize};
+/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
@@ -272,7 +272,7 @@ macro_rules! define_property {
 /// trait for an enum type, which requires the proc-macro attribute `#[default]` on one of the variants.
 ///
 /// ```rust
-/// # use ixa::{impl_property, define_entity, serde::Serialize};
+/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
