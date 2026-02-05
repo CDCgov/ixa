@@ -70,24 +70,24 @@ pub trait ContextEntitiesExt {
     /// query's result set is empty.
     ///
     /// To sample from the entire population, pass in the empty query `()`.
-    fn sample_entity<R, E, Q>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
+    fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
-        R: RngId + 'static,
-        R::RngType: Rng,
         E: Entity,
-        Q: Query<E>;
+        Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng;
 
     /// Sample up to `requested` entities uniformly from the query results. If the
     /// query's result set has fewer than `requested` entities, the entire result
     /// set is returned.
     ///
     /// To sample from the entire population, pass in the empty query `()`.
-    fn sample_entities<R, E, Q>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
+    fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
-        R: RngId + 'static,
-        R::RngType: Rng,
         E: Entity,
-        Q: Query<E>;
+        Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng;
 
     /// Returns a total count of all created entities of type `E`.
     fn get_entity_count<E: Entity>(&self) -> usize;
@@ -296,23 +296,23 @@ impl ContextEntitiesExt for Context {
 
         self.query_result_iterator(query).count()
     }
-    fn sample_entity<R, E, Q>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
+    fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
-        R: RngId + 'static,
-        R::RngType: Rng,
         E: Entity,
         Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng,
     {
         let query_result = self.query_result_iterator(query);
         self.sample(rng_id, move |rng| query_result.sample_entity(rng))
     }
 
-    fn sample_entities<R, E, Q>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
+    fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
-        R: RngId + 'static,
-        R::RngType: Rng,
         E: Entity,
         Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng,
     {
         let query_result = self.query_result_iterator(query);
         self.sample(rng_id, move |rng| query_result.sample_entities(rng, n))

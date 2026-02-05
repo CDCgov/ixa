@@ -93,9 +93,9 @@ Rust idiom to express this, we have to specify the types using turbo fish, which
 is awkward and ugly:
 
 ```rust
-// Sample from the entire population by supplying the "empty" query. The first `_` is for the RNG type, and the last
-// `_` is for the query type, both of which the compiler can infer.
-if let Some(person_id) = context.sample_entity::<_, Person, _>(TransmissionRng, ()) {
+// Sample from the entire population by supplying the "empty" query. The last two `_`s are for the query type and
+// RNG type, both of which the compiler can infer.
+if let Some(person_id) = context.sample_entity::<Person, _, _>(TransmissionRng, ()) {
     // Do something with `person_id`...
 }
 ```
