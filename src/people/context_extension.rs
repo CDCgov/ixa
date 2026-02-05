@@ -754,7 +754,6 @@ impl ContextPeopleExtInternal for Context {
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use std::collections::HashSet;
     use std::rc::Rc;
 
     use serde_derive::Serialize;
@@ -764,7 +763,7 @@ mod tests {
     use crate::{
         define_derived_person_property, define_global_property, define_person_property,
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
+        HashSet, HashSetExt, IxaError, PersonId, PersonPropertyChangeEvent,
     };
 
     define_person_property!(Age, u8);
