@@ -31,7 +31,8 @@ The primary advantage of using this macro is that it automatically derives the l
 specifying the default value, but it's not much harder to specify default values using other macros.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
-specify the visibility. A `pub` visibility is added automatically in the expansion.
+specify the visibility. A `pub` visibility is added automatically to the struct
+and to inner fields of tuple structs in the expansion.
 
 # [`impl_property!`]
 
@@ -44,8 +45,9 @@ Some examples:
 ```rust,ignore
 define_entity!(Person);
 
-// The `define_property!` automatically adds `pub` visibility. If we want to restrict the
-// visibility of our `Property` type, we can use the `impl_property!` macro instead. The only
+// The `define_property!` automatically adds `pub` visibility to the struct and its tuple
+// fields. If we want to restrict the visibility of our `Property` type, we can use the
+// `impl_property!` macro instead. The only
 // catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 struct Age(pub u8);
@@ -136,7 +138,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity}; use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
-/// pub struct Age(u8);
+/// pub struct Age(pub u8);
 /// impl_property!(Age, Person);
 /// ```
 ///
@@ -203,7 +205,7 @@ macro_rules! define_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name($visibility Option<$inner_ty>);
+        pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_property! to provide a custom display implementation
         $crate::impl_property!(
@@ -226,7 +228,7 @@ macro_rules! define_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name($($visibility $field_ty),*);
+        pub struct $name($(pub $field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
@@ -534,7 +536,7 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub struct $name($visibility Option<$inner_ty>);
+        pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_derived_property! to provide a custom display implementation
         $crate::impl_derived_property!(
@@ -564,7 +566,7 @@ macro_rules! define_derived_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub struct $name( $($visibility $field_ty),* );
+        pub struct $name( $(pub $field_ty),* );
 
         $crate::impl_derived_property!(
             $name,
