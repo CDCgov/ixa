@@ -96,7 +96,7 @@ description of the project.
 
 ```toml
 # Cargo.toml
-{{ #rustdoc_include ../../models/disease_model/Cargo.toml}}
+{{ #rustdoc_include ../../../../examples/basic-infection/Cargo.toml }}
 ```
 
 ## Executing the Ixa model
@@ -106,7 +106,7 @@ this:
 
 ```rust
 // main.rs
-{{ #rustdoc_include ../../models/basic/main.rs}}
+{{ #rustdoc_include ../../../../examples/basic-infection/main.rs }}
 ```
 
 Don't let this code intimidate you—it's really quite simple. The first line says

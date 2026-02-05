@@ -16,7 +16,7 @@ a new file in the `src` directory called `people.rs`.
 ## `PersonProperty`
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:InfectionStatusValue}}
+{{#rustdoc_include ../../../../examples/basic-infection/src/people.rs:InfectionStatusValue}}
 ```
 
 To each person we will associate a value of the enum (short for “enumeration”)
@@ -51,7 +51,7 @@ is not enough to define this enum. We have to tell Ixa that it will be a
 `PersonProperty`:
 
 ```rust
-{{#rustdoc_include ../../models/disease_model/src/people.rs:define_person_property}}
+{{#rustdoc_include ../../../../examples/basic-infection/src/people.rs:define_person_property}}
 ```
 
 > [!NOTE] Name Tags and Values
