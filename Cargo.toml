@@ -97,7 +97,7 @@ profiling = []
 write_cli_usage = ["clap-markdown"]
 
 [dependencies]
-approx.workspace = true       # Macros
+approx.workspace = true
 bincode.workspace = true
 clap.workspace = true
 csv.workspace = true
@@ -148,11 +148,7 @@ fern = { workspace = true, optional = true }
 # Required here only to enable the js backend:
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = [
-    "console",
-    "Performance",
-    "Window",
-] }
+web-sys = { workspace = true, optional = true, features = ["console", "Performance", "Window"] }
 
 [dev-dependencies]
 assert_approx_eq.workspace = true
