@@ -75,6 +75,7 @@ ouroboros = "^0.18.5"
 [package]
 name = "ixa"
 version = "1.0.0"
+rust-version = "1.88.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
