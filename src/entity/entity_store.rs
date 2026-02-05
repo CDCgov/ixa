@@ -215,25 +215,23 @@ impl EntityStore {
     pub fn get_mut<E: Entity>(&mut self) -> &mut E {
         let index = E::id();
 
-        // If the item is already initialized, return a mutable reference.
-        if self.items[index].entity.get().is_some() {
-            return self.items[index]
-                .entity
-                .get_mut()
-                .unwrap()
-                .downcast_mut()
-                .expect("TypeID does not match registered entity type. You must use the `define_entity!` macro to create an entity.");
+        let record = self.items.get_mut(index).unwrap_or_else(|| {
+            panic!(
+                "No registered entity found with index = {index:?}. \
+             You must use the `define_entity!` macro to create an entity."
+            )
+        });
+
+        // Initialize if needed
+        if record.entity.get().is_none() {
+            record.entity.set(E::new_boxed()).unwrap();
         }
 
-        // Initialize the item.
-        let record = &mut self.items[index];
-        let _ = record.entity.set(E::new_boxed());
-        record
-            .entity
-            .get_mut()
-            .unwrap()
-            .downcast_mut::<E>()
-            .expect("TypeID does not match registered entity type. You must use the `define_entity!` macro to create an entity.")
+        // Now the `unwrap` on `get_mut` is guaranteed to succeed.
+        record.entity.get_mut().unwrap().downcast_mut::<E>().expect(
+            "TypeID does not match registered entity type. \
+             You must use the `define_entity!` macro to create an entity.",
+        )
     }
 
     /// Creates a new `EntityId` for the given `Entity` type `E`.

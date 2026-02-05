@@ -50,8 +50,9 @@ define_property!(
 );
 ```
 
-If you want to use an existing type, or if you want to make the same type a
-property of more than one `Entity`, you can use the `impl_property!` variant:
+If you want to use an existing type for a property, or if you want to make the
+same type a property of more than one `Entity`, you can use the `impl_property!`
+variant:
 
 ```rust
 // The downside is, we have to make sure the property type implements all the
