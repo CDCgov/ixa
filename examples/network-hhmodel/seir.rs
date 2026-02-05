@@ -1,16 +1,16 @@
 use ixa::log::info;
-use ixa::network::{Edge, EdgeType};
-use ixa::people::{PersonId, PersonPropertyChangeEvent};
+use ixa::network::edge::EdgeType;
 use ixa::prelude::*;
-use ixa::ExecutionPhase;
+use ixa::{impl_property, ExecutionPhase};
 use rand_distr::{Bernoulli, Gamma};
 use serde::{Deserialize, Serialize};
 
 use crate::network::{Age5to17, AgeUnder5, Household};
 use crate::parameters::Parameters;
+use crate::{Person, PersonId};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
-pub enum DiseaseStatusValue {
+pub enum DiseaseStatus {
     S,
     E,
     I,
@@ -19,9 +19,13 @@ pub enum DiseaseStatusValue {
 
 define_rng!(SeirRng);
 
-define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatusValue::S);
+impl_property!(DiseaseStatus, Person, default_const = DiseaseStatus::S);
 
-define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
+define_property!(
+    struct InfectedBy(pub Option<PersonId>),
+    Person,
+    default_const = InfectedBy(None)
+);
 
 fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
     1.0 - (1.0 - sar).powf(1.0 / infectious_period)
@@ -32,32 +36,28 @@ fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f6
     context.sample_distr(SeirRng, d)
 }
 
-pub fn get_i_s_edges<T: EdgeType + 'static>(context: &Context) -> Vec<Edge<T::Value>> {
-    let mut edges = Vec::new();
-
-    context.with_query_people_results((DiseaseStatus, DiseaseStatusValue::I), &mut |infected| {
-        for i in infected {
-            edges.extend(context.get_matching_edges::<T>(*i, |context, edge| {
-                context.match_person(edge.neighbor, (DiseaseStatus, DiseaseStatusValue::S))
-            }));
-        }
+fn expose_network<ET: EdgeType<Person>>(context: &mut Context, beta: f64) {
+    let mut infectious_people = Vec::new();
+    context.with_query_results((DiseaseStatus::I,), &mut |infected| {
+        infectious_people = infected.iter().copied().collect();
     });
 
-    edges
-}
+    for infectious in infectious_people {
+        let edges = context.get_matching_edges::<Person, ET>(infectious, |context, edge| {
+            context.match_entity(edge.neighbor, (DiseaseStatus::S,))
+        });
 
-fn expose_network<T: EdgeType + 'static>(context: &mut Context, beta: f64) {
-    let edges = get_i_s_edges::<T>(context);
-    for e in edges {
-        if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
-            context.set_person_property(e.neighbor, DiseaseStatus, DiseaseStatusValue::E);
-            info!(
-                "Person {} exposed person {} at time {}.",
-                e.person,
-                e.neighbor,
-                context.get_current_time()
-            );
-            context.set_person_property(e.neighbor, InfectedBy, Some(e.person));
+        for e in edges {
+            if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
+                context.set_property(e.neighbor, DiseaseStatus::E);
+                info!(
+                    "Person {} exposed person {} at time {}.",
+                    infectious,
+                    e.neighbor,
+                    context.get_current_time()
+                );
+                context.set_property(e.neighbor, InfectedBy(Some(infectious)));
+            }
         }
     }
 }
@@ -67,13 +67,13 @@ fn schedule_waiting_event(
     person_id: PersonId,
     shape: f64,
     mean_period: f64,
-    new_status: DiseaseStatusValue,
+    new_status: DiseaseStatus,
 ) {
     let ct = context.get_current_time();
     let waiting_time = calculate_waiting_time(context, shape, mean_period);
 
     context.add_plan(ct + waiting_time, move |context| {
-        context.set_person_property(person_id, DiseaseStatus, new_status);
+        context.set_property(person_id, new_status);
     });
 }
 
@@ -88,7 +88,7 @@ fn schedule_infection(context: &mut Context, person_id: PersonId) {
         person_id,
         parameters.shape,
         parameters.incubation_period,
-        DiseaseStatusValue::I,
+        DiseaseStatus::I,
     );
 }
 
@@ -103,7 +103,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         person_id,
         parameters.shape,
         parameters.infectious_period,
-        DiseaseStatusValue::R,
+        DiseaseStatus::R,
     );
 }
 
@@ -140,16 +140,17 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
     );
 
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<DiseaseStatus>| match event.current {
-            DiseaseStatusValue::E => schedule_infection(context, event.person_id),
-            DiseaseStatusValue::I => schedule_recovery(context, event.person_id),
+        move |context, event: PropertyChangeEvent<Person, DiseaseStatus>| match event.current {
+            DiseaseStatus::E => schedule_infection(context, event.entity_id),
+            DiseaseStatus::I => schedule_recovery(context, event.entity_id),
             _ => (),
         },
     );
 
     // expose the first people to the disease
     for ii in initial_infections {
-        context.set_person_property(*ii, DiseaseStatus, DiseaseStatusValue::E);
+        context.set_property(*ii, InfectedBy(Some(*ii)));
+        context.set_property(*ii, DiseaseStatus::E);
     }
 }
 
@@ -189,7 +190,7 @@ mod tests {
         network::init(&mut context, &people);
 
         let mut to_infect = Vec::<PersonId>::new();
-        context.with_query_people_results((Id, 71), &mut |people| {
+        context.with_query_results((Id(71),), &mut |people| {
             for p in people {
                 to_infect.push(*p);
             }
@@ -200,19 +201,19 @@ mod tests {
         context.execute();
 
         assert_eq!(
-            context.query_people_count((DiseaseStatus, DiseaseStatusValue::S)),
+            context.query_entity_count::<Person, _>((DiseaseStatus::S,)),
             399
         );
         assert_eq!(
-            context.query_people_count((DiseaseStatus, DiseaseStatusValue::E)),
+            context.query_entity_count::<Person, _>((DiseaseStatus::E,)),
             0
         );
         assert_eq!(
-            context.query_people_count((DiseaseStatus, DiseaseStatusValue::I)),
+            context.query_entity_count::<Person, _>((DiseaseStatus::I,)),
             0
         );
         assert_eq!(
-            context.query_people_count((DiseaseStatus, DiseaseStatusValue::R)),
+            context.query_entity_count::<Person, _>((DiseaseStatus::R,)),
             1207
         );
     }

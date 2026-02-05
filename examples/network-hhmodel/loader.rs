@@ -1,49 +1,47 @@
 use std::fs::File;
 
 use csv::Reader;
+use ixa::impl_property;
 use ixa::prelude::*;
-use ixa::PersonId;
-use serde::Deserialize;
-use serde_derive::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::example_dir;
+use crate::{example_dir, Person, PersonId};
 
-define_person_property!(Id, u16);
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct Id(pub u16);
+impl_property!(Id, Person);
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
-pub enum AgeGroupValue {
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum AgeGroup {
     AgeUnder5,
     Age5to17,
     Age18to64,
     Age65Plus,
 }
-define_person_property!(AgeGroup, AgeGroupValue);
+impl_property!(AgeGroup, Person);
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum SexValue {
+pub enum Sex {
     Female,
     Male,
 }
-define_person_property!(Sex, SexValue);
+impl_property!(Sex, Person);
 
-define_person_property!(HouseholdId, u16);
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct HouseholdId(pub u16);
+impl_property!(HouseholdId, Person);
 
 #[derive(Deserialize, Debug)]
 struct PeopleRecord {
-    id: u16,
-    age_group: AgeGroupValue,
-    sex: SexValue,
-    household_id: u16,
+    id: Id,
+    age_group: AgeGroup,
+    sex: Sex,
+    household_id: HouseholdId,
 }
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     context
-        .add_person((
-            (Id, record.id),
-            (AgeGroup, record.age_group),
-            (Sex, record.sex),
-            (HouseholdId, record.household_id),
-        ))
+        .add_entity((record.id, record.age_group, record.sex, record.household_id))
         .unwrap()
 }
 
@@ -63,8 +61,8 @@ pub fn init(context: &mut Context) -> Vec<PersonId> {
         people.push(create_person_from_record(context, &record));
     }
 
-    context.index_person_property(Id);
-    context.index_person_property(HouseholdId);
+    context.index_property::<Person, Id>();
+    context.index_property::<Person, HouseholdId>();
 
     people
 }
@@ -83,7 +81,7 @@ mod tests {
         let mut context = Context::new();
         context.init_random(42);
         init(&mut context);
-        assert_eq!(context.get_current_population(), EXPECTED_ROWS);
+        assert_eq!(context.get_entity_count::<Person>(), EXPECTED_ROWS);
     }
 
     #[test]
@@ -94,21 +92,21 @@ mod tests {
         let people = init(&mut context);
 
         let person = people[0];
-        assert!(context.match_person(person, (Id, 676)));
-        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::Age18to64)));
-        assert!(context.match_person(person, (Sex, SexValue::Female)));
-        assert!(context.match_person(person, (HouseholdId, 1)));
+        assert!(context.match_entity(
+            person,
+            (Id(676), AgeGroup::Age18to64, Sex::Female, HouseholdId(1))
+        ));
 
         let person = people[246];
-        assert!(context.match_person(person, (Id, 213)));
-        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::AgeUnder5)));
-        assert!(context.match_person(person, (Sex, SexValue::Female)));
-        assert!(context.match_person(person, (HouseholdId, 162)));
+        assert!(context.match_entity(
+            person,
+            (Id(213), AgeGroup::AgeUnder5, Sex::Female, HouseholdId(162))
+        ));
 
         let person = people[1591];
-        assert!(context.match_person(person, (Id, 1591)));
-        assert!(context.match_person(person, (AgeGroup, AgeGroupValue::Age65Plus)));
-        assert!(context.match_person(person, (Sex, SexValue::Male)));
-        assert!(context.match_person(person, (HouseholdId, 496)));
+        assert!(context.match_entity(
+            person,
+            (Id(1591), AgeGroup::Age65Plus, Sex::Male, HouseholdId(496))
+        ));
     }
 }
