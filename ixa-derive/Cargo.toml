@@ -1,6 +1,6 @@
 [package]
 name = "ixa-derive"
-version = "0.0.4"
+version = "1.0.0"
 description = "Procedural macros for Ixa"
 repository.workspace = true
 license.workspace = true
