@@ -12,8 +12,8 @@ define_property!(
     },
     Person
 );
-define_property!(struct VaccineEfficacy(pub f64), Person);
-define_property!(struct VaccineDoses(pub u8), Person);
+define_property!(struct VaccineEfficacy(f64), Person);
+define_property!(struct VaccineDoses(u8), Person);
 
 pub trait ContextVaccineExt: ContextRandomExt {
     fn get_vaccine_props(&self, risk: RiskCategory) -> (VaccineType, VaccineEfficacy) {

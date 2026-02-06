@@ -139,7 +139,7 @@ impl_property!(
 /// # use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
-/// pub struct Age(pub u8);
+/// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
 ///
@@ -242,7 +242,7 @@ macro_rules! define_property {
         $(, $($extra:tt)+),*
     ) => {
         #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name { $($visibility $field_name : $field_ty),* }
+        pub struct $name { $(pub $field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
     };
 
