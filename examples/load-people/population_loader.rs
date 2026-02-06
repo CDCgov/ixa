@@ -20,7 +20,7 @@ struct PeopleRecord {
     risk_category: RiskCategory,
 }
 
-define_property!(struct Age(pub u8), Person);
+define_property!(struct Age(u8), Person);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     let age = Age(record.age);

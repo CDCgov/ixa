@@ -22,7 +22,7 @@ define_rng!(SeirRng);
 impl_property!(DiseaseStatus, Person, default_const = DiseaseStatus::S);
 
 define_property!(
-    struct InfectedBy(pub Option<PersonId>),
+    struct InfectedBy(Option<PersonId>),
     Person,
     default_const = InfectedBy(None)
 );
