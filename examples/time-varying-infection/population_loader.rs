@@ -15,7 +15,7 @@ define_property!(
 );
 
 define_property!(
-    struct InfectionTime(pub Option<f64>),
+    struct InfectionTime(Option<f64>),
     Person,
     default_const = InfectionTime(None)
 );

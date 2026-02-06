@@ -139,9 +139,9 @@ mod test {
     use crate::prelude::*;
 
     define_entity!(Person);
-    define_property!(struct Age(pub u8), Person, default_const = Age(0));
-    define_property!(struct Weight(pub u8), Person, default_const = Weight(0));
-    define_property!(struct Height(pub u8), Person, default_const = Height(0));
+    define_property!(struct Age(u8), Person, default_const = Age(0));
+    define_property!(struct Weight(u8), Person, default_const = Weight(0));
+    define_property!(struct Height(u8), Person, default_const = Height(0));
 
     define_multi_property!((Age, Weight, Height), Person);
     define_multi_property!((Weight, Height, Age), Person);

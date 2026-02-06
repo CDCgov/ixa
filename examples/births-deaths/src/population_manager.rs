@@ -22,11 +22,11 @@ define_property!(
     default_const = InfectionStatus::S
 );
 define_property!(
-    struct Age(pub u8),
+    struct Age(u8),
     Person
 );
 define_property!(
-    struct Alive(pub bool),
+    struct Alive(bool),
     Person,
     default_const = Alive(true)
 );

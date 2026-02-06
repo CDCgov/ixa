@@ -6,15 +6,15 @@ mod tests {
     define_entity!(Person);
 
     // Test entity property / derived / multi-property macros
-    define_property!(struct TestPropU32(pub u32), Person);
-    define_property!(struct TestPropU32b(pub u32), Person);
+    define_property!(struct TestPropU32(u32), Person);
+    define_property!(struct TestPropU32b(u32), Person);
     define_property!(
-        struct TestPropDefault(pub u32),
+        struct TestPropDefault(u32),
         Person,
         default_const = TestPropDefault(7u32)
     );
     define_property!(
-        struct TestPropOpt(pub Option<u8>),
+        struct TestPropOpt(Option<u8>),
         Person,
         default_const = TestPropOpt(None)
     );
