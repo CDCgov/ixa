@@ -21,6 +21,7 @@ use std::marker::PhantomData;
 
 use ouroboros::self_referencing;
 
+use crate::entity::index::IndexSetResult;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
 use crate::hashing::{IndexSet, IndexSetIter};
@@ -253,11 +254,18 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
         // Check for an index.
         {
-            let property_index_value_store = property_store.get_with_id(P::index_id());
-            if property_index_value_store.index_unindexed_entities(context) {
-                return property_index_value_store
-                    .get_index_set_with_hash(P::hash_property_value(&value.make_canonical()))
-                    .map(SourceSet::IndexSet);
+            match property_store.get_index_set_with_hash_for_property_id(
+                context,
+                P::index_id(),
+                P::hash_property_value(&value.make_canonical()),
+            ) {
+                IndexSetResult::Set(entity_set) => {
+                    return Some(SourceSet::IndexSet(entity_set));
+                }
+                IndexSetResult::Empty => {
+                    return None;
+                }
+                IndexSetResult::Unsupported => {}
             }
         }
 

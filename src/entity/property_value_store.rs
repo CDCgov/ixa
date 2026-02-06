@@ -16,7 +16,9 @@ use std::cell::{Ref, RefCell};
 use log::{error, trace};
 
 use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
-use crate::entity::index::Index;
+use crate::entity::index::{
+    FullIndex, IndexCountResult, IndexSetResult, PropertyIndex, PropertyIndexType, ValueCountIndex,
+};
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
@@ -43,22 +45,36 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
     fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
+
     /// Fetches the hash bucket corresponding to the provided hash value. Returns `None` if either the
     /// property is not indexed or there is no bucket corresponding to the hash value.
     fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<IndexSet<EntityId<E>>>>;
 
-    /// Returns whether this `PropertyValueStore` instance has an `Index<E, P>`. Note that this is not the same as
-    /// asking whether the property itself is indexed, as some properties might use the index of some other
-    /// `PropertyValueStore`, as in the case of multi-properties.
-    fn is_indexed(&self) -> bool;
+    /// Fetches the hash bucket corresponding to the provided hash value.
+    /// Returns `Unsupported` if there is no index or the index cannot return sets.
+    fn get_index_set_with_hash_result(
+        &self,
+        context: &Context,
+        hash: HashValueType,
+    ) -> IndexSetResult<'_, E>;
 
-    /// If `is_indexed` is `true`, constructs an `Index<E, P>` if one doesn't already exist. If `is_indexed` is `false`,
-    /// sets `self.index` to `None`, dropping any existing index.
-    fn set_indexed(&mut self, is_indexed: bool);
+    /// Fetches the count corresponding to the provided hash value.
+    /// Returns `Unsupported` if there is no index or the index cannot return counts.
+    fn get_index_count_with_hash_result(
+        &self,
+        context: &Context,
+        hash: HashValueType,
+    ) -> IndexCountResult;
+
+    /// Returns the index type used by this `PropertyValueStore` instance.
+    fn index_type(&self) -> PropertyIndexType;
+
+    /// Sets the index type for this property value store.
+    fn set_indexed(&mut self, index_type: PropertyIndexType);
 
     /// Updates the index for any entities that have been added to the context since the last time the index was
-    /// updated. As a convenience, returns `false` if this property is not indexed.
-    fn index_unindexed_entities(&self, context: &Context) -> bool;
+    /// updated.
+    fn index_unindexed_entities(&self, context: &Context);
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
@@ -84,10 +100,8 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         } else {
             self.get(entity_id)
         };
-        if let Some(index) = &self.index {
-            let mut index = index.borrow_mut();
-            index.remove_entity(&previous_value.make_canonical(), entity_id);
-        }
+        self.index
+            .remove_entity(&previous_value.make_canonical(), entity_id);
         Box::new(PartialPropertyChangeEventCore::<E, P>::new(
             entity_id,
             previous_value,
@@ -95,70 +109,87 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
     }
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        if let Some(index) = &mut self.index {
-            index.get_mut().add_entity_with_hash(hash, entity_id);
+        if self.index.index_type() != PropertyIndexType::Unindexed {
+            self.index.add_entity_with_hash(hash, entity_id);
         } else {
             error!("attempted to add an entity to an index for an unindexed property");
         }
     }
 
     fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        if let Some(index) = &mut self.index {
-            index.get_mut().remove_entity_with_hash(hash, entity_id);
+        if self.index.index_type() != PropertyIndexType::Unindexed {
+            self.index.remove_entity_with_hash(hash, entity_id);
         } else {
             error!("attempted to remove an entity from an index for an unindexed property");
         }
     }
 
     fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<Ref<IndexSet<EntityId<E>>>> {
-        if let Some(index) = &self.index {
-            let index = index.borrow();
-            Ref::filter_map(index, |idx| idx.get_with_hash(hash)).ok()
-        } else {
-            None
-        }
+        self.index.get_index_set_with_hash(hash)
     }
 
-    fn is_indexed(&self) -> bool {
-        self.index.is_some()
+    fn get_index_set_with_hash_result(
+        &self,
+        context: &Context,
+        hash: HashValueType,
+    ) -> IndexSetResult<'_, E> {
+        self.index_unindexed_entities(context);
+        self.index.get_index_set_with_hash_result(hash)
     }
 
-    fn set_indexed(&mut self, is_indexed: bool) {
-        if is_indexed && !self.is_indexed() {
-            self.index = Some(RefCell::new(Index::new()));
-        } else if !is_indexed {
-            self.index = None;
-        }
+    fn get_index_count_with_hash_result(
+        &self,
+        context: &Context,
+        hash: HashValueType,
+    ) -> IndexCountResult {
+        self.index_unindexed_entities(context);
+        self.index.get_index_count_with_hash_result(hash)
     }
 
-    fn index_unindexed_entities(&self, context: &Context) -> bool {
-        if let Some(index) = &self.index {
-            let current_pop = context.get_entity_count::<E>();
-            {
-                // Prevent a double borrow.
-                let mut index = index.borrow();
-                if index.max_indexed >= current_pop {
-                    return true;
+    fn index_type(&self) -> PropertyIndexType {
+        self.index_type()
+    }
+
+    fn set_indexed(&mut self, index_type: PropertyIndexType) {
+        match index_type {
+            PropertyIndexType::Unindexed => {
+                self.index = PropertyIndex::Unindexed;
+            }
+            PropertyIndexType::FullIndex => {
+                if self.index.index_type() != PropertyIndexType::FullIndex {
+                    self.index = PropertyIndex::FullIndex(RefCell::new(FullIndex::new()));
                 }
             }
-
-            let mut index = index.borrow_mut();
-            trace!(
-                "{}: indexing unindexed entity {}..<{}",
-                P::name(),
-                index.max_indexed,
-                current_pop
-            );
-
-            for id in index.max_indexed..current_pop {
-                let entity_id = EntityId::new(id);
-                let value = context.get_property::<E, P>(entity_id);
-                index.add_entity(&P::make_canonical(value), entity_id);
+            PropertyIndexType::ValueCountIndex => {
+                if self.index.index_type() != PropertyIndexType::ValueCountIndex {
+                    self.index =
+                        PropertyIndex::ValueCountIndex(
+                            RefCell::new(ValueCountIndex::<E, P>::new()),
+                        );
+                }
             }
-            index.max_indexed = current_pop;
-            true
-        } else {
-            false
         }
+    }
+
+    fn index_unindexed_entities(&self, context: &Context) {
+        let current_pop = context.get_entity_count::<E>();
+        let max_indexed = match self.index.max_indexed() {
+            None => return,
+            Some(max_indexed) if max_indexed >= current_pop => return,
+            Some(max_indexed) => max_indexed,
+        };
+        trace!(
+            "{}: indexing unindexed entity {}..<{}",
+            P::name(),
+            max_indexed,
+            current_pop
+        );
+
+        for id in max_indexed..current_pop {
+            let entity_id = EntityId::new(id);
+            let value = context.get_property::<E, P>(entity_id);
+            self.index.add_entity(&P::make_canonical(value), entity_id);
+        }
+        self.index.set_max_indexed(current_pop);
     }
 }

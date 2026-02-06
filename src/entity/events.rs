@@ -45,11 +45,9 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
         let current_value: P = context.get_property(self.0.entity_id);
         let property_value_store = context.get_property_value_store_mut::<E, P>();
 
-        if let Some(index) = &mut property_value_store.index {
-            index
-                .borrow_mut()
-                .add_entity(&current_value.make_canonical(), self.0.entity_id);
-        }
+        property_value_store
+            .index
+            .add_entity(&current_value.make_canonical(), self.0.entity_id);
 
         // We decided not to do the following check.
         // See `src/entity/context_extension::ContextEntitiesExt::set_property`.

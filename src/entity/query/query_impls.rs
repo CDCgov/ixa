@@ -2,6 +2,7 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
+use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
 use crate::entity::query::query_result_iterator::QueryResultIterator;
@@ -72,19 +73,18 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         // multi-property is unindexed, we fall through to create `SourceSet`s for the components
         // rather than wrapping a `DerivedPropertySource`.
         if let Some(multi_property_id) = self.multi_property_id() {
-            // The `index_unindexed_people` method returns `false` if the property is not indexed.
-            if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
-                // Fetch the right hash bucket from the index and return it.
-                let property_value_store = property_store.get_with_id(multi_property_id);
-                if let Some(people_set) =
-                    property_value_store.get_index_set_with_hash(self.multi_property_value_hash())
-                {
+            match property_store.get_index_set_with_hash_for_property_id(
+                context,
+                multi_property_id,
+                self.multi_property_value_hash(),
+            ) {
+                IndexSetResult::Set(people_set) => {
                     return QueryResultIterator::from_index_set(people_set);
-                } else {
-                    // Since we already checked that this multi-property is indexed, it must be that
-                    // there are no entities having this property value.
+                }
+                IndexSetResult::Empty => {
                     return QueryResultIterator::empty();
                 }
+                IndexSetResult::Unsupported => {}
             }
             // If the property is not indexed, we fall through.
         }
@@ -185,19 +185,18 @@ macro_rules! impl_query {
                     // rather than wrapping a `DerivedPropertySource`.
                     if let Some(multi_property_id) = self.multi_property_id() {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        // The `index_unindexed_people` method returns `false` if the property is not indexed.
-                        if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
-                            // Fetch the right hash bucket from the index and return it.
-                            let property_value_store = property_store.get_with_id(multi_property_id);
-                            if let Some(entity_set) = property_value_store.get_index_set_with_hash(
-                                self.multi_property_value_hash(),
-                            ) {
+                        match property_store.get_index_set_with_hash_for_property_id(
+                            context,
+                            multi_property_id,
+                            self.multi_property_value_hash(),
+                        ) {
+                            $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 return QueryResultIterator::from_index_set(entity_set);
-                            } else {
-                                // Since we already checked that this multi-property is indexed, it must be that
-                                // there are no entities having this property value.
+                            }
+                            $crate::entity::index::IndexSetResult::Empty => {
                                 return QueryResultIterator::empty();
                             }
+                            $crate::entity::index::IndexSetResult::Unsupported => {}
                         }
                         // If the property is not indexed, we fall through.
                     }
@@ -233,20 +232,20 @@ macro_rules! impl_query {
                     // The fast path: If this query is indexed, we only have to do one pass over the entities.
                     if let Some(multi_property_id) = self.multi_property_id() {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        // The `index_unindexed_people` method returns `false` if the property is not indexed.
-                        if property_store.index_unindexed_entities_for_property_id(context, multi_property_id) {
-                            // Fetch the right hash bucket from the index and return it.
-                            let property_value_store = property_store.get_with_id(multi_property_id);
-                            if let Some(entity_set) = property_value_store.get_index_set_with_hash(
-                                self.multi_property_value_hash(),
-                            ) {
-                                entities.retain(|entity_id| entity_set.contains(entity_id) );
-                            } else {
-                                // Since we already checked that this multi-property is indexed, it must be that
-                                // there are no entities having this property value.
-                                entities.clear();
+                        match property_store.get_index_set_with_hash_for_property_id(
+                            context,
+                            multi_property_id,
+                            self.multi_property_value_hash(),
+                        ) {
+                            $crate::entity::index::IndexSetResult::Set(entity_set) => {
+                                entities.retain(|entity_id| entity_set.contains(entity_id));
+                                return;
                             }
-                            return;
+                            $crate::entity::index::IndexSetResult::Empty => {
+                                entities.clear();
+                                return;
+                            }
+                            $crate::entity::index::IndexSetResult::Unsupported => {}
                         }
                         // If the property is not indexed, we fall through.
                     }
