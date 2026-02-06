@@ -16,11 +16,6 @@ To read parameters, we create a struct called Parameters and read from the
 configuration file.
 
 ```rust
-use ixa::context::Context;
-use ixa::global_properties::GlobalPropertiesContext;
-
-mod global_properties;
-mod people;
 pub struct ParametersValues {
     population: usize,
     max_time: f64,
@@ -30,16 +25,19 @@ pub struct ParametersValues {
 }
 ```
 
-Parameters are read using a `load-parameters.rs` module which implements the
-method `load_parameters_from_config` and sets the parameters as a global
-property, which can be accessed by the other modules.
+Parameters are read using a `parameters_loader.rs` module which loads the values
+from a config file and sets the parameters as a global property, which can be
+accessed by the other modules.
 
 ```rust
 fn main() {
     let mut context = Context::new();
 
     define_global_property!(Parameters, ParametersValues);
-    context.load_parameters_from_config(ParameterValues, "config.yaml");
+    let p = context
+        .load_parameters_from_json::<ParametersValues>("input.json")
+        .unwrap();
+    context.set_global_property_value(Parameters, p).unwrap();
 
     let parameters = context.get_global_property_value(Parameters);
 

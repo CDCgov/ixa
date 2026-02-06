@@ -4,6 +4,8 @@ mod population_loader;
 mod sir;
 mod vaccine;
 
+define_entity!(Person);
+
 fn main() {
     let mut context = Context::new();
 

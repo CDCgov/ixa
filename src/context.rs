@@ -22,7 +22,7 @@ use crate::plan::{PlanId, Queue};
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
-use crate::{get_data_plugin_count, trace, warn, ContextPeopleExt, HashMap, HashMapExt};
+use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
 /// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -587,8 +587,7 @@ impl Context {
     }
 
     pub fn get_execution_statistics(&mut self) -> ExecutionStatistics {
-        let population = self.get_current_population();
-        self.execution_profiler.compute_final_statistics(population)
+        self.execution_profiler.compute_final_statistics()
     }
 }
 
@@ -651,7 +650,7 @@ mod tests {
     use ixa_derive::IxaEvent;
 
     use super::*;
-    use crate::{define_data_plugin, define_entity, define_property};
+    use crate::{define_data_plugin, define_entity, define_property, ContextEntitiesExt};
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -1305,7 +1304,7 @@ mod tests {
         // This test verifies that shutdown_requested is properly reset after
         // being acted upon. This allows the context to be reused after shutdown.
         let mut context = Context::new();
-        context.add_person(()).unwrap();
+        let _: PersonId = context.add_entity((Age(50),)).unwrap();
 
         // Schedule a plan at time 0.0 that calls shutdown
         context.add_plan(0.0, |ctx| {
@@ -1315,11 +1314,11 @@ mod tests {
         // First execute - should run until shutdown
         context.execute();
         assert_eq!(context.get_current_time(), 0.0);
-        assert_eq!(context.get_current_population(), 1);
+        assert_eq!(context.get_entity_count::<Person>(), 1);
 
         // Add a new plan at time 2.0
         context.add_plan(2.0, |ctx| {
-            ctx.add_person(()).unwrap();
+            let _: PersonId = ctx.add_entity((Age(50),)).unwrap();
         });
 
         // Second execute - should execute the new plan
@@ -1328,7 +1327,7 @@ mod tests {
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(
-            context.get_current_population(),
+            context.get_entity_count::<Person>(),
             2,
             "If this fails, shutdown_requested was not properly reset"
         );

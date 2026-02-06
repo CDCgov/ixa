@@ -1,22 +1,21 @@
 use ixa::prelude::*;
 use rand_distr::Exp;
 
-use crate::{InfectionStatus, InfectionStatusValue, Parameters};
+use crate::{InfectionStatus, Parameters, Person, PersonId};
 
 define_rng!(TransmissionRng);
 
 fn attempt_infection(context: &mut Context) {
-    let population_size: usize = context.get_current_population();
-    let person_to_infect = context.sample_person(TransmissionRng, ()).unwrap();
-    let person_status: InfectionStatusValue =
-        context.get_person_property(person_to_infect, InfectionStatus);
+    let population_size: usize = context.get_entity_count::<Person>();
+    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
+    let person_status: InfectionStatus = context.get_property(person_to_infect);
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
 
-    if person_status == InfectionStatusValue::S {
-        context.set_person_property(person_to_infect, InfectionStatus, InfectionStatusValue::I);
+    if person_status == InfectionStatus::S {
+        context.set_property(person_to_infect, InfectionStatus::I);
     }
 
     // With a food-borne illness (i.e., constant force of infection), each _person_
@@ -67,10 +66,10 @@ mod test {
             .set_global_property_value(Parameters, p_values)
             .unwrap();
         context.init_random(123);
-        let pid = context.add_person(()).unwrap();
+        let pid: PersonId = context.add_entity(()).unwrap();
         attempt_infection(&mut context);
-        let person_status = context.get_person_property(pid, InfectionStatus);
-        assert_eq!(person_status, InfectionStatusValue::I);
+        let person_status: InfectionStatus = context.get_property(pid);
+        assert_eq!(person_status, InfectionStatus::I);
         context.execute();
     }
 }

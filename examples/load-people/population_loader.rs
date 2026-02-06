@@ -1,36 +1,34 @@
 use std::path::PathBuf;
 
 use ixa::prelude::*;
-use ixa::PersonId;
 use serde::Deserialize;
 use serde_derive::Serialize;
 
-use crate::vaccine::{ContextVaccineExt, VaccineEfficacy, VaccineType};
+use crate::vaccine::ContextVaccineExt;
+use crate::{Person, PersonId};
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum RiskCategoryValue {
+pub enum RiskCategory {
     High,
     Low,
 }
+impl_property!(RiskCategory, Person);
 
 #[derive(Deserialize, Debug)]
 struct PeopleRecord {
     age: u8,
-    risk_category: RiskCategoryValue,
+    risk_category: RiskCategory,
 }
 
-define_person_property!(Age, u8);
-define_person_property!(RiskCategory, RiskCategoryValue);
+define_property!(struct Age(pub u8), Person);
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
-    let (t, e) = context.get_vaccine_props(record.risk_category);
+    let age = Age(record.age);
+    let risk_category = record.risk_category;
+    let (vaccine_type, vaccine_efficacy) = context.get_vaccine_props(risk_category);
+    let doses = context.sample_vaccine_doses(age);
     context
-        .add_person((
-            (Age, record.age),
-            (RiskCategory, record.risk_category),
-            (VaccineType, t),
-            (VaccineEfficacy, e),
-        ))
+        .add_entity((age, risk_category, vaccine_type, vaccine_efficacy, doses))
         .unwrap()
 }
 
@@ -56,8 +54,7 @@ mod tests {
     use ixa::prelude::*;
 
     use super::*;
-    use crate::population_loader::Age;
-    use crate::vaccine::{VaccineDoses, VaccineEfficacy, VaccineType, VaccineTypeValue};
+    use crate::vaccine::{VaccineDoses, VaccineEfficacy, VaccineType};
 
     const EXPECTED_ROWS: usize = 5;
 
@@ -66,7 +63,7 @@ mod tests {
         let mut context = Context::new();
         context.init_random(42);
         init(&mut context);
-        assert_eq!(context.get_current_population(), EXPECTED_ROWS);
+        assert_eq!(context.get_entity_count::<Person>(), EXPECTED_ROWS);
     }
 
     #[test]
@@ -77,17 +74,17 @@ mod tests {
         // any change in the deterministic RNG.
         let expected_computed = vec![
             // (age, risk_category, vaccine_type, efficacy, doses)
-            (20, RiskCategoryValue::Low, VaccineTypeValue::B, 0.8, 1),
-            (80, RiskCategoryValue::High, VaccineTypeValue::A, 0.9, 2),
+            (20, RiskCategory::Low, VaccineType::B, 0.8, 1),
+            (80, RiskCategory::High, VaccineType::A, 0.9, 2),
         ];
 
         let mut context = Context::new();
         context.init_random(42);
 
-        // Subscribe to person property change event
+        // Subscribe to property change event
         let flag_clone = Rc::clone(&flag);
         context.subscribe_to_event(
-            move |_context, _event: PersonPropertyChangeEvent<VaccineEfficacy>| {
+            move |_context, _event: PropertyChangeEvent<Person, VaccineEfficacy>| {
                 *flag_clone.borrow_mut() = true;
             },
         );
@@ -99,27 +96,27 @@ mod tests {
             let counter = Rc::clone(&counter);
             let expected_computed = Rc::clone(&expected_computed);
 
-            move |context, event: PersonCreatedEvent| {
-                let person = event.person_id;
+            move |context, event: EntityCreatedEvent<Person>| {
+                let person = event.entity_id;
                 let current_count = *counter.borrow();
                 let (age, risk_category, vaccine_type, efficacy, doses) =
                     expected_computed[current_count];
 
-                assert_eq!(context.get_person_property(person, Age), age);
-                assert_eq!(
-                    context.get_person_property(person, RiskCategory),
-                    risk_category
-                );
-                assert_eq!(
-                    context.get_person_property(person, VaccineType),
-                    vaccine_type
-                );
-                assert_eq!(
-                    context.get_person_property(person, VaccineEfficacy),
-                    efficacy
-                );
+                let Age(actual_age) = context.get_property(person);
+                assert_eq!(actual_age, age);
+
+                let actual_risk_category: RiskCategory = context.get_property(person);
+                assert_eq!(actual_risk_category, risk_category);
+
+                let actual_vaccine_type: VaccineType = context.get_property(person);
+                assert_eq!(actual_vaccine_type, vaccine_type);
+
+                let VaccineEfficacy(actual_efficacy) = context.get_property(person);
+                assert_eq!(actual_efficacy, efficacy);
+
                 // This assert will break for any change that affects the deterministic hasher.
-                assert_eq!(context.get_person_property(person, VaccineDoses), doses);
+                let VaccineDoses(actual_doses) = context.get_property(person);
+                assert_eq!(actual_doses, doses);
 
                 *counter.borrow_mut() += 1;
             }
@@ -133,7 +130,7 @@ mod tests {
         // Execute the context
         context.execute();
 
-        // Make sure PersonPropertyChangeEvent didn't fire
+        // Make sure PropertyChangeEvent didn't fire
         assert!(!*flag.borrow());
     }
 }

@@ -1,63 +1,76 @@
 use ixa::prelude::*;
-use serde_derive::Serialize;
 
-#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
-pub enum DiseaseStatusValue {
-    S,
-    I,
-    R,
-}
+use crate::Person;
 
-define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatusValue::S);
+define_property!(
+    enum DiseaseStatus {
+        S,
+        I,
+        R,
+    },
+    Person,
+    default_const = DiseaseStatus::S
+);
 
 pub fn init(context: &mut Context) {
-    context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
-        let person = event.person_id;
+    context.subscribe_to_event(move |context, event: EntityCreatedEvent<Person>| {
+        let person = event.entity_id;
         context.add_plan(1.0, move |context| {
-            context.set_person_property(person, DiseaseStatus, DiseaseStatusValue::I);
+            context.set_property(person, DiseaseStatus::I);
         });
         context.add_plan(2.0, move |context| {
-            context.set_person_property(person, DiseaseStatus, DiseaseStatusValue::R);
+            context.set_property(person, DiseaseStatus::R);
         });
     });
 }
 
 #[cfg(test)]
 mod tests {
-    use ixa::PersonPropertyChangeEvent;
-
     use super::*;
+    use crate::population_loader::{Age, RiskCategory};
+    use crate::vaccine::{VaccineDoses, VaccineEfficacy, VaccineType};
+    use crate::{Person, PersonId};
 
     #[test]
     fn test_disease_status() {
         let mut context = Context::new();
         init(&mut context);
 
-        let person = context.add_person(()).unwrap();
+        let person: PersonId = context
+            .add_entity((
+                Age(0),
+                RiskCategory::Low,
+                VaccineType::A,
+                VaccineEfficacy(0.0),
+                VaccineDoses(0),
+            ))
+            .unwrap();
 
         // People should start in the S state
         assert_eq!(
-            context.get_person_property(person, DiseaseStatus),
-            DiseaseStatusValue::S
+            context.get_property::<Person, DiseaseStatus>(person),
+            DiseaseStatus::S
         );
 
-        // At 1.0, people should be in the I state
-        context.subscribe_to_event(|context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-            let person = event.person_id;
-            if context.get_current_time() == 1.0 {
-                assert_eq!(
-                    context.get_person_property(person, DiseaseStatus),
-                    DiseaseStatusValue::I
-                );
-            }
-        });
+        // At 1.0, people should be in the "I" state
+        context.subscribe_to_event(
+            |context, event: PropertyChangeEvent<Person, DiseaseStatus>| {
+                let person = event.entity_id;
+                if context.get_current_time() == 1.0 {
+                    assert_eq!(
+                        context.get_property::<Person, DiseaseStatus>(person),
+                        DiseaseStatus::I
+                    );
+                }
+            },
+        );
 
         context.execute();
 
         // People should end up in the R state by the end of the simulation
         assert_eq!(
-            context.get_person_property(person, DiseaseStatus),
-            DiseaseStatusValue::R
+            context.get_property::<Person, DiseaseStatus>(person),
+            DiseaseStatus::R
         );
     }
 }

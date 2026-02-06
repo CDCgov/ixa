@@ -9,8 +9,7 @@ use serde::Serializer;
 
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::people::ContextPeopleExt;
-use crate::{define_data_plugin, error, trace, ContextBase, HashMap, HashMapExt, Tabulator};
+use crate::{define_data_plugin, error, trace, ContextBase, HashMap, HashMapExt};
 
 // * file_prefix: precedes the report name in the filename. An example of a
 // potential prefix might be scenario or simulation name
@@ -25,7 +24,6 @@ pub struct ConfigReportOptions {
 
 impl ConfigReportOptions {
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
         trace!("new ConfigReportOptions");
         // Sets the defaults
@@ -170,51 +168,6 @@ pub trait ContextReportExt: ContextBase {
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
 
-    /// Adds a periodic report at the end of period `period` which summarizes the
-    /// number of people in each combination of properties in `tabulator`.
-    /// # Errors
-    /// If the file already exists and `overwrite` is set to false, raises an error and info message.
-    /// If the file cannot be created, returns [`IxaError`]
-    fn add_periodic_report<T: Tabulator + Clone + 'static>(
-        &mut self,
-        short_name: &str,
-        period: f64,
-        tabulator: T,
-    ) -> Result<(), IxaError> {
-        trace!("Adding periodic report {short_name}");
-
-        self.add_report_by_type_id(TypeId::of::<T>(), short_name)?;
-
-        {
-            // Write the header
-            let mut writer = self.get_writer(TypeId::of::<T>());
-            let columns = tabulator.get_columns();
-            let mut header = vec!["t".to_string()];
-            header.extend(columns);
-            header.push("count".to_string());
-            writer
-                .write_record(&header)
-                .expect("Failed to write header");
-        }
-
-        self.add_periodic_plan_with_phase(
-            period,
-            move |context: &mut Context| {
-                context.tabulate_person_properties(&tabulator, move |context, values, count| {
-                    let mut writer = context.get_writer(TypeId::of::<T>());
-                    let mut row = vec![context.get_current_time().to_string()];
-                    row.extend(values.to_owned());
-                    row.push(count.to_string());
-
-                    writer.write_record(&row).expect("Failed to write row");
-                });
-            },
-            crate::context::ExecutionPhase::Last,
-        );
-
-        Ok(())
-    }
-
     fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
         let data_container = self.get_data(ReportPlugin);
@@ -249,9 +202,15 @@ mod test {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{define_person_property_with_default, define_report, info};
+    use crate::{define_entity, define_property, define_report, info};
 
-    define_person_property_with_default!(IsRunner, bool, false);
+    define_entity!(Person);
+
+    define_property!(
+        struct IsRunner(bool),
+        Person,
+        default_const = IsRunner(false)
+    );
 
     #[derive(Serialize, Deserialize)]
     struct SampleReport {
@@ -543,66 +502,5 @@ mod test {
         let reader = csv::Reader::from_reader(file);
         let records = reader.into_records();
         assert_eq!(records.count(), 0);
-    }
-
-    #[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
-    pub enum SymptomValue {
-        Presymptomatic,
-        Category1,
-        Category2,
-        Category3,
-        Category4,
-    }
-
-    define_person_property_with_default!(Symptoms, Option<SymptomValue>, None);
-
-    #[test]
-    fn add_periodic_report() {
-        let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
-
-        // We need the writer to go out of scope so the file is flushed
-        {
-            let mut context = Context::new();
-            let config = context.report_options();
-            config
-                .file_prefix("test_".to_string())
-                .directory(path.clone());
-            let _ = context.add_periodic_report("periodic", 1.2, (IsRunner, Symptoms));
-            let person = context.add_person(()).unwrap();
-            context.add_person(()).unwrap();
-
-            context.add_plan(1.2, move |context: &mut Context| {
-                context.set_person_property(person, IsRunner, true);
-                context.set_person_property(person, Symptoms, Some(SymptomValue::Category1));
-            });
-            context.execute();
-        }
-        let file_path = path.join("test_periodic.csv");
-        assert!(file_path.exists(), "CSV file should exist");
-
-        let mut reader = csv::Reader::from_path(file_path).unwrap();
-
-        assert_eq!(
-            reader.headers().unwrap(),
-            vec!["t", "IsRunner", "Symptoms", "count"]
-        );
-
-        let mut actual: Vec<Vec<String>> = reader
-            .records()
-            .map(|result| result.unwrap().iter().map(String::from).collect())
-            .collect();
-        let mut expected = vec![
-            vec!["0", "false", "None", "2"],
-            vec!["1.2", "false", "Category1", "0"],
-            vec!["1.2", "false", "None", "1"],
-            vec!["1.2", "true", "Category1", "1"],
-            vec!["1.2", "true", "None", "0"],
-        ];
-
-        actual.sort_unstable();
-        expected.sort_unstable();
-
-        assert_eq!(actual, expected, "CSV file should contain the correct data");
     }
 }

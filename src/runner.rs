@@ -15,8 +15,6 @@ use crate::log::level_to_string_list;
 use crate::progress::init_timeline_progress_bar;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-#[cfg(feature = "web_api")]
-use crate::web_api::ContextWebApiExt;
 use crate::{set_log_level, set_module_filters, warn, LevelFilter};
 
 /// Custom parser for log levels
@@ -336,19 +334,6 @@ where
     #[cfg(not(feature = "debugger"))]
     if args.debugger.is_some() {
         warn!("Ixa was not compiled with the debugger feature, but a debugger option was provided");
-    }
-
-    // If the Web API is provided, stop there.
-    #[cfg(feature = "web_api")]
-    if let Some(t) = args.web {
-        let port = t.unwrap_or(33334);
-        let url = context.setup_web_api(port).unwrap();
-        println!("Web API active on {url}");
-        context.schedule_web_api(0.0);
-    }
-    #[cfg(not(feature = "web_api"))]
-    if args.web.is_some() {
-        warn!("Ixa was not compiled with the web_api feature, but a web_api option was provided");
     }
 
     if let Some(max_time) = args.timeline_progress_max {
