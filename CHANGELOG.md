@@ -7,12 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.1](https://github.com/CDCgov/ixa/compare/ixa-v0.5.0...ixa-v0.5.1) - 2026-01-12
+## [1.0.0](https://github.com/CDCgov/ixa/compare/ixa-v0.5.0...ixa-v1.0.0) - 2026-01-12
 
-### Other
-
-- add print execution stats fn ([#663](https://github.com/CDCgov/ixa/pull/663))
-- add tests for reservoir functions ([#664](https://github.com/CDCgov/ixa/pull/664))
+Final release of v1 (with people API) before entities is released (with v2).
 
 ## [0.5.0](https://github.com/CDCgov/ixa/compare/ixa-v0.4.4...ixa-v0.5.0) - 2025-12-29
 
