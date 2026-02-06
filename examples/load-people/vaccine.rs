@@ -1,34 +1,34 @@
 use ixa::prelude::*;
-use serde_derive::Serialize;
 
-use crate::population_loader::{Age, RiskCategoryValue};
+use crate::population_loader::{Age, RiskCategory};
+use crate::Person;
 
 define_rng!(VaccineRng);
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Serialize, Copy, Clone, PartialEq, Eq, Debug)]
-pub enum VaccineTypeValue {
-    A,
-    B,
-}
+define_property!(
+    enum VaccineType {
+        A,
+        B,
+    },
+    Person
+);
+define_property!(struct VaccineEfficacy(pub f64), Person);
+define_property!(struct VaccineDoses(pub u8), Person);
 
-define_person_property!(VaccineType, VaccineTypeValue);
-define_person_property!(VaccineEfficacy, f64);
-define_person_property!(VaccineDoses, u8, |context: &Context, person_id| {
-    let age = context.get_person_property(person_id, Age);
-    if age > 10 {
-        context.sample_range(VaccineRng, 0..5)
-    } else {
-        0
-    }
-});
-
-pub trait ContextVaccineExt: PluginContext {
-    fn get_vaccine_props(&self, risk: RiskCategoryValue) -> (VaccineTypeValue, f64) {
-        if risk == RiskCategoryValue::High {
-            (VaccineTypeValue::A, 0.9)
+pub trait ContextVaccineExt: ContextRandomExt {
+    fn get_vaccine_props(&self, risk: RiskCategory) -> (VaccineType, VaccineEfficacy) {
+        if risk == RiskCategory::High {
+            (VaccineType::A, VaccineEfficacy(0.9))
         } else {
-            (VaccineTypeValue::B, 0.8)
+            (VaccineType::B, VaccineEfficacy(0.8))
+        }
+    }
+
+    fn sample_vaccine_doses(&self, age: Age) -> VaccineDoses {
+        if age.0 > 10 {
+            VaccineDoses(self.sample_range(VaccineRng, 0..5))
+        } else {
+            VaccineDoses(0)
         }
     }
 }

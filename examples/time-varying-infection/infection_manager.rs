@@ -1,9 +1,11 @@
-use ixa::people::{PersonId, PersonPropertyChangeEvent};
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
 use rand_distr::Exp;
 
 use crate::parameters_loader::Parameters;
-use crate::population_loader::{DiseaseStatus, DiseaseStatusValue, InfectionTime};
+use crate::population_loader::{DiseaseStatus, InfectionTime, Person, PersonId};
+
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, DiseaseStatus>;
 
 define_rng!(InfectionRng);
 
@@ -18,7 +20,7 @@ fn n_eff_inv_infec(context: &mut Context) -> f64 {
         .unwrap()
         .clone();
     // get number of infected people
-    let n_infected = context.query_people_count((DiseaseStatus, DiseaseStatusValue::I));
+    let n_infected = context.query_entity_count::<Person, _>((DiseaseStatus::I,));
     (1.0 / parameters.infection_duration) / (n_infected as f64)
 }
 
@@ -28,15 +30,13 @@ fn evaluate_recovery(
     resampling_rate: f64,
 ) -> Option<f64> {
     // get time person has spent infected
-    let time_spent_infected = context.get_current_time()
-        - context
-            .get_person_property(person_id, InfectionTime)
-            .unwrap();
+    let InfectionTime(infection_time) = context.get_property(person_id);
+    let time_spent_infected = context.get_current_time() - infection_time.unwrap();
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(InfectionRng, recovery_probability) {
         // recovery has happened by now
-        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::R);
+        context.set_property(person_id, DiseaseStatus::R);
         Some(context.get_current_time())
     } else {
         // add plan for recovery evaluation to happen again at fastest rate
@@ -51,42 +51,36 @@ fn evaluate_recovery(
     }
 }
 
-fn handle_infection_status_change(
-    context: &mut Context,
-    event: PersonPropertyChangeEvent<DiseaseStatus>,
-) {
+fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    if matches!(event.current, DiseaseStatusValue::I) {
+    if event.current == DiseaseStatus::I {
         // recall resampling rate is sum of maximum foi rate and gamma
         // maximum foi rate is foi * 2 -- the 2 because foi is sin(t + c) + 1
         evaluate_recovery(
             context,
-            event.person_id,
+            event.entity_id,
             parameters.foi * 2.0 + 1.0 / parameters.infection_duration,
         );
     }
 }
 
 pub fn init(context: &mut Context) {
-    context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-            handle_infection_status_change(context, event);
-        },
-    );
+    context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
+        handle_infection_status_change(context, event);
+    });
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::parameters_loader::ParametersValues;
-    use crate::population_loader::{DiseaseStatus, DiseaseStatusValue};
 
-    fn handle_recovery_event(event: PersonPropertyChangeEvent<DiseaseStatus>) {
-        assert_eq!(event.current, DiseaseStatusValue::R);
-        assert_eq!(event.previous, DiseaseStatusValue::I);
+    fn handle_recovery_event(event: InfectionStatusEvent) {
+        assert_eq!(event.current, DiseaseStatus::R);
+        assert_eq!(event.previous, DiseaseStatus::I);
     }
 
     #[test]
@@ -115,18 +109,16 @@ mod test {
         init(&mut context);
 
         for _ in 0..parameters.population {
-            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
-            context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
+            let person_id: PersonId = context.add_entity((InfectionTime(Some(0.0)),)).unwrap();
+            context.set_property(person_id, DiseaseStatus::I);
         }
 
         // put this subscription after every agent has become infected
         // so that handle_recovery_event is not triggered by an S --> I transition
         // but only I --> R transitions, which is what it checks for
-        context.subscribe_to_event(
-            move |_context, event: PersonPropertyChangeEvent<DiseaseStatus>| {
-                handle_recovery_event(event);
-            },
-        );
+        context.subscribe_to_event::<InfectionStatusEvent>(move |_context, event| {
+            handle_recovery_event(event);
+        });
 
         context.execute();
     }
@@ -152,9 +144,9 @@ mod test {
             .unwrap();
         context.init_random(parameters.seed);
         for _ in 0..parameters.population {
-            let person_id = context.add_person(()).unwrap();
+            let person_id: PersonId = context.add_entity(()).unwrap();
             people.push(person_id);
-            context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
+            context.set_property(person_id, DiseaseStatus::I);
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),
@@ -164,7 +156,7 @@ mod test {
         let cdf_value_many_infected = recovery_cdf(&mut context, time_spent_infected);
         // now make it so that all but 1 person becomes recovered
         for i in 1..parameters.population {
-            context.set_person_property(people[i], DiseaseStatus, DiseaseStatusValue::R);
+            context.set_property(people[i], DiseaseStatus::R);
         }
         assert_eq!(
             n_eff_inv_infec(&mut context),
@@ -201,8 +193,8 @@ mod test {
                 .unwrap();
             context.init_random(seed);
             init(&mut context);
-            let person_id = context.add_person((InfectionTime, Some(0.0))).unwrap();
-            context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
+            let person_id: PersonId = context.add_entity((InfectionTime(Some(0.0)),)).unwrap();
+            context.set_property(person_id, DiseaseStatus::I);
             // there should only be one infected person in the simulation
             assert_eq!(
                 n_eff_inv_infec(&mut context),

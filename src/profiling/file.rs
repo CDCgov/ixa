@@ -34,12 +34,6 @@ struct SerializableExecutionStatistics {
     max_memory_usage: u64,
     cpu_time: SerializableDuration,
     wall_time: SerializableDuration,
-
-    // Per person stats
-    population: usize,
-    cpu_time_per_person: SerializableDuration,
-    wall_time_per_person: SerializableDuration,
-    memory_per_person: u64,
 }
 
 #[cfg(feature = "profiling")]
@@ -49,10 +43,6 @@ impl From<ExecutionStatistics> for SerializableExecutionStatistics {
             max_memory_usage: value.max_memory_usage,
             cpu_time: SerializableDuration(value.cpu_time),
             wall_time: SerializableDuration(value.wall_time),
-            population: value.population,
-            cpu_time_per_person: SerializableDuration(value.cpu_time_per_person),
-            wall_time_per_person: SerializableDuration(value.wall_time_per_person),
-            memory_per_person: value.memory_per_person,
         }
     }
 }
@@ -201,10 +191,6 @@ mod tests {
             max_memory_usage: 1024 * 1024,
             cpu_time: Duration::from_secs(1),
             wall_time: Duration::from_secs(2),
-            population: 1000,
-            cpu_time_per_person: Duration::from_micros(1000),
-            wall_time_per_person: Duration::from_micros(2000),
-            memory_per_person: 1024,
         };
 
         write_profiling_data_to_file(&file_path, exec_stats).expect("Failed to write file");
@@ -221,8 +207,6 @@ mod tests {
         assert!(json["named_counts"].is_array());
         assert!(json["named_spans"].is_array());
         assert!(json["computed_statistics"].is_object());
-
-        assert_eq!(json["execution_statistics"]["population"], 1000);
         assert_eq!(
             json["execution_statistics"]["max_memory_usage"],
             1024 * 1024
@@ -256,10 +240,6 @@ mod tests {
             max_memory_usage: 2048,
             cpu_time: Duration::from_secs_f64(1.5),
             wall_time: Duration::from_secs_f64(2.5),
-            population: 500,
-            cpu_time_per_person: Duration::from_micros(3000),
-            wall_time_per_person: Duration::from_micros(5000),
-            memory_per_person: 4,
         };
 
         write_profiling_data_to_file(&file_path, exec_stats).expect("Failed to write file");
