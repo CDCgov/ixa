@@ -7,7 +7,7 @@ use crate::entity::query::{Query, QueryResultIterator};
 use crate::entity::{Entity, EntityId, EntityIterator};
 use crate::hashing::IndexSet;
 use crate::rand::Rng;
-use crate::{warn, Context, ContextRandomExt, RngId};
+use crate::{warn, Context, ContextRandomExt, IxaError, RngId};
 
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
@@ -15,7 +15,7 @@ pub trait ContextEntitiesExt {
     fn add_entity<E: Entity, PL: PropertyList<E>>(
         &mut self,
         property_list: PL,
-    ) -> Result<EntityId<E>, String>;
+    ) -> Result<EntityId<E>, IxaError>;
 
     /// Fetches the property value set for the given `entity_id`.
     ///
@@ -109,15 +109,13 @@ impl ContextEntitiesExt for Context {
     fn add_entity<E: Entity, PL: PropertyList<E>>(
         &mut self,
         property_list: PL,
-    ) -> Result<EntityId<E>, String> {
+    ) -> Result<EntityId<E>, IxaError> {
         // Check that the properties in the list are distinct.
-        if let Err(msg) = PL::validate() {
-            return Err(format!("invalid property list: {}", msg));
-        }
+        PL::validate()?;
 
         // Check that all required properties are present.
         if !PL::contains_required_properties() {
-            return Err("initialization list is missing required properties".to_string());
+            return Err("initialization list is missing required properties".into());
         }
 
         // Now that we know we will succeed, we create the entity.
@@ -480,10 +478,10 @@ mod tests {
         let mut context = Context::new();
         let result = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
 
-        assert_eq!(
+        assert!(matches!(
             result,
-            Err("initialization list is missing required properties".to_string())
-        );
+            Err(crate::IxaError::IxaError(ref msg)) if msg == "initialization list is missing required properties"
+        ));
     }
 
     #[test]
