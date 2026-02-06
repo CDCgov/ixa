@@ -1,27 +1,26 @@
 use std::path::PathBuf;
 
-use ixa::people::PersonPropertyChangeEvent;
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use crate::{InfectionStatus, InfectionStatusValue, Parameters};
+use crate::{InfectionStatus, Parameters, Person};
 
-#[derive(Serialize, Deserialize, Clone)]
+type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
+
+#[derive(Serialize, Clone)]
 struct IncidenceReportItem {
     time: f64,
     person_id: String,
-    infection_status: InfectionStatusValue,
+    infection_status: InfectionStatus,
 }
 
 define_report!(IncidenceReportItem);
 
-fn handle_infection_status_change(
-    context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatus>,
-) {
+fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
-        person_id: format!("{}", event.person_id),
+        person_id: format!("{}", event.entity_id),
         infection_status: event.current,
     });
 }
@@ -39,10 +38,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         .directory(output_dir)
         .overwrite(true); // Not recommended for production. See `basic-infection/incidence-report`.;
     context.add_report::<IncidenceReportItem>(&parameters.output_file)?;
-    context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
-            handle_infection_status_change(context, event);
-        },
-    );
+    context.subscribe_to_event::<InfectionStatusEvent>(|context, event| {
+        handle_infection_status_change(context, event);
+    });
     Ok(())
 }

@@ -1,8 +1,10 @@
-use ixa::people::{PersonId, PersonPropertyChangeEvent};
+use ixa::entity::events::PropertyChangeEvent;
 use ixa::prelude::*;
 use rand_distr::Exp;
 
-use crate::{InfectionStatus, InfectionStatusValue, Parameters};
+use crate::{InfectionStatus, Parameters, Person, PersonId};
+
+pub type InfectionStatusEvent = PropertyChangeEvent<Person, InfectionStatus>;
 
 define_rng!(InfectionRng);
 
@@ -15,25 +17,20 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / infection_duration).unwrap());
     context.add_plan(recovery_time, move |context| {
-        context.set_person_property(person_id, InfectionStatus, InfectionStatusValue::R);
+        context.set_property(person_id, InfectionStatus::R);
     });
 }
 
-fn handle_infection_status_change(
-    context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionStatus>,
-) {
-    if matches!(event.current, InfectionStatusValue::I) {
-        schedule_recovery(context, event.person_id);
+fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {
+    if event.current == InfectionStatus::I {
+        schedule_recovery(context, event.entity_id);
     }
 }
 
 pub fn init(context: &mut Context) {
-    context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
-            handle_infection_status_change(context, event);
-        },
-    );
+    context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
+        handle_infection_status_change(context, event);
+    });
 }
 
 #[cfg(test)]
@@ -62,24 +59,22 @@ mod test {
         context.init_random(42);
         init(&mut context);
 
-        context.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
-                if matches!(event.current, InfectionStatusValue::R) {
-                    *context.get_data_mut(RecoveryPlugin) += 1;
-                }
-            },
-        );
+        context.subscribe_to_event(move |context, event: InfectionStatusEvent| {
+            if event.current == InfectionStatus::R {
+                *context.get_data_mut(RecoveryPlugin) += 1;
+            }
+        });
 
         let population_size: usize = 10;
         for _ in 0..population_size {
-            let person = context.add_person(()).unwrap();
+            let person: PersonId = context.add_entity(()).unwrap();
 
             context.add_plan(1.0, move |context| {
-                context.set_person_property(person, InfectionStatus, InfectionStatusValue::I);
+                context.set_property(person, InfectionStatus::I);
             });
         }
         context.execute();
-        assert_eq!(population_size, context.get_current_population());
+        assert_eq!(population_size, context.get_entity_count::<Person>());
         let recovered_size: usize = *context.get_data(RecoveryPlugin);
 
         assert_eq!(recovered_size, population_size);

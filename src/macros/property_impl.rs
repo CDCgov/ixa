@@ -2,11 +2,11 @@
 
 Macros for implementing properties.
 
-# [`define_property!`]
+# [`define_property!`][macro@crate::define_property]
 
-For the most common cases, use the [`define_property!`] macro. This macro defines a struct or enum
+For the most common cases, use the [`define_property!`][macro@crate::define_property] macro. This macro defines a struct or enum
 with the standard derives required by the [`Property`][crate::entity::property::Property] trait and implements [`Property`][crate::entity::property::Property] (via
-[`impl_property!`]) for you.
+[`impl_property!`][macro@crate::impl_property]) for you.
 
 ```rust,ignore
 define_property!(struct Age(u8), Person);
@@ -33,9 +33,9 @@ specifying the default value, but it's not much harder to specify default values
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
 specify the visibility. A `pub` visibility is added automatically in the expansion.
 
-# [`impl_property!`]
+# [`impl_property!`][macro@crate::impl_property]
 
-You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`] macro. This macro defines the
+You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
 have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
 
@@ -71,9 +71,9 @@ pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 ```
 
-# [`impl_property!`] with options
+# [`impl_property!`][macro@crate::impl_property] with options
 
-The [`impl_property!`] macro gives you much more control over the implementation of your
+The [`impl_property!`][macro@crate::impl_property] macro gives you much more control over the implementation of your
 property type. It takes optional keyword arguments for things like the default value,
 initialization strategy, and how the property is converted to a string for display.
 
@@ -120,7 +120,7 @@ impl_property!(
 */
 
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
-/// [`impl_property!`] for it. This macro provides a concise shorthand for defining
+/// [`impl_property!`][macro@crate::impl_property] for it. This macro provides a concise shorthand for defining
 /// simple property types that follow the same derive and implementation pattern.
 ///
 /// The macro supports the following forms:
@@ -133,7 +133,8 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
+/// # use ixa::{impl_property, define_entity};
+/// # use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub struct Age(u8);
@@ -153,7 +154,8 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
+/// # use ixa::{impl_property, define_entity};
+/// # use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
@@ -175,7 +177,8 @@ impl_property!(
 /// ```
 /// Expands to:
 /// ```rust
-/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
+/// # use ixa::{impl_property, define_entity};
+/// # use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
@@ -193,7 +196,7 @@ impl_property!(
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
-///   fields), define the type manually and then call [`impl_property!`] directly.
+///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
 #[macro_export]
 macro_rules! define_property {
     // Struct (tuple) with single Option<T> field (special case)
@@ -260,7 +263,7 @@ macro_rules! define_property {
 /// Implements the [`Property`][crate::entity::property::Property] trait for the given property type and entity.
 ///
 /// Use this macro when you want to implement the `Property<E: Entity>` trait for a type you have declared yourself.
-/// You might want to declare your own property type yourself instead of using the [`define_property!`] macro if
+/// You might want to declare your own property type yourself instead of using the [`define_property!`][macro@crate::define_property] macro if
 /// - you want a visibility other than `pub`
 /// - you want to derive additional traits
 /// - your type definition requires attribute proc-macros or other special syntax (for example, deriving
@@ -272,7 +275,8 @@ macro_rules! define_property {
 /// trait for an enum type, which requires the proc-macro attribute `#[default]` on one of the variants.
 ///
 /// ```rust
-/// # use ixa::{impl_property, define_entity}; use serde::Serialize;
+/// # use ixa::{impl_property, define_entity};
+/// # use serde::Serialize;
 /// # define_entity!(Person);
 /// #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
@@ -507,9 +511,9 @@ macro_rules! impl_property {
     };
 }
 
-/// The "derived" variant of [`define_property!`] for defining simple derived property types.
+/// The "derived" variant of [`define_property!`][macro@crate::define_property] for defining simple derived property types.
 /// Defines a `struct` or `enum` with a standard set of derives and automatically invokes
-/// [`impl_derived_property!`] for it.
+/// [`impl_derived_property!`][macro@crate::impl_derived_property] for it.
 ///
 /// Defines a derived property with the following parameters:
 /// * Property type declaration: A struct or enum declaration.
@@ -517,7 +521,7 @@ macro_rules! impl_property {
 /// * `[$($dependency),+]`: A list of person properties the derived property depends on.
 /// * `[$(global_dependency),*]`: A list of global properties the derived property depends on. Can optionally be omitted if empty.
 /// * `$calculate`: A closure that takes the values of each dependency and returns the derived value.
-/// * Optional parameters: The same optional parameters accepted by [`impl_property!`].
+/// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property].
 #[macro_export]
 macro_rules! define_derived_property {
     // The calls to `$crate::impl_derived_property!` are all the same except for
@@ -652,9 +656,9 @@ macro_rules! define_derived_property {
 
 /// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
 ///
-/// Accepts the same parameters as [`define_derived_property!`], except the first parameter is the name of a
+/// Accepts the same parameters as [`define_derived_property!`][macro@crate::define_derived_property], except the first parameter is the name of a
 /// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
-/// of [`impl_property!`]. It calls [`impl_property!`] with the appropriate derived property parameters.
+/// of [`impl_property!`][macro@crate::impl_property]. It calls [`impl_property!`][macro@crate::impl_property] with the appropriate derived property parameters.
 #[macro_export]
 macro_rules! impl_derived_property {
         (

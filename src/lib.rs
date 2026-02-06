@@ -59,17 +59,9 @@ pub use network::{ContextNetworkExt, Edge, EdgeType};
 
 pub mod macros;
 
-pub mod people;
-pub use people::{
-    ContextPeopleExt, PersonCreatedEvent, PersonId, PersonProperty, PersonPropertyChangeEvent,
-};
-
 pub mod plan;
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
-
-pub mod tabulator;
-pub use tabulator::Tabulator;
 
 pub mod report;
 pub use report::{ConfigReportOptions, ContextReportExt, Report};
@@ -93,9 +85,6 @@ pub mod progress;
 pub mod external_api;
 pub mod hashing;
 pub mod numeric;
-
-#[cfg(feature = "web_api")]
-pub mod web_api;
 
 // Re-export for macros
 pub use ixa_derive::{

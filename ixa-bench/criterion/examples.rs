@@ -16,24 +16,8 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             context
         });
     });
-    criterion.bench_function("example-basic-infection-legacy", |bencher| {
-        bencher.iter_with_large_drop(|| {
-            let mut context = Context::new();
-            basic_infection_initialize(&mut context);
-            context.execute();
-            context
-        });
-    });
 
     criterion.bench_function("example-births-deaths", |bencher| {
-        bencher.iter_with_large_drop(|| {
-            let mut context = Context::new();
-            births_deaths_initialize(&mut context, output_dir.path());
-            context.execute();
-            context
-        });
-    });
-    criterion.bench_function("example-births-deaths-legacy", |bencher| {
         bencher.iter_with_large_drop(|| {
             let mut context = Context::new();
             births_deaths_initialize(&mut context, output_dir.path());

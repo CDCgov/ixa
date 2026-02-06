@@ -1,17 +1,24 @@
 use ixa::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use crate::parameters_loader::Parameters;
 
-#[derive(Deserialize, Serialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum DiseaseStatusValue {
-    S,
-    I,
-    R,
-}
+define_entity!(Person);
 
-define_person_property_with_default!(DiseaseStatus, DiseaseStatusValue, DiseaseStatusValue::S);
-define_person_property_with_default!(InfectionTime, Option<f64>, None);
+define_property!(
+    enum DiseaseStatus {
+        S,
+        I,
+        R,
+    },
+    Person,
+    default_const = DiseaseStatus::S
+);
+
+define_property!(
+    struct InfectionTime(pub Option<f64>),
+    Person,
+    default_const = InfectionTime(None)
+);
 
 pub fn init(context: &mut Context) {
     let parameters = context
@@ -19,6 +26,6 @@ pub fn init(context: &mut Context) {
         .unwrap()
         .clone();
     for _ in 0..parameters.population {
-        context.add_person(()).unwrap();
+        let _: PersonId = context.add_entity(()).unwrap();
     }
 }

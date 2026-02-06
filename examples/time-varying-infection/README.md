@@ -16,8 +16,8 @@ The goal of this example is two-fold:
 2. Provide a template from which we can bench-test complicated examples of
    time-varying infection to explore the need for us to establish `ixa`
    standards for modeling time-varying rates.
-3. Bonus: the basic-infection example did not use `ixa`'s internal `people` or
-   `global_properties` modules, so this example also updates to using the
+3. Bonus: the basic-infection example did not use `ixa`'s internal
+   `global_properties` module, so this example also updates to using the
    built-in functionality.
 
 Some aspects worth thinking about standardizing on time-varying rates:
@@ -158,31 +158,39 @@ use roots::find_root_brent;
 use reikna::integral::integrate;
 define_rng!(InfectionRng);
 
-pub enum DiseaseStatusValue {
-    S, I, R
-}
+define_entity!(Person);
 
-define_person_property_with_default!(DiseaseStatus,
-                                     DiseaseStatusValue,
-                                     DiseaseStatusValue::S);
+define_property!(
+    enum DiseaseStatus {
+        S,
+        I,
+        R,
+    },
+    Person,
+    default_const = DiseaseStatus::S
+);
 
-define_person_property_with_default!(InfectionTime, Option<f64>, None);
+define_property!(
+    struct InfectionTime(pub Option<f64>),
+    Person,
+    default_const = InfectionTime(None)
+);
 
 fn init(context: &mut Context) {
     // let deviled eggs be our food borne illness
     // as soon as a person enters the simulation, they are exposed to deviled eggs
     // based on foi(t), they will have their infection planned at a given time
-    context.subscribe_to_event(move |context, event: PersonCreatedEvent| {
+    context.subscribe_to_event(move |context, event: EntityCreatedEvent<Person>| {
         expose_person_to_deviled_eggs(context, event);
     });
 }
 
 fn expose_person_to_deviled_eggs(context: &mut Context,
-                                 person_created_event: PersonCreatedEvent) {
+                                 person_created_event: EntityCreatedEvent<Person>) {
     // when the person is exposed to deviled eggs, make a plan for them to fall
     // sick based on foi(t), where inverse sampling is used to draw times from
     // the corresponding distribution
-    inverse_sampling_infection(context, person_created_event.person_id());
+    inverse_sampling_infection(context, person_created_event.entity_id);
 }
 
 // parameterize the foi
@@ -190,7 +198,7 @@ fn foi(t: f64, sin_shift: f64) -> f64 {
     f64::sin(t + sin_shift) + 1 // foi must always be greater than 1
 }
 
-fn inverse_sampling_infection(context: &mut Context, person_id: PersonID) {
+fn inverse_sampling_infection(context: &mut Context, person_id: PersonId) {
     // random exponential value
     let s: f64 = context.sample_distr(InfectionRng, Exp1);
     // get the time by following the formula described above
@@ -203,10 +211,10 @@ fn inverse_sampling_infection(context: &mut Context, person_id: PersonID) {
     let t = find_root_brent(0f64, 100f64, // lower and upper bounds for the root finding
                             f_int_shifted).unwrap();
     context.add_plan(t, move |context| {
-        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::I);
+        context.set_property(person_id, DiseaseStatus::I);
         // for reasons that will become apparent with the recovery rate example,
         // we also need to record the time at which a person becomes infected
-        context.set_person_property(person_id, InfectionTime, t);
+        context.set_property(person_id, InfectionTime(Some(t)));
     });
 }
 ```
@@ -330,16 +338,16 @@ define_rng!(RecoveryRng);
 
 fn init(context: &mut Context) {
     context.subscribe_to_event(move |context,
-                               event: PersonPropertyChangeEvent<DiseaseStatus>| {
+                               event: PropertyChangeEvent<Person, DiseaseStatus>| {
         handle_infection_status_change(context, event);
     });
 }
 
 fn handle_infection_status_change(context: &mut Context,
-                                  event: PersonPropertyChangeEvent<DiseaseStatus>) {
+                                  event: PropertyChangeEvent<Person, DiseaseStatus>) {
     let parameters = context.get_global_property_value(Parameters).clone();
-    if matches!(event.current, DiseaseStatusValue::I) {
-        evaluate_recovery(context, event.person_id, parameters.foi * 2.0 + 1.0 / parameters.infection_distribution);
+    if event.current == DiseaseStatus::I {
+        evaluate_recovery(context, event.entity_id, parameters.foi * 2.0 + 1.0 / parameters.infection_duration);
     }
 }
 
@@ -350,25 +358,19 @@ fn recovery_cdf(context: &mut Context, time_spent_infected: f64) -> f64 {
 fn n_effective_infected(context: &mut Context) -> f64 {
     let parameters = context.get_global_property_value(Parameters).clone();
     // get number of infected people
-    let mut n_infected = 0;
-    for usize_id in 0..context.get_current_population() {
-        if matches!(context.get_person_property(context.get_person_id(usize_id),
-                                       DiseaseStatus), DiseaseStatusValue::I) {
-                                        n_infected += 1;
-                                       }
-    }
-    parameters.gamma / n_infected
+    let n_infected = context.query_entity_count::<Person, _>((DiseaseStatus::I,));
+    (1.0 / parameters.infection_duration) / (n_infected as f64)
 }
 
 fn evaluate_recovery(context: &mut Context, person_id: PersonId, resampling_rate: f64) {
     // get time person has spent infected
-    let time_spent_infected = context.get_current_time() - context.get_person_property(person_id,
-    InfectionTime)
+    let InfectionTime(infection_time) = context.get_property(person_id);
+    let time_spent_infected = context.get_current_time() - infection_time.unwrap();
     // evaluate whether recovery has happened by this time or not
     let recovery_probability = recovery_cdf(context, time_spent_infected);
     if context.sample_bool(RecoveryRng, recovery_probability) {
         // recovery has happened by now
-        context.set_person_property(person_id, DiseaseStatus, DiseaseStatusValue::R);
+        context.set_property(person_id, DiseaseStatus::R);
     } else {
         // add plan for recovery evaluation to happen again at fastest rate
         context.add_plan(context.get_current_time() + context.sample_distr(ExposureRng,

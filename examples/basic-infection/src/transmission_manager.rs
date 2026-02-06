@@ -45,7 +45,7 @@ mod test {
     use ixa::context::Context;
 
     use super::*;
-    use crate::people::{InfectionStatus, PersonId};
+    use crate::people::InfectionStatus;
     use crate::SEED;
 
     #[test]
