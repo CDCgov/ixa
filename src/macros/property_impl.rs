@@ -826,7 +826,7 @@ mod tests {
 
     use serde::Serialize;
 
-    use crate::entity::Query;
+    use crate::entity::{PropertyIndexType, Query};
     use crate::prelude::*;
 
     define_entity!(Person);
@@ -975,22 +975,22 @@ mod tests {
         let mut indexed_count = 0;
         if context
             .get_property_value_store::<Person, ProfileNAW>()
-            .index
-            .is_some()
+            .index_type()
+            != PropertyIndexType::Unindexed
         {
             indexed_count += 1;
         }
         if context
             .get_property_value_store::<Person, ProfileAWN>()
-            .index
-            .is_some()
+            .index_type()
+            != PropertyIndexType::Unindexed
         {
             indexed_count += 1;
         }
         if context
             .get_property_value_store::<Person, ProfileWAN>()
-            .index
-            .is_some()
+            .index_type()
+            != PropertyIndexType::Unindexed
         {
             indexed_count += 1;
         }

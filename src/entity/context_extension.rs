@@ -2,6 +2,7 @@ use std::any::{Any, TypeId};
 
 use crate::entity::entity_set::EntitySetIterator;
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
+use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::Query;
@@ -215,7 +216,8 @@ impl ContextEntitiesExt for Context {
 
     fn index_property<E: Entity, P: Property<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
-        property_store.set_property_indexed::<P>(true);
+        property_store
+            .set_property_indexed::<P>(crate::entity::index::PropertyIndexType::FullIndex);
     }
     #[cfg(test)]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
@@ -233,21 +235,21 @@ impl ContextEntitiesExt for Context {
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
-            // The `index_unindexed_people` method returns `false` if the property is not indexed.
-            if property_store.index_unindexed_entities_for_property_id(self, multi_property_id) {
-                // Fetch the right hash bucket from the index and return it.
-                let property_value_store = property_store.get_with_id(multi_property_id);
-                if let Some(people_set) =
-                    property_value_store.get_index_set_with_hash(query.multi_property_value_hash())
-                {
+            match property_store.get_index_set_with_hash_for_property_id(
+                self,
+                multi_property_id,
+                query.multi_property_value_hash(),
+            ) {
+                IndexSetResult::Set(people_set) => {
                     callback(&people_set);
-                } else {
-                    // Since we already checked that this multi-property is indexed, it must be that
-                    // there are no entities having this property value.
+                    return;
+                }
+                IndexSetResult::Empty => {
                     let people_set = IndexSet::default();
                     callback(&people_set);
+                    return;
                 }
-                return;
+                IndexSetResult::Unsupported => {}
             }
             // If the property is not indexed, we fall through.
         }
@@ -276,19 +278,13 @@ impl ContextEntitiesExt for Context {
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
-            // The `index_unindexed_people` method returns `false` if the property is not indexed.
-            if property_store.index_unindexed_entities_for_property_id(self, multi_property_id) {
-                // Fetch the right hash bucket from the index and return it.
-                let property_value_store = property_store.get_with_id(multi_property_id);
-                if let Some(people_set) =
-                    property_value_store.get_index_set_with_hash(query.multi_property_value_hash())
-                {
-                    return people_set.len();
-                } else {
-                    // Since we already checked that this multi-property is indexed, it must be that
-                    // there are no entities having this property value.
-                    return 0;
-                }
+            match property_store.get_index_count_with_hash_for_property_id(
+                self,
+                multi_property_id,
+                query.multi_property_value_hash(),
+            ) {
+                IndexCountResult::Count(count) => return count,
+                IndexCountResult::Unsupported => {}
             }
             // If the property is not indexed, we fall through.
         }

@@ -36,10 +36,11 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::EntityId;
+use crate::entity::{EntityId, HashValueType, PropertyIndexType};
 use crate::Context;
 
 /// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
@@ -335,19 +336,19 @@ impl<E: Entity> PropertyStore<E> {
         self.items
             .get(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
-            .is_indexed()
+            .index_type()
+            != PropertyIndexType::Unindexed
     }
 
-    /// If `is_indexed` is `true`, creates an index for `P` if one does not exist. If `is_indexed` is `false`,
-    /// removes any existing index for `P`.
+    /// Sets the index type for `P`. Passing `PropertyIndexType::Unindexed` removes any existing index for `P`.
     ///
     /// Note that the index might not live in the `PropertyValueStore` associated with `P` itself, as in the case
     /// of multi-properties which share a single index among all equivalent multi-properties.
-    pub fn set_property_indexed<P: Property<E>>(&mut self, is_indexed: bool) {
+    pub fn set_property_indexed<P: Property<E>>(&mut self, index_type: PropertyIndexType) {
         let property_value_store = self.items
             .get_mut(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
-        property_value_store.set_indexed(is_indexed);
+        property_value_store.set_indexed(index_type);
     }
 
     /// Updates the index of the property having the given ID for any entities that have been added to the context
@@ -357,8 +358,26 @@ impl<E: Entity> PropertyStore<E> {
         &self,
         context: &Context,
         property_id: usize,
-    ) -> bool {
+    ) {
         self.items[property_id].index_unindexed_entities(context)
+    }
+
+    pub fn get_index_set_with_hash_for_property_id(
+        &self,
+        context: &Context,
+        property_id: usize,
+        hash: HashValueType,
+    ) -> IndexSetResult<'_, E> {
+        self.items[property_id].get_index_set_with_hash_result(context, hash)
+    }
+
+    pub fn get_index_count_with_hash_for_property_id(
+        &self,
+        context: &Context,
+        property_id: usize,
+        hash: HashValueType,
+    ) -> IndexCountResult {
+        self.items[property_id].get_index_count_with_hash_result(context, hash)
     }
 }
 

@@ -36,7 +36,7 @@ mod entity;
 pub mod entity_set;
 pub mod entity_store;
 pub mod events;
-mod index;
+pub(crate) mod index;
 pub mod multi_property;
 pub mod property;
 pub mod property_list;
@@ -49,6 +49,7 @@ pub mod query;
 pub use context_extension::ContextEntitiesExt;
 pub use entity::*;
 pub use entity_set::EntitySetIterator;
+pub use index::PropertyIndexType;
 pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
 
