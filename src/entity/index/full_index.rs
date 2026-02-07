@@ -32,13 +32,13 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
     }
 
     /// Inserts an entity into the set associated with `key`, creating a new set if one does not yet
-    /// exist. Returns a `bool` according to whether the `entity_id` already existed in the set.
-    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) -> bool {
+    /// exist.
+    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
         trace!("adding entity {:?} to index {}", entity_id, P::name());
         let hash = P::hash_property_value(key);
 
-        // > `hasher` is called if entries need to be moved or copied to a new table.
-        // > This must return the same hash value that each entry was inserted with.
+        // `hasher` is called if entries need to be moved or copied to a new table.
+        // This must return the same hash value that each entry was inserted with.
         #[allow(clippy::cast_possible_truncation)]
         let hasher = |(stored_value, _stored_set): &_| P::hash_property_value(stored_value) as u64;
         // Equality is determined by comparing the full 128-bit hashes. We do not expect any
@@ -50,7 +50,7 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
             .or_insert_with(|| (*key, IndexSet::default()))
             .get_mut()
             .1
-            .insert(entity_id)
+            .insert(entity_id);
     }
 
     pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
@@ -111,9 +111,9 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
     }
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
-    use super::FullIndex;
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
 
