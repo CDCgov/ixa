@@ -12,6 +12,7 @@ mod value_count_index;
 pub use full_index::*;
 pub use value_count_index::*;
 
+#[derive(Debug)]
 pub enum IndexSetResult<'a, E: Entity> {
     /// The index type cannot satisfy the query.
     Unsupported,
@@ -21,6 +22,7 @@ pub enum IndexSetResult<'a, E: Entity> {
     Set(Ref<'a, IndexSet<EntityId<E>>>),
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum IndexCountResult {
     /// The index type cannot satisfy the query.
     Unsupported,

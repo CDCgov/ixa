@@ -2,7 +2,7 @@ use std::any::{Any, TypeId};
 
 use crate::entity::entity_set::EntitySetIterator;
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
-use crate::entity::index::{IndexCountResult, IndexSetResult};
+use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::Query;
@@ -41,6 +41,12 @@ pub trait ContextEntitiesExt {
     /// The actual computation of the index is done lazily as needed upon execution of queries,
     /// not when this method is called.
     fn index_property<E: Entity, P: Property<E>>(&mut self);
+
+    /// Enables value-count indexing of property values for the property `P`.
+    ///
+    /// If the property already has a full index, that index is left unchanged, as it
+    /// already supports value-count queries.
+    fn index_property_counts<E: Entity, P: Property<E>>(&mut self);
 
     /// Checks if a property `P` is indexed.
     ///
@@ -216,14 +222,23 @@ impl ContextEntitiesExt for Context {
 
     fn index_property<E: Entity, P: Property<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
-        property_store
-            .set_property_indexed::<P>(crate::entity::index::PropertyIndexType::FullIndex);
+        property_store.set_property_indexed::<P>(PropertyIndexType::FullIndex);
     }
+
+    fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        let current_index_type = property_store.get::<P>().index_type();
+        if current_index_type != PropertyIndexType::FullIndex {
+            property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
+        }
+    }
+
     #[cfg(test)]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
         let property_store = self.entity_store.get_property_store::<E>();
         property_store.is_property_indexed::<P>()
     }
+
     fn with_query_results<E: Entity, Q: Query<E>>(
         &self,
         query: Q,
@@ -468,6 +483,66 @@ mod tests {
         // Age is the only required property
         let _person3 = context.add_entity((Age(120),)).unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 3);
+    }
+
+    // Helper for index tests
+    #[derive(Copy, Clone)]
+    enum IndexMode {
+        Unindexed,
+        FullIndex,
+        ValueCountIndex,
+    }
+
+    // Returns `(context, existing_value, missing_value)`
+    fn setup_context_for_index_tests(index_mode: IndexMode) -> (Context, Age, Age) {
+        let mut context = Context::new();
+        match index_mode {
+            IndexMode::Unindexed => {}
+            IndexMode::FullIndex => context.index_property::<Person, Age>(),
+            IndexMode::ValueCountIndex => context.index_property_counts::<Person, Age>(),
+        }
+
+        let existing_value = Age(12);
+        let missing_value = Age(99);
+
+        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity((existing_value,)).unwrap();
+
+        (context, existing_value, missing_value)
+    }
+
+    #[test]
+    fn query_results_respect_index_modes() {
+        let modes = [
+            IndexMode::Unindexed,
+            IndexMode::FullIndex,
+            IndexMode::ValueCountIndex,
+        ];
+
+        for mode in modes {
+            let (context, existing_value, missing_value) = setup_context_for_index_tests(mode);
+
+            let mut existing_len = 0;
+            context.with_query_results((existing_value,), &mut |people_set| {
+                existing_len = people_set.len();
+            });
+            assert_eq!(existing_len, 2);
+
+            let mut missing_len = 0;
+            context.with_query_results((missing_value,), &mut |people_set| {
+                missing_len = people_set.len();
+            });
+            assert_eq!(missing_len, 0);
+
+            let existing_count = context.query_result_iterator((existing_value,)).count();
+            assert_eq!(existing_count, 2);
+
+            let missing_count = context.query_result_iterator((missing_value,)).count();
+            assert_eq!(missing_count, 0);
+
+            assert_eq!(context.query_entity_count((existing_value,)), 2);
+            assert_eq!(context.query_entity_count((missing_value,)), 0);
+        }
     }
 
     #[test]
