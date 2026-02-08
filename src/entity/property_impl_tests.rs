@@ -98,9 +98,9 @@ fn test_multi_property_ordering() {
     assert_eq!(ProfileNAW::index_id(), ProfileAWN::index_id());
     assert_eq!(ProfileNAW::index_id(), ProfileWAN::index_id());
 
-    let a_canonical: <ProfileNAW as Property<_>>::CanonicalValue = ProfileNAW::make_canonical(a);
-    let b_canonical: <ProfileAWN as Property<_>>::CanonicalValue = ProfileAWN::make_canonical(b);
-    let c_canonical: <ProfileWAN as Property<_>>::CanonicalValue = ProfileWAN::make_canonical(c);
+    let a_canonical: <ProfileNAW as PropertyDef<_>>::CanonicalValue = ProfileNAW::make_canonical(a);
+    let b_canonical: <ProfileAWN as PropertyDef<_>>::CanonicalValue = ProfileAWN::make_canonical(b);
+    let c_canonical: <ProfileWAN as PropertyDef<_>>::CanonicalValue = ProfileWAN::make_canonical(c);
 
     assert_eq!(a_canonical, b_canonical);
     assert_eq!(a_canonical, c_canonical);
@@ -180,7 +180,7 @@ fn test_multi_property_vs_property_query() {
         assert_eq!(
             Query::multi_property_value_hash(&example_query),
             ProfileNAW::hash_property_value(
-                &(Name("Alice"), Age(22), Weight(170.5)).make_canonical()
+                &ProfileNAW::make_canonical((Name("Alice"), Age(22), Weight(170.5)))
             )
         );
     }

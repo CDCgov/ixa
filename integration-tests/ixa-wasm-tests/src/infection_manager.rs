@@ -17,7 +17,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
     context.add_plan(recovery_time, move |context| {
-        context.set_property(person_id, InfectionStatus::R);
+        context.set_property::<_, InfectionStatus>(person_id, InfectionStatus::R);
     });
 }
 
@@ -69,7 +69,7 @@ mod test {
         let population_size = 10;
         for _ in 0..population_size {
             let person_id = context.add_entity((InfectionStatus::S,)).unwrap();
-            context.set_property(person_id, InfectionStatus::I);
+            context.set_property::<_, InfectionStatus>(person_id, InfectionStatus::I);
         }
 
         context.execute();

@@ -1,13 +1,23 @@
 [workspace]
 resolver = "2"
 members = [
-    "ixa-*",
+    "ixa-derive",
+    "ixa-fips",
+    # ixa-bench temporarily excluded during v2.0.0 refactor (depends on examples)
+    # "ixa-bench",
+    # Examples temporarily excluded during v2.0.0 refactor
+    # "examples/basic-infection",
+    # "examples/births-deaths",
+    # "examples/profiling",
+    "integration-tests/ixa-*",
+]
+exclude = [
+    "docs/book/models/disease_model",
     "examples/basic-infection",
     "examples/births-deaths",
     "examples/profiling",
-    "integration-tests/ixa-*",
+    "ixa-bench",
 ]
-exclude = ["docs/book/models/disease_model"]
 
 [workspace.package]
 edition = "2021"
@@ -147,9 +157,9 @@ tempfile.workspace = true
 reikna.workspace = true
 roots.workspace = true
 
-# Example Libraries
-ixa_example_basic_infection = { path = "examples/basic-infection" }
-ixa_example_births_deaths = { path = "examples/births-deaths" }
+# Example Libraries (temporarily excluded during v2.0.0 refactor)
+# ixa_example_basic_infection = { path = "examples/basic-infection" }
+# ixa_example_births_deaths = { path = "examples/births-deaths" }
 
 [workspace.lints.rust]
 mismatched_lifetime_syntaxes = "allow"

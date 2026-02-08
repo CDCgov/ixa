@@ -5,7 +5,7 @@ Macros for implementing properties.
 # [`define_property!`][macro@crate::define_property]
 
 For the most common cases, use the [`define_property!`][macro@crate::define_property] macro. This macro defines a struct or enum
-with the standard derives required by the [`Property`][crate::entity::property::Property] trait and implements [`Property`][crate::entity::property::Property] (via
+with the standard derives required by the [`PropertyDef`][crate::entity::property::PropertyDef] trait and implements [`PropertyDef`][crate::entity::property::PropertyDef] (via
 [`impl_property!`][macro@crate::impl_property]) for you.
 
 ```rust,ignore
@@ -27,7 +27,7 @@ define a compile-time constant default value for the property. This is an option
 If it is omitted, a value for the property must be supplied upon entity creation.
 
 The primary advantage of using this macro is that it automatically derives the list of traits every
-[`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
+[`PropertyDef`][crate::entity::property::PropertyDef] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
@@ -36,8 +36,8 @@ and to inner fields of tuple structs in the expansion.
 
 # [`impl_property!`][macro@crate::impl_property]
 
-You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
-[`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
+You can implement [`PropertyDef`][crate::entity::property::PropertyDef] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
+[`PropertyDef`][crate::entity::property::PropertyDef] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
 have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
 
 Some examples:
@@ -46,7 +46,7 @@ Some examples:
 define_entity!(Person);
 
 // The `define_property!` automatically adds `pub` visibility to the struct and its tuple
-// fields. If we want to restrict the visibility of our `Property` type, we can use the
+// fields. If we want to restrict the visibility of our `PropertyDef` type, we can use the
 // `impl_property!` macro instead. The only
 // catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -54,7 +54,7 @@ struct Age(pub u8);
 impl_property!(Age, Person);
 
 // Here we derive `Default`, which also requires an attribute on one
-// of the variants. (`Property` has its own independent mechanism for
+// of the variants. (`PropertyDef` has its own independent mechanism for
 // assigning default values for entities unrelated to the `Default` trait.)
 #[derive(Copy, Clone, Debug, PartialEq, Default, Serialize)]
 enum InfectionStatus {
@@ -92,9 +92,9 @@ impl_property!(
 );
 ```
 
-## Use case: `Property::CanonicalValue` different from `Self`
+## Use case: `PropertyDef::CanonicalValue` different from `Self`
 
-The `Property::CanonicalValue` type is used to store the property value in
+The `PropertyDef::CanonicalValue` type is used to store the property value in
 the index. If the property type is different from the value type, you can
 specify a custom canonical type using the `canonical_value` parameter, but
 you also must provide a conversion function to and from the canonical type.
@@ -201,6 +201,37 @@ impl_property!(
 ///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
 #[macro_export]
 macro_rules! define_property {
+    // ===== New-style ZST property marker =====
+
+    // Primitive ZST marker: define_property!(Age, u8);
+    // Generates a ZST struct `Age` that implements `IsProperty<Value = u8>`.
+    ($name:ident, $value_ty:ty) => {
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        pub struct $name;
+
+        impl serde::Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_unit()
+            }
+        }
+
+        impl $crate::entity::property::IsProperty for $name {
+            type Value = $value_ty;
+        }
+    };
+
+    // Enum property: define_property!(enum InfectionStatus { S, I, R });
+    // Generates the enum. `Property<InfectionStatus>` already implements `IsProperty<Value = InfectionStatus>`
+    // via the blanket `impl<T: AnyProperty> IsProperty for Property<T>`.
+    (enum $name:ident { $($variant:ident),* $(,)? }) => {
+        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
+        pub enum $name {
+            $($variant),*
+        }
+    };
+
+    // ===== Legacy wrapper-style property (backward compat) =====
+
     // Struct (tuple) with single Option<T> field (special case)
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
@@ -262,9 +293,9 @@ macro_rules! define_property {
     };
 }
 
-/// Implements the [`Property`][crate::entity::property::Property] trait for the given property type and entity.
+/// Implements the [`PropertyDef`][crate::entity::property::PropertyDef] trait for the given property type and entity.
 ///
-/// Use this macro when you want to implement the `Property<E: Entity>` trait for a type you have declared yourself.
+/// Use this macro when you want to implement the `PropertyDef<E: Entity>` trait for a type you have declared yourself.
 /// You might want to declare your own property type yourself instead of using the [`define_property!`][macro@crate::define_property] macro if
 /// - you want a visibility other than `pub`
 /// - you want to derive additional traits
@@ -296,7 +327,7 @@ macro_rules! define_property {
 ///
 /// Parameters must be given in the correct order.
 ///
-/// * `$property`: The identifier for the type implementing [`Property`][crate::entity::property::Property].
+/// * `$property`: The identifier for the type implementing [`PropertyDef`][crate::entity::property::PropertyDef].
 /// * `$entity`: The entity type this property is associated with.
 /// * Optional parameters (each may be omitted; defaults will be used):
 ///   * `compute_derived_fn = <expr>` — Function used to compute derived properties. Use `define_derived_property!` or
@@ -315,12 +346,12 @@ macro_rules! define_property {
 ///
 /// # Semantics
 /// - If `compute_derived_fn` is provided, the property is derived. In this case, `default_const` must be absent, and
-///   calling `Property::default_const()` results in a panic. Use `define_derived_property!` or `impl_derived_property!`
+///   calling `PropertyDef::default_const()` results in a panic. Use `define_derived_property!` or `impl_derived_property!`
 ///   instead of using this option directly.
 /// - If `default_const` is provided, the property is a non-derived constant property. In this case,
-///   `compute_derived_fn` must be absent, and calling `Property::compute_derived()` results in a panic.
-/// - If neither is provided, the property is non-derived and required/explicit; both `Property::default_const()` and
-///   `Property::compute_derived()` panic.
+///   `compute_derived_fn` must be absent, and calling `PropertyDef::compute_derived()` results in a panic.
+/// - If neither is provided, the property is non-derived and required/explicit; both `PropertyDef::default_const()` and
+///   `PropertyDef::compute_derived()` panic.
 /// - If both are provided, a compile-time error is emitted.
 #[macro_export]
 macro_rules! impl_property {
@@ -376,7 +407,7 @@ macro_rules! impl_property {
 
             // index_id_fn
             $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
-                <Self as $crate::entity::property::Property<$entity>>::id()
+                <Self as $crate::entity::property::PropertyDef<$entity>>::id()
             }),
 
             // collect_deps_fn
@@ -433,7 +464,7 @@ macro_rules! impl_property {
     // This is the purely syntactic implementation.
     (
         @__impl_property_common
-        $property:ident,           // The name of the type we are implementing `Property` for
+        $property:ident,           // The name of the type we are implementing `PropertyDef` for
         $entity:ident,             // The entity type this property is associated with
         $canonical_value:ty,       // If the type stored in the index is different from Self, the name of that type
         $initialization_kind:expr, // The kind of initialization this property has (implicit selection)
@@ -446,7 +477,8 @@ macro_rules! impl_property {
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
-        impl $crate::entity::property::Property<$entity> for $property {
+        impl $crate::entity::property::PropertyDef<$entity> for $property {
+            type Value = $property;
             type CanonicalValue = $canonical_value;
 
             fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
@@ -456,24 +488,24 @@ macro_rules! impl_property {
             fn compute_derived(
                 _context: &$crate::Context,
                 _entity_id: $crate::entity::EntityId<$entity>,
-            ) -> Self {
+            ) -> Self::Value {
                 ($compute_derived_fn)(_context, _entity_id)
             }
 
-            fn default_const() -> Self {
+            fn default_const() -> Self::Value {
                 $default_const
             }
 
-            fn make_canonical(self) -> Self::CanonicalValue {
-                ($make_canonical)(self)
+            fn make_canonical(value: Self::Value) -> Self::CanonicalValue {
+                ($make_canonical)(value)
             }
 
-            fn make_uncanonical(value: Self::CanonicalValue) -> Self {
+            fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value {
                 ($make_uncanonical)(value)
             }
 
-            fn get_display(&self) -> String {
-                ($display_impl)(self)
+            fn get_display(value: &Self::Value) -> String {
+                ($display_impl)(value)
             }
 
             fn id() -> usize {
@@ -507,6 +539,270 @@ macro_rules! impl_property {
                 #[ctor]
                 fn [<_register_property_ $entity:snake _ $property:snake>]() {
                     $ctor_registration
+                }
+            }
+        }
+    };
+}
+
+/// Implements [`PropertyDef<E>`] for a new-style ZST property marker that implements [`IsProperty`].
+///
+/// This macro generates the `PropertyDef<E>` impl where `type Value = <P as IsProperty>::Value`.
+/// It is used by `define_entity!` to associate properties with entities.
+///
+/// # Forms
+///
+/// ```rust,ignore
+/// // Required property (no default):
+/// impl_property_for_entity!(Age, Person);
+///
+/// // Property with default value:
+/// impl_property_for_entity!(Weight, Person, default_const = 0.0);
+///
+/// // Enum property via Property<T> marker, with default:
+/// impl_property_for_entity!(Property<InfectionStatus>, Person, default_const = InfectionStatus::Susceptible);
+/// ```
+#[macro_export]
+macro_rules! impl_property_for_entity {
+    // Required Property<T> (no default) — must come before $property:ty to avoid ambiguity
+    (Property<$inner:ident>, $entity:ident) => {
+        impl $crate::entity::property::PropertyDef<$entity>
+            for $crate::entity::property::Property<$inner>
+        {
+            type Value = <$crate::entity::property::Property<$inner>
+                as $crate::entity::property::IsProperty>::Value;
+            type CanonicalValue = <$crate::entity::property::Property<$inner>
+                as $crate::entity::property::IsProperty>::Value;
+
+            fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
+                $crate::entity::property::PropertyInitializationKind::Explicit
+            }
+
+            fn compute_derived(
+                _context: &$crate::Context,
+                _entity_id: $crate::entity::EntityId<$entity>,
+            ) -> Self::Value {
+                panic!("property is not derived")
+            }
+
+            fn default_const() -> Self::Value {
+                panic!("property has no default value")
+            }
+
+            fn make_canonical(value: Self::Value) -> Self::CanonicalValue {
+                value
+            }
+
+            fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value {
+                value
+            }
+
+            fn get_display(value: &Self::Value) -> String {
+                format!("{value:?}")
+            }
+
+            fn id() -> usize {
+                static INDEX: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+                let index = INDEX.load(std::sync::atomic::Ordering::Relaxed);
+                if index != usize::MAX {
+                    return index;
+                }
+
+                $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
+            }
+
+            fn index_id() -> usize {
+                <Self as $crate::entity::property::PropertyDef<$entity>>::id()
+            }
+
+            fn collect_non_derived_dependencies(
+                _result: &mut $crate::HashSet<usize>,
+            ) {
+            }
+        }
+
+        $crate::paste::paste! {
+            $crate::ctor::declarative::ctor! {
+                #[ctor]
+                fn [<_register_zst_property_ $entity:snake _ property_ $inner:snake>]() {
+                    $crate::entity::property_store::add_to_property_registry::<
+                        $entity,
+                        $crate::entity::property::Property<$inner>,
+                    >();
+                }
+            }
+        }
+    };
+
+    // Property<T> with default value — must come before $property:ty to avoid ambiguity
+    (Property<$inner:ident>, $entity:ident, default_const = $default_const:expr) => {
+        impl $crate::entity::property::PropertyDef<$entity>
+            for $crate::entity::property::Property<$inner>
+        {
+            type Value = <$crate::entity::property::Property<$inner>
+                as $crate::entity::property::IsProperty>::Value;
+            type CanonicalValue = <$crate::entity::property::Property<$inner>
+                as $crate::entity::property::IsProperty>::Value;
+
+            fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
+                $crate::entity::property::PropertyInitializationKind::Constant
+            }
+
+            fn compute_derived(
+                _context: &$crate::Context,
+                _entity_id: $crate::entity::EntityId<$entity>,
+            ) -> Self::Value {
+                panic!("property is not derived")
+            }
+
+            fn default_const() -> Self::Value {
+                $default_const
+            }
+
+            fn make_canonical(value: Self::Value) -> Self::CanonicalValue {
+                value
+            }
+
+            fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value {
+                value
+            }
+
+            fn get_display(value: &Self::Value) -> String {
+                format!("{value:?}")
+            }
+
+            fn id() -> usize {
+                static INDEX: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+                let index = INDEX.load(std::sync::atomic::Ordering::Relaxed);
+                if index != usize::MAX {
+                    return index;
+                }
+
+                $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
+            }
+
+            fn index_id() -> usize {
+                <Self as $crate::entity::property::PropertyDef<$entity>>::id()
+            }
+
+            fn collect_non_derived_dependencies(
+                _result: &mut $crate::HashSet<usize>,
+            ) {
+            }
+        }
+
+        $crate::paste::paste! {
+            $crate::ctor::declarative::ctor! {
+                #[ctor]
+                fn [<_register_zst_property_ $entity:snake _ property_ $inner:snake>]() {
+                    $crate::entity::property_store::add_to_property_registry::<
+                        $entity,
+                        $crate::entity::property::Property<$inner>,
+                    >();
+                }
+            }
+        }
+    };
+
+    // Required property (no default)
+    ($property:ty, $entity:ident) => {
+        $crate::impl_property_for_entity!(
+            @impl_common
+            $property,
+            $entity,
+            $crate::entity::property::PropertyInitializationKind::Explicit,
+            |_, _| panic!("property is not derived"),
+            panic!("property has no default value")
+        );
+    };
+
+    // Property with default value
+    ($property:ty, $entity:ident, default_const = $default_const:expr) => {
+        $crate::impl_property_for_entity!(
+            @impl_common
+            $property,
+            $entity,
+            $crate::entity::property::PropertyInitializationKind::Constant,
+            |_, _| panic!("property is not derived"),
+            $default_const
+        );
+    };
+
+    // Internal common implementation
+    (
+        @impl_common
+        $property:ty,
+        $entity:ident,
+        $initialization_kind:expr,
+        $compute_derived_fn:expr,
+        $default_const:expr
+    ) => {
+        impl $crate::entity::property::PropertyDef<$entity> for $property {
+            type Value = <$property as $crate::entity::property::IsProperty>::Value;
+            type CanonicalValue = <$property as $crate::entity::property::IsProperty>::Value;
+
+            fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
+                $initialization_kind
+            }
+
+            fn compute_derived(
+                _context: &$crate::Context,
+                _entity_id: $crate::entity::EntityId<$entity>,
+            ) -> Self::Value {
+                ($compute_derived_fn)(_context, _entity_id)
+            }
+
+            fn default_const() -> Self::Value {
+                $default_const
+            }
+
+            fn make_canonical(value: Self::Value) -> Self::CanonicalValue {
+                value
+            }
+
+            fn make_uncanonical(value: Self::CanonicalValue) -> Self::Value {
+                value
+            }
+
+            fn get_display(value: &Self::Value) -> String {
+                format!("{value:?}")
+            }
+
+            fn id() -> usize {
+                static INDEX: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+                let index = INDEX.load(std::sync::atomic::Ordering::Relaxed);
+                if index != usize::MAX {
+                    return index;
+                }
+
+                $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
+            }
+
+            fn index_id() -> usize {
+                <Self as $crate::entity::property::PropertyDef<$entity>>::id()
+            }
+
+            fn collect_non_derived_dependencies(
+                _result: &mut $crate::HashSet<usize>,
+            ) {
+                // No dependencies for non-derived properties
+            }
+        }
+
+        // Use paste to generate a unique ctor function name.
+        // We need to handle the case where $property is a path like Property<Foo>.
+        // paste! can handle this by converting the type name to snake case.
+        $crate::paste::paste! {
+            $crate::ctor::declarative::ctor! {
+                #[ctor]
+                fn [<_register_zst_property_ $entity:snake _ $property:snake>]() {
+                    $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
                 }
             }
         }
@@ -656,7 +952,7 @@ macro_rules! define_derived_property {
     };
 }
 
-/// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
+/// Implements the [`PropertyDef`][crate::entity::property::PropertyDef] trait for an existing type as a derived property.
 ///
 /// Accepts the same parameters as [`define_derived_property!`][macro@crate::define_derived_property], except the first parameter is the name of a
 /// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
@@ -747,7 +1043,7 @@ macro_rules! define_multi_property {
                         let mut displayed = String::from("(");
                         $(
                             displayed.push_str(
-                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
+                                &<$dependency as $crate::entity::property::PropertyDef<$entity>>::get_display([<_ $dependency:lower>])
                             );
                             displayed.push_str(", ");
                         )+
@@ -775,7 +1071,7 @@ macro_rules! define_multi_property {
                         // Slow path: initialize it.
                         // Multi-properties report a single index ID for all equivalent multi-properties,
                         // because they share a single `Index<E, P>` instance.
-                        let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
+                        let mut type_ids = [$( <$dependency as $crate::entity::property::PropertyDef<$entity>>::type_id() ),+];
                         type_ids.sort_unstable();
                         // Check if an index has already been assigned to this property set.
                         match $crate::entity::multi_property::type_ids_to_multi_property_index(&type_ids) {
@@ -786,7 +1082,7 @@ macro_rules! define_multi_property {
                             },
                             None => {
                                 // An index ID is not yet assigned. We will use our own index for this property.
-                                let index = <Self as $crate::entity::property::Property<$entity>>::id();
+                                let index = <Self as $crate::entity::property::PropertyDef<$entity>>::id();
                                 INDEX_ID.store(index, std::sync::atomic::Ordering::Relaxed);
                                 // And register the new index with this property set.
                                 $crate::entity::multi_property::register_type_ids_to_multi_property_index(
@@ -920,11 +1216,11 @@ mod tests {
         assert_eq!(ProfileNAW::index_id(), ProfileAWN::index_id());
         assert_eq!(ProfileNAW::index_id(), ProfileWAN::index_id());
 
-        let a_canonical: <ProfileNAW as Property<_>>::CanonicalValue =
+        let a_canonical: <ProfileNAW as PropertyDef<_>>::CanonicalValue =
             ProfileNAW::make_canonical(a);
-        let b_canonical: <ProfileAWN as Property<_>>::CanonicalValue =
+        let b_canonical: <ProfileAWN as PropertyDef<_>>::CanonicalValue =
             ProfileAWN::make_canonical(b);
-        let c_canonical: <ProfileWAN as Property<_>>::CanonicalValue =
+        let c_canonical: <ProfileWAN as PropertyDef<_>>::CanonicalValue =
             ProfileWAN::make_canonical(c);
 
         assert_eq!(a_canonical, b_canonical);
@@ -1004,9 +1300,11 @@ mod tests {
             assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
             assert_eq!(
                 Query::multi_property_value_hash(&example_query),
-                ProfileNAW::hash_property_value(
-                    &(Name("Alice"), Age(22), Weight(170.5)).make_canonical()
-                )
+                ProfileNAW::hash_property_value(&ProfileNAW::make_canonical((
+                    Name("Alice"),
+                    Age(22),
+                    Weight(170.5)
+                )))
             );
         }
 
@@ -1023,9 +1321,9 @@ mod tests {
         let child = context.add_entity::<Person, _>((Age(12),)).unwrap();
         let adult = context.add_entity::<Person, _>((Age(44),)).unwrap();
 
-        let senior_group: AgeGroup = context.get_property(senior);
-        let child_group: AgeGroup = context.get_property(child);
-        let adult_group: AgeGroup = context.get_property(adult);
+        let senior_group = context.get_property::<_, AgeGroup>(senior);
+        let child_group = context.get_property::<_, AgeGroup>(child);
+        let adult_group = context.get_property::<_, AgeGroup>(adult);
 
         assert_eq!(senior_group, AgeGroup::Senior);
         assert_eq!(child_group, AgeGroup::Child);

@@ -4,7 +4,7 @@ A `Network<E: Entity, ET: EdgeType<E>>` is the concrete type implementing the st
 
 An adjacency list is just a list of `Edge<E: Entity, ET: EdgeType<E>>`s. Thus, `Network` is just a list of
 lists of edges. This data structure shares the storage optimization behavior of
-`PropertyValueStoreCore<E: Entity, P: Property<E>>` in that it is indexed by `EntityId<E>` and grows as needed. The
+`PropertyValueStoreCore<E: Entity, P: PropertyDef<E>>` in that it is indexed by `EntityId<E>` and grows as needed. The
 difference is that it stores adjacency lists (edges) rather that properties and doesn't manage an index.
 
 This structure is only concerned with storage of unique edges. Other business logic is the responsibility

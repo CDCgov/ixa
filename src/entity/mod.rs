@@ -24,7 +24,7 @@ context.set_property::<MyProperty>(my_entity_id, some_property_value);
 
 This implementation of entities relies heavily on the "registry pattern" for efficient
 lookup of entities and properties. The idea is that concrete types implementing `Entity` (and
-separately, `Property<Entity>`) have a `ctor` that initializes a global (per concrete type)
+separately, `PropertyDef<Entity>`) have a `ctor` that initializes a global (per concrete type)
 static variable `index`. Each concrete `Entity` type is thus assigned a unique index ranging from
 `0` to `ENTITY_COUNT - 1`. Then instances of container types like `EntityStore` (respectively
 `PropertyStore`) use this index to look up the corresponding instances in a vector it owns.
@@ -51,5 +51,5 @@ pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
 
 /// The type used in the indexing infrastructure. This type alias is
-/// public, because it is used by any implementor of `Property<E: Entity>`.
+/// public, because it is used by any implementor of `PropertyDef<E: Entity>`.
 pub type HashValueType = u128;

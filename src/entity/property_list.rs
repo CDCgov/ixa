@@ -9,7 +9,7 @@ Both use cases have the following two constraints:
 2. The properties are distinct.
 
 We enforce the first constraint with the type system by only implementing `PropertyList<E>`
-for tuples of types implementing `Property<E>` (of length up to some max). Using properties
+for tuples of types implementing `PropertyDef<E>` (of length up to some max). Using properties
 for mismatched entities will result in a nice compile-time error at the point of use.
 
 Unfortunately, the second constraint has to be enforced at runtime. We implement `PropertyList::validate()` to do this.
@@ -24,7 +24,7 @@ use std::any::TypeId;
 use seq_macro::seq;
 
 use super::entity::{Entity, EntityId};
-use super::property::Property;
+use super::property::PropertyDef;
 use super::property_store::PropertyStore;
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
@@ -44,6 +44,19 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
 }
 
+// An entity marker type is an empty `PropertyList` for itself, allowing `add_entity(Person)`.
+impl<E: Entity + Copy + 'static> PropertyList<E> for E {
+    fn validate() -> Result<(), String> {
+        Ok(())
+    }
+    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
+        property_type_ids.is_empty()
+    }
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+}
+
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
 impl<E: Entity> PropertyList<E> for () {
     fn validate() -> Result<(), String> {
@@ -61,7 +74,7 @@ impl<E: Entity> PropertyList<E> for () {
 //     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
 //     whether the conflict actually exists.
 // A single `Property` is a `PropertyList` of length 1
-// impl<E: Entity, P: Property<E>> PropertyList<E> for P {
+// impl<E: Entity, P: PropertyDef<E>> PropertyList<E> for P {
 //     fn validate() -> Result<(), String> {
 //         Ok(())
 //     }
@@ -76,7 +89,7 @@ impl<E: Entity> PropertyList<E> for () {
 // }
 
 // A single `Property` tuple is a `PropertyList` of length 1
-impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
+impl<E: Entity, P: PropertyDef<E, Value = P>> PropertyList<E> for (P,) {
     fn validate() -> Result<(), String> {
         Ok(())
     }
@@ -94,7 +107,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
 macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
-            impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
+            impl<E: Entity, #( P~N: PropertyDef<E, Value = P~N>,)*> PropertyList<E> for (#(P~N, )*){
                 fn validate() -> Result<(), String> {
                     // For `Property` distinctness check
                     let property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];

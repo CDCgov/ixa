@@ -21,13 +21,13 @@
 use hashbrown::HashTable;
 use log::{error, trace};
 
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::{Entity, EntityId, HashValueType};
 use crate::hashing::IndexSet;
 
 /// The typed index.
 #[derive(Default)]
-pub struct Index<E: Entity, P: Property<E>> {
+pub struct Index<E: Entity, P: PropertyDef<E>> {
     // Primarily for debugging purposes
     #[allow(dead_code)]
     pub(super) name: &'static str,
@@ -42,7 +42,7 @@ pub struct Index<E: Entity, P: Property<E>> {
     pub(super) max_indexed: usize,
 }
 
-impl<E: Entity, P: Property<E>> Index<E, P> {
+impl<E: Entity, P: PropertyDef<E>> Index<E, P> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -214,8 +214,8 @@ mod test {
         let value1 = Age(42);
         let value2 = Age(43);
         assert_ne!(
-            <Age as Property<Person>>::hash_property_value(&value1),
-            <Age as Property<Person>>::hash_property_value(&value2)
+            <Age as PropertyDef<Person>>::hash_property_value(&value1),
+            <Age as PropertyDef<Person>>::hash_property_value(&value2)
         );
     }
 }

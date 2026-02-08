@@ -3,7 +3,7 @@ use std::any::TypeId;
 use seq_macro::seq;
 
 use crate::entity::multi_property::static_reorder_by_keys;
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::query::query_result_iterator::QueryResultIterator;
 use crate::entity::query::source_set::SourceSet;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
@@ -44,7 +44,7 @@ impl<E: Entity> Query<E> for () {
 }
 
 // Implement the query version with one parameter.
-impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
+impl<E: Entity, P1: PropertyDef<E, Value = P1>> Query<E> for (P1,) {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         let value = P1::make_canonical(self.0);
         vec![(P1::id(), P1::hash_property_value(&value))]
@@ -103,7 +103,7 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
     }
 
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-        let found_value: P1 = context.get_property(entity_id);
+        let found_value = context.get_property::<E, P1>(entity_id);
         found_value == self.0
     }
 
@@ -119,7 +119,7 @@ macro_rules! impl_query {
             impl<
                 E: Entity,
                 #(
-                    T~N : Property<E>,
+                    T~N : PropertyDef<E, Value = T~N>,
                 )*
             > Query<E> for (
                 #(
@@ -220,7 +220,7 @@ macro_rules! impl_query {
                 fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
                     #(
                         {
-                            let found_value: T~N = context.get_property(entity_id);
+                            let found_value = context.get_property::<E, T~N>(entity_id);
                             if found_value != self.N {
                                 return false
                             }

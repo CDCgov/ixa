@@ -269,7 +269,7 @@ mod tests {
             assert_eq!(people.len(), 0);
         });
 
-        context.set_property(person1, RiskCategory::Low);
+        context.set_property::<_, RiskCategory>(person1, RiskCategory::Low);
         context.with_query_results((RiskCategory::High,), &mut |people| {
             assert_eq!(people.len(), 0);
         });
@@ -372,7 +372,7 @@ mod tests {
         assert_eq!(seniors.len(), 1, "One senior");
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
-        context.set_property(person, Age(65));
+        context.set_property::<_, Age>(person, Age(65));
 
         context.with_query_results((Senior(false),), &mut |people| {
             not_seniors = people.to_owned_vec()
@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(seniors.len(), 1, "One senior");
         assert_eq!(not_seniors.len(), 1, "One non-senior");
 
-        context.set_property(person, Age(65));
+        context.set_property::<_, Age>(person, Age(65));
 
         context.with_query_results((Senior(false),), &mut |people| {
             not_seniors = people.to_owned_vec()
@@ -484,7 +484,7 @@ mod tests {
             assert!(people.contains(&p3));
         });
 
-        context.set_property(p2, Age(28));
+        context.set_property::<_, Age>(p2, Age(28));
         // multi-property index again after changing the value
         context.with_query_results((Height(140), County(1), Age(28)), &mut |people| {
             assert_eq!(people.len(), 2, "Should have 2 matches");

@@ -17,7 +17,7 @@ use log::{error, trace};
 
 use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
 use crate::entity::index::Index;
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
 use crate::hashing::IndexSet;
@@ -61,7 +61,7 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn index_unindexed_entities(&self, context: &Context) -> bool;
 }
 
-impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
+impl<E: Entity, P: PropertyDef<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -86,7 +86,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         };
         if let Some(index) = &self.index {
             let mut index = index.borrow_mut();
-            index.remove_entity(&previous_value.make_canonical(), entity_id);
+            index.remove_entity(&P::make_canonical(previous_value), entity_id);
         }
         Box::new(PartialPropertyChangeEventCore::<E, P>::new(
             entity_id,
@@ -152,7 +152,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
 
             for id in index.max_indexed..current_pop {
                 let entity_id = EntityId::new(id);
-                let value = context.get_property::<E, P>(entity_id);
+                let value: P::Value = context.get_property::<E, P>(entity_id);
                 index.add_entity(&P::make_canonical(value), entity_id);
             }
             index.max_indexed = current_pop;

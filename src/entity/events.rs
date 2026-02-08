@@ -28,7 +28,7 @@ because a non-derived p
 
 use ixa_derive::IxaEvent;
 
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, IxaEvent};
 
@@ -37,18 +37,18 @@ pub(crate) trait PartialPropertyChangeEvent {
     fn emit_in_context(self: Box<Self>, context: &mut Context);
 }
 
-impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
+impl<E: Entity, P: PropertyDef<E>> PartialPropertyChangeEvent
     for PartialPropertyChangeEventCore<E, P>
 {
     /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(self: Box<Self>, context: &mut Context) {
-        let current_value: P = context.get_property(self.0.entity_id);
+        let current_value: P::Value = context.get_property::<E, P>(self.0.entity_id);
         let property_value_store = context.get_property_value_store_mut::<E, P>();
 
         if let Some(index) = &mut property_value_store.index {
             index
                 .borrow_mut()
-                .add_entity(&current_value.make_canonical(), self.0.entity_id);
+                .add_entity(&P::make_canonical(current_value), self.0.entity_id);
         }
 
         // We decided not to do the following check.
@@ -67,20 +67,20 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 /// A `Box<PartialPropertyChangeEventCore<E, P>>` can be transformed into a `Box<PropertyChangeEvent<E, P>>` in place,
 /// avoiding an allocation.
 #[repr(transparent)]
-pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(
+pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: PropertyDef<E>>(
     PropertyChangeEvent<E, P>,
 );
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // `PartialPropertyChangeEvent<E, P>` is always `Copy`/`Clone` if we derive them.
-impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P> {
+impl<E: Entity, P: PropertyDef<E>> Clone for PartialPropertyChangeEventCore<E, P> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P> {}
+impl<E: Entity, P: PropertyDef<E>> Copy for PartialPropertyChangeEventCore<E, P> {}
 
-impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
-    pub fn new(entity_id: EntityId<E>, previous_value: P) -> Self {
+impl<E: Entity, P: PropertyDef<E>> PartialPropertyChangeEventCore<E, P> {
+    pub fn new(entity_id: EntityId<E>, previous_value: P::Value) -> Self {
         Self(PropertyChangeEvent {
             entity_id,
             current: previous_value,
@@ -88,7 +88,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
         })
     }
 
-    pub fn to_event(mut self, current_value: P) -> PropertyChangeEvent<E, P> {
+    pub fn to_event(mut self, current_value: P::Value) -> PropertyChangeEvent<E, P> {
         self.0.current = current_value;
         self.0
     }
@@ -121,22 +121,22 @@ impl<E: Entity> EntityCreatedEvent<E> {
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
-pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
+pub struct PropertyChangeEvent<E: Entity, P: PropertyDef<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,
     /// The new value
-    pub current: P,
+    pub current: P::Value,
     /// The old value
-    pub previous: P,
+    pub previous: P::Value,
 }
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // this type is always `Copy`/`Clone` if we derive them.
-impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
+impl<E: Entity, P: PropertyDef<E>> Clone for PropertyChangeEvent<E, P> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
+impl<E: Entity, P: PropertyDef<E>> Copy for PropertyChangeEvent<E, P> {}
 
 #[cfg(test)]
 mod tests {
@@ -228,7 +228,7 @@ mod tests {
             .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
             .unwrap();
 
-        context.set_property(person_id, RiskCategory::High);
+        context.set_property::<_, RiskCategory>(person_id, RiskCategory::High);
         context.execute();
         assert!(*flag.borrow());
     }
@@ -249,7 +249,7 @@ mod tests {
             .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
             .unwrap();
         // Emits a change event.
-        context.set_property(person_id, RunningShoes(42));
+        context.set_property::<_, RunningShoes>(person_id, RunningShoes(42));
         context.execute();
         assert!(*flag.borrow());
     }
@@ -272,7 +272,7 @@ mod tests {
                 *flag_clone.borrow_mut() = true;
             },
         );
-        context.set_property(person, Age(18));
+        context.set_property::<_, Age>(person, Age(18));
         context.execute();
         assert!(*flag.borrow());
     }

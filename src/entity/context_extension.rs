@@ -1,7 +1,7 @@
 use std::any::{Any, TypeId};
 
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::{Query, QueryResultIterator};
 use crate::entity::{Entity, EntityId, EntityIterator};
@@ -23,13 +23,36 @@ pub trait ContextEntitiesExt {
     /// ```rust, ignore
     /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
     /// ```
-    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
+    fn get_property<E: Entity, P: PropertyDef<E>>(&self, entity_id: EntityId<E>) -> P::Value;
+
+    /// Fetches a property value using a marker argument instead of turbofish syntax.
+    ///
+    /// ```rust,ignore
+    /// let age: u8 = context.get_property_value(person_id, Age);
+    /// ```
+    fn get_property_value<E: Entity, P: PropertyDef<E>>(
+        &self,
+        entity_id: EntityId<E>,
+        _property: P,
+    ) -> P::Value;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
-    fn set_property<E: Entity, P: Property<E>>(
+    fn set_property<E: Entity, P: PropertyDef<E>>(
         &mut self,
         entity_id: EntityId<E>,
-        property_value: P,
+        property_value: P::Value,
+    );
+
+    /// Sets a property value using a marker argument instead of turbofish syntax.
+    ///
+    /// ```rust,ignore
+    /// context.set_property_value(person_id, Age, 30_u8);
+    /// ```
+    fn set_property_value<E: Entity, P: PropertyDef<E>>(
+        &mut self,
+        entity_id: EntityId<E>,
+        _property: P,
+        value: P::Value,
     );
 
     /// Enables indexing of property values for the property `P`.
@@ -38,7 +61,7 @@ pub trait ContextEntitiesExt {
     ///     `context.index_property::<Person, Age>()`
     /// The actual computation of the index is done lazily as needed upon execution of queries,
     /// not when this method is called.
-    fn index_property<E: Entity, P: Property<E>>(&mut self);
+    fn index_property<E: Entity, P: PropertyDef<E>>(&mut self);
 
     /// Checks if a property `P` is indexed.
     ///
@@ -49,7 +72,7 @@ pub trait ContextEntitiesExt {
     /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
     /// share a single index.
     #[cfg(test)]
-    fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
+    fn is_property_indexed<E: Entity, P: PropertyDef<E>>(&self) -> bool;
 
     /// This method gives client code direct immutable access to the fully realized set of
     /// entity IDs. This is especially efficient for indexed queries, as this method reduces
@@ -134,7 +157,7 @@ impl ContextEntitiesExt for Context {
         Ok(new_entity_id)
     }
 
-    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
+    fn get_property<E: Entity, P: PropertyDef<E>>(&self, entity_id: EntityId<E>) -> P::Value {
         if P::is_derived() {
             P::compute_derived(self, entity_id)
         } else {
@@ -143,10 +166,18 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn set_property<E: Entity, P: Property<E>>(
+    fn get_property_value<E: Entity, P: PropertyDef<E>>(
+        &self,
+        entity_id: EntityId<E>,
+        _property: P,
+    ) -> P::Value {
+        self.get_property::<E, P>(entity_id)
+    }
+
+    fn set_property<E: Entity, P: PropertyDef<E>>(
         &mut self,
         entity_id: EntityId<E>,
-        property_value: P,
+        property_value: P::Value,
     ) {
         debug_assert!(!P::is_derived(), "cannot set a derived property");
 
@@ -214,12 +245,21 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn index_property<E: Entity, P: Property<E>>(&mut self) {
+    fn set_property_value<E: Entity, P: PropertyDef<E>>(
+        &mut self,
+        entity_id: EntityId<E>,
+        _property: P,
+        value: P::Value,
+    ) {
+        self.set_property::<E, P>(entity_id, value);
+    }
+
+    fn index_property<E: Entity, P: PropertyDef<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
         property_store.set_property_indexed::<P>(true);
     }
     #[cfg(test)]
-    fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
+    fn is_property_indexed<E: Entity, P: PropertyDef<E>>(&self) -> bool {
         let property_store = self.entity_store.get_property_store::<E>();
         property_store.is_property_indexed::<P>()
     }
@@ -494,24 +534,24 @@ mod tests {
         let person = context.add_entity((Age(25),)).unwrap();
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age = context.get_property::<_, Age>(person);
         assert_eq!(age, Age(25));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status = context.get_property::<_, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Susceptible);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated = context.get_property::<_, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(false));
 
         // Change them
-        context.set_property(person, Age(26));
-        context.set_property(person, InfectionStatus::Infected);
-        context.set_property(person, Vaccinated(true));
+        context.set_property::<_, Age>(person, Age(26));
+        context.set_property::<_, InfectionStatus>(person, InfectionStatus::Infected);
+        context.set_property::<_, Vaccinated>(person, Vaccinated(true));
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age = context.get_property::<_, Age>(person);
         assert_eq!(age, Age(26));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status = context.get_property::<_, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Infected);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated = context.get_property::<_, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(true));
     }
 
@@ -525,24 +565,24 @@ mod tests {
             .unwrap();
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age = context.get_property::<_, Age>(person);
         assert_eq!(age, Age(25));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status = context.get_property::<_, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Recovered);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated = context.get_property::<_, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(true));
 
         // Change them
-        context.set_property(person, Age(26));
-        context.set_property(person, InfectionStatus::Infected);
-        context.set_property(person, Vaccinated(false));
+        context.set_property::<_, Age>(person, Age(26));
+        context.set_property::<_, InfectionStatus>(person, InfectionStatus::Infected);
+        context.set_property::<_, Vaccinated>(person, Vaccinated(false));
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age = context.get_property::<_, Age>(person);
         assert_eq!(age, Age(26));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status = context.get_property::<_, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Infected);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated = context.get_property::<_, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(false));
     }
 
@@ -585,11 +625,11 @@ mod tests {
             .add_entity((Age(3), Vaccinated(true), InfectionStatus::Recovered))
             .unwrap();
 
-        let actual_high: RiskLevel = context.get_property(expected_high_id);
+        let actual_high = context.get_property::<_, RiskLevel>(expected_high_id);
         assert_eq!(actual_high, RiskLevel::High);
-        let actual_med: RiskLevel = context.get_property(expected_med_id);
+        let actual_med = context.get_property::<_, RiskLevel>(expected_med_id);
         assert_eq!(actual_med, RiskLevel::Medium);
-        let actual_low: RiskLevel = context.get_property(expected_low_id);
+        let actual_low = context.get_property::<_, RiskLevel>(expected_low_id);
         assert_eq!(actual_low, RiskLevel::Low);
     }
 
@@ -629,7 +669,7 @@ mod tests {
             .unwrap();
 
         // Should emit change events
-        context.set_property(expected_high_id, Age(20));
+        context.set_property::<_, Age>(expected_high_id, Age(20));
 
         // Execute queued event handlers
         context.execute();
@@ -649,10 +689,10 @@ mod tests {
         let child = context.add_entity((Age(17),)).unwrap();
         let adult = context.add_entity((Age(19),)).unwrap();
 
-        let child_computed: MyDerivedProperty = context.get_property(child);
+        let child_computed = context.get_property::<_, MyDerivedProperty>(child);
         assert_eq!(child_computed, MyDerivedProperty(17+18));
 
-        let adult_computed: MyDerivedProperty = context.get_property(adult);
+        let adult_computed = context.get_property::<_, MyDerivedProperty>(adult);
         assert_eq!(adult_computed, MyDerivedProperty(19+18));
     }
     */
@@ -662,7 +702,7 @@ mod tests {
         let mut context = Context::new();
         let person = context.add_entity((Age(17), IsSwimmer(true))).unwrap();
 
-        let is_adult_athlete: AdultAthlete = context.get_property(person);
+        let is_adult_athlete = context.get_property::<_, AdultAthlete>(person);
         assert!(!is_adult_athlete.0);
 
         let flag = Rc::new(RefCell::new(0));
@@ -676,9 +716,9 @@ mod tests {
             },
         );
 
-        context.set_property(person, Age(20));
+        context.set_property::<_, Age>(person, Age(20));
         // Make sure the derived property is what we expect.
-        let is_adult_athlete: AdultAthlete = context.get_property(person);
+        let is_adult_athlete = context.get_property::<_, AdultAthlete>(person);
         assert!(is_adult_athlete.0);
 
         // Execute queued event handlers
@@ -772,7 +812,7 @@ mod tests {
         assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
         assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
 
-        context.set_property(person1, InfectionStatus::Infected);
+        context.set_property::<_, InfectionStatus>(person1, InfectionStatus::Infected);
 
         assert_eq!(
             context.query_entity_count((InfectionStatus::Susceptible,)),
@@ -781,7 +821,7 @@ mod tests {
         assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 1);
         assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
 
-        context.set_property(person1, InfectionStatus::Recovered);
+        context.set_property::<_, InfectionStatus>(person1, InfectionStatus::Recovered);
 
         assert_eq!(
             context.query_entity_count((InfectionStatus::Susceptible,)),
@@ -795,19 +835,19 @@ mod tests {
         assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 6);
         assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
 
-        context.set_property(person2, Age(12));
+        context.set_property::<_, Age>(person2, Age(12));
 
         assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
         assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 5);
         assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
 
-        context.set_property(person1, Age(75));
+        context.set_property::<_, Age>(person1, Age(75));
 
         assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
         assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
         assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 1);
 
-        context.set_property(person2, Age(77));
+        context.set_property::<_, Age>(person2, Age(77));
 
         assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
         assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);

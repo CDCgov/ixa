@@ -63,22 +63,22 @@ mod tests {
                 TestPropOpt(Some(3u8)),
             ))
             .unwrap();
-        let val: TestPropU32 = ctx.get_property(pid);
+        let val = ctx.get_property::<_, TestPropU32>(pid);
         assert_eq!(val.0, 10u32);
         // Verify default property value is set for TestPropDefault
-        let default_val: TestPropDefault = ctx.get_property(pid);
+        let default_val = ctx.get_property::<_, TestPropDefault>(pid);
         assert_eq!(default_val.0, 7u32);
 
         // Derived property should compute from TestPropU32
-        let d: DerivedProp = ctx.get_property(pid);
+        let d = ctx.get_property::<_, DerivedProp>(pid);
         assert_eq!(d.0, 11u32);
 
         // Multi property - basic sanity (canonical value types)
-        let multi = <MultiProp as Property<Person>>::make_canonical((
+        let multi = <MultiProp as PropertyDef<Person>>::make_canonical((
             TestPropU32(10u32),
             TestPropU32b(20u32),
         ));
-        let disp = <MultiProp as Property<Person>>::get_display(&multi);
+        let disp = <MultiProp as PropertyDef<Person>>::get_display(&multi);
         assert!(disp.contains("10"));
 
         // Edge type (entity-based network): create two people and add an edge of type TestEdge

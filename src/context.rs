@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
-use crate::entity::property::Property;
+use crate::entity::property::PropertyDef;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::Entity;
 use crate::execution_stats::{
@@ -130,12 +130,12 @@ impl Context {
         }
     }
 
-    pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
+    pub(crate) fn get_property_value_store<E: Entity, P: PropertyDef<E>>(
         &self,
     ) -> &PropertyValueStoreCore<E, P> {
         self.entity_store.get_property_store::<E>().get::<P>()
     }
-    pub(crate) fn get_property_value_store_mut<E: Entity, P: Property<E>>(
+    pub(crate) fn get_property_value_store_mut<E: Entity, P: PropertyDef<E>>(
         &mut self,
     ) -> &mut PropertyValueStoreCore<E, P> {
         self.entity_store

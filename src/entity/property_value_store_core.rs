@@ -1,6 +1,6 @@
 /*!
 
-A `PropertyValueStoreCore<E: Entity, P: Property<E>>` is the concrete type implementing the value storage.
+A `PropertyValueStoreCore<E: Entity, P: PropertyDef<E>>` is the concrete type implementing the value storage.
 
 This concrete type exists primarily to own the backing storage for non-derived properties and the `Index<E, P>`
 instance, if there is one. It implements only the lowest level getters and setters for the property storage.
@@ -12,16 +12,16 @@ use std::cell::RefCell;
 
 use super::entity::{Entity, EntityId};
 use super::index::Index;
-use super::property::{Property, PropertyInitializationKind};
+use super::property::{PropertyDef, PropertyInitializationKind};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::value_vec::ValueVec;
 
 /// The underlying storage type for property values.
-pub(crate) type RawPropertyValueVec<P> = ValueVec<P>;
+pub(crate) type RawPropertyValueVec<V> = ValueVec<V>;
 
-pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
+pub struct PropertyValueStoreCore<E: Entity, P: PropertyDef<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
-    pub(super) data: RawPropertyValueVec<P>,
+    pub(super) data: RawPropertyValueVec<P::Value>,
     /// An index mapping `property_value` to `set_of_entities`.
     // Note that while we use a `RefCell` here, most of the time we don't incur the overhead of dynamic borrow checking,
     // because we use `index.get_mut()` instead of `index.borrow_mut()`. We only need `index.borrow_mut()` for
@@ -30,7 +30,7 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     pub(crate) index: Option<RefCell<Index<E, P>>>,
 }
 
-impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
+impl<E: Entity, P: PropertyDef<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
             data: ValueVec::default(),
@@ -39,7 +39,7 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     }
 }
 
-impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
+impl<E: Entity, P: PropertyDef<E>> PropertyValueStoreCore<E, P> {
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -61,7 +61,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Returns the property value for the given entity.
-    pub fn get(&self, entity_id: EntityId<E>) -> P {
+    pub fn get(&self, entity_id: EntityId<E>) -> P::Value {
         debug_assert!(
             !P::is_derived(),
             "Tried to get a derived property value from property value store."
@@ -74,7 +74,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`.
-    pub fn set(&self, entity_id: EntityId<E>, value: P) {
+    pub fn set(&self, entity_id: EntityId<E>, value: P::Value) {
         debug_assert!(
             !P::is_derived(),
             "Tried to set a derived property value in property value store."
@@ -118,7 +118,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`, returning the previous value.
-    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> P {
+    pub fn replace(&self, entity_id: EntityId<E>, value: P::Value) -> P::Value {
         debug_assert!(
             !P::is_derived(),
             "Tried to replace a derived property value in property value store."

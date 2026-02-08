@@ -9,7 +9,7 @@
 //! iterates over the intersection of a set of `SourceSet`s. Internally, `QueryResultIterator` holds
 //! its state in a set of `SourceSet` instances and a `SourceIterator`, which is an iterator created
 //! from a `SourceSet`. A `SourceSet` wraps either an index set (an immutable reference to a set
-//! from an index) or a property vector (the `Vec<Option<Property<E>::Value>>` that internally
+//! from an index) or a property vector (the `Vec<Option<PropertyDef<E>::Value>>` that internally
 //! stores the property values) and can compute membership very efficiently. The algorithm chooses
 //! the _smallest_ `SourceSet` to create its `SourceIterator` and, when `QueryResultIterator::next()`
 //! is called, this `SourceIterator` is iterated over until an ID is found that is contained
@@ -24,7 +24,7 @@ use ouroboros::self_referencing;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
 use crate::hashing::{IndexSet, IndexSetIter};
-use crate::prelude::Property;
+use crate::prelude::PropertyDef;
 use crate::Context;
 
 type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
@@ -49,12 +49,12 @@ pub trait AbstractPropertySource<'a, E: Entity> {
 
 /// To iterate over the values of an unindexed derived property,
 /// we need to iterate over the entire population and filter.
-pub(super) struct DerivedPropertySource<'a, E: Entity, P: Property<E>> {
+pub(super) struct DerivedPropertySource<'a, E: Entity, P: PropertyDef<E>> {
     /// A reference to the context so we can compute derived values
     context: &'a Context,
 
     /// The value that `EntityId<E>`s in this (abstract) set must have for `P`.
-    value: P,
+    value: P::Value,
 
     /// See notes on the `Iterator` impl for this struct below.
     next_index: usize,
@@ -65,8 +65,8 @@ pub(super) struct DerivedPropertySource<'a, E: Entity, P: Property<E>> {
     _phantom: PhantomData<E>,
 }
 
-impl<'a, E: Entity, P: Property<E>> DerivedPropertySource<'a, E, P> {
-    pub fn new(context: &'a Context, value: P) -> Self {
+impl<'a, E: Entity, P: PropertyDef<E>> DerivedPropertySource<'a, E, P> {
+    pub fn new(context: &'a Context, value: P::Value) -> Self {
         let population_size = context.get_entity_count::<E>();
 
         DerivedPropertySource {
@@ -79,7 +79,7 @@ impl<'a, E: Entity, P: Property<E>> DerivedPropertySource<'a, E, P> {
     }
 }
 
-impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
+impl<'a, E: Entity, P: PropertyDef<E>> AbstractPropertySource<'a, E>
     for DerivedPropertySource<'a, E, P>
 {
     fn upper_len(&self) -> usize {
@@ -95,7 +95,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     }
 }
 
-impl<'a, E: Entity, P: Property<E>> Iterator for DerivedPropertySource<'a, E, P> {
+impl<'a, E: Entity, P: PropertyDef<E>> Iterator for DerivedPropertySource<'a, E, P> {
     type Item = EntityId<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -115,13 +115,13 @@ impl<'a, E: Entity, P: Property<E>> Iterator for DerivedPropertySource<'a, E, P>
 
 /// Typed property vec. This does double duty as a concrete property vec and as an
 /// iterator. Instances of this struct represent the (abstract) set of `EntityId`s for
-/// which the property `P: Property<E>` has the value `ConcretePropertyVec::value`.
-pub(super) struct ConcretePropertySource<'a, E: Entity, P: Property<E>> {
+/// which the property `P: PropertyDef<E>` has the value `ConcretePropertyVec::value`.
+pub(super) struct ConcretePropertySource<'a, E: Entity, P: PropertyDef<E>> {
     /// A `Ref` to the underlying property vector backing property `P`.
-    values: &'a RawPropertyValueVec<P>,
+    values: &'a RawPropertyValueVec<P::Value>,
 
     /// The value that `EntityId<E>`s in this (abstract) set must have for `P`.
-    value: P,
+    value: P::Value,
 
     /// See notes on the `Iterator` impl for this struct below.
     next_index: usize,
@@ -138,10 +138,14 @@ pub(super) struct ConcretePropertySource<'a, E: Entity, P: Property<E>> {
     _phantom: PhantomData<E>,
 }
 
-impl<'a, E: Entity, P: Property<E>> ConcretePropertySource<'a, E, P> {
+impl<'a, E: Entity, P: PropertyDef<E>> ConcretePropertySource<'a, E, P> {
     /// Takes a `Ref` to the values vector, the `value` we are searching
     /// for, and whether unset values should be considered equal to `value`.
-    pub fn new(values: &'a RawPropertyValueVec<P>, value: P, population_size: usize) -> Self {
+    pub fn new(
+        values: &'a RawPropertyValueVec<P::Value>,
+        value: P::Value,
+        population_size: usize,
+    ) -> Self {
         let is_default_value = !P::is_required() && P::default_const() == value;
         ConcretePropertySource {
             values,
@@ -154,7 +158,7 @@ impl<'a, E: Entity, P: Property<E>> ConcretePropertySource<'a, E, P> {
     }
 }
 
-impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
+impl<'a, E: Entity, P: PropertyDef<E>> AbstractPropertySource<'a, E>
     for ConcretePropertySource<'a, E, P>
 {
     fn upper_len(&self) -> usize {
@@ -182,7 +186,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     }
 }
 
-impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P> {
+impl<'a, E: Entity, P: PropertyDef<E>> Iterator for ConcretePropertySource<'a, E, P> {
     type Item = EntityId<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -248,7 +252,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// properties, we wrap a reference to the property's backing vector.
     ///
     /// This method refreshes outdated indexes.
-    pub(super) fn new<P: Property<E>>(value: P, context: &'a Context) -> Option<Self> {
+    pub(super) fn new<P: PropertyDef<E>>(value: P::Value, context: &'a Context) -> Option<Self> {
         let property_store = context.entity_store.get_property_store::<E>();
 
         // Check for an index.
@@ -256,7 +260,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             let property_index_value_store = property_store.get_with_id(P::index_id());
             if property_index_value_store.index_unindexed_entities(context) {
                 return property_index_value_store
-                    .get_index_set_with_hash(P::hash_property_value(&value.make_canonical()))
+                    .get_index_set_with_hash(P::hash_property_value(&P::make_canonical(value)))
                     .map(SourceSet::IndexSet);
             }
         }
@@ -271,7 +275,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             ))))
         } else {
             let property_value_store = property_store.get::<P>();
-            let values: &'a RawPropertyValueVec<P> = &property_value_store.data;
+            let values: &'a RawPropertyValueVec<P::Value> = &property_value_store.data;
 
             Some(SourceSet::<'a>::PropertySet(Box::<
                 ConcretePropertySource<'a, E, P>,
