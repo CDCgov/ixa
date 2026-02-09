@@ -26,10 +26,11 @@ use seq_macro::seq;
 use super::entity::{Entity, EntityId};
 use super::property::Property;
 use super::property_store::PropertyStore;
+use crate::IxaError;
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
-    /// Validates that the properties are distinct. If not, returns a string describing the problematic properties.
-    fn validate() -> Result<(), String>;
+    /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
+    fn validate() -> Result<(), IxaError>;
 
     /// Checks that this property list includes all properties in the given list.
     fn contains_properties(property_type_ids: &[TypeId]) -> bool;
@@ -46,7 +47,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
 impl<E: Entity> PropertyList<E> for () {
-    fn validate() -> Result<(), String> {
+    fn validate() -> Result<(), IxaError> {
         Ok(())
     }
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
@@ -77,7 +78,7 @@ impl<E: Entity> PropertyList<E> for () {
 
 // A single `Property` tuple is a `PropertyList` of length 1
 impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
-    fn validate() -> Result<(), String> {
+    fn validate() -> Result<(), IxaError> {
         Ok(())
     }
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
@@ -95,7 +96,7 @@ macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
             impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
-                fn validate() -> Result<(), String> {
+                fn validate() -> Result<(), IxaError> {
                     // For `Property` distinctness check
                     let property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];
 
@@ -106,7 +107,7 @@ macro_rules! impl_property_list {
                                     "the same property appears in both position {} and {} in the property list",
                                     i,
                                     j
-                                ));
+                                ).into());
                             }
                         }
                     }
