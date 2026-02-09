@@ -2,10 +2,9 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
+use crate::entity::entity_set::{EntitySetIterator, SourceSet};
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
-use crate::entity::query::query_result_iterator::QueryResultIterator;
-use crate::entity::query::source_set::SourceSet;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
 use crate::hashing::one_shot_128;
 use crate::Context;
@@ -28,9 +27,9 @@ impl<E: Entity> Query<E> for () {
         one_shot_128(&empty)
     }
 
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         let population_iterator = context.get_entity_iterator::<E>();
-        QueryResultIterator::from_population_iterator(population_iterator)
+        EntitySetIterator::from_population_iterator(population_iterator)
     }
 
     fn match_entity(&self, _entity_id: EntityId<E>, _context: &Context) -> bool {
@@ -64,7 +63,7 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         P1::hash_property_value(&P1::make_canonical(self.0))
     }
 
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         let property_store = context.entity_store.get_property_store::<E>();
 
         // The case of an indexed multi-property.
@@ -79,11 +78,11 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
                 if let Some(people_set) =
                     property_value_store.get_index_set_with_hash(self.multi_property_value_hash())
                 {
-                    return QueryResultIterator::from_index_set(people_set);
+                    return EntitySetIterator::from_index_set(people_set);
                 } else {
                     // Since we already checked that this multi-property is indexed, it must be that
                     // there are no entities having this property value.
-                    return QueryResultIterator::empty();
+                    return EntitySetIterator::empty();
                 }
             }
             // If the property is not indexed, we fall through.
@@ -96,10 +95,10 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
             sources.push(source_set);
         } else {
             // If a single source set is empty, the intersection of all sources is empty.
-            return QueryResultIterator::empty();
+            return EntitySetIterator::empty();
         }
 
-        QueryResultIterator::from_sources(sources)
+        EntitySetIterator::from_sources(sources)
     }
 
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
@@ -178,7 +177,7 @@ macro_rules! impl_query {
                     one_shot_128(&data.as_slice())
                 }
 
-                fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
+                fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
                     // The case of an indexed multi-property.
                     // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
                     // multi-property is unindexed, we fall through to create `SourceSet`s for the components
@@ -192,11 +191,11 @@ macro_rules! impl_query {
                             if let Some(entity_set) = property_value_store.get_index_set_with_hash(
                                 self.multi_property_value_hash(),
                             ) {
-                                return QueryResultIterator::from_index_set(entity_set);
+                                return EntitySetIterator::from_index_set(entity_set);
                             } else {
                                 // Since we already checked that this multi-property is indexed, it must be that
                                 // there are no entities having this property value.
-                                return QueryResultIterator::empty();
+                                return EntitySetIterator::empty();
                             }
                         }
                         // If the property is not indexed, we fall through.
@@ -210,11 +209,11 @@ macro_rules! impl_query {
                             sources.push(source_set);
                         } else {
                             // If a single source set is empty, the intersection of all sources is empty.
-                            return QueryResultIterator::empty();
+                            return EntitySetIterator::empty();
                         }
                     )*
 
-                    QueryResultIterator::from_sources(sources)
+                    EntitySetIterator::from_sources(sources)
                 }
 
                 fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {

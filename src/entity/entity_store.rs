@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::entity::property_store::PropertyStore;
-use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::HashMap;
 
 /// Global entity index counter; keeps track of the index that will be assigned to the next entity that
@@ -260,9 +260,9 @@ impl EntityStore {
     }
 
     /// Returns an iterator over all valid `EntityId<E>`s
-    pub fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
+    pub fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
         let count = self.get_entity_count::<E>();
-        EntityIterator::new(count)
+        PopulationIterator::new(count)
     }
 
     pub fn get_property_store<E: Entity>(&self) -> &PropertyStore<E> {
