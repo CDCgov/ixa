@@ -14,7 +14,7 @@ use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, HashValueType};
 use crate::hashing::HashMap;
 use crate::prelude::EntityId;
-use crate::Context;
+use crate::{Context, IxaError};
 
 /// A newtype wrapper that associates a tuple of property values with an entity type.
 ///
@@ -109,7 +109,7 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
 }
 
 impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T> {
-    fn validate() -> Result<(), String> {
+    fn validate() -> Result<(), IxaError> {
         T::validate()
     }
 
