@@ -33,6 +33,7 @@ static variable `index`. Each concrete `Entity` type is thus assigned a unique i
 
 pub mod context_extension;
 mod entity;
+pub mod entity_set;
 pub mod entity_store;
 pub mod events;
 mod index;
@@ -47,6 +48,7 @@ pub mod query;
 // Flatten the module hierarchy.
 pub use context_extension::ContextEntitiesExt;
 pub use entity::*;
+pub use entity_set::EntitySetIterator;
 pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
 

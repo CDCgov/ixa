@@ -1,10 +1,11 @@
 use std::any::{Any, TypeId};
 
+use crate::entity::entity_set::EntitySetIterator;
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
-use crate::entity::query::{Query, QueryResultIterator};
-use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::entity::query::Query;
+use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
 use crate::rand::Rng;
 use crate::{warn, Context, ContextRandomExt, RngId};
@@ -93,10 +94,10 @@ pub trait ContextEntitiesExt {
     fn get_entity_count<E: Entity>(&self) -> usize;
 
     /// Returns an iterator over all created entities of type `E`.
-    fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E>;
+    fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
     /// Generates an iterator over the results of the query.
-    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> QueryResultIterator<E>;
+    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
 
     /// Determines if the given person matches this query.
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
@@ -264,7 +265,7 @@ impl ContextEntitiesExt for Context {
         // The slow path of computing the full query set.
         warn!("Called Context::with_query_results() with an unindexed query. It's almost always better to use Context::query_result_iterator() for unindexed queries.");
 
-        // Fall back to `QueryResultIterator`.
+        // Fall back to `EntitySetIterator`.
         let people_set = query
             .new_query_result_iterator(self)
             .collect::<IndexSet<_>>();
@@ -322,11 +323,11 @@ impl ContextEntitiesExt for Context {
         self.entity_store.get_entity_count::<E>()
     }
 
-    fn get_entity_iterator<E: Entity>(&self) -> EntityIterator<E> {
+    fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
         self.entity_store.get_entity_iterator::<E>()
     }
 
-    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> QueryResultIterator<E> {
+    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
         query.new_query_result_iterator(self)
     }
 
