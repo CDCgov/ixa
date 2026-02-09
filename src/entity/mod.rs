@@ -35,6 +35,7 @@ pub mod context_extension;
 mod entity;
 pub mod entity_store;
 pub mod events;
+pub mod foreign_entity_key;
 mod index;
 pub mod multi_property;
 pub mod property;
@@ -47,6 +48,7 @@ pub mod query;
 // Flatten the module hierarchy.
 pub use context_extension::ContextEntitiesExt;
 pub use entity::*;
+pub use foreign_entity_key::ContextForeignEntityKeyExt;
 pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
 

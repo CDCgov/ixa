@@ -124,7 +124,7 @@ for learning Rust's ownership rules available
 high-level, here are the key ideas to understand:
 
 1. When a function takes an object as input, it takes ownership of that object
-   -- meaning that the object is "consumed" by the function and does not exist
+   \-- meaning that the object is "consumed" by the function and does not exist
    after the calling of that function. - This is true for all types except those
    that are automatically copyable, or in Rust lingo implement the `Copy` trait.
    All primitive types -- floats, integers, booleans, etc. -- implement `Copy`,
@@ -165,32 +165,41 @@ cargo run --example {name-of-example}
 
 In general, you will be using `cargo` to run and interact with your Ixa models
 from the command line. We recommend learning some
-[basic `cargo` commands](https://doc.rust-lang.org/cargo/guide/index.html), and
+[basic](https://doc.rust-lang.org/cargo/guide/index.html) [`cargo`](https://doc.rust-lang.org/cargo/guide/index.html) [commands](https://doc.rust-lang.org/cargo/guide/index.html), and
 there are valuable
 [cheatsheets](https://kapeli.com/cheat_sheets/Cargo.docset/Contents/Resources/Documents/index)
 to keep handy as you get more involved in active development.
 
 Here are a few other useful commands to know:
 
-- `cargo test` will run all tests in the project.
-- `cargo build --release` compiles the project into a shell executable that you
+* `cargo test` will run all tests in the project.
+
+* `cargo build --release` compiles the project into a shell executable that you
   can ship to your users.
-- `cargo add {crate-name}` adds a Rust crate/project dependency to your project
+
+* `cargo add {crate-name}` adds a Rust crate/project dependency to your project
   for you to use.
 
 ## Additional Rust resources
 
-- **[Rust By Example](https://doc.rust-lang.org/rust-by-example/index.html):**
+* **[Rust By Example](https://doc.rust-lang.org/rust-by-example/index.html):**
   "RBE shows off a bunch of code, and keeps the talking to a minimum. It also
   includes exercises!"
-- **[Tour of Rust](https://tourofrust.com/TOC_en.html):** Live code and
+
+* **[Tour of Rust](https://tourofrust.com/TOC_en.html):** Live code and
   explanations, side by side.
-- **[Rust in Easy English](https://dhghomon.github.io/easy_rust/Chapter_3.html):**
+
+* **[Rust in Easy English](https://dhghomon.github.io/easy_rust/Chapter_3.html):**
   60+ concepts, simple English, example-driven.
-- **[Rust for the Polyglot Programmer](https://www.chiark.greenend.org.uk/~ianmdlvl/rust-polyglot/index.html):**
+
+* **[Rust for the Polyglot Programmer](https://www.chiark.greenend.org.uk/~ianmdlvl/rust-polyglot/index.html):**
   A guide for the experienced programmer.
-- **[The Rust Standard Library Documentation](https://doc.rust-lang.org/std/index.html)**
-- **[The Cargo Book](https://doc.rust-lang.org/cargo/index.html):** An online
+
+* **[The Rust Standard Library Documentation](https://doc.rust-lang.org/std/index.html)**
+
+* **[The Cargo Book](https://doc.rust-lang.org/cargo/index.html):** An online
   manual for Rust's package manager Cargo.
-- **[The Rust Playground](https://play.rust-lang.org/):** Execute sample code in
+
+* **[The Rust Playground](https://play.rust-lang.org/):** Execute sample code in
   your browser.
+

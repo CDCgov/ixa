@@ -31,7 +31,7 @@ Open the newly created `disease_model` directory in your favorite IDE, like
         └── 📄 Cargo.toml
 ```
 
-> [!INFO] Source Control
+> \[!INFO] Source Control
 >
 > The `.gitignore` file lists all the files and directories you don't want to
 > include in source control. For a Rust project you should at least have
@@ -41,22 +41,30 @@ Open the newly created `disease_model` directory in your favorite IDE, like
 
 <!-- markdownlint-disable-next-line MD028 -->
 
-> [!INFO] Cargo
+> \[!INFO] Cargo
 >
 > Cargo is Rust's package manager and build system. It is a single tool that
 > plays the role of the multiple different tools you would use in other
 > languages, such as `pip` and `poetry` in the Python ecosystem. We use Cargo to
 >
-> - install tools like ripgrep (`cargo install`)
-> - initialize new projects (`cargo new` and `cargo init`)
-> - add new project dependencies (`cargo add serde`)
-> - update dependency versions (`cargo update`)
-> - check the project's code for errors (`cargo check`)
-> - download and build the correct dependencies with the correct feature flags
+> * install tools like ripgrep (`cargo install`)
+>
+> * initialize new projects (`cargo new` and `cargo init`)
+>
+> * add new project dependencies (`cargo add serde`)
+>
+> * update dependency versions (`cargo update`)
+>
+> * check the project's code for errors (`cargo check`)
+>
+> * download and build the correct dependencies with the correct feature flags
 >   (`cargo build`)
-> - build the project's targets, including examples and tests (`cargo build`)
-> - generate documentation (`cargo doc`)
-> - run tests and benchmarks (`cargo test`, `cargo bench`)
+>
+> * build the project's targets, including examples and tests (`cargo build`)
+>
+> * generate documentation (`cargo doc`)
+>
+> * run tests and benchmarks (`cargo test`, `cargo bench`)
 
 ## Setup Dependencies and `Cargo.toml`
 
@@ -82,8 +90,9 @@ cargo add csv
 
 Notice that:
 
-- a particular version can be specified with the `packagename@1.2.3` syntax;
-- we can compile a library with specific features turn on or off.
+* a particular version can be specified with the `packagename@1.2.3` syntax;
+
+* we can compile a library with specific features turn on or off.
 
 ### `Cargo.toml`
 
@@ -116,7 +125,7 @@ before the simulation is kicked off if necessary. The only setup we do is
 schedule a plan at time 1.0. The plan is itself another closure that prints the
 current simulation time.
 
-> [!INFO] Closures
+> \[!INFO] Closures
 >
 > A _closure_ is a small, self-contained block of code that can be passed around
 > and executed later. It can capture and use variables from its surrounding
@@ -130,6 +139,7 @@ The `run_with_args()` function does the following:
    arguments and initializing subsystems accordingly. A `Context` keeps track of
    the state of the world for our model and is the primary way code interacts
    with anything in the running model.
+
 2. It executes our closure, passing it a _mutable reference_ to `context` so we
    can do any additional setup.
 
@@ -167,23 +177,25 @@ the log level:
 cargo run -- --log-level disease_model=trace
 ```
 
-> [!INFO] Logging
+> \[!INFO] Logging
 >
 > The `trace!`, `info!`, and `error!` logging macros allow us to print messages
 > to the console, but they are much more powerful than a simple print statement.
 > With log messages, you can:
 >
-> - Turn log messages on and off as needed.
-> - Enable only messages with a specified priority (for example, only warnings
+> * Turn log messages on and off as needed.
+>
+> * Enable only messages with a specified priority (for example, only warnings
 >   or higher).
-> - Filter messages to show only those emitted from a specific module, like the
+>
+> * Filter messages to show only those emitted from a specific module, like the
 >   `people` module we write in the next section.
 >
 > See the logging documentation for more details.
 
 <!-- markdownlint-disable-next-line MD028 -->
 
-> [!INFO] Command Line Arguments
+> \[!INFO] Command Line Arguments
 >
 > The `run_with_args()` function takes care of handling any command line
 > arguments for us, which is why we don't just create a `Context` object and
