@@ -221,12 +221,15 @@ macro_rules! define_property {
     };
 
     // Enum property: define_property!(enum InfectionStatus { S, I, R });
-    // Generates the enum. `Property<InfectionStatus>` already implements `IsProperty<Value = InfectionStatus>`
-    // via the blanket `impl<T: AnyProperty> IsProperty for Property<T>`.
+    // Generates the enum and implements `IsProperty<Value = Self>` directly.
     (enum $name:ident { $($variant:ident),* $(,)? }) => {
         #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
         pub enum $name {
             $($variant),*
+        }
+
+        impl $crate::entity::property::IsProperty for $name {
+            type Value = $name;
         }
     };
 

@@ -109,14 +109,6 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
 }
 
 impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T> {
-    fn validate() -> Result<(), String> {
-        T::validate()
-    }
-
-    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-        T::contains_properties(property_type_ids)
-    }
-
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
         self.inner.set_values_for_entity(entity_id, property_store)
     }
@@ -686,32 +678,6 @@ mod tests {
 
         let query = all!(Person, Age(42), RiskCategory::High,);
         assert_eq!(context.query_entity_count(query), 1);
-    }
-
-    #[test]
-    fn entity_property_tuple_as_property_list() {
-        use super::EntityPropertyTuple;
-        use crate::entity::property_list::PropertyList;
-
-        // Test validate
-        assert!(EntityPropertyTuple::<Person, (Age,)>::validate().is_ok());
-        assert!(EntityPropertyTuple::<Person, (Age, RiskCategory)>::validate().is_ok());
-
-        // Test contains_properties
-        assert!(EntityPropertyTuple::<Person, (Age,)>::contains_properties(
-            &[Age::type_id()]
-        ));
-        assert!(
-            EntityPropertyTuple::<Person, (Age, RiskCategory)>::contains_properties(&[
-                Age::type_id()
-            ])
-        );
-        assert!(
-            EntityPropertyTuple::<Person, (Age, RiskCategory)>::contains_properties(&[
-                Age::type_id(),
-                RiskCategory::type_id()
-            ])
-        );
     }
 
     #[test]

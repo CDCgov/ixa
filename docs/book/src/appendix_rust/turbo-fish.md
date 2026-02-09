@@ -186,4 +186,3 @@ the notation gets rather gnarly without it:
 
 context.subscribe_to_event::<PropertyChangeEvent<Person, InfectionStatus>>(handle_infection_status_change);
 ```
-

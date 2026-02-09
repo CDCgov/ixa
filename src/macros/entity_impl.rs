@@ -76,20 +76,6 @@ macro_rules! define_entity {
         );
     };
 
-    // Parse a required Property<T>: `Property<T>,`
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident>, $($rest:tt)*
-    ) => {
-        $crate::define_entity!(@emit_property_for_entity $entity, $inner);
-        $crate::define_entity!(@process_props $entity,
-            required: [$($req)* ($crate::entity::property::Property<$inner>, $inner, $inner)],
-            defaulted: [$($def)*],
-            $($rest)*
-        );
-    };
-
     // Parse a defaulted property: `PropType = default_value,`
     (@process_props $entity:ident,
         required: [$($req:tt)*],
@@ -100,20 +86,6 @@ macro_rules! define_entity {
         $crate::define_entity!(@process_props $entity,
             required: [$($req)*],
             defaulted: [$($def)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value, { $default })],
-            $($rest)*
-        );
-    };
-
-    // Parse a defaulted Property<T>: `Property<T> = default_value,`
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident> = $default:expr, $($rest:tt)*
-    ) => {
-        $crate::define_entity!(@emit_property_for_entity $entity, $inner, default_const = $default);
-        $crate::define_entity!(@process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)* ($crate::entity::property::Property<$inner>, $inner, $inner, { $default })],
             $($rest)*
         );
     };
@@ -129,15 +101,6 @@ macro_rules! define_entity {
         $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], $prop,);
     };
 
-    // Required Property<T> without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident>
-    ) => {
-        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], Property<$inner>,);
-    };
-
     // Defaulted property without trailing comma
     (@process_props $entity:ident,
         required: [$($req:tt)*],
@@ -145,32 +108,6 @@ macro_rules! define_entity {
         $prop:ident = $default:expr
     ) => {
         $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], $prop = $default,);
-    };
-
-    // Defaulted Property<T> without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident> = $default:expr
-    ) => {
-        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], Property<$inner> = $default,);
-    };
-
-    // Helper: emit impl_property_for_entity for Property<T> (required)
-    (@emit_property_for_entity $entity:ident, $inner:ident) => {
-        $crate::impl_property_for_entity!(
-            Property<$inner>,
-            $entity
-        );
-    };
-
-    // Helper: emit impl_property_for_entity for Property<T> (with default)
-    (@emit_property_for_entity $entity:ident, $inner:ident, default_const = $default:expr) => {
-        $crate::impl_property_for_entity!(
-            Property<$inner>,
-            $entity,
-            default_const = $default
-        );
     };
 
     // Generate validated builder struct, init struct, and PropertyList impl
@@ -195,7 +132,7 @@ macro_rules! define_entity {
 
             impl $entity {
                 /// Create a new builder for this entity type.
-                #[allow(unused)]
+                #[allow(unused, clippy::new_ret_no_self)]
                 pub fn new() -> [<$entity Builder>] {
                     [<$entity Builder>] {
                         $(
@@ -256,26 +193,6 @@ macro_rules! define_entity {
             }
 
             impl $crate::entity::property_list::PropertyList<$entity> for [<$entity Init>] {
-                fn validate() -> Result<(), String> {
-                    Ok(())
-                }
-
-                fn contains_properties(property_type_ids: &[std::any::TypeId]) -> bool {
-                    let self_type_ids: &[std::any::TypeId] = &[
-                        $(
-                            <$r_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
-                        )*
-                        $(
-                            <$d_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
-                        )*
-                    ];
-                    property_type_ids.iter().all(|id| self_type_ids.contains(id))
-                }
-
-                fn contains_required_properties() -> bool {
-                    true
-                }
-
                 fn set_values_for_entity(
                     &self,
                     entity_id: $crate::entity::EntityId<$entity>,
@@ -485,7 +402,6 @@ macro_rules! define_entity_with_properties {
 mod tests {
     #![allow(dead_code)]
 
-    use crate::entity::property::Property;
     use crate::prelude::*;
 
     // New-style ZST property markers
@@ -503,7 +419,7 @@ mod tests {
     define_entity!(struct Animal {
         ZstAge,
         ZstWeight = 0.0,
-        Property<ZstStatus> = ZstStatus::S,
+        ZstStatus = ZstStatus::S,
     });
 
     #[test]
@@ -529,7 +445,7 @@ mod tests {
         assert_eq!(weight, 55.5);
 
         // ZstStatus should have its default since we didn't set it
-        let status: ZstStatus = context.get_property::<_, Property<ZstStatus>>(id);
+        let status: ZstStatus = context.get_property::<_, ZstStatus>(id);
         assert_eq!(status, ZstStatus::S);
     }
 
@@ -547,8 +463,8 @@ mod tests {
         assert_eq!(age, 20);
 
         // Mutate enum property
-        context.set_property::<_, Property<ZstStatus>>(id, ZstStatus::I);
-        let status: ZstStatus = context.get_property::<_, Property<ZstStatus>>(id);
+        context.set_property::<_, ZstStatus>(id, ZstStatus::I);
+        let status: ZstStatus = context.get_property::<_, ZstStatus>(id);
         assert_eq!(status, ZstStatus::I);
     }
 
@@ -564,7 +480,7 @@ mod tests {
         let weight: f64 = context.get_property::<_, ZstWeight>(id);
         assert_eq!(weight, 0.0);
 
-        let status: ZstStatus = context.get_property::<_, Property<ZstStatus>>(id);
+        let status: ZstStatus = context.get_property::<_, ZstStatus>(id);
         assert_eq!(status, ZstStatus::S);
     }
 
@@ -572,7 +488,7 @@ mod tests {
     fn test_new_style_property_change_event() {
         use crate::entity::events::PropertyChangeEvent;
 
-        type StatusChange = PropertyChangeEvent<Animal, Property<ZstStatus>>;
+        type StatusChange = PropertyChangeEvent<Animal, ZstStatus>;
 
         let mut context = Context::new();
 
@@ -587,7 +503,7 @@ mod tests {
         let id = context
             .add_entity(Animal::new().zst_age(3_u8).build().unwrap())
             .unwrap();
-        context.set_property::<_, Property<ZstStatus>>(id, ZstStatus::I);
+        context.set_property::<_, ZstStatus>(id, ZstStatus::I);
         context.execute();
 
         assert_eq!(*context.get_data(EventCount), 1);
@@ -609,15 +525,12 @@ mod tests {
         context.set_property_value(id, ZstAge, 42_u8);
         assert_eq!(context.get_property_value(id, ZstAge), 42);
 
-        // Enum property with Property<T> marker
-        let status = context.get_property_value(id, Property::<ZstStatus>::new());
+        // Enum property
+        let status: ZstStatus = context.get_property::<_, ZstStatus>(id);
         assert_eq!(status, ZstStatus::S);
 
-        context.set_property_value(id, Property::<ZstStatus>::new(), ZstStatus::R);
-        assert_eq!(
-            context.get_property_value(id, Property::<ZstStatus>::new()),
-            ZstStatus::R
-        );
+        context.set_property::<_, ZstStatus>(id, ZstStatus::R);
+        assert_eq!(context.get_property::<_, ZstStatus>(id), ZstStatus::R);
     }
 
     #[test]
@@ -654,7 +567,7 @@ mod tests {
         // Use impl_entity! to add Entity impl + property associations
         impl_entity!(struct Vehicle {
             Speed,
-            Property<Fuel> = Fuel::Gas,
+            Fuel = Fuel::Gas,
         });
 
         let mut context = Context::new();
@@ -665,14 +578,11 @@ mod tests {
         let speed: f64 = context.get_property_value(car, Speed);
         assert_eq!(speed, 60.0);
 
-        let fuel = context.get_property_value(car, Property::<Fuel>::new());
+        let fuel: Fuel = context.get_property::<_, Fuel>(car);
         assert_eq!(fuel, Fuel::Gas);
 
-        context.set_property_value(car, Property::<Fuel>::new(), Fuel::Electric);
-        assert_eq!(
-            context.get_property_value(car, Property::<Fuel>::new()),
-            Fuel::Electric
-        );
+        context.set_property::<_, Fuel>(car, Fuel::Electric);
+        assert_eq!(context.get_property::<_, Fuel>(car), Fuel::Electric);
     }
 
     // === Tests for define_entity_with_properties! ===
@@ -690,7 +600,7 @@ mod tests {
     define_entity_with_properties!(Creature {
         CreatureAge,
         CreatureAlive = true,
-        Property<CreatureKind> = CreatureKind::Cat,
+        CreatureKind = CreatureKind::Cat,
     });
 
     #[test]
@@ -698,7 +608,7 @@ mod tests {
         // build() without setting required field should error
         let result = Creature::new().build();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("CreatureAge"));
+        assert!(result.unwrap_err().to_string().contains("CreatureAge"));
     }
 
     #[test]
@@ -713,7 +623,7 @@ mod tests {
         let alive: bool = context.get_property::<_, CreatureAlive>(id);
         assert!(alive); // default is true
 
-        let kind: CreatureKind = context.get_property::<_, Property<CreatureKind>>(id);
+        let kind: CreatureKind = context.get_property::<_, CreatureKind>(id);
         assert_eq!(kind, CreatureKind::Cat); // default is Cat
     }
 
@@ -735,7 +645,7 @@ mod tests {
         let alive: bool = context.get_property::<_, CreatureAlive>(id);
         assert!(!alive);
 
-        let kind: CreatureKind = context.get_property::<_, Property<CreatureKind>>(id);
+        let kind: CreatureKind = context.get_property::<_, CreatureKind>(id);
         assert_eq!(kind, CreatureKind::Bird);
     }
 
@@ -757,7 +667,7 @@ mod tests {
         assert_eq!(context.get_property::<Creature, CreatureAge>(id), 42_u8);
         assert!(context.get_property::<Creature, CreatureAlive>(id));
         assert_eq!(
-            context.get_property::<Creature, Property<CreatureKind>>(id),
+            context.get_property::<Creature, CreatureKind>(id),
             CreatureKind::Dog
         );
     }
@@ -766,7 +676,7 @@ mod tests {
     fn test_ewp_property_change_event() {
         use crate::entity::events::PropertyChangeEvent;
 
-        type KindChange = PropertyChangeEvent<Creature, Property<CreatureKind>>;
+        type KindChange = PropertyChangeEvent<Creature, CreatureKind>;
 
         let mut context = Context::new();
 
@@ -781,7 +691,7 @@ mod tests {
         let id = context
             .add_entity(Creature::new().creature_age(1_u8).build().unwrap())
             .unwrap();
-        context.set_property::<_, Property<CreatureKind>>(id, CreatureKind::Dog);
+        context.set_property::<_, CreatureKind>(id, CreatureKind::Dog);
         context.execute();
 
         assert_eq!(*context.get_data(KindEventCount), 1);
@@ -802,7 +712,7 @@ mod tests {
     define_entity!(struct Widget {
         NoCommaAge,
         NoCommaWeight = 0.0,
-        Property<NoCommaStatus> = NoCommaStatus::Active
+        NoCommaStatus = NoCommaStatus::Active
     });
 
     #[test]
@@ -819,7 +729,7 @@ mod tests {
         let weight: f64 = context.get_property::<_, NoCommaWeight>(id);
         assert_eq!(weight, 0.0);
 
-        let status: NoCommaStatus = context.get_property::<_, Property<NoCommaStatus>>(id);
+        let status: NoCommaStatus = context.get_property::<_, NoCommaStatus>(id);
         assert_eq!(status, NoCommaStatus::Active);
     }
 

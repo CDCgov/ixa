@@ -12,8 +12,10 @@ All examples assume `use ixa::prelude::*;`.
 The entity system has three layers:
 
 1. **Properties** -- marker types that name a value (e.g. `Age` names a `u8`)
-2. **Entities** -- zero-sized types that group properties (e.g. `Person` has `Age` and `InfectionStatus`)
-3. **Context** -- runtime storage. Create entities, get/set property values, query
+2. **Entities** -- zero-sized types that group properties (e.g. `Person` has
+   `Age` and `InfectionStatus`)
+3. **Context** -- runtime storage. Create entities, get/set property values,
+   query
 
 ---
 
@@ -41,13 +43,14 @@ define_property!(
 );
 ```
 
-This creates the enum. The property marker type for it is `Property<InfectionStatus>`,
-which automatically implements `IsProperty<Value = InfectionStatus>` via a blanket impl.
+This creates the enum. The property marker type for it is
+`Property<InfectionStatus>`, which automatically implements
+`IsProperty<Value = InfectionStatus>` via a blanket impl.
 
 ### Legacy wrapper property
 
-The old form ties a property to an entity at definition time and wraps the
-value inside the type itself:
+The old form ties a property to an entity at definition time and wraps the value
+inside the type itself:
 
 ```rust
 define_property!(struct Age(u8), Person, default_const = Age(0));
@@ -72,7 +75,8 @@ work and are required for queries and derived properties.
 define_entity!(Person);
 ```
 
-Generates `pub struct Person;`, the `Entity` impl, and `type PersonId = EntityId<Person>`.
+Generates `pub struct Person;`, the `Entity` impl, and
+`type PersonId = EntityId<Person>`.
 
 ### Entity with properties (new-style)
 
@@ -99,11 +103,11 @@ This generates:
 
 Property syntax inside `define_entity!`:
 
-| Syntax | Meaning |
-|--------|---------|
-| `Age,` | Required ZST property, no default |
-| `Age = 0,` | Optional ZST property with default |
-| `Property<Foo>,` | Required enum/struct property |
+| Syntax                      | Meaning                                    |
+| --------------------------- | ------------------------------------------ |
+| `Age,`                      | Required ZST property, no default          |
+| `Age = 0,`                  | Optional ZST property with default         |
+| `Property<Foo>,`            | Required enum/struct property              |
 | `Property<Foo> = Foo::Bar,` | Optional enum/struct property with default |
 
 ### Implement Entity for an existing struct
@@ -148,8 +152,8 @@ let person = context.add_entity(
 ```
 
 Builder methods are named after the property in `snake_case`. Unset optional
-properties use their default. Required properties that aren't set will cause
-a runtime error.
+properties use their default. Required properties that aren't set will cause a
+runtime error.
 
 ### With entity marker (no properties needed)
 
@@ -260,18 +264,18 @@ context.subscribe_to_event::<StatusEvent>(|context, event| {
 
 `PropertyChangeEvent` fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `entity_id` | `EntityId<E>` | The entity that changed |
-| `current` | `P::Value` | New value after the change |
-| `previous` | `P::Value` | Old value before the change |
+| Field       | Type          | Description                 |
+| ----------- | ------------- | --------------------------- |
+| `entity_id` | `EntityId<E>` | The entity that changed     |
+| `current`   | `P::Value`    | New value after the change  |
+| `previous`  | `P::Value`    | Old value before the change |
 
 ---
 
 ## 7. Queries (Legacy Properties Only)
 
-Queries currently work with legacy wrapper-style properties (where `Value = Self`).
-New-style ZST properties cannot be used in tuple queries yet.
+Queries currently work with legacy wrapper-style properties (where
+`Value = Self`). New-style ZST properties cannot be used in tuple queries yet.
 
 ### Count entities matching a query
 
@@ -327,8 +331,8 @@ This is useful when the entity type can't be inferred from context.
 context.index_property::<Person, Age>();
 ```
 
-Indexing makes queries on that property O(1) instead of O(n). The index is
-built lazily on first query after calling `index_property`.
+Indexing makes queries on that property O(1) instead of O(n). The index is built
+lazily on first query after calling `index_property`.
 
 ---
 
@@ -350,6 +354,7 @@ define_derived_property!(
 ```
 
 Derived properties:
+
 - Are read-only (cannot be set)
 - Automatically recompute when dependencies change
 - Emit `PropertyChangeEvent` when their value changes
@@ -377,32 +382,32 @@ context.with_query_results((Age(30), County(5), Height(170)), &mut |results| {
 
 ### Property macros
 
-| Macro | Purpose |
-|-------|---------|
-| `define_property!(Name, ValueType)` | New-style ZST property marker |
-| `define_property!(enum Name { ... })` | New-style enum property |
-| `define_property!(struct Name(Type), Entity, ...)` | Legacy wrapper property (struct) |
-| `define_property!(enum Name { ... }, Entity, ...)` | Legacy wrapper property (enum) |
-| `impl_property!(Name, Entity, ...)` | Implement `PropertyDef` for existing type (legacy) |
-| `impl_property_for_entity!(Name, Entity)` | Associate ZST property with entity |
-| `impl_property_for_entity!(Property<T>, Entity, ...)` | Associate enum property with entity |
+| Macro                                                 | Purpose                                            |
+| ----------------------------------------------------- | -------------------------------------------------- |
+| `define_property!(Name, ValueType)`                   | New-style ZST property marker                      |
+| `define_property!(enum Name { ... })`                 | New-style enum property                            |
+| `define_property!(struct Name(Type), Entity, ...)`    | Legacy wrapper property (struct)                   |
+| `define_property!(enum Name { ... }, Entity, ...)`    | Legacy wrapper property (enum)                     |
+| `impl_property!(Name, Entity, ...)`                   | Implement `PropertyDef` for existing type (legacy) |
+| `impl_property_for_entity!(Name, Entity)`             | Associate ZST property with entity                 |
+| `impl_property_for_entity!(Property<T>, Entity, ...)` | Associate enum property with entity                |
 
 ### Entity macros
 
-| Macro | Purpose |
-|-------|---------|
-| `define_entity!(Name)` | Define entity struct + Entity impl |
-| `define_entity!(struct Name { ... })` | Define entity with property declarations + builder |
-| `impl_entity!(Name)` | Implement Entity for existing struct |
-| `impl_entity!(struct Name { ... })` | Implement Entity for existing struct with properties |
+| Macro                                 | Purpose                                              |
+| ------------------------------------- | ---------------------------------------------------- |
+| `define_entity!(Name)`                | Define entity struct + Entity impl                   |
+| `define_entity!(struct Name { ... })` | Define entity with property declarations + builder   |
+| `impl_entity!(Name)`                  | Implement Entity for existing struct                 |
+| `impl_entity!(struct Name { ... })`   | Implement Entity for existing struct with properties |
 
 ### Other macros
 
-| Macro | Purpose |
-|-------|---------|
-| `all!(Entity, prop_values...)` | Create entity-scoped query/property list |
-| `define_derived_property!(...)` | Computed property from other properties |
-| `define_multi_property!((P1, P2, ...), Entity)` | Joint property index |
+| Macro                                           | Purpose                                  |
+| ----------------------------------------------- | ---------------------------------------- |
+| `all!(Entity, prop_values...)`                  | Create entity-scoped query/property list |
+| `define_derived_property!(...)`                 | Computed property from other properties  |
+| `define_multi_property!((P1, P2, ...), Entity)` | Joint property index                     |
 
 ---
 
@@ -410,7 +415,7 @@ context.with_query_results((Age(30), County(5), Height(170)), &mut |results| {
 
 ### New-style property types
 
-```
+```rs
 define_property!(Age, u8)
   Age             : IsProperty<Value = u8>     -- ZST marker
   Age             : PropertyDef<Person>         -- after define_entity!
@@ -424,7 +429,7 @@ define_property!(enum Status { S, I, R })
 
 ### Legacy property types
 
-```
+```rs
 define_property!(struct Age(u8), Person)
   Age             : PropertyDef<Person>
   P::Value = Age                                -- wrapper IS the value
@@ -432,21 +437,21 @@ define_property!(struct Age(u8), Person)
 
 ### Key traits
 
-| Trait | Purpose |
-|-------|---------|
-| `Entity` | Marker for entity types. Impl via `define_entity!` / `impl_entity!` |
-| `IsProperty` | Entity-independent property marker. Has `type Value` |
-| `PropertyDef<E>` | Ties a property to an entity. Has `type Value`, storage, indexing |
-| `PropertyList<E>` | For entity creation. Tuples, builders, entity markers |
-| `Query<E>` | For querying. Tuples of legacy properties, `all!` macro results |
-| `PropertySetter<E>` | For `(Marker, Value)` tuples |
+| Trait               | Purpose                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| `Entity`            | Marker for entity types. Impl via `define_entity!` / `impl_entity!` |
+| `IsProperty`        | Entity-independent property marker. Has `type Value`                |
+| `PropertyDef<E>`    | Ties a property to an entity. Has `type Value`, storage, indexing   |
+| `PropertyList<E>`   | For entity creation. Tuples, builders, entity markers               |
+| `Query<E>`          | For querying. Tuples of legacy properties, `all!` macro results     |
+| `PropertySetter<E>` | For `(Marker, Value)` tuples                                        |
 
 ### IDs
 
-| Type | Description |
-|------|-------------|
-| `EntityId<E>` | Typed ID for an entity instance |
-| `PersonId` | Type alias for `EntityId<Person>` (auto-generated) |
+| Type          | Description                                        |
+| ------------- | -------------------------------------------------- |
+| `EntityId<E>` | Typed ID for an entity instance                    |
+| `PersonId`    | Type alias for `EntityId<Person>` (auto-generated) |
 
 ---
 

@@ -4,7 +4,7 @@ use ixa::prelude::*;
 define_entity!(struct Person {
     Age,
     IsAlive = true,
-    Property<InfectionStatus> = InfectionStatus::Susceptible,
+    InfectionStatus = InfectionStatus::Susceptible,
     HouseholdTag,
 });
 

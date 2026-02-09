@@ -1,44 +1,39 @@
 # Summary
 
-* [Introduction](introduction.md)
+- [Introduction](introduction.md)
+  - [Get Started](get-started.md)
 
-  * [Get Started](get-started.md)
+  - [Command Line Usage](cli-usage.md)
 
-  * [Command Line Usage](cli-usage.md)
+- [Your First Model](first_model/your-first-model.md)
+  - [Setting Up Your First Model](first_model/setup.md)
 
-* [Your First Model](first_model/your-first-model.md)
+  - [The People Module](first_model/people.md)
 
-  * [Setting Up Your First Model](first_model/setup.md)
+  - [The Transmission Module](first_model/transmission.md)
 
-  * [The People Module](first_model/people.md)
+  - [The Infection Module](first_model/infection.md)
 
-  * [The Transmission Module](first_model/transmission.md)
+  - [The Incidence Report](first_model/reporter.md)
 
-  * [The Infection Module](first_model/infection.md)
+  - [Next Steps](first_model/next-steps.md)
 
-  * [The Incidence Report](first_model/reporter.md)
+- [Topics](topics/topics.md)
+  - [Indexing](topics/indexing.md)
 
-  * [Next Steps](first_model/next-steps.md)
+  - [Performance and Profiling](topics/performance.md)
 
-* [Topics](topics/topics.md)
+  - [Profiling Module](topics/profiling-module.md)
 
-  * [Indexing](topics/indexing.md)
+  - [`random`](topics/random-module.md) [module](topics/random-module.md)
 
-  * [Performance and Profiling](topics/performance.md)
+  - [Reports](topics/reports.md)
 
-  * [Profiling Module](topics/profiling-module.md)
+- [Migrating to ixa 2.0](migration_guide.md)
 
-  * [`random`](topics/random-module.md) [module](topics/random-module.md)
+- [Appendix: Rust](appendix_rust/appendix-rust.md)
+  - [Specifying Generic Types and the Turbo Fish](appendix_rust/turbo-fish.md)
 
-  * [Reports](topics/reports.md)
+  - [Rust Learning Resources](appendix_rust/rust-resources.md)
 
-* [Migrating to ixa 2.0](migration_guide.md)
-
-* [Appendix: Rust](appendix_rust/appendix-rust.md)
-
-  * [Specifying Generic Types and the Turbo Fish](appendix_rust/turbo-fish.md)
-
-  * [Rust Learning Resources](appendix_rust/rust-resources.md)
-
-  * [Python vs. Rust](appendix_rust/python-vs-rust.md)
-
+  - [Python vs. Rust](appendix_rust/python-vs-rust.md)

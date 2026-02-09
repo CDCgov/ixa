@@ -133,19 +133,7 @@ impl ContextEntitiesExt for Context {
         &mut self,
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError> {
-        // Check that the properties in the list are distinct.
-        if let Err(msg) = PL::validate() {
-            return Err(IxaError::from(format!("invalid property list: {}", msg)));
-        }
-
-        // Check that all required properties are present.
-        if !PL::contains_required_properties() {
-            return Err(IxaError::from(
-                "initialization list is missing required properties",
-            ));
-        }
-
-        // Now that we know we will succeed, we create the entity.
+        // Create the entity.
         let new_entity_id = self.entity_store.new_entity_id::<E>();
 
         // Assign the properties in the list to the new entity.
@@ -515,17 +503,6 @@ mod tests {
         // Age is the only required property
         let _person3 = context.add_entity((Age(120),)).unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 3);
-    }
-
-    #[test]
-    fn add_an_entity_without_required_properties() {
-        let mut context = Context::new();
-        let result = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
-
-        assert_eq!(
-            result,
-            IxaError::from("initialization list is missing required properties")
-        );
     }
 
     #[test]

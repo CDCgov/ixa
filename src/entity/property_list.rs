@@ -1,25 +1,10 @@
 /*!
 
-A [`PropertyList<E>`] is just a tuple of distinct properties of the same [`Entity`] `E`. It
-is used in two distinct places: as an initialization list for a new entity, and as a query.
-
-Both use cases have the following two constraints:
-
-1. The properties are properties of the same entity.
-2. The properties are distinct.
-
-We enforce the first constraint with the type system by only implementing `PropertyList<E>`
-for tuples of types implementing `PropertyDef<E>` (of length up to some max). Using properties
-for mismatched entities will result in a nice compile-time error at the point of use.
-
-Unfortunately, the second constraint has to be enforced at runtime. We implement `PropertyList::validate()` to do this.
-
-For both use cases, the order in which the properties appear is
-unimportant in spite of the Rust language semantics of tuple types.
+A [`PropertyList<E>`] is a tuple of properties of the same [`Entity`] `E`, used
+as an initialization list for a new entity. It sets the property values for an entity
+upon creation.
 
 */
-
-use std::any::TypeId;
 
 use seq_macro::seq;
 
@@ -28,17 +13,6 @@ use super::property::PropertyDef;
 use super::property_store::PropertyStore;
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
-    /// Validates that the properties are distinct. If not, returns a string describing the problematic properties.
-    fn validate() -> Result<(), String>;
-
-    /// Checks that this property list includes all properties in the given list.
-    fn contains_properties(property_type_ids: &[TypeId]) -> bool;
-
-    /// Checks that this property list contains all required properties of the entity.
-    fn contains_required_properties() -> bool {
-        Self::contains_properties(E::required_property_ids())
-    }
-
     /// Assigns the given entity the property values in `self` in the `property_store`.
     /// This method does NOT emit property change events, as it is called upon entity creation.
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
@@ -46,12 +20,6 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 
 // An entity marker type is an empty `PropertyList` for itself, allowing `add_entity(Person)`.
 impl<E: Entity + Copy + 'static> PropertyList<E> for E {
-    fn validate() -> Result<(), String> {
-        Ok(())
-    }
-    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-        property_type_ids.is_empty()
-    }
     fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
         // No values to assign.
     }
@@ -59,44 +27,13 @@ impl<E: Entity + Copy + 'static> PropertyList<E> for E {
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
 impl<E: Entity> PropertyList<E> for () {
-    fn validate() -> Result<(), String> {
-        Ok(())
-    }
-    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-        property_type_ids.is_empty()
-    }
     fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
         // No values to assign.
     }
 }
 
-// ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
-//     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
-//     whether the conflict actually exists.
-// A single `Property` is a `PropertyList` of length 1
-// impl<E: Entity, P: PropertyDef<E>> PropertyList<E> for P {
-//     fn validate() -> Result<(), String> {
-//         Ok(())
-//     }
-//     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-//         property_type_ids.len() == 0
-//             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
-//     }
-//     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
-//         let property_value_store = property_store.get::<P>();
-//         property_value_store.set(entity_id, *self);
-//     }
-// }
-
 // A single `Property` tuple is a `PropertyList` of length 1
 impl<E: Entity, P: PropertyDef<E, Value = P>> PropertyList<E> for (P,) {
-    fn validate() -> Result<(), String> {
-        Ok(())
-    }
-    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-        property_type_ids.is_empty()
-            || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
-    }
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
         let property_value_store = property_store.get::<P>();
         property_value_store.set(entity_id, self.0);
@@ -108,31 +45,6 @@ macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
             impl<E: Entity, #( P~N: PropertyDef<E, Value = P~N>,)*> PropertyList<E> for (#(P~N, )*){
-                fn validate() -> Result<(), String> {
-                    // For `Property` distinctness check
-                    let property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];
-
-                    for i in 0..$ct - 1 {
-                        for j in (i + 1)..$ct {
-                            if property_type_ids[i] == property_type_ids[j] {
-                                return Err(format!(
-                                    "the same property appears in both position {} and {} in the property list",
-                                    i,
-                                    j
-                                ));
-                            }
-                        }
-                    }
-
-                    Ok(())
-                }
-
-                fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-                    let self_property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];
-
-                    property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
-                }
-
                 fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>){
                     #({
                         let property_value_store = property_store.get::<P~N>();
@@ -144,7 +56,7 @@ macro_rules! impl_property_list {
     };
 }
 
-// Generate impls for tuple lengths 2 through 10.
+// Generate impls for tuple lengths 2 through 5.
 seq!(Z in 2..=5 {
     impl_property_list!(Z);
 });
