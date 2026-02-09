@@ -9,20 +9,26 @@
 /// define_entity!(Person);
 /// ```
 ///
-/// ## Entity with associated properties
+/// ## Entity with associated properties (validated builder)
 /// ```rust,ignore
 /// define_entity!(struct Person {
-///     Age,                                       // required property
-///     Weight = 0.0,                              // optional with default
-///     Property<InfectionStatus> = InfectionStatus::Susceptible,  // enum property with default
+///     Age,                                              // required (must be set)
+///     Weight = 0.0,                                     // defaulted
+///     Property<InfectionStatus> = InfectionStatus::S,   // defaulted enum
 /// });
+///
+/// let person = context.add_entity(
+///     Person::build()
+///         .age(10_u8)
+///         .build()?    // validates required fields
+/// )?;
 /// ```
 ///
 /// The property-bearing form:
 /// - Generates `impl PropertyDef<Person>` for each listed property
-/// - Generates a `PersonBuilder` struct with setter methods
-/// - `Person::build()` returns a `PersonBuilder`
-/// - The builder implements `PropertyList<Person>` for use with `add_entity`
+/// - Generates a `PersonBuilder` with setter methods and a `build()` method
+/// - `build()` returns `Result<PersonInit, String>`, validating required fields
+/// - `PersonInit` implements `PropertyList<Person>` for use with `add_entity`
 #[macro_export]
 macro_rules! define_entity {
     // Simple form (no properties)
@@ -30,13 +36,6 @@ macro_rules! define_entity {
         #[allow(unused)]
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
         pub struct $entity_name;
-
-        impl $entity_name {
-            #[allow(unused)]
-            pub fn new() -> Self {
-                Self::default()
-            }
-        }
 
         $crate::impl_entity!($entity_name);
     };
@@ -46,67 +45,75 @@ macro_rules! define_entity {
         // Define the entity struct and implement Entity trait
         $crate::define_entity!($entity_name);
 
-        // Process property declarations: accumulates (prop_ty, field_name, value_ty) into builder list
-        // and emits impl_property_for_entity! calls eagerly.
-        $crate::define_entity!(@process_props $entity_name, [], $($prop_decl)*);
+        // Process property declarations with required/defaulted tracking
+        $crate::define_entity!(@process_props $entity_name, required: [], defaulted: [], $($prop_decl)*);
     };
 
     // === Internal rules for parsing property declarations ===
 
     // Terminal: no more properties to parse. Generate builder.
     (@process_props $entity:ident,
-        [$( ($all_prop:ty, $all_field:ident, $all_value_ty:ty) )*],
+        required: [$( ($r_prop:ty, $r_field:ident, $r_value_ty:ty) )*],
+        defaulted: [$( ($d_prop:ty, $d_field:ident, $d_value_ty:ty, { $($d_default:tt)* }) )*],
     ) => {
-        // Generate the builder struct and impl
         $crate::define_entity!(@generate_builder $entity,
-            [$( ($all_prop, $all_field, $all_value_ty) )*]
+            required: [$( ($r_prop, $r_field, $r_value_ty) )*],
+            defaulted: [$( ($d_prop, $d_field, $d_value_ty, { $($d_default)* }) )*]
         );
     };
 
     // Parse a required property: `PropType,`
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         $prop:ident, $($rest:tt)*
     ) => {
         $crate::impl_property_for_entity!($prop, $entity);
         $crate::define_entity!(@process_props $entity,
-            [$($all)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value)],
+            required: [$($req)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value)],
+            defaulted: [$($def)*],
             $($rest)*
         );
     };
 
     // Parse a required Property<T>: `Property<T>,`
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         Property<$inner:ident>, $($rest:tt)*
     ) => {
         $crate::define_entity!(@emit_property_for_entity $entity, $inner);
         $crate::define_entity!(@process_props $entity,
-            [$($all)* ($crate::entity::property::Property<$inner>, $inner, $inner)],
+            required: [$($req)* ($crate::entity::property::Property<$inner>, $inner, $inner)],
+            defaulted: [$($def)*],
             $($rest)*
         );
     };
 
-    // Parse an optional property with default: `PropType = default_value,`
+    // Parse a defaulted property: `PropType = default_value,`
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         $prop:ident = $default:expr, $($rest:tt)*
     ) => {
         $crate::impl_property_for_entity!($prop, $entity, default_const = $default);
         $crate::define_entity!(@process_props $entity,
-            [$($all)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value)],
+            required: [$($req)*],
+            defaulted: [$($def)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value, { $default })],
             $($rest)*
         );
     };
 
-    // Parse an optional Property<T> with default: `Property<T> = default_value,`
+    // Parse a defaulted Property<T>: `Property<T> = default_value,`
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         Property<$inner:ident> = $default:expr, $($rest:tt)*
     ) => {
         $crate::define_entity!(@emit_property_for_entity $entity, $inner, default_const = $default);
         $crate::define_entity!(@process_props $entity,
-            [$($all)* ($crate::entity::property::Property<$inner>, $inner, $inner)],
+            required: [$($req)*],
+            defaulted: [$($def)* ($crate::entity::property::Property<$inner>, $inner, $inner, { $default })],
             $($rest)*
         );
     };
@@ -115,34 +122,38 @@ macro_rules! define_entity {
 
     // Required property without trailing comma
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         $prop:ident
     ) => {
-        $crate::define_entity!(@process_props $entity, [$($all)*], $prop,);
+        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], $prop,);
     };
 
     // Required Property<T> without trailing comma
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         Property<$inner:ident>
     ) => {
-        $crate::define_entity!(@process_props $entity, [$($all)*], Property<$inner>,);
+        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], Property<$inner>,);
     };
 
-    // Optional property with default without trailing comma
+    // Defaulted property without trailing comma
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         $prop:ident = $default:expr
     ) => {
-        $crate::define_entity!(@process_props $entity, [$($all)*], $prop = $default,);
+        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], $prop = $default,);
     };
 
-    // Optional Property<T> with default without trailing comma
+    // Defaulted Property<T> without trailing comma
     (@process_props $entity:ident,
-        [$($all:tt)*],
+        required: [$($req:tt)*],
+        defaulted: [$($def:tt)*],
         Property<$inner:ident> = $default:expr
     ) => {
-        $crate::define_entity!(@process_props $entity, [$($all)*], Property<$inner> = $default,);
+        $crate::define_entity!(@process_props $entity, required: [$($req)*], defaulted: [$($def)*], Property<$inner> = $default,);
     };
 
     // Helper: emit impl_property_for_entity for Property<T> (required)
@@ -162,26 +173,36 @@ macro_rules! define_entity {
         );
     };
 
-    // Generate builder struct and implementation
+    // Generate validated builder struct, init struct, and PropertyList impl
     (@generate_builder $entity:ident,
-        [$( ($prop:ty, $field:ident, $value_ty:ty) )*]
+        required: [$( ($r_prop:ty, $r_field:ident, $r_value_ty:ty) )*],
+        defaulted: [$( ($d_prop:ty, $d_field:ident, $d_value_ty:ty, { $($d_default:tt)* }) )*]
     ) => {
         $crate::paste::paste! {
-            /// Builder for creating entities with explicit property values.
+            /// Builder for creating entities with validated property values.
+            ///
+            /// Required properties are stored as `Option` and must be set before calling `build()`.
+            /// Defaulted properties are pre-initialized with their default values.
             #[derive(Debug, Clone, Copy)]
             pub struct [<$entity Builder>] {
                 $(
-                    [<$field:snake>]: Option<$value_ty>,
+                    [<$r_field:snake>]: Option<$r_value_ty>,
+                )*
+                $(
+                    [<$d_field:snake>]: $d_value_ty,
                 )*
             }
 
             impl $entity {
                 /// Create a new builder for this entity type.
                 #[allow(unused)]
-                pub fn build() -> [<$entity Builder>] {
+                pub fn new() -> [<$entity Builder>] {
                     [<$entity Builder>] {
                         $(
-                            [<$field:snake>]: None,
+                            [<$r_field:snake>]: None,
+                        )*
+                        $(
+                            [<$d_field:snake>]: { $($d_default)* },
                         )*
                     }
                 }
@@ -190,14 +211,51 @@ macro_rules! define_entity {
             impl [<$entity Builder>] {
                 $(
                     #[allow(unused)]
-                    pub fn [<$field:snake>](mut self, value: $value_ty) -> Self {
-                        self.[<$field:snake>] = Some(value);
+                    pub fn [<$r_field:snake>](mut self, value: $r_value_ty) -> Self {
+                        self.[<$r_field:snake>] = Some(value);
                         self
                     }
                 )*
+                $(
+                    #[allow(unused)]
+                    pub fn [<$d_field:snake>](mut self, value: $d_value_ty) -> Self {
+                        self.[<$d_field:snake>] = value;
+                        self
+                    }
+                )*
+
+                /// Validate all required fields are set and produce a validated init struct.
+                pub fn build(self) -> Result<[<$entity Init>], $crate::IxaError> {
+                    Ok([<$entity Init>] {
+                        $(
+                            [<$r_field:snake>]: self.[<$r_field:snake>]
+                                .ok_or_else(|| $crate::IxaError::from(format!(
+                                    "required property {} not set",
+                                    stringify!($r_field)
+                                )))?,
+                        )*
+                        $(
+                            [<$d_field:snake>]: self.[<$d_field:snake>],
+                        )*
+                    })
+                }
             }
 
-            impl $crate::entity::property_list::PropertyList<$entity> for [<$entity Builder>] {
+            /// Validated init struct for creating entities.
+            ///
+            /// Produced by the builder's `build()` method after validation.
+            /// All fields are guaranteed to have values.
+            #[derive(Debug, Clone, Copy)]
+            pub struct [<$entity Init>] {
+                $(
+                    [<$r_field:snake>]: $r_value_ty,
+                )*
+                $(
+                    [<$d_field:snake>]: $d_value_ty,
+                )*
+            }
+
+            impl $crate::entity::property_list::PropertyList<$entity> for [<$entity Init>] {
                 fn validate() -> Result<(), String> {
                     Ok(())
                 }
@@ -205,14 +263,16 @@ macro_rules! define_entity {
                 fn contains_properties(property_type_ids: &[std::any::TypeId]) -> bool {
                     let self_type_ids: &[std::any::TypeId] = &[
                         $(
-                            <$prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
+                            <$r_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
+                        )*
+                        $(
+                            <$d_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
                         )*
                     ];
                     property_type_ids.iter().all(|id| self_type_ids.contains(id))
                 }
 
                 fn contains_required_properties() -> bool {
-                    // The builder always contains all properties, so it always satisfies required properties
                     true
                 }
 
@@ -222,9 +282,15 @@ macro_rules! define_entity {
                     property_store: &$crate::entity::property_store::PropertyStore<$entity>,
                 ) {
                     $(
-                        if let Some(value) = self.[<$field:snake>] {
-                            let store = property_store.get::<$prop>();
-                            store.set(entity_id, value);
+                        {
+                            let store = property_store.get::<$r_prop>();
+                            store.set(entity_id, self.[<$r_field:snake>]);
+                        }
+                    )*
+                    $(
+                        {
+                            let store = property_store.get::<$d_prop>();
+                            store.set(entity_id, self.[<$d_field:snake>]);
                         }
                     )*
                 }
@@ -265,7 +331,7 @@ macro_rules! impl_entity {
     // Form with property declarations (struct already exists)
     (struct $entity_name:ident { $($prop_decl:tt)* }) => {
         $crate::impl_entity!($entity_name);
-        $crate::define_entity!(@process_props $entity_name, [], $($prop_decl)*);
+        $crate::define_entity!(@process_props $entity_name, required: [], defaulted: [], $($prop_decl)*);
     };
 
     // Simple form (no properties)
@@ -405,304 +471,13 @@ macro_rules! define_group {
     };
 }
 
-/// Defines an entity with associated properties, generating a validated builder pattern.
+/// Alias for `define_entity!(struct ...)`. Prefer using `define_entity!` directly.
 ///
-/// Unlike `define_entity!(struct ...)`, this macro distinguishes between **required** and
-/// **defaulted** properties:
-///
-/// - **Required** properties have no default value and must be explicitly set via the builder.
-/// - **Defaulted** properties have a default value and are pre-initialized in the builder.
-///
-/// The `build()` method on the builder returns `Result<EntityInit, String>`, validating that
-/// all required fields have been set. The resulting `EntityInit` struct implements
-/// `PropertyList<E>` for use with `add_entity`.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// define_property!(Age, u8);
-/// define_property!(IsAlive, bool);
-/// define_property!(enum InfectionStatus { S, I, R });
-///
-/// define_entity_with_properties!(Person {
-///     Age,                                              // required
-///     IsAlive = true,                                   // defaulted
-///     Property<InfectionStatus> = InfectionStatus::S,   // defaulted enum
-/// });
-///
-/// let person = context.add_entity(
-///     Person::build()
-///         .age(10_u8)
-///         .build()?
-/// )?;
-/// ```
+/// This macro delegates entirely to `define_entity!(struct $name { ... })`.
 #[macro_export]
 macro_rules! define_entity_with_properties {
     ($entity_name:ident { $($prop_decl:tt)* }) => {
-        $crate::define_entity!($entity_name);
-
-        // Start processing: accumulate required and defaulted property lists
-        $crate::define_entity_with_properties!(
-            @process_props $entity_name,
-            required: [],
-            defaulted: [],
-            $($prop_decl)*
-        );
-    };
-
-    // === Terminal: no more properties. Generate builder + init. ===
-    (@process_props $entity:ident,
-        required: [$( ($r_prop:ty, $r_field:ident, $r_value_ty:ty) )*],
-        defaulted: [$( ($d_prop:ty, $d_field:ident, $d_value_ty:ty, { $($d_default:tt)* }) )*],
-    ) => {
-        $crate::define_entity_with_properties!(
-            @generate_builder $entity,
-            required: [$( ($r_prop, $r_field, $r_value_ty) )*],
-            defaulted: [$( ($d_prop, $d_field, $d_value_ty, { $($d_default)* }) )*]
-        );
-    };
-
-    // === Parse required ZST property: `Age,` ===
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        $prop:ident, $($rest:tt)*
-    ) => {
-        $crate::impl_property_for_entity!($prop, $entity);
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value)],
-            defaulted: [$($def)*],
-            $($rest)*
-        );
-    };
-
-    // === Parse required Property<T>: `Property<T>,` ===
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident>, $($rest:tt)*
-    ) => {
-        $crate::define_entity!(@emit_property_for_entity $entity, $inner);
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)* ($crate::entity::property::Property<$inner>, $inner, $inner)],
-            defaulted: [$($def)*],
-            $($rest)*
-        );
-    };
-
-    // === Parse defaulted ZST property: `Age = 0,` ===
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        $prop:ident = $default:expr, $($rest:tt)*
-    ) => {
-        $crate::impl_property_for_entity!($prop, $entity, default_const = $default);
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)* ($prop, $prop, <$prop as $crate::entity::property::IsProperty>::Value, { $default })],
-            $($rest)*
-        );
-    };
-
-    // === Parse defaulted Property<T>: `Property<T> = T::V,` ===
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident> = $default:expr, $($rest:tt)*
-    ) => {
-        $crate::define_entity!(@emit_property_for_entity $entity, $inner, default_const = $default);
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)* ($crate::entity::property::Property<$inner>, $inner, $inner, { $default })],
-            $($rest)*
-        );
-    };
-
-    // --- No trailing comma variants (last item in the list) ---
-
-    // Required ZST property without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        $prop:ident
-    ) => {
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)*],
-            $prop,
-        );
-    };
-
-    // Required Property<T> without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident>
-    ) => {
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)*],
-            Property<$inner>,
-        );
-    };
-
-    // Defaulted ZST property without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        $prop:ident = $default:expr
-    ) => {
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)*],
-            $prop = $default,
-        );
-    };
-
-    // Defaulted Property<T> with default without trailing comma
-    (@process_props $entity:ident,
-        required: [$($req:tt)*],
-        defaulted: [$($def:tt)*],
-        Property<$inner:ident> = $default:expr
-    ) => {
-        $crate::define_entity_with_properties!(
-            @process_props $entity,
-            required: [$($req)*],
-            defaulted: [$($def)*],
-            Property<$inner> = $default,
-        );
-    };
-
-    // === Generate builder struct, init struct, and PropertyList impl ===
-    (@generate_builder $entity:ident,
-        required: [$( ($r_prop:ty, $r_field:ident, $r_value_ty:ty) )*],
-        defaulted: [$( ($d_prop:ty, $d_field:ident, $d_value_ty:ty, { $($d_default:tt)* }) )*]
-    ) => {
-        $crate::paste::paste! {
-            /// Builder for creating entities with validated property values.
-            ///
-            /// Required properties are stored as `Option` and must be set before calling `build()`.
-            /// Defaulted properties are pre-initialized with their default values.
-            #[derive(Debug, Clone, Copy)]
-            pub struct [<$entity Builder>] {
-                $(
-                    [<$r_field:snake>]: Option<$r_value_ty>,
-                )*
-                $(
-                    [<$d_field:snake>]: $d_value_ty,
-                )*
-            }
-
-            impl $entity {
-                /// Create a new builder for this entity type.
-                #[allow(unused)]
-                pub fn build() -> [<$entity Builder>] {
-                    [<$entity Builder>] {
-                        $(
-                            [<$r_field:snake>]: None,
-                        )*
-                        $(
-                            [<$d_field:snake>]: { $($d_default)* },
-                        )*
-                    }
-                }
-            }
-
-            impl [<$entity Builder>] {
-                $(
-                    #[allow(unused)]
-                    pub fn [<$r_field:snake>](mut self, value: $r_value_ty) -> Self {
-                        self.[<$r_field:snake>] = Some(value);
-                        self
-                    }
-                )*
-                $(
-                    #[allow(unused)]
-                    pub fn [<$d_field:snake>](mut self, value: $d_value_ty) -> Self {
-                        self.[<$d_field:snake>] = value;
-                        self
-                    }
-                )*
-
-                /// Validate all required fields are set and produce a validated init struct.
-                pub fn build(self) -> Result<[<$entity Init>], String> {
-                    Ok([<$entity Init>] {
-                        $(
-                            [<$r_field:snake>]: self.[<$r_field:snake>]
-                                .ok_or_else(|| format!(
-                                    "required property {} not set",
-                                    stringify!($r_field)
-                                ))?,
-                        )*
-                        $(
-                            [<$d_field:snake>]: self.[<$d_field:snake>],
-                        )*
-                    })
-                }
-            }
-
-            /// Validated init struct for creating entities.
-            ///
-            /// Produced by the builder's `build()` method after validation.
-            /// All fields are guaranteed to have values.
-            #[derive(Debug, Clone, Copy)]
-            pub struct [<$entity Init>] {
-                $(
-                    [<$r_field:snake>]: $r_value_ty,
-                )*
-                $(
-                    [<$d_field:snake>]: $d_value_ty,
-                )*
-            }
-
-            impl $crate::entity::property_list::PropertyList<$entity> for [<$entity Init>] {
-                fn validate() -> Result<(), String> {
-                    Ok(())
-                }
-
-                fn contains_properties(property_type_ids: &[std::any::TypeId]) -> bool {
-                    let self_type_ids: &[std::any::TypeId] = &[
-                        $(
-                            <$r_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
-                        )*
-                        $(
-                            <$d_prop as $crate::entity::property::PropertyDef<$entity>>::type_id(),
-                        )*
-                    ];
-                    property_type_ids.iter().all(|id| self_type_ids.contains(id))
-                }
-
-                fn contains_required_properties() -> bool {
-                    true
-                }
-
-                fn set_values_for_entity(
-                    &self,
-                    entity_id: $crate::entity::EntityId<$entity>,
-                    property_store: &$crate::entity::property_store::PropertyStore<$entity>,
-                ) {
-                    $(
-                        {
-                            let store = property_store.get::<$r_prop>();
-                            store.set(entity_id, self.[<$r_field:snake>]);
-                        }
-                    )*
-                    $(
-                        {
-                            let store = property_store.get::<$d_prop>();
-                            store.set(entity_id, self.[<$d_field:snake>]);
-                        }
-                    )*
-                }
-            }
-        }
+        $crate::define_entity!(struct $entity_name { $($prop_decl)* });
     };
 }
 
@@ -737,7 +512,13 @@ mod tests {
 
         // Create entity using builder
         let id = context
-            .add_entity(Animal::build().zst_age(10_u8).zst_weight(55.5))
+            .add_entity(
+                Animal::new()
+                    .zst_age(10_u8)
+                    .zst_weight(55.5)
+                    .build()
+                    .unwrap(),
+            )
             .unwrap();
 
         // Read back properties using turbofish
@@ -756,7 +537,9 @@ mod tests {
     fn test_new_style_set_property() {
         let mut context = Context::new();
 
-        let id = context.add_entity(Animal::build().zst_age(5_u8)).unwrap();
+        let id = context
+            .add_entity(Animal::new().zst_age(5_u8).build().unwrap())
+            .unwrap();
 
         // Mutate property
         context.set_property::<_, ZstAge>(id, 20_u8);
@@ -774,7 +557,9 @@ mod tests {
         let mut context = Context::new();
 
         // Only set required property (ZstAge), rely on defaults for others
-        let id = context.add_entity(Animal::build().zst_age(1_u8)).unwrap();
+        let id = context
+            .add_entity(Animal::new().zst_age(1_u8).build().unwrap())
+            .unwrap();
 
         let weight: f64 = context.get_property::<_, ZstWeight>(id);
         assert_eq!(weight, 0.0);
@@ -799,7 +584,9 @@ mod tests {
             *context.get_data_mut(EventCount) += 1;
         });
 
-        let id = context.add_entity(Animal::build().zst_age(3_u8)).unwrap();
+        let id = context
+            .add_entity(Animal::new().zst_age(3_u8).build().unwrap())
+            .unwrap();
         context.set_property::<_, Property<ZstStatus>>(id, ZstStatus::I);
         context.execute();
 
@@ -810,7 +597,9 @@ mod tests {
     fn test_marker_based_get_set() {
         let mut context = Context::new();
 
-        let id = context.add_entity(Animal::build().zst_age(5_u8)).unwrap();
+        let id = context
+            .add_entity(Animal::new().zst_age(5_u8).build().unwrap())
+            .unwrap();
 
         // get_property_value with marker
         let age: u8 = context.get_property_value(id, ZstAge);
@@ -869,7 +658,9 @@ mod tests {
         });
 
         let mut context = Context::new();
-        let car = context.add_entity(Vehicle::build().speed(60.0)).unwrap();
+        let car = context
+            .add_entity(Vehicle::new().speed(60.0).build().unwrap())
+            .unwrap();
 
         let speed: f64 = context.get_property_value(car, Speed);
         assert_eq!(speed, 60.0);
@@ -905,7 +696,7 @@ mod tests {
     #[test]
     fn test_ewp_required_field_validation() {
         // build() without setting required field should error
-        let result = Creature::build().build();
+        let result = Creature::new().build();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("CreatureAge"));
     }
@@ -916,7 +707,7 @@ mod tests {
 
         // Only set required field, defaults should apply
         let id = context
-            .add_entity(Creature::build().creature_age(5_u8).build().unwrap())
+            .add_entity(Creature::new().creature_age(5_u8).build().unwrap())
             .unwrap();
 
         let alive: bool = context.get_property::<_, CreatureAlive>(id);
@@ -932,7 +723,7 @@ mod tests {
 
         let id = context
             .add_entity(
-                Creature::build()
+                Creature::new()
                     .creature_age(10_u8)
                     .creature_alive(false)
                     .creature_kind(CreatureKind::Bird)
@@ -954,7 +745,7 @@ mod tests {
 
         let id = context
             .add_entity(
-                Creature::build()
+                Creature::new()
                     .creature_age(42_u8)
                     .creature_alive(true)
                     .creature_kind(CreatureKind::Dog)
@@ -988,7 +779,7 @@ mod tests {
         });
 
         let id = context
-            .add_entity(Creature::build().creature_age(1_u8).build().unwrap())
+            .add_entity(Creature::new().creature_age(1_u8).build().unwrap())
             .unwrap();
         context.set_property::<_, Property<CreatureKind>>(id, CreatureKind::Dog);
         context.execute();
@@ -1019,7 +810,7 @@ mod tests {
         let mut context = Context::new();
 
         let id = context
-            .add_entity(Widget::build().no_comma_age(5_u8))
+            .add_entity(Widget::new().no_comma_age(5_u8).build().unwrap())
             .unwrap();
 
         let age: u8 = context.get_property::<_, NoCommaAge>(id);
@@ -1046,7 +837,7 @@ mod tests {
         let mut context = Context::new();
 
         let id = context
-            .add_entity(Gadget::build().gadget_size(42_u32).build().unwrap())
+            .add_entity(Gadget::new().gadget_size(42_u32).build().unwrap())
             .unwrap();
 
         let size: u32 = context.get_property::<_, GadgetSize>(id);
