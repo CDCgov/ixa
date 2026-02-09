@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0](https://github.com/CDCgov/ixa/compare/ixa-derive-v0.0.3...ixa-derive-v1.0.0) - 2025-11-17
+## [2.0.0-beta](https://github.com/CDCgov/ixa/compare/ixa-derive-v1.0.0...ixa-derive-v2.0.0-beta) - 2026-02-09
+
+- Added entities implementation and removed people module
+
+# [1.0.0](https://github.com/CDCgov/ixa/compare/ixa-derive-v0.0.3...ixa-derive-v1.0.0) - 2025-11-17
 
 - added rust fmt rules for imports ([#586](https://github.com/CDCgov/ixa/pull/586))
 
