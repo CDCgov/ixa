@@ -5,6 +5,8 @@ use entities::*;
 use ixa::prelude::*;
 use population_loader::{load_synthetic_population, SyntheticPopRecord};
 
+define_rng!(InfectionRng);
+
 fn main() -> anyhow::Result<()> {
     let mut context = Context::new();
 
@@ -19,6 +21,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("Loaded {} people", people.len());
+
+    let seeds: Vec<EntityId<Person>> = context.sample_entities(InfectionRng, (), 3);
+    for person in &seeds {
+        // This is still not ideal because of multiple impls
+        context.set_property::<Person, InfectionStatus>(*person, InfectionStatus::Infected);
+        println!("Infected person {:?}", person);
+    }
 
     Ok(())
 }
