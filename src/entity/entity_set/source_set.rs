@@ -5,13 +5,13 @@
 //! iterator over the set of `EntityId<E>`s it represents. The lifetime `'c`
 //! is the lifetime of the (immutable) borrow of the underlying `Context`.
 //!
-//! The `SourceSet<'c>` and `SourceIterator<'c>` types are used by `QueryResultIterator<'c>`, which
-//! iterates over the intersection of a set of `SourceSet`s. Internally, `QueryResultIterator` holds
+//! The `SourceSet<'c>` and `SourceIterator<'c>` types are used by `EntitySetIterator<'c>`, which
+//! iterates over the intersection of a set of `SourceSet`s. Internally, `EntitySetIterator` holds
 //! its state in a set of `SourceSet` instances and a `SourceIterator`, which is an iterator created
 //! from a `SourceSet`. A `SourceSet` wraps either an index set (an immutable reference to a set
 //! from an index) or a property vector (the `Vec<Option<Property<E>::Value>>` that internally
 //! stores the property values) and can compute membership very efficiently. The algorithm chooses
-//! the _smallest_ `SourceSet` to create its `SourceIterator` and, when `QueryResultIterator::next()`
+//! the _smallest_ `SourceSet` to create its `SourceIterator` and, when `EntitySetIterator::next()`
 //! is called, this `SourceIterator` is iterated over until an ID is found that is contained
 //! in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
 
@@ -22,7 +22,7 @@ use std::marker::PhantomData;
 use ouroboros::self_referencing;
 
 use crate::entity::property_value_store_core::RawPropertyValueVec;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityIterator};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, PopulationIterator};
 use crate::hashing::{IndexSet, IndexSetIter};
 use crate::prelude::Property;
 use crate::Context;
@@ -34,7 +34,7 @@ type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
 /// both `ConcretePropertyVec<'a, P: Property>` and `DerivedPropertySource<'a, P: Property>`.
 pub trait AbstractPropertySource<'a, E: Entity> {
     /// An upper bound on the number of elements this source will need to iterate over. The idea is to perform the
-    /// minimum amount of work to determine the first set in the intersection of sets that `QueryResultIterator`
+    /// minimum amount of work to determine the first set in the intersection of sets that `EntitySetIterator`
     /// represents.
     fn upper_len(&self) -> usize;
 
@@ -234,13 +234,13 @@ impl<'a, E: Entity> IndexSetIterator<'a, E> {
 }
 
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
-pub enum SourceSet<'a, E: Entity> {
+pub(crate) enum SourceSet<'a, E: Entity> {
     IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
     PropertySet(BxPropertySource<'a, E>),
 }
 
 impl<'a, E: Entity> SourceSet<'a, E> {
-    /// A constructor for `SourceSet`s during construction of `QueryResultIterator` in
+    /// A constructor for `SourceSet`s during construction of `EntitySetIterator` in
     /// `Query<E>::new_query_result_iterator()`. Returns `None` if the set is empty.
     ///
     /// We first look for an index set. If not found, we check if the property is derived.
@@ -248,7 +248,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// properties, we wrap a reference to the property's backing vector.
     ///
     /// This method refreshes outdated indexes.
-    pub(super) fn new<P: Property<E>>(value: P, context: &'a Context) -> Option<Self> {
+    pub(crate) fn new<P: Property<E>>(value: P, context: &'a Context) -> Option<Self> {
         let property_store = context.entity_store.get_property_store::<E>();
 
         // Check for an index.
@@ -310,14 +310,14 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         }
     }
 }
-/// Kinds of iterators that are used as a basis for `QueryResultIterator`
-pub(crate) enum SourceIterator<'a, E: Entity> {
+/// Kinds of iterators that are used as a basis for `EntitySetIterator`
+pub(super) enum SourceIterator<'a, E: Entity> {
     /// An iterator over an index set
     IndexIter(IndexSetIterator<'a, E>),
     /// An iterator over a property vector
     PropertyVecIter(Box<dyn Iterator<Item = EntityId<E>> + 'a>),
     /// An iterator over the entire population
-    WholePopulation(EntityIterator<E>),
+    WholePopulation(PopulationIterator<E>),
     /// An empty iterator
     Empty,
 }
@@ -335,15 +335,6 @@ impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
 
 impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
     type Item = EntityId<E>;
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        match self {
-            SourceIterator::IndexIter(iter) => iter.with_iter_mut(|iter| iter.nth(n).copied()),
-            SourceIterator::PropertyVecIter(iter) => iter.nth(n),
-            SourceIterator::WholePopulation(iter) => iter.nth(n),
-            SourceIterator::Empty => None,
-        }
-    }
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -373,6 +364,15 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
             SourceIterator::PropertyVecIter(iter) => iter.count(),
             SourceIterator::WholePopulation(iter) => iter.count(),
             SourceIterator::Empty => 0,
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self {
+            SourceIterator::IndexIter(iter) => iter.with_iter_mut(|iter| iter.nth(n).copied()),
+            SourceIterator::PropertyVecIter(iter) => iter.nth(n),
+            SourceIterator::WholePopulation(iter) => iter.nth(n),
+            SourceIterator::Empty => None,
         }
     }
 }

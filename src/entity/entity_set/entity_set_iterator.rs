@@ -1,18 +1,18 @@
-//! A `QueryResultIterator` encapsulates the execution of a query, presenting the results as
-//! an iterator.
+//! An `EntitySetIterator` encapsulates the execution of an entity set operation, presenting the
+//! results as an iterator.
 //!
-//! You normally create a `QueryResultIterator` by calling `context.query_entity(some_query)`,
-//! which returns a `QueryResultIterator` instance.
+//! You normally create an `EntitySetIterator` by calling `context.query_entity(some_query)`,
+//! which returns an `EntitySetIterator` instance.
 //!
-//! A `QueryResultIterator` can be thought of abstractly as representing the intersection of
-//! a set of `SourceSet`s. Internally, `QueryResultIterator` holds its state in a set of
+//! An `EntitySetIterator` can be thought of abstractly as representing the intersection of
+//! a set of `SourceSet`s. Internally, `EntitySetIterator` holds its state in a set of
 //! `SourceSet` instances and a `SourceIterator`, which is an iterator created from a
 //! `SourceSet` and represents the first of the sets in the intersection. To produce the "next"
-//! `EntityId<E>` for a call to `QueryResultIterator::next()`, we need to iterate over the
+//! `EntityId<E>` for a call to `EntitySetIterator::next()`, we need to iterate over the
 //! `SourceIterator` until we find an entity ID that is contained in all of the `SourceSet`s
 //! simultaneously.
 //!
-//! A `QueryResultIterator` holds an immutable reference to the `Context`, so
+//! An `EntitySetIterator` holds an immutable reference to the `Context`, so
 //! operations that mutate `Context` will be forbidden by the compiler statically. The results
 //! can be collected into a `Vec` (or other container) with the `collect` idiom for use cases
 //! where you want a mutable copy of the result set. If you don't need a mutable copy, use
@@ -23,50 +23,50 @@ use std::cell::Ref;
 use log::warn;
 use rand::Rng;
 
-use crate::entity::query::source_set::{SourceIterator, SourceSet};
-use crate::entity::{Entity, EntityId, EntityIterator};
+use crate::entity::entity_set::source_set::{SourceIterator, SourceSet};
+use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
 use crate::random::{sample_multiple_l_reservoir, sample_single_l_reservoir};
 
-/// An iterator over the results of a query, producing `EntityId<E>`s until exhausted.
-pub struct QueryResultIterator<'c, E: Entity> {
+/// An iterator over the IDs in an entity set, producing `EntityId<E>`s until exhausted.
+pub struct EntitySetIterator<'c, E: Entity> {
     source: SourceIterator<'c, E>,
     sources: Vec<SourceSet<'c, E>>,
 }
 
-impl<'c, E: Entity> QueryResultIterator<'c, E> {
-    /// Create a new empty `QueryResultIterator` for situations where you know
-    /// there are no results but need a `QueryResultIterator`.
-    pub fn empty() -> QueryResultIterator<'c, E> {
-        QueryResultIterator {
+impl<'c, E: Entity> EntitySetIterator<'c, E> {
+    /// Create a new empty `EntitySetIterator` for situations where you know
+    /// there are no results but need an `EntitySetIterator`.
+    pub fn empty() -> EntitySetIterator<'c, E> {
+        EntitySetIterator {
             source: SourceIterator::Empty,
             sources: vec![],
         }
     }
 
-    /// Create a new `QueryResultIterator` that iterates over the entire population if entities.
+    /// Create a new `EntitySetIterator` that iterates over the entire entity population.
     /// This is used, for example, when the query is the empty query.
-    pub(super) fn from_population_iterator(iter: EntityIterator<E>) -> Self {
-        QueryResultIterator {
+    pub(crate) fn from_population_iterator(iter: PopulationIterator<E>) -> Self {
+        EntitySetIterator {
             source: SourceIterator::WholePopulation(iter),
             sources: vec![],
         }
     }
 
-    /// Create a new `QueryResultIterator` from a provided list of sources.
+    /// Create a new `EntitySetIterator` from a provided list of sources.
     /// The sources need not be sorted.
-    pub fn from_sources(mut sources: Vec<SourceSet<'c, E>>) -> Self {
+    pub(crate) fn from_sources(mut sources: Vec<SourceSet<'c, E>>) -> Self {
         if sources.is_empty() {
             return Self::empty();
         }
 
         sources.sort_unstable_by_key(|x| x.upper_len());
         let source = sources.remove(0).into_iter();
-        QueryResultIterator { source, sources }
+        EntitySetIterator { source, sources }
     }
 
-    pub fn from_index_set(set: Ref<'c, IndexSet<EntityId<E>>>) -> QueryResultIterator<'c, E> {
-        QueryResultIterator {
+    pub fn from_index_set(set: Ref<'c, IndexSet<EntityId<E>>>) -> EntitySetIterator<'c, E> {
+        EntitySetIterator {
             source: SourceSet::IndexSet(set).into_iter(),
             sources: vec![],
         }
@@ -105,7 +105,7 @@ impl<'c, E: Entity> QueryResultIterator<'c, E> {
     }
 }
 
-impl<'a, E: Entity> Iterator for QueryResultIterator<'a, E> {
+impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
     type Item = EntityId<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -162,7 +162,7 @@ impl<'a, E: Entity> Iterator for QueryResultIterator<'a, E> {
         }
     }
 }
-impl<'c, E: Entity> std::iter::FusedIterator for QueryResultIterator<'c, E> {}
+impl<'c, E: Entity> std::iter::FusedIterator for EntitySetIterator<'c, E> {}
 
 #[cfg(test)]
 mod tests {

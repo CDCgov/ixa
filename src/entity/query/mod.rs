@@ -1,13 +1,10 @@
 mod query_impls;
-mod query_result_iterator;
-mod source_set;
 
 use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::{Mutex, OnceLock};
 
-pub use query_result_iterator::QueryResultIterator;
-
+use crate::entity::entity_set::EntitySetIterator;
 use crate::entity::multi_property::type_ids_to_multi_property_index;
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
@@ -95,7 +92,7 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
         self.inner.multi_property_value_hash()
     }
 
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E> {
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         self.inner.new_query_result_iterator(context)
     }
 
@@ -158,8 +155,8 @@ pub trait Query<E: Entity>: Copy + 'static {
     /// multi-property value.
     fn multi_property_value_hash(&self) -> HashValueType;
 
-    /// Creates a new `QueryResultIterator`
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> QueryResultIterator<'c, E>;
+    /// Creates a new `EntitySetIterator`.
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E>;
 
     /// Determines if the given person matches this query.
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool;
