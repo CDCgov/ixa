@@ -7,7 +7,12 @@ jobs:
   compare-branches:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
+      contents: write
       pull-requests: write
+    env:
+      BENCH_HISTORY_BRANCH: benchmarks-history
+      BENCH_HISTORY_DIR: tmp-bench-history
     steps:
       - uses: actions/checkout@v6
       - name: Setup environment
@@ -28,10 +33,23 @@ jobs:
         run: git checkout ${{ github.event.pull_request.head.ref }}
 
       - name: Run hyperfine benchmarks
-        run: mise run bench:hyperfine -- -- --export-markdown hyperfine.md
+        run:
+          mise run bench:hyperfine -- -- --export-markdown hyperfine.md
+          --export-json hyperfine.json
 
-      - name: Run benchmarks on head branch and format output
+      - name: Run criterion benchmarks (baseline compare)
         run: |
+          set -euo pipefail
+          if cargo bench -p ixa-bench -- --baseline base 2>&1 | tee criterion-compare.txt; then
+            cargo run -q -p ixa-bench --bin check_criterion_regressions | tee criterion-regressions.txt
+          else
+            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" | tee criterion-regressions.txt
+            mise run bench:criterion 2>&1 | tee -a criterion-compare.txt
+          fi
+
+      - name: Format PR comment
+        run: |
+          set -euo pipefail
           echo '### Benchmark Results' > results.md
           echo '' >> results.md
           echo '#### Hyperfine' >> results.md
@@ -42,19 +60,81 @@ jobs:
           echo '' >> results.md
           echo '#### Criterion' >> results.md
           echo '' >> results.md
-          if ! cargo bench -p ixa-bench -- --baseline base 2>&1; then
-            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
-            mise run bench:criterion 2>&1
-          else
-            echo '```' >> results.md
-            cargo run -q -p ixa-bench --bin check_criterion_regressions >> results.md
-            echo '```' >> results.md
-          fi
+          echo '```' >> results.md
+          cat criterion-regressions.txt >> results.md
+          echo '```' >> results.md
 
       - name: Add comment to PR
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
             --body-file results.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name:
+          Download previous bench history from benchmarks-history branch (best
+          effort)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Fetches raw JSON directly from the benchmarks-history branch.
+          # If it doesn't exist yet, we continue with an empty history.
+          if gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/contents/bench-history.json?ref=${BENCH_HISTORY_BRANCH}" \
+            --jq '.content' > bench-history.b64 2>/dev/null; then
+            base64 -d bench-history.b64 > bench-history.json
+            echo "Downloaded bench-history.json from ${BENCH_HISTORY_BRANCH}"
+          else
+            echo "No bench-history.json found on ${BENCH_HISTORY_BRANCH} (first run?)."
+          fi
+
+      - name: Create JSON results
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_BRANCH:
+            ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          node scripts/bench_results.js \
+            --repo "${GITHUB_REPOSITORY}" \
+            --branch "${RUN_BRANCH}" \
+            --pr-number "${PR_NUMBER}" \
+            --base-ref "${BASE_REF}" --base-sha "${BASE_SHA}" \
+            --head-ref "${HEAD_REF}" --head-sha "${HEAD_SHA}" \
+            --hyperfine-json hyperfine.json \
+            --criterion-log criterion-compare.txt \
+            --history-in bench-history.json \
+            --out-current bench-current.json \
+            --history-out bench-history.json
+
+      - name: Publish bench-history.json to benchmarks-history branch
+        if:
+          ${{ github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf "${BENCH_HISTORY_DIR}"
+          git clone --depth 1 --branch "${BENCH_HISTORY_BRANCH}" "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BENCH_HISTORY_DIR}"
+          cp bench-history.json "${BENCH_HISTORY_DIR}/bench-history.json"
+          pushd "${BENCH_HISTORY_DIR}" >/dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # git diff doesn't consider untracked files; use status to detect any change.
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to bench-history.json"
+            exit 0
+          fi
+          git add bench-history.json
+          git commit -m "Update bench-history.json"
+          git push
+          popd >/dev/null
