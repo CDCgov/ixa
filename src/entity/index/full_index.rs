@@ -1,37 +1,17 @@
-#![allow(unused)]
-//! An `Index<P: Property>` implements a map from `property_value` to `set_of_entities`,
-//! where the `set_of_entities` is a `HashSet<EntityId<P>>` of entities having the value of
-//! their property `P` equal to `property_value`.
-//!
-//! Type-erased access to the index is provided through `PropertyValueStore`, which provides
-//! the type-erased interface to property storage more generally.
-//!
-//! `Index<P>::lookup: HashTable<(T, HashSet<EntityId<E>>)>` is a hash table,
-//! _not_ a hash map. The difference is, a hash table is keyed by a `u64`, in our case,
-//! the 64-bit hash of the property value, and allows for a custom equality check. For
-//! equality, we compare the 128-bit hash of the property value. This allows us to keep the
-//! lookup operation completely type-erased. The value associated with the key is a tuple
-//! of the property value and a set of `EntityId<E>`s. The property value is stored so that
-//!
-//! 1. we can compute its 128-bit hash to check equality during lookup,
-//! 2. we can iterate over (property value, set of `EntityId<E>`s) pairs in the typed API, and
-//! 3. we can iterate over (serialized property value, set of `EntityId<E>`s) pairs in the
-//!    type-erased API.
+//! Full property-value index that maps each distinct value to the set of matching entity IDs.
 
 use hashbrown::HashTable;
 use log::{error, trace};
 
-use crate::entity::property::Property;
 use crate::entity::{Entity, EntityId, HashValueType};
 use crate::hashing::IndexSet;
+use crate::prelude::Property;
 
-/// The typed index.
+/// An index that maintains a full set of entity IDs for each distinct property value.
+/// The entity IDs are stored in an `IndexSet` for both fast containment checks and fast
+/// direct indexing (fast random sampling).
 #[derive(Default)]
-pub struct Index<E: Entity, P: Property<E>> {
-    // Primarily for debugging purposes
-    #[allow(dead_code)]
-    pub(super) name: &'static str,
-
+pub struct FullIndex<E: Entity, P: Property<E>> {
     // We store a copy of the value here so that we can iterate over
     // it in the typed API, and so that the type-erased API can
     // access some serialization of it.
@@ -39,27 +19,26 @@ pub struct Index<E: Entity, P: Property<E>> {
 
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
-    pub(super) max_indexed: usize,
+    pub(in crate::entity) max_indexed: usize,
 }
 
-impl<E: Entity, P: Property<E>> Index<E, P> {
+impl<E: Entity, P: Property<E>> FullIndex<E, P> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            name: P::name(),
             data: HashTable::default(),
             max_indexed: 0,
         }
     }
 
     /// Inserts an entity into the set associated with `key`, creating a new set if one does not yet
-    /// exist. Returns a `bool` according to whether the `entity_id` already existed in the set.
-    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) -> bool {
+    /// exist.
+    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
         trace!("adding entity {:?} to index {}", entity_id, P::name());
         let hash = P::hash_property_value(key);
 
-        // > `hasher` is called if entries need to be moved or copied to a new table.
-        // > This must return the same hash value that each entry was inserted with.
+        // `hasher` is called if entries need to be moved or copied to a new table.
+        // This must return the same hash value that each entry was inserted with.
         #[allow(clippy::cast_possible_truncation)]
         let hasher = |(stored_value, _stored_set): &_| P::hash_property_value(stored_value) as u64;
         // Equality is determined by comparing the full 128-bit hashes. We do not expect any
@@ -71,7 +50,7 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
             .or_insert_with(|| (*key, IndexSet::default()))
             .get_mut()
             .1
-            .insert(entity_id)
+            .insert(entity_id);
     }
 
     pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
@@ -132,9 +111,9 @@ impl<E: Entity, P: Property<E>> Index<E, P> {
     }
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
-    use super::Index;
     use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
 
@@ -194,12 +173,6 @@ mod test {
         assert_eq!(results_a, results_b);
 
         println!("Results: {:?}", results_a);
-    }
-
-    #[test]
-    fn index_name() {
-        let index = Index::<Person, Age>::new();
-        assert!(index.name.contains("Age"));
     }
 
     #[test]

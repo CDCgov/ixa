@@ -36,10 +36,11 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::EntityId;
+use crate::entity::{EntityId, HashValueType, PropertyIndexType};
 use crate::Context;
 
 /// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
@@ -244,7 +245,7 @@ impl<E: Entity> PropertyStore<E> {
     }
 
     /// Fetches an immutable reference to the type-erased `PropertyValueStore<E>`.
-    #[must_use]
+    #[cfg(test)]
     pub(crate) fn get_with_id(&self, property_id: usize) -> &dyn PropertyValueStore<E> {
         self.items[property_id].as_ref()
     }
@@ -335,30 +336,44 @@ impl<E: Entity> PropertyStore<E> {
         self.items
             .get(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
-            .is_indexed()
+            .index_type()
+            != PropertyIndexType::Unindexed
     }
 
-    /// If `is_indexed` is `true`, creates an index for `P` if one does not exist. If `is_indexed` is `false`,
-    /// removes any existing index for `P`.
+    /// Sets the index type for `P`. Passing `PropertyIndexType::Unindexed` removes any existing index for `P`.
     ///
     /// Note that the index might not live in the `PropertyValueStore` associated with `P` itself, as in the case
     /// of multi-properties which share a single index among all equivalent multi-properties.
-    pub fn set_property_indexed<P: Property<E>>(&mut self, is_indexed: bool) {
+    pub fn set_property_indexed<P: Property<E>>(&mut self, index_type: PropertyIndexType) {
         let property_value_store = self.items
             .get_mut(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
-        property_value_store.set_indexed(is_indexed);
+        property_value_store.set_indexed(index_type);
     }
 
     /// Updates the index of the property having the given ID for any entities that have been added to the context
     /// since the last time the index was updated. As a convenience, returns `false` if this property is not indexed,
     /// `true` otherwise.
-    pub fn index_unindexed_entities_for_property_id(
+    pub fn index_unindexed_entities_for_property_id(&self, context: &Context, property_id: usize) {
+        self.items[property_id].index_unindexed_entities(context)
+    }
+
+    pub fn get_index_set_with_hash_for_property_id(
         &self,
         context: &Context,
         property_id: usize,
-    ) -> bool {
-        self.items[property_id].index_unindexed_entities(context)
+        hash: HashValueType,
+    ) -> IndexSetResult<'_, E> {
+        self.items[property_id].get_index_set_with_hash_result(context, hash)
+    }
+
+    pub fn get_index_count_with_hash_for_property_id(
+        &self,
+        context: &Context,
+        property_id: usize,
+        hash: HashValueType,
+    ) -> IndexCountResult {
+        self.items[property_id].get_index_count_with_hash_result(context, hash)
     }
 }
 
@@ -366,16 +381,13 @@ impl<E: Entity> PropertyStore<E> {
 mod tests {
     #![allow(dead_code)]
     use super::*;
-    use crate::entity::EntityId;
-    use crate::{define_entity, define_property, impl_property};
+    use crate::entity::index::{IndexCountResult, IndexSetResult};
+    use crate::prelude::*;
+    use crate::{define_entity, define_property, Context};
 
     define_entity!(Person);
 
-    // The primary advantage of the `define_property!` macro is that you don't have to remember the list of traits you
-    // need to put in the `derive` clause for a property.
     define_property!(struct Age(u8), Person);
-
-    // The `define_property` macro also lets you specify the default value.
     define_property!(
         enum InfectionStatus {
             Susceptible,
@@ -385,15 +397,7 @@ mod tests {
         Person,
         default_const = InfectionStatus::Susceptible
     );
-
-    // If the property type has, for example, a complicated `derive` clause or
-    // other proc macro attribute magic, it might not be parsable by the simplistic
-    // `define_property!` macro. In that case, you can use the `impl_property!` macro for
-    // a type that has already been defined. The downside is that you have to manually
-    // specify the traits that all properties need to implement in the `derive` clause.
-    #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize)]
-    struct Vaccinated(bool);
-    impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
+    define_property!(struct Vaccinated(bool), Person, default_const = Vaccinated(false));
 
     #[test]
     fn test_get_property_store() {
@@ -453,5 +457,159 @@ mod tests {
                 Vaccinated(true)
             );
         }
+    }
+
+    #[test]
+    fn test_index_query_results_for_property_store() {
+        let mut context = Context::new();
+        context.index_property::<Person, Age>();
+
+        let existing_value = Age(12);
+        let missing_value = Age(99);
+        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
+        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+
+        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity((existing_value,)).unwrap();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+
+        // FullIndex + count
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexCountResult::Count(0)
+        );
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexCountResult::Count(2)
+        );
+
+        // FullIndex + set
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexSetResult::Empty
+        ));
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexSetResult::Set(set) if set.len() == 2
+        ));
+    }
+
+    #[test]
+    fn test_index_query_results_for_property_store_value_count_index() {
+        let mut context = Context::new();
+        context.index_property_counts::<Person, Age>();
+
+        let existing_value = Age(12);
+        let missing_value = Age(99);
+        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
+        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+
+        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity((existing_value,)).unwrap();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+
+        // ValueCountIndex + count
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexCountResult::Count(0)
+        );
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexCountResult::Count(2)
+        );
+
+        // ValueCountIndex + set (unsupported)
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexSetResult::Unsupported
+        ));
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexSetResult::Unsupported
+        ));
+    }
+
+    #[test]
+    fn test_index_query_results_for_property_store_unindexed() {
+        let mut context = Context::new();
+        let existing_value = Age(12);
+        let missing_value = Age(99);
+        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
+        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+
+        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity((existing_value,)).unwrap();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+
+        // Unindexed + count
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexCountResult::Unsupported
+        );
+        assert_eq!(
+            property_store.get_index_count_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexCountResult::Unsupported
+        );
+
+        // Unindexed + set
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                missing_hash,
+            ),
+            IndexSetResult::Unsupported
+        ));
+        assert!(matches!(
+            property_store.get_index_set_with_hash_for_property_id(
+                &context,
+                Age::index_id(),
+                existing_hash,
+            ),
+            IndexSetResult::Unsupported
+        ));
     }
 }

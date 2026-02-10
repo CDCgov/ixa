@@ -8,11 +8,9 @@ A higher level interface to the `Index` is provided through the `PropertyValueSt
 
 */
 
-use std::cell::RefCell;
-
 use super::entity::{Entity, EntityId};
-use super::index::Index;
 use super::property::{Property, PropertyInitializationKind};
+use crate::entity::index::{PropertyIndex, PropertyIndexType};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::value_vec::ValueVec;
 
@@ -23,18 +21,14 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: RawPropertyValueVec<P>,
     /// An index mapping `property_value` to `set_of_entities`.
-    // Note that while we use a `RefCell` here, most of the time we don't incur the overhead of dynamic borrow checking,
-    // because we use `index.get_mut()` instead of `index.borrow_mut()`. We only need `index.borrow_mut()` for
-    // updating the index during setting of a property, at which time the compiler guarantees no other borrows of
-    // `context` exist because `Context::set_property` takes `&mut self`.
-    pub(crate) index: Option<RefCell<Index<E, P>>>,
+    pub(crate) index: PropertyIndex<E, P>,
 }
 
 impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
             data: ValueVec::default(),
-            index: Default::default(),
+            index: PropertyIndex::Unindexed,
         }
     }
 }
@@ -51,8 +45,12 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: ValueVec::with_capacity(capacity),
-            index: None,
+            index: PropertyIndex::Unindexed,
         }
+    }
+
+    pub(crate) fn index_type(&self) -> PropertyIndexType {
+        self.index.index_type()
     }
 
     /// Ensures capacity for at least `additional` more elements
