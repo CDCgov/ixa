@@ -10,7 +10,7 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-ixa = { path = "../../../ixa" }
+ixa = { path = "../../" }
 ixa-derive = { path = "../../ixa-derive" }
 
 serde.workspace = true
