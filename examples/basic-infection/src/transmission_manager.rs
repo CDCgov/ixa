@@ -10,7 +10,7 @@ define_rng!(TransmissionRng);
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
     let population_size: usize = context.get_entity_count::<Person>();
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
+    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
 
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
