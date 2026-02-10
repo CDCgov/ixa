@@ -4,6 +4,8 @@ pnpm = "latest"
 "pre-commit" = "4.3.0"
 "prettier" = "3.6.2"
 "npm:markdownlint-cli" = "0.45.0"
+"npm:@commitlint/cli" = "19.7.1"
+"npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
 "cargo:mdbook" = "0.4.52"
@@ -138,6 +140,10 @@ run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,y
 [tasks.'check:markdown']
 run = ["markdownlint '**/*.md'", "mise prettier check"]
 
+[tasks.'lint:commit-msg']
+description = "Lint commit messages (Conventional Commits)"
+run = "commitlint --config ./commitlint.config.cjs --edit {{arg(name='file', default='.git/COMMIT_EDITMSG')}}"
+
 [tasks.fix-all]
 description = "Auto-fix formatting and linting issues"
 depends = "fix:*"
@@ -186,4 +192,4 @@ depends = "docker:build"
 run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
 [tasks.'install:hooks']
-run = "pre-commit install"
+run = "pre-commit install --hook-type pre-commit --hook-type commit-msg"
