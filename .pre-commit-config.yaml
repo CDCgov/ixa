@@ -14,3 +14,12 @@ repos:
         verbose: true
         pass_filenames: false
         always_run: true
+
+      - id: mise-commit-msg
+        name: mise commit-msg
+        entry: mise
+        args: ["run", "lint:commit-msg"]
+        language: system
+        verbose: true
+        stages: [commit-msg]
+        pass_filenames: true
