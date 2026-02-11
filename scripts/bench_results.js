@@ -133,6 +133,14 @@ function parseHyperfineJson(hyperfineJson) {
   });
 }
 
+function normalizeRunPrNumber(run) {
+  if (!run || typeof run !== 'object') return undefined;
+  const raw = run.pr_number;
+  if (raw == null) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function main() {
   const argv = process.argv.slice(2);
 
@@ -201,7 +209,7 @@ function main() {
 
   history.schema = 1;
   history.updated_at = runAt;
-  history.runs.push({
+  const newRun = {
     run_at: runAt,
     branch,
     pr_number: prNumber,
@@ -209,7 +217,14 @@ function main() {
     head: payload.head,
     hyperfine: payload.hyperfine.results,
     criterion: payload.criterion.results,
-  });
+  };
+
+  // For PRs, keep a single entry per PR number (reruns update in-place rather than append).
+  if (Number.isFinite(prNumber)) {
+    history.runs = history.runs.filter((r) => normalizeRunPrNumber(r) !== prNumber);
+  }
+
+  history.runs.push(newRun);
 
   fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
 }
