@@ -53,6 +53,14 @@ run = "cargo test --all-targets --workspace"
 description = "Run just the core ixa tests (much faster)"
 run = "cargo test -p ixa"
 
+[tasks.'test:book']
+description = "Build and run the Ixa Book disease model example against local ixa"
+dir = "docs/book/models/disease_model"
+run = '''
+  cargo run \
+    --config 'patch."https://github.com/CDCgov/ixa".ixa.path="../../../.."'
+'''
+
 [tasks.'test:wasm']
 description = "Run wasm integration tests"
 dir = "integration-tests/ixa-wasm-tests"
