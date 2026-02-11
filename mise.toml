@@ -12,9 +12,16 @@ prek = "latest"
 "cargo:mdbook-inline-highlighting" = "1.0.0"
 rumdl = "0.1.18"
 
+
 [settings]
 # Note: If you have cargo-binstall installed, this will make tool installs much faster
 cargo.binstall = true
+
+[tasks.'install-nightly']
+description = "Install rust nightly, which is needed for clippy"
+run = [
+  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
+]
 
 [tasks.build]
 description = "Build default targets. Run with --release for a release build."
@@ -46,7 +53,7 @@ depends = ["test:unit", "test:wasm"]
 
 [tasks.test]
 description = "Run rust tests. Faster than test-all"
-alias = "test:unit"
+depends = ["test:unit"]
 
 [tasks.'test:unit']
 description = "Run all unit tests"
@@ -117,9 +124,10 @@ run = ["mise run check:*"]
 
 [tasks.check]
 description = "Run rust checks. Faster than check-all"
-alias = "check:rust"
+depends = ["check:rust"]
 
 [tasks.'check:rust']
+depends = "install-nightly"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
@@ -150,7 +158,7 @@ depends = "fix:*"
 
 [tasks.fix]
 description = "Fix rust code. Faster than fix-all"
-alias = "fix:rust"
+depends = ["fix:rust"]
 
 [tasks.'fix:markdown']
 run = "rumdl check --fix ."
