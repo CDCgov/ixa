@@ -33,9 +33,9 @@ jobs:
         run: git checkout ${{ github.event.pull_request.head.ref }}
 
       - name: Run hyperfine benchmarks
-        run:
-          mise run bench:hyperfine -- -- --export-markdown hyperfine.md
-          --export-json hyperfine.json
+        run: |
+          set -euo pipefail
+          mise run bench:hyperfine -- -- --export-markdown hyperfine.md --export-json hyperfine.json
 
       - name: Run criterion benchmarks (baseline compare)
         run: |
@@ -54,9 +54,7 @@ jobs:
           echo '' >> results.md
           echo '#### Hyperfine' >> results.md
           echo '' >> results.md
-          echo '```' >> results.md
           cat hyperfine.md >> results.md
-          echo '```' >> results.md
           echo '' >> results.md
           echo '#### Criterion' >> results.md
           echo '' >> results.md
