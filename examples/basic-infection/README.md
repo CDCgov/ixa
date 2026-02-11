@@ -7,7 +7,7 @@ disease and not from interactions between individuals.
 
 ## Simulation overview
 
-![Diagram of infection](infection-diagram.png) ![alt text](image.png)
+![Diagram of infection](infection-diagram.png)
 
 The first infection attempt is scheduled at time 0. Infection attempts are
 scheduled to occur based on the constant force of infection. Once an infection

@@ -3,7 +3,6 @@ node = "latest"
 pnpm = "latest"
 prek = "latest"
 "prettier" = "3.6.2"
-"npm:markdownlint-cli" = "0.45.0"
 "npm:@commitlint/cli" = "19.7.1"
 "npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
@@ -11,6 +10,7 @@ prek = "latest"
 "cargo:mdbook" = "0.4.52"
 "cargo:mdbook-callouts" = "0.2.2"
 "cargo:mdbook-inline-highlighting" = "1.0.0"
+rumdl = "0.1.18"
 
 [settings]
 # Note: If you have cargo-binstall installed, this will make tool installs much faster
@@ -113,8 +113,7 @@ depends = "build:hyperfine"
 run = './target/release/hyperfine'
 
 [tasks.check-all]
-description = "Formatting and linting"
-depends = "check:*"
+run = ["mise run check:*"]
 
 [tasks.check]
 description = "Run rust checks. Faster than check-all"
@@ -125,20 +124,21 @@ run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
   "cargo check --all-targets --workspace --all-features",
-  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
-  "cargo +nightly fmt --check",
+  "cargo fmt --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
 [tasks.prettier]
 description = "Run prettier on all supported files"
-run = '''prettier --{{arg(name='action', default='check')}} "**/*.{md,json,yml,yaml}" \
-  --ignore-path ./.gitignore --ignore-path ./.markdownlintignore \
+run = '''prettier --cache --{{arg(name='action', default='check')}} \
+  "*.{yml,yaml}" "{.github,.devcontainer,.claude,.vscode}/**/*.{json,yml,yaml}" \
+  "{docs,examples,integration-tests,ixa-derive,ixa-fips,ixa-bench}/**/*.{json,yml,yaml}" \
+  --ignore-path ./.gitignore \
   --ignore-path ./integration-tests/ixa-wasm-tests/.gitignore
 '''
 
 [tasks.'check:markdown']
-run = ["markdownlint '**/*.md'", "mise prettier check"]
+run = "rumdl check ."
 
 [tasks.'lint:commit-msg']
 description = "Lint commit messages (Conventional Commits)"
@@ -152,18 +152,14 @@ depends = "fix:*"
 description = "Fix rust code. Faster than fix-all"
 alias = "fix:rust"
 
-[tasks.'fix:prettier']
-run = "mise prettier write"
+[tasks.'fix:markdown']
+run = "rumdl check --fix ."
 
 [tasks.'fix:rust']
 run = [
   "cargo clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
-  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
-  "cargo +nightly fmt",
+  "cargo fmt",
 ]
-
-[tasks.'fix:markdown']
-run = "markdownlint --fix '**/*.md' || true"
 
 [tasks.clean]
 description = "Remove build artifacts"
@@ -176,8 +172,7 @@ run = '''
 '''
 
 [tasks.precommit]
-description = "This is used by prek (which installs git hooks)"
-depends = "check-all"
+depends = ['check-all']
 
 [tasks.prepush]
 description = "Check everything before pushing"
@@ -193,3 +188,7 @@ run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
 [tasks.'install:hooks']
 run = "prek install --hook-type pre-commit --hook-type commit-msg"
+
+[tasks.'hooks:clear']
+description = "Remove all hooks"
+run = "rm -rf .git/hooks"
