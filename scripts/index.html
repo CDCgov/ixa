@@ -9,10 +9,18 @@
         color-scheme: light dark;
       }
 
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
         font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell,
           Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: Canvas;
+        color: CanvasText;
       }
 
       header {
@@ -35,6 +43,7 @@
       main {
         padding: 16px 20px 24px;
         max-width: 1200px;
+        margin: 0 auto;
       }
 
       .row {
@@ -53,18 +62,48 @@
       }
 
       select,
+      input[type="url"],
+      input[type="text"],
+      input[type="file"],
       button {
         font: inherit;
         padding: 8px 10px;
         border-radius: 8px;
         border: 1px solid rgba(127, 127, 127, 0.35);
-        background: transparent;
+        background: Field;
+        color: FieldText;
         min-width: 260px;
+      }
+
+      input[type="file"] {
+        padding: 6px 10px;
+      }
+
+      input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: Highlight;
       }
 
       button {
         min-width: auto;
         cursor: pointer;
+        background: ButtonFace;
+        color: ButtonText;
+      }
+
+      select:focus-visible,
+      input[type="url"]:focus-visible,
+      input[type="text"]:focus-visible,
+      input[type="file"]:focus-visible,
+      button:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+      }
+
+      button:hover {
+        border-color: rgba(127, 127, 127, 0.55);
       }
 
       .checkbox {
@@ -75,6 +114,9 @@
         border: 1px solid rgba(127, 127, 127, 0.35);
         border-radius: 8px;
         user-select: none;
+        opacity: 0.9;
+        background: Field;
+        color: FieldText;
       }
 
       .checkbox input {
@@ -133,6 +175,18 @@
 
     <main>
       <div class="row">
+        <label style="flex: 1 1 520px; min-width: 320px">
+          History URL
+          <input id="historyUrl" type="url" spellcheck="false" />
+        </label>
+
+        <button id="loadUrl" type="button">Load URL</button>
+
+        <label style="flex: 1 1 420px; min-width: 320px">
+          Load from disk
+          <input id="historyFile" type="file" accept="application/json,.json" />
+        </label>
+
         <label>
           Suite
           <select id="suite">
@@ -203,8 +257,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
-      const HISTORY_URL =
-        "https://raw.githubusercontent.com/cdc-as81/ixa/refs/heads/gh-pages/bench-history.json";
+      const DEFAULT_HISTORY_URL =
+        "https://raw.githubusercontent.com/cdcgov/ixa/refs/heads/bench-history/bench-history.json";
+
+      /** @type {{ kind: 'url', url: string } | { kind: 'file', file: File }} */
+      let currentSource = { kind: "url", url: DEFAULT_HISTORY_URL };
+
+      /** @type {any} */
+      let currentHistory = null;
 
       /**
        * Expected JSON shape (schema v1):
@@ -711,8 +771,8 @@
         return Math.min(hi, Math.max(lo, Math.trunc(x)));
       }
 
-      async function fetchHistory() {
-        const res = await fetch(HISTORY_URL, {
+      async function fetchHistoryFromUrl(url) {
+        const res = await fetch(url, {
           cache: "no-store",
           headers: { Accept: "application/json" },
         });
@@ -722,21 +782,40 @@
         return await res.json();
       }
 
-      function updateMeta(history) {
+      async function fetchHistoryFromFile(file) {
+        const text = await file.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          throw new Error(
+            `Failed to parse JSON from file: ${file?.name ?? "(unknown)"}\n\n${String(e?.message ?? e)}`
+          );
+        }
+      }
+
+      async function fetchHistory(source) {
+        if (source?.kind === "file") return await fetchHistoryFromFile(source.file);
+        const url = source?.url ?? DEFAULT_HISTORY_URL;
+        return await fetchHistoryFromUrl(url);
+      }
+
+      function updateMeta(history, source) {
         const runs = Array.isArray(history?.runs) ? history.runs : [];
         const last = runs.length ? runs.slice().sort((a, b) => new Date(a.run_at) - new Date(b.run_at))[runs.length - 1] : null;
         const lastTxt = last?.run_at ? formatDate(last.run_at) : "(unknown)";
-        $("meta").innerHTML =
-          `Source: <a href="${HISTORY_URL}">${HISTORY_URL}</a> · Runs: ${runs.length} · Latest: ${lastTxt}`;
+        if (source?.kind === "file") {
+          $("meta").textContent =
+            `Source: ${source.file?.name ?? "(local file)"} · Runs: ${runs.length} · Latest: ${lastTxt}`;
+          return;
+        }
+
+        const url = source?.url ?? DEFAULT_HISTORY_URL;
+        $("meta").innerHTML = `Source: <a href="${url}">${url}</a> · Runs: ${runs.length} · Latest: ${lastTxt}`;
       }
 
-      async function main() {
-        setError("");
-        destroyCharts();
-        $("meta").textContent = "Loading…";
-
-        const history = await fetchHistory();
-        updateMeta(history);
+      function initUiOnce() {
+        if (initUiOnce._done) return;
+        initUiOnce._done = true;
 
         const suiteEl = $("suite");
         const showAllEl = $("showAll");
@@ -752,8 +831,9 @@
         const cmpNextEl = $("cmpNext");
 
         function rerender() {
+          if (!currentHistory) return;
           const suite = suiteEl.value;
-          const suiteRuns = getSuiteRuns(history, suite);
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
           const bench = benchEl.value;
           const metric = metricEl.value;
           const showBand = showBandEl.checked;
@@ -771,20 +851,25 @@
         }
 
         function onSuiteChange() {
+          if (!currentHistory) return;
           const suite = suiteEl.value;
-          const suiteRuns = getSuiteRuns(history, suite);
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
           const benchmarks = listBenchmarks(suiteRuns);
           const defaultBench = pickDefaultBenchmark(benchmarks);
 
+          const prevBench = benchEl.value;
+          const nextBench = benchmarks.includes(prevBench) ? prevBench : defaultBench;
           populateSelect(
             benchEl,
             benchmarks.map((b) => ({ value: b, label: b })),
-            defaultBench
+            nextBench
           );
 
           const metrics = listMetricsForSuite(suite);
           const defaultMetric = suite === "criterion" ? "estimate" : "mean_sec";
-          populateSelect(metricEl, metrics, defaultMetric);
+          const prevMetric = metricEl.value;
+          const nextMetric = metrics.includes(prevMetric) ? prevMetric : defaultMetric;
+          populateSelect(metricEl, metrics, nextMetric);
 
           // Delta chart run pickers
           const runLabels = makeLabels(suiteRuns);
@@ -809,8 +894,9 @@
         }
 
         function stepRun(selectEl, delta) {
+          if (!currentHistory) return;
           const suite = suiteEl.value;
-          const suiteRuns = getSuiteRuns(history, suite);
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
           const hi = suiteRuns.length - 1;
           if (hi < 0) return;
 
@@ -841,18 +927,61 @@
         cmpPrevEl.addEventListener("click", () => stepRun(cmpRunEl, -1));
         cmpNextEl.addEventListener("click", () => stepRun(cmpRunEl, +1));
 
-        $("reload").addEventListener("click", async () => {
-          try {
-            await main();
-          } catch (e) {
-            setError(String(e?.stack ?? e));
-          }
-        });
-
-        onSuiteChange();
+        // Expose for loaders
+        initUiOnce._onSuiteChange = onSuiteChange;
       }
 
-      main().catch((e) => {
+      async function loadAndRender(source) {
+        setError("");
+        destroyCharts();
+        $("meta").textContent = "Loading…";
+
+        const history = await fetchHistory(source);
+        currentHistory = history;
+        currentSource = source?.kind ? source : { kind: "url", url: DEFAULT_HISTORY_URL };
+        updateMeta(history, currentSource);
+
+        initUiOnce();
+        initUiOnce._onSuiteChange?.();
+      }
+
+      // UI wiring for sources
+      $("historyUrl").value = DEFAULT_HISTORY_URL;
+
+      $("loadUrl").addEventListener("click", async () => {
+        try {
+          const url = String($("historyUrl").value ?? "").trim() || DEFAULT_HISTORY_URL;
+          await loadAndRender({ kind: "url", url });
+        } catch (e) {
+          setError(String(e?.stack ?? e));
+        }
+      });
+
+      $("historyUrl").addEventListener("keydown", async (ev) => {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        $("loadUrl").click();
+      });
+
+      $("historyFile").addEventListener("change", async (ev) => {
+        try {
+          const file = ev?.target?.files?.[0];
+          if (!file) return;
+          await loadAndRender({ kind: "file", file });
+        } catch (e) {
+          setError(String(e?.stack ?? e));
+        }
+      });
+
+      $("reload").addEventListener("click", async () => {
+        try {
+          await loadAndRender(currentSource);
+        } catch (e) {
+          setError(String(e?.stack ?? e));
+        }
+      });
+
+      loadAndRender(currentSource).catch((e) => {
         setError(
           `Failed to load or render bench history.\n\n${String(e?.stack ?? e)}\n\n` +
             `If this is opened from a file:// URL, your browser may block some requests depending on settings. ` +
