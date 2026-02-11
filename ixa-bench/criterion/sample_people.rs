@@ -13,6 +13,7 @@ const SEED: u64 = 42;
 define_entity!(Person);
 define_property!(struct Property10(u8), Person);
 define_property!(struct Property100(u8), Person);
+define_property!(struct Unindexed10(u8), Person);
 
 fn setup() -> (Context, Vec<u8>) {
     let mut rng = StdRng::seed_from_u64(SEED);
@@ -36,6 +37,7 @@ fn setup() -> (Context, Vec<u8>) {
             .add_entity((
                 Property10(context.sample_range(SampleBenchRng, 0..10)),
                 Property100(context.sample_range(SampleBenchRng, 0..100)),
+                Unindexed10(context.sample_range(SampleBenchRng, 0..10)),
             ))
             .unwrap();
     }
@@ -100,6 +102,36 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
                     black_box((Property10(*value % 10), Property100(*value))),
+                    *black_box(value) as usize,
+                ));
+            }
+        });
+    });
+
+    // Sampling one entity when the query is on an unindexed property. The source iterator is a
+    // PropertyVecIter, which must scan the property's value vector.
+    criterion.bench_function("sampling_single_unindexed_entities", |bencher| {
+        bencher.iter(|| {
+            let counts = black_box(&counts);
+
+            for value in counts {
+                let _selected = black_box(
+                    context.sample_entity(SampleBenchRng, black_box((Unindexed10(*value % 10),))),
+                );
+            }
+        });
+    });
+
+    // Sampling several entities when the query is on an unindexed property. The source iterator is a
+    // PropertyVecIter, which must scan the property's value vector.
+    criterion.bench_function("sampling_multiple_unindexed_entities", |bencher| {
+        bencher.iter(|| {
+            let counts = black_box(&counts);
+
+            for value in counts {
+                let _selected = black_box(context.sample_entities(
+                    SampleBenchRng,
+                    black_box((Unindexed10(*value % 10),)),
                     *black_box(value) as usize,
                 ));
             }
