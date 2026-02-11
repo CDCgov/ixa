@@ -20,7 +20,7 @@ cargo.binstall = true
 [tasks.'install-nightly']
 description = "Install rust nightly, which is needed for clippy"
 run = [
-  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt",
+  "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt clippy",
 ]
 
 [tasks.build]
