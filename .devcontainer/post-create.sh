@@ -18,7 +18,7 @@ source ~/.bashrc
 # Install everything listed under the [tools] section of mise.toml
 mise trust
 
-# Add pre-commit hooks
+# Add git hooks
 mise install:hooks
 
 #install needed libs for wasm

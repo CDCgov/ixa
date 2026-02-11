@@ -1,7 +1,7 @@
 [tools]
 node = "latest"
 pnpm = "latest"
-"pre-commit" = "4.3.0"
+prek = "latest"
 "prettier" = "3.6.2"
 "npm:markdownlint-cli" = "0.45.0"
 "npm:@commitlint/cli" = "19.7.1"
@@ -176,7 +176,7 @@ run = '''
 '''
 
 [tasks.precommit]
-description = "This is used by pre-commit (which installs git hooks)"
+description = "This is used by prek (which installs git hooks)"
 depends = "check-all"
 
 [tasks.prepush]
@@ -192,4 +192,4 @@ depends = "docker:build"
 run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
 [tasks.'install:hooks']
-run = "pre-commit install --hook-type pre-commit --hook-type commit-msg"
+run = "prek install --hook-type pre-commit --hook-type commit-msg"
