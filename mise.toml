@@ -194,7 +194,7 @@ run = "docker build -t ixa-bench ."
 depends = "docker:build"
 run = "docker run --rm -it -v \"$PWD\":/home/runner/ixa ixa-bench"
 
-[tasks.'install:hooks']
+[tasks.'hooks:install']
 run = "prek install --hook-type pre-commit --hook-type commit-msg"
 
 [tasks.'hooks:clear']
