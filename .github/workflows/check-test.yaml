@@ -38,5 +38,8 @@ jobs:
       - name: Run examples
         run: mise run examples
 
+      - name: Build book example
+        run: mise run test:book
+
       - name: Build docs
         run: mise run docs
