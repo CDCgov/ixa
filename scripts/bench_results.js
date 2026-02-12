@@ -90,7 +90,12 @@ function parseCriterionCompareLog(text) {
   for (const line of lines) {
     const benchMatch = line.match(/^Benchmarking\s+(.+?)\s*$/);
     if (benchMatch) {
-      currentName = benchMatch[1].trim();
+      const raw = benchMatch[1].trim();
+      // Criterion emits progress/status suffixes like:
+      //   "Benchmarking foo: Warming up ...", "Benchmarking foo: Collecting ...", "Benchmarking foo: Analyzing"
+      // We want the stable benchmark identifier ("foo").
+      const statusStripped = raw.replace(/\s*:\s*(Warming up|Collecting|Analyzing)\b.*$/u, '').trim();
+      currentName = statusStripped || raw;
       continue;
     }
 
