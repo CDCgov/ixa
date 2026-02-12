@@ -1,165 +1,372 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IXA - A Rust framework for building modular agent-based models</title>
-    <style>
-      /** Based on https://codepen.io/andreaminato/pen/MXgJKw **/
-      body {
-        margin: 0;
-      }
 
-      #app {
-        position: relative;
-        height: 100vh;
-        width: 100vw;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IXA - A Rust framework for building modular agent-based models</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lilex:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      .title {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif;
-      }
+    :root {
+      --bg: #0e0e10;
+      --surface: #18181b;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --accent: #d4d4d8;
+      --font-size-xs: 0.7rem;
+      --font-size-sm: 0.8rem;
+      --font-size-base: 1rem;
+      --font-size-display: 4rem;
+      font-size: 18px;
+    }
 
-      .title h1 {
-        margin: 0;
-        font-size: 20vw;
-        text-shadow: 0 0 7px #fff, 0 0 10px #fff, 0 0 21px #fff;
-      }
+    body {
+      font-family: "Lilex", monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-      .container {
-        top: 0;
-        background: #fff;
-        right: 0;
-        bottom: 0;
-        position: absolute;
-        left: 0;
-        overflow: hidden;
-      }
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+      width: 100%;
+      max-width: 640px;
+      gap: 3rem;
+    }
 
-      .loader {
-        text-align: center;
-        display: flex;
-        justify-content: space-around;
-        flex-wrap: wrap;
-      }
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
 
-      .loader span {
-        width: 128px;
-        height: 128px;
-        background: url("ixa_logo.svg");
-        background-size: cover;
-        opacity: 0;
-        animation: loader 30s infinite linear;
-      }
+    .logo {
+      width: 120px;
+      height: auto;
+      opacity: 0.85;
+      transition: opacity 0.3s ease;
+    }
 
-      .loader span:nth-child(2n) {
-        animation-name: loadercw;
-      }
+    .logo:hover {
+      opacity: 1;
+    }
 
-      .loader span:nth-child(5n + 5) {
-        animation-delay: 1.3s;
-      }
+    h1 {
+      font-size: var(--font-size-display);
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      line-height: 1;
+    }
 
-      .loader span:nth-child(3n + 2) {
-        animation-delay: 1.5s;
-      }
+    .tagline {
+      font-size: var(--font-size-base);
+      font-weight: 400;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+      max-width: 440px;
+    }
 
-      .loader span:nth-child(2n + 5) {
-        animation-delay: 1.7s;
-      }
+    .get-started {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+    }
 
-      .loader span:nth-child(3n + 10) {
-        animation-delay: 2.7s;
-      }
+    .get-started-label {
+      font-size: var(--font-size-sm);
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
 
-      .loader span:nth-child(7n + 2) {
-        animation-delay: 3.5s;
-      }
+    }
 
-      .loader span:nth-child(4n + 5) {
-        animation-delay: 5.5s;
-      }
+    .install-box {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.875rem 1.25rem;
+      font-family: "Lilex", monospace;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      position: relative;
+      user-select: all;
+    }
 
-      .loader span:nth-child(3n + 7) {
-        animation-delay: 8s;
-      }
+    .install-box:hover {
+      border-color: #3f3f46;
+      background: #1c1c1f;
+    }
 
-      @keyframes loader {
-        0% {
-          width: 128px;
-          height: 128px;
-          opacity: 0;
-          transform: translate(0, 0vh) rotateZ(0deg);
-        }
-        25% {
-          width: 128px;
-          height: 128px;
-          opacity: 1;
-          transform: translate(0, 25vh) rotateZ(90deg);
-        }
-        75% {
-          width: 128px;
-          height: 128px;
-          opacity: 1;
-          transform: translate(5vw, 75vh) rotateZ(270deg);
-        }
-        100% {
-          width: 128px;
-          height: 128px;
-          opacity: 0;
-          transform: translate(10vw, 100vh) rotateZ(360deg);
-        }
-      }
-      @keyframes loadercw {
-        0% {
-          width: 128px;
-          height: 128px;
-          opacity: 0;
-          transform: translate(0, 0vh) rotateZ(0deg);
-        }
-        25% {
-          width: 128px;
-          height: 128px;
-          opacity: 1;
-          transform: translate(0, 25vh) rotateZ(-90deg);
-        }
-        75% {
-          width: 128px;
-          height: 128px;
-          opacity: 1;
-          transform: translate(5vw, 75vh) rotateZ(-270deg);
-        }
-        100% {
-          width: 128px;
-          height: 128px;
-          opacity: 0;
-          transform: translate(10vw, 100vh) rotateZ(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <div class="container">
-        <div class="loader">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </div>
-      <div class="title">
-        <h1>IXA</h1>
+    .install-box .prompt {
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .install-box .copy-hint {
+      font-size: var(--font-size-xs);
+      color: #52525b;
+      user-select: none;
+      margin-left: 0.5rem;
+      transition: color 0.2s ease;
+    }
+
+    .install-box:hover .copy-hint {
+      color: var(--text-muted);
+    }
+
+    .install-box.copied .copy-hint {
+      color: var(--accent);
+    }
+
+    .links {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .links a {
+      font-size: var(--font-size-sm);
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid transparent;
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .links a:hover {
+      color: var(--text);
+      border-bottom-color: var(--border);
+    }
+
+    .crab-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+    }
+
+    .crab {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 48px;
+      height: 48px;
+      will-change: transform, filter;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="crab-layer" id="crabLayer"></div>
+  <main>
+    <div class="hero">
+      <img src="ixa_logo.svg" alt="Ixa crab logo" class="logo" />
+      <h1>ixa</h1>
+      <p class="tagline">
+        A Rust framework for building modular agent-based models.
+      </p>
+    </div>
+
+    <div class="get-started">
+      <span class="get-started-label">Get Started</span>
+      <div class="install-box" onclick="copyInstall(this)" role="button" tabindex="0">
+        <span class="prompt">$</span>
+        <span class="command">cargo add ixa</span>
+        <span class="copy-hint">click to copy</span>
       </div>
     </div>
-  </body>
+
+    <nav class="links">
+      <a href="book/">Documentation</a>
+      <a href="doc/ixa/">API Reference</a>
+      <a href="https://github.com/CDCgov/ixa">GitHub</a>
+    </nav>
+  </main>
+
+  <script>
+    // Note: I am using transforms for the animations here because they don't
+    // trigger paint / layout
+    // Take a look at https://web.dev/articles/animations-guide for why
+
+    function copyInstall(el) {
+      navigator.clipboard.writeText("cargo add ixa");
+      el.classList.add("copied");
+      el.querySelector(".copy-hint").textContent = "copied!";
+      setTimeout(() => {
+        el.classList.remove("copied");
+        el.querySelector(".copy-hint").textContent = "click to copy";
+      }, 2000);
+    }
+
+    const layer = document.getElementById("crabLayer");
+    const crabs = [];
+    const INITIAL_COUNT = 5;
+    const CRAB_SIZE = 48;
+    const CRAB_RADIUS = CRAB_SIZE / 2;
+    const MAX_SPEED = 1.4;
+    const WANDER_STRENGTH = 0.03;
+    // random speed added on top of base 0.4
+    const SPAWN_SPEED_RANGE = 0.6;
+    // max angle change per frame (radians)
+    const WANDER_JITTER = 0.6;
+    // velocity retained after hitting a wall
+    const BOUNCE_DAMPEN = 0.6;
+    // fully desaturated
+    const SUSCEPTIBLE = 1;
+    // full color
+    const INFECTED = 0;
+
+    let mouseX = -100, mouseY = -100;
+
+    // Cursor-following crab
+    const cursorImg = document.createElement("img");
+    cursorImg.src = "ixa_logo.svg";
+    cursorImg.className = "crab";
+    cursorImg.style.filter = `grayscale(${SUSCEPTIBLE})`;
+    cursorImg.style.opacity = "0.5";
+    cursorImg.style.transform = `translate3d(${mouseX}px,${mouseY}px,0)`;
+    layer.appendChild(cursorImg);
+    const cursorCrab = { el: cursorImg, x: mouseX, y: mouseY, vx: 0, vy: 0, gray: SUSCEPTIBLE, isCursor: true };
+    crabs.push(cursorCrab);
+
+    document.addEventListener("mousemove", (e) => {
+      mouseX = e.clientX - CRAB_RADIUS;
+      mouseY = e.clientY - CRAB_RADIUS;
+    });
+
+    requestAnimationFrame(tick);
+
+    function spawnCrab(cx, cy) {
+      const img = document.createElement("img");
+      img.src = "ixa_logo.svg";
+      img.className = "crab";
+      img.style.filter = `grayscale(${SUSCEPTIBLE})`;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.4 + Math.random() * SPAWN_SPEED_RANGE;
+      const crab = {
+        el: img,
+        x: cx - CRAB_RADIUS + (Math.random() - 0.5) * 40,
+        y: cy - CRAB_RADIUS + (Math.random() - 0.5) * 40,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        wanderAngle: angle,
+        gray: SUSCEPTIBLE,
+      };
+      const flip = crab.vx < 0 ? " scaleX(-1)" : "";
+      img.style.transform = `translate3d(${crab.x}px,${crab.y}px,0)${flip}`;
+      layer.appendChild(img);
+      crabs.push(crab);
+    }
+
+    function tick() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      for (const c of crabs) {
+        if (c.isCursor) {
+          const prevX = c.x;
+          c.x = mouseX;
+          c.y = mouseY;
+          c.vx = c.x - prevX;
+          const flip = c.vx < 0 ? " scaleX(-1)" : "";
+          c.el.style.transform = `translate3d(${c.x}px,${c.y}px,0)${flip}`;
+          c.el.style.filter = `grayscale(${c.gray})`;
+          continue;
+        }
+
+        // Wander: gently drift the heading angle
+        c.wanderAngle += (Math.random() - 0.5) * WANDER_JITTER;
+        c.vx += Math.cos(c.wanderAngle) * WANDER_STRENGTH;
+        c.vy += Math.sin(c.wanderAngle) * WANDER_STRENGTH;
+
+        // Clamp speed
+        const speed = Math.sqrt(c.vx * c.vx + c.vy * c.vy);
+        if (speed > MAX_SPEED) {
+          c.vx = (c.vx / speed) * MAX_SPEED;
+          c.vy = (c.vy / speed) * MAX_SPEED;
+        }
+
+        c.x += c.vx;
+        c.y += c.vy;
+
+        // Soft bounce off edges — nudge heading away from walls
+        if (c.x < 0) { c.x = 0; c.vx = Math.abs(c.vx) * BOUNCE_DAMPEN; c.wanderAngle = Math.random() * Math.PI - Math.PI / 2; }
+        if (c.y < 0) { c.y = 0; c.vy = Math.abs(c.vy) * BOUNCE_DAMPEN; c.wanderAngle = Math.random() * Math.PI; }
+        if (c.x + CRAB_SIZE > w) { c.x = w - CRAB_SIZE; c.vx = -Math.abs(c.vx) * BOUNCE_DAMPEN; c.wanderAngle = Math.PI + (Math.random() - 0.5) * Math.PI; }
+        if (c.y + CRAB_SIZE > h) { c.y = h - CRAB_SIZE; c.vy = -Math.abs(c.vy) * BOUNCE_DAMPEN; c.wanderAngle = -Math.random() * Math.PI; }
+
+        const flip = c.vx < 0 ? " scaleX(-1)" : "";
+        c.el.style.transform = `translate3d(${c.x}px,${c.y}px,0)${flip}`;
+        c.el.style.filter = `grayscale(${c.gray})`;
+      }
+
+      // Collision detection: light up crabs that touch (including cursor)
+      for (let i = 0; i < crabs.length; i++) {
+        for (let j = i + 1; j < crabs.length; j++) {
+          const a = crabs[i], b = crabs[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          if (dx * dx + dy * dy < CRAB_SIZE * CRAB_SIZE) {
+            a.gray = INFECTED;
+            b.gray = INFECTED;
+          }
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+    let firstClick = true;
+
+    document.addEventListener("click", (e) => {
+      if (e.target.closest(".install-box") || e.target.closest(".links")) return;
+      if (firstClick) {
+        firstClick = false;
+        for (let i = 0; i < INITIAL_COUNT; i++) {
+          spawnCrab(Math.random() * window.innerWidth, Math.random() * window.innerHeight);
+        }
+      }
+      spawnCrab(e.clientX, e.clientY);
+    });
+  </script>
+</body>
+
 </html>
