@@ -1,7 +1,7 @@
 [tools]
 node = "latest"
 pnpm = "latest"
-prek = "latest"
+"cargo:prek" = "latest"
 "prettier" = "3.6.2"
 "npm:@commitlint/cli" = "19.7.1"
 "npm:@commitlint/config-conventional" = "19.7.1"
@@ -10,7 +10,7 @@ prek = "latest"
 "cargo:mdbook" = "0.4.52"
 "cargo:mdbook-callouts" = "0.2.2"
 "cargo:mdbook-inline-highlighting" = "1.0.0"
-rumdl = "0.1.18"
+"cargo:rumdl" = "0.1.18"
 
 
 [settings]
