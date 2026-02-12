@@ -3,16 +3,15 @@ name: Benchmark Pull Requests
 on:
   pull_request:
 
+env:
+  BENCH_HISTORY_BRANCH: benchmarks-history
+  BENCH_HISTORY_DIR: tmp-bench-history
+
 jobs:
   compare-branches:
     runs-on: ubuntu-latest
     permissions:
-      actions: write
-      contents: write
-      pull-requests: write
-    env:
-      BENCH_HISTORY_BRANCH: benchmarks-history
-      BENCH_HISTORY_DIR: tmp-bench-history
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - name: Setup environment
@@ -62,14 +61,11 @@ jobs:
           cat criterion-regressions.txt >> results.md
           echo '```' >> results.md
 
-      - name: Add comment to PR
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
-            --body-file results.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload PR comment artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-comment
+          path: results.md
 
       - name:
           Download previous bench history from benchmarks-history branch (best
@@ -113,18 +109,59 @@ jobs:
             --out-current bench-current.json \
             --history-out bench-history.json
 
-      - name: Publish bench-history.json to benchmarks-history branch
-        if:
-          ${{ github.event_name != 'pull_request' ||
-          github.event.pull_request.head.repo.full_name == github.repository }}
+      - name: Upload bench history artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: bench-history
+          path: bench-history.json
+
+  comment-on-pr:
+    runs-on: ubuntu-latest
+    needs: compare-branches
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download PR comment artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: pr-comment
+
+      - name: Add comment to PR
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body-file results.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-bench-history:
+    runs-on: ubuntu-latest
+    needs: compare-branches
+    permissions:
+      contents: write
+    steps:
+      - name: Download bench history artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: bench-history
+
+      - name: Checkout benchmarks-history branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BENCH_HISTORY_BRANCH }}
+          path: ${{ env.BENCH_HISTORY_DIR }}
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish bench-history.json to benchmarks-history branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          rm -rf "${BENCH_HISTORY_DIR}"
-          git clone --depth 1 --branch "${BENCH_HISTORY_BRANCH}" "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BENCH_HISTORY_DIR}"
           cp bench-history.json "${BENCH_HISTORY_DIR}/bench-history.json"
           pushd "${BENCH_HISTORY_DIR}" >/dev/null
+          git checkout "${BENCH_HISTORY_BRANCH}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # git diff doesn't consider untracked files; use status to detect any change.
@@ -133,6 +170,6 @@ jobs:
             exit 0
           fi
           git add bench-history.json
-          git commit -m "Update bench-history.json"
+          git commit -m "Update bench-history.json (PR #${PR_NUMBER} @ ${HEAD_SHA:0:7})"
           git push
           popd >/dev/null
