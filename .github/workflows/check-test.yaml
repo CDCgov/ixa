@@ -21,8 +21,8 @@ jobs:
       - name: Install wasm target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Pre-commit (lint, check)
-        run: pre-commit run --all-files
+      - name: Linting and formatting
+        run: mise run precommit
 
       - name: Unit tests
         run: mise run test:unit
