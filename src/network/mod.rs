@@ -57,10 +57,10 @@ impl NetworkData {
         inner: ET,
     ) -> Result<(), IxaError> {
         if entity_id == neighbor {
-            return Err(IxaError::IxaError(String::from("Cannot make edge to self")));
+            return Err(IxaError::CannotMakeEdgeToSelf);
         }
         if weight.is_infinite() || weight.is_nan() || weight.is_sign_negative() {
-            return Err(IxaError::IxaError(String::from("Invalid weight")));
+            return Err(IxaError::InvalidWeight);
         }
 
         let edge = Edge {
@@ -303,9 +303,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
     {
         let edges = self.get_edges::<E, ET>(entity_id);
         if edges.is_empty() {
-            return Err(IxaError::IxaError(String::from(
-                "Can't sample from empty list",
-            )));
+            return Err(IxaError::CannotSampleFromEmptyList);
         }
 
         let weights: Vec<_> = edges.iter().map(|x| x.weight).collect();
@@ -432,7 +430,7 @@ mod test_inner {
 
         assert!(matches!(
             nd.add_edge::<Person, EdgeType1>(PersonId::new(1), PersonId::new(2), 0.02, EdgeType1),
-            Err(IxaError::IxaError(_))
+            Err(IxaError::EdgeAlreadyExists)
         ));
     }
 
@@ -474,7 +472,7 @@ mod test_inner {
 
         let result =
             nd.add_edge::<Person, EdgeType1>(PersonId::new(1), PersonId::new(1), 0.01, EdgeType1);
-        assert!(matches!(result, Err(IxaError::IxaError(_))));
+        assert!(matches!(result, Err(IxaError::CannotMakeEdgeToSelf)));
     }
 
     #[test]
@@ -483,7 +481,7 @@ mod test_inner {
 
         let result =
             nd.add_edge::<Person, EdgeType1>(PersonId::new(1), PersonId::new(2), -1.0, EdgeType1);
-        assert!(matches!(result, Err(IxaError::IxaError(_))));
+        assert!(matches!(result, Err(IxaError::InvalidWeight)));
 
         let result = nd.add_edge::<Person, EdgeType1>(
             PersonId::new(1),
@@ -491,7 +489,7 @@ mod test_inner {
             f32::NAN,
             EdgeType1,
         );
-        assert!(matches!(result, Err(IxaError::IxaError(_))));
+        assert!(matches!(result, Err(IxaError::InvalidWeight)));
 
         let result = nd.add_edge::<Person, EdgeType1>(
             PersonId::new(1),
@@ -499,7 +497,7 @@ mod test_inner {
             f32::INFINITY,
             EdgeType1,
         );
-        assert!(matches!(result, Err(IxaError::IxaError(_))));
+        assert!(matches!(result, Err(IxaError::InvalidWeight)));
     }
 
     #[test]

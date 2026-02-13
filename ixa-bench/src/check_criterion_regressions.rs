@@ -4,6 +4,7 @@ use std::{env, fs};
 
 use ixa::{HashSet, HashSetExt};
 use serde_json::Value;
+use thiserror::Error;
 
 struct Est {
     group: String,
@@ -14,6 +15,32 @@ struct Est {
 }
 
 type TableRow = (String, String, String, String, String);
+
+#[derive(Error, Debug)]
+enum ReadEstError {
+    #[error("read error {path}: {source}")]
+    ReadFile {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("json parse {path}: {source}")]
+    JsonParse {
+        path: String,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("missing mean")]
+    MissingMean,
+    #[error("missing point_estimate")]
+    MissingPointEstimate,
+    #[error("missing confidence_interval")]
+    MissingConfidenceInterval,
+    #[error("missing lower_bound")]
+    MissingLowerBound,
+    #[error("missing upper_bound")]
+    MissingUpperBound,
+}
 
 fn find_change_files(base: &Path) -> Vec<(String, String, std::path::PathBuf)> {
     let mut results = Vec::new();
@@ -61,27 +88,32 @@ fn find_change_files(base: &Path) -> Vec<(String, String, std::path::PathBuf)> {
     results
 }
 
-fn read_est(path: &Path) -> Result<(f64, f64, f64), String> {
-    let data =
-        fs::read_to_string(path).map_err(|e| format!("read error {}: {}", path.display(), e))?;
-    let v: Value =
-        serde_json::from_str(&data).map_err(|e| format!("json parse {}: {}", path.display(), e))?;
-    let mean = v.get("mean").ok_or_else(|| "missing mean".to_string())?;
+fn read_est(path: &Path) -> Result<(f64, f64, f64), ReadEstError> {
+    let path_str = path.display().to_string();
+    let data = fs::read_to_string(path).map_err(|source| ReadEstError::ReadFile {
+        path: path_str.clone(),
+        source,
+    })?;
+    let v: Value = serde_json::from_str(&data).map_err(|source| ReadEstError::JsonParse {
+        path: path_str.clone(),
+        source,
+    })?;
+    let mean = v.get("mean").ok_or(ReadEstError::MissingMean)?;
     let pe = mean
         .get("point_estimate")
         .and_then(|x| x.as_f64())
-        .ok_or_else(|| "missing point_estimate".to_string())?;
+        .ok_or(ReadEstError::MissingPointEstimate)?;
     let ci = mean
         .get("confidence_interval")
-        .ok_or_else(|| "missing confidence_interval".to_string())?;
+        .ok_or(ReadEstError::MissingConfidenceInterval)?;
     let lb = ci
         .get("lower_bound")
         .and_then(|x| x.as_f64())
-        .ok_or_else(|| "missing lower_bound".to_string())?;
+        .ok_or(ReadEstError::MissingLowerBound)?;
     let ub = ci
         .get("upper_bound")
         .and_then(|x| x.as_f64())
-        .ok_or_else(|| "missing upper_bound".to_string())?;
+        .ok_or(ReadEstError::MissingUpperBound)?;
     Ok((pe, lb, ub))
 }
 

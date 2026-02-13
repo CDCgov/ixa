@@ -41,6 +41,7 @@ anyhow.workspace = true
 ctor.workspace = true
 nohash-hasher = "0.2.0"
 tempfile.workspace = true
+thiserror.workspace = true
 
 [lib]
 bench = false
