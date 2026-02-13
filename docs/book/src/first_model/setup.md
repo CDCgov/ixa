@@ -64,7 +64,7 @@ Ixa comes with a convenience script for setting up new Ixa projects. Change
 directory to `disease_model/`, the project root, and run this command.
 
 ```bash
-curl -s https://raw.githubusercontent.com/CDCgov/ixa/release/scripts/setup_new_ixa_project.sh | sh -s
+curl -s https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s
 ```
 
 The script adds the Ixa library as a project dependency and provides you with a
