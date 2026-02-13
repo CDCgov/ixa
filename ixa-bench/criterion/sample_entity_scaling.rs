@@ -13,6 +13,7 @@ define_entity!(Mosquito);
 define_property!(struct Species(u8), Mosquito);
 define_property!(struct Region(u8), Mosquito);
 define_multi_property!((Species, Region), Mosquito);
+define_property!(struct Unindexed10(u8), Mosquito);
 
 const POPULATION_SIZES: [usize; 3] = [1_000, 10_000, 100_000];
 
@@ -31,6 +32,7 @@ fn setup_context(population_size: usize) -> Context {
             .add_entity((
                 Species(context.sample_range(SampleScalingRng, 0..10)),
                 Region(context.sample_range(SampleScalingRng, 0..10)),
+                Unindexed10(context.sample_range(SampleScalingRng, 0..10)),
             ))
             .unwrap();
     }
@@ -156,12 +158,37 @@ pub fn bench_sample_entity_multi_property_indexed(c: &mut Criterion, results: Re
     group.finish();
 }
 
+// Sampling one entity when the query is on an unindexed property. The source iterator is a
+// PropertyVecIter, which must scan the property's value vector.
+pub fn bench_sample_entity_single_property_unindexed(c: &mut Criterion, results: Results) {
+    let bench_name = "sample_entity_single_property_unindexed";
+    let mut group = c.benchmark_group(bench_name);
+
+    for &size in &POPULATION_SIZES {
+        let context = setup_context(size);
+
+        group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
+            let ns = bench_ns_per_sample(b, || {
+                let _ = context.sample_entity(SampleScalingRng, (Unindexed10(5),));
+            });
+
+            results
+                .lock()
+                .unwrap()
+                .insert((bench_name.to_string(), size), ns);
+        });
+    }
+
+    group.finish();
+}
+
 fn sample_entity_scaling(c: &mut Criterion) {
     let results: Results = Arc::new(Mutex::new(BTreeMap::new()));
 
     bench_sample_entity_whole_population(c, results.clone());
     bench_sample_entity_single_property_indexed(c, results.clone());
     bench_sample_entity_multi_property_indexed(c, results.clone());
+    bench_sample_entity_single_property_unindexed(c, results.clone());
 
     // Prints a scaling summary at the end like:
     //   === Scaling summary: sample_entity_whole_population ===
@@ -174,6 +201,7 @@ fn sample_entity_scaling(c: &mut Criterion) {
     print_scaling_summary(&results, "sample_entity_whole_population");
     print_scaling_summary(&results, "sample_entity_single_property_indexed");
     print_scaling_summary(&results, "sample_entity_multi_property_indexed");
+    print_scaling_summary(&results, "sample_entity_single_property_unindexed");
 }
 
 criterion_group!(benches, sample_entity_scaling);

@@ -4,14 +4,22 @@
 use crate::rand::seq::index::sample as choose_range;
 use crate::rand::Rng;
 
-/// Sample a random element uniformly from a container of known length.
+/// Samples one element uniformly at random from an iterator whose length is known at runtime.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over.
-/// This algorithm is used when the property is indexed, and thus we know the length of the result set.
+/// The caller must ensure that `(len, Some(len)) == iter.size_hint()`, i.e. the iterator
+/// reports its exact length via `size_hint`. We do not require `ExactSizeIterator`
+/// because that is a compile-time guarantee, whereas our requirement is a runtime condition.
+///
+/// The implementation selects a random index and uses `Iterator::nth`. For iterators
+/// with O(1) `nth` (e.g., randomly indexable structures), this is very efficient.
+/// The selected value is cloned.
+///
+/// The iterator need only support iteration; random indexing is not required.
+/// This function is intended for use when the result set is indexed and its length is known.
 pub fn sample_single_from_known_length<I, R, T>(rng: &mut R, mut iter: I) -> Option<T>
 where
     R: Rng,
-    I: Iterator<Item = T>, //+ ExactSizeIterator<Item = T>,
+    I: Iterator<Item = T>,
 {
     // It is the caller's responsibility to ensure that `(len, Some(len)) == iter.size_hint()`.
     let (length, _) = iter.size_hint();
@@ -34,8 +42,7 @@ where
 ///
 /// This algorithm is significantly slower than the "known length" algorithm (factor
 /// of 10^4). The reservoir algorithm from [`rand`](crate::rand) reduces to the "known length"
-/// algorithm when the iterator is an [`ExactSizeIterator`](std::iter::ExactSizeIterator), or more precisely,
-/// when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
+/// algorithm when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
 /// this algorithm is much faster than the [`rand`](crate::rand)  implementation (factor of 100).
 pub fn sample_single_l_reservoir<I, R, T>(rng: &mut R, iterable: I) -> Option<T>
 where
@@ -64,18 +71,23 @@ where
     }
 }
 
-/// Sample multiple random elements uniformly without replacement from a container of known length.
-/// This function assumes `set.len() >= requested`.
+/// Samples `requested` elements uniformly at random without replacement from an iterator
+/// whose length is known at runtime. Requires `len >= requested`.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over. The values are cloned.
+/// The caller must ensure that `(len, Some(len)) == iter.size_hint()`, i.e. the iterator
+/// reports its exact length via `size_hint`. We do not require `ExactSizeIterator`
+/// because that is a compile-time guarantee, whereas our requirement is a runtime condition.
 ///
-/// This algorithm can be used when the property is indexed, and thus we know the length of the result set.
-/// For very small `requested` values (<=5), this algorithm is faster than reservoir because it doesn't
-/// iterate over the entire set.
+/// The implementation selects random indices and uses `Iterator::nth`. For iterators
+/// with O(1) `nth` (e.g., randomly indexable structures), this is very efficient.
+/// Selected values are cloned.
+///
+/// This strategy is particularly effective for small `requested` (≤ 5), since it
+/// avoids iterating over the entire set and is typically faster than reservoir sampling.
 pub fn sample_multiple_from_known_length<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
-    I: IntoIterator<Item = T>, //+ ExactSizeIterator<Item = T>,
+    I: IntoIterator<Item = T>,
 {
     let mut iter = iter.into_iter();
     // It is the caller's responsibility to ensure that `(length, Some(length)) == iter.size_hint()`.
@@ -104,7 +116,8 @@ where
 /// Sample multiple random elements uniformly without replacement from a container of unknown length. If
 /// more samples are requested than are in the set, the function returns as many items as it can.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over. The values are cloned.
+/// The implementation uses `Iterator::nth`. Randomly indexable structures will have a O(1) `nth`
+/// implementation and will be very efficient. The values are cloned.
 ///
 /// This function implements "Algorithm L" from KIM-HUNG LI
 /// Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
