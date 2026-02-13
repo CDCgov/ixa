@@ -76,14 +76,8 @@ We will depend on a few external libraries in addition to Ixa. The `cargo add`
 command makes this easy.
 
 ```bash
-cargo add rand_distr@0.4.3
-cargo add csv
+cargo add csv rand_distr serde
 ```
-
-Notice that:
-
-- a particular version can be specified with the `packagename@1.2.3` syntax;
-- we can compile a library with specific features turn on or off.
 
 ### `Cargo.toml`
 
