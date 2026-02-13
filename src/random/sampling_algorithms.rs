@@ -4,21 +4,30 @@
 use crate::rand::seq::index::sample as choose_range;
 use crate::rand::Rng;
 
-/// Sample a random element uniformly from a container of known length.
+/// Samples one element uniformly at random from an iterator whose length is known at runtime.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over.
-/// This algorithm is used when the property is indexed, and thus we know the length of the result set.
+/// The caller must ensure that `(len, Some(len)) == iter.size_hint()`, i.e. the iterator
+/// reports its exact length via `size_hint`. We do not require `ExactSizeIterator`
+/// because that is a compile-time guarantee, whereas our requirement is a runtime condition.
+///
+/// The implementation selects a random index and uses `Iterator::nth`. For iterators
+/// with O(1) `nth` (e.g., randomly indexable structures), this is very efficient.
+/// The selected value is cloned.
+///
+/// The iterator need only support iteration; random indexing is not required.
+/// This function is intended for use when the result set is indexed and its length is known.
 pub fn sample_single_from_known_length<I, R, T>(rng: &mut R, mut iter: I) -> Option<T>
 where
     R: Rng,
-    I: Iterator<Item = T> + ExactSizeIterator<Item = T>,
+    I: Iterator<Item = T>,
 {
-    let len = iter.len();
-    if len == 0 {
+    // It is the caller's responsibility to ensure that `(len, Some(len)) == iter.size_hint()`.
+    let (length, _) = iter.size_hint();
+    if length == 0 {
         return None;
     }
     // This little trick with `u32` makes this function 30% faster.
-    let index = rng.random_range(0..len as u32) as usize;
+    let index = rng.random_range(0..length as u32) as usize;
     // The set need not be randomly indexable, so we have to use the `nth` method.
     iter.nth(index)
 }
@@ -33,61 +42,72 @@ where
 ///
 /// This algorithm is significantly slower than the "known length" algorithm (factor
 /// of 10^4). The reservoir algorithm from [`rand`](crate::rand) reduces to the "known length"
-/// algorithm when the iterator is an [`ExactSizeIterator`](std::iter::ExactSizeIterator), or more precisely,
-/// when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
+/// algorithm when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
 /// this algorithm is much faster than the [`rand`](crate::rand)  implementation (factor of 100).
 pub fn sample_single_l_reservoir<I, R, T>(rng: &mut R, iterable: I) -> Option<T>
 where
     R: Rng,
     I: IntoIterator<Item = T>,
 {
-    let mut chosen_item: Option<T> = None; // the currently selected element
+    let mut iter = iterable.into_iter();
     let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
-    let mut position: usize = 0; // current index in data
-    let mut next_pick_position: usize = 1; // index of the next item to pick
+    let mut chosen_item: T = iter.next()?; // the currently selected element
 
-    iterable.into_iter().for_each(|item| {
-        position += 1;
-        if position == next_pick_position {
-            chosen_item = Some(item);
-            next_pick_position +=
-                (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize + 1;
-            weight *= rng.random_range(0.0..1.0);
+    // Number of elements to skip before the next candidate to consider for the reservoir.
+    // `iter.nth(skip)` skips `skip` elements and returns the next one.
+    let mut skip = (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
+    weight *= rng.random_range(0.0..1.0);
+
+    loop {
+        match iter.nth(skip) {
+            Some(item) => {
+                chosen_item = item;
+                skip =
+                    (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
+                weight *= rng.random_range(0.0..1.0);
+            }
+            None => return Some(chosen_item),
         }
-    });
-
-    chosen_item
+    }
 }
 
-/// Sample multiple random elements uniformly without replacement from a container of known length.
-/// This function assumes `set.len() >= requested`.
+/// Samples `requested` elements uniformly at random without replacement from an iterator
+/// whose length is known at runtime. Requires `len >= requested`.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over. The values are cloned.
+/// The caller must ensure that `(len, Some(len)) == iter.size_hint()`, i.e. the iterator
+/// reports its exact length via `size_hint`. We do not require `ExactSizeIterator`
+/// because that is a compile-time guarantee, whereas our requirement is a runtime condition.
 ///
-/// This algorithm can be used when the property is indexed, and thus we know the length of the result set.
-/// For very small `requested` values (<=5), this algorithm is faster than reservoir because it doesn't
-/// iterate over the entire set.
+/// The implementation selects random indices and uses `Iterator::nth`. For iterators
+/// with O(1) `nth` (e.g., randomly indexable structures), this is very efficient.
+/// Selected values are cloned.
+///
+/// This strategy is particularly effective for small `requested` (≤ 5), since it
+/// avoids iterating over the entire set and is typically faster than reservoir sampling.
 pub fn sample_multiple_from_known_length<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
-    I: IntoIterator<Item = T> + ExactSizeIterator<Item = T>,
+    I: IntoIterator<Item = T>,
 {
-    let mut indexes = Vec::with_capacity(requested);
-    indexes.extend(choose_range(rng, iter.len(), requested));
-    indexes.sort_unstable();
-    let mut index_iterator = indexes.into_iter();
-    let mut next_idx = index_iterator.next().unwrap();
-    let mut selected = Vec::with_capacity(requested);
+    let mut iter = iter.into_iter();
+    // It is the caller's responsibility to ensure that `(length, Some(length)) == iter.size_hint()`.
+    let (length, _) = iter.size_hint();
 
-    for (idx, item) in iter.enumerate() {
-        if idx == next_idx {
+    let mut indexes = Vec::with_capacity(requested);
+    indexes.extend(choose_range(rng, length, requested));
+    indexes.sort_unstable();
+
+    let mut selected = Vec::with_capacity(requested);
+    let mut consumed: usize = 0; // number of elements consumed from the iterator so far
+
+    // `iter.nth(n)` skips `n` elements and returns the next one, so to reach
+    // index `idx` we skip `idx - consumed` where `consumed` tracks how many
+    // elements have already been consumed.
+    for idx in indexes {
+        if let Some(item) = iter.nth(idx - consumed) {
             selected.push(item);
-            if let Some(i) = index_iterator.next() {
-                next_idx = i;
-            } else {
-                break;
-            }
         }
+        consumed = idx + 1;
     }
 
     selected
@@ -96,7 +116,8 @@ where
 /// Sample multiple random elements uniformly without replacement from a container of unknown length. If
 /// more samples are requested than are in the set, the function returns as many items as it can.
 ///
-/// We do not assume the container is randomly indexable, only that it can be iterated over. The values are cloned.
+/// The implementation uses `Iterator::nth`. Randomly indexable structures will have a O(1) `nth`
+/// implementation and will be very efficient. The values are cloned.
 ///
 /// This function implements "Algorithm L" from KIM-HUNG LI
 /// Reservoir-Sampling Algorithms of Time Complexity O(n(1 + log(N/n)))
@@ -115,32 +136,34 @@ where
 
     let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
     weight = weight.powf(1.0 / requested as f64);
-    let mut position: usize = 0; // current index in data
-    let mut next_pick_position: usize = 1; // index of the next item to pick
-    let mut reservoir = Vec::with_capacity(requested); // the sample reservoir
+    let mut iter = iter.into_iter();
+    let mut reservoir: Vec<T> = iter.by_ref().take(requested).collect(); // the sample reservoir
 
-    iter.into_iter().for_each(|item| {
-        position += 1;
-        if position == next_pick_position {
-            if reservoir.len() == requested {
+    if reservoir.len() < requested {
+        return reservoir;
+    }
+
+    // Number of elements to skip before the next candidate to consider for the reservoir.
+    // `iter.nth(skip)` skips `skip` elements and returns the next one.
+    let mut skip = (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
+    let uniform_random: f64 = rng.random_range(0.0..1.0);
+    weight *= uniform_random.powf(1.0 / requested as f64);
+
+    loop {
+        match iter.nth(skip) {
+            Some(item) => {
                 let to_remove = rng.random_range(0..reservoir.len());
                 reservoir.swap_remove(to_remove);
-            }
-            reservoir.push(item);
+                reservoir.push(item);
 
-            if reservoir.len() == requested {
-                next_pick_position += (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight))
-                    .floor() as usize
-                    + 1;
+                skip =
+                    (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
                 let uniform_random: f64 = rng.random_range(0.0..1.0);
                 weight *= uniform_random.powf(1.0 / requested as f64);
-            } else {
-                next_pick_position += 1;
             }
+            None => return reservoir,
         }
-    });
-
-    reservoir
+    }
 }
 
 #[cfg(test)]
