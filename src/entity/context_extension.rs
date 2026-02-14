@@ -34,12 +34,12 @@ pub trait ContextEntitiesExt {
         property_value: P,
     );
 
-    /// Enables indexing of property values for the property `P`.
+    /// Enables full indexing of property values for the property `P`.
     ///
     /// This method is called with the turbo-fish syntax:
     ///     `context.index_property::<Person, Age>()`
-    /// The actual computation of the index is done lazily as needed upon execution of queries,
-    /// not when this method is called.
+    ///
+    /// This method both enables the index and catches it up to the current population.
     fn index_property<E: Entity, P: Property<E>>(&mut self);
 
     /// Enables value-count indexing of property values for the property `P`.
@@ -131,8 +131,19 @@ impl ContextEntitiesExt for Context {
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
-        property_list
-            .set_values_for_entity(new_entity_id, self.entity_store.get_property_store::<E>());
+        property_list.set_values_for_new_entity(
+            new_entity_id,
+            self.entity_store.get_property_store_mut::<E>(),
+        );
+
+        // Keep all enabled indexes caught up as entities are created.
+        let context_ptr: *const Context = self;
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        // SAFETY: We create a shared `&Context` for read-only property access while mutably
+        // borrowing the property store to update index internals.
+        unsafe {
+            property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
+        }
 
         // Emit an `EntityCreatedEvent<Entity>`.
         self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
@@ -156,24 +167,12 @@ impl ContextEntitiesExt for Context {
     ) {
         debug_assert!(!P::is_derived(), "cannot set a derived property");
 
-        // The algorithm is as follows
-        // 1. Get the previous value of the property.
-        //    1.1 If it's the same as `property_value`, exit.
-        //    1.2 Otherwise, create a `PartialPropertyChangeEvent<E, P>`.
-        // 2. Remove the `entity_id` from the index bucket corresponding to its old value.
-        // 3. For each dependent of the property, do the analog of steps 1 & 2:
-        //    3.1 Compute the previous value of the dependent property `Q`, creating a
-        //        `PartialPropertyChangeEvent<E, Q>` instance if necessary.
-        //    3.2 Remove the `entity_id` from the index bucket corresponding to the old value of `Q`.
-        // 4. Set the new value of the (main) property in the property store.
-        // 5. Update the property index: Insert the `entity_id` into the index bucket corresponding to the new value.
-        // 6. Emit the property change event: convert the `PartialPropertyChangeEvent<E, P>` into a
-        //    `event: PropertyChangeEvent<E, P>` and call `Context::emit_event(event)`.
-        // 7. For each dependent of the property, do the analog of steps 4-6:
-        //    7.1 Compute the new value of the dependent property
-        //    7.2 Add `entity_id` to the index bucket corresponding to the new value.
-        //    7.3 convert the `PartialPropertyChangeEvent<E, Q>` into a
-        //        `event: PropertyChangeEvent<E, Q>` and call `Context::emit_event(event)`.
+        // The algorithm is as follows:
+        // 1. Snapshot previous values for the main property and its dependents by creating
+        //    `PartialPropertyChangeEvent` instances.
+        // 2. Set the new value of the main property in the property store.
+        // 3. Emit each partial event; during emission each event computes the current value,
+        //    updates its index (remove old/add new), and emits a `PropertyChangeEvent`.
 
         // We need two passes over the dependents: one pass to compute all the old values and
         // another to compute all the new values. We group the steps for each dependent (and, it
@@ -197,32 +196,48 @@ impl ContextEntitiesExt for Context {
         // - There may be use cases for listening to "writes" that don't actually change values.
 
         let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![];
-        let property_store = self.entity_store.get_property_store::<E>();
 
-        // Create the partial property change for this value.
-        dependents.push(property_store.create_partial_property_change(P::id(), entity_id, self));
-        // Now create partial property change events for each dependent.
-        for dependent_idx in P::dependents() {
+        // Immutable: Collect the previous value to create partial property change events
+        {
+            let property_store = self.entity_store.get_property_store::<E>();
+
+            // Create the partial property change for this value.
             dependents.push(property_store.create_partial_property_change(
-                *dependent_idx,
+                P::id(),
                 entity_id,
                 self,
             ));
+            // Now create partial property change events for each dependent.
+            for dependent_idx in P::dependents() {
+                dependents.push(property_store.create_partial_property_change(
+                    *dependent_idx,
+                    entity_id,
+                    self,
+                ));
+            }
         }
 
         // Update the value
         let property_value_store = self.get_property_value_store::<E, P>();
         property_value_store.set(entity_id, property_value);
 
-        // After updating the value
+        // Mutable: After updating the value, we update its dependents, removing old values and
+        // storing the new values in their respective indexes, and emit the property change event.
         for dependent in dependents.into_iter() {
             dependent.emit_in_context(self)
         }
     }
 
     fn index_property<E: Entity, P: Property<E>>(&mut self) {
+        let property_id = P::index_id();
+        let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
         property_store.set_property_indexed::<P>(PropertyIndexType::FullIndex);
+        // SAFETY: This only creates a shared reference to `Context` while mutably borrowing
+        // the property store to update index internals.
+        unsafe {
+            property_store.index_unindexed_entities_for_property_id(&*context_ptr, property_id);
+        }
     }
 
     fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
@@ -251,12 +266,11 @@ impl ContextEntitiesExt for Context {
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             match property_store.get_index_set_with_hash_for_property_id(
-                self,
                 multi_property_id,
                 query.multi_property_value_hash(),
             ) {
                 IndexSetResult::Set(people_set) => {
-                    callback(&people_set);
+                    callback(people_set);
                     return;
                 }
                 IndexSetResult::Empty => {
@@ -294,7 +308,6 @@ impl ContextEntitiesExt for Context {
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             match property_store.get_index_count_with_hash_for_property_id(
-                self,
                 multi_property_id,
                 query.multi_property_value_hash(),
             ) {
@@ -351,7 +364,7 @@ impl ContextEntitiesExt for Context {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Ref, RefCell};
+    use std::cell::RefCell;
     use std::rc::Rc;
 
     use super::*;
@@ -494,7 +507,7 @@ mod tests {
     }
 
     // Helper for index tests
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     enum IndexMode {
         Unindexed,
         FullIndex,
@@ -534,7 +547,7 @@ mod tests {
             context.with_query_results((existing_value,), &mut |people_set| {
                 existing_len = people_set.len();
             });
-            assert_eq!(existing_len, 2);
+            assert_eq!(existing_len, 2, "Wrong length for {mode:?}");
 
             let mut missing_len = 0;
             context.with_query_results((missing_value,), &mut |people_set| {
@@ -820,13 +833,13 @@ mod tests {
 
         let property_store = context.entity_store.get_property_store::<Person>();
         let property_value_store = property_store.get_with_id(index_id);
-        let bucket: Ref<IndexSet<EntityId<Person>>> = property_value_store
+        let bucket: &IndexSet<EntityId<Person>> = property_value_store
             .get_index_set_with_hash(
                 (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
             )
             .unwrap();
 
-        let address2 = &*bucket as *const _;
+        let address2 = bucket as *const _;
         assert_eq!(address2, address);
     }
 

@@ -107,7 +107,6 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         // rather than wrapping a `DerivedPropertySource`.
         if let Some(multi_property_id) = self.multi_property_id() {
             match property_store.get_index_set_with_hash_for_property_id(
-                context,
                 multi_property_id,
                 self.multi_property_value_hash(),
             ) {
@@ -219,7 +218,6 @@ macro_rules! impl_query {
                     if let Some(multi_property_id) = self.multi_property_id() {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
-                            context,
                             multi_property_id,
                             self.multi_property_value_hash(),
                         ) {
@@ -266,7 +264,6 @@ macro_rules! impl_query {
                     if let Some(multi_property_id) = self.multi_property_id() {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
-                            context,
                             multi_property_id,
                             self.multi_property_value_hash(),
                         ) {

@@ -15,7 +15,6 @@
 //! is called, this `SourceIterator` is iterated over until an ID is found that is contained
 //! in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
 
-use std::cell::Ref;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
@@ -218,14 +217,14 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
 /// iterator in the `Iterator` implementation on `SourceIterator`.
 #[self_referencing]
 pub(super) struct IndexSetIterator<'a, E: Entity> {
-    index_set: Ref<'a, IndexSet<EntityId<E>>>,
+    index_set: &'a IndexSet<EntityId<E>>,
     #[borrows(index_set)]
     #[covariant]
     iter: IndexSetIter<'this, EntityId<E>>,
 }
 
 impl<'a, E: Entity> IndexSetIterator<'a, E> {
-    pub fn from_index_set(index_set: Ref<'a, IndexSet<EntityId<E>>>) -> Self {
+    pub fn from_index_set(index_set: &'a IndexSet<EntityId<E>>) -> Self {
         IndexSetIteratorBuilder {
             index_set,
             iter_builder: |index_set| index_set.iter(),
@@ -236,7 +235,7 @@ impl<'a, E: Entity> IndexSetIterator<'a, E> {
 
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
 pub(crate) enum SourceSet<'a, E: Entity> {
-    IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
+    IndexSet(&'a IndexSet<EntityId<E>>),
     PropertySet(BxPropertySource<'a, E>),
 }
 
@@ -247,15 +246,12 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// We first look for an index set. If not found, we check if the property is derived.
     /// For derived properties, we wrap a reference to the `Context`. For nonderived
     /// properties, we wrap a reference to the property's backing vector.
-    ///
-    /// This method refreshes outdated indexes.
     pub(crate) fn new<P: Property<E>>(value: P, context: &'a Context) -> Option<Self> {
         let property_store = context.entity_store.get_property_store::<E>();
 
         // Check for an index.
         {
             match property_store.get_index_set_with_hash_for_property_id(
-                context,
                 P::index_id(),
                 P::hash_property_value(&value.make_canonical()),
             ) {
@@ -387,8 +383,6 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::*;
     use crate::{define_entity, define_property};
 
@@ -405,8 +399,7 @@ mod tests {
             EntityId::new(3),
             EntityId::new(6),
         ]);
-        let people_set = RefCell::new(people_set);
-        let people_set_ref = people_set.borrow();
+        let people_set_ref = &people_set;
         {
             let pvi = SourceSet::PropertySet(Box::new(ConcretePropertySource::<_, Age>::new(
                 &values,

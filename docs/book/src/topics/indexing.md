@@ -29,8 +29,9 @@ Best practices:
   can put all of your `Context::index_property` calls together in a main
   initialization function if you prefer.
 - It is not an error to call `Context::index_property` in the middle of a
-  running simulation or to call it twice for the same property, but it makes
-  little sense to do so.
+  running simulation or to call it twice for the same property.
+- Calling `Context::index_property` enables indexing and catches the index up to
+  the current population at the time of the call.
 
 ## Property Value Storage in Ixa
 
@@ -112,17 +113,6 @@ An index in Ixa is just a map between a property _value_ and the list of all
 property value is (almost) as fast as looking up the property value for a given
 `PersonId`.
 
-> [!INFO] Ixa's Intelligent Indexing Strategy
->
-> The picture we have painted of how Ixa implements indexing is necessarily a
-> simplification. Ixa uses a lazy indexing strategy, which means if a property
-> is never queried, then Ixa never actually does the work of computing the
-> index. Ixa also keeps track of whether new people have been added to the
-> simulation since the last time a query was run, so that it only has to update
-> its index for those newly added people. These and other optimizations make
-> Ixa's indexing very fast and memory efficient compared to the simplistic
-> version described in this section.
-
 ## The Costs of Creating an Index
 
 There are two costs you have to pay for indexing:
@@ -145,10 +135,6 @@ There are two costs you have to pay for indexing:
 > it all at once doesn't matter: the sum of all the small efforts to update the
 > index every time a person is added is equal to the cost of creating the index
 > from scratch for an existing set of data.
->
-> We can, however, save the effort of updating the index when property values
-> _change_ if we wait until we actually run a query that needs to use the index
-> before we construct the index. This is why Ixa uses a lazy indexing strategy.
 
 Usually scanning through the whole property column is so slow relative to
 maintaining an index that the extra computational cost of maintaining the index

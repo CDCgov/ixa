@@ -42,7 +42,11 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 
     /// Assigns the given entity the property values in `self` in the `property_store`.
     /// This method does NOT emit property change events, as it is called upon entity creation.
-    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
+    fn set_values_for_new_entity(
+        &self,
+        entity_id: EntityId<E>,
+        property_store: &mut PropertyStore<E>,
+    );
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
@@ -53,7 +57,11 @@ impl<E: Entity> PropertyList<E> for () {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
-    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+    fn set_values_for_new_entity(
+        &self,
+        _entity_id: EntityId<E>,
+        _property_store: &mut PropertyStore<E>,
+    ) {
         // No values to assign.
     }
 }
@@ -67,7 +75,11 @@ impl<E: Entity + Copy> PropertyList<E> for E {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
-    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+    fn set_values_for_new_entity(
+        &self,
+        _entity_id: EntityId<E>,
+        _property_store: &mut PropertyStore<E>,
+    ) {
         // No values to assign.
     }
 }
@@ -84,8 +96,8 @@ impl<E: Entity + Copy> PropertyList<E> for E {
 //         property_type_ids.len() == 0
 //             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
 //     }
-//     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
-//         let property_value_store = property_store.get::<P>();
+//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>) {
+//         let property_value_store = property_store.get_mut::<P>();
 //         property_value_store.set(entity_id, *self);
 //     }
 // }
@@ -99,8 +111,12 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         property_type_ids.is_empty()
             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
     }
-    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
-        let property_value_store = property_store.get::<P>();
+    fn set_values_for_new_entity(
+        &self,
+        entity_id: EntityId<E>,
+        property_store: &mut PropertyStore<E>,
+    ) {
+        let property_value_store = property_store.get_mut::<P>();
         property_value_store.set(entity_id, self.0);
     }
 }
@@ -134,9 +150,9 @@ macro_rules! impl_property_list {
                     property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
                 }
 
-                fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>){
+                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>){
                     #({
-                        let property_value_store = property_store.get::<P~N>();
+                        let property_value_store = property_store.get_mut::<P~N>();
                         property_value_store.set(entity_id, self.N);
                     })*
                 }

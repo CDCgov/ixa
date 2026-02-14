@@ -33,7 +33,9 @@ use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, IxaEvent};
 
 /// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
+/// Interacts with the index on behalf of the erased type.
 pub(crate) trait PartialPropertyChangeEvent {
+    /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(self: Box<Self>, context: &mut Context);
 }
 
@@ -41,21 +43,26 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
     for PartialPropertyChangeEventCore<E, P>
 {
     /// Updates the index with the current property value and emits a change event.
-    fn emit_in_context(self: Box<Self>, context: &mut Context) {
-        let current_value: P = context.get_property(self.0.entity_id);
+    fn emit_in_context(mut self: Box<Self>, context: &mut Context) {
+        self.0.current = context.get_property(self.0.entity_id);
         let property_value_store = context.get_property_value_store_mut::<E, P>();
 
+        // Out with the old
         property_value_store
             .index
-            .add_entity(&current_value.make_canonical(), self.0.entity_id);
+            .remove_entity(&self.0.previous.make_canonical(), self.0.entity_id);
+        // In with the new
+        property_value_store
+            .index
+            .add_entity(&self.0.current.make_canonical(), self.0.entity_id);
 
         // We decided not to do the following check.
         // See `src/entity/context_extension::ContextEntitiesExt::set_property`.
-        // if current_value != self.0.previous {
-        //     context.emit_event(self.to_event(current_value));
+        // if self.0.current != self.0.previous {
+        //     context.emit_event(self.to_event());
         // }
 
-        context.emit_event(self.to_event(current_value));
+        context.emit_event(self.to_event());
     }
 }
 
@@ -86,8 +93,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
         })
     }
 
-    pub fn to_event(mut self, current_value: P) -> PropertyChangeEvent<E, P> {
-        self.0.current = current_value;
+    pub fn to_event(self) -> PropertyChangeEvent<E, P> {
         self.0
     }
 }

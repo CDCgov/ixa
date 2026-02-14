@@ -18,8 +18,6 @@
 //! where you want a mutable copy of the result set. If you don't need a mutable copy, use
 //! `Context::with_query_results` instead, as it is much more efficient for indexed queries.
 
-use std::cell::Ref;
-
 use log::warn;
 use rand::Rng;
 
@@ -67,7 +65,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         EntitySetIterator { source, sources }
     }
 
-    pub fn from_index_set(set: Ref<'c, IndexSet<EntityId<E>>>) -> EntitySetIterator<'c, E> {
+    pub fn from_index_set(set: &'c IndexSet<EntityId<E>>) -> EntitySetIterator<'c, E> {
         EntitySetIterator {
             source: SourceSet::IndexSet(set).into_iter(),
             sources: vec![],
