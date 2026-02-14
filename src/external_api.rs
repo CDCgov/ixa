@@ -69,7 +69,7 @@ pub(crate) mod global_properties {
                     let output = context.get_serialized_value_by_string(name)?;
                     match output {
                         Some(value) => Ok(Retval::Value(value)),
-                        None => Err(IxaError::IxaError(format!("Property {name} is not set"))),
+                        None => Err(IxaError::PropertyNotSet { name: name.clone() }),
                     }
                 }
             }
@@ -154,9 +154,7 @@ pub(crate) mod breakpoint {
                 #[allow(unused_variables)]
                 ArgsEnum::Set { time, console } => {
                     if *time < context.get_current_time() {
-                        return Err(IxaError::from(format!(
-                            "Breakpoint time {time} is in the past"
-                        )));
+                        return Err(IxaError::BreakpointTimeInPast { time: *time });
                     }
                     context.schedule_debugger(*time, None, Box::new(enter_debugger));
 
@@ -170,9 +168,7 @@ pub(crate) mod breakpoint {
                         trace!("Deleting breakpoint {id}");
                         let cancelled = context.delete_breakpoint(u64::from(*id));
                         if cancelled.is_none() {
-                            Err(IxaError::from(format!(
-                                "Attempted to delete a nonexistent breakpoint {id}",
-                            )))
+                            Err(IxaError::BreakpointNotFound { id: *id })
                         } else {
                             Ok(Retval::Ok)
                         }

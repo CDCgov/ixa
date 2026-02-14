@@ -123,7 +123,7 @@ impl ContextEntitiesExt for Context {
 
         // Check that all required properties are present.
         if !PL::contains_required_properties() {
-            return Err("initialization list is missing required properties".into());
+            return Err(IxaError::MissingRequiredInitializationProperties);
         }
 
         // Now that we know we will succeed, we create the entity.
@@ -552,7 +552,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(crate::IxaError::IxaError(ref msg)) if msg == "initialization list is missing required properties"
+            Err(crate::IxaError::MissingRequiredInitializationProperties)
         ));
     }
 

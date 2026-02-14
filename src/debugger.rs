@@ -2,9 +2,20 @@ use std::fmt::Write;
 
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use rustyline;
+use thiserror::Error;
 
 use crate::external_api::{breakpoint, global_properties, halt, next, run_ext_api};
-use crate::{define_data_plugin, trace, Context, HashMap, HashMapExt, IxaError};
+use crate::{define_data_plugin, trace, Context, HashMap, HashMapExt};
+
+#[derive(Error, Debug)]
+enum DebuggerError {
+    #[error("error splitting line")]
+    SplitLine,
+    #[error(transparent)]
+    Clap(#[from] clap::Error),
+    #[error("unknown command: {command}")]
+    UnknownCommand { command: String },
+}
 
 trait DebuggerCommand {
     /// Handle the command and any inputs; returning true will exit the debugger
@@ -12,7 +23,7 @@ trait DebuggerCommand {
         &self,
         context: &mut Context,
         matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String>;
+    ) -> Result<(bool, Option<String>), DebuggerError>;
     fn extend(&self, command: Command) -> Command;
 }
 
@@ -59,13 +70,12 @@ impl Debugger {
         &self,
         l: &str,
         context: &mut Context,
-    ) -> Result<(bool, Option<String>), String> {
-        let args = shlex::split(l).ok_or("Error splitting lines")?;
+    ) -> Result<(bool, Option<String>), DebuggerError> {
+        let args = shlex::split(l).ok_or(DebuggerError::SplitLine)?;
         let matches = self
             .cli
             .clone() // cli can only be used once.
-            .try_get_matches_from(args)
-            .map_err(|e| e.to_string())?;
+            .try_get_matches_from(args)?;
 
         if let Some((command, _)) = matches.subcommand() {
             // If the provided command is known, run its handler
@@ -74,7 +84,9 @@ impl Debugger {
                 return handler.handle(context, &matches);
             }
             // Unexpected command: print an error
-            return Err(format!("error: Unknown command: {command}"));
+            return Err(DebuggerError::UnknownCommand {
+                command: command.to_string(),
+            });
         }
 
         unreachable!("subcommand required");
@@ -87,11 +99,10 @@ impl DebuggerCommand for GlobalPropertyCommand {
         &self,
         context: &mut Context,
         matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
+    ) -> Result<(bool, Option<String>), DebuggerError> {
         let args = global_properties::Args::from_arg_matches(matches).unwrap();
         let ret = run_ext_api::<global_properties::Api>(context, &args);
         match ret {
-            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
             Err(e) => Ok((false, Some(format!("error: {e}")))),
             Ok(global_properties::Retval::List(properties)) => Ok((
                 false,
@@ -116,7 +127,7 @@ impl DebuggerCommand for HaltCommand {
         &self,
         context: &mut Context,
         _matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
+    ) -> Result<(bool, Option<String>), DebuggerError> {
         context.shutdown();
         Ok((true, None))
     }
@@ -132,7 +143,7 @@ impl DebuggerCommand for NextCommand {
         &self,
         context: &mut Context,
         _matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
+    ) -> Result<(bool, Option<String>), DebuggerError> {
         // We execute directly instead of setting `Context::break_requested` so as not to interfere
         // with anything else that might be requesting a break, or in case debugger sessions become
         // stateful.
@@ -151,10 +162,10 @@ impl DebuggerCommand for BreakpointCommand {
         &self,
         context: &mut Context,
         matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
+    ) -> Result<(bool, Option<String>), DebuggerError> {
         let args = breakpoint::Args::from_arg_matches(matches).unwrap();
         match run_ext_api::<breakpoint::Api>(context, &args) {
-            Err(IxaError::IxaError(e)) => Ok((false, Some(format!("error: {e}")))),
+            Err(e) => Ok((false, Some(format!("error: {e}")))),
             Ok(return_value) => {
                 match return_value {
                     breakpoint::Retval::List(bp_list) => {
@@ -169,7 +180,6 @@ impl DebuggerCommand for BreakpointCommand {
 
                 Ok((false, None))
             }
-            _ => unimplemented!(),
         }
     }
     fn extend(&self, command: Command) -> Command {
@@ -188,7 +198,7 @@ impl DebuggerCommand for ContinueCommand {
         &self,
         _context: &mut Context,
         _matches: &ArgMatches,
-    ) -> Result<(bool, Option<String>), String> {
+    ) -> Result<(bool, Option<String>), DebuggerError> {
         Ok((true, None))
     }
     fn extend(&self, command: Command) -> Command {
@@ -384,6 +394,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
+            .to_string()
             .contains("required arguments were not provided"));
     }
 
@@ -391,7 +402,7 @@ mod tests {
     fn test_cli_debugger_global_get_unregistered_prop() {
         let context = &mut Context::new();
         let (_quits, output) = process_line("global get NotExist\n", context);
-        assert_eq!(output.unwrap(), "error: No global property: NotExist");
+        assert_eq!(output.unwrap(), "error: no global property: NotExist");
     }
 
     #[test]
@@ -411,7 +422,7 @@ mod tests {
         let (_quits, output) = process_line("global get ixa.EmptyGlobal\n", context);
         assert_eq!(
             output.unwrap(),
-            "error: Property ixa.EmptyGlobal is not set"
+            "error: property ixa.EmptyGlobal is not set"
         );
     }
 

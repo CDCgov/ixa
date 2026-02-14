@@ -93,7 +93,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
         // Enforce uniqueness by neighbor
         if edges.iter().any(|e| e.neighbor == edge.neighbor) {
-            return Err(IxaError::IxaError("Edge already exists".into()));
+            return Err(IxaError::EdgeAlreadyExists);
         }
 
         edges.push(edge);
