@@ -10,8 +10,6 @@
 //!
 //! The iterator is created through `EntitySet::into_iter()`.
 
-use std::cell::Ref;
-
 use log::warn;
 use rand::Rng;
 
@@ -260,7 +258,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         }
     }
 
-    pub(crate) fn from_index_set(set: Ref<'c, IndexSet<EntityId<E>>>) -> EntitySetIterator<'c, E> {
+    pub(crate) fn from_index_set(set: &'c IndexSet<EntityId<E>>) -> EntitySetIterator<'c, E> {
         EntitySetIterator {
             inner: EntitySetIteratorInner::Source(SourceSet::IndexSet(set).into_iter()),
         }
@@ -448,8 +446,6 @@ mod tests {
     is indexed with fewer results to ensure it becomes the "smallest source
     set", making the tested property NOT the initial source position.
     */
-
-    use std::cell::RefCell;
 
     use indexmap::IndexSet;
 
@@ -1053,17 +1049,15 @@ mod tests {
         assert_eq!(remaining, 2);
     }
 
-    fn finite_set(ids: &[usize]) -> RefCell<FxIndexSet<EntityId<Person>>> {
-        RefCell::new(
-            ids.iter()
-                .copied()
-                .map(EntityId::new)
-                .collect::<FxIndexSet<_>>(),
-        )
+    fn finite_set(ids: &[usize]) -> FxIndexSet<EntityId<Person>> {
+        ids.iter()
+            .copied()
+            .map(EntityId::new)
+            .collect::<FxIndexSet<_>>()
     }
 
-    fn as_entity_set(set: &RefCell<FxIndexSet<EntityId<Person>>>) -> EntitySet<Person> {
-        EntitySet::from_source(SourceSet::IndexSet(set.borrow()))
+    fn as_entity_set(set: &FxIndexSet<EntityId<Person>>) -> EntitySet<Person> {
+        EntitySet::from_source(SourceSet::IndexSet(set))
     }
 
     #[test]

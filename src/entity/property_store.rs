@@ -352,28 +352,36 @@ impl<E: Entity> PropertyStore<E> {
     }
 
     /// Updates the index of the property having the given ID for any entities that have been added to the context
-    /// since the last time the index was updated. As a convenience, returns `false` if this property is not indexed,
-    /// `true` otherwise.
-    pub fn index_unindexed_entities_for_property_id(&self, context: &Context, property_id: usize) {
+    /// since the last time the index was updated.
+    pub fn index_unindexed_entities_for_property_id(
+        &mut self,
+        context: &Context,
+        property_id: usize,
+    ) {
         self.items[property_id].index_unindexed_entities(context)
+    }
+
+    /// Updates all indexed properties for any entities that have been added since the last update.
+    pub fn index_unindexed_entities_for_all_properties(&mut self, context: &Context) {
+        for store in &mut self.items {
+            store.index_unindexed_entities(context);
+        }
     }
 
     pub fn get_index_set_with_hash_for_property_id(
         &self,
-        context: &Context,
         property_id: usize,
         hash: HashValueType,
     ) -> IndexSetResult<'_, E> {
-        self.items[property_id].get_index_set_with_hash_result(context, hash)
+        self.items[property_id].get_index_set_with_hash_result(hash)
     }
 
     pub fn get_index_count_with_hash_for_property_id(
         &self,
-        context: &Context,
         property_id: usize,
         hash: HashValueType,
     ) -> IndexCountResult {
-        self.items[property_id].get_index_count_with_hash_result(context, hash)
+        self.items[property_id].get_index_count_with_hash_result(hash)
     }
 }
 
@@ -476,34 +484,23 @@ mod tests {
 
         // FullIndex + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Count(2)
         );
 
         // FullIndex + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Empty
         ));
         assert!(matches!(
             property_store.get_index_set_with_hash_for_property_id(
-                &context,
                 Age::index_id(),
                 existing_hash,
             ),
@@ -528,37 +525,23 @@ mod tests {
 
         // ValueCountIndex + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Count(2)
         );
 
         // ValueCountIndex + set (unsupported)
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexSetResult::Unsupported
         ));
     }
@@ -578,37 +561,23 @@ mod tests {
 
         // Unindexed + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Unsupported
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Unsupported
         );
 
         // Unindexed + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexSetResult::Unsupported
         ));
     }
