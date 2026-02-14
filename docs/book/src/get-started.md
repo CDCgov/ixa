@@ -10,13 +10,11 @@ Execute the following commands to create a new Rust project called `ixa_model`.
 cargo new --bin ixa_model
 
 cd ixa_model
-
 ```
 
 Use Ixa's new project setup script to setup the project for Ixa.
 
 ```bash
-
 curl -s https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s
 ```
 
@@ -43,5 +41,5 @@ cargo run -- --log-level=trace
 To run with logging enabled for just `ixa_model`:
 
 ```bash
-cargo run -- --log-level=ixa_model:trace
+cargo run -- --log-level ixa_model=trace
 ```
