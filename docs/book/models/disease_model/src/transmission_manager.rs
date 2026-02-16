@@ -22,7 +22,7 @@ fn attempt_infection(context: &mut Context) {
     #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
         + context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap())
-        / POPULATION as f64;
+            / POPULATION as f64;
 
     context.add_plan(next_attempt_time, attempt_infection);
 }

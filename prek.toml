@@ -1,0 +1,28 @@
+
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+
+[[repos.hooks]]
+id = "check-toml"
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "check"
+name = "Check"
+language = "system"
+entry = "mise"
+args = ["run", "precommit"]
+files = ""
+
+[[repos.hooks]]
+id = "mise-commit-msg"
+name = "mise commit-msg"
+language = "system"
+entry = "mise"
+args = ["run", "lint:commit-msg"]
+stages = ["commit-msg"]

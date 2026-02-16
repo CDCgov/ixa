@@ -7,7 +7,7 @@ use crate::utilities::{resolved_person_property_path, TypeTuple};
 
 fn reorder_indices(tag: &[Ident]) -> Vec<usize> {
     let mut sorted: Vec<_> = tag.iter().enumerate().collect();
-    sorted.sort_unstable_by(|(_, a), (_, b)| a.to_string().cmp(&b.to_string()));
+    sorted.sort_unstable_by_key(|(_, a)| a.to_string());
     sorted.iter().map(|(i, _)| *i).collect()
 }
 

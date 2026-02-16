@@ -26,7 +26,9 @@ use rand::Rng;
 use crate::entity::entity_set::source_set::{SourceIterator, SourceSet};
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
-use crate::random::{sample_multiple_l_reservoir, sample_single_l_reservoir};
+use crate::random::{
+    sample_multiple_from_known_length, sample_multiple_l_reservoir, sample_single_l_reservoir,
+};
 
 /// An iterator over the IDs in an entity set, producing `EntityId<E>`s until exhausted.
 pub struct EntitySetIterator<'c, E: Entity> {
@@ -101,7 +103,16 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     where
         R: Rng,
     {
-        sample_multiple_l_reservoir(rng, self, requested)
+        match self.size_hint() {
+            (lower, Some(upper)) if lower == upper => {
+                if lower == 0 {
+                    warn!("Requested a sample of entities from an empty population");
+                    return vec![];
+                }
+                sample_multiple_from_known_length(rng, self, requested)
+            }
+            _ => sample_multiple_l_reservoir(rng, self, requested),
+        }
     }
 }
 

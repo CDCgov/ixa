@@ -9,6 +9,10 @@ runs:
     - name: Setup mise
       uses: jdx/mise-action@v2
 
+    - name: Install nightly
+      shell: bash
+      run: mise run install-nightly
+
     - name: Cache
       uses: actions/cache@v4
       with:

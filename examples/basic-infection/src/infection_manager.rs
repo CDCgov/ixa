@@ -35,9 +35,7 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 
 pub fn init(context: &mut Context) {
     trace!("Initializing infection_manager");
-    context.subscribe_to_event::<InfectionStatusEvent>(move |context, event| {
-        handle_infection_status_change(context, event);
-    });
+    context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
 }
 
 #[cfg(test)]
