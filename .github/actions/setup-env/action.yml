@@ -3,6 +3,29 @@ description: Install cargo binstall and mise environment
 runs:
   using: composite
   steps:
+    - name: Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.rustup/toolchains/
+        key: cargo-${{ hashFiles('Cargo.toml') }}
+        restore-keys: |
+          cargo-
+
+    - name: Cache website
+      uses: actions/cache@v4
+      with:
+        path: |
+          website/book/
+          website/doc/
+        key: website-${{ hashFiles('mise.toml', 'docs/book/**', 'Cargo.toml', 'src/**', '**/Cargo.toml') }}
+        restore-keys: |
+          website-
+
     - name: Install cargo-binstall
       uses: cargo-bins/cargo-binstall@v1.15.6
 
@@ -12,17 +35,3 @@ runs:
     - name: Install nightly
       shell: bash
       run: mise run install-nightly
-
-    - name: Cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          ~/.cargo-install/
-          ~/.rustup/toolchains/
-          target/
-          docs/book/book/
-        key: cargo-${{ hashFiles('Cargo.toml') }}
