@@ -1,0 +1,1029 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IXA Bench History</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell,
+          Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      header {
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 650;
+      }
+
+      header .meta {
+        margin-top: 6px;
+        opacity: 0.85;
+        font-size: 12px;
+      }
+
+      main {
+        padding: 16px 20px 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        opacity: 0.9;
+      }
+
+      select,
+      input[type="url"],
+      input[type="text"],
+      input[type="file"],
+      button {
+        font: inherit;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(127, 127, 127, 0.35);
+        background: Field;
+        color: FieldText;
+        min-width: 260px;
+      }
+
+      input[type="file"] {
+        padding: 6px 10px;
+      }
+
+      input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: Highlight;
+      }
+
+      button {
+        min-width: auto;
+        cursor: pointer;
+        background: ButtonFace;
+        color: ButtonText;
+      }
+
+      select:focus-visible,
+      input[type="url"]:focus-visible,
+      input[type="text"]:focus-visible,
+      input[type="file"]:focus-visible,
+      button:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+      }
+
+      button:hover {
+        border-color: rgba(127, 127, 127, 0.55);
+      }
+
+      .checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid rgba(127, 127, 127, 0.35);
+        border-radius: 8px;
+        user-select: none;
+        opacity: 0.9;
+        background: Field;
+        color: FieldText;
+      }
+
+      .checkbox input {
+        transform: translateY(1px);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+
+      .card {
+        border: 1px solid rgba(127, 127, 127, 0.25);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        opacity: 0.9;
+        font-weight: 650;
+      }
+
+      .canvasWrap {
+        position: relative;
+        height: 420px;
+      }
+
+      .error {
+        color: #b00020;
+        white-space: pre-wrap;
+        margin-top: 12px;
+      }
+
+      .hint {
+        margin-top: 10px;
+        opacity: 0.8;
+        font-size: 12px;
+      }
+
+      @media (min-width: 1000px) {
+        .grid {
+          grid-template-columns: 1.5fr 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>IXA benchmark history</h1>
+      <div class="meta" id="meta">Loading…</div>
+    </header>
+
+    <main>
+      <div class="row">
+        <label style="flex: 1 1 520px; min-width: 320px">
+          History URL
+          <input id="historyUrl" type="url" spellcheck="false" />
+        </label>
+
+        <button id="loadUrl" type="button">Load URL</button>
+
+        <label style="flex: 1 1 420px; min-width: 320px">
+          Load from disk
+          <input id="historyFile" type="file" accept="application/json,.json" />
+        </label>
+
+        <label>
+          Suite
+          <select id="suite">
+            <option value="criterion">criterion</option>
+            <option value="hyperfine">hyperfine</option>
+          </select>
+        </label>
+
+        <label class="checkbox" title="Render a separate time-series chart for every benchmark in the selected suite">
+          <input id="showAll" type="checkbox" />
+          Show all benchmarks
+        </label>
+
+        <label>
+          Benchmark
+          <select id="benchmark"></select>
+        </label>
+
+        <label>
+          Metric
+          <select id="metric"></select>
+        </label>
+
+        <label class="checkbox" title="Show an uncertainty band when available">
+          <input id="showBand" type="checkbox" checked />
+          Show band
+        </label>
+
+        <button id="reload" type="button">Reload</button>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Time series</h2>
+          <div class="canvasWrap" id="tsSingleWrap"><canvas id="ts"></canvas></div>
+          <div id="tsAllWrap" hidden></div>
+          <div class="hint" id="tsHint"></div>
+        </section>
+
+        <section class="card">
+          <h2>Latest vs previous (percent change)</h2>
+          <div class="row" style="margin-top: 6px; margin-bottom: 10px">
+            <label>
+              Baseline run
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                <button id="basePrev" type="button" title="Older">←</button>
+                <select id="baseRun" style="min-width: 260px; max-width: 520px"></select>
+                <button id="baseNext" type="button" title="Newer">→</button>
+              </div>
+            </label>
+
+            <label>
+              Compare run
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                <button id="cmpPrev" type="button" title="Older">←</button>
+                <select id="cmpRun" style="min-width: 260px; max-width: 520px"></select>
+                <button id="cmpNext" type="button" title="Newer">→</button>
+              </div>
+            </label>
+          </div>
+          <div class="canvasWrap" id="deltaWrap"><canvas id="delta"></canvas></div>
+          <div class="hint" id="deltaHint"></div>
+        </section>
+      </div>
+
+      <div class="error" id="error" hidden></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+      const DEFAULT_HISTORY_URL =
+        "https://raw.githubusercontent.com/cdcgov/ixa/refs/heads/benchmarks-history/bench-history.json";
+
+      /** @type {{ kind: 'url', url: string } | { kind: 'file', file: File }} */
+      let currentSource = { kind: "url", url: DEFAULT_HISTORY_URL };
+
+      /** @type {any} */
+      let currentHistory = null;
+
+      /**
+       * Expected JSON shape (schema v1):
+       * { schema: 1, runs: [ { run_at, branch, base, head, criterion: [], hyperfine: [] } ] }
+       */
+
+      /** @type {Chart | null} */
+      let tsChart = null;
+      /** @type {Chart[]} */
+      let tsCharts = [];
+      /** @type {Chart | null} */
+      let deltaChart = null;
+
+      const $ = (id) => document.getElementById(id);
+
+      function setError(message) {
+        const el = $("error");
+        if (!message) {
+          el.hidden = true;
+          el.textContent = "";
+          return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+      }
+
+      function formatDate(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return String(iso);
+        return d.toISOString().slice(0, 19).replace("T", " ") + "Z";
+      }
+
+      function bestUnit(seconds) {
+        const s = Math.abs(seconds);
+        if (s === 0) return { scale: 1, unit: "s" };
+        if (s >= 1) return { scale: 1, unit: "s" };
+        if (s >= 1e-3) return { scale: 1e3, unit: "ms" };
+        if (s >= 1e-6) return { scale: 1e6, unit: "µs" };
+        return { scale: 1e9, unit: "ns" };
+      }
+
+      function fmtSeconds(seconds, forcedUnit) {
+        const { scale, unit } = forcedUnit ?? bestUnit(seconds);
+        const v = seconds * scale;
+        const abs = Math.abs(v);
+        const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+        return `${v.toFixed(digits)} ${unit}`;
+      }
+
+      function safeSha(sha) {
+        if (!sha) return "";
+        return String(sha).slice(0, 7);
+      }
+
+      function destroyCharts() {
+        if (tsChart) {
+          tsChart.destroy();
+          tsChart = null;
+        }
+        for (const c of tsCharts) c.destroy();
+        tsCharts = [];
+        if (deltaChart) {
+          deltaChart.destroy();
+          deltaChart = null;
+        }
+      }
+
+      function getSuiteRuns(history, suite) {
+        const runs = Array.isArray(history?.runs) ? history.runs.slice() : [];
+        runs.sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
+        return runs.map((r) => ({
+          run_at: r.run_at,
+          branch: r.branch,
+          pr_number: r.pr_number,
+          base: r.base,
+          head: r.head,
+          entries: Array.isArray(r?.[suite]) ? r[suite] : [],
+        }));
+      }
+
+      function indexByName(entries) {
+        /** @type {Map<string, any>} */
+        const map = new Map();
+        for (const e of entries) {
+          if (e && typeof e.name === "string") map.set(e.name, e);
+        }
+        return map;
+      }
+
+      function listBenchmarks(suiteRuns) {
+        const set = new Set();
+        for (const r of suiteRuns) {
+          for (const e of r.entries) {
+            if (e && typeof e.name === "string") set.add(e.name);
+          }
+        }
+        return [...set].sort((a, b) => a.localeCompare(b));
+      }
+
+      function listMetricsForSuite(suite) {
+        if (suite === "criterion") {
+          return [
+            { value: "estimate", label: "estimate" },
+            { value: "lower", label: "lower" },
+            { value: "upper", label: "upper" },
+          ];
+        }
+        return [
+          { value: "mean_sec", label: "mean" },
+          { value: "min_sec", label: "min" },
+          { value: "max_sec", label: "max" },
+          { value: "stddev_sec", label: "stddev" },
+        ];
+      }
+
+      function readValueSeconds(suite, entry, metric) {
+        if (!entry) return null;
+
+        if (suite === "criterion") {
+          const arr = entry.time_sec;
+          if (!Array.isArray(arr) || arr.length < 3) return null;
+          const lower = Number(arr[0]);
+          const est = Number(arr[1]);
+          const upper = Number(arr[2]);
+          if ([lower, est, upper].some((x) => !Number.isFinite(x))) return null;
+
+          if (metric === "lower") return lower;
+          if (metric === "upper") return upper;
+          return est;
+        }
+
+        const v = Number(entry[metric]);
+        if (!Number.isFinite(v)) return null;
+        return v;
+      }
+
+      function readBandSeconds(suite, entry) {
+        if (!entry) return null;
+        if (suite === "criterion") {
+          const arr = entry.time_sec;
+          if (!Array.isArray(arr) || arr.length < 3) return null;
+          const lower = Number(arr[0]);
+          const upper = Number(arr[2]);
+          if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
+          return { lower, upper };
+        }
+
+        const mean = Number(entry.mean_sec);
+        const sd = Number(entry.stddev_sec);
+        if (!Number.isFinite(mean) || !Number.isFinite(sd)) return null;
+        const lower = Math.max(0, mean - sd);
+        const upper = mean + sd;
+        return { lower, upper };
+      }
+
+      function makeLabels(suiteRuns) {
+        return suiteRuns.map((r) => {
+          const sha = safeSha(r?.head?.sha);
+          const pr = r.pr_number ? `PR #${r.pr_number}` : r.branch ? r.branch : "";
+          const left = formatDate(r.run_at);
+          const right = [sha, pr].filter(Boolean).join(" · ");
+          return right ? `${left} — ${right}` : left;
+        });
+      }
+
+      function pickDefaultBenchmark(benchmarks) {
+        if (!benchmarks.length) return "";
+        // Prefer a common-looking benchmark when available
+        const preferredPrefix = ["large_sir::ixa", "large_sir::baseline", "counts/"];
+        for (const p of preferredPrefix) {
+          const found = benchmarks.find((b) => b.startsWith(p));
+          if (found) return found;
+        }
+        return benchmarks[0];
+      }
+
+      function renderSingleTimeSeriesChart({
+        canvas,
+        labels,
+        suiteRuns,
+        suite,
+        benchmarkName,
+        metric,
+        showBand,
+      }) {
+        const allPoints = [];
+        const lowerBand = [];
+        const upperBand = [];
+
+        for (const r of suiteRuns) {
+          const byName = indexByName(r.entries);
+          const entry = byName.get(benchmarkName);
+          allPoints.push(readValueSeconds(suite, entry, metric));
+          const band = showBand ? readBandSeconds(suite, entry) : null;
+          lowerBand.push(band ? band.lower : null);
+          upperBand.push(band ? band.upper : null);
+        }
+
+        const vals = allPoints.filter((x) => Number.isFinite(x));
+        const unit = vals.length
+          ? bestUnit(vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)])
+          : { scale: 1, unit: "s" };
+
+        const datasets = [];
+        if (showBand) {
+          datasets.push({
+            label: "lower",
+            data: lowerBand.map((s) => (s == null ? null : s * unit.scale)),
+            borderColor: "rgba(0,0,0,0)",
+            pointRadius: 0,
+            borderWidth: 0,
+            tension: 0.15,
+            spanGaps: true,
+          });
+          datasets.push({
+            label: "upper",
+            data: upperBand.map((s) => (s == null ? null : s * unit.scale)),
+            borderColor: "rgba(0,0,0,0)",
+            pointRadius: 0,
+            borderWidth: 0,
+            backgroundColor: "rgba(80, 120, 255, 0.15)",
+            fill: "-1",
+            tension: 0.15,
+            spanGaps: true,
+          });
+        }
+
+        datasets.push({
+          label: `${benchmarkName} (${metric})`,
+          data: allPoints.map((s) => (s == null ? null : s * unit.scale)),
+          borderColor: "rgba(80, 120, 255, 0.95)",
+          backgroundColor: "rgba(80, 120, 255, 0.25)",
+          pointRadius: 2,
+          borderWidth: 2,
+          tension: 0.15,
+          spanGaps: true,
+        });
+
+        return new Chart(canvas, {
+          type: "line",
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => {
+                    const scaled = item.parsed.y;
+                    if (scaled == null) return "(missing)";
+                    return `${item.dataset.label}: ${fmtSeconds(
+                      scaled / unit.scale,
+                      unit
+                    )}`;
+                  },
+                },
+              },
+            },
+            scales: {
+              y: {
+                title: { display: true, text: `Time (${unit.unit})` },
+                ticks: { callback: (v) => `${v} ${unit.unit}` },
+              },
+              x: {
+                ticks: {
+                  maxRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: 6,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function renderTimeSeries({ suiteRuns, suite, benchmarkName, metric, showBand }) {
+        if (typeof Chart === "undefined") {
+          throw new Error(
+            "Chart.js failed to load (Chart is undefined). Check network access or CDN availability."
+          );
+        }
+
+        // Reset previous time-series chart(s)
+        if (tsChart) {
+          tsChart.destroy();
+          tsChart = null;
+        }
+        for (const c of tsCharts) c.destroy();
+        tsCharts = [];
+
+        const showAll = $("showAll").checked;
+        const labels = makeLabels(suiteRuns);
+
+        $("tsSingleWrap").hidden = showAll;
+        $("tsAllWrap").hidden = !showAll;
+
+        if (!showAll) {
+          tsChart = renderSingleTimeSeriesChart({
+            canvas: $("ts"),
+            labels,
+            suiteRuns,
+            suite,
+            benchmarkName,
+            metric,
+            showBand,
+          });
+        } else {
+          const allWrap = $("tsAllWrap");
+
+          const benchmarks = listBenchmarks(suiteRuns);
+          const grid = document.createElement("div");
+          grid.style.display = "grid";
+          grid.style.gridTemplateColumns = "1fr";
+          grid.style.gap = "12px";
+          allWrap.replaceChildren(grid);
+
+          for (const name of benchmarks) {
+            const block = document.createElement("div");
+            block.style.border = "1px solid rgba(127, 127, 127, 0.25)";
+            block.style.borderRadius = "12px";
+            block.style.padding = "10px";
+
+            const title = document.createElement("div");
+            title.textContent = name;
+            title.style.fontSize = "12px";
+            title.style.opacity = "0.9";
+            title.style.fontWeight = "650";
+            title.style.marginBottom = "8px";
+            block.appendChild(title);
+
+            const wrap = document.createElement("div");
+            wrap.style.position = "relative";
+            wrap.style.height = "220px";
+            block.appendChild(wrap);
+
+            const canvas = document.createElement("canvas");
+            wrap.appendChild(canvas);
+            grid.appendChild(block);
+
+            tsCharts.push(
+              renderSingleTimeSeriesChart({
+                canvas,
+                labels,
+                suiteRuns,
+                suite,
+                benchmarkName: name,
+                metric,
+                showBand,
+              })
+            );
+          }
+        }
+
+        const lastIdx = suiteRuns.length - 1;
+        const last = lastIdx >= 0 ? suiteRuns[lastIdx] : null;
+        const hintParts = [];
+        if (suiteRuns.length) hintParts.push(`${suiteRuns.length} run(s)`);
+        if (last?.head?.sha) hintParts.push(`latest head: ${safeSha(last.head.sha)}`);
+        if (showAll) hintParts.push("showing all benchmarks");
+        $("tsHint").textContent = hintParts.join(" · ");
+      }
+
+      function renderLatestDelta({ suiteRuns, suite, metric, baseIdx, cmpIdx }) {
+        if (typeof Chart === "undefined") {
+          throw new Error(
+            "Chart.js failed to load (Chart is undefined). Check network access or CDN availability."
+          );
+        }
+
+        if (suiteRuns.length < 2) {
+          if (deltaChart) {
+            deltaChart.destroy();
+            deltaChart = null;
+          }
+          $("deltaHint").textContent = "Need at least 2 runs.";
+          return;
+        }
+
+        const hi = suiteRuns.length - 1;
+        const bi = clampInt(baseIdx, 0, hi);
+        const ci = clampInt(cmpIdx, 0, hi);
+
+        if (bi === ci) {
+          if (deltaChart) {
+            deltaChart.destroy();
+            deltaChart = null;
+          }
+          $("deltaHint").textContent = "Pick two different runs to compare.";
+          return;
+        }
+
+        const prev = suiteRuns[bi];
+        const next = suiteRuns[ci];
+        const prevMap = indexByName(prev.entries);
+        const nextMap = indexByName(next.entries);
+
+        /** @type {{name: string, pct: number}[]} */
+        const changes = [];
+        for (const [name, nextEntry] of nextMap.entries()) {
+          const prevEntry = prevMap.get(name);
+          const a = readValueSeconds(suite, prevEntry, metric);
+          const b = readValueSeconds(suite, nextEntry, metric);
+          if (a == null || b == null) continue;
+          if (a === 0) continue;
+          const pct = ((b - a) / a) * 100;
+          if (!Number.isFinite(pct)) continue;
+          changes.push({ name, pct });
+        }
+
+        changes.sort((x, y) => y.pct - x.pct);
+        const MAX = 25;
+        const trimmed = changes.slice(0, MAX);
+
+        // Make the chart height scale with bar count (helps readability)
+        const deltaWrap = $("deltaWrap");
+        const desired = 90 + trimmed.length * 18;
+        deltaWrap.style.height = `${Math.max(320, Math.min(900, desired))}px`;
+
+        const labels = trimmed.map((c) => c.name);
+        const data = trimmed.map((c) => c.pct);
+
+        const ctx = $("delta");
+        if (deltaChart) deltaChart.destroy();
+        deltaChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "% change (y vs x)",
+                data,
+                backgroundColor: data.map((v) =>
+                  v >= 0 ? "rgba(220, 70, 70, 0.65)" : "rgba(70, 180, 120, 0.65)"
+                ),
+                borderColor: data.map((v) =>
+                  v >= 0 ? "rgba(220, 70, 70, 0.95)" : "rgba(70, 180, 120, 0.95)"
+                ),
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: "y",
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: (items) => {
+                    const i = items?.[0];
+                    return i ? String(i.label) : "";
+                  },
+                  label: (item) => {
+                    const v = item.parsed.x;
+                    return `${Number(v).toFixed(2)}%`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                title: { display: true, text: "% change (time; lower is better)" },
+                ticks: { callback: (v) => `${v}%` },
+              },
+              y: {
+                ticks: {
+                  autoSkip: false,
+                  callback: (_v, idx) => {
+                    const s = labels[idx] ?? "";
+                    const max = 42;
+                    return s.length > max ? s.slice(0, max - 1) + "…" : s;
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const prevSha = safeSha(prev?.head?.sha);
+        const nextSha = safeSha(next?.head?.sha);
+        $("deltaHint").textContent =
+          `Comparing ${formatDate(prev.run_at)} (${prevSha}) → ${formatDate(next.run_at)} (${nextSha}). ` +
+          `Showing up to ${Math.min(MAX, changes.length)} benchmarks (full names in tooltip).`;
+      }
+
+	      function populateSelect(selectEl, options, value) {
+	        selectEl.replaceChildren();
+	        for (const opt of options) {
+	          const o = document.createElement("option");
+	          o.value = opt.value ?? opt;
+	          o.textContent = opt.label ?? opt;
+	          selectEl.appendChild(o);
+	        }
+	        if (value) selectEl.value = value;
+	      }
+
+	      function clampInt(n, lo, hi) {
+	        const x = Number(n);
+	        if (!Number.isFinite(x)) return lo;
+	        return Math.min(hi, Math.max(lo, Math.trunc(x)));
+	      }
+
+	      function parseHistoryUrl(rawUrl) {
+	        const parsed = new URL(String(rawUrl), window.location.href);
+	        if (!["http:", "https:"].includes(parsed.protocol)) {
+	          throw new Error(`Only http(s) URLs are allowed: ${parsed.protocol}`);
+	        }
+	        if (parsed.username || parsed.password) {
+	          throw new Error("Credentials in URLs are not allowed");
+	        }
+	        return parsed;
+	      }
+
+	      function safeHistoryHref(rawUrl) {
+	        try {
+	          return parseHistoryUrl(rawUrl).href;
+	        } catch {
+	          return null;
+	        }
+	      }
+
+	      async function fetchHistoryFromUrl(url) {
+	        const safeUrl = parseHistoryUrl(url).href;
+	        const res = await fetch(safeUrl, {
+	          cache: "no-store",
+	          headers: { Accept: "application/json" },
+	        });
+	        if (!res.ok) {
+	          throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+	        }
+	        return await res.json();
+	      }
+
+      async function fetchHistoryFromFile(file) {
+        const text = await file.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          throw new Error(
+            `Failed to parse JSON from file: ${file?.name ?? "(unknown)"}\n\n${String(e?.message ?? e)}`
+          );
+        }
+      }
+
+      async function fetchHistory(source) {
+        if (source?.kind === "file") return await fetchHistoryFromFile(source.file);
+        const url = source?.url ?? DEFAULT_HISTORY_URL;
+        return await fetchHistoryFromUrl(url);
+      }
+
+      function updateMeta(history, source) {
+        const runs = Array.isArray(history?.runs) ? history.runs : [];
+        const last =
+          runs.length
+            ? runs
+                .slice()
+                .sort((a, b) => new Date(a.run_at) - new Date(b.run_at))[runs.length - 1]
+            : null;
+        const lastTxt = last?.run_at ? formatDate(last.run_at) : "(unknown)";
+        if (source?.kind === "file") {
+          $("meta").textContent =
+            `Source: ${source.file?.name ?? "(local file)"} · Runs: ${runs.length} · Latest: ${lastTxt}`;
+          return;
+        }
+
+	        const url = source?.url ?? DEFAULT_HISTORY_URL;
+	        const metaEl = $("meta");
+	        metaEl.replaceChildren();
+	        metaEl.append("Source: ");
+
+	        const linkEl = document.createElement("a");
+	        linkEl.textContent = url;
+	        linkEl.href = safeHistoryHref(url) ?? "#";
+	        linkEl.rel = "noreferrer noopener";
+	        linkEl.target = "_blank";
+	        metaEl.append(linkEl);
+
+        metaEl.append(` · Runs: ${runs.length} · Latest: ${lastTxt}`);
+      }
+
+      function initUiOnce() {
+        if (initUiOnce._done) return;
+        initUiOnce._done = true;
+
+        const suiteEl = $("suite");
+        const showAllEl = $("showAll");
+        const benchEl = $("benchmark");
+        const metricEl = $("metric");
+        const showBandEl = $("showBand");
+
+        const baseRunEl = $("baseRun");
+        const cmpRunEl = $("cmpRun");
+        const basePrevEl = $("basePrev");
+        const baseNextEl = $("baseNext");
+        const cmpPrevEl = $("cmpPrev");
+        const cmpNextEl = $("cmpNext");
+
+        function rerender() {
+          if (!currentHistory) return;
+          const suite = suiteEl.value;
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
+          const bench = benchEl.value;
+          const metric = metricEl.value;
+          const showBand = showBandEl.checked;
+
+          benchEl.disabled = showAllEl.checked;
+
+          renderTimeSeries({ suiteRuns, suite, benchmarkName: bench, metric, showBand });
+          renderLatestDelta({
+            suiteRuns,
+            suite,
+            metric,
+            baseIdx: baseRunEl.value,
+            cmpIdx: cmpRunEl.value,
+          });
+        }
+
+        function onSuiteChange() {
+          if (!currentHistory) return;
+          const suite = suiteEl.value;
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
+          const benchmarks = listBenchmarks(suiteRuns);
+          const defaultBench = pickDefaultBenchmark(benchmarks);
+
+          const prevBench = benchEl.value;
+          const nextBench = benchmarks.includes(prevBench) ? prevBench : defaultBench;
+          populateSelect(
+            benchEl,
+            benchmarks.map((b) => ({ value: b, label: b })),
+            nextBench
+          );
+
+          const metrics = listMetricsForSuite(suite);
+          const defaultMetric = suite === "criterion" ? "estimate" : "mean_sec";
+          const prevMetric = metricEl.value;
+          const nextMetric = metrics.includes(prevMetric) ? prevMetric : defaultMetric;
+          populateSelect(metricEl, metrics, nextMetric);
+
+          // Delta chart run pickers
+          const runLabels = makeLabels(suiteRuns);
+          const runOptions = runLabels.map((label, idx) => ({
+            value: String(idx),
+            label,
+          }));
+
+          const n = suiteRuns.length;
+          const defaultBase = String(Math.max(0, n - 2));
+          const defaultCmp = String(Math.max(0, n - 1));
+
+          const prevBase = baseRunEl.value;
+          const prevCmp = cmpRunEl.value;
+          const baseVal = prevBase !== "" && Number(prevBase) < n ? prevBase : defaultBase;
+          const cmpVal = prevCmp !== "" && Number(prevCmp) < n ? prevCmp : defaultCmp;
+
+          populateSelect(baseRunEl, runOptions, baseVal);
+          populateSelect(cmpRunEl, runOptions, cmpVal);
+
+          rerender();
+        }
+
+        function stepRun(selectEl, delta) {
+          if (!currentHistory) return;
+          const suite = suiteEl.value;
+          const suiteRuns = getSuiteRuns(currentHistory, suite);
+          const hi = suiteRuns.length - 1;
+          if (hi < 0) return;
+
+          const otherEl = selectEl === baseRunEl ? cmpRunEl : baseRunEl;
+          let idx = clampInt(selectEl.value, 0, hi) + delta;
+          idx = clampInt(idx, 0, hi);
+
+          const other = clampInt(otherEl.value, 0, hi);
+          if (idx === other) {
+            idx = clampInt(idx + (delta >= 0 ? 1 : -1), 0, hi);
+            if (idx === other) return;
+          }
+
+          selectEl.value = String(idx);
+          rerender();
+        }
+
+        suiteEl.addEventListener("change", onSuiteChange);
+        showAllEl.addEventListener("change", rerender);
+        benchEl.addEventListener("change", rerender);
+        metricEl.addEventListener("change", rerender);
+        showBandEl.addEventListener("change", rerender);
+
+        baseRunEl.addEventListener("change", rerender);
+        cmpRunEl.addEventListener("change", rerender);
+        basePrevEl.addEventListener("click", () => stepRun(baseRunEl, -1));
+        baseNextEl.addEventListener("click", () => stepRun(baseRunEl, +1));
+        cmpPrevEl.addEventListener("click", () => stepRun(cmpRunEl, -1));
+        cmpNextEl.addEventListener("click", () => stepRun(cmpRunEl, +1));
+
+        // Expose for loaders
+        initUiOnce._onSuiteChange = onSuiteChange;
+      }
+
+      async function loadAndRender(source) {
+        setError("");
+        destroyCharts();
+        $("meta").textContent = "Loading…";
+
+        const history = await fetchHistory(source);
+        currentHistory = history;
+        currentSource = source?.kind ? source : { kind: "url", url: DEFAULT_HISTORY_URL };
+        updateMeta(history, currentSource);
+
+        initUiOnce();
+        initUiOnce._onSuiteChange?.();
+      }
+
+      // UI wiring for sources
+      $("historyUrl").value = DEFAULT_HISTORY_URL;
+
+	      $("loadUrl").addEventListener("click", async () => {
+	        try {
+	          const urlRaw = String($("historyUrl").value ?? "").trim() || DEFAULT_HISTORY_URL;
+	          const url = parseHistoryUrl(urlRaw).href;
+	          await loadAndRender({ kind: "url", url });
+	        } catch (e) {
+	          setError(String(e?.stack ?? e));
+	        }
+	      });
+
+      $("historyUrl").addEventListener("keydown", async (ev) => {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        $("loadUrl").click();
+      });
+
+      $("historyFile").addEventListener("change", async (ev) => {
+        try {
+          const file = ev?.target?.files?.[0];
+          if (!file) return;
+          await loadAndRender({ kind: "file", file });
+        } catch (e) {
+          setError(String(e?.stack ?? e));
+        }
+      });
+
+      $("reload").addEventListener("click", async () => {
+        try {
+          await loadAndRender(currentSource);
+        } catch (e) {
+          setError(String(e?.stack ?? e));
+        }
+      });
+
+      loadAndRender(currentSource).catch((e) => {
+        setError(
+          `Failed to load or render bench history.\n\n${String(e?.stack ?? e)}\n\n` +
+            `If this is opened from a file:// URL, your browser may block some requests depending on settings. ` +
+            `Try a different browser, or run a local server like: python3 -m http.server -d scripts 8000`
+        );
+      });
+    </script>
+  </body>
+</html>
