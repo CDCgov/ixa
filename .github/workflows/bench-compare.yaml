@@ -8,58 +8,209 @@ env:
   BENCH_HISTORY_DIR: tmp-bench-history
 
 jobs:
-  compare-branches:
+  bench-group:
+    name: Benchmark Group (${{ matrix.group }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: indexing
+            criterion_target: indexing
+          - group: large_dataset
+            criterion_target: large_dataset
+          - group: sampling
+            criterion_target: sampling
+          - group: counts
+            criterion_target: counts
+          - group: algorithms
+            criterion_target: algorithms
+          - group: sample_entity_scaling
+            criterion_target: sample_entity_scaling
+          - group: examples
+            criterion_target: examples
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run criterion benchmarks for group
+        id: bench
+        run: |
+          set -uo pipefail
+
+          group="${{ matrix.group }}"
+          target="${{ matrix.criterion_target }}"
+
+          base_status=0
+          compare_status=0
+          regress_status=0
+
+          git checkout --force "origin/${{ github.event.pull_request.base.ref }}"
+          cargo bench -p ixa-bench --bench "$target" -- --save-baseline base 2>&1 | tee "criterion-base-${group}.txt" || base_status=$?
+
+          git checkout --force "${{ github.event.pull_request.head.sha }}"
+          if cargo bench -p ixa-bench --bench "$target" -- --baseline base 2>&1 | tee "criterion-compare-${group}.txt"; then
+            cargo run -q -p ixa-bench --bin check_criterion_regressions 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
+          else
+            compare_status=$?
+            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" | tee "criterion-regressions-${group}.txt"
+            cargo bench -p ixa-bench --bench "$target" 2>&1 | tee -a "criterion-compare-${group}.txt" || true
+          fi
+
+          {
+            echo "group=${group}"
+            echo "target=${target}"
+            echo "base_status=${base_status}"
+            echo "compare_status=${compare_status}"
+            echo "regress_status=${regress_status}"
+            echo "base_ref=${{ github.event.pull_request.base.ref }}"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}"
+            echo "head_ref=${{ github.event.pull_request.head.ref }}"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}"
+          } > "status-${group}.env"
+
+          if [ "$base_status" -ne 0 ] || [ "$compare_status" -ne 0 ] || [ "$regress_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Format group markdown
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+
+          group="${{ matrix.group }}"
+
+          if [ -f "status-${group}.env" ]; then
+            # shellcheck disable=SC1090
+            source "status-${group}.env"
+          else
+            base_status="unknown"
+            compare_status="unknown"
+            regress_status="unknown"
+            base_ref="${{ github.event.pull_request.base.ref }}"
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_ref="${{ github.event.pull_request.head.ref }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          fi
+
+          {
+            echo "## ${group}"
+            echo
+            printf -- '- Base: `%s` (`%s`)\n' "$base_ref" "$base_sha"
+            printf -- '- Head: `%s` (`%s`)\n' "$head_ref" "$head_sha"
+            printf -- '- Statuses: baseline=`%s`, compare=`%s`, regressions=`%s`\n' "$base_status" "$compare_status" "$regress_status"
+            echo
+            echo '```'
+            if [ -f "criterion-regressions-${group}.txt" ]; then
+              cat "criterion-regressions-${group}.txt"
+            else
+              echo "No regression output was generated for this group."
+            fi
+            echo '```'
+            echo
+          } > "results_${group}.md"
+
+      - name: Upload group markdown artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: results-${{ matrix.group }}
+          path: results_${{ matrix.group }}.md
+
+      - name: Upload group raw logs artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: raw-${{ matrix.group }}
+          if-no-files-found: ignore
+          path: |
+            criterion-base-${{ matrix.group }}.txt
+            criterion-compare-${{ matrix.group }}.txt
+            criterion-regressions-${{ matrix.group }}.txt
+            status-${{ matrix.group }}.env
+
+  aggregate-results:
+    runs-on: ubuntu-latest
+    needs: bench-group
+    if: ${{ always() }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
-      - name: Checkout base branch
-        uses: actions/checkout@v6
+      - name: Download group markdown artifacts
+        uses: actions/download-artifact@v6
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
-          # This fetches all branches so we can compare the PR branch with the base branch
-          fetch-depth: 0
+          pattern: results-*
+          merge-multiple: true
+          path: artifacts/results
 
-      - name: Create a benchmark baseline
-        run: mise run bench:create '' base || echo "Could not create baseline"
-
-      - name: Checkout PR branch
-        # The checkout is done manually to avoid cleaning up the baseline benchmark
-        run: git checkout ${{ github.event.pull_request.head.ref }}
+      - name: Download group raw log artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: raw-*
+          merge-multiple: true
+          path: artifacts/raw
 
       - name: Run hyperfine benchmarks
         run: |
           set -euo pipefail
           mise run bench:hyperfine -- -- --export-markdown hyperfine.md --export-json hyperfine.json
 
-      - name: Run criterion benchmarks (baseline compare)
+      - name: Build combined PR comment markdown
         run: |
           set -euo pipefail
-          if cargo bench -p ixa-bench -- --baseline base 2>&1 | tee criterion-compare.txt; then
-            cargo run -q -p ixa-bench --bin check_criterion_regressions | tee criterion-regressions.txt
-          else
-            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" | tee criterion-regressions.txt
-            mise run bench:criterion 2>&1 | tee -a criterion-compare.txt
-          fi
 
-      - name: Format PR comment
-        run: |
-          set -euo pipefail
+          groups=(
+            indexing
+            large_dataset
+            sampling
+            counts
+            algorithms
+            sample_entity_scaling
+            examples
+          )
+
           echo '### Benchmark Results' > results.md
           echo '' >> results.md
+
           echo '#### Hyperfine' >> results.md
           echo '' >> results.md
-          cat hyperfine.md >> results.md
+          if [ -f hyperfine.md ]; then
+            cat hyperfine.md >> results.md
+          else
+            echo '_Hyperfine output missing._' >> results.md
+          fi
           echo '' >> results.md
-          echo '#### Criterion' >> results.md
+
+          echo '#### Criterion (by group)' >> results.md
           echo '' >> results.md
-          echo '```' >> results.md
-          cat criterion-regressions.txt >> results.md
-          echo '```' >> results.md
+
+          for group in "${groups[@]}"; do
+            file="artifacts/results/results_${group}.md"
+            if [ -f "$file" ]; then
+              cat "$file" >> results.md
+            else
+              {
+                echo "## ${group}"
+                echo
+                echo "Result file missing for this group."
+                echo
+              } >> results.md
+            fi
+          done
 
       - name: Upload PR comment artifact
         uses: actions/upload-artifact@v6
@@ -77,16 +228,12 @@ jobs:
             echo "Skipping bench history JSON generation/publish because this PR targets '${{ github.event.pull_request.base.ref }}' (not 'main')."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name:
-          Download previous bench history from benchmarks-history branch (best
-          effort)
+      - name: Download previous bench history from benchmarks-history branch (best effort)
         if: ${{ github.event.pull_request.base.ref == 'main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Fetches raw JSON directly from the benchmarks-history branch.
-          # If it doesn't exist yet, we continue with an empty history.
           if gh api \
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/contents/bench-history.json?ref=${BENCH_HISTORY_BRANCH}" \
@@ -97,6 +244,30 @@ jobs:
             echo "No bench-history.json found on ${BENCH_HISTORY_BRANCH} (first run?)."
           fi
 
+      - name: Merge criterion group logs
+        if: ${{ github.event.pull_request.base.ref == 'main' }}
+        run: |
+          set -euo pipefail
+
+          groups=(
+            indexing
+            large_dataset
+            sampling
+            counts
+            algorithms
+            sample_entity_scaling
+            examples
+          )
+
+          : > criterion-compare.txt
+          for group in "${groups[@]}"; do
+            file="artifacts/raw/criterion-compare-${group}.txt"
+            if [ -f "$file" ]; then
+              cat "$file" >> criterion-compare.txt
+              echo '' >> criterion-compare.txt
+            fi
+          done
+
       - name: Create JSON results
         if: ${{ github.event.pull_request.base.ref == 'main' }}
         env:
@@ -105,8 +276,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          RUN_BRANCH:
-            ${{ github.event.pull_request.head.ref || github.ref_name }}
+          RUN_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
           set -euo pipefail
           node scripts/bench_results.mjs \
@@ -130,7 +300,7 @@ jobs:
 
   comment-on-pr:
     runs-on: ubuntu-latest
-    needs: compare-branches
+    needs: aggregate-results
     permissions:
       pull-requests: write
     steps:
@@ -149,8 +319,8 @@ jobs:
 
   publish-bench-history:
     runs-on: ubuntu-latest
-    needs: compare-branches
-    if: ${{ github.event.pull_request.base.ref == 'main' }}
+    needs: aggregate-results
+    if: ${{ github.event.pull_request.base.ref == 'main_test' }} # should be main, disable for testing
     permissions:
       contents: write
     steps:
@@ -178,7 +348,6 @@ jobs:
           git checkout "${BENCH_HISTORY_BRANCH}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # git diff doesn't consider untracked files; use status to detect any change.
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to bench-history.json"
             exit 0
