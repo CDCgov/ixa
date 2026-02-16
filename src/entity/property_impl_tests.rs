@@ -150,22 +150,22 @@ fn test_multi_property_vs_property_query() {
     let mut indexed_count = 0;
     if context
         .get_property_value_store::<Person, ProfileNAW>()
-        .index
-        .is_some()
+        .index_type()
+        != ixa::entity::index::PropertyIndexType::Unindexed
     {
         indexed_count += 1;
     }
     if context
         .get_property_value_store::<Person, ProfileAWN>()
-        .index
-        .is_some()
+        .index_type()
+        != ixa::entity::index::PropertyIndexType::Unindexed
     {
         indexed_count += 1;
     }
     if context
         .get_property_value_store::<Person, ProfileWAN>()
-        .index
-        .is_some()
+        .index_type()
+        != ixa::entity::index::PropertyIndexType::Unindexed
     {
         indexed_count += 1;
     }
