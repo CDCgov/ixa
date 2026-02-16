@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local test harness for scripts/bench_results.js
+# Local test harness for scripts/bench_results.mjs
 # Usage:
 #   bash scripts/test_bench_results.sh
 
@@ -43,7 +43,7 @@ history1="$workdir/bench-history.1.json"
 history2="$workdir/bench-history.2.json"
 history3="$workdir/bench-history.3.json"
 
-node "$(pwd)/scripts/bench_results.js" \
+node "$(pwd)/scripts/bench_results.mjs" \
   --repo "$repo" \
   --branch "feature/test" \
   --pr-number 42 \
@@ -60,7 +60,7 @@ jq -e '.branch=="feature/test" and (.hyperfine.results|length)==1 and (.criterio
 jq -e '(.runs|length)==1 and (.runs[0].pr_number==42) and (.runs[0].head.sha=="2222222")' "$history1" >/dev/null
 
 # Add another PR; should append (history grows).
-node "$(pwd)/scripts/bench_results.js" \
+node "$(pwd)/scripts/bench_results.mjs" \
   --repo "$repo" \
   --branch "feature/other" \
   --pr-number 43 \
@@ -76,7 +76,7 @@ node "$(pwd)/scripts/bench_results.js" \
 jq -e '(.runs|length)==2 and ([.runs[].pr_number]|sort)==[42,43]' "$history2" >/dev/null
 
 # Re-run PR 42; should update existing entry (history length unchanged).
-node "$(pwd)/scripts/bench_results.js" \
+node "$(pwd)/scripts/bench_results.mjs" \
   --repo "$repo" \
   --branch "feature/test-rerun" \
   --pr-number 42 \
@@ -101,4 +101,4 @@ if [[ "$low_ms" != "10.771 ms" ]]; then
   exit 1
 fi
 
-echo "OK: bench_results.js test passed"
+echo "OK: bench_results.mjs test passed"

@@ -575,14 +575,13 @@
           });
         } else {
           const allWrap = $("tsAllWrap");
-          allWrap.innerHTML = "";
 
           const benchmarks = listBenchmarks(suiteRuns);
           const grid = document.createElement("div");
           grid.style.display = "grid";
           grid.style.gridTemplateColumns = "1fr";
           grid.style.gap = "12px";
-          allWrap.appendChild(grid);
+          allWrap.replaceChildren(grid);
 
           for (const name of benchmarks) {
             const block = document.createElement("div");
@@ -754,33 +753,53 @@
           `Showing up to ${Math.min(MAX, changes.length)} benchmarks (full names in tooltip).`;
       }
 
-      function populateSelect(selectEl, options, value) {
-        selectEl.innerHTML = "";
-        for (const opt of options) {
-          const o = document.createElement("option");
-          o.value = opt.value ?? opt;
-          o.textContent = opt.label ?? opt;
-          selectEl.appendChild(o);
-        }
-        if (value) selectEl.value = value;
-      }
+	      function populateSelect(selectEl, options, value) {
+	        selectEl.replaceChildren();
+	        for (const opt of options) {
+	          const o = document.createElement("option");
+	          o.value = opt.value ?? opt;
+	          o.textContent = opt.label ?? opt;
+	          selectEl.appendChild(o);
+	        }
+	        if (value) selectEl.value = value;
+	      }
 
-      function clampInt(n, lo, hi) {
-        const x = Number(n);
-        if (!Number.isFinite(x)) return lo;
-        return Math.min(hi, Math.max(lo, Math.trunc(x)));
-      }
+	      function clampInt(n, lo, hi) {
+	        const x = Number(n);
+	        if (!Number.isFinite(x)) return lo;
+	        return Math.min(hi, Math.max(lo, Math.trunc(x)));
+	      }
 
-      async function fetchHistoryFromUrl(url) {
-        const res = await fetch(url, {
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) {
-          throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-        }
-        return await res.json();
-      }
+	      function parseHistoryUrl(rawUrl) {
+	        const parsed = new URL(String(rawUrl), window.location.href);
+	        if (!["http:", "https:"].includes(parsed.protocol)) {
+	          throw new Error(`Only http(s) URLs are allowed: ${parsed.protocol}`);
+	        }
+	        if (parsed.username || parsed.password) {
+	          throw new Error("Credentials in URLs are not allowed");
+	        }
+	        return parsed;
+	      }
+
+	      function safeHistoryHref(rawUrl) {
+	        try {
+	          return parseHistoryUrl(rawUrl).href;
+	        } catch {
+	          return null;
+	        }
+	      }
+
+	      async function fetchHistoryFromUrl(url) {
+	        const safeUrl = parseHistoryUrl(url).href;
+	        const res = await fetch(safeUrl, {
+	          cache: "no-store",
+	          headers: { Accept: "application/json" },
+	        });
+	        if (!res.ok) {
+	          throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+	        }
+	        return await res.json();
+	      }
 
       async function fetchHistoryFromFile(file) {
         const text = await file.text();
@@ -801,7 +820,12 @@
 
       function updateMeta(history, source) {
         const runs = Array.isArray(history?.runs) ? history.runs : [];
-        const last = runs.length ? runs.slice().sort((a, b) => new Date(a.run_at) - new Date(b.run_at))[runs.length - 1] : null;
+        const last =
+          runs.length
+            ? runs
+                .slice()
+                .sort((a, b) => new Date(a.run_at) - new Date(b.run_at))[runs.length - 1]
+            : null;
         const lastTxt = last?.run_at ? formatDate(last.run_at) : "(unknown)";
         if (source?.kind === "file") {
           $("meta").textContent =
@@ -809,8 +833,19 @@
           return;
         }
 
-        const url = source?.url ?? DEFAULT_HISTORY_URL;
-        $("meta").innerHTML = `Source: <a href="${url}">${url}</a> · Runs: ${runs.length} · Latest: ${lastTxt}`;
+	        const url = source?.url ?? DEFAULT_HISTORY_URL;
+	        const metaEl = $("meta");
+	        metaEl.replaceChildren();
+	        metaEl.append("Source: ");
+
+	        const linkEl = document.createElement("a");
+	        linkEl.textContent = url;
+	        linkEl.href = safeHistoryHref(url) ?? "#";
+	        linkEl.rel = "noreferrer noopener";
+	        linkEl.target = "_blank";
+	        metaEl.append(linkEl);
+
+        metaEl.append(` · Runs: ${runs.length} · Latest: ${lastTxt}`);
       }
 
       function initUiOnce() {
@@ -948,14 +983,15 @@
       // UI wiring for sources
       $("historyUrl").value = DEFAULT_HISTORY_URL;
 
-      $("loadUrl").addEventListener("click", async () => {
-        try {
-          const url = String($("historyUrl").value ?? "").trim() || DEFAULT_HISTORY_URL;
-          await loadAndRender({ kind: "url", url });
-        } catch (e) {
-          setError(String(e?.stack ?? e));
-        }
-      });
+	      $("loadUrl").addEventListener("click", async () => {
+	        try {
+	          const urlRaw = String($("historyUrl").value ?? "").trim() || DEFAULT_HISTORY_URL;
+	          const url = parseHistoryUrl(urlRaw).href;
+	          await loadAndRender({ kind: "url", url });
+	        } catch (e) {
+	          setError(String(e?.stack ?? e));
+	        }
+	      });
 
       $("historyUrl").addEventListener("keydown", async (ev) => {
         if (ev.key !== "Enter") return;

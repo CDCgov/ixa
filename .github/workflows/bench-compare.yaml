@@ -109,7 +109,7 @@ jobs:
             ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
           set -euo pipefail
-          node scripts/bench_results.js \
+          node scripts/bench_results.mjs \
             --repo "${GITHUB_REPOSITORY}" \
             --branch "${RUN_BRANCH}" \
             --pr-number "${PR_NUMBER}" \

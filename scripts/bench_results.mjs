@@ -3,7 +3,7 @@
 Generates benchmark JSON artifacts from Hyperfine + Criterion outputs.
 
 Usage (example):
-  node scripts/bench_results.js \
+  node scripts/bench_results.mjs \
     --repo owner/repo \
     --branch my-branch \
     --pr-number 123 \
@@ -17,27 +17,42 @@ Usage (example):
 
 All args are optional except input files; missing inputs produce empty result arrays.
 */
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
-'use strict';
+const __filename = fileURLToPath(import.meta.url);
 
-const fs = require('fs');
-const path = require('path');
+const DEFAULT_MAX_INPUT_BYTES = 100 * 1024 * 1024; // 100 MiB
 
-function die(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(2);
+function maxInputBytes() {
+  const raw = process.env.BENCH_RESULTS_MAX_INPUT_BYTES;
+  if (!raw) return DEFAULT_MAX_INPUT_BYTES;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_INPUT_BYTES;
 }
 
-function getArgValue(argv, name) {
-  const idx = argv.indexOf(name);
-  if (idx === -1) return undefined;
-  const value = argv[idx + 1];
-  if (!value || value.startsWith('--')) die(`Missing value for ${name}`);
-  return value;
+function readFileUtf8WithLimit(filePath) {
+  const stat = fs.statSync(filePath);
+  const limit = maxInputBytes();
+  if (stat.size > limit) {
+    throw new Error(`Input file too large: ${filePath} (${stat.size} bytes > ${limit} bytes)`);
+  }
+  return fs.readFileSync(filePath, 'utf8');
 }
 
-function hasArg(argv, name) {
-  return argv.includes(name);
+function safeJsonParse(text, sourceLabel) {
+  try {
+    return JSON.parse(text, (key, value) => {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
+      return value;
+    });
+  } catch (e) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+    process.stderr.write(`bench_results.mjs: ignoring invalid JSON from ${sourceLabel}: ${msg}\n`);
+    return null;
+  }
 }
 
 function parseMaybeNumber(text) {
@@ -68,13 +83,26 @@ function parseDurationToSeconds(text) {
 function readTextIfExists(filePath) {
   if (!filePath) return '';
   if (!fs.existsSync(filePath)) return '';
-  return fs.readFileSync(filePath, 'utf8');
+  try {
+    return readFileUtf8WithLimit(filePath);
+  } catch (e) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+    process.stderr.write(`bench_results.mjs: ignoring unreadable text file ${filePath}: ${msg}\n`);
+    return '';
+  }
 }
 
 function readJsonIfExists(filePath) {
   if (!filePath) return null;
   if (!fs.existsSync(filePath)) return null;
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  try {
+    const text = readFileUtf8WithLimit(filePath);
+    return safeJsonParse(text, filePath);
+  } catch (e) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+    process.stderr.write(`bench_results.mjs: ignoring unreadable JSON file ${filePath}: ${msg}\n`);
+    return null;
+  }
 }
 
 function parseCriterionCompareLog(text) {
@@ -147,31 +175,50 @@ function normalizeRunPrNumber(run) {
 }
 
 function main() {
-  const argv = process.argv.slice(2);
+  const { values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      repo: { type: 'string' },
+      branch: { type: 'string' },
+      'pr-number': { type: 'string' },
+      'base-ref': { type: 'string' },
+      'base-sha': { type: 'string' },
+      'head-ref': { type: 'string' },
+      'head-sha': { type: 'string' },
+      'run-at': { type: 'string' },
+      'hyperfine-json': { type: 'string' },
+      'criterion-log': { type: 'string' },
+      'out-current': { type: 'string' },
+      'history-in': { type: 'string' },
+      'history-out': { type: 'string' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    strict: false,
+  });
 
-  if (hasArg(argv, '--help') || hasArg(argv, '-h')) {
+  if (values.help) {
     process.stdout.write(fs.readFileSync(__filename, 'utf8').split('\n').slice(0, 40).join('\n') + '\n');
     return;
   }
 
-  const repo = getArgValue(argv, '--repo') ?? process.env.GITHUB_REPOSITORY;
-  const branch = getArgValue(argv, '--branch') ?? process.env.RUN_BRANCH ?? process.env.GITHUB_REF_NAME;
-  const prNumber = parseMaybeNumber(getArgValue(argv, '--pr-number') ?? process.env.PR_NUMBER);
+  const repo = values.repo ?? process.env.GITHUB_REPOSITORY;
+  const branch = values.branch ?? process.env.RUN_BRANCH ?? process.env.GITHUB_REF_NAME;
+  const prNumber = parseMaybeNumber(values['pr-number'] ?? process.env.PR_NUMBER);
 
-  const baseRef = getArgValue(argv, '--base-ref') ?? process.env.BASE_REF;
-  const baseSha = getArgValue(argv, '--base-sha') ?? process.env.BASE_SHA;
+  const baseRef = values['base-ref'] ?? process.env.BASE_REF;
+  const baseSha = values['base-sha'] ?? process.env.BASE_SHA;
 
-  const headRef = getArgValue(argv, '--head-ref') ?? process.env.HEAD_REF;
-  const headSha = getArgValue(argv, '--head-sha') ?? process.env.HEAD_SHA ?? process.env.GITHUB_SHA;
+  const headRef = values['head-ref'] ?? process.env.HEAD_REF;
+  const headSha = values['head-sha'] ?? process.env.HEAD_SHA ?? process.env.GITHUB_SHA;
 
-  const runAt = getArgValue(argv, '--run-at') ?? new Date().toISOString();
+  const runAt = values['run-at'] ?? new Date().toISOString();
 
-  const hyperfineJsonPath = getArgValue(argv, '--hyperfine-json') ?? 'hyperfine.json';
-  const criterionLogPath = getArgValue(argv, '--criterion-log') ?? 'criterion-compare.txt';
+  const hyperfineJsonPath = values['hyperfine-json'] ?? 'hyperfine.json';
+  const criterionLogPath = values['criterion-log'] ?? 'criterion-compare.txt';
 
-  const outCurrent = getArgValue(argv, '--out-current') ?? 'bench-current.json';
-  const historyIn = getArgValue(argv, '--history-in');
-  const historyOut = getArgValue(argv, '--history-out') ?? 'bench-history.json';
+  const outCurrent = values['out-current'] ?? 'bench-current.json';
+  const historyIn = values['history-in'];
+  const historyOut = values['history-out'] ?? 'bench-history.json';
 
   const hyperfineJson = readJsonIfExists(hyperfineJsonPath);
   const hyperfineTimings = parseHyperfineJson(hyperfineJson);
