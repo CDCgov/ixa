@@ -297,7 +297,7 @@ jobs:
   publish-bench-history:
     runs-on: ubuntu-latest
     needs: aggregate-results
-    if: ${{ github.event.pull_request.base.ref == 'main_test' }} # should be main, disable for testing
+    if: ${{ github.event.pull_request.base.ref == 'main' }}
     permissions:
       contents: write
     steps:
