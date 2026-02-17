@@ -34,9 +34,6 @@ jobs:
       - name: Build docs
         run: mise run docs
 
-      - name: Remove rustdoc build artifacts
-        run: rm -rf website/debug
-
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
