@@ -22,7 +22,7 @@ a new file in the `src` directory called `people.rs`.
 We have to define the `Person` entity before we can associate properties with
 it. The `define_entity!(Person)` macro invocation automatically defines the
 `Person` type, implements the `Entity` trait for `Person`, and creates the type
-alias `PersonId = EntityId<Person>`, which is the type we can use to represent
+alias `PersonId = EntityId\<Person>`, which is the type we can use to represent
 specific instances of our entity, a single person, in our simulation.
 
 To each person we will associate a value of the enum (short for “enumeration”)
