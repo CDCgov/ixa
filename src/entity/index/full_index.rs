@@ -141,13 +141,13 @@ mod tests {
 
         let mut results_a = Default::default();
         context.with_query_results((Age(1u8), Weight(2u8), Height(3u8)), &mut |results| {
-            results_a = results.clone()
+            results_a = results.into_iter().collect::<Vec<_>>()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
         context.with_query_results((Weight(2u8), Height(3u8), Age(1u8)), &mut |results| {
-            results_b = results.clone()
+            results_b = results.into_iter().collect::<Vec<_>>()
         });
         assert_eq!(results_b.len(), 1);
 
@@ -160,13 +160,13 @@ mod tests {
 
         let mut results_a = Default::default();
         context.with_query_results((Weight(1u8), Height(2u8), Age(3u8)), &mut |results| {
-            results_a = results.clone()
+            results_a = results.into_iter().collect::<Vec<_>>()
         });
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
         context.with_query_results((Age(3u8), Weight(1u8), Height(2u8)), &mut |results| {
-            results_b = results.clone()
+            results_b = results.into_iter().collect::<Vec<_>>()
         });
         assert_eq!(results_b.len(), 1);
 

@@ -4,7 +4,7 @@ use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::{Mutex, OnceLock};
 
-use crate::entity::entity_set::EntitySetIterator;
+use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_index;
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
@@ -92,8 +92,8 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
         self.inner.multi_property_value_hash()
     }
 
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
-        self.inner.new_query_result_iterator(context)
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
+        self.inner.new_query_result(context)
     }
 
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
@@ -155,8 +155,13 @@ pub trait Query<E: Entity>: Copy + 'static {
     /// multi-property value.
     fn multi_property_value_hash(&self) -> HashValueType;
 
+    /// Creates a new query result as an `EntitySet`.
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E>;
+
     /// Creates a new `EntitySetIterator`.
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E>;
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+        self.new_query_result(context).into_iter()
+    }
 
     /// Determines if the given person matches this query.
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool;
@@ -168,7 +173,6 @@ pub trait Query<E: Entity>: Copy + 'static {
 #[cfg(test)]
 mod tests {
 
-    use crate::hashing::HashSetExt;
     use crate::prelude::*;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, Context,
@@ -195,7 +199,7 @@ mod tests {
         let _ = context.add_entity((RiskCategory::High,)).unwrap();
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -204,7 +208,7 @@ mod tests {
         let context = Context::new();
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 0);
+            assert_eq!(people.into_iter().count(), 0);
         });
     }
 
@@ -231,7 +235,7 @@ mod tests {
         assert!(context.is_property_indexed::<Person, RiskCategory>());
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -241,7 +245,7 @@ mod tests {
         let _ = context.add_entity((RiskCategory::High,));
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
         assert!(!context.is_property_indexed::<Person, RiskCategory>());
 
@@ -249,7 +253,7 @@ mod tests {
         assert!(context.is_property_indexed::<Person, RiskCategory>());
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -259,20 +263,20 @@ mod tests {
         let person1 = context.add_entity((RiskCategory::High,)).unwrap();
 
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
 
         context.with_query_results((RiskCategory::Low,), &mut |people| {
-            assert_eq!(people.len(), 0);
+            assert_eq!(people.into_iter().count(), 0);
         });
 
         context.set_property(person1, RiskCategory::Low);
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 0);
+            assert_eq!(people.into_iter().count(), 0);
         });
 
         context.with_query_results((RiskCategory::Low,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -283,7 +287,7 @@ mod tests {
         context.index_property::<Person, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -294,12 +298,12 @@ mod tests {
         context.index_property::<Person, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
 
         let _ = context.add_entity((RiskCategory::High,)).unwrap();
         context.with_query_results((RiskCategory::High,), &mut |people| {
-            assert_eq!(people.len(), 2);
+            assert_eq!(people.into_iter().count(), 2);
         });
     }
 
@@ -309,7 +313,7 @@ mod tests {
         let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
 
         context.with_query_results((Age(42),), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -321,7 +325,7 @@ mod tests {
         let _ = context.add_entity((Age(40), RiskCategory::Low)).unwrap();
 
         context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -333,7 +337,7 @@ mod tests {
         let _ = context.add_entity((Age(40), RiskCategory::Low)).unwrap();
 
         context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -346,7 +350,7 @@ mod tests {
 
         context.index_property::<Person, Age>();
         context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
-            assert_eq!(people.len(), 1);
+            assert_eq!(people.into_iter().count(), 1);
         });
     }
 
@@ -449,50 +453,50 @@ mod tests {
 
         // 'regular' derived property
         context.with_query_results((Ach(28, 2, 160),), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p4));
-            assert!(people.contains(&p5));
+            assert!(people.contains(p4));
+            assert!(people.contains(p5));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         // multi-property index
         context.with_query_results((Age(28), County(2), Height(160)), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p4));
-            assert!(people.contains(&p5));
+            assert!(people.contains(p4));
+            assert!(people.contains(p5));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         // multi-property index with different order
         context.with_query_results((County(2), Height(160), Age(28)), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p4));
-            assert!(people.contains(&p5));
+            assert!(people.contains(p4));
+            assert!(people.contains(p5));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         // multi-property index with different order
         context.with_query_results((Height(160), County(2), Age(28)), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p4));
-            assert!(people.contains(&p5));
+            assert!(people.contains(p4));
+            assert!(people.contains(p5));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         // multi-property index with different order and different value
         context.with_query_results((Height(140), County(1), Age(28)), &mut |people| {
-            assert_eq!(people.len(), 1, "Should have 1 matches");
-            assert!(people.contains(&p3));
+            assert!(people.contains(p3));
+            assert_eq!(people.into_iter().count(), 1, "Should have 1 matches");
         });
 
         context.set_property(p2, Age(28));
         // multi-property index again after changing the value
         context.with_query_results((Height(140), County(1), Age(28)), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p2));
-            assert!(people.contains(&p3));
+            assert!(people.contains(p2));
+            assert!(people.contains(p3));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         context.with_query_results((Height(140), County(1)), &mut |people| {
-            assert_eq!(people.len(), 2, "Should have 2 matches");
-            assert!(people.contains(&p2));
-            assert!(people.contains(&p3));
+            assert!(people.contains(p2));
+            assert!(people.contains(p3));
+            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
     }
 
@@ -567,8 +571,8 @@ mod tests {
             EntityPropertyTuple::new((Age(42), RiskCategory::High));
 
         context.with_query_results(query, &mut |people| {
-            assert_eq!(people.len(), 1);
-            assert!(people.contains(&p1));
+            assert!(people.contains(p1));
+            assert_eq!(people.into_iter().count(), 1);
         });
 
         // Test match_entity
@@ -666,7 +670,7 @@ mod tests {
         assert_eq!(context.query_entity_count(query), 1);
 
         context.with_query_results(query, &mut |people| {
-            assert!(people.contains(&p1));
+            assert!(people.contains(p1));
         });
     }
 
