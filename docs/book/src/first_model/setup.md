@@ -64,7 +64,7 @@ Ixa comes with a convenience script for setting up new Ixa projects. Change
 directory to `disease_model/`, the project root, and run this command.
 
 ```bash
-curl -s https://raw.githubusercontent.com/CDCgov/ixa/release/scripts/setup_new_ixa_project.sh | sh -s
+curl -s https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s
 ```
 
 The script adds the Ixa library as a project dependency and provides you with a
@@ -76,14 +76,8 @@ We will depend on a few external libraries in addition to Ixa. The `cargo add`
 command makes this easy.
 
 ```bash
-cargo add rand_distr@0.4.3
-cargo add csv
+cargo add csv rand_distr serde
 ```
-
-Notice that:
-
-- a particular version can be specified with the `packagename@1.2.3` syntax;
-- we can compile a library with specific features turn on or off.
 
 ### `Cargo.toml`
 
