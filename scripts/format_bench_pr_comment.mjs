@@ -23,6 +23,7 @@ import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
 const SECTION_TITLES = ['Regressions', 'Improvements', 'Unchanged'];
+const SAMPLE_ENTITY_PREFIX = 'sample_entity_';
 
 function readTextIfExists(filePath) {
   if (!filePath) return '';
@@ -44,16 +45,99 @@ function safeJoinWithin(rootDir, fileName) {
   return full;
 }
 
-function maxBacktickRun(text) {
-  const matches = String(text || '').match(/`+/g);
-  if (!matches) return 0;
-  return matches.reduce((max, s) => Math.max(max, s.length), 0);
+function toNumberPercent(text) {
+  const s = String(text || '').trim();
+  const n = Number.parseFloat(s.replace('%', ''));
+  return Number.isFinite(n) ? n : NaN;
 }
 
-function fencedBlock(text) {
-  const body = String(text || '').trimEnd();
-  const fence = '`'.repeat(Math.max(3, maxBacktickRun(body) + 1));
-  return [fence, body || '(none)', fence].join('\n');
+function isHeaderOrDividerLine(line) {
+  const t = String(line || '').trim();
+  if (!t) return true;
+  if (/^Group\s+Bench\s+Change\s+CI\s+Lower\s+CI\s+Upper\s*$/i.test(t)) return true;
+  if (/^-{3,}(\s+-{3,})+\s*$/.test(t)) return true;
+  return false;
+}
+
+function parseCriterionBodyToRows(body) {
+  const lines = String(body || '').split(/\r?\n/);
+  const rows = [];
+
+  for (const line of lines) {
+    if (isHeaderOrDividerLine(line)) continue;
+    const parts = String(line).trim().split(/\s{2,}/);
+    if (parts.length < 5) continue;
+
+    const [rawGroup, rawBenchOrParam, rawChange, rawCiLower, rawCiUpper] = parts;
+    const changePct = toNumberPercent(rawChange);
+    const ciLowerPct = toNumberPercent(rawCiLower);
+    const ciUpperPct = toNumberPercent(rawCiUpper);
+
+    // The check_criterion_regressions output uses two shapes:
+    // 1) group=<suite>, bench=<benchmark_name>
+    // 2) group=sample_entity_<benchmark_name>, bench=<param>
+    const isSampleEntity = String(rawGroup).startsWith(SAMPLE_ENTITY_PREFIX);
+    const outGroup = isSampleEntity ? 'sample_entity' : rawGroup;
+    const outBench = isSampleEntity ? rawGroup : rawBenchOrParam;
+    const outParam = isSampleEntity ? rawBenchOrParam : '';
+
+    rows.push({
+      group: outGroup,
+      bench: outBench,
+      param: outParam,
+      change: rawChange,
+      ciLower: rawCiLower,
+      ciUpper: rawCiUpper,
+      changePct,
+      ciLowerPct,
+      ciUpperPct,
+    });
+  }
+
+  return rows;
+}
+
+function sortRowsForSection(title, rows) {
+  const r = [...rows];
+  if (title === 'Regressions') {
+    r.sort((a, b) => b.changePct - a.changePct);
+    return r;
+  }
+  if (title === 'Improvements') {
+    r.sort((a, b) => a.changePct - b.changePct);
+    return r;
+  }
+  // Unchanged: sort by absolute change magnitude, descending.
+  r.sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+  return r;
+}
+
+function escapePipeCell(text) {
+  return String(text || '').replaceAll('|', '\\|');
+}
+
+function formatBenchCell(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  return `\`${escapePipeCell(s)}\``;
+}
+
+function buildMarkdownTable(rows) {
+  const lines = [];
+  lines.push('| Group | Bench | Param | Change | CI Lower | CI Upper |');
+  lines.push('|:--|:--|--:|--:|--:|--:|');
+
+  for (const row of rows) {
+    lines.push(
+      `| ${escapePipeCell(row.group)} | ${formatBenchCell(row.bench)} | ${escapePipeCell(row.param)} | ${escapePipeCell(row.change)} | ${escapePipeCell(row.ciLower)} | ${escapePipeCell(row.ciUpper)} |`,
+    );
+  }
+
+  if (rows.length === 0) {
+    lines.push('| (none) |  |  |  |  |  |');
+  }
+
+  return lines.join('\n');
 }
 
 function extractNamedSection(text, title) {
@@ -110,21 +194,12 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
     const p = safeJoinWithin(criterionDir, `criterion-regressions-${group}.txt`);
     const raw = readTextIfExists(p).trimEnd();
 
-    const extracted = Object.fromEntries(
-      SECTION_TITLES.map((t) => [t, extractNamedSectionBody(raw, t)]),
-    );
-
-    const hasStructured = SECTION_TITLES.some((t) => extracted[t] != null);
-
+    const extracted = Object.fromEntries(SECTION_TITLES.map((t) => [t, extractNamedSectionBody(raw, t)]));
     for (const t of SECTION_TITLES) {
-      let body = extracted[t];
-      if (body == null) {
-        if (!raw) body = '(no output)';
-        else if (!hasStructured) body = t === 'Unchanged' ? raw : '(no structured output)';
-        else body = '(none)';
-      }
-
-      bySection[t].push({ group, body });
+      const body = extracted[t];
+      if (body == null) continue;
+      const rows = parseCriterionBodyToRows(body);
+      bySection[t].push(...rows);
     }
   }
 
@@ -133,7 +208,7 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
 
   lines.push('#### Hyperfine', '');
   if (String(hyperfineMd || '').trim()) {
-    lines.push(fencedBlock(String(hyperfineMd)), '');
+    lines.push(String(hyperfineMd).trimEnd(), '');
   } else {
     lines.push('_Hyperfine output missing._', '');
   }
@@ -141,12 +216,16 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
   lines.push('#### Criterion', '');
 
   for (const title of SECTION_TITLES) {
-    lines.push(`##### ${title}`, '');
-    const content = bySection[title]
-      .map((entry) => String(entry.body || '').trimEnd() || '(none)')
-      .join('\n');
-    lines.push(fencedBlock(content));
-    lines.push('');
+    const heading =
+      title === 'Regressions'
+        ? '##### Regressions (slower)'
+        : title === 'Improvements'
+          ? '##### Improvements (faster)'
+          : '##### Unchanged / inconclusive (CI crosses 0%)';
+
+    const rows = sortRowsForSection(title, bySection[title]);
+    lines.push(heading, '');
+    lines.push(buildMarkdownTable(rows), '');
   }
 
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
