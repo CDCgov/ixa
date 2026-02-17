@@ -183,34 +183,11 @@ jobs:
             examples
           )
 
-          echo '### Benchmark Results' > results.md
-          echo '' >> results.md
-
-          echo '#### Hyperfine' >> results.md
-          echo '' >> results.md
-          if [ -f hyperfine.md ]; then
-            cat hyperfine.md >> results.md
-          else
-            echo '_Hyperfine output missing._' >> results.md
-          fi
-          echo '' >> results.md
-
-          echo '#### Criterion (by group)' >> results.md
-          echo '' >> results.md
-
-          for group in "${groups[@]}"; do
-            file="artifacts/results/results_${group}.md"
-            if [ -f "$file" ]; then
-              cat "$file" >> results.md
-            else
-              {
-                echo "## ${group}"
-                echo
-                echo "Result file missing for this group."
-                echo
-              } >> results.md
-            fi
-          done
+          node scripts/format_bench_pr_comment.mjs \
+            --out results.md \
+            --hyperfine-md hyperfine.md \
+            --criterion-dir artifacts/raw \
+            --groups "$(IFS=,; echo "${groups[*]}")"
 
       - name: Upload PR comment artifact
         uses: actions/upload-artifact@v6
