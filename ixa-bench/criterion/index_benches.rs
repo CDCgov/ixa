@@ -46,7 +46,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                     context.with_query_results(
                         black_box((Property10(number % 10),)),
                         &mut |entity_ids| {
-                            black_box(entity_ids.len());
+                            black_box(entity_ids.try_len());
                         },
                     );
                 }
@@ -65,7 +65,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                             Property100(*number),
                         )),
                         &mut |entity_ids| {
-                            black_box(entity_ids.len());
+                            black_box(entity_ids.try_len());
                         },
                     );
                 }
@@ -85,7 +85,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                             MultiProperty100(*number),
                         )),
                         &mut |entity_ids| {
-                            black_box(entity_ids.len());
+                            black_box(entity_ids.try_len());
                         },
                     );
                 }

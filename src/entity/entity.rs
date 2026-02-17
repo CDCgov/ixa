@@ -146,6 +146,11 @@ impl<E: Entity> PopulationIterator<E> {
             _phantom: PhantomData,
         }
     }
+
+    #[must_use]
+    pub(crate) fn population(&self) -> usize {
+        self.population
+    }
 }
 
 impl<E: Entity> Iterator for PopulationIterator<E> {

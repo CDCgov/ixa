@@ -50,25 +50,52 @@ where
     I: IntoIterator<Item = T>,
 {
     let mut iter = iterable.into_iter();
-    let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
+    let mut weight: f64 = rng.random(); // controls skip distance distribution
+    let mut log_one_minus_weight = (-weight).ln_1p();
     let mut chosen_item: T = iter.next()?; // the currently selected element
 
     // Number of elements to skip before the next candidate to consider for the reservoir.
     // `iter.nth(skip)` skips `skip` elements and returns the next one.
-    let mut skip = (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
-    weight *= rng.random_range(0.0..1.0);
+    let mut skip = (rng.random::<f64>().ln() / log_one_minus_weight).floor() as usize;
+    weight *= rng.random::<f64>();
+    log_one_minus_weight = (-weight).ln_1p();
 
     loop {
         match iter.nth(skip) {
             Some(item) => {
                 chosen_item = item;
-                skip =
-                    (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
-                weight *= rng.random_range(0.0..1.0);
+                skip = (rng.random::<f64>().ln() / log_one_minus_weight).floor() as usize;
+                weight *= rng.random::<f64>();
+                log_one_minus_weight = (-weight).ln_1p();
             }
             None => return Some(chosen_item),
         }
     }
+}
+
+/// Count elements and sample one element uniformly from an iterator of unknown
+/// length.
+///
+/// Returns `(count, sample)` where `count` is the total number of items observed
+/// and `sample` is `None` iff `count == 0`.
+///
+/// This uses single-item reservoir sampling while tracking total count.
+pub fn count_and_sample_single_l_reservoir<I, R, T>(rng: &mut R, iterable: I) -> (usize, Option<T>)
+where
+    R: Rng,
+    I: IntoIterator<Item = T>,
+{
+    let mut count = 0usize;
+    let mut chosen_item: Option<T> = None;
+
+    for item in iterable {
+        count += 1;
+        if rng.random_range(0..count as u64) == 0 {
+            chosen_item = Some(item);
+        }
+    }
+
+    (count, chosen_item)
 }
 
 /// Samples `requested` elements uniformly at random without replacement from an iterator
@@ -134,8 +161,10 @@ where
         return Vec::new();
     }
 
-    let mut weight: f64 = rng.random_range(0.0..1.0); // controls skip distance distribution
-    weight = weight.powf(1.0 / requested as f64);
+    let requested_recip = 1.0 / requested as f64;
+    let mut weight: f64 = rng.random(); // controls skip distance distribution
+    weight = weight.powf(requested_recip);
+    let mut log_one_minus_weight = (-weight).ln_1p();
     let mut iter = iter.into_iter();
     let mut reservoir: Vec<T> = iter.by_ref().take(requested).collect(); // the sample reservoir
 
@@ -145,9 +174,10 @@ where
 
     // Number of elements to skip before the next candidate to consider for the reservoir.
     // `iter.nth(skip)` skips `skip` elements and returns the next one.
-    let mut skip = (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
-    let uniform_random: f64 = rng.random_range(0.0..1.0);
-    weight *= uniform_random.powf(1.0 / requested as f64);
+    let mut skip = (rng.random::<f64>().ln() / log_one_minus_weight).floor() as usize;
+    let uniform_random: f64 = rng.random();
+    weight *= uniform_random.powf(requested_recip);
+    log_one_minus_weight = (-weight).ln_1p();
 
     loop {
         match iter.nth(skip) {
@@ -156,10 +186,10 @@ where
                 reservoir.swap_remove(to_remove);
                 reservoir.push(item);
 
-                skip =
-                    (f64::ln(rng.random_range(0.0..1.0)) / f64::ln(1.0 - weight)).floor() as usize;
-                let uniform_random: f64 = rng.random_range(0.0..1.0);
-                weight *= uniform_random.powf(1.0 / requested as f64);
+                skip = (rng.random::<f64>().ln() / log_one_minus_weight).floor() as usize;
+                let uniform_random: f64 = rng.random();
+                weight *= uniform_random.powf(requested_recip);
+                log_one_minus_weight = (-weight).ln_1p();
             }
             None => return reservoir,
         }
@@ -266,6 +296,33 @@ mod tests {
         assert!(sample.is_some());
         let value = sample.unwrap();
         assert!(data.contains(value));
+    }
+
+    #[test]
+    fn test_count_and_sample_single_l_reservoir_empty() {
+        let data: Vec<u32> = Vec::new();
+        let mut rng = StdRng::seed_from_u64(42);
+        let (count, sample) = count_and_sample_single_l_reservoir(&mut rng, data);
+        assert_eq!(count, 0);
+        assert!(sample.is_none());
+    }
+
+    #[test]
+    fn test_count_and_sample_single_l_reservoir_count_matches() {
+        let data: Vec<u32> = (0..1000).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        let (count, sample) = count_and_sample_single_l_reservoir(&mut rng, data);
+        assert_eq!(count, 1000);
+        assert!(sample.is_some());
+    }
+
+    #[test]
+    fn test_count_and_sample_single_l_reservoir_single_element() {
+        let data: Vec<u32> = vec![7];
+        let mut rng = StdRng::seed_from_u64(42);
+        let (count, sample) = count_and_sample_single_l_reservoir(&mut rng, data);
+        assert_eq!(count, 1);
+        assert_eq!(sample, Some(7));
     }
 
     #[test]

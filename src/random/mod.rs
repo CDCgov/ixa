@@ -6,8 +6,8 @@ use std::cell::RefCell;
 
 pub use context_ext::ContextRandomExt;
 pub use sampling_algorithms::{
-    sample_multiple_from_known_length, sample_multiple_l_reservoir,
-    sample_single_from_known_length, sample_single_l_reservoir,
+    count_and_sample_single_l_reservoir, sample_multiple_from_known_length,
+    sample_multiple_l_reservoir, sample_single_from_known_length, sample_single_l_reservoir,
 };
 
 pub use crate::define_rng;
