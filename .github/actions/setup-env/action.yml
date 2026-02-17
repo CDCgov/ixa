@@ -16,16 +16,6 @@ runs:
         restore-keys: |
           cargo-
 
-    - name: Cache website
-      uses: actions/cache@v4
-      with:
-        path: |
-          website/book/
-          website/doc/
-        key: website-${{ hashFiles('mise.toml', 'docs/book/**', 'Cargo.toml', 'src/**', '**/Cargo.toml') }}
-        restore-keys: |
-          website-
-
     - name: Install cargo-binstall
       uses: cargo-bins/cargo-binstall@v1.15.6
 
