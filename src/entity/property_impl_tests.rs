@@ -14,14 +14,18 @@ define_property!(struct Pu32(u32), Person, default_const = Pu32(0));
 define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
 define_property!(struct Name(&'static str), Person, default_const = Name(""));
 define_property!(struct Age(u8), Person, default_const = Age(0));
-define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
+#[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+struct Weight(f64);
+impl_property!(Weight, Person, default_const = Weight(0.0));
 
 // A struct with named fields
-define_property!(
-    struct Innocculation {
-        time: f64,
-        dose: u8,
-    },
+#[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+struct Innocculation {
+    time: f64,
+    dose: u8,
+}
+impl_property!(
+    Innocculation,
     Person,
     default_const = Innocculation { time: 0.0, dose: 0 }
 );

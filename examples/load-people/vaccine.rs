@@ -12,7 +12,9 @@ define_property!(
     },
     Person
 );
-define_property!(struct VaccineEfficacy(f64), Person);
+#[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct VaccineEfficacy(pub f64);
+impl_property!(VaccineEfficacy, Person);
 define_property!(struct VaccineDoses(u8), Person);
 
 pub trait ContextVaccineExt: ContextRandomExt {

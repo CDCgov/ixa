@@ -14,11 +14,9 @@ define_property!(
     default_const = DiseaseStatus::S
 );
 
-define_property!(
-    struct InfectionTime(Option<f64>),
-    Person,
-    default_const = InfectionTime(None)
-);
+#[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct InfectionTime(pub Option<f64>);
+impl_property!(InfectionTime, Person, default_const = InfectionTime(None));
 
 pub fn init(context: &mut Context) {
     let parameters = context
