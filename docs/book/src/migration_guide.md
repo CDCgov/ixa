@@ -56,7 +56,7 @@ variant:
 
 ```rust
 // The downside is, we have to make sure the property type implements all the
-// traits a property needs (and optionally any extras we want).
+// traits a property needs.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum InfectionStatus {
     Susceptible,
