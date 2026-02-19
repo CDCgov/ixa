@@ -44,6 +44,7 @@ pub mod property_store;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;
+pub(crate) mod value_change_counter;
 
 // Flatten the module hierarchy.
 pub use context_extension::ContextEntitiesExt;
