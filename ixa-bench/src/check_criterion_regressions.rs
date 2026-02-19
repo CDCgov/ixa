@@ -1,8 +1,6 @@
 use std::path::Path;
-use std::time::{Duration, SystemTime};
 use std::{env, fs};
 
-use ixa::{HashSet, HashSetExt};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -15,6 +13,13 @@ struct Est {
 }
 
 type TableRow = (String, String, String, String, String);
+
+#[derive(Clone, Copy, Debug)]
+enum Verdict {
+    Regressed,
+    Improved,
+    Unchanged,
+}
 
 #[derive(Error, Debug)]
 enum ReadEstError {
@@ -40,6 +45,20 @@ enum ReadEstError {
     MissingLowerBound,
     #[error("missing upper_bound")]
     MissingUpperBound,
+}
+
+#[derive(Error, Debug)]
+enum ReadVerdictError {
+    #[error("read error {path}: {source}")]
+    ReadFile {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("could not determine criterion verdict from report {path}")]
+    MissingVerdict { path: String },
+    #[error("invalid report path for change file {path}")]
+    InvalidReportPath { path: String },
 }
 
 fn find_change_files(base: &Path) -> Vec<(String, String, std::path::PathBuf)> {
@@ -117,14 +136,26 @@ fn read_est(path: &Path) -> Result<(f64, f64, f64), ReadEstError> {
     Ok((pe, lb, ub))
 }
 
-fn is_recent(path: &Path, recent_seconds: u64) -> bool {
-    match fs::metadata(path).and_then(|m| m.modified()) {
-        Ok(mtime) => match SystemTime::now().duration_since(mtime) {
-            Ok(dur) => dur <= Duration::from_secs(recent_seconds),
-            Err(_) => false,
-        },
-        Err(_) => false,
+fn read_verdict(path: &Path) -> Result<Verdict, ReadVerdictError> {
+    let path_str = path.display().to_string();
+    let html = fs::read_to_string(path).map_err(|source| ReadVerdictError::ReadFile {
+        path: path_str.clone(),
+        source,
+    })?;
+
+    if html.contains("Performance has regressed.") {
+        return Ok(Verdict::Regressed);
     }
+    if html.contains("Performance has improved.") {
+        return Ok(Verdict::Improved);
+    }
+    if html.contains("Change within noise threshold.")
+        || html.contains("No change in performance detected.")
+    {
+        return Ok(Verdict::Unchanged);
+    }
+
+    Err(ReadVerdictError::MissingVerdict { path: path_str })
 }
 
 fn print_table(
@@ -208,33 +239,12 @@ fn main() {
     } else {
         None
     };
+
     let base = Path::new("target/criterion");
     let change_files = find_change_files(base);
     if change_files.is_empty() {
         eprintln!("No criterion change outputs found under target/criterion");
         std::process::exit(1);
-    }
-
-    // detect recent groups if no explicit filter
-    let mut recent_groups: Option<HashSet<String>> = None;
-    if filter_group.is_none() {
-        let mut set: HashSet<String> = HashSet::new();
-        for entry in change_files.iter() {
-            let g = &entry.0;
-            let gpath = base.join(g);
-            if is_recent(&gpath, 300) {
-                set.insert(g.clone());
-                continue;
-            }
-            // check benches
-            let bpath = base.join(g).join(&entry.1);
-            if is_recent(&bpath, 300) {
-                set.insert(g.clone());
-            }
-        }
-        if !set.is_empty() {
-            recent_groups = Some(set);
-        }
     }
 
     let mut regressions: Vec<Est> = Vec::new();
@@ -247,13 +257,34 @@ fn main() {
             if fg != &group {
                 continue;
             }
-        } else if let Some(ref rg) = recent_groups {
-            if !rg.contains(&group) {
-                continue;
-            }
         }
         match read_est(&path) {
             Ok((pe, lb, ub)) => {
+                let report_path = match path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("report").join("index.html"))
+                {
+                    Some(p) => p,
+                    None => {
+                        eprintln!(
+                            "Error parsing {}: {}",
+                            path.display(),
+                            ReadVerdictError::InvalidReportPath {
+                                path: path.display().to_string(),
+                            }
+                        );
+                        std::process::exit(1);
+                    }
+                };
+                let verdict = match read_verdict(&report_path) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        eprintln!("Error parsing {}: {}", report_path.display(), err);
+                        std::process::exit(1);
+                    }
+                };
+
                 let e = Est {
                     group: group.clone(),
                     bench: bench.clone(),
@@ -261,12 +292,10 @@ fn main() {
                     lb,
                     ub,
                 };
-                if pe > 0.0 && lb > 0.0 {
-                    regressions.push(e);
-                } else if pe < 0.0 && ub < 0.0 {
-                    improvements.push(e);
-                } else {
-                    unchanged.push(e);
+                match verdict {
+                    Verdict::Regressed => regressions.push(e),
+                    Verdict::Improved => improvements.push(e),
+                    Verdict::Unchanged => unchanged.push(e),
                 }
             }
             Err(err) => {
