@@ -25,3 +25,5 @@ in its entirety.
    Give a randomly sampled subpopulation that intervention and add a check to
    the transmission module to see if the person that we are attempting to infect
    has that property. Change the probability of infection accordingly.
+   _Hint: You will probably need some new constants, a new person property, a new
+   random number generator, and the `Bernoulli` distribution._
