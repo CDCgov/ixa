@@ -3,32 +3,31 @@ use ixa::prelude::*;
 use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, PersonId};
-use crate::{FORCE_OF_INFECTION, POPULATION};
+use crate::FORCE_OF_INFECTION;
+use crate::people::{InfectionStatus, Person, PersonId};
 
 define_rng!(TransmissionRng);
 // ANCHOR_END: imports
 
 // ANCHOR: attempt_infection
-fn attempt_infection(context: &mut Context) {
+fn attempt_infection(context: &mut Context, infectee: PersonId) {
     trace!("Attempting infection");
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
-    let person_status: InfectionStatus = context.get_property(person_to_infect);
-
+    // check that this person is infectable
+    let person_status: InfectionStatus = context.get_property(infectee);
     if person_status == InfectionStatus::S {
-        context.set_property(person_to_infect, InfectionStatus::I);
+        context.set_property(infectee, InfectionStatus::I);
     }
-
-    #[allow(clippy::cast_precision_loss)]
-    let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap())
-            / POPULATION as f64;
-
-    context.add_plan(next_attempt_time, attempt_infection);
 }
 
 pub fn init(context: &mut Context) {
     trace!("Initializing transmission manager");
-    context.add_plan(0.0, attempt_infection);
+    for person_id in context
+        .query_result_iterator::<Person, _>(())
+        .collect::<Vec<PersonId>>()
+    {
+        let infection_time =
+            context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap());
+        context.add_plan(infection_time, move |c| attempt_infection(c, person_id));
+    }
 }
 // ANCHOR_END: attempt_infection
