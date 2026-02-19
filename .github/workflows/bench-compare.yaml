@@ -136,9 +136,36 @@ jobs:
             criterion-regressions-${{ matrix.group }}.txt
             status-${{ matrix.group }}.env
 
+  hyperfine:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run hyperfine benchmarks
+        run: |
+          set -euo pipefail
+          mise run bench:hyperfine -- -- --export-markdown hyperfine.md --export-json hyperfine.json
+
+      - name: Upload hyperfine artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: hyperfine
+          path: |
+            hyperfine.md
+            hyperfine.json
+
   aggregate-results:
     runs-on: ubuntu-latest
-    needs: bench-group
+    needs:
+      - bench-group
+      - hyperfine
     if: ${{ always() }}
     permissions:
       contents: read
@@ -164,10 +191,10 @@ jobs:
           merge-multiple: true
           path: artifacts/raw
 
-      - name: Run hyperfine benchmarks
-        run: |
-          set -euo pipefail
-          mise run bench:hyperfine -- -- --export-markdown hyperfine.md --export-json hyperfine.json
+      - name: Download hyperfine artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: hyperfine
 
       - name: Build combined PR comment markdown
         run: |
