@@ -8,10 +8,13 @@ A higher level interface to the `Index` is provided through the `PropertyValueSt
 
 */
 
+use std::cell::RefCell;
+
 use super::entity::{Entity, EntityId};
 use super::property::{Property, PropertyInitializationKind};
 use crate::entity::index::{PropertyIndex, PropertyIndexType};
 use crate::entity::property_value_store::PropertyValueStore;
+use crate::entity::value_change_counter::ValueChangeCounter;
 use crate::value_vec::ValueVec;
 
 /// The underlying storage type for property values.
@@ -22,6 +25,8 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     pub(super) data: RawPropertyValueVec<P>,
     /// An index mapping `property_value` to `set_of_entities`.
     pub(crate) index: PropertyIndex<E, P>,
+    /// Value change counters for this property.
+    pub(crate) value_change_counters: Vec<RefCell<Box<dyn ValueChangeCounter<E, P>>>>,
 }
 
 impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
@@ -29,6 +34,7 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
         Self {
             data: ValueVec::default(),
             index: PropertyIndex::Unindexed,
+            value_change_counters: Vec::new(),
         }
     }
 }
@@ -46,11 +52,22 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Self {
             data: ValueVec::with_capacity(capacity),
             index: PropertyIndex::Unindexed,
+            value_change_counters: Vec::new(),
         }
     }
 
     pub(crate) fn index_type(&self) -> PropertyIndexType {
         self.index.index_type()
+    }
+
+    /// Adds a value change counter and returns its ID.
+    pub(crate) fn add_value_change_counter(
+        &mut self,
+        counter: Box<dyn ValueChangeCounter<E, P>>,
+    ) -> usize {
+        let counter_id = self.value_change_counters.len();
+        self.value_change_counters.push(RefCell::new(counter));
+        counter_id
     }
 
     /// Ensures capacity for at least `additional` more elements

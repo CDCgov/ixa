@@ -38,8 +38,10 @@ use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
 use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
+use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{EntityId, HashValueType, PropertyIndexType};
 use crate::Context;
 
@@ -349,6 +351,22 @@ impl<E: Entity> PropertyStore<E> {
             .get_mut(P::index_id())
             .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
         property_value_store.set_indexed(index_type);
+    }
+
+    /// Creates a stratified value change counter for tracked property `P` with strata `PL`.
+    ///
+    /// Returns the counter ID.
+    pub fn create_value_change_counter<PL, P>(&mut self) -> usize
+    where
+        PL: PropertyList<E> + Eq + std::hash::Hash,
+        P: Property<E> + Eq + std::hash::Hash,
+    {
+        let property_value_store = self.get_mut::<P>();
+        property_value_store.add_value_change_counter(Box::new(StratifiedValueChangeCounter::<
+            E,
+            PL,
+            P,
+        >::new()))
     }
 
     /// Updates the index of the property having the given ID for any entities that have been added to the context
