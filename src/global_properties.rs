@@ -68,7 +68,9 @@ where
                         let val: T::Value = serde_json::from_value(value)?;
                         T::validate(&val)?;
                         if context.get_global_property_value(T::new()).is_some() {
-                            return Err(IxaError::IxaError(format!("Duplicate property {name}")));
+                            return Err(IxaError::DuplicateProperty {
+                                name: name.to_string(),
+                            });
                         }
                         context.set_global_property_value(T::new(), val)?;
                         Ok(())
@@ -130,7 +132,7 @@ impl GlobalPropertiesDataContainer {
             // Note: If we change global properties to be mutable, we'll need to
             // update define_derived_person_property to either handle updates or only
             // allow immutable properties.
-            Entry::Occupied(_) => Err(IxaError::from("Entry already exists")),
+            Entry::Occupied(_) => Err(IxaError::EntryAlreadyExists),
         }
     }
 
@@ -229,7 +231,9 @@ impl ContextGlobalPropertiesExt for Context {
         let accessor = get_global_property_accessor(name);
         match accessor {
             Some(accessor) => (accessor.getter)(self),
-            None => Err(IxaError::from(format!("No global property: {name}"))),
+            None => Err(IxaError::NoGlobalProperty {
+                name: name.to_string(),
+            }),
         }
     }
 
@@ -243,7 +247,7 @@ impl ContextGlobalPropertiesExt for Context {
             if let Some(accessor) = get_global_property_accessor(&k) {
                 (accessor.setter)(self, &k, v)?;
             } else {
-                return Err(IxaError::from(format!("No global property: {k}")));
+                return Err(IxaError::NoGlobalProperty { name: k });
             }
         }
 
@@ -381,9 +385,7 @@ mod test {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/global_properties_missing.json");
         match context.load_global_properties(&path) {
-            Err(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "No global property: ixa.PropertyUnknown");
-            }
+            Err(IxaError::NoGlobalProperty { name }) => assert_eq!(name, "ixa.PropertyUnknown"),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -409,7 +411,7 @@ mod test {
         context.load_global_properties(&path).unwrap();
         let error = context.load_global_properties(&path);
         match error {
-            Err(IxaError::IxaError(_)) => {}
+            Err(IxaError::DuplicateProperty { .. }) => {}
             _ => panic!("Unexpected error type"),
         }
     }
@@ -421,10 +423,10 @@ mod test {
     define_global_property!(Property3, Property3Type, |v: &Property3Type| {
         match v.field_int {
             0 => Ok(()),
-            _ => Err(IxaError::IxaError(format!(
-                "Illegal value for `field_int`: {}",
-                v.field_int
-            ))),
+            _ => Err(IxaError::IllegalGlobalPropertyValue {
+                field: "field_int".to_string(),
+                value: v.field_int.to_string(),
+            }),
         }
     });
 
@@ -441,7 +443,7 @@ mod test {
         let mut context = Context::new();
         assert!(matches!(
             context.set_global_property_value(Property3, Property3Type { field_int: 1 }),
-            Err(IxaError::IxaError(_))
+            Err(IxaError::IllegalGlobalPropertyValue { .. })
         ));
     }
 
@@ -460,7 +462,7 @@ mod test {
             .join("tests/data/global_properties_invalid.json");
         assert!(matches!(
             context.load_global_properties(&path),
-            Err(IxaError::IxaError(_))
+            Err(IxaError::IllegalGlobalPropertyValue { .. })
         ));
     }
 

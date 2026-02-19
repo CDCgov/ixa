@@ -103,11 +103,10 @@ macro_rules! impl_property_list {
                     for i in 0..$ct - 1 {
                         for j in (i + 1)..$ct {
                             if property_type_ids[i] == property_type_ids[j] {
-                                return Err(format!(
-                                    "the same property appears in both position {} and {} in the property list",
-                                    i,
-                                    j
-                                ).into());
+                                return Err(IxaError::DuplicatePropertyInPropertyList {
+                                    first_index: i,
+                                    second_index: j,
+                                });
                             }
                         }
                     }
