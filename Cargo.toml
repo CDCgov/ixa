@@ -28,7 +28,6 @@ bincode = { version = "^2.0.1", default-features = false, features = [
     "std",
     "serde",
 ] }
-reikna = "^0.12.3"
 ixa-derive = { version = "2.0.0-beta", path = "ixa-derive" }
 seq-macro = "^0.3.5"
 paste = "^1.0.15"
@@ -46,7 +45,6 @@ rustc-hash = "^2.1.1"
 tempfile = "^3.15.0"
 assert_cmd = "^2.0.16"
 criterion = "^0.7.0"
-roots = "0.0.8"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.27.1", features = ["derive"] }
 quote = "^1.0.38"
@@ -142,10 +140,6 @@ assert_cmd.workspace = true
 criterion.workspace = true
 rand_distr.workspace = true
 tempfile.workspace = true
-
-# Only used in time-varying-infection
-reikna.workspace = true
-roots.workspace = true
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }

@@ -16,6 +16,7 @@
   - [Profiling Module](topics/profiling-module.md)
   - [`random` module](topics/random-module.md)
   - [Reports](topics/reports.md)
+- [Examples](examples.md)
 - [Migrating to ixa 2.0](migration_guide.md)
 - [Appendix: Rust](appendix_rust/appendix-rust.md)
   - [Specifying Generic Types and the Turbo Fish](appendix_rust/turbo-fish.md)

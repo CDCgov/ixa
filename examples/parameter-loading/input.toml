@@ -1,7 +1,0 @@
-population = 10
-max_time = 20.0
-seed = 123
-foi = 0.15
-infection_duration = 5.0
-output_dir = "examples/parameter-loading"
-output_file = "incidence"
