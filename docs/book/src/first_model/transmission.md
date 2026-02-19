@@ -10,12 +10,12 @@ manager. Create the file `src/transmission_manager.rs` and add
 use ixa::Context;
 
 fn attempt_infection(context: &mut Context) {
-
+  // attempt an infection...
 }
 
 pub fn init(context: &mut Context) {
- trace!("Initializing transmission manager");
-
+  trace!("Initializing transmission manager");
+  // initialize the transmission manager...
 }
 ```
 
@@ -36,14 +36,7 @@ error.
 
 ```rust
 // main.rs
-mod people;
-mod transmission_manager;
-
-use ixa::Context;
-
-static POPULATION: u64 = 1000;
-static FORCE_OF_INFECTION: f64 = 0.1;
-static MAX_TIME: f64 = 200.0;
+{{#rustdoc_include ../../models/disease_model/src/main.rs:header}}
 // ...the rest of the file...
 ```
 

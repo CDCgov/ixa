@@ -1,4 +1,3 @@
-/* ANCHOR: all */
 use ixa::prelude::*;
 use ixa::trace;
 
@@ -29,4 +28,3 @@ pub fn init(context: &mut Context) {
     }
 }
 // ANCHOR_END: init
-/* ANCHOR_END: all */
