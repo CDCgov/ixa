@@ -20,23 +20,24 @@ just a starting point. It is _not_ intended to be:
 We introduce modeling in Ixa by implementing a simple model for a food-borne
 illness where infection events follow a **Poisson process**. We assume that each
 susceptible person has a constant risk of becoming infected over time,
-independent of past infections. The Poisson process describes events
-(infections) occurring randomly in time but with a constant rate.
+independent of other infections.
+
+> [!WARNING] This is not the typical SIR model
+> While this model has susceptible, infected, and recovered disease states,
+> it is different from the
+> [canonical "SIR" model](<https://en.wikipedia.org/wiki/Compartmental_models_(epidemiology)#The_SIR_model>).
+> In this model, the risk of infection does not depend on the prevalence of
+> infected persons. Put another way, the people in the model can become
+> _infected_ but they are not _infectious_.
 
 In this model, each individual susceptible person has an exponentially
-distributed time until they are infected. This means the time between successive
-infection events follows an exponential distribution. The rate of infection is
-typically expressed as a **force of infection**, which is a measure of the risk
-of a susceptible individual contracting the disease. In the case of a food-borne
-illness, this force is constant, meaning each susceptible individual faces a
-fixed probability per unit time of becoming infected, independent of the number
-of people already infected. Infected individuals subsequently recovery and
-cannot be re-infected. (Note that while this model has S, I, and R compartments,
-it is different from the
-[canonical "SIR" model](<https://en.wikipedia.org/wiki/Compartmental_models_(epidemiology)#The_SIR_model>).
-In our simple model, the force of infection does not depend on the prevalence of
-infected persons. Put another way, our "I" compartment consists merely of
-_infected_ persons; they are not _infectious_.)
+distributed time until they are infected. The rate of infections is referred to
+as the **force of infection**, and the mean time to infection for each individual
+is the inverse of the force of infection. (It follows that the time between
+successive infection events is also exponentially distributed.)
+
+Infected individuals subsequently recover and
+cannot be re-infected. The times to recovery are exponentially distributed.
 
 ## High-level view of how Ixa functions
 
@@ -51,24 +52,27 @@ concepts we need to understand about models in Ixa are:
    model and is the primary way code interacts with anything in the running
    model.
 2. **Timeline:** A future event list of the simulation, the timeline is a queue
-   of `Callback` objects -called _plans_ - that will assume control of the
+   of `Callback` objects, called _plans_, that will assume control of the
    `Context` at a future point in time and execute the logic in the plan.
 3. **Plan:** A piece of logic scheduled to execute at a certain time on the
    timeline. Plans are added to the timeline through the `Context`.
-4. **Agents:** Generally people in a disease model, agents are the entities that
+4. **Entities:** Generally people in a disease model, the entities in the model
    dynamically interact over the course of the simulation. Data can be
-   associated with agents as properties—"people properties" in our case.
-5. **Property:** Data attached to an agent.
+   associated with entities as _properties_.
+5. **Property:** Data attached to an entity. In our case, we have _people properties_.
 6. **Module:** An organizational unit of functionality. Simulations are
    constructed out of a series of interacting modules that take turns
-   manipulating the Context through a mutable reference. Modules store data in
+   manipulating the `Context` through a mutable reference. Modules store data in
    the simulation using the `DataPlugin` trait that allows them to retrieve data
    by type.
-7. **Event:** Modules can also emit 'events' that other modules can subscribe to
+7. **Event:** Modules can also emit _events_ that other modules can subscribe to
    handle by event type. This allows modules to broadcast that specific things
    have occurred and have other modules take turns reacting to these
    occurrences. An example of an event might be a person becoming infected by a
    disease.
+
+> [!TIP]
+> The term "agent" is sometimes used as a synonym for "entity."
 
 ## The organization of a model's implementation
 

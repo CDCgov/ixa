@@ -1,4 +1,4 @@
-# The Incident Reporter
+# The Incidence Reporter
 
 An agent-based model does not output an answer at the end of a simulation in the
 usual sense. Rather, the simulation evolves the state of the world over time. If

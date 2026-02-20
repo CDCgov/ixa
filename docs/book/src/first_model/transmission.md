@@ -10,12 +10,12 @@ manager. Create the file `src/transmission_manager.rs` and add
 use ixa::Context;
 
 fn attempt_infection(context: &mut Context) {
-
+  // attempt an infection...
 }
 
 pub fn init(context: &mut Context) {
- trace!("Initializing transmission manager");
-
+  trace!("Initializing transmission manager");
+  // initialize the transmission manager...
 }
 ```
 
@@ -23,10 +23,29 @@ pub fn init(context: &mut Context) {
 
 Recall our abstract model: We assume that each susceptible person has a constant
 risk of becoming infected over time, independent of past infections, expressed
-as a force of infection. Mathematically, this results in an exponentially
-distributed duration between infection events. So we need to represent the
-constant `FORCE_OF_INFECTION` and a random number source to sample exponentially
-distributed random time durations.
+as a force of infection.
+
+There are at least three ways to implement this model:
+
+1. At the start of the simulation, schedule each person's infection. This approach
+   is possible because, in this model, everyone will eventually be infected, and all
+   infections occur independently of one another.
+2. At the start of the simulation, schedule a single infection. When that infection occurs,
+   schedule the next infection. If, for each susceptible person, the time to infection
+   is exponentially distributed, then the time until the next infection of _any_
+   susceptible person in the simulation is also exponentially distributed, with a rate
+   equal to the force of infection times the number of susceptibles. Upon any one
+   infection, we select the next infectee at random from the remaining susceptibles
+   and schedule their infection.
+3. Schedule infection _attempts_, occurring at a rate equal to the force of infection
+   times the total number of people. Upon any one infection attempt, we check if the
+   attempted infectee is susceptible, and, if so, infect them. We then select the next
+   attempted infectee at random from the entire population, and schedule their attempted
+   infection. Infection attempts occur at a rate equal to the force of infection times
+   the total number of people.
+
+These three approaches are mathematically equivalent. Here we demonstrate the third
+approach because it is the simplest to implement in ixa.
 
 We have already dealt with constants when we defined the constant `POPULATION`
 in `main.rs`. Let's define `FORCE_OF_INFECTION` right next to it. We also cap
@@ -36,14 +55,7 @@ error.
 
 ```rust
 // main.rs
-mod people;
-mod transmission_manager;
-
-use ixa::Context;
-
-static POPULATION: u64 = 1000;
-static FORCE_OF_INFECTION: f64 = 0.1;
-static MAX_TIME: f64 = 200.0;
+{{#rustdoc_include ../../models/disease_model/src/main.rs:header}}
 // ...the rest of the file...
 ```
 
@@ -82,10 +94,6 @@ accomplishes the three tasks above. A few observations:
   "empty query" `()`, which means we want to sample from the entire population.
   The population will never be empty, so the result will never be `None`, and so
   we just call `unwrap()` on the `Some(PersonId)` value to get the `PersonId`.
-- The `#[allow(clippy::cast_precision_loss)]` is optional; without it the
-  compiler will warn you about converting `population` 's integral type `usize`
-  to the floating point type `f64`, but we know that this conversion is safe to
-  do in this context.
 - If the sampled person is not susceptible, then the only thing this function
   does is schedule the next attempt at infection.
 - The time at which the next attempt is scheduled is sampled randomly from the

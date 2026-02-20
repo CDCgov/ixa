@@ -19,10 +19,12 @@ fn attempt_infection(context: &mut Context) {
         context.set_property(person_to_infect, InfectionStatus::I);
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap())
-            / POPULATION as f64;
+    let current_time = context.get_current_time();
+    let delay_to_next_attempt = context.sample_distr(
+        TransmissionRng,
+        Exp::new(FORCE_OF_INFECTION * POPULATION as f64).unwrap(),
+    );
+    let next_attempt_time = current_time + delay_to_next_attempt;
 
     context.add_plan(next_attempt_time, attempt_infection);
 }

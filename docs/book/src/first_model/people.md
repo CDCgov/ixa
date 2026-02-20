@@ -16,6 +16,8 @@ a new file in the `src` directory called `people.rs`.
 ## Defining an Entity and Property
 
 ```rust
+// people.rs
+
 {{#rustdoc_include ../../models/disease_model/src/people.rs:define_property}}
 ```
 
@@ -50,11 +52,11 @@ For our `people` module, the `init()` function just inserts people into the
 `Context`.
 
 ```rust
-/// Populates the "world" with people.
+// Populates the "world" with people.
 pub fn init(context: &mut Context) {
    trace!("Initializing people");
 
-   for _ in 0..1000 {
+   for _ in 0..100 {
       let _: PersonId = context.add_entity(()).expect("failed to add person");
    }
 }
@@ -81,12 +83,12 @@ would need to explicitly specify the entity type using
 
 ## Constants
 
-Having "magic numbers" embedded in your code, such as the constant `1000` here
+Having "magic numbers" embedded in your code, such as the constant `100` here
 representing the total number of people in our model, is **_bad practice_**.
 What if we want to change this value later? Will we even be able to find it in
 all of our source code? Ixa has a formal mechanism for managing these kinds of
 model parameters, but for now we will just define a "static constant" near the
-top of `src/main.rs` named `POPULATION` and replace the literal `1000` with
+top of `src/main.rs` named `POPULATION` and replace the literal `100` with
 `POPULATION`:
 
 ```rust
@@ -115,6 +117,5 @@ defined items are coming from, so we need to have `use` statements at the top of
 the file to import those items. Here is the complete `src/people.rs` file:
 
 ```rust
-//people.rs
-{{#rustdoc_include ../../models/disease_model/src/people.rs:all}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs}}
 ```
