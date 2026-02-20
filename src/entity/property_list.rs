@@ -131,7 +131,7 @@ macro_rules! impl_property_list {
     };
 }
 
-// Generate impls for tuple lengths 2 through 10.
-seq!(Z in 2..=5 {
+// Generate impls for tuple lengths 2 through 20. (The 0 and 1 case are implemented above.)
+seq!(Z in 2..=20 {
     impl_property_list!(Z);
 });
