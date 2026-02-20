@@ -1011,7 +1011,7 @@ mod tests {
         }
 
         context.with_query_results(((Name("John"), Age(42), Weight(220.5)),), &mut |results| {
-            assert_eq!(results.len(), 1);
+            assert_eq!(results.into_iter().count(), 1);
         });
     }
 
