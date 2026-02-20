@@ -193,8 +193,8 @@ macro_rules! impl_query {
     }
 }
 
-// Implement the versions with 2..10 parameters. (The 1 case is implemented above.)
-seq!(Z in 2..10 {
+// Implement the versions with 2..20 parameters. (The 1 case is implemented above.)
+seq!(Z in 2..20 {
     impl_query!(Z);
 });
 
