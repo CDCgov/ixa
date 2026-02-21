@@ -58,6 +58,20 @@ impl<E: Entity> PropertyList<E> for () {
     }
 }
 
+// An Entity ZST itself is an empty `PropertyList` for that entity.
+// This allows `context.add_entity(Person)` instead of `context.add_entity(())`.
+impl<E: Entity + Copy> PropertyList<E> for E {
+    fn validate() -> Result<(), IxaError> {
+        Ok(())
+    }
+    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
+        property_type_ids.is_empty()
+    }
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+}
+
 // ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
 //     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
 //     whether the conflict actually exists.

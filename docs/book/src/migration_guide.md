@@ -126,33 +126,32 @@ These macros automatically create a type alias of the form
 
 ### Adding a new entity (e.g. a new person)
 
-Adding a new entity with multiple property values using the `q!` macro:
+Adding a new entity with only default property values by passing the entity type
+directly:
+
+```rust
+let person_id = context.add_entity(Person).unwrap();
+```
+
+(This example assumes there are no required properties, that is, that every
+property has a default value.)
+
+Adding a new entity with property values using the `q!` macro:
 
 ```rust
 let person_id = context.add_entity(q!(Person, Age(25), InfectionStatus::Infected)).unwrap();
 ```
 
-Observe:
-
-- The `q!` macro takes the entity type as its first argument, followed by any
-  property values. The properties must be distinct, of course, and there must be
-  a value for every "required" property, that is, for every (non-derived)
-  property that doesn't have a default value.
+The `q!` macro takes the entity type as its first argument, followed by any
+property values. The properties must be distinct, of course, and there must be
+a value for every "required" property, that is, for every (non-derived)
+property that doesn't have a default value.
 
 Adding a new entity with just one property value:
 
 ```rust
 let person_id = context.add_entity(q!(Person, Age(25))).unwrap();
 ```
-
-Adding a new entity with only default property values:
-
-```rust
-let person_id = context.add_entity(q!(Person)).unwrap();
-```
-
-(This example assumes there are no required properties, that is, that every
-property has a default value.)
 
 ### Getting a property value for an entity
 

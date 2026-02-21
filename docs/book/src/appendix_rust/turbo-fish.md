@@ -39,51 +39,35 @@ value, we don't need to supply a value for it when calling
 create based on the property values we supply, and if we don't supply _any_
 property values, we need another way to specify the entity to create.
 
+The simplest way is to pass the entity type directly:
+
+```rust
+context.add_entity(Person).expect("failed to add person");
+```
+
 The `Context::add_entity` function is actually a whole family of functions
 `Context::add_entity\<E: Entity, PL: PropertyList>`, one function for each
 concrete `Entity` type `E` and `PropertyList` type `PL`. When we call
 `context.add_entity(...)` in our code with a tuple of properties (the
 initialization list), the Rust compiler looks at the initialization list and
-uses it to infer the concrete types `E` and `PL`. But when the initialization
+uses it to infer the concrete types `E` and `PL`. When the initialization
 list is `PL=()` (the empty list), the compiler doesn't know what the `Entity`
-type `E` should be. The Rust language allows us to tell it explicitly using the
-"turbo fish" notation:
+type `E` should be. You can avoid this problem entirely by passing the entity
+type directly as shown above. Alternatively, you can use turbo fish notation or
+specify the return type:
 
 ```rust
-context.add_entity::<Person, ()>(()).expect("failed to add person");
-```
-
-Actually, the compiler _always_ already knows the `PropertyList` type `PL`, so
-we can use the "wildcard" `_` (underscore) to tell the compiler to infer that
-type itself:
-
-```rust
+// Turbo fish notation
 context.add_entity::<Person, _>(()).expect("failed to add person");
-```
 
-There is another way to give the compiler enough information to infer the
-`Entity` type, namely by specifying the return type we are expecting. In our
-case, we just throw the returned `PersonId` away, but suppose we want to refer
-to the newly created person. We could write:
-
-```rust
+// Specifying the return type
 let person_id: PersonId = context.add_entity(()).expect("failed to add person");
-```
-
-The `Entity` type `E` must be `Person`, because that is the only way
-`Context::add_entity\<E: Entity, PL: PropertyList>` can return a `PersonId` (a
-type alias for `EntityId\<Person>`). You can use this trick even if you never
-use the returned `PersonId`, but in such a case it's best practice to signal
-this intent by using the special "don't care" variable `_` (underscore):
-
-```rust
-let _: PersonId = context.add_entity(()).expect("failed to add person");
 ```
 
 You do not have to learn the rules for when specifying the types using turbo
 fish notation is required. The compiler will let you know. For `add_entity`,
-always specifying the returned type means you'll never have to worry about turbo
-fish notation.
+passing the entity type directly or specifying the returned type means you'll
+never have to worry about turbo fish notation.
 
 ## Preferred Idiom for `Context::sample_entity()`
 

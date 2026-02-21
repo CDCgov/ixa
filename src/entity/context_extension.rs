@@ -485,6 +485,14 @@ mod tests {
         assert_eq!(context.get_entity_count::<Person>(), 3);
     }
 
+    #[test]
+    fn add_entity_with_zst() {
+        let mut context = Context::new();
+        let animal = context.add_entity(Animal).unwrap();
+        assert_eq!(context.get_entity_count::<Animal>(), 1);
+        assert_eq!(context.get_property::<Animal, Legs>(animal), Legs(4));
+    }
+
     // Helper for index tests
     #[derive(Copy, Clone)]
     enum IndexMode {
