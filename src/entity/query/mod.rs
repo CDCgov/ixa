@@ -15,7 +15,7 @@ use crate::{Context, IxaError};
 
 /// A newtype wrapper that associates a tuple of property values with an entity type.
 ///
-/// This is not meant to be used directly, but rather as a backing for the all! macro/
+/// This is not meant to be used directly, but rather as a backing for the with! macro/
 /// a replacement for the query tuple.
 ///
 /// # Example
@@ -26,7 +26,7 @@ use crate::{Context, IxaError};
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 ///
 /// // Use the all macro
-/// let query = all!(Person, Age(42));
+/// let query = with!(Person, Age(42));
 /// // Under the hood this is:
 /// // EntityPropertyTuple::<Person>::new((Age(42),));
 /// ```
@@ -627,42 +627,42 @@ mod tests {
 
     #[test]
     fn all_macro_no_properties() {
-        use crate::all;
+        use crate::with;
 
         let mut context = Context::new();
         let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
         let _ = context.add_entity((Age(30), RiskCategory::Low)).unwrap();
 
-        // all!(Person) should match all Person entities
-        let query = all!(Person);
+        // with!(Person) should match all Person entities
+        let query = with!(Person);
         assert_eq!(context.query_entity_count(query), 2);
     }
 
     #[test]
     fn all_macro_single_property() {
-        use crate::all;
+        use crate::with;
 
         let mut context = Context::new();
         let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
         let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
         let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
 
-        // all!(Person, Age(42)) should match entities with Age = 42
-        let query = all!(Person, Age(42));
+        // with!(Person, Age(42)) should match entities with Age = 42
+        let query = with!(Person, Age(42));
         assert_eq!(context.query_entity_count(query), 2);
     }
 
     #[test]
     fn all_macro_multiple_properties() {
-        use crate::all;
+        use crate::with;
 
         let mut context = Context::new();
         let p1 = context.add_entity((Age(42), RiskCategory::High)).unwrap();
         let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
         let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
 
-        // all!(Person, Age(42), RiskCategory::High) should match one entity
-        let query = all!(Person, Age(42), RiskCategory::High);
+        // with!(Person, Age(42), RiskCategory::High) should match one entity
+        let query = with!(Person, Age(42), RiskCategory::High);
         assert_eq!(context.query_entity_count(query), 1);
 
         context.with_query_results(query, &mut |people| {
@@ -672,16 +672,16 @@ mod tests {
 
     #[test]
     fn all_macro_with_trailing_comma() {
-        use crate::all;
+        use crate::with;
 
         let mut context = Context::new();
         let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
 
         // Trailing comma should work
-        let query = all!(Person, Age(42),);
+        let query = with!(Person, Age(42));
         assert_eq!(context.query_entity_count(query), 1);
 
-        let query = all!(Person, Age(42), RiskCategory::High,);
+        let query = with!(Person, Age(42), RiskCategory::High);
         assert_eq!(context.query_entity_count(query), 1);
     }
 
@@ -713,12 +713,12 @@ mod tests {
 
     #[test]
     fn all_macro_as_property_list_for_add_entity() {
-        use crate::all;
+        use crate::with;
 
         let mut context = Context::new();
 
-        // Use all! macro result to add an entity
-        let props = all!(Person, Age(42), RiskCategory::High);
+        // Use with! macro result to add an entity
+        let props = with!(Person, Age(42), RiskCategory::High);
         let person = context.add_entity(props).unwrap();
 
         // Verify the entity was created with the correct properties

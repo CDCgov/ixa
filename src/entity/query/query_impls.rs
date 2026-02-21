@@ -43,6 +43,40 @@ impl<E: Entity> Query<E> for () {
     }
 }
 
+// An Entity ZST itself is an empty query matching all entities of that type.
+// This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
+impl<E: Entity + Copy> Query<E> for E {
+    fn get_query(&self) -> Vec<(usize, HashValueType)> {
+        Vec::new()
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        Vec::new()
+    }
+
+    fn multi_property_id(&self) -> Option<usize> {
+        None
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        let empty: &[u128] = &[];
+        one_shot_128(&empty)
+    }
+
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+        let population_iterator = context.get_entity_iterator::<E>();
+        EntitySetIterator::from_population_iterator(population_iterator)
+    }
+
+    fn match_entity(&self, _entity_id: EntityId<E>, _context: &Context) -> bool {
+        true
+    }
+
+    fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
+        // Nothing to do.
+    }
+}
+
 // Implement the query version with one parameter.
 impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
