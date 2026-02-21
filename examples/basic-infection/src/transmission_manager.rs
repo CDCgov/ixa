@@ -10,7 +10,7 @@ define_rng!(TransmissionRng);
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
     let population_size: usize = context.get_entity_count::<Person>();
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
+    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, Person).unwrap();
 
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
@@ -52,7 +52,7 @@ mod test {
     fn test_attempt_infection() {
         let mut context = Context::new();
         context.init_random(SEED);
-        let person_id: PersonId = context.add_entity(()).unwrap();
+        let person_id = context.add_entity(Person).unwrap();
         attempt_infection(&mut context);
         let person_status: InfectionStatus = context.get_property(person_id);
         assert_eq!(person_status, InfectionStatus::I);
