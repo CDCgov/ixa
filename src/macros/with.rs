@@ -4,18 +4,18 @@
 ///
 /// ```ignore
 /// // Add an entity with default properties
-/// let query = q!(Person);
+/// let query = with!(Person);
 /// context.add_entity(query)?;
 ///
 /// // An inline query matching a single property
-/// let person = context.sample_entity(MyRng, q!(Person, Age(12)))?;
+/// let person = context.sample_entity(MyRng, with!(Person, Age(12)))?;
 ///
 /// // A query matching multiple properties
-/// let query = q!(Person, Age(12), RiskCategory::High);
+/// let query = with!(Person, Age(12), RiskCategory::High);
 /// let count = context.count_entities(query);
 /// ```
 #[macro_export]
-macro_rules! q {
+macro_rules! with {
     // No properties - generates empty tuple query
     ($entity:ty) => {
         $crate::EntityPropertyTuple::<$entity, _>::new(())
@@ -48,9 +48,9 @@ mod tests {
     fn all_macro_with_add_entity() {
         let mut context = Context::new();
 
-        // Use q! macro to add an entity
+        // Use with! macro to add an entity
         let person = context
-            .add_entity(q!(TestPerson, Age(42), Risk::High))
+            .add_entity(with!(TestPerson, Age(42), Risk::High))
             .unwrap();
 
         // Verify properties were set correctly
@@ -65,17 +65,18 @@ mod tests {
 
         // Add some entities
         let p1 = context
-            .add_entity(q!(TestPerson, Age(30), Risk::High))
+            .add_entity(with!(TestPerson, Age(30), Risk::High))
             .unwrap();
         let _ = context
-            .add_entity(q!(TestPerson, Age(30), Risk::Low))
+            .add_entity(with!(TestPerson, Age(30), Risk::Low))
             .unwrap();
         let _ = context
-            .add_entity(q!(TestPerson, Age(25), Risk::High))
+            .add_entity(with!(TestPerson, Age(25), Risk::High))
             .unwrap();
 
         // Sample from entities matching the query
-        let sampled = context.sample_entity(AllMacroTestRng, q!(TestPerson, Age(30), Risk::High));
+        let sampled =
+            context.sample_entity(AllMacroTestRng, with!(TestPerson, Age(30), Risk::High));
         assert_eq!(sampled, Some(p1));
     }
 
@@ -86,15 +87,16 @@ mod tests {
 
         // Add some entities that don't match the query
         let _ = context
-            .add_entity(q!(TestPerson, Age(30), Risk::Low))
+            .add_entity(with!(TestPerson, Age(30), Risk::Low))
             .unwrap();
 
         // Sample should return None when no entities match
-        let sampled = context.sample_entity(AllMacroTestRng, q!(TestPerson, Age(30), Risk::High));
+        let sampled =
+            context.sample_entity(AllMacroTestRng, with!(TestPerson, Age(30), Risk::High));
         assert_eq!(sampled, None);
     }
 
-    // Demonstrate that `q!` can disambiguate entities in otherwise ambiguous cases.
+    // Demonstrate that `with!` can disambiguate entities in otherwise ambiguous cases.
     use crate::entity::EntityId;
     define_entity!(TestMammal);
     define_entity!(TestAvian);
@@ -105,14 +107,18 @@ mod tests {
     fn all_macro_disambiguates_entities() {
         let mut context = Context::new();
 
-        context.add_entity(q!(TestAvian, IsBipedal(true))).unwrap();
-        context.add_entity(q!(TestMammal, IsBipedal(true))).unwrap();
+        context
+            .add_entity(with!(TestAvian, IsBipedal(true)))
+            .unwrap();
+        context
+            .add_entity(with!(TestMammal, IsBipedal(true)))
+            .unwrap();
 
-        let result = context.query_result_iterator(q!(TestMammal, IsBipedal(true)));
+        let result = context.query_result_iterator(with!(TestMammal, IsBipedal(true)));
         assert_eq!(result.count(), 1);
 
         let sampled_id = context
-            .sample_entity(AllMacroTestRng, q!(TestAvian, IsBipedal(true)))
+            .sample_entity(AllMacroTestRng, with!(TestAvian, IsBipedal(true)))
             .unwrap();
         let expected_id: EntityId<TestAvian> = EntityId::new(0);
         assert_eq!(sampled_id, expected_id);

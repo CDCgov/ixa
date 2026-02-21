@@ -136,13 +136,13 @@ let person_id = context.add_entity(Person).unwrap();
 (This example assumes there are no required properties, that is, that every
 property has a default value.)
 
-Adding a new entity with property values using the `q!` macro:
+Adding a new entity with property values using the `with!` macro:
 
 ```rust
-let person_id = context.add_entity(q!(Person, Age(25), InfectionStatus::Infected)).unwrap();
+let person_id = context.add_entity(with!(Person, Age(25), InfectionStatus::Infected)).unwrap();
 ```
 
-The `q!` macro takes the entity type as its first argument, followed by any
+The `with!` macro takes the entity type as its first argument, followed by any
 property values. The properties must be distinct, of course, and there must be
 a value for every "required" property, that is, for every (non-derived)
 property that doesn't have a default value.
@@ -150,7 +150,7 @@ property that doesn't have a default value.
 Adding a new entity with just one property value:
 
 ```rust
-let person_id = context.add_entity(q!(Person, Age(25))).unwrap();
+let person_id = context.add_entity(with!(Person, Age(25))).unwrap();
 ```
 
 ### Getting a property value for an entity

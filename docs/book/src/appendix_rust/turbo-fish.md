@@ -27,7 +27,7 @@ methods can usually be inferred by the compiler:
 ```rust
 // A silly example, but no turbo fish is required.
 context.with_query_results(
-    q!(Person, Age(30), Alive(true)),
+    with!(Person, Age(30), Alive(true)),
     |people_set| println("{:?}", people_set)
 );
 ```
