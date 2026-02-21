@@ -57,16 +57,14 @@ pub fn init(context: &mut Context) {
    trace!("Initializing people");
 
    for _ in 0..100 {
-      let _ = context.add_entity(q!(Person)).expect("failed to add person");
+      let _ = context.add_entity(Person).expect("failed to add person");
    }
 }
 ```
 
-We use the `q!` macro to create a query that specifies which entity type to
-create. Here, `q!(Person)` with no additional property values means we want a
-new `Person` with all default property values—our one and only `Property` was
-defined to have a default value of `InfectionStatus::S` (susceptible), so no
-additional information is needed.
+We use `Person` here to represent a new entity with all default property values–
+our one and only `Property` was defined to have a default value of
+`InfectionStatus::S` (susceptible), so no additional information is needed.
 
 The `.expect("failed to add person")` method call handles the case where adding
 a person could fail. We could intercept that failure if we wanted, but in this

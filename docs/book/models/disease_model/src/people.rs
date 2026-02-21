@@ -21,11 +21,10 @@ define_property!(
 
 // ANCHOR: init
 /// Populates the "world" with the `POPULATION` number of people.
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
+pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
-        let _ = context.add_entity(Person)?;
+        let _ = context.add_entity(Person).expect("failed to add person");
     }
-    Ok(())
 }
 // ANCHOR_END: init

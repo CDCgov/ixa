@@ -88,11 +88,12 @@ The function `attempt_infection()` needs to do the following:
 Read through this implementation and make sure you understand how it
 accomplishes the three tasks above. A few observations:
 
-- The method call `context.sample_entity(TransmissionRng, q!(Person))` takes the
+- The method call `context.sample_entity(TransmissionRng, Person)` takes the
   name of a random number source and a query and returns an `Option\<PersonId>`,
   which can have the value of `Some(PersonId)` or `None`. In this case, we use
-  the `q!` macro with just the entity type `Person` and no property filters,
-  which means we want to sample from the entire population. The population will
+  `Person` and no property filters, which means we want to sample from the
+  entire population. If we wanted to, we could pass filters with the `q!` macro
+  (e.g., `q!(Person, Region("California"))`) The population will
   never be empty, so the result will never be `None`, and so we just call
   `unwrap()` on the `Some(PersonId)` value to get the `PersonId`.
 - If the sampled person is not susceptible, then the only thing this function
