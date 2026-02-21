@@ -6,116 +6,7 @@ once. A nice feature of Rust is that the compiler can often infer the generic
 types at the point the function is used instead of relying on the programmer to
 specify the types explicitly.
 
-## An example with `Context::add_entity()`
-
-Suppose we want to initialize a population:
-
-```rust
-define_entity!(Person);
-define_property!(
-    // The type of the property
-    enum InfectionStatus {S,I,R},
-    // The entity the property is associated with
-    Person,
-    // The property's default value for newly created `Person` entities
-    default_const = InfectionStatus::S
-);
-
-/// Populates the "world" with people.
-pub fn init(context: &mut Context) {
-    for _ in 0..1000 {
-        context.add_entity((InfectionStatus::S, )).expect("failed to add person");
-    }
-}
-```
-
-During the initialization of our population, we explicitly told ixa to create a
-new _susceptible_ person, that is, with the `InfectionStatus::S` property value.
-However, when we defined the `InfectionStatus` property with the
-`define_property!` macro, we specified a default initial value with
-`default_const = InfectionStatus::S`. Since `InfectionStatus` has a default
-value, we don't need to supply a value for it when calling
-`context.add_entity(...)`. But remember, the compiler infers _which_ entity to
-create based on the property values we supply, and if we don't supply _any_
-property values, we need another way to specify the entity to create.
-
-The simplest way is to pass the entity type directly:
-
-```rust
-context.add_entity(Person).expect("failed to add person");
-```
-
-The `Context::add_entity` function is actually a whole family of functions
-`Context::add_entity\<E: Entity, PL: PropertyList>`, one function for each
-concrete `Entity` type `E` and `PropertyList` type `PL`. When we call
-`context.add_entity(...)` in our code with a tuple of properties (the
-initialization list), the Rust compiler looks at the initialization list and
-uses it to infer the concrete types `E` and `PL`. When the initialization
-list is `PL=()` (the empty list), the compiler doesn't know what the `Entity`
-type `E` should be. You can avoid this problem entirely by passing the entity
-type directly as shown above. Alternatively, you can use turbo fish notation or
-specify the return type:
-
-```rust
-// Turbo fish notation
-context.add_entity::<Person, _>(()).expect("failed to add person");
-
-// Specifying the return type
-let person_id: PersonId = context.add_entity(()).expect("failed to add person");
-```
-
-You do not have to learn the rules for when specifying the types using turbo
-fish notation is required. The compiler will let you know. For `add_entity`,
-passing the entity type directly or specifying the returned type means you'll
-never have to worry about turbo fish notation.
-
-## Preferred Idiom for `Context::sample_entity()`
-
-The `Context::sample_entity()` method especially deserves discussion, because we
-often want to immediately use the returned value. If we try to use the standard
-Rust idiom to express this, we have to specify the types using turbo fish, which
-is awkward and ugly:
-
-```rust
-// Sample from the entire population by supplying the "empty" query. The last two `_`s are for the query type and
-// RNG type, both of which the compiler can infer.
-if let Some(person_id) = context.sample_entity::<Person, _, _>(TransmissionRng, ()) {
-    // Do something with `person_id`...
-}
-```
-
-Since we are sampling from the entire population, if `sample_entity` returns
-`None`, then the population is empty, and we clearly have a bug in our code, in
-which case the best thing to do is to crash the program and fix the bug. Thus,
-instead of the `if let Some(...) =` construct, it's actually better to just call
-`unwrap` on the returned value in this case. Here is a much more readable and
-simple way to write the code:
-
-```rust
-// Sample from the entire population by supplying the "empty" query. The compiler infers which entity to sample
-// from the type of the variable we assign to.
-let person_id: PersonId = context.sample_entity(()).unwrap();
-// Do something with `person_id`...
-```
-
-If you really want to check for the `None` case in your code, assign the return
-value to a variable of type `Option\<PersonId>` instead of immediately
-unwrapping the `PersonId` value. Then you can use `if let Some(...) =` or a
-`match` statement at your preference:
-
-```rust
-let maybe_person_id: Option<PersonId> = context.sample_entity(());
-match maybe_person_id {
-    Some(person_id) => {
-        // Do something with `person_id`
-    }
-    None => {
-        // Handle the empty population case
-    }
-}
-```
-
-## Other Examples
+## Examples
 
 The compiler's ability to infer the types of generic functions means that for
 most of the common functions the types do not need to be specified with turbo
@@ -130,14 +21,13 @@ let status: InfectionStatus = context.get_property(person_id);
 context.set_property(other_person_id, status);
 ```
 
-As with `Context::add_entity`, the generic types for querying and sampling
-methods can usually be inferred by the compiler except when the "empty" query is
-provided:
+The generic types for querying and sampling
+methods can usually be inferred by the compiler:
 
 ```rust
 // A silly example, but no turbo fish is required.
 context.with_query_results(
-    (Age(30), Alive(true)),
+    q!(Person, Age(30), Alive(true)),
     |people_set| println("{:?}", people_set)
 );
 ```
