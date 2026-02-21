@@ -126,48 +126,32 @@ These macros automatically create a type alias of the form
 
 ### Adding a new entity (e.g. a new person)
 
-Adding a new entity with multiple property values:
+Adding a new entity with multiple property values using the `q!` macro:
 
 ```rust
-// Assuming the `Person` entity is defined somewhere.
-// Add a new entity (a person in this case) to an existing `Context` instance we have access to.
-let person_id = context.add_entity((Age(25), InfectionStatus::Infected)).unwrap();
+let person_id = context.add_entity(q!(Person, Age(25), InfectionStatus::Infected)).unwrap();
 ```
 
 Observe:
 
-- The compiler is smart enough to know that we are adding a new `Person` entity
-  because we supplied a list of property values that are properties for a
-  `Person`.
-- The `add_entity` function takes a "property list", which is just a tuple of
+- The `q!` macro takes the entity type as its first argument, followed by any
   property values. The properties must be distinct, of course, and there must be
   a value for every "required" property, that is, for every (non-derived)
   property that doesn't have a default value.
-- A single-property tuple uses the syntax `(Age(25), )`. Notice the awkward
-  trailing comma, which lets the compiler know the parentheses are defining a
-  tuple rather than functioning as grouping an expression.
 
 Adding a new entity with just one property value:
 
 ```rust
-// Assuming the `Person` entity is defined somewhere.
-// Add a new entity (a person in this case) to an existing `Context` instance we have access to.
-let person_id = context.add_entity((Age(25), )).unwrap();
+let person_id = context.add_entity(q!(Person, Age(25))).unwrap();
 ```
 
 Adding a new entity with only default property values:
 
 ```rust
-// If you specify the `EntityId\<E>` return type, the compiler uses it to infer which entity to add.
-// This is a good practice and avoids the special "turbo fish" syntax.
-let person_id: PersonId = context.add_entity(()).unwrap();
-
-// If we don't specify the `EntityId\<E>` type, we have to explicitly tell the compiler *which* entity
-// type we are adding, as there is nothing from which to infer the entity type.
-let person_id = context.add_entity::<Person, _>(()).unwrap();
+let person_id = context.add_entity(q!(Person)).unwrap();
 ```
 
-(These two examples assume there are no required properties, that is, that every
+(This example assumes there are no required properties, that is, that every
 property has a default value.)
 
 ### Getting a property value for an entity

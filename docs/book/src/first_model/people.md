@@ -57,29 +57,27 @@ pub fn init(context: &mut Context) {
    trace!("Initializing people");
 
    for _ in 0..100 {
-      let _: PersonId = context.add_entity(()).expect("failed to add person");
+      let _ = context.add_entity(q!(Person)).expect("failed to add person");
    }
 }
 ```
 
-The `context.add_entity()` method call might look a little odd, because we are
-not giving `context` any data to insert, but that is because our one and only
-`Property` was defined to have a default value of `InfectionStatus::S`
-(susceptible)—so `context.add_entity()` doesn't need any information to create a
-new person. Another odd thing is the `.expect("failed to add person")` method
-call. In more complicated scenarios adding a person can fail. We could intercept
-that failure if we wanted, but in this simple case we will just let the program
-crash with a message about the reason: "failed to add person".
+We use the `q!` macro to create a query that specifies which entity type to
+create. Here, `q!(Person)` with no additional property values means we want a
+new `Person` with all default property values—our one and only `Property` was
+defined to have a default value of `InfectionStatus::S` (susceptible), so no
+additional information is needed.
 
-Finally, the `Context::add_entity` method returns an entity ID wrapped in a
-`Result`, which the `expect` method unwraps. We can use this ID if we need to
-refer to this newly created person. Since we don't need it, we assign the value
-to the special "don't care" variable `_` (underscore), which just throws the
-value away. Why assign it to anything, though? So that the compiler can infer
-that it is a `Person` we are creating, as opposed to some other entity we may
-have defined. If we just omitted the `let _: PersonId =` part completely, we
-would need to explicitly specify the entity type using
-[turbo fish notation](../appendix_rust/turbo-fish.md).
+The `.expect("failed to add person")` method call handles the case where adding
+a person could fail. We could intercept that failure if we wanted, but in this
+simple case we will just let the program crash with a message about the reason:
+"failed to add person".
+
+The `Context::add_entity` method returns an entity ID wrapped in a `Result`,
+which the `expect` method unwraps. We can use this ID if we need to refer to
+this newly created person. Since we don't need it, we assign the value to the
+special "don't care" variable `_` (underscore), which just throws the value
+away.
 
 ## Constants
 
