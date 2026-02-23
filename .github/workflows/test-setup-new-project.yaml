@@ -35,7 +35,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          project_dir="$(mktemp -d)"
+          temp_root="$(mktemp -d)"
+          project_dir="$temp_root/ixa_project"
+          mkdir -p "$project_dir"
           echo "PROJECT_DIR=$project_dir" >> "$GITHUB_ENV"
           cd "$project_dir"
 
