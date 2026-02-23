@@ -1,0 +1,54 @@
+name: Setup New Project Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  setup-and-run:
+    name: setup-and-run (${{ matrix.flow_name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flow_name: default
+            ixa_branch: ""
+          - flow_name: release
+            ixa_branch: release
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Ensure clippy is installed
+        run: rustup component add clippy
+
+      - name: Create project with setup script
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_dir="$(mktemp -d)"
+          echo "PROJECT_DIR=$project_dir" >> "$GITHUB_ENV"
+          cd "$project_dir"
+
+          if [ -z "${{ matrix.ixa_branch }}" ]; then
+            /bin/bash "${{ github.workspace }}/scripts/setup_new_ixa_project.sh"
+          else
+            /bin/bash "${{ github.workspace }}/scripts/setup_new_ixa_project.sh" "${{ matrix.ixa_branch }}"
+          fi
+
+      - name: cargo run
+        run: cargo run
+        working-directory: ${{ env.PROJECT_DIR }}
+
+      - name: cargo clippy
+        run: cargo clippy
+        working-directory: ${{ env.PROJECT_DIR }}
