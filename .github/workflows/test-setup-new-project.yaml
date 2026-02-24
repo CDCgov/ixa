@@ -21,11 +21,6 @@ jobs:
             ixa_branch: release
 
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-
       - name: Ensure clippy is installed
         run: rustup component add clippy
 
@@ -40,9 +35,9 @@ jobs:
           cd "$project_dir"
 
           if [ -z "${{ matrix.ixa_branch }}" ]; then
-            /bin/bash "${{ github.workspace }}/scripts/setup_new_ixa_project.sh"
+            curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
           else
-            /bin/bash "${{ github.workspace }}/scripts/setup_new_ixa_project.sh" "${{ matrix.ixa_branch }}"
+            curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s "${{ matrix.ixa_branch }}"
           fi
 
       - name: cargo run
