@@ -4,11 +4,10 @@ description = "A basic disease model using the Ixa agent-based modeling framewor
 authors = ["John Doe <jdoe@example.com>"]
 version = "0.1.0"
 edition = "2024"
-publish = false # Do not publish to the Crates.io registry
+publish = false                                                                    # Do not publish to the Crates.io registry
 
 [dependencies]
 csv = "1.3.1"
-# TODO: revert to git dependency before merging
-ixa = { path = "../../../.." }
+ixa = { git = "https://github.com/CDCgov/ixa", branch = "main" }
 rand_distr = "0.5.1"
 serde = { version = "1.0.217", features = ["derive"] }
