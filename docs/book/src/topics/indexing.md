@@ -183,7 +183,8 @@ Suppose we have the properties `AgeGroup` and `InfectionStatus`, and we want to
 speed up queries of these two properties:
 
 ```rust
-let age_and_status = context.query_result_iterator((AgeGroup(30), InfectionStatus::Susceptible)); // Bottleneck
+let query = with!(Person, AgeGroup(30), InfectionStatus::Susceptible);
+let age_and_status = context.query_result_iterator(query); // Bottleneck
 ```
 
 We could index `AgeGroup` and `InfectionStatus` individually, but in this case

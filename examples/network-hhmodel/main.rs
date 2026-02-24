@@ -40,7 +40,7 @@ fn initialize(context: &mut Context) {
     incidence_report::init(context).unwrap();
 
     // Initialize infected person with InfectedBy value equal to their own PersonId
-    let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, ()).unwrap()];
+    let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
 
     #[allow(clippy::vec_init_then_push)]
     seir::init(context, &to_infect);
