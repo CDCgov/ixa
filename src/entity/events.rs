@@ -43,8 +43,19 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
     /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(self: Box<Self>, context: &mut Context) {
         let current_value: P = context.get_property(self.0.entity_id);
-        let property_value_store = context.get_property_value_store_mut::<E, P>();
 
+        // For value change counters
+        if current_value != self.0.previous {
+            let property_value_store = context.get_property_value_store::<E, P>();
+            for counter in &property_value_store.value_change_counters {
+                counter
+                    .borrow_mut()
+                    .update(self.0.entity_id, current_value, context);
+            }
+        }
+
+        // For indexing
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
         property_value_store
             .index
             .add_entity(&current_value.make_canonical(), self.0.entity_id);

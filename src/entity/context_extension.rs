@@ -1,4 +1,6 @@
 use std::any::{Any, TypeId};
+use std::hash::Hash;
+use std::marker::PhantomData;
 
 use crate::entity::entity_set::EntitySetIterator;
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
@@ -6,10 +8,63 @@ use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::Query;
+use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
 use crate::rand::Rng;
-use crate::{warn, Context, ContextRandomExt, IxaError, RngId};
+use crate::{warn, Context, ContextRandomExt, ExecutionPhase, IxaError, IxaEvent, RngId};
+
+struct PeriodicValueChangeCountEvent<E: Entity, PL: PropertyList<E>, P: Property<E>> {
+    counter_id: usize,
+    _marker: PhantomData<(E, PL, P)>,
+}
+
+impl<E: Entity, PL: PropertyList<E>, P: Property<E>> Copy
+    for PeriodicValueChangeCountEvent<E, PL, P>
+{
+}
+
+impl<E: Entity, PL: PropertyList<E>, P: Property<E>> Clone
+    for PeriodicValueChangeCountEvent<E, PL, P>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: Entity, PL: PropertyList<E>, P: Property<E>> IxaEvent
+    for PeriodicValueChangeCountEvent<E, PL, P>
+{
+}
+
+fn schedule_next_periodic_value_change_count_event<
+    E: Entity,
+    PL: PropertyList<E>,
+    P: Property<E>,
+>(
+    context: &mut Context,
+    period: f64,
+    counter_id: usize,
+) {
+    if context.remaining_plan_count() == 0 {
+        return;
+    }
+
+    let next_time = context.get_current_time() + period;
+    context.add_plan_with_phase(
+        next_time,
+        move |context| {
+            context.emit_event(PeriodicValueChangeCountEvent::<E, PL, P> {
+                counter_id,
+                _marker: PhantomData,
+            });
+            schedule_next_periodic_value_change_count_event::<E, PL, P>(
+                context, period, counter_id,
+            );
+        },
+        ExecutionPhase::Last,
+    );
+}
 
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
@@ -47,6 +102,42 @@ pub trait ContextEntitiesExt {
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
     fn index_property_counts<E: Entity, P: Property<E>>(&mut self);
+
+    /// Creates a value change counter for property `P` stratified by `PL`.
+    ///
+    /// Returns the counter ID.
+    fn create_value_change_counter<E, PL, P>(&mut self) -> usize
+    where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash;
+
+    /// Tracks periodic value change counts for counter `counter_id`.
+    ///
+    /// Also panics if `period` is not finite and strictly positive.
+    ///
+    /// The first report runs at `now + period`, in `ExecutionPhase::Last`. After the
+    /// handler returns, the matched counter is cleared.
+    ///
+    /// ```rust,ignore
+    /// let counter_id = context.create_value_change_counter::<Person, (InfectionStatus,), Age>();
+    /// context.track_periodic_value_change_counts::<Person, (InfectionStatus,), Age>(
+    ///     30.0,
+    ///     counter_id,
+    ///     |_context, counter| {
+    ///         let _ = counter;
+    ///     },
+    /// );
+    /// ```
+    fn track_periodic_value_change_counts<E, PL, P>(
+        &mut self,
+        period: f64,
+        counter_id: usize,
+        handler: impl Fn(&Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+    ) where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash;
 
     /// Checks if a property `P` is indexed.
     ///
@@ -233,6 +324,82 @@ impl ContextEntitiesExt for Context {
         }
     }
 
+    fn create_value_change_counter<E, PL, P>(&mut self) -> usize
+    where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash,
+    {
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        property_store.create_value_change_counter::<PL, P>()
+    }
+
+    fn track_periodic_value_change_counts<E, PL, P>(
+        &mut self,
+        period: f64,
+        counter_id: usize,
+        handler: impl Fn(&Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+    ) where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash,
+    {
+        assert!(
+            period > 0.0 && !period.is_nan() && !period.is_infinite(),
+            "Period must be greater than 0"
+        );
+
+        self.subscribe_to_event(move |context, event: PeriodicValueChangeCountEvent<E, PL, P>| {
+            if counter_id != event.counter_id {
+                return;
+            }
+
+            let property_value_store = context.get_property_value_store::<E, P>();
+            let mut counter = property_value_store
+                .value_change_counters
+                .get(event.counter_id)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "No value change counter found for property {} with counter_id {}",
+                        P::name(),
+                        event.counter_id
+                    )
+                })
+                .borrow_mut();
+            let counter = counter
+                .as_any_mut()
+                .downcast_mut::<StratifiedValueChangeCounter<E, PL, P>>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Value change counter for property {} and counter_id {} had unexpected type",
+                        P::name(),
+                        event.counter_id
+                    )
+                });
+            handler(context, counter);
+            counter.clear();
+        });
+
+        // We add the plan unconditionally here instead of calling
+        // `schedule_next_periodic_value_change_count_event` because
+        // `schedule_next_periodic_value_change_count_event` only
+        // proceeds if other plans are scheduled.
+        let first_report_time = self.get_current_time() + period;
+        self.add_plan_with_phase(
+            first_report_time,
+            move |context| {
+                context.emit_event(PeriodicValueChangeCountEvent::<E, PL, P> {
+                    counter_id,
+                    _marker: PhantomData,
+                });
+                schedule_next_periodic_value_change_count_event::<E, PL, P>(
+                    context, period, counter_id,
+                );
+            },
+            ExecutionPhase::Last,
+        );
+    }
+
     #[cfg(test)]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool {
         let property_store = self.entity_store.get_property_store::<E>();
@@ -354,10 +521,15 @@ mod tests {
     use std::cell::{Ref, RefCell};
     use std::rc::Rc;
 
+    use serde::Serialize;
+
     use super::*;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
-    use crate::{define_derived_property, define_entity, define_multi_property, define_property};
+    use crate::{
+        define_derived_property, define_entity, define_multi_property, define_property,
+        impl_property,
+    };
 
     define_entity!(Animal);
     define_property!(struct Legs(u8), Animal, default_const = Legs(4));
@@ -365,6 +537,18 @@ mod tests {
     define_entity!(Person);
 
     define_property!(struct Age(u8), Person);
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    struct CounterValue(u8);
+    impl_property!(CounterValue, Person, default_const = CounterValue(0));
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    struct CounterStratum(bool);
+    impl_property!(
+        CounterStratum,
+        Person,
+        default_const = CounterStratum(false)
+    );
 
     define_property!(
         enum InfectionStatus {
@@ -927,5 +1111,79 @@ mod tests {
         }
 
         assert_eq!(context.query_entity_count((AdultAthlete(false),)), 10);
+    }
+
+    #[test]
+    fn create_value_change_counter_returns_incrementing_ids() {
+        let mut context = Context::new();
+
+        let id0 = context.create_value_change_counter::<Person, (CounterStratum,), CounterValue>();
+        let id1 = context.create_value_change_counter::<Person, (CounterStratum,), CounterValue>();
+
+        assert_eq!(id0, 0);
+        assert_eq!(id1, 1);
+    }
+
+    #[test]
+    fn value_change_counter_updates_on_true_transitions() {
+        let mut context = Context::new();
+        let counter_id =
+            context.create_value_change_counter::<Person, (CounterStratum,), CounterValue>();
+
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+        context.set_property(person, CounterValue(1));
+        context.set_property(person, CounterValue(1));
+        context.set_property(person, CounterValue(2));
+
+        let property_value_store = context.get_property_value_store::<Person, CounterValue>();
+        let mut counter = property_value_store.value_change_counters[counter_id].borrow_mut();
+        let counter = counter
+            .as_any_mut()
+            .downcast_mut::<StratifiedValueChangeCounter<Person, (CounterStratum,), CounterValue>>()
+            .unwrap();
+
+        assert_eq!(
+            counter.get_count((CounterStratum(true),), CounterValue(1)),
+            1
+        );
+        assert_eq!(
+            counter.get_count((CounterStratum(true),), CounterValue(2)),
+            1
+        );
+    }
+
+    #[test]
+    fn periodic_value_change_counts_report_and_clear() {
+        let mut context = Context::new();
+        let counter_id =
+            context.create_value_change_counter::<Person, (CounterStratum,), CounterValue>();
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+
+        let observed = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let observed_clone = observed.clone();
+
+        context.track_periodic_value_change_counts::<Person, (CounterStratum,), CounterValue>(
+            1.0,
+            counter_id,
+            move |_context, counter| {
+                observed_clone
+                    .borrow_mut()
+                    .push(counter.get_count((CounterStratum(true),), CounterValue(1)));
+            },
+        );
+
+        context.add_plan(0.5, move |context| {
+            context.set_property(person, CounterValue(1));
+        });
+        context.add_plan(1.5, move |context| {
+            context.set_property(person, CounterValue(1));
+        });
+
+        context.execute();
+        assert_eq!(*observed.borrow(), vec![1, 0]);
     }
 }
