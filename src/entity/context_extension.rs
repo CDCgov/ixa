@@ -22,21 +22,27 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
     E: Entity,
     PL: PropertyList<E> + Eq + Hash,
     P: Property<E> + Eq + Hash,
-    F: Fn(&Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+    F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
 {
-    {
-        let property_value_store = context.get_property_value_store::<E, P>();
-        let mut counter = property_value_store
+    let mut counter = {
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
+        let slot = property_value_store
             .value_change_counters
-            .get(counter_id)
+            .get_mut(counter_id)
             .unwrap_or_else(|| {
                 panic!(
                     "No value change counter found for property {} with counter_id {}",
                     P::name(),
                     counter_id
                 )
-            })
-            .borrow_mut();
+            });
+        std::mem::replace(
+            slot.get_mut(),
+            Box::new(StratifiedValueChangeCounter::<E, PL, P>::new()),
+        )
+    };
+
+    {
         let counter = counter
             .as_any_mut()
             .downcast_mut::<StratifiedValueChangeCounter<E, PL, P>>()
@@ -50,6 +56,23 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
 
         handler(context, counter);
         counter.clear();
+    }
+
+    {
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
+        let slot = property_value_store
+            .value_change_counters
+            .get_mut(counter_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "No value change counter found for property {} with counter_id {}",
+                    P::name(),
+                    counter_id
+                )
+            });
+
+        // Swap back the cleared counter to retain its allocated capacity.
+        let _ = std::mem::replace(slot.get_mut(), counter);
     }
 
     if context.remaining_plan_count() == 0 {
@@ -127,7 +150,7 @@ pub trait ContextEntitiesExt {
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: Property<E> + Eq + Hash,
-        F: Fn(&Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static;
+        F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static;
 
     /// Checks if a property `P` is indexed.
     ///
@@ -348,7 +371,7 @@ impl ContextEntitiesExt for Context {
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: Property<E> + Eq + Hash,
-        F: Fn(&Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+        F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
     {
         assert!(
             period > 0.0 && !period.is_nan() && !period.is_infinite(),
