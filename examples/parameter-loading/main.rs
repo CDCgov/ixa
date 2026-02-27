@@ -1,60 +1,22 @@
 use std::path::PathBuf;
 
 use ixa::prelude::*;
-
-mod incidence_report;
-mod infection_manager;
 mod parameters_loader;
-mod transmission_manager;
+use crate::parameters_loader::{Parameters, ParametersExt};
 
-use crate::parameters_loader::Parameters;
-
-define_entity!(Person);
-define_property!(
-    enum InfectionStatus {
-        S,
-        I,
-        R,
-    },
-    Person,
-    default_const = InfectionStatus::S
-);
-
-fn example_dir() -> PathBuf {
-    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    parameters_path.join("examples").join("parameter-loading")
-}
-
-fn initialize() -> Result<Context, IxaError> {
+fn main() -> Result<(), IxaError> {
     let mut context = Context::new();
-    let file_path = example_dir().join("input.json");
 
-    parameters_loader::init_parameters(&mut context, &file_path)?;
+    // Initialize parameters as global properties
+    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("parameter-loading")
+        .join("input.json");
+    context.init_parameters(&file_path)?;
 
-    let parameters = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .clone();
-    context.init_random(parameters.seed);
+    // Get a parameter
+    let &Parameters { seed, .. } = context.get_parameters();
+    context.init_random(seed);
 
-    for _ in 0..parameters.population {
-        let _: PersonId = context.add_entity(()).unwrap();
-    }
-
-    transmission_manager::init(&mut context);
-    infection_manager::init(&mut context);
-    incidence_report::init(&mut context)?;
-
-    context.add_plan(parameters.max_time, |context| {
-        context.shutdown();
-    });
-    println!("{parameters:?}");
-
-    Ok(context)
-}
-
-fn main() {
-    let mut context = initialize().expect("Could not initialize context.");
-
-    context.execute();
+    Ok(())
 }

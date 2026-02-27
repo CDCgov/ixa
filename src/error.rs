@@ -1,67 +1,68 @@
 //! Provides [`IxaError`] and wraps other errors.
-use std::fmt::{self, Debug, Display};
 use std::io;
 
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Error, Debug)]
 #[allow(clippy::module_name_repetitions)]
 /// Provides [`IxaError`] and maps to other errors to
 /// convert to an [`IxaError`]
 pub enum IxaError {
-    IoError(io::Error),
-    JsonError(serde_json::Error),
-    CsvError(csv::Error),
-    Utf8Error(std::string::FromUtf8Error),
-    ParseIntError(std::num::ParseIntError),
-    IxaError(String),
-}
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    JsonError(#[from] serde_json::Error),
+    #[error(transparent)]
+    CsvError(#[from] csv::Error),
+    #[error(transparent)]
+    Utf8Error(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
 
-impl From<io::Error> for IxaError {
-    fn from(error: io::Error) -> Self {
-        IxaError::IoError(error)
-    }
-}
+    #[error("duplicate property {name}")]
+    DuplicateProperty { name: String },
+    #[error("entry already exists")]
+    EntryAlreadyExists,
+    #[error("no global property: {name}")]
+    NoGlobalProperty { name: String },
+    #[error("property {name} is not set")]
+    PropertyNotSet { name: String },
 
-impl From<serde_json::Error> for IxaError {
-    fn from(error: serde_json::Error) -> Self {
-        IxaError::JsonError(error)
-    }
-}
+    #[error("illegal value for `{field}`: {value}")]
+    IllegalGlobalPropertyValue { field: String, value: String },
 
-impl From<csv::Error> for IxaError {
-    fn from(error: csv::Error) -> Self {
-        IxaError::CsvError(error)
-    }
-}
+    #[error(
+        "the same property appears in both position {first_index} and {second_index} in the property list"
+    )]
+    DuplicatePropertyInPropertyList {
+        first_index: usize,
+        second_index: usize,
+    },
 
-impl From<std::string::FromUtf8Error> for IxaError {
-    fn from(error: std::string::FromUtf8Error) -> Self {
-        IxaError::Utf8Error(error)
-    }
-}
+    #[error("breakpoint time {time} is in the past")]
+    BreakpointTimeInPast { time: f64 },
+    #[error("attempted to delete a nonexistent breakpoint {id}")]
+    BreakpointNotFound { id: u32 },
 
-impl From<std::num::ParseIntError> for IxaError {
-    fn from(error: std::num::ParseIntError) -> Self {
-        IxaError::ParseIntError(error)
-    }
-}
+    #[error("invalid key in pair: {pair}")]
+    InvalidLogLevelKey { pair: String },
+    #[error("invalid value in pair: {pair}")]
+    InvalidLogLevelValue { pair: String },
+    #[error("invalid log level: {level}")]
+    InvalidLogLevel { level: String },
 
-impl From<String> for IxaError {
-    fn from(error: String) -> Self {
-        IxaError::IxaError(error)
-    }
-}
+    #[error("invalid log level format: {log_level}")]
+    InvalidLogLevelFormat { log_level: String },
 
-impl From<&str> for IxaError {
-    fn from(error: &str) -> Self {
-        IxaError::IxaError(error.to_string())
-    }
-}
+    #[error("cannot make edge to self")]
+    CannotMakeEdgeToSelf,
+    #[error("invalid weight")]
+    InvalidWeight,
+    #[error("edge already exists")]
+    EdgeAlreadyExists,
+    #[error("can't sample from empty list")]
+    CannotSampleFromEmptyList,
 
-impl std::error::Error for IxaError {}
-
-impl Display for IxaError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {self:?}")?;
-        Ok(())
-    }
+    #[error("initialization list is missing required properties")]
+    MissingRequiredInitializationProperties,
 }

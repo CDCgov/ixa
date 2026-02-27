@@ -2,7 +2,7 @@ use std::any::TypeId;
 
 use seq_macro::seq;
 
-use crate::entity::entity_set::{EntitySetIterator, SourceSet};
+use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
@@ -28,13 +28,54 @@ impl<E: Entity> Query<E> for () {
         one_shot_128(&empty)
     }
 
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
+        EntitySet::from_source(SourceSet::Population(context.get_entity_count::<E>()))
+    }
+
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+        EntitySetIterator::from_population_iterator(context.get_entity_iterator::<E>())
+    }
+
+    fn match_entity(&self, _entity_id: EntityId<E>, _context: &Context) -> bool {
+        // Every entity matches the empty query.
+        true
+    }
+
+    fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
+        // Nothing to do.
+    }
+}
+
+// An Entity ZST itself is an empty query matching all entities of that type.
+// This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
+impl<E: Entity + Copy> Query<E> for E {
+    fn get_query(&self) -> Vec<(usize, HashValueType)> {
+        Vec::new()
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        Vec::new()
+    }
+
+    fn multi_property_id(&self) -> Option<usize> {
+        None
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        let empty: &[u128] = &[];
+        one_shot_128(&empty)
+    }
+
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
+        EntitySet::from_source(SourceSet::Population(context.get_entity_count::<E>()))
+    }
+
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         let population_iterator = context.get_entity_iterator::<E>();
         EntitySetIterator::from_population_iterator(population_iterator)
     }
 
     fn match_entity(&self, _entity_id: EntityId<E>, _context: &Context) -> bool {
-        // Every entity matches the empty query.
         true
     }
 
@@ -64,13 +105,48 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         P1::hash_property_value(&P1::make_canonical(self.0))
     }
 
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
         let property_store = context.entity_store.get_property_store::<E>();
 
         // The case of an indexed multi-property.
         // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
         // multi-property is unindexed, we fall through to create `SourceSet`s for the components
         // rather than wrapping a `DerivedPropertySource`.
+        if let Some(multi_property_id) = self.multi_property_id() {
+            match property_store.get_index_set_with_hash_for_property_id(
+                context,
+                multi_property_id,
+                self.multi_property_value_hash(),
+            ) {
+                IndexSetResult::Set(people_set) => {
+                    return EntitySet::from_source(SourceSet::IndexSet(people_set));
+                }
+                IndexSetResult::Empty => {
+                    return EntitySet::empty();
+                }
+                IndexSetResult::Unsupported => {}
+            }
+            // If the property is not indexed, we fall through.
+        }
+
+        // We create a source set for each property.
+        let mut sources: Vec<SourceSet<E>> = Vec::new();
+
+        if let Some(source_set) = SourceSet::new::<P1>(self.0, context) {
+            sources.push(source_set);
+        } else {
+            // If a single source set is empty, the intersection of all sources is empty.
+            return EntitySet::empty();
+        }
+
+        EntitySet::from_intersection_sources(sources)
+    }
+
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+        // Constructing the `EntitySetIterator` directly instead of constructing an `EntitySet`
+        // first is a micro-optimization improving tight-loop benchmark performance.
+        let property_store = context.entity_store.get_property_store::<E>();
+
         if let Some(multi_property_id) = self.multi_property_id() {
             match property_store.get_index_set_with_hash_for_property_id(
                 context,
@@ -85,16 +161,13 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
                 }
                 IndexSetResult::Unsupported => {}
             }
-            // If the property is not indexed, we fall through.
         }
 
-        // We create a source set for each property.
         let mut sources: Vec<SourceSet<E>> = Vec::new();
 
         if let Some(source_set) = SourceSet::new::<P1>(self.0, context) {
             sources.push(source_set);
         } else {
-            // If a single source set is empty, the intersection of all sources is empty.
             return EntitySetIterator::empty();
         }
 
@@ -177,11 +250,47 @@ macro_rules! impl_query {
                     one_shot_128(&data.as_slice())
                 }
 
-                fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+                fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
                     // The case of an indexed multi-property.
                     // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
                     // multi-property is unindexed, we fall through to create `SourceSet`s for the components
                     // rather than wrapping a `DerivedPropertySource`.
+                    if let Some(multi_property_id) = self.multi_property_id() {
+                        let property_store = context.entity_store.get_property_store::<E>();
+                        match property_store.get_index_set_with_hash_for_property_id(
+                            context,
+                            multi_property_id,
+                            self.multi_property_value_hash(),
+                        ) {
+                            $crate::entity::index::IndexSetResult::Set(entity_set) => {
+                                return EntitySet::from_source(SourceSet::IndexSet(entity_set));
+                            }
+                            $crate::entity::index::IndexSetResult::Empty => {
+                                return EntitySet::empty();
+                            }
+                            $crate::entity::index::IndexSetResult::Unsupported => {}
+                        }
+                        // If the property is not indexed, we fall through.
+                    }
+
+                    // We create a source set for each property.
+                    let mut sources: Vec<SourceSet<E>> = Vec::new();
+
+                    #(
+                        if let Some(source_set) = SourceSet::new::<T~N>(self.N, context) {
+                            sources.push(source_set);
+                        } else {
+                            // If a single source set is empty, the intersection of all sources is empty.
+                            return EntitySet::empty();
+                        }
+                    )*
+
+                    EntitySet::from_intersection_sources(sources)
+                }
+
+                fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+                    // Constructing the `EntitySetIterator` directly instead of constructing an `EntitySet`
+                    // first is a micro-optimization improving tight-loop benchmark performance.
                     if let Some(multi_property_id) = self.multi_property_id() {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
@@ -197,17 +306,14 @@ macro_rules! impl_query {
                             }
                             $crate::entity::index::IndexSetResult::Unsupported => {}
                         }
-                        // If the property is not indexed, we fall through.
                     }
 
-                    // We create a source set for each property.
                     let mut sources: Vec<SourceSet<E>> = Vec::new();
 
                     #(
                         if let Some(source_set) = SourceSet::new::<T~N>(self.N, context) {
                             sources.push(source_set);
                         } else {
-                            // If a single source set is empty, the intersection of all sources is empty.
                             return EntitySetIterator::empty();
                         }
                     )*
@@ -266,7 +372,7 @@ macro_rules! impl_query {
     }
 }
 
-// Implement the versions with 2..10 parameters. (The 1 case is implemented above.)
-seq!(Z in 2..10 {
+// Implement the versions with 2..20 parameters. (The 0 and 1 case are implemented above.)
+seq!(Z in 2..20 {
     impl_query!(Z);
 });

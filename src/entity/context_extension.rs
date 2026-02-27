@@ -1,14 +1,14 @@
 use std::any::{Any, TypeId};
 
-use crate::entity::entity_set::EntitySetIterator;
+use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::Query;
 use crate::entity::{Entity, EntityId, PopulationIterator};
-use crate::hashing::IndexSet;
 use crate::rand::Rng;
+use crate::random::sample_multiple_from_known_length;
 use crate::{warn, Context, ContextRandomExt, IxaError, RngId};
 
 /// A trait extension for [`Context`] that exposes entity-related
@@ -59,13 +59,13 @@ pub trait ContextEntitiesExt {
     #[cfg(test)]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
 
-    /// This method gives client code direct immutable access to the fully realized set of
-    /// entity IDs. This is especially efficient for indexed queries, as this method reduces
-    /// to a simple lookup of a hash bucket. Otherwise, the set is allocated and computed.
-    fn with_query_results<E: Entity, Q: Query<E>>(
-        &self,
+    /// This method gives client code direct access to the query result as an `EntitySet`.
+    /// This is especially efficient for indexed queries, as this method can reduce to wrapping
+    /// a single indexed source.
+    fn with_query_results<'a, E: Entity, Q: Query<E>>(
+        &'a self,
         query: Q,
-        callback: &mut dyn FnMut(&IndexSet<EntityId<E>>),
+        callback: &mut dyn FnMut(EntitySet<'a, E>),
     );
 
     /// Gives the count of distinct entity IDs satisfying the query. This is especially
@@ -79,6 +79,17 @@ pub trait ContextEntitiesExt {
     ///
     /// To sample from the entire population, pass in the empty query `()`.
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
+    where
+        E: Entity,
+        Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng;
+
+    /// Count query results and sample a single entity uniformly from them.
+    ///
+    /// Returns `(count, sample)`, where `sample` is `None` iff `count == 0`.
+    /// To sample from the entire population, pass in the empty query `()`.
+    fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
         Q: Query<E>,
@@ -103,6 +114,9 @@ pub trait ContextEntitiesExt {
     /// Returns an iterator over all created entities of type `E`.
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
+    /// Generates an `EntitySet` representing the query results.
+    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
+
     /// Generates an iterator over the results of the query.
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
 
@@ -123,7 +137,7 @@ impl ContextEntitiesExt for Context {
 
         // Check that all required properties are present.
         if !PL::contains_required_properties() {
-            return Err("initialization list is missing required properties".into());
+            return Err(IxaError::MissingRequiredInitializationProperties);
         }
 
         // Now that we know we will succeed, we create the entity.
@@ -239,14 +253,14 @@ impl ContextEntitiesExt for Context {
         property_store.is_property_indexed::<P>()
     }
 
-    fn with_query_results<E: Entity, Q: Query<E>>(
-        &self,
+    fn with_query_results<'a, E: Entity, Q: Query<E>>(
+        &'a self,
         query: Q,
-        callback: &mut dyn FnMut(&IndexSet<EntityId<E>>),
+        callback: &mut dyn FnMut(EntitySet<'a, E>),
     ) {
         // The fast path for indexed queries.
 
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
@@ -256,12 +270,11 @@ impl ContextEntitiesExt for Context {
                 query.multi_property_value_hash(),
             ) {
                 IndexSetResult::Set(people_set) => {
-                    callback(&people_set);
+                    callback(EntitySet::from_source(SourceSet::IndexSet(people_set)));
                     return;
                 }
                 IndexSetResult::Empty => {
-                    let people_set = IndexSet::default();
-                    callback(&people_set);
+                    callback(EntitySet::empty());
                     return;
                 }
                 IndexSetResult::Unsupported => {}
@@ -272,25 +285,23 @@ impl ContextEntitiesExt for Context {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
-            let entity_set = self.get_entity_iterator::<E>().collect::<IndexSet<_>>();
-            callback(&entity_set);
+            callback(EntitySet::from_source(SourceSet::Population(
+                self.get_entity_count::<E>(),
+            )));
             return;
         }
 
         // The slow path of computing the full query set.
         warn!("Called Context::with_query_results() with an unindexed query. It's almost always better to use Context::query_result_iterator() for unindexed queries.");
 
-        // Fall back to `EntitySetIterator`.
-        let people_set = query
-            .new_query_result_iterator(self)
-            .collect::<IndexSet<_>>();
-        callback(&people_set);
+        // Fall back to the query's `EntitySet`.
+        callback(self.query(query));
     }
 
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
         // The fast path for indexed queries.
         //
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query:: new_query_result_iterator`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             match property_store.get_index_count_with_hash_for_property_id(
@@ -313,8 +324,50 @@ impl ContextEntitiesExt for Context {
         R: RngId + 'static,
         R::RngType: Rng,
     {
+        if query.type_id() == TypeId::of::<()>() {
+            let population = self.get_entity_count::<E>();
+            return self.sample(rng_id, move |rng| {
+                if population == 0 {
+                    warn!("Requested a sample entity from an empty population");
+                    return None;
+                }
+                let index = if population <= u32::MAX as usize {
+                    rng.random_range(0..population as u32) as usize
+                } else {
+                    rng.random_range(0..population)
+                };
+                Some(EntityId::new(index))
+            });
+        }
+
         let query_result = self.query_result_iterator(query);
         self.sample(rng_id, move |rng| query_result.sample_entity(rng))
+    }
+
+    fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
+    where
+        E: Entity,
+        Q: Query<E>,
+        R: RngId + 'static,
+        R::RngType: Rng,
+    {
+        if query.type_id() == TypeId::of::<()>() {
+            let population = self.get_entity_count::<E>();
+            return self.sample(rng_id, move |rng| {
+                if population == 0 {
+                    return (0, None);
+                }
+                let index = if population <= u32::MAX as usize {
+                    rng.random_range(0..population as u32) as usize
+                } else {
+                    rng.random_range(0..population)
+                };
+                (population, Some(EntityId::new(index)))
+            });
+        }
+
+        let query_result = self.query_result_iterator(query);
+        self.sample(rng_id, move |rng| query_result.count_and_sample_entity(rng))
     }
 
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
@@ -324,6 +377,20 @@ impl ContextEntitiesExt for Context {
         R: RngId + 'static,
         R::RngType: Rng,
     {
+        if query.type_id() == TypeId::of::<()>() {
+            let population = self.get_entity_count::<E>();
+            return self.sample(rng_id, move |rng| {
+                if population == 0 {
+                    warn!("Requested a sample of entities from an empty population");
+                    return vec![];
+                }
+                if n >= population {
+                    return PopulationIterator::<E>::new(population).collect();
+                }
+                sample_multiple_from_known_length(rng, PopulationIterator::<E>::new(population), n)
+            });
+        }
+
         let query_result = self.query_result_iterator(query);
         self.sample(rng_id, move |rng| query_result.sample_entities(rng, n))
     }
@@ -334,6 +401,10 @@ impl ContextEntitiesExt for Context {
 
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
         self.entity_store.get_entity_iterator::<E>()
+    }
+
+    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
+        query.new_query_result(self)
     }
 
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
@@ -357,10 +428,13 @@ mod tests {
     use super::*;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
-    use crate::{define_derived_property, define_entity, define_multi_property, define_property};
+    use crate::{
+        define_derived_property, define_entity, define_multi_property, define_property, define_rng,
+    };
 
     define_entity!(Animal);
     define_property!(struct Legs(u8), Animal, default_const = Legs(4));
+    define_rng!(EntityContextTestRng);
 
     define_entity!(Person);
 
@@ -485,6 +559,14 @@ mod tests {
         assert_eq!(context.get_entity_count::<Person>(), 3);
     }
 
+    #[test]
+    fn add_entity_with_zst() {
+        let mut context = Context::new();
+        let animal = context.add_entity(Animal).unwrap();
+        assert_eq!(context.get_entity_count::<Animal>(), 1);
+        assert_eq!(context.get_property::<Animal, Legs>(animal), Legs(4));
+    }
+
     // Helper for index tests
     #[derive(Copy, Clone)]
     enum IndexMode {
@@ -524,13 +606,13 @@ mod tests {
 
             let mut existing_len = 0;
             context.with_query_results((existing_value,), &mut |people_set| {
-                existing_len = people_set.len();
+                existing_len = people_set.into_iter().count();
             });
             assert_eq!(existing_len, 2);
 
             let mut missing_len = 0;
             context.with_query_results((missing_value,), &mut |people_set| {
-                missing_len = people_set.len();
+                missing_len = people_set.into_iter().count();
             });
             assert_eq!(missing_len, 0);
 
@@ -552,7 +634,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(crate::IxaError::IxaError(ref msg)) if msg == "initialization list is missing required properties"
+            Err(crate::IxaError::MissingRequiredInitializationProperties)
         ));
     }
 
@@ -639,6 +721,38 @@ mod tests {
 
         assert_eq!(context.get_entity_count::<Animal>(), 6);
         assert_eq!(context.get_entity_count::<Person>(), 8);
+    }
+
+    #[test]
+    fn count_and_sample_entity_empty_query_fast_path() {
+        let mut context = Context::new();
+        context.init_random(42);
+        for age in [10u8, 20, 30] {
+            let _: PersonId = context.add_entity((Age(age),)).unwrap();
+        }
+
+        let (count, sampled) =
+            context.count_and_sample_entity::<Person, _, _>(EntityContextTestRng, ());
+        assert_eq!(count, 3);
+        assert!(sampled.is_some());
+    }
+
+    #[test]
+    fn count_and_sample_entity_unindexed_derived_query() {
+        let mut context = Context::new();
+        context.init_random(43);
+        for age in [10u8, 20, 30, 80] {
+            let _: PersonId = context.add_entity((Age(age),)).unwrap();
+        }
+
+        let query = (AgeGroup::Adult,);
+        let expected_count = context.query_entity_count(query);
+        let (count, sampled) = context.count_and_sample_entity(EntityContextTestRng, query);
+        assert_eq!(count, expected_count);
+        assert_eq!(sampled.is_some(), count > 0);
+        if let Some(entity_id) = sampled {
+            assert!(context.match_entity(entity_id, query));
+        }
     }
 
     #[test]
@@ -786,12 +900,12 @@ mod tests {
         // Force an index build by running a query.
         let _ = context.query_result_iterator((InfectionStatus::Susceptible, Vaccinated(true)));
 
-        // Capture the address of the has set given by `with_query_result`
-        let mut address: *const IndexSet<EntityId<Person>> = std::ptr::null();
+        // Capture the set given by `with_query_results`.
+        let mut result_entities: IndexSet<EntityId<Person>> = IndexSet::default();
         context.with_query_results(
             (InfectionStatus::Susceptible, Vaccinated(true)),
             &mut |result_set| {
-                address = result_set as *const _;
+                result_entities = result_set.into_iter().collect::<IndexSet<_>>();
             },
         );
 
@@ -818,8 +932,37 @@ mod tests {
             )
             .unwrap();
 
-        let address2 = &*bucket as *const _;
-        assert_eq!(address2, address);
+        let expected_entities = bucket.iter().copied().collect::<IndexSet<_>>();
+        assert_eq!(expected_entities, result_entities);
+    }
+
+    #[test]
+    fn query_returns_entity_set_and_query_result_iterator_remains_compatible() {
+        let mut context = Context::new();
+        let p1 = context
+            .add_entity((Age(21), InfectionStatus::Susceptible, Vaccinated(true)))
+            .unwrap();
+        let _p2 = context
+            .add_entity((Age(22), InfectionStatus::Susceptible, Vaccinated(false)))
+            .unwrap();
+        let p3 = context
+            .add_entity((Age(23), InfectionStatus::Infected, Vaccinated(true)))
+            .unwrap();
+
+        let query = (Vaccinated(true),);
+
+        let from_set = context
+            .query::<Person, _>(query)
+            .into_iter()
+            .collect::<IndexSet<_>>();
+        let from_iterator = context
+            .query_result_iterator(query)
+            .collect::<IndexSet<_>>();
+
+        assert_eq!(from_set, from_iterator);
+        assert!(from_set.contains(&p1));
+        assert!(from_set.contains(&p3));
+        assert_eq!(from_set.len(), 2);
     }
 
     #[test]

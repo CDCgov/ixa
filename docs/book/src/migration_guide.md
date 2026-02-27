@@ -64,7 +64,7 @@ pub enum InfectionStatus {
     Recovered,
 }
 
-// Implements `Property<Person>` for an existing type.
+// Implements `Property\<Person>` for an existing type.
 impl_property!(
     InfectionStatus,
     Person,
@@ -77,7 +77,7 @@ traits and `pub` visibility to the type definition and then call
 `impl_property!` as above.)
 
 The crucial thing to understand is that the value type _is_ the property type.
-The `impl Property<Person> for InfectionStatus`, which the macros give you, is
+The `impl Property\<Person> for InfectionStatus`, which the macros give you, is
 the thing that ties the `InfectionStatus` type to the `Person` entity.
 
 For details about defining properties, see the `property_impl` module-level docs
@@ -90,9 +90,9 @@ and API docs for the macros `define_property!`, `impl_property!`,
 | Concept                     | Old System                                                                                                                     | New System                                                                                                           | Notes / Implications                                                                |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **Property Type Structure** | Two separate types: (1) value type, and (2) property-identifier ZST.                                                           | A single type represents both the value and identifies the property.                                                 | Simplified to a single type                                                         |
-| **Defining Properties**     | Define a normal Rust type (or use an existing primitive, e.g. `u8`), then use a macro to define the identifying property type. | Define a normal Rust type, then use `impl_property` to declare it a `Property<E>` for a particular `Entity` `E`.     |                                                                                     |
+| **Defining Properties**     | Define a normal Rust type (or use an existing primitive, e.g. `u8`), then use a macro to define the identifying property type. | Define a normal Rust type, then use `impl_property` to declare it a `Property\<E>` for a particular `Entity` `E`.     |                                                                                     |
 | **Entity Association**      | Implicit—only one entity ("person")                                                                                            | Every property must explicitly specify the `Entity` it belongs to (e.g., `Person`); Entities are defined separately. |                                                                                     |
-| **Default Values**          | Provided in the macro creating the property-identifier type.                                                                   | Same but with updated syntax; default values are per `Property<E>` implementation.                                   |                                                                                     |
+| **Default Values**          | Provided in the macro creating the property-identifier type.                                                                   | Same but with updated syntax; default values are per `Property\<E>` implementation.                                   |                                                                                     |
 | **Using Existing Types**    | A single _value_ type can be used in multiple properties—including primitive types like `u8`                                   | Only one property per type (per `Entity`); primitive types must be wrapped in a newtype.                             | Both systems require that the existing type implement the required property traits. |
 | **Macro Behavior**          | Macros define the property’s ZST and connect it to the value type via trait impls.                                             | Macros define "is a property of entity `E`" relationship via trait impl. No additional synthesized types.            | Both enforce correctness via macro                                                  |
 
@@ -121,54 +121,37 @@ impl_entity!(Person);
 ```
 
 These macros automatically create a type alias of the form
-`MyEntityId = EntityId<MyEntity>`. In our case, it defines the type alias
-`PersonId = EntityId<Person>`.
+`MyEntityId = EntityId\<MyEntity>`. In our case, it defines the type alias
+`PersonId = EntityId\<Person>`.
 
 ### Adding a new entity (e.g. a new person)
 
-Adding a new entity with multiple property values:
+Adding a new entity with only default property values by passing the entity type
+directly:
 
 ```rust
-// Assuming the `Person` entity is defined somewhere.
-// Add a new entity (a person in this case) to an existing `Context` instance we have access to.
-let person_id = context.add_entity((Age(25), InfectionStatus::Infected)).unwrap();
+let person_id = context.add_entity(Person).unwrap();
 ```
 
-Observe:
+(This example assumes there are no required properties, that is, that every
+property has a default value.)
 
-- The compiler is smart enough to know that we are adding a new `Person` entity
-  because we supplied a list of property values that are properties for a
-  `Person`.
-- The `add_entity` function takes a "property list", which is just a tuple of
-  property values. The properties must be distinct, of course, and there must be
-  a value for every "required" property, that is, for every (non-derived)
-  property that doesn't have a default value.
-- A single-property tuple uses the syntax `(Age(25), )`. Notice the awkward
-  trailing comma, which lets the compiler know the parentheses are defining a
-  tuple rather than functioning as grouping an expression.
+Adding a new entity with property values using the `with!` macro:
+
+```rust
+let person_id = context.add_entity(with!(Person, Age(25), InfectionStatus::Infected)).unwrap();
+```
+
+The `with!` macro takes the entity type as its first argument, followed by any
+property values. The properties must be distinct, of course, and there must be
+a value for every "required" property, that is, for every (non-derived)
+property that doesn't have a default value.
 
 Adding a new entity with just one property value:
 
 ```rust
-// Assuming the `Person` entity is defined somewhere.
-// Add a new entity (a person in this case) to an existing `Context` instance we have access to.
-let person_id = context.add_entity((Age(25), )).unwrap();
+let person_id = context.add_entity(with!(Person, Age(25))).unwrap();
 ```
-
-Adding a new entity with only default property values:
-
-```rust
-// If you specify the `EntityId<E>` return type, the compiler uses it to infer which entity to add.
-// This is a good practice and avoids the special "turbo fish" syntax.
-let person_id: PersonId = context.add_entity(()).unwrap();
-
-// If we don't specify the `EntityId<E>` type, we have to explicitly tell the compiler *which* entity
-// type we are adding, as there is nothing from which to infer the entity type.
-let person_id = context.add_entity::<Person, _>(()).unwrap();
-```
-
-(These two examples assume there are no required properties, that is, that every
-property has a default value.)
 
 ### Getting a property value for an entity
 

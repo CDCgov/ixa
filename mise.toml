@@ -43,7 +43,9 @@ done
 description = "Build the Rust cli docs, API docs and Ixa website"
 run = '''
   cargo run --features write_cli_usage --example basic-infection -- --markdown-help
-  cargo doc --all-features --no-deps --target-dir website/
+  cargo doc --all-features --no-deps
+  rm -rf website/doc
+  cp -r target/doc website
   mdbook build docs/book -d ../../website/book
 '''
 

@@ -28,8 +28,7 @@ bincode = { version = "^2.0.1", default-features = false, features = [
     "std",
     "serde",
 ] }
-reikna = "^0.12.3"
-ixa-derive = { version = "2.0.0-beta", path = "ixa-derive" }
+ixa-derive = { version = "2.0.0-beta.1", path = "ixa-derive" }
 seq-macro = "^0.3.5"
 paste = "^1.0.15"
 ctor = "^0.5.0"
@@ -46,7 +45,6 @@ rustc-hash = "^2.1.1"
 tempfile = "^3.15.0"
 assert_cmd = "^2.0.16"
 criterion = "^0.7.0"
-roots = "0.0.8"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.27.1", features = ["derive"] }
 quote = "^1.0.38"
@@ -65,10 +63,11 @@ humantime = "^2.2.0"
 bytesize = "^2.0.1"
 hashbrown = "^0.16.0"
 ouroboros = "^0.18.5"
+thiserror = "^2.0.11"
 
 [package]
 name = "ixa"
-version = "2.0.0-beta1"
+version = "2.0.0-beta1.1"
 rust-version = "1.88.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
@@ -110,6 +109,7 @@ bytesize.workspace = true
 hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
+thiserror.workspace = true
 
 # Building docs
 clap-markdown = { workspace = true, optional = true }
@@ -142,10 +142,6 @@ assert_cmd.workspace = true
 criterion.workspace = true
 rand_distr.workspace = true
 tempfile.workspace = true
-
-# Only used in time-varying-infection
-reikna.workspace = true
-roots.workspace = true
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }

@@ -18,18 +18,19 @@ use crate::report::ContextReportExt;
 use crate::{set_log_level, set_module_filters, warn, LevelFilter};
 
 /// Custom parser for log levels
-fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, String> {
+fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, IxaError> {
     s.split(',')
         .map(|pair| {
             let mut iter = pair.split('=');
-            let key = iter
-                .next()
-                .ok_or_else(|| format!("Invalid key in pair: {pair}"))?;
-            let value = iter
-                .next()
-                .ok_or_else(|| format!("Invalid value in pair: {pair}"))?;
-            let level =
-                LevelFilter::from_str(value).map_err(|_| format!("Invalid log level: {value}"))?;
+            let key = iter.next().ok_or_else(|| IxaError::InvalidLogLevelKey {
+                pair: pair.to_string(),
+            })?;
+            let value = iter.next().ok_or_else(|| IxaError::InvalidLogLevelValue {
+                pair: pair.to_string(),
+            })?;
+            let level = LevelFilter::from_str(value).map_err(|_| IxaError::InvalidLogLevel {
+                level: value.to_string(),
+            })?;
             Ok((key.to_string(), level))
         })
         .collect()
@@ -260,16 +261,19 @@ where
     if let Some(log_level) = args.log_level.as_ref() {
         if let Ok(level) = LevelFilter::from_str(log_level) {
             current_log_level = level;
-        } else if let Ok(log_levels) = parse_log_levels(log_level) {
-            let log_levels_slice: Vec<(&String, LevelFilter)> =
-                log_levels.iter().map(|(k, v)| (k, *v)).collect();
-            set_module_filters(log_levels_slice.as_slice());
-            for (key, value) in log_levels {
-                println!("Logging enabled for {key} at level {value}");
-                // Here you can set the log level for each key-value pair as needed
-            }
         } else {
-            return Err(format!("Invalid log level format: {log_level}").into());
+            match parse_log_levels(log_level) {
+                Ok(log_levels) => {
+                    let log_levels_slice: Vec<(&String, LevelFilter)> =
+                        log_levels.iter().map(|(k, v)| (k, *v)).collect();
+                    set_module_filters(log_levels_slice.as_slice());
+                    for (key, value) in log_levels {
+                        println!("Logging enabled for {key} at level {value}");
+                        // Here you can set the log level for each key-value pair as needed
+                    }
+                }
+                Err(e) => return Err(Box::new(e)),
+            }
         }
     }
 

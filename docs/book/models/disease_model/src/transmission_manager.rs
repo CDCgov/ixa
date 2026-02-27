@@ -3,7 +3,7 @@ use ixa::prelude::*;
 use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, PersonId};
+use crate::people::{InfectionStatus, Person};
 use crate::{FORCE_OF_INFECTION, POPULATION};
 
 define_rng!(TransmissionRng);
@@ -12,17 +12,19 @@ define_rng!(TransmissionRng);
 // ANCHOR: attempt_infection
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
+    let person_to_infect = context.sample_entity(TransmissionRng, Person).unwrap();
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
     if person_status == InfectionStatus::S {
         context.set_property(person_to_infect, InfectionStatus::I);
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(FORCE_OF_INFECTION).unwrap())
-            / POPULATION as f64;
+    let current_time = context.get_current_time();
+    let delay_to_next_attempt = context.sample_distr(
+        TransmissionRng,
+        Exp::new(FORCE_OF_INFECTION * POPULATION as f64).unwrap(),
+    );
+    let next_attempt_time = current_time + delay_to_next_attempt;
 
     context.add_plan(next_attempt_time, attempt_infection);
 }

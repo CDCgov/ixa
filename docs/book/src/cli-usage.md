@@ -8,7 +8,7 @@ Default cli arguments for ixa runner
 
 **Usage:** `ixa [OPTIONS]`
 
-### **Options:**
+###### **Options:**
 
 * `-r`, `--random-seed <RANDOM_SEED>` — Random seed
 
@@ -26,7 +26,6 @@ Default cli arguments for ixa runner
    | -v      |   ✓   |  ✓   |  ✓   |       |       |
    | -vv     |   ✓   |  ✓   |  ✓   |   ✓   |       |
    | -vvv    |   ✓   |  ✓   |  ✓   |   ✓   |   ✓   |
-
 * `--warn` — Set logging to WARN level. Shortcut for `--log-level warn`
 * `--debug` — Set logging to DEBUG level. Shortcut for `--log-level DEBUG`
 * `--trace` — Set logging to TRACE level. Shortcut for `--log-level TRACE`
@@ -34,3 +33,6 @@ Default cli arguments for ixa runner
 * `-w`, `--web <WEB>` — Enable the Web API at a given time. Defaults to t=0.0
 * `-t`, `--timeline-progress-max <TIMELINE_PROGRESS_MAX>` — Enable the timeline progress bar with a maximum time
 * `--no-stats` — Suppresses the printout of summary statistics at the end of the simulation
+
+
+

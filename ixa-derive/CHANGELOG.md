@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta.1](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0-beta...ixa-derive-v2.0.0-beta.1) - 2026-02-23
+
+### Other
+
+- Faster precommit ([#764](https://github.com/CDCgov/ixa/pull/764))
+
 ## [2.0.0-beta](https://github.com/CDCgov/ixa/compare/ixa-derive-v1.0.0...ixa-derive-v2.0.0-beta) - 2026-02-09
 
 - Added entities implementation and removed people module

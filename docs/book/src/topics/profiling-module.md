@@ -161,7 +161,7 @@ some span.
 
 You can register custom, derived metrics over collected `ProfilingData` using
 `add_computed_statistic(label, description, computer, printer)`. The "computer"
-returns an `Option<T>` (for conditionally defined statistics), and the "printer"
+returns an `Option\<T>` (for conditionally defined statistics), and the "printer"
 prints the computed value.
 
 Computed statistics are printed by `print_computed_statistics()` and included in

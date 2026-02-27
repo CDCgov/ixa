@@ -16,13 +16,15 @@ a new file in the `src` directory called `people.rs`.
 ## Defining an Entity and Property
 
 ```rust
+// people.rs
+
 {{#rustdoc_include ../../models/disease_model/src/people.rs:define_property}}
 ```
 
 We have to define the `Person` entity before we can associate properties with
 it. The `define_entity!(Person)` macro invocation automatically defines the
 `Person` type, implements the `Entity` trait for `Person`, and creates the type
-alias `PersonId = EntityId<Person>`, which is the type we can use to represent
+alias `PersonId = EntityId\<Person>`, which is the type we can use to represent
 specific instances of our entity, a single person, in our simulation.
 
 To each person we will associate a value of the enum (short for “enumeration”)
@@ -50,43 +52,39 @@ For our `people` module, the `init()` function just inserts people into the
 `Context`.
 
 ```rust
-/// Populates the "world" with people.
+// Populates the "world" with people.
 pub fn init(context: &mut Context) {
    trace!("Initializing people");
 
-   for _ in 0..1000 {
-      let _: PersonId = context.add_entity(()).expect("failed to add person");
+   for _ in 0..100 {
+      let _ = context.add_entity(Person).expect("failed to add person");
    }
 }
 ```
 
-The `context.add_entity()` method call might look a little odd, because we are
-not giving `context` any data to insert, but that is because our one and only
-`Property` was defined to have a default value of `InfectionStatus::S`
-(susceptible)—so `context.add_entity()` doesn't need any information to create a
-new person. Another odd thing is the `.expect("failed to add person")` method
-call. In more complicated scenarios adding a person can fail. We could intercept
-that failure if we wanted, but in this simple case we will just let the program
-crash with a message about the reason: "failed to add person".
+We use `Person` here to represent a new entity with all default property values–
+our one and only `Property` was defined to have a default value of
+`InfectionStatus::S` (susceptible), so no additional information is needed.
 
-Finally, the `Context::add_entity` method returns an entity ID wrapped in a
-`Result`, which the `expect` method unwraps. We can use this ID if we need to
-refer to this newly created person. Since we don't need it, we assign the value
-to the special "don't care" variable `_` (underscore), which just throws the
-value away. Why assign it to anything, though? So that the compiler can infer
-that it is a `Person` we are creating, as opposed to some other entity we may
-have defined. If we just omitted the `let _: PersonId =` part completely, we
-would need to explicitly specify the entity type using
-[turbo fish notation](../appendix_rust/turbo-fish.md).
+The `.expect("failed to add person")` method call handles the case where adding
+a person could fail. We could intercept that failure if we wanted, but in this
+simple case we will just let the program crash with a message about the reason:
+"failed to add person".
+
+The `Context::add_entity` method returns an entity ID wrapped in a `Result`,
+which the `expect` method unwraps. We can use this ID if we need to refer to
+this newly created person. Since we don't need it, we assign the value to the
+special "don't care" variable `_` (underscore), which just throws the value
+away.
 
 ## Constants
 
-Having "magic numbers" embedded in your code, such as the constant `1000` here
+Having "magic numbers" embedded in your code, such as the constant `100` here
 representing the total number of people in our model, is **_bad practice_**.
 What if we want to change this value later? Will we even be able to find it in
 all of our source code? Ixa has a formal mechanism for managing these kinds of
 model parameters, but for now we will just define a "static constant" near the
-top of `src/main.rs` named `POPULATION` and replace the literal `1000` with
+top of `src/main.rs` named `POPULATION` and replace the literal `100` with
 `POPULATION`:
 
 ```rust
@@ -115,6 +113,5 @@ defined items are coming from, so we need to have `use` statements at the top of
 the file to import those items. Here is the complete `src/people.rs` file:
 
 ```rust
-//people.rs
-{{#rustdoc_include ../../models/disease_model/src/people.rs:all}}
+{{#rustdoc_include ../../models/disease_model/src/people.rs}}
 ```

@@ -58,6 +58,20 @@ impl<E: Entity> PropertyList<E> for () {
     }
 }
 
+// An Entity ZST itself is an empty `PropertyList` for that entity.
+// This allows `context.add_entity(Person)` instead of `context.add_entity(())`.
+impl<E: Entity + Copy> PropertyList<E> for E {
+    fn validate() -> Result<(), IxaError> {
+        Ok(())
+    }
+    fn contains_properties(property_type_ids: &[TypeId]) -> bool {
+        property_type_ids.is_empty()
+    }
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+}
+
 // ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
 //     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
 //     whether the conflict actually exists.
@@ -103,11 +117,10 @@ macro_rules! impl_property_list {
                     for i in 0..$ct - 1 {
                         for j in (i + 1)..$ct {
                             if property_type_ids[i] == property_type_ids[j] {
-                                return Err(format!(
-                                    "the same property appears in both position {} and {} in the property list",
-                                    i,
-                                    j
-                                ).into());
+                                return Err(IxaError::DuplicatePropertyInPropertyList {
+                                    first_index: i,
+                                    second_index: j,
+                                });
                             }
                         }
                     }
@@ -132,7 +145,7 @@ macro_rules! impl_property_list {
     };
 }
 
-// Generate impls for tuple lengths 2 through 10.
-seq!(Z in 2..=5 {
+// Generate impls for tuple lengths 2 through 20. (The 0 and 1 case are implemented above.)
+seq!(Z in 2..=20 {
     impl_property_list!(Z);
 });

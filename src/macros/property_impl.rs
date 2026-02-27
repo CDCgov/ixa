@@ -893,18 +893,12 @@ mod tests {
         make_uncanonical = |v: u32| Signed(v as i32)
     );
     impl_property_value_traits!(Signed, Person);
-    #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
-    struct Weight(f64);
-    impl_property!(Weight, Person, default_const = Weight(0.0));
-
-    // A struct with named fields
-    #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
-    struct Innocculation {
-        time: f64,
-        dose: u8,
-    }
-    impl_property!(
-        Innocculation,
+    define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
+    define_property!(
+        struct Innocculation {
+            time: f64,
+            dose: u8,
+        },
         Person,
         default_const = Innocculation { time: 0.0, dose: 0 }
     );
@@ -1072,7 +1066,7 @@ mod tests {
         }
 
         context.with_query_results(((Name("John"), Age(42), Weight(220.5)),), &mut |results| {
-            assert_eq!(results.len(), 1);
+            assert_eq!(results.into_iter().count(), 1);
         });
     }
 
