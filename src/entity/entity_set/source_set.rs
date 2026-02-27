@@ -1,51 +1,83 @@
-//! A `SourceSet` abstractly represents the set of `EntityId<E>`s for which a particular
-//! `Property` has a particular value.
+//! `SourceSet` and `SourceIterator` are companion types that provide a uniform
+//! interface over several internal data-source representations used by query
+//! execution.
 //!
-//! A `SourceSet` can be converted into a `SourceIterator<'c>`, an
-//! iterator over the set of `EntityId<E>`s it represents. The lifetime `'c`
-//! is the lifetime of the (immutable) borrow of the underlying `Context`.
+//! `SourceSet` is the membership-oriented view (`contains`, `sort_key`), while
+//! `SourceIterator` (defined in `source_iterator.rs`) is the traversal-oriented
+//! view. A `SourceSet` can be converted into a `SourceIterator<'c>` over the same
+//! logical set. The lifetime `'c` is the lifetime of the (immutable) borrow of
+//! the underlying `Context`.
 //!
-//! The `SourceSet<'c>` and `SourceIterator<'c>` types are used by `EntitySetIterator<'c>`, which
-//! iterates over the intersection of a set of `SourceSet`s. Internally, `EntitySetIterator` holds
-//! its state in a set of `SourceSet` instances and a `SourceIterator`, which is an iterator created
-//! from a `SourceSet`. A `SourceSet` wraps either an index set (an immutable reference to a set
-//! from an index) or a property vector (the `Vec<Option<Property<E>::Value>>` that internally
-//! stores the property values) and can compute membership very efficiently. The algorithm chooses
-//! the _smallest_ `SourceSet` to create its `SourceIterator` and, when `EntitySetIterator::next()`
-//! is called, this `SourceIterator` is iterated over until an ID is found that is contained
-//! in all other `SourceSet`s, in which case the ID is returned, or until it is exhausted.
+//! Several auxiliary types sit between raw storage and these companion types:
+//! - `AbstractPropertySource`: type-erased property-backed set interface
+//! - `ConcretePropertySource`: wrapper over concrete property-value vectors
+//! - `DerivedPropertySource`: wrapper that computes derived property values
+//! - `IndexSetIterator` (in `source_iterator.rs`): self-referential wrapper over index-set iterators
+//!
+//! In some cases we intentionally do not split into separate intermediate
+//! `*Set` and `*Iterator` wrappers. For simplicity, `ConcretePropertySource` and
+//! `DerivedPropertySource` each implement both the set-facing
+//! `AbstractPropertySource` API and `Iterator`.
+//!
+//! `EntitySetIterator<'c>` uses `SourceSet<'c>` and `SourceIterator<'c>` to
+//! evaluate intersections. Sources may be empty, whole-population, index-backed,
+//! singleton, or property-backed. The iterator chooses the smallest source as the driver and
+//! checks candidate IDs against remaining sources.
+//!
+//! ## Source ordering and `cost_hint`
+//!
+//! `SourceSet::sort_key()` returns `(length_upper_bound, cost_hint)`. Source ordering for
+//! intersections and unions uses lexicographic ordering on this tuple:
+//! 1. smaller `length_upper_bound` first,
+//! 2. on ties, smaller `cost_hint` first.
+//!
+//! The `cost_hint` is a lightweight heuristic for relative per-candidate
+//! membership/iteration work. It is not a correctness value; it is only used to
+//! break ties when upper bounds are equal.
+//!
+//! | Source kind                  | `cost_hint` |
+//! | ---------------------------- | ----------- |
+//! | `SourceSet::Empty`           | `0`         |
+//! | `SourceSet::Entity`          | `1`         |
+//! | `SourceSet::Population`      | `2`         |
+//! | `SourceSet::IndexSet`        | `3`         |
+//! | `ConcretePropertySource`     | `5`         |
+//! | `DerivedPropertySource`      | `6`         |
 
 use std::cell::Ref;
-use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
-use ouroboros::self_referencing;
-
+use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, PopulationIterator};
-use crate::hashing::{IndexSet, IndexSetIter};
+use crate::hashing::{HashValueType, IndexSet};
 use crate::prelude::Property;
 use crate::Context;
 
-type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
+pub(super) type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub(crate) struct PropertySourceId {
+    pub property_id: usize,
+    pub value_hash: HashValueType,
+}
 
 /// Type erased property source representing the (abstract) set of `EntityId<E>`s
 /// for which a particular property has a particular value. This is used for
 /// both `ConcretePropertyVec<'a, P: Property>` and `DerivedPropertySource<'a, P: Property>`.
-pub trait AbstractPropertySource<'a, E: Entity> {
-    /// An upper bound on the number of elements this source will need to iterate over. The idea is to perform the
-    /// minimum amount of work to determine the first set in the intersection of sets that `EntitySetIterator`
-    /// represents.
-    fn upper_len(&self) -> usize;
+pub(crate) trait AbstractPropertySource<'a, E: Entity>:
+    Iterator<Item = EntityId<E>>
+{
+    /// Identity of the logical property query represented by this source.
+    fn id(&self) -> PropertySourceId;
 
     /// A test that `entity_id` is contained in the (abstractly
     /// defined) set. This operation is very efficient.
     fn contains(&self, entity_id: EntityId<E>) -> bool;
 
-    /// This is purely a type cast from `Box<dyn AbstractPropertyVec>` to
-    /// `Box<dyn Iterator<Item = EntityId<E>>>`. Notice the type of `self`.
-    fn to_iter(self: Box<Self>) -> Box<dyn Iterator<Item = EntityId<E>> + 'a>;
+    /// Ordering key used for source selection.
+    fn sort_key(&self) -> (usize, u8);
 }
 
 /// To iterate over the values of an unindexed derived property,
@@ -83,16 +115,19 @@ impl<'a, E: Entity, P: Property<E>> DerivedPropertySource<'a, E, P> {
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for DerivedPropertySource<'a, E, P>
 {
-    fn upper_len(&self) -> usize {
-        self.context.get_entity_count::<E>()
+    fn id(&self) -> PropertySourceId {
+        PropertySourceId {
+            property_id: P::index_id(),
+            value_hash: P::hash_property_value(&self.value.make_canonical()),
+        }
     }
 
     fn contains(&self, entity_id: EntityId<E>) -> bool {
         P::compute_derived(self.context, entity_id) == self.value
     }
 
-    fn to_iter(self: Box<Self>) -> Box<dyn Iterator<Item = EntityId<E>> + 'a> {
-        self
+    fn sort_key(&self) -> (usize, u8) {
+        (self.context.get_entity_count::<E>(), 6)
     }
 }
 
@@ -158,13 +193,10 @@ impl<'a, E: Entity, P: Property<E>> ConcretePropertySource<'a, E, P> {
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for ConcretePropertySource<'a, E, P>
 {
-    fn upper_len(&self) -> usize {
-        if !self.is_default_value {
-            self.values.len()
-        } else {
-            // If the property is default value, we can't use the length of the property vector, because
-            // unset values are implicitly equal to the default value. Instead, we use the population size.
-            self.population_size
+    fn id(&self) -> PropertySourceId {
+        PropertySourceId {
+            property_id: P::index_id(),
+            value_hash: P::hash_property_value(&self.value.make_canonical()),
         }
     }
 
@@ -178,8 +210,15 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
         }
     }
 
-    fn to_iter(self: Box<Self>) -> Box<dyn Iterator<Item = EntityId<E>> + 'a> {
-        self
+    fn sort_key(&self) -> (usize, u8) {
+        let upper = if !self.is_default_value {
+            self.values.len()
+        } else {
+            // If the property is default value, we can't use the length of the property vector, because
+            // unset values are implicitly equal to the default value. Instead, we use the population size.
+            self.population_size
+        };
+        (upper, 5)
     }
 }
 
@@ -213,42 +252,59 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
     }
 }
 
-/// The self-referential iterator type for index sets. We don't implement
-/// `Iterator` for this struct, choosing instead to access the inner
-/// iterator in the `Iterator` implementation on `SourceIterator`.
-#[self_referencing]
-pub(super) struct IndexSetIterator<'a, E: Entity> {
-    index_set: Ref<'a, IndexSet<EntityId<E>>>,
-    #[borrows(index_set)]
-    #[covariant]
-    iter: IndexSetIter<'this, EntityId<E>>,
-}
-
-impl<'a, E: Entity> IndexSetIterator<'a, E> {
-    pub fn from_index_set(index_set: Ref<'a, IndexSet<EntityId<E>>>) -> Self {
-        IndexSetIteratorBuilder {
-            index_set,
-            iter_builder: |index_set| index_set.iter(),
-        }
-        .build()
-    }
-}
-
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
 pub(crate) enum SourceSet<'a, E: Entity> {
+    Empty,
+    Population(usize),
+    #[allow(dead_code)]
+    Entity(EntityId<E>),
     IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
     PropertySet(BxPropertySource<'a, E>),
 }
 
+impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Empty, Self::Empty) => true,
+            (Self::Population(left), Self::Population(right)) => left == right,
+            (Self::Entity(left), Self::Entity(right)) => left == right,
+            (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
+            (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
+            _ => false,
+        }
+    }
+}
+
+impl<'a, E: Entity> Eq for SourceSet<'a, E> {}
+
 impl<'a, E: Entity> SourceSet<'a, E> {
-    /// A constructor for `SourceSet`s during construction of `EntitySetIterator` in
-    /// `Query<E>::new_query_result_iterator()`. Returns `None` if the set is empty.
+    pub(super) fn try_len(&self) -> Option<usize> {
+        match self {
+            SourceSet::Empty => Some(0),
+            SourceSet::Population(population) => Some(*population),
+            SourceSet::Entity(_) => Some(1),
+            SourceSet::IndexSet(source) => Some(source.len()),
+            SourceSet::PropertySet(_) => None,
+        }
+    }
+
+    /// Ordering key used for source selection.
+    pub(super) fn sort_key(&self) -> (usize, u8) {
+        match self {
+            SourceSet::Empty => (0, 0),
+            SourceSet::Entity(_) => (1, 1),
+            SourceSet::Population(population) => (*population, 2),
+            SourceSet::IndexSet(source) => (source.len(), 3),
+            SourceSet::PropertySet(source) => source.sort_key(),
+        }
+    }
+
+    /// A constructor for `SourceSet`s during construction of `EntitySet` in
+    /// `Query<E>::new_query_result()`. Returns `None` if the set is empty.
     ///
     /// We first look for an index set. If not found, we check if the property is derived.
     /// For derived properties, we wrap a reference to the `Context`. For nonderived
     /// properties, we wrap a reference to the property's backing vector.
-    ///
-    /// This method refreshes outdated indexes.
     pub(crate) fn new<P: Property<E>>(value: P, context: &'a Context) -> Option<Self> {
         let property_store = context.entity_store.get_property_store::<E>();
 
@@ -293,15 +349,11 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         }
     }
 
-    pub(super) fn upper_len(&self) -> usize {
-        match self {
-            SourceSet::IndexSet(source) => source.len(),
-            SourceSet::PropertySet(source) => source.upper_len(),
-        }
-    }
-
     pub(super) fn contains(&self, id: EntityId<E>) -> bool {
         match self {
+            SourceSet::Empty => false,
+            SourceSet::Population(population) => id.0 < *population,
+            SourceSet::Entity(entity_id) => *entity_id == id,
             SourceSet::IndexSet(source) => source.contains(&id),
             SourceSet::PropertySet(source) => source.contains(id),
         }
@@ -309,78 +361,18 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn into_iter(self) -> SourceIterator<'a, E> {
         match self {
+            SourceSet::Empty => SourceIterator::Empty,
+            SourceSet::Population(population) => {
+                SourceIterator::Population(PopulationIterator::new(population))
+            }
+            SourceSet::Entity(entity_id) => SourceIterator::Entity {
+                id: entity_id,
+                exhausted: false,
+            },
             SourceSet::IndexSet(ids) => {
                 SourceIterator::IndexIter(IndexSetIterator::from_index_set(ids))
             }
-            SourceSet::PropertySet(property_vec) => {
-                SourceIterator::PropertyVecIter(property_vec.to_iter())
-            }
-        }
-    }
-}
-/// Kinds of iterators that are used as a basis for `EntitySetIterator`
-pub(super) enum SourceIterator<'a, E: Entity> {
-    /// An iterator over an index set
-    IndexIter(IndexSetIterator<'a, E>),
-    /// An iterator over a property vector
-    PropertyVecIter(Box<dyn Iterator<Item = EntityId<E>> + 'a>),
-    /// An iterator over the entire population
-    WholePopulation(PopulationIterator<E>),
-    /// An empty iterator
-    Empty,
-}
-
-impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SourceIterator::IndexIter(_iter) => write!(f, "IndexIter"),
-            SourceIterator::PropertyVecIter(_iter) => write!(f, "PropertyVecIter"),
-            SourceIterator::WholePopulation(_iter) => write!(f, "WholePopulation"),
-            SourceIterator::Empty => write!(f, "Empty"),
-        }
-    }
-}
-
-impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
-    type Item = EntityId<E>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            SourceIterator::IndexIter(index_set_iter) => {
-                index_set_iter.with_iter_mut(|iter| iter.next().copied())
-            }
-            SourceIterator::PropertyVecIter(iter) => iter.next(),
-            SourceIterator::WholePopulation(iter) => iter.next(),
-            SourceIterator::Empty => None,
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            SourceIterator::IndexIter(iter) => iter.with_iter(|iter| iter.size_hint()),
-            SourceIterator::PropertyVecIter(_) => (0, None),
-            SourceIterator::WholePopulation(iter) => iter.size_hint(),
-            SourceIterator::Empty => (0, Some(0)),
-        }
-    }
-
-    fn count(self) -> usize {
-        // Some of these iterators have very efficient `count` implementations, and we want to exploit
-        // them when they exist.
-        match self {
-            SourceIterator::IndexIter(mut iter) => iter.with_iter_mut(|iter| iter.count()),
-            SourceIterator::PropertyVecIter(iter) => iter.count(),
-            SourceIterator::WholePopulation(iter) => iter.count(),
-            SourceIterator::Empty => 0,
-        }
-    }
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        match self {
-            SourceIterator::IndexIter(iter) => iter.with_iter_mut(|iter| iter.nth(n).copied()),
-            SourceIterator::PropertyVecIter(iter) => iter.nth(n),
-            SourceIterator::WholePopulation(iter) => iter.nth(n),
-            SourceIterator::Empty => None,
+            SourceSet::PropertySet(property_vec) => SourceIterator::PropertyVecIter(property_vec),
         }
     }
 }
@@ -390,38 +382,99 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
-    use crate::{define_entity, define_property};
+    use crate::{define_derived_property, define_entity, define_property};
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person, default_const = Age(0));
+    define_property!(struct Flag(bool), Person, default_const = Flag(false));
+    define_derived_property!(struct IsAdult(bool), Person, [Age], |age| IsAdult(age.0 >= 18));
 
     #[test]
-    fn test_iterators() {
-        let values: RawPropertyValueVec<Age> =
-            [0u8, 3, 2, 3, 4, 5, 3].into_iter().map(Age).collect();
-        let people_set = IndexSet::from_iter([
-            EntityId::new(0),
-            EntityId::new(2),
-            EntityId::new(3),
-            EntityId::new(6),
-        ]);
-        let people_set = RefCell::new(people_set);
-        let people_set_ref = people_set.borrow();
-        {
-            let pvi = SourceSet::PropertySet(Box::new(ConcretePropertySource::<_, Age>::new(
-                &values,
-                Age(3u8),
-                8,
-            )));
-            let isi = SourceSet::IndexSet(people_set_ref);
-            let sources = vec![pvi, isi];
+    fn source_set_variants_basic_behavior() {
+        let empty = SourceSet::<Person>::Empty;
+        assert_eq!(empty.sort_key(), (0, 0));
+        assert!(!empty.contains(EntityId::new(0)));
+        assert_eq!(empty.into_iter().count(), 0);
 
-            for source in sources {
-                for id in source.into_iter() {
-                    print!("{:?}, ", id);
-                }
-                println!();
-            }
+        let population = SourceSet::<Person>::Population(3);
+        assert_eq!(population.sort_key(), (3, 2));
+        assert!(population.contains(EntityId::new(0)));
+        assert!(!population.contains(EntityId::new(3)));
+        let population_ids = SourceSet::<Person>::Population(3)
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            population_ids,
+            vec![EntityId::new(0), EntityId::new(1), EntityId::new(2)]
+        );
+
+        let singleton = SourceSet::<Person>::Entity(EntityId::new(9));
+        assert_eq!(singleton.sort_key(), (1, 1));
+        assert!(singleton.contains(EntityId::new(9)));
+        assert!(!singleton.contains(EntityId::new(8)));
+        let singleton_ids = SourceSet::<Person>::Entity(EntityId::new(9))
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(singleton_ids, vec![EntityId::new(9)]);
+
+        let ids = RefCell::new(
+            [EntityId::new(1), EntityId::new(4), EntityId::new(8)]
+                .into_iter()
+                .collect::<IndexSet<_>>(),
+        );
+        let ids_ref = ids.borrow();
+        let indexed = SourceSet::<Person>::IndexSet(ids_ref);
+        assert_eq!(indexed.sort_key(), (3, 3));
+        assert!(indexed.contains(EntityId::new(4)));
+        assert!(!indexed.contains(EntityId::new(2)));
+    }
+
+    #[test]
+    fn source_set_new_uses_indexed_or_unindexed_backing() {
+        let mut context = Context::new();
+        for age in [1u8, 2, 2, 3] {
+            context.add_entity((Age(age), Flag(true))).unwrap();
         }
+
+        assert!(matches!(
+            SourceSet::<Person>::new::<Age>(Age(2), &context).unwrap(),
+            SourceSet::PropertySet(_)
+        ));
+        let unindexed_ids = SourceSet::<Person>::new::<Age>(Age(2), &context)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        context.index_property::<Person, Age>();
+        assert!(matches!(
+            SourceSet::<Person>::new::<Age>(Age(2), &context).unwrap(),
+            SourceSet::IndexSet(_)
+        ));
+
+        let indexed_ids = SourceSet::<Person>::new::<Age>(Age(2), &context)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(unindexed_ids, indexed_ids);
+    }
+
+    #[test]
+    fn source_set_new_derived_vs_nonderived_backing() {
+        let mut context = Context::new();
+        context.add_entity((Age(12), Flag(true))).unwrap();
+        context.add_entity((Age(20), Flag(true))).unwrap();
+        context.add_entity((Age(44), Flag(false))).unwrap();
+
+        let nonderived = SourceSet::<Person>::new::<Age>(Age(20), &context).unwrap();
+        assert!(matches!(nonderived, SourceSet::PropertySet(_)));
+
+        let derived = SourceSet::<Person>::new::<IsAdult>(IsAdult(true), &context).unwrap();
+        assert!(matches!(derived, SourceSet::PropertySet(_)));
+
+        let derived_ids = SourceSet::<Person>::new::<IsAdult>(IsAdult(true), &context)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(derived_ids, vec![EntityId::new(1), EntityId::new(2)]);
     }
 }
