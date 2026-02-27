@@ -64,18 +64,6 @@ with different transmission rates by edge type.
 cargo run --example network-hhmodel
 ```
 
-### `reports`
-
-Legacy report example directory retained in the repository.
-
-### `reports-multi-threaded`
-
-Legacy multi-threaded report example directory retained in the repository.
-
-### `time-varying-infection`
-
-Legacy time-varying infection example directory retained in the repository.
-
 ## External examples
 
 * [ixa-epi-covid](https://github.com/CDCgov/ixa-epi-isolation)
