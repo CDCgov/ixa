@@ -109,8 +109,10 @@ pub trait ContextEntitiesExt {
     ///
     /// Also panics if `period` is not finite and strictly positive.
     ///
-    /// The first report runs at `now + period`, in `ExecutionPhase::Last`. After the
-    /// handler returns, the matched counter is cleared.
+    /// Recording starts at `ExecutionPhase::First` at simulation start time. The
+    /// first report runs at simulation start time in `ExecutionPhase::Last`, then at
+    /// each subsequent `start_time + k * period`. After the handler returns, the
+    /// matched counter is cleared.
     ///
     /// ```rust,ignore
     /// context.track_periodic_value_change_counts::<Person, (InfectionStatus,), Age>(
@@ -352,25 +354,30 @@ impl ContextEntitiesExt for Context {
             period > 0.0 && !period.is_nan() && !period.is_infinite(),
             "Period must be greater than 0"
         );
-
-        let counter_id = self
-            .entity_store
-            .get_property_store_mut::<E>()
-            .create_value_change_counter::<PL, P>();
-
-        // We add the plan unconditionally here instead of calling
-        // `schedule_next_periodic_value_change_count` because
-        // `schedule_next_periodic_value_change_count` only
-        // proceeds if other plans are scheduled.
-        let first_report_time = self.get_current_time() + period;
+        let start_time = self.get_start_time().unwrap_or(0.0);
         self.add_plan_with_phase(
-            first_report_time,
+            start_time,
             move |context| {
-                handle_periodic_value_change_count_event::<E, PL, P, F>(
-                    context, period, counter_id, handler,
+                // We create the counter at simulation start so initialization-time
+                // property writes are never recorded.
+                let counter_id = context
+                    .entity_store
+                    .get_property_store_mut::<E>()
+                    .create_value_change_counter::<PL, P>();
+
+                // We defer the first handler plan until now because it needs
+                // `counter_id`, and it must run in `ExecutionPhase::Last`.
+                context.add_plan_with_phase(
+                    context.get_current_time(),
+                    move |context| {
+                        handle_periodic_value_change_count_event::<E, PL, P, F>(
+                            context, period, counter_id, handler,
+                        );
+                    },
+                    ExecutionPhase::Last,
                 );
             },
-            ExecutionPhase::Last,
+            ExecutionPhase::First,
         );
     }
 
@@ -1219,6 +1226,12 @@ mod tests {
         );
 
         let property_value_store = context.get_property_value_store::<Person, CounterValue>();
+        assert_eq!(property_value_store.value_change_counters.len(), 0);
+
+        context.add_plan(0.5, Context::shutdown);
+        context.execute();
+
+        let property_value_store = context.get_property_value_store::<Person, CounterValue>();
         assert_eq!(property_value_store.value_change_counters.len(), 2);
     }
 
@@ -1245,7 +1258,7 @@ mod tests {
         });
 
         context.execute();
-        assert_eq!(*observed.borrow(), vec![(1, 1)]);
+        assert_eq!(*observed.borrow(), vec![(0, 0), (1, 1)]);
     }
 
     #[test]
@@ -1272,6 +1285,44 @@ mod tests {
         });
 
         context.execute();
-        assert_eq!(*observed.borrow(), vec![1, 0]);
+        assert_eq!(*observed.borrow(), vec![0, 1, 0]);
+    }
+
+    #[test]
+    fn periodic_value_change_counts_start_time_and_phase_behavior() {
+        let mut context = Context::new();
+        context.set_start_time(-2.0);
+
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+
+        let observed_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        let observed_counts = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let observed_times_clone = observed_times.clone();
+        let observed_counts_clone = observed_counts.clone();
+
+        context.track_periodic_value_change_counts(1.0, move |context, counter| {
+            observed_times_clone
+                .borrow_mut()
+                .push(context.get_current_time());
+            observed_counts_clone
+                .borrow_mut()
+                .push(counter.get_count((CounterStratum(true),), CounterValue(1)));
+        });
+
+        context.add_plan_with_phase(
+            -2.0,
+            move |context| {
+                context.set_property(person, CounterValue(1));
+            },
+            ExecutionPhase::Normal,
+        );
+        context.add_plan(0.0, |_| {});
+
+        context.execute();
+
+        assert_eq!(*observed_times.borrow(), vec![-2.0, -1.0, 0.0]);
+        assert_eq!(*observed_counts.borrow(), vec![1, 0, 0]);
     }
 }
