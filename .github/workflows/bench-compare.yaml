@@ -178,21 +178,21 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Download group markdown artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: results-*
           merge-multiple: true
           path: artifacts/results
 
       - name: Download group raw log artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: raw-*
           merge-multiple: true
           path: artifacts/raw
 
       - name: Download hyperfine artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: hyperfine
 
@@ -309,7 +309,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Download PR comment artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pr-comment
 
@@ -329,7 +329,7 @@ jobs:
       contents: write
     steps:
       - name: Download bench history artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bench-history
 
