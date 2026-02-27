@@ -141,7 +141,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::{Deserialize, Serialize};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Hash)]
+/// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 /// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
@@ -162,7 +162,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::{Deserialize, Serialize};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Hash)]
+/// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
 /// impl_property!(Coordinates, Person);
 /// ```
@@ -185,7 +185,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::{Deserialize, Serialize};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Hash)]
+/// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 /// pub enum InfectionStatus {
 ///     Susceptible,
 ///     Infectious,
@@ -196,8 +196,10 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - The generated type always derives the following traits:
-///   `Debug`, `PartialEq`, `Clone`, `Copy`, `Serialize`, `Deserialize`, and `Hash`.
+/// - The generated type derives `Debug`, `Clone`, `Copy`, `Serialize`, and `Deserialize`.
+/// - The generated type also implements `PartialEq`, `Eq`, and `Hash` in terms of
+///   [`Property::hash_property_value`](crate::entity::property::Property::hash_property_value)
+///   applied to canonical values.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
@@ -210,7 +212,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_property! to provide a custom display implementation
@@ -225,6 +227,7 @@ macro_rules! define_property {
                 }
             }
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (tuple)
@@ -233,9 +236,10 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name($(pub $field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (named fields)
@@ -244,9 +248,10 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name { $(pub $field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Enum
@@ -257,11 +262,45 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub enum $name {
             $($variant),*
         }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! impl_property_value_traits {
+    ($property:ident, $entity:ident) => {
+        impl std::cmp::PartialEq for $property {
+            fn eq(&self, other: &Self) -> bool {
+                let lhs =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*self);
+                let rhs =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*other);
+                <Self as $crate::entity::property::Property<$entity>>::hash_property_value(&lhs)
+                    == <Self as $crate::entity::property::Property<$entity>>::hash_property_value(
+                        &rhs,
+                    )
+            }
+        }
+
+        impl std::cmp::Eq for $property {}
+
+        impl std::hash::Hash for $property {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                let canonical =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*self);
+                let hash =
+                    <Self as $crate::entity::property::Property<$entity>>::hash_property_value(
+                        &canonical,
+                    );
+                state.write_u128(hash);
+            }
+        }
     };
 }
 
@@ -542,7 +581,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_derived_property! to provide a custom display implementation
@@ -560,6 +599,7 @@ macro_rules! define_derived_property {
             }
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (tuple)
@@ -572,7 +612,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name( $(pub $field_ty),* );
 
         $crate::impl_derived_property!(
@@ -583,6 +623,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (named fields)
@@ -595,7 +636,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub struct $name { $($visibility $field_name : $field_ty),* }
 
         $crate::impl_derived_property!(
@@ -606,6 +647,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Enum
@@ -620,7 +662,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         pub enum $name {
             $($variant),*
         }
@@ -633,6 +675,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Internal branch to construct the compute function.
@@ -839,6 +882,17 @@ mod tests {
     define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
     define_property!(struct Name(&'static str), Person, default_const = Name(""));
     define_property!(struct Age(u8), Person, default_const = Age(0));
+    #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+    struct Signed(i32);
+    impl_property!(
+        Signed,
+        Person,
+        default_const = Signed(0),
+        canonical_value = u32,
+        make_canonical = |v: Signed| v.0.unsigned_abs(),
+        make_uncanonical = |v: u32| Signed(v as i32)
+    );
+    impl_property_value_traits!(Signed, Person);
     #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
     struct Weight(f64);
     impl_property!(Weight, Person, default_const = Weight(0.0));
@@ -1092,5 +1146,24 @@ mod tests {
         let property = POu32(Some(22));
         let debug_str = format!("{:?}", property);
         assert_eq!(debug_str, "POu32(Some(22))");
+    }
+
+    #[test]
+    fn test_equality_and_hash_use_canonical_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let left = Signed(-7);
+        let right = Signed(7);
+
+        assert_eq!(Signed::make_canonical(left), Signed::make_canonical(right));
+        assert_eq!(left, right);
+
+        let mut left_hasher = DefaultHasher::new();
+        left.hash(&mut left_hasher);
+        let mut right_hasher = DefaultHasher::new();
+        right.hash(&mut right_hasher);
+
+        assert_eq!(left_hasher.finish(), right_hasher.finish());
     }
 }
