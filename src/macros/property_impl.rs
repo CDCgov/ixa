@@ -5,7 +5,7 @@ Macros for implementing properties.
 # [`define_property!`][macro@crate::define_property]
 
 For the most common cases, use the [`define_property!`][macro@crate::define_property] macro. This macro defines a struct or enum
-with the standard derives required by the [`Property`][crate::entity::property::Property] trait and implements [`Property`][crate::entity::property::Property] (via
+with a standard set of derives and implements [`Property`][crate::entity::property::Property] (via
 [`impl_property!`][macro@crate::impl_property]) for you.
 
 ```rust,ignore
@@ -26,8 +26,8 @@ Notice the convenient `default_const = <default_value>` keyword argument that al
 define a compile-time constant default value for the property. This is an optional argument.
 If it is omitted, a value for the property must be supplied upon entity creation.
 
-The primary advantage of using this macro is that it automatically derives the list of traits every
-[`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
+The primary advantage of using this macro is that it automatically derives the standard property traits for you. You
+don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
@@ -38,7 +38,13 @@ and to inner fields of tuple structs in the expansion.
 
 You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
-have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
+have to remember to derive the traits your type needs. At minimum, property types must satisfy the
+[`AnyProperty`][crate::entity::property::AnyProperty] bound (`Copy`, `Clone`, `Debug`, `PartialEq`, `Serialize`).
+For consistency with the hash/equality semantics used by `define_property!`,
+also invoke `impl_property_value_traits!(TypeName, EntityName)` after
+`impl_property!`.
+This is a separate macro call because the same type may implement `Property`
+for multiple entities.
 
 Some examples:
 
@@ -48,10 +54,12 @@ define_entity!(Person);
 // The `define_property!` automatically adds `pub` visibility to the struct and its tuple
 // fields. If we want to restrict the visibility of our `Property` type, we can use the
 // `impl_property!` macro instead. The only
-// catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
+// catch is, we have to remember to `derive` all of
+// `Copy, Clone, Debug, PartialEq, Serialize`.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 struct Age(pub u8);
 impl_property!(Age, Person);
+impl_property_value_traits!(Age, Person);
 
 // Here we derive `Default`, which also requires an attribute on one
 // of the variants. (`Property` has its own independent mechanism for
@@ -65,12 +73,14 @@ enum InfectionStatus {
 }
 // We also specify the default value explicitly for entities.
 impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Susceptible);
+impl_property_value_traits!(InfectionStatus, Person);
 
 // Exactly equivalent to
 //    `define_property!(struct Vaccinated(pub bool), Person, default_const = Vaccinated(false));`
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
+impl_property_value_traits!(Vaccinated, Person);
 ```
 
 # [`impl_property!`][macro@crate::impl_property] with options
@@ -117,6 +127,7 @@ impl_property!(
     make_uncanonical = |v: DegreesCelsius| DegreesFahrenheit(v.0 * 9.0 / 5.0 + 32.0),
     display_impl = |v| format!("{:.1} °C", v.0)
 );
+impl_property_value_traits!(DegreesFahrenheit, WeatherStation);
 ```
 
 */
@@ -138,7 +149,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, Clone, Copy, Serialize)]
 /// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
@@ -159,7 +170,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, Clone, Copy, Serialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
 /// impl_property!(Coordinates, Person);
 /// ```
@@ -182,7 +193,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
 ///     Susceptible,
 ///     Infectious,
@@ -193,8 +204,10 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - The generated type always derives the following traits:
-///   `Debug`, `PartialEq`, `Eq`, `Clone`, `Copy`, and `Serialize`.
+/// - The generated type derives `Debug`, `Clone`, `Copy`, and `Serialize`.
+/// - The generated type also implements `PartialEq`, `Eq`, and `Hash` in terms of
+///   [`Property::hash_property_value`](crate::entity::property::Property::hash_property_value)
+///   applied to canonical values.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
@@ -207,7 +220,7 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_property! to provide a custom display implementation
@@ -222,6 +235,7 @@ macro_rules! define_property {
                 }
             }
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (tuple)
@@ -230,9 +244,10 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name($(pub $field_ty),*);
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (named fields)
@@ -241,9 +256,10 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name { $(pub $field_name : $field_ty),* }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Enum
@@ -254,11 +270,45 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub enum $name {
             $($variant),*
         }
         $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::impl_property_value_traits!($name, $entity);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! impl_property_value_traits {
+    ($property:ident, $entity:ident) => {
+        impl std::cmp::PartialEq for $property {
+            fn eq(&self, other: &Self) -> bool {
+                let lhs =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*self);
+                let rhs =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*other);
+                <Self as $crate::entity::property::Property<$entity>>::hash_property_value(&lhs)
+                    == <Self as $crate::entity::property::Property<$entity>>::hash_property_value(
+                        &rhs,
+                    )
+            }
+        }
+
+        impl std::cmp::Eq for $property {}
+
+        impl std::hash::Hash for $property {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                let canonical =
+                    <Self as $crate::entity::property::Property<$entity>>::make_canonical(*self);
+                let hash =
+                    <Self as $crate::entity::property::Property<$entity>>::hash_property_value(
+                        &canonical,
+                    );
+                state.write_u128(hash);
+            }
+        }
     };
 }
 
@@ -539,7 +589,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name(pub Option<$inner_ty>);
 
         // Use impl_derived_property! to provide a custom display implementation
@@ -557,6 +607,7 @@ macro_rules! define_derived_property {
             }
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (tuple)
@@ -569,7 +620,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name( $(pub $field_ty),* );
 
         $crate::impl_derived_property!(
@@ -580,6 +631,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Struct (named fields)
@@ -592,7 +644,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub struct $name { $($visibility $field_name : $field_ty),* }
 
         $crate::impl_derived_property!(
@@ -603,6 +655,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Enum
@@ -617,7 +670,7 @@ macro_rules! define_derived_property {
         // For `canonical_value` implementations:
         $(, $($extra:tt)+),*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
         pub enum $name {
             $($variant),*
         }
@@ -630,6 +683,7 @@ macro_rules! define_derived_property {
             |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
+        $crate::impl_property_value_traits!($name, $entity);
     };
 
     // Internal branch to construct the compute function.
@@ -836,9 +890,18 @@ mod tests {
     define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
     define_property!(struct Name(&'static str), Person, default_const = Name(""));
     define_property!(struct Age(u8), Person, default_const = Age(0));
+    #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+    struct Signed(i32);
+    impl_property!(
+        Signed,
+        Person,
+        default_const = Signed(0),
+        canonical_value = u32,
+        make_canonical = |v: Signed| v.0.unsigned_abs(),
+        make_uncanonical = |v: u32| Signed(v as i32)
+    );
+    impl_property_value_traits!(Signed, Person);
     define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
-
-    // A struct with named fields
     define_property!(
         struct Innocculation {
             time: f64,
@@ -1085,5 +1148,24 @@ mod tests {
         let property = POu32(Some(22));
         let debug_str = format!("{:?}", property);
         assert_eq!(debug_str, "POu32(Some(22))");
+    }
+
+    #[test]
+    fn test_equality_and_hash_use_canonical_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let left = Signed(-7);
+        let right = Signed(7);
+
+        assert_eq!(Signed::make_canonical(left), Signed::make_canonical(right));
+        assert_eq!(left, right);
+
+        let mut left_hasher = DefaultHasher::new();
+        left.hash(&mut left_hasher);
+        let mut right_hasher = DefaultHasher::new();
+        right.hash(&mut right_hasher);
+
+        assert_eq!(left_hasher.finish(), right_hasher.finish());
     }
 }
