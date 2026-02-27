@@ -612,4 +612,121 @@ mod tests {
             IndexSetResult::Unsupported
         ));
     }
+
+    #[test]
+    fn set_contiguous_from_rows_empty_input_noop() {
+        let property_store = PropertyStore::<Person>::new();
+        let ages = property_store.get::<Age>();
+        ages.set_contiguous_from_rows(0, &[] as &[Age], |value| *value);
+
+        // A subsequent write should behave as if nothing had been written before.
+        ages.set(EntityId::<Person>::new(0), Age(12));
+        assert_eq!(ages.get(EntityId::<Person>::new(0)), Age(12));
+    }
+
+    #[test]
+    fn set_contiguous_from_rows_non_constant_append() {
+        let property_store = PropertyStore::<Person>::new();
+        let ages = property_store.get::<Age>();
+        let rows = [Age(10), Age(20), Age(30)];
+        ages.set_contiguous_from_rows(0, &rows, |value| *value);
+
+        assert_eq!(ages.get(EntityId::<Person>::new(0)), Age(10));
+        assert_eq!(ages.get(EntityId::<Person>::new(1)), Age(20));
+        assert_eq!(ages.get(EntityId::<Person>::new(2)), Age(30));
+    }
+
+    #[test]
+    fn set_contiguous_from_rows_constant_append_all_defaults() {
+        let property_store = PropertyStore::<Person>::new();
+        let statuses = property_store.get::<InfectionStatus>();
+
+        let rows = [InfectionStatus::Susceptible, InfectionStatus::Susceptible];
+        statuses.set_contiguous_from_rows(0, &rows, |value| *value);
+
+        // If defaults were skipped, setting index 2 should still backfill defaults.
+        statuses.set(EntityId::<Person>::new(2), InfectionStatus::Infected);
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(0)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(1)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(2)),
+            InfectionStatus::Infected
+        );
+    }
+
+    #[test]
+    fn set_contiguous_from_rows_constant_append_all_non_default() {
+        let property_store = PropertyStore::<Person>::new();
+        let statuses = property_store.get::<InfectionStatus>();
+
+        let rows = [InfectionStatus::Infected, InfectionStatus::Recovered];
+        statuses.set_contiguous_from_rows(0, &rows, |value| *value);
+
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(0)),
+            InfectionStatus::Infected
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(1)),
+            InfectionStatus::Recovered
+        );
+    }
+
+    #[test]
+    fn set_contiguous_from_rows_constant_append_mixed_values() {
+        let property_store = PropertyStore::<Person>::new();
+        let statuses = property_store.get::<InfectionStatus>();
+
+        let rows = [
+            InfectionStatus::Susceptible,
+            InfectionStatus::Infected,
+            InfectionStatus::Susceptible,
+        ];
+        statuses.set_contiguous_from_rows(0, &rows, |value| *value);
+
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(0)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(1)),
+            InfectionStatus::Infected
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(2)),
+            InfectionStatus::Susceptible
+        );
+    }
+
+    #[test]
+    fn set_contiguous_from_rows_non_contiguous_start_falls_back_to_set() {
+        let property_store = PropertyStore::<Person>::new();
+        let statuses = property_store.get::<InfectionStatus>();
+
+        let rows = [InfectionStatus::Recovered];
+        statuses.set_contiguous_from_rows(3, &rows, |value| *value);
+
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(0)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(1)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(2)),
+            InfectionStatus::Susceptible
+        );
+        assert_eq!(
+            statuses.get(EntityId::<Person>::new(3)),
+            InfectionStatus::Recovered
+        );
+    }
 }

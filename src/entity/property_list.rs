@@ -43,6 +43,32 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Assigns the given entity the property values in `self` in the `property_store`.
     /// This method does NOT emit property change events, as it is called upon entity creation.
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
+
+    /// Assigns property values for many entities in one call.
+    ///
+    /// The default implementation calls [`set_values_for_entity`](PropertyList::set_values_for_entity)
+    /// once per entity. Tuple impls override this with a columnar write (one property column at a
+    /// time) to reduce repeated property store lookups during bulk entity creation.
+    ///
+    /// Custom `PropertyList` implementations may rely on this default; the bulk API will work
+    /// correctly, though without the columnar optimization.
+    fn set_values_for_entities(
+        start_entity_index: usize,
+        property_values: &[Self],
+        property_store: &PropertyStore<E>,
+    ) {
+        for (offset, val) in property_values.iter().enumerate() {
+            val.set_values_for_entity(EntityId::new(start_entity_index + offset), property_store);
+        }
+    }
+
+    /// Reserves additional capacity in each concrete property value store touched by this list.
+    ///
+    /// The default implementation is a no-op. Tuple impls override this to pre-allocate storage,
+    /// which avoids repeated reallocations during bulk entity creation.
+    ///
+    /// Custom `PropertyList` implementations may rely on this default safely.
+    fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {}
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
@@ -55,6 +81,18 @@ impl<E: Entity> PropertyList<E> for () {
     }
     fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
         // No values to assign.
+    }
+
+    fn set_values_for_entities(
+        _start_entity_index: usize,
+        _property_values: &[Self],
+        _property_store: &PropertyStore<E>,
+    ) {
+        // No values to assign.
+    }
+
+    fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {
+        // No properties to reserve.
     }
 }
 
@@ -88,6 +126,23 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
         let property_value_store = property_store.get::<P>();
         property_value_store.set(entity_id, self.0);
+    }
+
+    fn set_values_for_entities(
+        start_entity_index: usize,
+        property_values: &[Self],
+        property_store: &PropertyStore<E>,
+    ) {
+        let property_value_store = property_store.get::<P>();
+        property_value_store.set_contiguous_from_rows(
+            start_entity_index,
+            property_values,
+            |values| values.0,
+        );
+    }
+
+    fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
+        property_store.get::<P>().reserve(additional);
     }
 }
 
@@ -124,6 +179,27 @@ macro_rules! impl_property_list {
                     #({
                         let property_value_store = property_store.get::<P~N>();
                         property_value_store.set(entity_id, self.N);
+                    })*
+                }
+
+                fn set_values_for_entities(
+                    start_entity_index: usize,
+                    property_values: &[Self],
+                    property_store: &PropertyStore<E>,
+                ) {
+                    #({
+                        let property_value_store = property_store.get::<P~N>();
+                        property_value_store.set_contiguous_from_rows(
+                            start_entity_index,
+                            property_values,
+                            |values| values.N,
+                        );
+                    })*
+                }
+
+                fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
+                    #({
+                        property_store.get::<P~N>().reserve(additional);
                     })*
                 }
             }

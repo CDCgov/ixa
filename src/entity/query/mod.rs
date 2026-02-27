@@ -117,6 +117,28 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
         self.inner.set_values_for_entity(entity_id, property_store)
     }
+
+    fn set_values_for_entities(
+        start_entity_index: usize,
+        property_values: &[Self],
+        property_store: &PropertyStore<E>,
+    ) {
+        // `EntityPropertyTuple` wraps an arbitrary `T: PropertyList<E>`, so we only have access
+        // to the row-level `set_values_for_entity` here. We cannot extract a contiguous slice of
+        // `T` values to pass to `T::set_values_for_entities`, which would give the columnar bulk
+        // path. Users of the `all!()` macro therefore don't benefit from the columnar write
+        // optimization, but correctness is maintained.
+        for (offset, wrapper) in property_values.iter().enumerate() {
+            let entity_id = EntityId::new(start_entity_index + offset);
+            wrapper
+                .inner
+                .set_values_for_entity(entity_id, property_store);
+        }
+    }
+
+    fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
+        T::reserve_for_entities(property_store, additional);
+    }
 }
 
 /// Encapsulates a query.
@@ -727,5 +749,98 @@ mod tests {
             context.get_property::<Person, RiskCategory>(person),
             RiskCategory::High
         );
+    }
+
+    #[test]
+    fn entity_property_tuple_bulk_add_entities_assigns_values() {
+        use crate::all;
+
+        let mut context = Context::new();
+        let rows = vec![
+            all!(Person, Age(10), County(1), Height(100), RiskCategory::Low),
+            all!(Person, Age(11), County(2), Height(101), RiskCategory::High),
+            all!(Person, Age(12), County(2), Height(102), RiskCategory::Low),
+        ];
+
+        let ids = context.add_entities::<Person, _, _>(rows).unwrap();
+        assert_eq!(
+            ids,
+            vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
+        );
+        assert_eq!(context.get_property::<Person, Age>(ids[0]), Age(10));
+        assert_eq!(context.get_property::<Person, County>(ids[1]), County(2));
+        assert_eq!(
+            context.get_property::<Person, RiskCategory>(ids[1]),
+            RiskCategory::High
+        );
+        assert_eq!(context.get_property::<Person, Height>(ids[2]), Height(102));
+    }
+
+    #[test]
+    fn entity_property_tuple_bulk_add_entities_works_with_indexed_queries() {
+        use crate::all;
+
+        let mut context = Context::new();
+        context.index_property::<Person, (Age, County)>();
+
+        let rows = vec![
+            all!(Person, Age(20), County(7), Height(170), RiskCategory::Low),
+            all!(Person, Age(20), County(7), Height(171), RiskCategory::High),
+            all!(Person, Age(30), County(8), Height(172), RiskCategory::Low),
+        ];
+        context.add_entities::<Person, _, _>(rows).unwrap();
+
+        assert_eq!(context.query_entity_count((Age(20), County(7))), 2);
+        assert_eq!(context.query_entity_count((Age(30), County(8))), 1);
+    }
+
+    #[test]
+    fn entity_property_tuple_bulk_add_entities_verifies_every_row() {
+        // Exhaustively checks that the row-major write path in EntityPropertyTuple does not mix
+        // up values between rows. Uses unique per-row values for all four property types.
+        use crate::all;
+
+        const N: usize = 20;
+
+        let mut context = Context::new();
+        let rows: Vec<_> = (0..N)
+            .map(|i| {
+                all!(
+                    Person,
+                    Age(i as u8),
+                    County(i as u32 * 10),
+                    Height(i as u32 * 100),
+                    if i % 2 == 0 {
+                        RiskCategory::Low
+                    } else {
+                        RiskCategory::High
+                    }
+                )
+            })
+            .collect();
+
+        let ids = context.add_entities::<Person, _, _>(rows).unwrap();
+
+        assert_eq!(ids.len(), N);
+        for (i, &id) in ids.iter().enumerate() {
+            assert_eq!(context.get_property::<Person, Age>(id), Age(i as u8));
+            assert_eq!(
+                context.get_property::<Person, County>(id),
+                County(i as u32 * 10)
+            );
+            assert_eq!(
+                context.get_property::<Person, Height>(id),
+                Height(i as u32 * 100)
+            );
+            let expected_risk = if i % 2 == 0 {
+                RiskCategory::Low
+            } else {
+                RiskCategory::High
+            };
+            assert_eq!(
+                context.get_property::<Person, RiskCategory>(id),
+                expected_risk
+            );
+        }
     }
 }

@@ -200,6 +200,84 @@ mod tests {
     }
 
     #[test]
+    fn add_entity_with_subscriber_fires_exactly_one_event() {
+        let mut context = Context::new();
+
+        let event_count = Rc::new(RefCell::new(0usize));
+        let event_count_clone = event_count.clone();
+        context.subscribe_to_event(move |ctx, event: EntityCreatedEvent<Person>| {
+            *event_count_clone.borrow_mut() += 1;
+            // Properties are accessible in the handler because events are deferred until execute().
+            assert_eq!(ctx.get_property::<Person, Age>(event.entity_id), Age(42));
+            assert_eq!(
+                ctx.get_property::<Person, RiskCategory>(event.entity_id),
+                RiskCategory::High
+            );
+        });
+
+        let id = context
+            .add_entity::<Person, _>((Age(42), RunningShoes(7), RiskCategory::High))
+            .unwrap();
+        assert_eq!(id, PersonId::new(0));
+        assert_eq!(
+            *event_count.borrow(),
+            0,
+            "event must not fire before execute()"
+        );
+
+        context.execute();
+        assert_eq!(*event_count.borrow(), 1, "exactly one event must fire");
+    }
+
+    #[test]
+    fn add_entity_without_subscriber_creates_entity_correctly() {
+        // Verifies the has_event_handlers fast path: no subscriber means no event emission,
+        // but the entity must still be created with correct properties and count.
+        let mut context = Context::new();
+
+        let id = context
+            .add_entity::<Person, _>((Age(30), RunningShoes(10), RiskCategory::Low))
+            .unwrap();
+
+        context.execute();
+
+        assert_eq!(id, PersonId::new(0));
+        assert_eq!(context.get_entity_count::<Person>(), 1);
+        assert_eq!(context.get_property::<Person, Age>(id), Age(30));
+        assert_eq!(
+            context.get_property::<Person, RiskCategory>(id),
+            RiskCategory::Low
+        );
+    }
+
+    #[test]
+    fn observe_bulk_entity_addition_order() {
+        let mut context = Context::new();
+
+        let seen_ids = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let seen_ids_clone = seen_ids.clone();
+        context.subscribe_to_event(move |_context, event: EntityCreatedEvent<Person>| {
+            seen_ids_clone.borrow_mut().push(event.entity_id.0);
+        });
+
+        let ids = context
+            .add_entities::<Person, _, _>([
+                (Age(18), RunningShoes(33), RiskCategory::Low),
+                (Age(19), RunningShoes(34), RiskCategory::High),
+                (Age(20), RunningShoes(35), RiskCategory::Low),
+            ])
+            .unwrap();
+
+        context.execute();
+
+        assert_eq!(
+            ids,
+            vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
+        );
+        assert_eq!(*seen_ids.borrow(), vec![0, 1, 2]);
+    }
+
+    #[test]
     fn observe_entity_property_change() {
         let mut context = Context::new();
 
@@ -235,21 +313,24 @@ mod tests {
     fn observe_entity_property_change_with_set() {
         let mut context = Context::new();
 
-        let flag = Rc::new(RefCell::new(false));
-        let flag_clone = flag.clone();
+        let event_count = Rc::new(RefCell::new(0usize));
+        let event_count_clone = event_count.clone();
         context.subscribe_to_event(
             move |_context, _event: PropertyChangeEvent<Person, RunningShoes>| {
-                *flag_clone.borrow_mut() = true;
+                *event_count_clone.borrow_mut() += 1;
             },
         );
-        // Does not emit a change event.
+        // Entity creation does not emit property-change events.
         let person_id = context
             .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
             .unwrap();
+        context.execute();
+        assert_eq!(*event_count.borrow(), 0);
+
         // Emits a change event.
         context.set_property(person_id, RunningShoes(42));
         context.execute();
-        assert!(*flag.borrow());
+        assert_eq!(*event_count.borrow(), 1);
     }
 
     #[test]

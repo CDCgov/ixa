@@ -202,6 +202,10 @@ impl Context {
         }
     }
 
+    pub(crate) fn has_event_handlers<E: IxaEvent + Copy + 'static>(&self) -> bool {
+        self.event_handlers.contains_key(&TypeId::of::<E>())
+    }
+
     /// Add a plan to the future event list at the specified time in the normal
     /// phase
     ///
@@ -940,6 +944,21 @@ mod tests {
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
         assert_eq!(*obs_data2.borrow(), 2);
+    }
+
+    #[test]
+    fn has_event_handlers_reflects_subscriptions() {
+        let mut context = Context::new();
+        assert!(!context.has_event_handlers::<Event1>());
+        assert!(!context.has_event_handlers::<Event2>());
+
+        context.subscribe_to_event::<Event1>(|_, _| {});
+        assert!(context.has_event_handlers::<Event1>());
+        assert!(!context.has_event_handlers::<Event2>());
+
+        context.subscribe_to_event::<Event2>(|_, _| {});
+        assert!(context.has_event_handlers::<Event1>());
+        assert!(context.has_event_handlers::<Event2>());
     }
 
     #[test]

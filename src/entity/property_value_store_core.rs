@@ -157,6 +157,66 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
         }
     }
+
+    /// Writes a contiguous run of values starting at `start_index`.
+    ///
+    /// This has a fast path for appending contiguous rows (`start_index == len`) to
+    /// avoid per-value bounds/default branching in `set`.
+    pub fn set_contiguous_from_rows<T, F>(&self, start_index: usize, rows: &[T], get_value: F)
+    where
+        F: Copy + Fn(&T) -> P,
+    {
+        debug_assert!(
+            !P::is_derived(),
+            "Tried to set a derived property value in property value store."
+        );
+        if rows.is_empty() {
+            return;
+        }
+
+        let len = self.data.len();
+
+        // Fast path: contiguous append.
+        if start_index == len {
+            if P::initialization_kind() == PropertyInitializationKind::Constant {
+                let default_value = P::default_const();
+                let mut has_default = false;
+                let mut has_non_default = false;
+
+                for row in rows {
+                    if get_value(row) == default_value {
+                        has_default = true;
+                    } else {
+                        has_non_default = true;
+                    }
+                    if has_default && has_non_default {
+                        break;
+                    }
+                }
+
+                // All values are default; keep sparse optimization.
+                if !has_non_default {
+                    return;
+                }
+
+                // No defaults in this chunk; append directly in one pass.
+                if !has_default {
+                    self.data.reserve(rows.len());
+                    self.data.extend(rows.iter().map(get_value));
+                    return;
+                }
+            } else {
+                self.data.reserve(rows.len());
+                self.data.extend(rows.iter().map(get_value));
+                return;
+            }
+        }
+
+        // General fallback path.
+        for (offset, row) in rows.iter().enumerate() {
+            self.set(EntityId::new(start_index + offset), get_value(row));
+        }
+    }
 }
 
 // See tests in `property_store.rs`.

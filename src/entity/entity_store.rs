@@ -13,6 +13,7 @@ for all registered types so that only valid (existing) `EntityId<E>` values are 
 
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
+use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
@@ -242,6 +243,16 @@ impl EntityStore {
         let id = record.entity_count;
         record.entity_count += 1;
         EntityId::new(id)
+    }
+
+    /// Reserves a contiguous range of new entity indices for `E`.
+    pub(crate) fn allocate_entity_id_range<E: Entity>(&mut self, n: usize) -> Range<usize> {
+        let index = E::id();
+        let record = &mut self.items[index];
+        let start = record.entity_count;
+        let end = start + n;
+        record.entity_count = end;
+        start..end
     }
 
     /// Returns a total count of all created entities of type `E`.
@@ -741,5 +752,42 @@ mod tests {
         assert_eq!(context.get_entity_count::<TestItem1>(), 6);
         assert_eq!(snapshot_iter.count(), 5); // Still sees original population
         assert_eq!(context.get_entity_iterator::<TestItem1>().count(), 6); // New iterator sees 6
+    }
+
+    #[test]
+    fn test_allocate_entity_id_range_from_empty() {
+        let mut store = EntityStore::new();
+        let range = store.allocate_entity_id_range::<TestItem1>(4);
+        assert_eq!(range, 0..4);
+        assert_eq!(store.get_entity_count::<TestItem1>(), 4);
+    }
+
+    #[test]
+    fn test_allocate_entity_id_range_is_contiguous_across_calls() {
+        let mut store = EntityStore::new();
+        let range1 = store.allocate_entity_id_range::<TestItem2>(3);
+        let range2 = store.allocate_entity_id_range::<TestItem2>(2);
+        assert_eq!(range1, 0..3);
+        assert_eq!(range2, 3..5);
+        assert_eq!(store.get_entity_count::<TestItem2>(), 5);
+    }
+
+    #[test]
+    fn test_allocate_entity_id_range_zero_is_noop() {
+        let mut store = EntityStore::new();
+        let initial_count = store.get_entity_count::<TestItem3>();
+        let range = store.allocate_entity_id_range::<TestItem3>(0);
+        assert_eq!(range, 0..0);
+        assert_eq!(store.get_entity_count::<TestItem3>(), initial_count);
+    }
+
+    #[test]
+    fn test_allocate_entity_id_range_interacts_with_new_entity_id() {
+        let mut store = EntityStore::new();
+        let range = store.allocate_entity_id_range::<TestItem1>(2);
+        assert_eq!(range, 0..2);
+        let next_id = store.new_entity_id::<TestItem1>();
+        assert_eq!(next_id.0, 2);
+        assert_eq!(store.get_entity_count::<TestItem1>(), 3);
     }
 }

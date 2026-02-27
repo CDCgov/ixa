@@ -64,6 +64,20 @@ with different transmission rates by edge type.
 cargo run --example network-hhmodel
 ```
 
+## Output-only Examples
+
+### `reports`
+
+Contains sample CSV report outputs for a single-run reporting workflow.
+
+### `reports-multi-threaded`
+
+Contains sample CSV report outputs generated from a multi-threaded workflow.
+
+### `time-varying-infection`
+
+Contains sample incidence output for a time-varying infection scenario.
+
 ## External examples
 
 * [ixa-epi-covid](https://github.com/CDCgov/ixa-epi-isolation)
