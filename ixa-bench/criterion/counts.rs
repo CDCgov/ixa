@@ -63,6 +63,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
+    // Unindexed concrete + unindexed derived property
+    group.bench_function("concrete_plus_derived_unindexed_entities", |bencher| {
+        bencher.iter(|| {
+            black_box(context.query_entity_count(black_box((HomeId(HOME_VAL), AgeGroupFoi(1)))));
+        });
+    });
+
     // Indexed single property
     context.index_property::<Person, HomeId>();
     group.bench_function("single_property_indexed_entities", |bencher| {

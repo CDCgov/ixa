@@ -14,6 +14,22 @@ define_entity!(Person);
 define_property!(struct Property10(u8), Person);
 define_property!(struct Property100(u8), Person);
 define_property!(struct Unindexed10(u8), Person);
+define_property!(struct Age(u8), Person);
+define_derived_property!(
+    struct AgeGroupFoi(u8),
+    Person,
+    [Age],
+    [],
+    |age| {
+        if age.0 <= 1 {
+            AgeGroupFoi(0)
+        } else if age.0 <= 65 {
+            AgeGroupFoi(1)
+        } else {
+            AgeGroupFoi(2)
+        }
+    }
+);
 
 fn setup() -> (Context, Vec<u8>) {
     let mut rng = StdRng::seed_from_u64(SEED);
@@ -38,6 +54,7 @@ fn setup() -> (Context, Vec<u8>) {
                 Property10(context.sample_range(SampleBenchRng, 0..10)),
                 Property100(context.sample_range(SampleBenchRng, 0..100)),
                 Unindexed10(context.sample_range(SampleBenchRng, 0..10)),
+                Age(context.sample_range(SampleBenchRng, 0..100)),
             ))
             .unwrap();
     }
@@ -61,6 +78,22 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             }
         });
     });
+
+    criterion.bench_function(
+        "count_and_sampling_single_known_length_entities",
+        |bencher| {
+            bencher.iter(|| {
+                let counts = black_box(&counts);
+
+                for value in counts {
+                    let _selected = black_box(context.count_and_sample_entity(
+                        SampleBenchRng,
+                        black_box((Property100(*value),)),
+                    ));
+                }
+            });
+        },
+    );
 
     // Sampling one entity when the query is not a single indexed property/multi-property. The result
     // set is not realized, so this is the reservoir sampling case.
@@ -137,6 +170,39 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             }
         });
     });
+
+    // Sampling one entity for an unindexed concrete + unindexed derived query.
+    criterion.bench_function(
+        "sampling_single_unindexed_concrete_plus_derived_entities",
+        |bencher| {
+            bencher.iter(|| {
+                let counts = black_box(&counts);
+
+                for value in counts {
+                    let _selected = black_box(context.sample_entity(
+                        SampleBenchRng,
+                        black_box((Unindexed10(*value % 10), AgeGroupFoi(*value % 3))),
+                    ));
+                }
+            });
+        },
+    );
+
+    criterion.bench_function(
+        "count_and_sampling_single_unindexed_concrete_plus_derived_entities",
+        |bencher| {
+            bencher.iter(|| {
+                let counts = black_box(&counts);
+
+                for value in counts {
+                    let _selected = black_box(context.count_and_sample_entity(
+                        SampleBenchRng,
+                        black_box((Unindexed10(*value % 10), AgeGroupFoi(*value % 3))),
+                    ));
+                }
+            });
+        },
+    );
 
     criterion.finish()
 }

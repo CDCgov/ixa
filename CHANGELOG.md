@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta1.1](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta1...ixa-v2.0.0-beta1.1) - 2026-02-23
+
+### Added
+
+- ValueCountIndex. Fixes #678. ([#751](https://github.com/CDCgov/ixa/pull/751))
+
+### Fixed
+
+- Implement `PropertyList` and `Query` for tuples of size up to 20 ([#789](https://github.com/CDCgov/ixa/pull/789))
+- check_criterion_regressions reports different stats from criterion ([#785](https://github.com/CDCgov/ixa/pull/785))
+- Fixed mise `docs` task to use regular `target` directory ([#780](https://github.com/CDCgov/ixa/pull/780))
+- Updated the example in the Ixa Book to use `event.current` ([#758](https://github.com/CDCgov/ixa/pull/758))
+
+### Other
+
+- *(deps)* bump qs in /integration-tests/ixa-wasm-tests ([#777](https://github.com/CDCgov/ixa/pull/777))
+- Tweaks to Your First Model ([#787](https://github.com/CDCgov/ixa/pull/787))
+- Refactor IxaError to use thiserror ([#768](https://github.com/CDCgov/ixa/pull/768))
+- Improve examples ([#775](https://github.com/CDCgov/ixa/pull/775))
+- parallelize check-test workflow ([#781](https://github.com/CDCgov/ixa/pull/781))
+- improve benchmarks workflow ([#778](https://github.com/CDCgov/ixa/pull/778))
+- improve cache ([#776](https://github.com/CDCgov/ixa/pull/776))
+- Small improvements to book ([#719](https://github.com/CDCgov/ixa/pull/719))
+- add benchmarks history tracking ([#765](https://github.com/CDCgov/ixa/pull/765))
+- Corrected then instead of them ([#772](https://github.com/CDCgov/ixa/pull/772))
+- Sampling algorithms now use nth method. Fixes #667. ([#760](https://github.com/CDCgov/ixa/pull/760))
+- Faster precommit ([#764](https://github.com/CDCgov/ixa/pull/764))
+- added links and getstarted to homepage ([#767](https://github.com/CDCgov/ixa/pull/767))
+- add mise precommit hook for Conventional Commits ([#752](https://github.com/CDCgov/ixa/pull/752))
+- Make default mise targets rust only
+
 ## [2.0.0-beta1](https://github.com/CDCgov/ixa/compare/ixa-v1.0.0...ixa-v2.0.0-beta1) - 2026-02-09
 
 - Added entities implementation and removed people module.

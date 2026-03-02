@@ -3,7 +3,7 @@ use ixa::prelude::*;
 use ixa::trace;
 use rand_distr::Exp;
 
-use crate::people::{InfectionStatus, PersonId};
+use crate::people::{InfectionStatus, Person};
 use crate::{FORCE_OF_INFECTION, POPULATION};
 
 define_rng!(TransmissionRng);
@@ -12,7 +12,7 @@ define_rng!(TransmissionRng);
 // ANCHOR: attempt_infection
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, ()).unwrap();
+    let person_to_infect = context.sample_entity(TransmissionRng, Person).unwrap();
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
     if person_status == InfectionStatus::S {

@@ -37,10 +37,7 @@ fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f6
 }
 
 fn expose_network<ET: EdgeType<Person>>(context: &mut Context, beta: f64) {
-    let mut infectious_people = Vec::new();
-    context.with_query_results((DiseaseStatus::I,), &mut |infected| {
-        infectious_people = infected.iter().copied().collect();
-    });
+    let infectious_people = context.query((DiseaseStatus::I,)).to_owned_vec();
 
     for infectious in infectious_people {
         let edges = context.get_matching_edges::<Person, ET>(infectious, |context, edge| {
@@ -191,9 +188,7 @@ mod tests {
 
         let mut to_infect = Vec::<PersonId>::new();
         context.with_query_results((Id(71),), &mut |people| {
-            for p in people {
-                to_infect.push(*p);
-            }
+            to_infect.extend(people);
         });
 
         init(&mut context, &to_infect);
