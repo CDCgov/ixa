@@ -1,41 +1,11 @@
 # Burn-in Periods and Negative Time
 
-## **Syntax and Summary**
+## Syntax Summary
 
-To implement burn-in using negative time:
-
-1. Choose a burn-in duration `d`.
-2. Call `context.set_start_time(-d)` before execution.
-3. Schedule burn-in logic at negative times.
-4. Schedule transition logic at `0.0` if needed.
-5. Call `context.execute()` once.
-
-Minimal example:
+Burn-in is implemented by setting a negative start time and treating `0.0` as the beginning of the analysis window:
 
 ```rust
-use ixa::prelude::*;
-
-let mut context = Context::new();
-
-// 1. Extend the timeline backward.
-context.set_start_time(-180.0);
-
-// 2. Burn-in logic.
-context.add_plan(-180.0, |ctx| {
-    // initialization or modified dynamics
-});
-
-// 3. Activate full dynamics at the analysis boundary.
-context.add_plan_with_phase(
-    0.0, 
-    |ctx| {
-    	  // Enable full dynamics, reporting, interventions, etc.
-    },
-  	// Optional: Run this plan before other plans scheduled at time 0.0
-  	ExecutionPhase::First
-);
-
-context.execute();
+context.set_start_time(-d);
 ```
 
 ## Introduction
@@ -58,7 +28,18 @@ The core pattern is:
 
 1. Choose a burn-in duration (for example, 180 days).
 2. Set the simulation start time to the negative of that duration.
-3. Schedule burn-in and main-simulation logic on the same timeline.
+3. Differentiate burn-in behavior from main-simulation behavior using one of the two methods below.
+
+There are two standard approaches:
+
+- **Time-gated logic**: behavior depends directly on the current time with `context.get_current_time() >= 0.0` checks throughout the code.
+- **Activation at `0.0`**: a plan scheduled at time `0.0` enables or modifies model state (for example, by turning on transmission, enabling interventions, or beginning data collection).
+
+Both approaches operate on the same continuous timeline. The choice depends on whether you prefer localized time checks or a single activation event at `0.0`. There is no automatic transition at `0.0`. Any change in behavior must be implemented explicitly in your model.
+
+### 1. Activation at `0.0`
+
+Schedule a plan at `0.0` that enables or modifies model behavior. For example, transmission, reporting, or interventions may be turned on at the boundary. This approach centralizes the transition logic in a single plan.
 
 The following example burns in for 180 days and enables full model dynamics at time `0.0`:
 
@@ -70,59 +51,79 @@ let mut context = Context::new();
 // Burn in for 180 days before the "official" start.
 context.set_start_time(-180.0);
 
-// Burn-in setup and updates can run at negative times.
+// Optional: perform initialization at the start of burn-in.
 context.add_plan(-180.0, |ctx| {
     // Initialize or seed state here.
 });
 
-// Transition point: begin simulation proper at time 0.
+// Method 1: Activation at 0.0
 context.add_plan_with_phase(
     0.0, 
     |ctx| {
-    	  // Enable full dynamics, reporting, interventions, etc.
+        // Enable full dynamics, reporting, interventions, etc.
     },
-  	// Run this plan before other plans scheduled at time 0.0
-  	ExecutionPhase::First
+    ExecutionPhase::First
 );
 
 context.execute();
 ```
 
-The simulation does not restart at `0.0`. Time flows continuously from negative values through zero and onward. What changes at `0.0` is not how Ixa executes the model, but what behavior your model chooses to enable.
+In this example we use `context.add_plan_with_phase` with `ExecutionPhase::First` instead of the usual `context.add_plan` so that the activation plan runs before any other plans that happen to be scheduled at time `0.0`.
 
-## Interpreting Time in Model Code
+### 2. Time-Gated Logic in Model Code
 
-The `context.get_current_time()` method always returns the current simulation time:
-
-- Negative during burn-in
-- `0.0` at the beginning of the analysis window
-- Positive thereafter
-
-No special API is required to detect burn-in. Time itself provides the phase boundary. Model behavior can be partitioned directly by time:
+Partition behavior directly by checking the current time:
 
 ```rust
 fn transmission_step(context: &mut Context) {
-    let t = context.get_current_time();
-
-    if t < 0.0 {
-        // Burn-in behavior (for example, transmission disabled)
+    if t < context.get_current_time() {
+        // Burn-in behavior
         return;
     }
-
     // Main simulation behavior
 }
 ```
 
-This pattern makes the transition at `0.0` explicit and local to the model logic. Ixa does not switch modes automatically at `0.0`; any change in behavior must be encoded in your model.
+This approach makes the phase boundary explicit in the code where behavior occurs. The downside is that you might need to do this check in many different disparate places within model code.
 
-In practice, models use one of two approaches:
+## Practical Considerations
 
-- **Time-gated logic**, as shown above, where behavior depends directly on the current time.
-- **Activation at** **`0.0`**, where a plan scheduled at time `0.0` enables or modifies model state (for example, by turning on transmission, enabling interventions, or beginning data collection).
+Burn-in relies on the same scheduling rules as the rest of the simulation. The following constraints are important when working with negative time.
 
-Both approaches operate on the same continuous timeline. The choice depends on whether you prefer explicit time checks throughout the model or a single transition event that modifies state at the boundary.
+### Set the Start Time Before Execution
 
-## **Common Burn-in Designs**
+`context.set_start_time(...)` must be called before `context.execute()` and may only be called once.
+
+The start time may be set to an arbitrarily low number. When execution begins, the event queue advances directly to the earliest scheduled plan. If burn-in plans are scheduled stochastically, it may be useful to choose a sufficiently low start time such that the probability of scheduling a plan earlier than the start time is effectively zero.
+
+### Plans Cannot Be Scheduled Earlier Than the Effective Start Time
+
+A plan cannot be scheduled earlier than the simulation’s effective current time. Before execution begins:
+
+- If no start time is set, the earliest allowable plan time is `0.0`.
+- If `start_time = s`, the earliest allowable plan time is `s`.
+
+For burn-in, this means you must set a negative start time before scheduling any negative-time plans.
+
+### Periodic Plans Begin at 0.0
+
+`add_periodic_plan_with_phase(...)` schedules its first execution at `0.0`, not at the simulation start time. This is often desirable: reporting or intervention logic naturally begins at the analysis boundary. However, periodic behavior will not automatically run during negative-time burn-in.
+
+If periodic activity is required during burn-in, schedule the first execution manually at the desired negative time and reschedule from there.
+
+### Reports and Outputs Include Negative Timestamps
+
+Outputs generated during burn-in will carry negative timestamps. This is usually intentional. If downstream analysis should begin at `0.0`, filter during post-processing or guard reporting logic within the model.
+
+### Include Negative Time in Initialization Tests
+
+If negative time is part of your model initialization strategy, unit tests that validate initialization behavior may also need to include negative-time execution. Tests that assume the model begins at `0.0` may otherwise miss burn-in effects.
+
+### `0.0` Convention, Not a Reset
+
+Time does not reset at `0.0`. The event queue continues uninterrupted across the boundary. Any transition in behavior at `0.0` must be implemented explicitly in model logic or in a plan scheduled at that time.
+
+## Common Burn-in Designs
 
 Burn-in is not limited to simple state initialization. In practice, it is used to execute a specialized variant of the model prior to the analysis window. Several patterns recur frequently.
 
@@ -155,34 +156,3 @@ Negative time allows this process to occur within the same execution, without sp
 Often, the model’s full dynamics operate throughout burn-in, but outputs or interventions are suppressed until `t >= 0.0`. In this case, burn-in shapes the system state, while the analysis window determines what is recorded or evaluated.
 
 Burn-in is therefore not a distinct modeling technique. It is a scheduling strategy that allows different behaviors to operate before and after a chosen time boundary on a single continuous timeline.
-
-## Practical Considerations
-
-Burn-in relies on the same scheduling rules as the rest of the simulation. The following constraints are important when working with negative time.
-
-### Set the Start Time Before Execution
-
-`context.set_start_time(...)` must be called before `context.execute()` and may only be called once. If you intend to use negative time, set the start time first, then schedule burn-in plans.
-
-### Plans Cannot Be Scheduled Earlier Than the Effective Start Time
-
-A plan cannot be scheduled earlier than the simulation’s effective current time. Before execution begins:
-
-- If no start time is set, the earliest allowable plan time is `0.0`.
-- If `start_time = s`, the earliest allowable plan time is `s`.
-
-For burn-in, this means you must set a negative start time before scheduling any negative-time plans.
-
-### Periodic Plans Begin at 0.0
-
-`add_periodic_plan_with_phase(...)` schedules its first execution at `0.0`, not at the simulation start time. This is often desirable: reporting or intervention logic naturally begins at the analysis boundary. However, periodic behavior will not automatically run during negative-time burn-in.
-
-If periodic activity is required during burn-in, schedule the first execution manually at the desired negative time and reschedule from there.
-
-### Reports and Outputs Include Negative Timestamps
-
-Outputs generated during burn-in will carry negative timestamps. This is usually intentional. If downstream analysis should begin at `0.0`, filter during post-processing or guard reporting logic within the model.
-
-### `0.0` Convention, Not a Reset
-
-Time does not reset at `0.0`. The event queue continues uninterrupted across the boundary. Any transition in behavior at `0.0` must be implemented explicitly in model logic or in a plan scheduled at that time.
