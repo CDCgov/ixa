@@ -13,6 +13,48 @@ use crate::{warn, Context, ContextRandomExt, IxaError, RngId};
 
 const BULK_ADD_CHUNK_SIZE: usize = 8192;
 
+fn flush_bulk_add_chunk<E: Entity, PL: PropertyList<E>>(
+    context: &mut Context,
+    chunk: &mut Vec<PL>,
+    entity_ids: &mut Vec<EntityId<E>>,
+    should_emit_events: bool,
+    reserve_for_chunk: bool,
+) {
+    if chunk.is_empty() {
+        return;
+    }
+
+    let chunk_len = chunk.len();
+    if reserve_for_chunk {
+        let property_store = context.entity_store.get_property_store::<E>();
+        PL::reserve_for_entities(property_store, chunk_len);
+    }
+
+    let entity_id_range = context
+        .entity_store
+        .allocate_entity_id_range::<E>(chunk_len);
+    let start_entity_index = entity_id_range.start;
+
+    // Events are enqueued before `set_values_for_entities` writes properties.
+    // This is safe because `emit_event` is always deferred: handlers run during
+    // `context.execute()`, by which time all property values are written. If
+    // synchronous event dispatch is ever added, this ordering must be revisited.
+    for entity_index in entity_id_range {
+        let new_entity_id = EntityId::new(entity_index);
+        if should_emit_events {
+            context.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
+        }
+        entity_ids.push(new_entity_id);
+    }
+
+    PL::set_values_for_entities(
+        start_entity_index,
+        chunk.as_slice(),
+        context.entity_store.get_property_store::<E>(),
+    );
+    chunk.clear();
+}
+
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
 pub trait ContextEntitiesExt {
@@ -206,61 +248,23 @@ impl ContextEntitiesExt for Context {
         for property_list in iter {
             chunk.push(property_list);
             if chunk.len() == BULK_ADD_CHUNK_SIZE {
-                let chunk_len = chunk.len();
-                if !reserve_using_size_hint {
-                    let property_store = self.entity_store.get_property_store::<E>();
-                    PL::reserve_for_entities(property_store, chunk_len);
-                }
-
-                let entity_id_range = self.entity_store.allocate_entity_id_range::<E>(chunk_len);
-                let start_entity_index = entity_id_range.start;
-
-                // Events are enqueued before `set_values_for_entities` writes properties.
-                // This is safe because `emit_event` is always deferred: handlers run during
-                // `context.execute()`, by which time all property values are written. If
-                // synchronous event dispatch is ever added, this ordering must be revisited.
-                for entity_index in entity_id_range {
-                    let new_entity_id = EntityId::new(entity_index);
-                    if should_emit_events {
-                        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
-                    }
-                    entity_ids.push(new_entity_id);
-                }
-
-                PL::set_values_for_entities(
-                    start_entity_index,
-                    chunk.as_slice(),
-                    self.entity_store.get_property_store::<E>(),
+                flush_bulk_add_chunk::<E, PL>(
+                    self,
+                    &mut chunk,
+                    &mut entity_ids,
+                    should_emit_events,
+                    !reserve_using_size_hint,
                 );
-                chunk.clear();
             }
         }
 
-        if !chunk.is_empty() {
-            let chunk_len = chunk.len();
-            if !reserve_using_size_hint {
-                let property_store = self.entity_store.get_property_store::<E>();
-                PL::reserve_for_entities(property_store, chunk_len);
-            }
-
-            let entity_id_range = self.entity_store.allocate_entity_id_range::<E>(chunk_len);
-            let start_entity_index = entity_id_range.start;
-
-            // Same deferred-event ordering as the chunk flush loop above.
-            for entity_index in entity_id_range {
-                let new_entity_id = EntityId::new(entity_index);
-                if should_emit_events {
-                    self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
-                }
-                entity_ids.push(new_entity_id);
-            }
-
-            PL::set_values_for_entities(
-                start_entity_index,
-                chunk.as_slice(),
-                self.entity_store.get_property_store::<E>(),
-            );
-        }
+        flush_bulk_add_chunk::<E, PL>(
+            self,
+            &mut chunk,
+            &mut entity_ids,
+            should_emit_events,
+            !reserve_using_size_hint,
+        );
 
         Ok(entity_ids)
     }
