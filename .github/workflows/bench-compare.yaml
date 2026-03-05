@@ -119,14 +119,14 @@ jobs:
 
       - name: Upload group markdown artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: results-${{ matrix.group }}
           path: results_${{ matrix.group }}.md
 
       - name: Upload group raw logs artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: raw-${{ matrix.group }}
           if-no-files-found: ignore
@@ -154,7 +154,7 @@ jobs:
           mise run bench:hyperfine -- -- --export-markdown hyperfine.md --export-json hyperfine.json
 
       - name: Upload hyperfine artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: hyperfine
           path: |
@@ -217,7 +217,7 @@ jobs:
             --groups "$(IFS=,; echo "${groups[*]}")"
 
       - name: Upload PR comment artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pr-comment
           path: results.md
@@ -297,7 +297,7 @@ jobs:
 
       - name: Upload bench history artifact
         if: ${{ github.event.pull_request.base.ref == 'main' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: bench-history
           path: bench-history.json
