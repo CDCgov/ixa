@@ -57,6 +57,15 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Source(source))
     }
 
+    /// Create an entity set from a contiguous half-open ID range (`start..end`).
+    pub(crate) fn from_contiguous_entity_range(start: usize, end: usize) -> Self {
+        if start >= end {
+            Self::empty()
+        } else {
+            Self::from_source(SourceSet::EntityRange(start..end))
+        }
+    }
+
     pub(crate) fn from_intersection_sources(mut sources: Vec<SourceSet<'a, E>>) -> Self {
         match sources.len() {
             0 => return Self::empty(),

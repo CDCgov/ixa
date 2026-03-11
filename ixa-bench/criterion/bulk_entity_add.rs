@@ -75,6 +75,28 @@ where
     }
 }
 
+fn insert_with_add_entities<I>(context: &mut Context, rows: I)
+where
+    I: IntoIterator<Item = PersonRow>,
+{
+    let _ = context
+        .add_entities(rows.into_iter().map(|row| {
+            (
+                Age(row.age),
+                HomeId(row.home_id),
+                SchoolId(row.school_id),
+                WorkplaceId(row.workplace_id),
+            )
+        }))
+        .unwrap();
+}
+
+fn insert_with_prototype(context: &mut Context, n: usize) {
+    let _ = context
+        .add_entities_with_prototype(n, (Age(42), HomeId(1_000), SchoolId(100), WorkplaceId(200)))
+        .unwrap();
+}
+
 fn bench_bulk_entity_add_baseline(c: &mut Criterion) {
     let mut group = c.benchmark_group("bulk_entity_add");
 
@@ -102,6 +124,48 @@ fn bench_bulk_entity_add_baseline(c: &mut Criterion) {
                     Context::new,
                     |context| {
                         insert_one_by_one(context, StreamingRows::new(size));
+                    },
+                    BatchSize::LargeInput,
+                )
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("add_entities_pre_collected", n),
+            &n,
+            |b, _| {
+                b.iter_batched_ref(
+                    Context::new,
+                    |context| {
+                        insert_with_add_entities(context, pre_collected_rows.iter().copied());
+                    },
+                    BatchSize::LargeInput,
+                )
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("add_entities_streaming", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    Context::new,
+                    |context| {
+                        insert_with_add_entities(context, StreamingRows::new(size));
+                    },
+                    BatchSize::LargeInput,
+                )
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("add_entities_prototype", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    Context::new,
+                    |context| {
+                        insert_with_prototype(context, size);
                     },
                     BatchSize::LargeInput,
                 )

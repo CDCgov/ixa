@@ -16,6 +16,7 @@ use std::cell::OnceCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
+use crate::entity::entity_set::EntitySet;
 use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::HashMap;
@@ -242,6 +243,18 @@ impl EntityStore {
         let id = record.entity_count;
         record.entity_count += 1;
         EntityId::new(id)
+    }
+
+    /// Creates `count` consecutive new entity IDs and returns them as an `EntitySet`.
+    pub(crate) fn new_entity_ids<'a, E: Entity>(&mut self, count: usize) -> EntitySet<'a, E> {
+        let index = E::id();
+        let record = &mut self.items[index];
+        let start = record.entity_count;
+        let end = start
+            .checked_add(count)
+            .expect("entity count overflow while reserving entity IDs");
+        record.entity_count = end;
+        EntitySet::from_contiguous_entity_range(start, end)
     }
 
     /// Returns a total count of all created entities of type `E`.

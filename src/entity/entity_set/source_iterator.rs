@@ -55,6 +55,11 @@ pub(super) enum SourceIterator<'a, E: Entity> {
     Population(PopulationIterator<E>),
     /// A singleton iterator
     Entity { id: EntityId<E>, exhausted: bool },
+    /// An iterator over a contiguous half-open entity ID range.
+    EntityRange {
+        source: std::ops::Range<usize>,
+        iter: std::ops::Range<usize>,
+    },
     /// An empty iterator
     Empty,
 }
@@ -66,6 +71,7 @@ impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
             SourceIterator::PropertyVecIter(_iter) => write!(f, "PropertyVecIter"),
             SourceIterator::Population { .. } => write!(f, "WholePopulation"),
             SourceIterator::Entity { .. } => write!(f, "Entity"),
+            SourceIterator::EntityRange { .. } => write!(f, "EntityRange"),
             SourceIterator::Empty => write!(f, "Empty"),
         }
     }
@@ -83,6 +89,7 @@ impl<'a, E: Entity> SourceIterator<'a, E> {
             SourceIterator::PropertyVecIter(source) => source.contains(id),
             SourceIterator::Population(source) => id.0 < source.population(),
             SourceIterator::Entity { id: entity_id, .. } => *entity_id == id,
+            SourceIterator::EntityRange { source, .. } => source.contains(&id.0),
             SourceIterator::Empty => false,
         }
     }
@@ -107,6 +114,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     Some(*id)
                 }
             }
+            SourceIterator::EntityRange { iter, .. } => iter.next().map(EntityId::new),
             SourceIterator::Empty => None,
         }
     }
@@ -124,6 +132,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     (1, Some(1))
                 }
             }
+            SourceIterator::EntityRange { iter, .. } => iter.size_hint(),
             SourceIterator::Empty => (0, Some(0)),
         }
     }
@@ -142,6 +151,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     1
                 }
             }
+            SourceIterator::EntityRange { iter, .. } => iter.count(),
             SourceIterator::Empty => 0,
         }
     }
@@ -158,6 +168,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     Some(id)
                 }
             }
+            Self::EntityRange { iter, .. } => iter.last().map(EntityId::new),
             Self::Empty => None,
         }
     }
@@ -177,6 +188,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     None
                 }
             }
+            Self::EntityRange { iter, .. } => iter.nth(n).map(EntityId::new),
             Self::Empty => None,
         }
     }
@@ -196,6 +208,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                     f(id);
                 }
             }
+            Self::EntityRange { iter, .. } => iter.for_each(|index| f(EntityId::new(index))),
             Self::Empty => {}
         }
     }
@@ -216,6 +229,9 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                 } else {
                     f(init, id)
                 }
+            }
+            Self::EntityRange { iter, .. } => {
+                iter.fold(init, |acc, index| f(acc, EntityId::new(index)))
             }
             Self::Empty => init,
         }

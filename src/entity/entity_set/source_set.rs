@@ -39,6 +39,7 @@
 //! | ---------------------------- | ----------- |
 //! | `SourceSet::Empty`           | `0`         |
 //! | `SourceSet::Entity`          | `1`         |
+//! | `SourceSet::EntityRange`     | `2`         |
 //! | `SourceSet::Population`      | `2`         |
 //! | `SourceSet::IndexSet`        | `3`         |
 //! | `ConcretePropertySource`     | `5`         |
@@ -46,6 +47,7 @@
 
 use std::cell::Ref;
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
@@ -258,6 +260,7 @@ pub(crate) enum SourceSet<'a, E: Entity> {
     Population(usize),
     #[allow(dead_code)]
     Entity(EntityId<E>),
+    EntityRange(Range<usize>),
     IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
     PropertySet(BxPropertySource<'a, E>),
 }
@@ -268,6 +271,7 @@ impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
             (Self::Empty, Self::Empty) => true,
             (Self::Population(left), Self::Population(right)) => left == right,
             (Self::Entity(left), Self::Entity(right)) => left == right,
+            (Self::EntityRange(left), Self::EntityRange(right)) => left == right,
             (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
             (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
             _ => false,
@@ -283,6 +287,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             SourceSet::Empty => Some(0),
             SourceSet::Population(population) => Some(*population),
             SourceSet::Entity(_) => Some(1),
+            SourceSet::EntityRange(range) => Some(range.len()),
             SourceSet::IndexSet(source) => Some(source.len()),
             SourceSet::PropertySet(_) => None,
         }
@@ -293,6 +298,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         match self {
             SourceSet::Empty => (0, 0),
             SourceSet::Entity(_) => (1, 1),
+            SourceSet::EntityRange(range) => (range.len(), 2),
             SourceSet::Population(population) => (*population, 2),
             SourceSet::IndexSet(source) => (source.len(), 3),
             SourceSet::PropertySet(source) => source.sort_key(),
@@ -354,6 +360,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             SourceSet::Empty => false,
             SourceSet::Population(population) => id.0 < *population,
             SourceSet::Entity(entity_id) => *entity_id == id,
+            SourceSet::EntityRange(range) => range.contains(&id.0),
             SourceSet::IndexSet(source) => source.contains(&id),
             SourceSet::PropertySet(source) => source.contains(id),
         }
@@ -368,6 +375,10 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             SourceSet::Entity(entity_id) => SourceIterator::Entity {
                 id: entity_id,
                 exhausted: false,
+            },
+            SourceSet::EntityRange(range) => SourceIterator::EntityRange {
+                source: range.clone(),
+                iter: range.clone(),
             },
             SourceSet::IndexSet(ids) => {
                 SourceIterator::IndexIter(IndexSetIterator::from_index_set(ids))

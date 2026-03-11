@@ -19,6 +19,20 @@ pub trait ContextEntitiesExt {
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError>;
 
+    /// Adds many entities from row-wise property lists.
+    fn add_entities<E, PL, I>(&mut self, property_lists: I) -> Result<EntitySet<E>, IxaError>
+    where
+        E: Entity,
+        PL: PropertyList<E>,
+        I: IntoIterator<Item = PL>;
+
+    /// Adds `n` entities initialized from one prototype property list.
+    fn add_entities_with_prototype<E: Entity, PL: PropertyList<E>>(
+        &mut self,
+        n: usize,
+        prototype: PL,
+    ) -> Result<EntitySet<E>, IxaError>;
+
     /// Fetches the property value set for the given `entity_id`.
     ///
     /// The easiest way to call this method is by assigning it to a variable with an explicit type:
@@ -152,6 +166,64 @@ impl ContextEntitiesExt for Context {
         self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
 
         Ok(new_entity_id)
+    }
+
+    fn add_entities<E, PL, I>(&mut self, property_lists: I) -> Result<EntitySet<E>, IxaError>
+    where
+        E: Entity,
+        PL: PropertyList<E>,
+        I: IntoIterator<Item = PL>,
+    {
+        PL::validate()?;
+
+        if !PL::contains_required_properties() {
+            return Err(IxaError::MissingRequiredInitializationProperties);
+        }
+
+        let start = self.entity_store.get_entity_count::<E>();
+
+        for property_list in property_lists {
+            let entity_id = self.entity_store.new_entity_id::<E>();
+
+            {
+                let property_store = self.entity_store.get_property_store::<E>();
+                property_list.set_values_for_entity(entity_id, property_store);
+            }
+
+            self.emit_event(EntityCreatedEvent::<E>::new(entity_id));
+        }
+
+        let end = self.entity_store.get_entity_count::<E>();
+        Ok(EntitySet::from_contiguous_entity_range(start, end))
+    }
+
+    fn add_entities_with_prototype<E: Entity, PL: PropertyList<E>>(
+        &mut self,
+        n: usize,
+        prototype: PL,
+    ) -> Result<EntitySet<E>, IxaError> {
+        PL::validate()?;
+
+        if !PL::contains_required_properties() {
+            return Err(IxaError::MissingRequiredInitializationProperties);
+        }
+
+        let start = self.entity_store.get_entity_count::<E>();
+        let inserted = self.entity_store.new_entity_ids::<E>(n);
+        let end = self.entity_store.get_entity_count::<E>();
+
+        {
+            let property_store = self.entity_store.get_property_store::<E>();
+            for index in start..end {
+                prototype.set_values_for_entity(EntityId::new(index), property_store);
+            }
+        }
+
+        for index in start..end {
+            self.emit_event(EntityCreatedEvent::<E>::new(EntityId::new(index)));
+        }
+
+        Ok(inserted)
     }
 
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
@@ -557,6 +629,135 @@ mod tests {
         // Age is the only required property
         let _person3 = context.add_entity((Age(120),)).unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 3);
+    }
+
+    #[test]
+    fn add_entities_basic_insert_count_and_ids() {
+        let mut context = Context::new();
+
+        let inserted = context
+            .add_entities::<Person, _, _>(vec![(Age(12),), (Age(34),), (Age(120),)])
+            .unwrap();
+        let inserted_ids = inserted.into_iter().collect::<Vec<_>>();
+
+        assert_eq!(
+            inserted_ids,
+            vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
+        );
+        assert_eq!(context.get_entity_count::<Person>(), 3);
+    }
+
+    #[test]
+    fn add_entities_with_prototype_basic_insert_count_and_ids() {
+        let mut context = Context::new();
+
+        let inserted = context
+            .add_entities_with_prototype::<Person, _>(3, (Age(42), Vaccinated(true)))
+            .unwrap();
+        let inserted_ids = inserted.into_iter().collect::<Vec<_>>();
+
+        assert_eq!(
+            inserted_ids,
+            vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
+        );
+        assert_eq!(context.get_entity_count::<Person>(), 3);
+
+        for entity_id in inserted_ids {
+            let age: Age = context.get_property(entity_id);
+            let vaccinated: Vaccinated = context.get_property(entity_id);
+            let infection_status: InfectionStatus = context.get_property(entity_id);
+
+            assert_eq!(age, Age(42));
+            assert_eq!(vaccinated, Vaccinated(true));
+            assert_eq!(infection_status, InfectionStatus::Susceptible);
+        }
+    }
+
+    #[test]
+    fn add_entities_missing_required_properties_does_not_mutate_context() {
+        let mut context = Context::new();
+        {
+            let result = context
+                .add_entities::<Person, _, _>(vec![(Vaccinated(true),), (Vaccinated(false),)]);
+
+            assert!(matches!(
+                result,
+                Err(crate::IxaError::MissingRequiredInitializationProperties)
+            ));
+        }
+        assert_eq!(context.get_entity_count::<Person>(), 0);
+    }
+
+    #[test]
+    fn add_entities_duplicate_properties_does_not_mutate_context() {
+        let mut context = Context::new();
+        {
+            let result = context.add_entities::<Person, _, _>(vec![(Age(12), Age(34))]);
+
+            assert!(matches!(
+                result,
+                Err(crate::IxaError::DuplicatePropertyInPropertyList {
+                    first_index: 0,
+                    second_index: 1,
+                })
+            ));
+        }
+        assert_eq!(context.get_entity_count::<Person>(), 0);
+    }
+
+    #[test]
+    fn add_entities_noop_cases_return_empty_sets() {
+        let mut context = Context::new();
+
+        let empty_rows: Vec<(Age,)> = Vec::new();
+        let inserted = context.add_entities::<Person, _, _>(empty_rows).unwrap();
+        assert!(inserted.into_iter().next().is_none());
+        assert_eq!(context.get_entity_count::<Person>(), 0);
+
+        let inserted = context
+            .add_entities_with_prototype::<Person, _>(0, (Age(99),))
+            .unwrap();
+        assert!(inserted.into_iter().next().is_none());
+        assert_eq!(context.get_entity_count::<Person>(), 0);
+    }
+
+    #[test]
+    fn add_entities_returns_only_new_ids_in_insertion_order() {
+        let mut context = Context::new();
+
+        let existing = context.add_entity((Age(1),)).unwrap();
+        assert_eq!(existing, PersonId::new(0));
+
+        let inserted = context
+            .add_entities::<Person, _, _>(vec![(Age(2),), (Age(3),), (Age(4),)])
+            .unwrap();
+        let inserted_ids = inserted.into_iter().collect::<Vec<_>>();
+
+        assert_eq!(
+            inserted_ids,
+            vec![PersonId::new(1), PersonId::new(2), PersonId::new(3)]
+        );
+    }
+
+    #[test]
+    fn add_entities_emits_created_events_in_ascending_id_order() {
+        let mut context = Context::new();
+
+        let observed = Rc::new(RefCell::new(Vec::<PersonId>::new()));
+        let observed_clone = observed.clone();
+        context.subscribe_to_event(move |_context, event: EntityCreatedEvent<Person>| {
+            observed_clone.borrow_mut().push(event.entity_id);
+        });
+
+        let _ = context
+            .add_entities::<Person, _, _>(vec![(Age(10),), (Age(11),), (Age(12),)])
+            .unwrap();
+        context.execute();
+
+        assert_eq!(
+            observed.borrow().as_slice(),
+            &[PersonId::new(0), PersonId::new(1), PersonId::new(2)]
+        );
     }
 
     #[test]
