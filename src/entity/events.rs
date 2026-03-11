@@ -261,12 +261,13 @@ mod tests {
         });
 
         let ids = context
-            .add_entities::<Person, _, _>([
+            .add_entities::<Person, _>(vec![
                 (Age(18), RunningShoes(33), RiskCategory::Low),
                 (Age(19), RunningShoes(34), RiskCategory::High),
                 (Age(20), RunningShoes(35), RiskCategory::Low),
             ])
-            .unwrap();
+            .unwrap()
+            .to_owned_vec();
 
         context.execute();
 

@@ -81,7 +81,7 @@ impl<'a, E: Entity> SourceIterator<'a, E> {
                 iter.with_index_set(|index_set| index_set.contains(&id))
             }
             SourceIterator::PropertyVecIter(source) => source.contains(id),
-            SourceIterator::Population(source) => id.0 < source.population(),
+            SourceIterator::Population(source) => source.contains(id),
             SourceIterator::Entity { id: entity_id, .. } => *entity_id == id,
             SourceIterator::Empty => false,
         }
@@ -279,6 +279,13 @@ mod tests {
         assert!(population_iter.contains(EntityId::new(0)));
         assert!(population_iter.contains(EntityId::new(4)));
         assert!(!population_iter.contains(EntityId::new(5)));
+
+        let mut population_range_iter = SourceSet::<Person>::PopulationRange(3..6).into_iter();
+        assert_eq!(population_range_iter.next(), Some(EntityId::new(3)));
+        assert_eq!(population_range_iter.next(), Some(EntityId::new(4)));
+        assert!(!population_range_iter.contains(EntityId::new(2)));
+        assert!(population_range_iter.contains(EntityId::new(5)));
+        assert!(!population_range_iter.contains(EntityId::new(6)));
 
         let empty_iter = SourceSet::<Person>::Empty.into_iter();
         assert!(!empty_iter.contains(EntityId::new(0)));

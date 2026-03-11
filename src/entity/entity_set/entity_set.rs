@@ -357,6 +357,13 @@ mod tests {
         assert!(population.contains(EntityId::<Person>::new(2)));
         assert!(!population.contains(EntityId::<Person>::new(3)));
         assert_eq!(population.sort_key().0, 3);
+
+        let population_range = EntitySet::from_source(SourceSet::<Person>::PopulationRange(3..6));
+        assert!(!population_range.contains(EntityId::<Person>::new(2)));
+        assert!(population_range.contains(EntityId::<Person>::new(3)));
+        assert!(population_range.contains(EntityId::<Person>::new(5)));
+        assert!(!population_range.contains(EntityId::<Person>::new(6)));
+        assert_eq!(population_range.sort_key().0, 3);
     }
 
     #[test]
@@ -524,6 +531,9 @@ mod tests {
 
         let population = EntitySet::<Person>::from_source(SourceSet::Population(5));
         assert_eq!(population.try_len(), Some(5));
+
+        let population_range = EntitySet::<Person>::from_source(SourceSet::PopulationRange(4..9));
+        assert_eq!(population_range.try_len(), Some(5));
 
         let index_data = RefCell::new(
             [EntityId::new(1), EntityId::new(2), EntityId::new(3)]

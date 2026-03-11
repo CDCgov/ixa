@@ -136,8 +136,23 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
         }
     }
 
+    fn set_values_for_repeated_entities(
+        &self,
+        start_entity_index: usize,
+        n: usize,
+        property_store: &PropertyStore<E>,
+    ) {
+        self.inner
+            .set_values_for_repeated_entities(start_entity_index, n, property_store);
+    }
+
     fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
         T::reserve_for_entities(property_store, additional);
+    }
+
+    fn reserve_for_repeated_entities(&self, property_store: &PropertyStore<E>, additional: usize) {
+        self.inner
+            .reserve_for_repeated_entities(property_store, additional);
     }
 }
 
@@ -766,7 +781,10 @@ mod tests {
             with!(Person, Age(12), County(2), Height(102), RiskCategory::Low),
         ];
 
-        let ids = context.add_entities::<Person, _, _>(rows).unwrap();
+        let ids = context
+            .add_entities::<Person, _>(rows)
+            .unwrap()
+            .to_owned_vec();
         assert_eq!(
             ids,
             vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
@@ -792,7 +810,7 @@ mod tests {
             with!(Person, Age(20), County(7), Height(171), RiskCategory::High),
             with!(Person, Age(30), County(8), Height(172), RiskCategory::Low),
         ];
-        context.add_entities::<Person, _, _>(rows).unwrap();
+        context.add_entities::<Person, _>(rows).unwrap();
 
         assert_eq!(context.query_entity_count((Age(20), County(7))), 2);
         assert_eq!(context.query_entity_count((Age(30), County(8))), 1);
@@ -823,7 +841,10 @@ mod tests {
             })
             .collect();
 
-        let ids = context.add_entities::<Person, _, _>(rows).unwrap();
+        let ids = context
+            .add_entities::<Person, _>(rows)
+            .unwrap()
+            .to_owned_vec();
 
         assert_eq!(ids.len(), N);
         for (i, &id) in ids.iter().enumerate() {

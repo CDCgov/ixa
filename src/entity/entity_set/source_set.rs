@@ -40,12 +40,14 @@
 //! | `SourceSet::Empty`           | `0`         |
 //! | `SourceSet::Entity`          | `1`         |
 //! | `SourceSet::Population`      | `2`         |
+//! | `SourceSet::PopulationRange` | `2`         |
 //! | `SourceSet::IndexSet`        | `3`         |
 //! | `ConcretePropertySource`     | `5`         |
 //! | `DerivedPropertySource`      | `6`         |
 
 use std::cell::Ref;
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
@@ -256,6 +258,7 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
 pub(crate) enum SourceSet<'a, E: Entity> {
     Empty,
     Population(usize),
+    PopulationRange(Range<usize>),
     #[allow(dead_code)]
     Entity(EntityId<E>),
     IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
@@ -267,6 +270,7 @@ impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
         match (self, other) {
             (Self::Empty, Self::Empty) => true,
             (Self::Population(left), Self::Population(right)) => left == right,
+            (Self::PopulationRange(left), Self::PopulationRange(right)) => left == right,
             (Self::Entity(left), Self::Entity(right)) => left == right,
             (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
             (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
@@ -282,6 +286,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         match self {
             SourceSet::Empty => Some(0),
             SourceSet::Population(population) => Some(*population),
+            SourceSet::PopulationRange(range) => Some(range.len()),
             SourceSet::Entity(_) => Some(1),
             SourceSet::IndexSet(source) => Some(source.len()),
             SourceSet::PropertySet(_) => None,
@@ -294,6 +299,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             SourceSet::Empty => (0, 0),
             SourceSet::Entity(_) => (1, 1),
             SourceSet::Population(population) => (*population, 2),
+            SourceSet::PopulationRange(range) => (range.len(), 2),
             SourceSet::IndexSet(source) => (source.len(), 3),
             SourceSet::PropertySet(source) => source.sort_key(),
         }
@@ -353,6 +359,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         match self {
             SourceSet::Empty => false,
             SourceSet::Population(population) => id.0 < *population,
+            SourceSet::PopulationRange(range) => range.contains(&id.0),
             SourceSet::Entity(entity_id) => *entity_id == id,
             SourceSet::IndexSet(source) => source.contains(&id),
             SourceSet::PropertySet(source) => source.contains(id),
@@ -364,6 +371,9 @@ impl<'a, E: Entity> SourceSet<'a, E> {
             SourceSet::Empty => SourceIterator::Empty,
             SourceSet::Population(population) => {
                 SourceIterator::Population(PopulationIterator::new(population))
+            }
+            SourceSet::PopulationRange(range) => {
+                SourceIterator::Population(PopulationIterator::from_range(range.start, range.end))
             }
             SourceSet::Entity(entity_id) => SourceIterator::Entity {
                 id: entity_id,
@@ -406,6 +416,19 @@ mod tests {
         assert_eq!(
             population_ids,
             vec![EntityId::new(0), EntityId::new(1), EntityId::new(2)]
+        );
+
+        let population_range = SourceSet::<Person>::PopulationRange(3..6);
+        assert_eq!(population_range.sort_key(), (3, 2));
+        assert!(!population_range.contains(EntityId::new(2)));
+        assert!(population_range.contains(EntityId::new(3)));
+        assert!(!population_range.contains(EntityId::new(6)));
+        let population_range_ids = SourceSet::<Person>::PopulationRange(3..6)
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            population_range_ids,
+            vec![EntityId::new(3), EntityId::new(4), EntityId::new(5)]
         );
 
         let singleton = SourceSet::<Person>::Entity(EntityId::new(9));

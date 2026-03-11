@@ -128,9 +128,11 @@ pub type BxEntity = Box<dyn Entity>;
 /// of the newly added entities.
 #[derive(Copy, Clone)]
 pub struct PopulationIterator<E: Entity> {
-    /// The total count of all entities of this type at the time this iterator was created
-    population: usize,
-    /// The next `EntityId<E>` this iterator will produce (assuming `entity_id < population`)
+    /// The first `EntityId<E>` this iterator may produce.
+    start_entity_id: usize,
+    /// One past the final `EntityId<E>` this iterator may produce.
+    end_entity_id: usize,
+    /// The next `EntityId<E>` this iterator will produce (assuming `entity_id < end_entity_id`)
     entity_id: usize,
 
     _phantom: PhantomData<E>,
@@ -141,15 +143,28 @@ impl<E: Entity> PopulationIterator<E> {
     // `EntityId<E>` values are ever created.
     pub(crate) fn new(population: usize) -> Self {
         PopulationIterator::<E> {
-            population,
+            start_entity_id: 0,
+            end_entity_id: population,
             entity_id: 0,
             _phantom: PhantomData,
         }
     }
 
     #[must_use]
-    pub(crate) fn population(&self) -> usize {
-        self.population
+    pub(crate) fn from_range(start_entity_id: usize, end_entity_id: usize) -> Self {
+        debug_assert!(start_entity_id <= end_entity_id);
+
+        PopulationIterator::<E> {
+            start_entity_id,
+            end_entity_id,
+            entity_id: start_entity_id,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn contains(&self, entity_id: EntityId<E>) -> bool {
+        (self.start_entity_id..self.end_entity_id).contains(&entity_id.0)
     }
 }
 
@@ -157,9 +172,9 @@ impl<E: Entity> Iterator for PopulationIterator<E> {
     type Item = EntityId<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.entity_id < self.population {
+        if self.entity_id < self.end_entity_id {
             let current_id = self.entity_id;
-            // `self.entity_id` saturates to `self.population`.
+            // `self.entity_id` saturates to `self.end_entity_id`.
             self.entity_id += 1;
             Some(EntityId::new(current_id))
         } else {
@@ -180,16 +195,17 @@ impl<E: Entity> Iterator for PopulationIterator<E> {
 
     // Fast "seeking" operation.
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        // `self.entity_id` saturates to `self.population`.
-        self.entity_id = (self.entity_id + n).min(self.population);
+        // `self.entity_id` saturates to `self.end_entity_id`.
+        self.entity_id = (self.entity_id + n).min(self.end_entity_id);
         self.next()
     }
 }
 
 impl<E: Entity> ExactSizeIterator for PopulationIterator<E> {
     fn len(&self) -> usize {
-        // Safety: Since `self.entity_id` saturates to `self.population`, we do not need `saturating_sub` here.
-        self.population - self.entity_id
+        // Safety: Since `self.entity_id` saturates to `self.end_entity_id`, we do not need
+        // `saturating_sub` here.
+        self.end_entity_id - self.entity_id
     }
 }
 // Once `PopulationIterator<E>` returns `None`, it will always return `None`.
@@ -263,5 +279,20 @@ mod tests {
         let mut cloned = iter;
         assert_eq!(iter.next(), cloned.next());
         assert_eq!(iter.size_hint(), cloned.size_hint());
+    }
+
+    #[test]
+    fn test_entity_iterator_range() {
+        let mut iter = PopulationIterator::<DummyEntity>::from_range(3, 6);
+
+        assert!(iter.contains(EntityId::new(3)));
+        assert!(iter.contains(EntityId::new(5)));
+        assert!(!iter.contains(EntityId::new(2)));
+        assert!(!iter.contains(EntityId::new(6)));
+
+        assert_eq!(iter.len(), 3);
+        assert_eq!(iter.next(), Some(EntityId::new(3)));
+        assert_eq!(iter.nth(1), Some(EntityId::new(5)));
+        assert_eq!(iter.next(), None);
     }
 }

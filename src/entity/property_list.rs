@@ -24,7 +24,7 @@ use std::any::TypeId;
 use seq_macro::seq;
 
 use super::entity::{Entity, EntityId};
-use super::property::Property;
+use super::property::{Property, PropertyInitializationKind};
 use super::property_store::PropertyStore;
 use crate::IxaError;
 
@@ -62,6 +62,21 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
         }
     }
 
+    /// Assigns this property list to `n` consecutive entities starting at `start_entity_index`.
+    ///
+    /// The default implementation writes one entity at a time. Tuple impls override this so
+    /// constant properties whose repeated value equals their default can be skipped entirely.
+    fn set_values_for_repeated_entities(
+        &self,
+        start_entity_index: usize,
+        n: usize,
+        property_store: &PropertyStore<E>,
+    ) {
+        for offset in 0..n {
+            self.set_values_for_entity(EntityId::new(start_entity_index + offset), property_store);
+        }
+    }
+
     /// Reserves additional capacity in each concrete property value store touched by this list.
     ///
     /// The default implementation is a no-op. Tuple impls override this to pre-allocate storage,
@@ -69,6 +84,14 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     ///
     /// Custom `PropertyList` implementations may rely on this default safely.
     fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {}
+
+    /// Reserves additional capacity for writing the same property list repeatedly.
+    ///
+    /// The default implementation falls back to the type-level reservation logic. Tuple impls
+    /// override this so repeated constant-default values do not reserve storage they will never use.
+    fn reserve_for_repeated_entities(&self, property_store: &PropertyStore<E>, additional: usize) {
+        Self::reserve_for_entities(property_store, additional);
+    }
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
@@ -91,7 +114,24 @@ impl<E: Entity> PropertyList<E> for () {
         // No values to assign.
     }
 
+    fn set_values_for_repeated_entities(
+        &self,
+        _start_entity_index: usize,
+        _n: usize,
+        _property_store: &PropertyStore<E>,
+    ) {
+        // No values to assign.
+    }
+
     fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {
+        // No properties to reserve.
+    }
+
+    fn reserve_for_repeated_entities(
+        &self,
+        _property_store: &PropertyStore<E>,
+        _additional: usize,
+    ) {
         // No properties to reserve.
     }
 }
@@ -106,6 +146,15 @@ impl<E: Entity + Copy> PropertyList<E> for E {
         property_type_ids.is_empty()
     }
     fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+
+    fn set_values_for_repeated_entities(
+        &self,
+        _start_entity_index: usize,
+        _n: usize,
+        _property_store: &PropertyStore<E>,
+    ) {
         // No values to assign.
     }
 }
@@ -155,8 +204,31 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         );
     }
 
+    fn set_values_for_repeated_entities(
+        &self,
+        start_entity_index: usize,
+        n: usize,
+        property_store: &PropertyStore<E>,
+    ) {
+        if P::initialization_kind() != PropertyInitializationKind::Constant
+            || self.0 != P::default_const()
+        {
+            property_store
+                .get::<P>()
+                .set_contiguous_repeated(start_entity_index, n, self.0);
+        }
+    }
+
     fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
         property_store.get::<P>().reserve(additional);
+    }
+
+    fn reserve_for_repeated_entities(&self, property_store: &PropertyStore<E>, additional: usize) {
+        if P::initialization_kind() != PropertyInitializationKind::Constant
+            || self.0 != P::default_const()
+        {
+            property_store.get::<P>().reserve(additional);
+        }
     }
 }
 
@@ -211,9 +283,40 @@ macro_rules! impl_property_list {
                     })*
                 }
 
+                fn set_values_for_repeated_entities(
+                    &self,
+                    start_entity_index: usize,
+                    n: usize,
+                    property_store: &PropertyStore<E>,
+                ) {
+                    #({
+                        if P~N::initialization_kind() != PropertyInitializationKind::Constant
+                            || self.N != P~N::default_const()
+                        {
+                            property_store
+                                .get::<P~N>()
+                                .set_contiguous_repeated(start_entity_index, n, self.N);
+                        }
+                    })*
+                }
+
                 fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
                     #({
                         property_store.get::<P~N>().reserve(additional);
+                    })*
+                }
+
+                fn reserve_for_repeated_entities(
+                    &self,
+                    property_store: &PropertyStore<E>,
+                    additional: usize,
+                ) {
+                    #({
+                        if P~N::initialization_kind() != PropertyInitializationKind::Constant
+                            || self.N != P~N::default_const()
+                        {
+                            property_store.get::<P~N>().reserve(additional);
+                        }
                     })*
                 }
             }

@@ -217,6 +217,45 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             self.set(EntityId::new(start_index + offset), get_value(row));
         }
     }
+
+    /// Writes `count` copies of `value` starting at `start_index`.
+    ///
+    /// This has an append fast path and preserves the sparse optimization for constant default
+    /// properties when the repeated value is the default.
+    pub fn set_contiguous_repeated(&self, start_index: usize, count: usize, value: P) {
+        debug_assert!(
+            !P::is_derived(),
+            "Tried to set a derived property value in property value store."
+        );
+        if count == 0 {
+            return;
+        }
+
+        let len = self.data.len();
+
+        if start_index >= len && P::initialization_kind() == PropertyInitializationKind::Constant {
+            let default_value = P::default_const();
+
+            if value == default_value {
+                return;
+            }
+
+            self.data.reserve(start_index + count - len);
+            self.data.resize(start_index, default_value);
+            self.data.resize(start_index + count, value);
+            return;
+        }
+
+        if start_index == len {
+            self.data.reserve(count);
+            self.data.resize(start_index + count, value);
+            return;
+        }
+
+        for offset in 0..count {
+            self.set(EntityId::new(start_index + offset), value);
+        }
+    }
 }
 
 // See tests in `property_store.rs`.

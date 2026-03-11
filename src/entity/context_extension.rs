@@ -15,21 +15,14 @@ const BULK_ADD_CHUNK_SIZE: usize = 8192;
 
 fn flush_bulk_add_chunk<E: Entity, PL: PropertyList<E>>(
     context: &mut Context,
-    chunk: &mut Vec<PL>,
-    entity_ids: &mut Vec<EntityId<E>>,
+    chunk: &[PL],
     should_emit_events: bool,
-    reserve_for_chunk: bool,
 ) {
     if chunk.is_empty() {
         return;
     }
 
     let chunk_len = chunk.len();
-    if reserve_for_chunk {
-        let property_store = context.entity_store.get_property_store::<E>();
-        PL::reserve_for_entities(property_store, chunk_len);
-    }
-
     let entity_id_range = context
         .entity_store
         .allocate_entity_id_range::<E>(chunk_len);
@@ -44,15 +37,13 @@ fn flush_bulk_add_chunk<E: Entity, PL: PropertyList<E>>(
         if should_emit_events {
             context.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
         }
-        entity_ids.push(new_entity_id);
     }
 
     PL::set_values_for_entities(
         start_entity_index,
-        chunk.as_slice(),
+        chunk,
         context.entity_store.get_property_store::<E>(),
     );
-    chunk.clear();
 }
 
 /// A trait extension for [`Context`] that exposes entity-related
@@ -66,17 +57,20 @@ pub trait ContextEntitiesExt {
     /// Adds many entities of the same type in a single call.
     ///
     /// This method validates the `PropertyList` type once and then inserts entities in
-    /// iterator order. The returned IDs preserve this order.
+    /// `property_lists` order. Iterating the returned set yields those new entities in
+    /// ascending ID order, which matches insertion order.
     ///
     /// All inserted rows must have the same `PropertyList` type.
-    fn add_entities<E, PL, I>(&mut self, property_lists: I) -> Result<Vec<EntityId<E>>, IxaError>
+    fn add_entities<E, PL>(
+        &mut self,
+        property_lists: Vec<PL>,
+    ) -> Result<EntitySet<'static, E>, IxaError>
     where
         E: Entity,
-        PL: PropertyList<E>,
-        I: IntoIterator<Item = PL>;
+        PL: PropertyList<E>;
 
     /// Adds `n` entities initialized with the same property list.
-    fn add_n_entities<E: Entity, PL: PropertyList<E>>(
+    fn add_identical_entities<E: Entity, PL: PropertyList<E>>(
         &mut self,
         n: usize,
         property_list: PL,
@@ -219,11 +213,13 @@ impl ContextEntitiesExt for Context {
         Ok(new_entity_id)
     }
 
-    fn add_entities<E, PL, I>(&mut self, property_lists: I) -> Result<Vec<EntityId<E>>, IxaError>
+    fn add_entities<E, PL>(
+        &mut self,
+        property_lists: Vec<PL>,
+    ) -> Result<EntitySet<'static, E>, IxaError>
     where
         E: Entity,
         PL: PropertyList<E>,
-        I: IntoIterator<Item = PL>,
     {
         // Check that the properties in each list are distinct.
         PL::validate()?;
@@ -233,48 +229,65 @@ impl ContextEntitiesExt for Context {
             return Err(IxaError::MissingRequiredInitializationProperties);
         }
 
-        let iter = property_lists.into_iter();
-        let (lower_bound, _) = iter.size_hint();
+        let len = property_lists.len();
+        let start_entity_index = self.get_entity_count::<E>();
         let should_emit_events = self.has_event_handlers::<EntityCreatedEvent<E>>();
-        let mut entity_ids = Vec::with_capacity(lower_bound);
-        let mut chunk = Vec::with_capacity(BULK_ADD_CHUNK_SIZE);
-        let reserve_using_size_hint = lower_bound > 0;
 
-        if reserve_using_size_hint {
+        if len > 0 {
             let property_store = self.entity_store.get_property_store::<E>();
-            PL::reserve_for_entities(property_store, lower_bound);
+            PL::reserve_for_entities(property_store, len);
         }
 
-        for property_list in iter {
-            chunk.push(property_list);
-            if chunk.len() == BULK_ADD_CHUNK_SIZE {
-                flush_bulk_add_chunk::<E, PL>(
-                    self,
-                    &mut chunk,
-                    &mut entity_ids,
-                    should_emit_events,
-                    !reserve_using_size_hint,
-                );
-            }
+        for chunk in property_lists.chunks(BULK_ADD_CHUNK_SIZE) {
+            flush_bulk_add_chunk::<E, PL>(self, chunk, should_emit_events);
         }
 
-        flush_bulk_add_chunk::<E, PL>(
-            self,
-            &mut chunk,
-            &mut entity_ids,
-            should_emit_events,
-            !reserve_using_size_hint,
-        );
-
-        Ok(entity_ids)
+        if len == 0 {
+            Ok(EntitySet::empty())
+        } else {
+            Ok(EntitySet::from_source(SourceSet::PopulationRange(
+                start_entity_index..(start_entity_index + len),
+            )))
+        }
     }
 
-    fn add_n_entities<E: Entity, PL: PropertyList<E>>(
+    fn add_identical_entities<E: Entity, PL: PropertyList<E>>(
         &mut self,
         n: usize,
         property_list: PL,
     ) -> Result<Vec<EntityId<E>>, IxaError> {
-        self.add_entities::<E, PL, _>(std::iter::repeat_n(property_list, n))
+        PL::validate()?;
+
+        if !PL::contains_required_properties() {
+            return Err(IxaError::MissingRequiredInitializationProperties);
+        }
+
+        if n > 0 {
+            let property_store = self.entity_store.get_property_store::<E>();
+            property_list.reserve_for_repeated_entities(property_store, n);
+        }
+
+        let should_emit_events = self.has_event_handlers::<EntityCreatedEvent<E>>();
+        let entity_id_range = self.entity_store.allocate_entity_id_range::<E>(n);
+        let start_entity_index = entity_id_range.start;
+
+        // Events are enqueued before `set_values_for_repeated_entities` writes properties.
+        // This is safe because `emit_event` is always deferred: handlers run during
+        // `context.execute()`, by which time all property values are written. If
+        // synchronous event dispatch is ever added, this ordering must be revisited.
+        if should_emit_events {
+            for entity_index in entity_id_range.clone() {
+                self.emit_event(EntityCreatedEvent::<E>::new(EntityId::new(entity_index)));
+            }
+        }
+
+        property_list.set_values_for_repeated_entities(
+            start_entity_index,
+            n,
+            self.entity_store.get_property_store::<E>(),
+        );
+
+        Ok(entity_id_range.map(EntityId::new).collect())
     }
 
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
@@ -695,8 +708,9 @@ mod tests {
         let mut context = Context::new();
 
         let ids = context
-            .add_entities::<Person, _, _>([(Age(12),), (Age(34),), (Age(120),)])
-            .unwrap();
+            .add_entities::<Person, _>(vec![(Age(12),), (Age(34),), (Age(120),)])
+            .unwrap()
+            .to_owned_vec();
 
         assert_eq!(
             ids,
@@ -706,10 +720,12 @@ mod tests {
     }
 
     #[test]
-    fn add_n_entities_and_count() {
+    fn add_identical_entities_and_count() {
         let mut context = Context::new();
 
-        let ids = context.add_n_entities::<Person, _>(4, (Age(25),)).unwrap();
+        let ids = context
+            .add_identical_entities::<Person, _>(4, (Age(25),))
+            .unwrap();
 
         assert_eq!(
             ids,
@@ -724,28 +740,32 @@ mod tests {
     }
 
     #[test]
-    fn add_entities_empty_iterator_is_noop() {
+    fn add_entities_empty_vec_is_noop() {
         let mut context = Context::new();
         let ids = context
-            .add_entities::<Person, _, _>(std::iter::empty::<(Age,)>())
+            .add_entities::<Person, _>(Vec::<(Age,)>::new())
+            .unwrap();
+        assert!(ids.into_iter().next().is_none());
+        assert_eq!(context.get_entity_count::<Person>(), 0);
+    }
+
+    #[test]
+    fn add_identical_entities_zero_is_noop() {
+        let mut context = Context::new();
+        let ids = context
+            .add_identical_entities::<Person, _>(0, (Age(25),))
             .unwrap();
         assert!(ids.is_empty());
         assert_eq!(context.get_entity_count::<Person>(), 0);
     }
 
     #[test]
-    fn add_n_entities_zero_is_noop() {
+    fn add_identical_entities_without_required_properties_does_not_mutate_context() {
         let mut context = Context::new();
-        let ids = context.add_n_entities::<Person, _>(0, (Age(25),)).unwrap();
-        assert!(ids.is_empty());
-        assert_eq!(context.get_entity_count::<Person>(), 0);
-    }
-
-    #[test]
-    fn add_n_entities_without_required_properties_does_not_mutate_context() {
-        let mut context = Context::new();
-        let result = context
-            .add_n_entities::<Person, _>(3, (InfectionStatus::Susceptible, Vaccinated(true)));
+        let result = context.add_identical_entities::<Person, _>(
+            3,
+            (InfectionStatus::Susceptible, Vaccinated(true)),
+        );
 
         assert!(matches!(
             result,
@@ -755,26 +775,84 @@ mod tests {
     }
 
     #[test]
-    fn add_n_entities_matches_add_entities_repeat_n() {
-        let mut context_from_add_n = Context::new();
+    fn add_identical_entities_matches_add_entities_repeat_n() {
+        let mut context_from_add_identical = Context::new();
         let mut context_from_add_entities = Context::new();
 
-        let ids_from_add_n = context_from_add_n
-            .add_n_entities::<Person, _>(6, (Age(41), Vaccinated(true)))
+        let ids_from_add_identical = context_from_add_identical
+            .add_identical_entities::<Person, _>(6, (Age(41), Vaccinated(true)))
             .unwrap();
         let ids_from_add_entities = context_from_add_entities
-            .add_entities::<Person, _, _>(std::iter::repeat_n((Age(41), Vaccinated(true)), 6))
-            .unwrap();
+            .add_entities::<Person, _>(vec![(Age(41), Vaccinated(true)); 6])
+            .unwrap()
+            .to_owned_vec();
 
-        assert_eq!(ids_from_add_n, ids_from_add_entities);
-        for id in ids_from_add_n {
+        assert_eq!(ids_from_add_identical, ids_from_add_entities);
+        for id in ids_from_add_identical {
             assert_eq!(
-                context_from_add_n.get_property::<Person, Age>(id),
+                context_from_add_identical.get_property::<Person, Age>(id),
                 context_from_add_entities.get_property::<Person, Age>(id)
             );
             assert_eq!(
-                context_from_add_n.get_property::<Person, Vaccinated>(id),
+                context_from_add_identical.get_property::<Person, Vaccinated>(id),
                 context_from_add_entities.get_property::<Person, Vaccinated>(id)
+            );
+        }
+    }
+
+    #[test]
+    fn add_identical_entities_skips_constant_default_properties() {
+        let mut context = Context::new();
+
+        let ids = context
+            .add_identical_entities::<Person, _>(
+                4,
+                (Age(25), InfectionStatus::Susceptible, Vaccinated(false)),
+            )
+            .unwrap();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(property_store.get::<Age>().data.len(), 4);
+        assert_eq!(property_store.get::<InfectionStatus>().data.len(), 0);
+        assert_eq!(property_store.get::<Vaccinated>().data.len(), 0);
+
+        for id in ids {
+            assert_eq!(context.get_property::<Person, Age>(id), Age(25));
+            assert_eq!(
+                context.get_property::<Person, InfectionStatus>(id),
+                InfectionStatus::Susceptible
+            );
+            assert_eq!(
+                context.get_property::<Person, Vaccinated>(id),
+                Vaccinated(false)
+            );
+        }
+    }
+
+    #[test]
+    fn add_identical_entities_repeated_non_default_constant_fills_sparse_tail() {
+        let mut context = Context::new();
+
+        let default_ids = context
+            .add_identical_entities::<Person, _>(3, (Age(20),))
+            .unwrap();
+        let non_default_ids = context
+            .add_identical_entities::<Person, _>(2, (Age(30), Vaccinated(true)))
+            .unwrap();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(property_store.get::<Vaccinated>().data.len(), 5);
+
+        for id in default_ids {
+            assert_eq!(
+                context.get_property::<Person, Vaccinated>(id),
+                Vaccinated(false)
+            );
+        }
+        for id in non_default_ids {
+            assert_eq!(
+                context.get_property::<Person, Vaccinated>(id),
+                Vaccinated(true)
             );
         }
     }
@@ -782,7 +860,7 @@ mod tests {
     #[test]
     fn add_entities_duplicate_properties_returns_error_without_mutation() {
         let mut context = Context::new();
-        let result = context.add_entities::<Person, _, _>([(Age(10), Age(20))]);
+        let result = context.add_entities::<Person, _>(vec![(Age(10), Age(20))]);
         assert!(matches!(
             result,
             Err(crate::IxaError::DuplicatePropertyInPropertyList {
@@ -794,30 +872,15 @@ mod tests {
     }
 
     #[test]
-    fn add_entities_with_unknown_size_hint_iterator() {
-        struct UnknownSize<I> {
-            inner: I,
-        }
-
-        impl<I: Iterator> Iterator for UnknownSize<I> {
-            type Item = I::Item;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                self.inner.next()
-            }
-
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                (0, None)
-            }
-        }
-
+    fn add_entities_from_vec_preserves_ids_and_values() {
         let mut context = Context::new();
-        let rows = (0u8..37).map(|age| (Age(age), Vaccinated(age % 2 == 0)));
-        let ids = context
-            .add_entities::<Person, _, _>(UnknownSize { inner: rows })
-            .unwrap();
+        let rows: Vec<_> = (0u8..37)
+            .map(|age| (Age(age), Vaccinated(age % 2 == 0)))
+            .collect();
+        let ids = context.add_entities::<Person, _>(rows).unwrap();
 
-        assert_eq!(ids.len(), 37);
+        assert_eq!(ids.try_len(), Some(37));
+        let ids = ids.to_owned_vec();
         assert_eq!(ids.first().copied(), Some(PersonId::new(0)));
         assert_eq!(ids.last().copied(), Some(PersonId::new(36)));
         assert_eq!(context.get_entity_count::<Person>(), 37);
@@ -832,8 +895,13 @@ mod tests {
         let mut context = Context::new();
 
         let ids_1 = context
-            .add_entities::<Person, _, _>((0..BULK_ADD_CHUNK_SIZE).map(|idx| (Age(idx as u8),)))
-            .unwrap();
+            .add_entities::<Person, _>(
+                (0..BULK_ADD_CHUNK_SIZE)
+                    .map(|idx| (Age(idx as u8),))
+                    .collect(),
+            )
+            .unwrap()
+            .to_owned_vec();
         assert_eq!(ids_1.len(), BULK_ADD_CHUNK_SIZE);
         assert_eq!(ids_1.first().copied(), Some(PersonId::new(0)));
         assert_eq!(
@@ -842,10 +910,13 @@ mod tests {
         );
 
         let ids_2 = context
-            .add_entities::<Person, _, _>(
-                (0..(BULK_ADD_CHUNK_SIZE + 1)).map(|idx| (Age((idx % 251) as u8),)),
+            .add_entities::<Person, _>(
+                (0..(BULK_ADD_CHUNK_SIZE + 1))
+                    .map(|idx| (Age((idx % 251) as u8),))
+                    .collect(),
             )
-            .unwrap();
+            .unwrap()
+            .to_owned_vec();
         assert_eq!(ids_2.len(), BULK_ADD_CHUNK_SIZE + 1);
         assert_eq!(
             ids_2.first().copied(),
@@ -858,10 +929,13 @@ mod tests {
 
         let multi_chunk_count = 2 * BULK_ADD_CHUNK_SIZE + 3;
         let ids_3 = context
-            .add_entities::<Person, _, _>(
-                (0..multi_chunk_count).map(|idx| (Age((idx % 199) as u8),)),
+            .add_entities::<Person, _>(
+                (0..multi_chunk_count)
+                    .map(|idx| (Age((idx % 199) as u8),))
+                    .collect(),
             )
-            .unwrap();
+            .unwrap()
+            .to_owned_vec();
         assert_eq!(ids_3.len(), multi_chunk_count);
         assert_eq!(
             ids_3.first().copied(),
@@ -891,8 +965,9 @@ mod tests {
     fn add_entities_with_empty_property_list_uses_defaults() {
         let mut context = Context::new();
         let ids = context
-            .add_entities::<Animal, _, _>(std::iter::repeat_n((), 5))
-            .unwrap();
+            .add_entities::<Animal, _>(vec![(); 5])
+            .unwrap()
+            .to_owned_vec();
 
         assert_eq!(ids.len(), 5);
         assert_eq!(context.get_entity_count::<Animal>(), 5);
@@ -907,13 +982,13 @@ mod tests {
         context.index_property::<Person, Age>();
 
         context
-            .add_entities::<Person, _, _>([(Age(12),), (Age(12),), (Age(16),)])
+            .add_entities::<Person, _>(vec![(Age(12),), (Age(12),), (Age(16),)])
             .unwrap();
         assert_eq!(context.query_entity_count((Age(12),)), 2);
         assert_eq!(context.query_entity_count((Age(16),)), 1);
 
         context
-            .add_entities::<Person, _, _>([(Age(12),), (Age(30),), (Age(16),), (Age(16),)])
+            .add_entities::<Person, _>(vec![(Age(12),), (Age(30),), (Age(16),), (Age(16),)])
             .unwrap();
         assert_eq!(context.query_entity_count((Age(12),)), 3);
         assert_eq!(context.query_entity_count((Age(16),)), 3);
@@ -994,7 +1069,7 @@ mod tests {
     #[test]
     fn add_entities_without_required_properties_does_not_mutate_context() {
         let mut context = Context::new();
-        let result = context.add_entities::<Person, _, _>([
+        let result = context.add_entities::<Person, _>(vec![
             (InfectionStatus::Susceptible, Vaccinated(true)),
             (InfectionStatus::Recovered, Vaccinated(false)),
         ]);
@@ -1012,12 +1087,13 @@ mod tests {
         let mut loop_context = Context::new();
 
         let bulk_ids = bulk_context
-            .add_entities::<Person, _, _>([
+            .add_entities::<Person, _>(vec![
                 (Age(18), Vaccinated(true), InfectionStatus::Recovered),
                 (Age(22), Vaccinated(false), InfectionStatus::Susceptible),
                 (Age(44), Vaccinated(false), InfectionStatus::Infected),
             ])
-            .unwrap();
+            .unwrap()
+            .to_owned_vec();
 
         let loop_ids = vec![
             loop_context

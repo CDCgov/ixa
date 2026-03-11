@@ -57,23 +57,27 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             Context::new,
             |mut context| {
                 let ids = context
-                    .add_entities::<Person, _, _>((0..N_PEOPLE).map(|i| {
-                        let i_u32 = i as u32;
-                        (
-                            Age((i % 100) as u8),
-                            Prop1(i_u32 + 1),
-                            Prop2((i_u32 % 10_000) + 1),
-                            Prop3((i_u32 % 100_000) + 1),
-                            Prop4((i_u32 % 1_000_000) + 1),
-                            Prop5((i_u32.wrapping_mul(3)) + 1),
-                            Prop6((i_u32.wrapping_mul(5)) + 1),
-                            Prop7((i_u32.wrapping_mul(7)) + 1),
-                            Prop8((i_u32.wrapping_mul(11)) + 1),
-                            Prop9((i_u32.wrapping_mul(13)) + 1),
-                        )
-                    }))
+                    .add_entities::<Person, _>(
+                        (0..N_PEOPLE)
+                            .map(|i| {
+                                let i_u32 = i as u32;
+                                (
+                                    Age((i % 100) as u8),
+                                    Prop1(i_u32 + 1),
+                                    Prop2((i_u32 % 10_000) + 1),
+                                    Prop3((i_u32 % 100_000) + 1),
+                                    Prop4((i_u32 % 1_000_000) + 1),
+                                    Prop5((i_u32.wrapping_mul(3)) + 1),
+                                    Prop6((i_u32.wrapping_mul(5)) + 1),
+                                    Prop7((i_u32.wrapping_mul(7)) + 1),
+                                    Prop8((i_u32.wrapping_mul(11)) + 1),
+                                    Prop9((i_u32.wrapping_mul(13)) + 1),
+                                )
+                            })
+                            .collect(),
+                    )
                     .unwrap();
-                black_box(ids.len());
+                black_box(ids.try_len().unwrap());
             },
             BatchSize::SmallInput,
         );
