@@ -17,14 +17,14 @@ use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
 };
-use crate::plan::{PlanId, Queue};
+use crate::plan::{PlanId, Queue, QueuedPlan, RunCondition};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
 #[cfg(feature = "debugger")]
 use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
-/// The common callback used by multiple [`Context`] methods for future events
+/// The common callback used by multiple [`Context`] methods for future events.
 type Callback = dyn FnOnce(&mut Context);
 
 /// A handler for an event type `E`
@@ -68,10 +68,10 @@ impl Display for ExecutionPhase {
 /// store data in the simulation using the [`DataPlugin`] trait that allows them
 /// to retrieve data by type.
 ///
-/// The future event list of the simulation is a queue of `Callback` objects -
-/// called `plans` - that will assume control of the [`Context`] at a future point
-/// in time and execute the logic in the associated `FnOnce(&mut Context)`
-/// closure. Modules can add plans to this queue through the [`Context`].
+/// The future event list of the simulation is a queue of plans that each hold
+/// a `FnOnce(&mut Context)` callback and may also hold a [`RunCondition`]. When
+/// a plan reaches dispatch, its condition is checked first; if the condition is
+/// absent or returns `true`, the callback executes.
 ///
 /// The simulation also has a separate callback mechanism. Callbacks
 /// fire before the next timed event (even if it is scheduled for the
@@ -83,7 +83,7 @@ impl Display for ExecutionPhase {
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>, ExecutionPhase>,
+    plan_queue: Queue<QueuedPlan, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     pub(crate) entity_store: EntityStore,
@@ -141,6 +141,39 @@ impl Context {
         self.entity_store
             .get_property_store_mut::<E>()
             .get_mut::<P>()
+    }
+
+    fn add_queued_plan_with_phase(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+        run_condition: Option<Box<dyn RunCondition>>,
+    ) -> PlanId {
+        let current = self.get_current_time();
+        assert!(!time.is_nan(), "Time {time} is invalid: cannot be NaN");
+        assert!(
+            !time.is_infinite(),
+            "Time {time} is invalid: cannot be infinite"
+        );
+        assert!(
+            time >= current,
+            "Time {time} is invalid: cannot be less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
+            current
+        );
+        self.plan_queue
+            .add_plan(time, QueuedPlan::new(callback, run_condition), phase)
+    }
+
+    // This private method lives here instead of on `Queue`, because it needs to mutate
+    // `self.plan_queue` while also giving `should_run` an immutable reference to the context.
+    fn next_runnable_plan(&mut self) -> Option<crate::plan::Plan<QueuedPlan>> {
+        while let Some(plan) = self.plan_queue.get_next_plan() {
+            if plan.data.should_run(self, plan.plan_id) {
+                return Some(plan);
+            }
+        }
+        None
     }
 
     /// Schedule the simulation to pause at time t and start the debugger.
@@ -214,6 +247,28 @@ impl Context {
         self.add_plan_with_phase(time, callback, ExecutionPhase::Normal)
     }
 
+    /// Add a plan to the future event list at the specified time in the normal
+    /// phase and execute it only if the run condition still holds at dispatch.
+    ///
+    /// Returns a [`PlanId`] for the newly added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan_with_run_condition(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        run_condition: impl RunCondition + 'static,
+    ) -> PlanId {
+        self.add_plan_with_phase_and_run_condition(
+            time,
+            callback,
+            ExecutionPhase::Normal,
+            run_condition,
+        )
+    }
+
     /// Add a plan to the future event list at the specified time and with the
     /// specified phase (first, normal, or last among plans at the
     /// specified time)
@@ -229,18 +284,26 @@ impl Context {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId {
-        let current = self.get_current_time();
-        assert!(!time.is_nan(), "Time {time} is invalid: cannot be NaN");
-        assert!(
-            !time.is_infinite(),
-            "Time {time} is invalid: cannot be infinite"
-        );
-        assert!(
-            time >= current,
-            "Time {time} is invalid: cannot be less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
-            current
-        );
-        self.plan_queue.add_plan(time, Box::new(callback), phase)
+        self.add_queued_plan_with_phase(time, callback, phase, None)
+    }
+
+    /// Add a plan to the future event list at the specified time and with the
+    /// specified phase, and execute it only if the run condition still holds at
+    /// dispatch.
+    ///
+    /// Returns a [`PlanId`] for the newly added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_plan_with_phase_and_run_condition(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+        run_condition: impl RunCondition + 'static,
+    ) -> PlanId {
+        self.add_queued_plan_with_phase(time, callback, phase, Some(Box::new(run_condition)))
     }
 
     fn evaluate_periodic_and_schedule_next(
@@ -302,7 +365,6 @@ impl Context {
     /// This function panics if you cancel a plan which has already been
     /// cancelled or executed.
     pub fn cancel_plan(&mut self, plan_id: &PlanId) {
-        trace!("canceling plan {plan_id:?}");
         let result = self.plan_queue.cancel_plan(plan_id);
         if result.is_none() {
             warn!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
@@ -575,10 +637,10 @@ impl Context {
             callback(self);
         }
         // There aren't any callbacks, so look at the first plan.
-        else if let Some(plan) = self.plan_queue.get_next_plan() {
+        else if let Some(plan) = self.next_runnable_plan() {
             trace!("calling plan at {:.6}", plan.time);
             self.current_time = Some(plan.time);
-            (plan.data)(self);
+            plan.data.execute(self);
         } else {
             trace!("No callbacks or plans; exiting event loop");
             // OK, there aren't any plans, so we're done.
@@ -598,11 +660,24 @@ pub trait ContextBase: Sized {
     );
     fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
     fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+    fn add_plan_with_run_condition(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        run_condition: impl RunCondition + 'static,
+    ) -> PlanId;
     fn add_plan_with_phase(
         &mut self,
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
+    ) -> PlanId;
+    fn add_plan_with_phase_and_run_condition(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+        run_condition: impl RunCondition + 'static,
     ) -> PlanId;
     fn add_periodic_plan_with_phase(
         &mut self,
@@ -623,7 +698,9 @@ impl ContextBase for Context {
             fn subscribe_to_event<E: IxaEvent + Copy + 'static>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
             fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
             fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+            fn add_plan_with_run_condition(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, run_condition: impl RunCondition + 'static) -> PlanId;
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
+            fn add_plan_with_phase_and_run_condition(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase, run_condition: impl RunCondition + 'static) -> PlanId;
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
             fn cancel_plan(&mut self, plan_id: &PlanId);
             fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
@@ -674,6 +751,12 @@ mod tests {
         default_const = Vaccinated(false)
     );
 
+    define_property!(
+        struct Alive(bool),
+        Person,
+        default_const = Alive(true)
+    );
+
     #[test]
     fn empty_context() {
         let mut context = Context::new();
@@ -706,6 +789,21 @@ mod tests {
                 context.get_data_mut(ComponentA).push(value);
             },
             phase,
+        )
+    }
+
+    fn add_plan_with_condition(
+        context: &mut Context,
+        time: f64,
+        value: u32,
+        run_condition: impl RunCondition + 'static,
+    ) -> PlanId {
+        context.add_plan_with_run_condition(
+            time,
+            move |context| {
+                context.get_data_mut(ComponentA).push(value);
+            },
+            run_condition,
         )
     }
 
@@ -804,6 +902,65 @@ mod tests {
     fn cancel_plan() {
         let mut context = Context::new();
         let to_cancel = add_plan(&mut context, 2.0, 1);
+        context.add_plan(1.0, move |context| {
+            context.cancel_plan(&to_cancel);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        let test_vec: Vec<u32> = vec![];
+        assert_eq!(*context.get_data_mut(ComponentA), test_vec);
+    }
+
+    #[test]
+    fn conditional_plan_runs_when_condition_true() {
+        let mut context = Context::new();
+        add_plan_with_condition(&mut context, 1.0, 1, |_context: &Context, _plan_id| true);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn conditional_plan_skips_when_condition_false() {
+        let mut context = Context::new();
+        add_plan_with_condition(&mut context, 1.0, 1, |_context: &Context, _plan_id| false);
+        context.execute();
+        assert_eq!(context.get_current_time(), 0.0);
+        let test_vec: Vec<u32> = vec![];
+        assert_eq!(*context.get_data_mut(ComponentA), test_vec);
+    }
+
+    #[test]
+    fn conditional_plan_observes_later_state_change() {
+        let mut context = Context::new();
+        let person = context.add_entity((Age(0),)).unwrap();
+        add_plan_with_condition(&mut context, 2.0, 2, move |context: &Context, _plan_id| {
+            context.get_property::<Person, Alive>(person) == Alive(true)
+        });
+        context.add_plan(1.0, move |context| {
+            context.set_property(person, Alive(false));
+            context.get_data_mut(ComponentA).push(1);
+        });
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn skipped_conditional_plan_does_not_block_later_plan() {
+        let mut context = Context::new();
+        add_plan_with_condition(&mut context, 1.0, 1, |_context: &Context, _plan_id| false);
+        add_plan(&mut context, 2.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![2]);
+    }
+
+    #[test]
+    fn cancel_plan_still_works_for_conditional_plan() {
+        let mut context = Context::new();
+        let to_cancel =
+            add_plan_with_condition(&mut context, 2.0, 1, |_context: &Context, _plan_id| true);
         context.add_plan(1.0, move |context| {
             context.cancel_plan(&to_cancel);
         });

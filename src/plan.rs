@@ -12,7 +12,54 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+use crate::Context;
 use crate::{trace, HashMap, HashMapExt};
+
+type Callback = dyn FnOnce(&mut Context);
+
+/// A predicate checked when a scheduled plan reaches dispatch.
+///
+/// Returning `false` skips execution of that plan.
+pub trait RunCondition {
+    fn should_run(&self, context: &Context, plan_id: PlanId) -> bool;
+}
+
+impl<F> RunCondition for F
+where
+    F: for<'a> Fn(&'a Context, PlanId) -> bool + 'static,
+{
+    fn should_run(&self, context: &Context, plan_id: PlanId) -> bool {
+        self(context, plan_id)
+    }
+}
+
+pub(crate) struct QueuedPlan {
+    callback: Box<Callback>,
+    run_condition: Option<Box<dyn RunCondition>>,
+}
+
+impl QueuedPlan {
+    pub(crate) fn new(
+        callback: impl FnOnce(&mut Context) + 'static,
+        run_condition: Option<Box<dyn RunCondition>>,
+    ) -> Self {
+        Self {
+            callback: Box::new(callback),
+            run_condition,
+        }
+    }
+
+    pub(crate) fn should_run(&self, context: &Context, plan_id: PlanId) -> bool {
+        self.run_condition
+            .as_ref()
+            .map(|condition| condition.should_run(context, plan_id))
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn execute(self, context: &mut Context) {
+        (self.callback)(context);
+    }
+}
 
 /// A priority queue that stores arbitrary data sorted by time
 ///
@@ -113,6 +160,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
                     // Skip plans that have been cancelled and thus have no data
                     if let Some(data) = self.data_map.remove(&entry.plan_id) {
                         return Some(Plan {
+                            plan_id: PlanId(entry.plan_id),
                             time: entry.time,
                             data,
                         });
@@ -216,6 +264,7 @@ pub struct PlanId(pub(crate) u64);
 
 /// A plan that holds data of type `T` intended to be used at the specified time
 pub struct Plan<T> {
+    pub plan_id: PlanId,
     pub time: f64,
     pub data: T,
 }
@@ -223,7 +272,7 @@ pub struct Plan<T> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
-    use super::Queue;
+    use super::{PlanId, Queue};
 
     #[test]
     fn empty_queue() {
@@ -240,16 +289,19 @@ mod tests {
         assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(0));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(2));
         assert_eq!(next_plan.time, 2.0);
         assert_eq!(next_plan.data, 2);
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(1));
         assert_eq!(next_plan.time, 3.0);
         assert_eq!(next_plan.data, 3);
 
@@ -265,11 +317,13 @@ mod tests {
         assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(0));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(1));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 2);
 
@@ -285,10 +339,12 @@ mod tests {
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(1));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 2);
 
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(0));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
@@ -306,11 +362,13 @@ mod tests {
         assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(0));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(2));
         assert_eq!(next_plan.time, 3.0);
         assert_eq!(next_plan.data, 3);
 
@@ -326,6 +384,7 @@ mod tests {
         assert!(!plan_queue.is_empty());
 
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(0));
         assert_eq!(next_plan.time, 1.0);
         assert_eq!(next_plan.data, 1);
 
@@ -333,11 +392,13 @@ mod tests {
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(2));
         assert_eq!(next_plan.time, 1.5);
         assert_eq!(next_plan.data, 3);
 
         assert!(!plan_queue.is_empty());
         let next_plan = plan_queue.get_next_plan().unwrap();
+        assert_eq!(next_plan.plan_id, PlanId(1));
         assert_eq!(next_plan.time, 2.0);
         assert_eq!(next_plan.data, 2);
 

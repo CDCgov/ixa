@@ -8,6 +8,7 @@ pub use crate::log::{debug, error, info, trace, warn};
 pub use crate::network::ContextNetworkExt;
 pub use crate::random::ContextRandomExt;
 pub use crate::report::ContextReportExt;
+pub use crate::RunCondition;
 pub use crate::{
     define_data_plugin, define_derived_property, define_edge_type, define_entity,
     define_global_property, define_multi_property, define_property, define_report, define_rng,

@@ -60,6 +60,7 @@ pub use network::{ContextNetworkExt, Edge, EdgeType};
 pub mod macros;
 
 pub mod plan;
+pub use plan::RunCondition;
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
 
