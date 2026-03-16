@@ -1,4 +1,5 @@
 //! Provides [`IxaError`] and wraps other errors.
+use std::error::Error;
 use std::io;
 
 use thiserror::Error;
@@ -28,8 +29,11 @@ pub enum IxaError {
     #[error("property {name} is not set")]
     PropertyNotSet { name: String },
 
-    #[error("illegal value for `{field}`: {value}")]
-    IllegalGlobalPropertyValue { field: String, value: String },
+    #[error("illegal value for global property `{name}`: {source}")]
+    IllegalGlobalPropertyValue {
+        name: String,
+        source: Box<dyn Error + 'static>,
+    },
 
     #[error(
         "the same property appears in both position {first_index} and {second_index} in the property list"

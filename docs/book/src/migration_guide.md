@@ -96,6 +96,13 @@ and API docs for the macros `define_property!`, `impl_property!`,
 | **Using Existing Types**    | A single _value_ type can be used in multiple properties—including primitive types like `u8`                                   | Only one property per type (per `Entity`); primitive types must be wrapped in a newtype.                             | Both systems require that the existing type implement the required property traits. |
 | **Macro Behavior**          | Macros define the property’s ZST and connect it to the value type via trait impls.                                             | Macros define "is a property of entity `E`" relationship via trait impl. No additional synthesized types.            | Both enforce correctness via macro                                                  |
 
+## Global property validator errors
+
+Global-property validators are client code, so they should return
+`Result<(), Box<dyn std::error::Error + 'static>>` instead of constructing
+`IxaError` values directly. Ixa wraps any returned validator error in
+`IxaError::IllegalGlobalPropertyValue` when a global property is set or loaded.
+
 ## New Entities API: How Do I...?
 
 We will use `Person` as an example entity, but there is nothing special about
