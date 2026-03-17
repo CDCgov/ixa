@@ -44,7 +44,6 @@
 //! | `ConcretePropertySource`     | `5`         |
 //! | `DerivedPropertySource`      | `6`         |
 
-use std::cell::Ref;
 use std::marker::PhantomData;
 
 use super::source_iterator::{IndexSetIterator, SourceIterator};
@@ -258,7 +257,7 @@ pub(crate) enum SourceSet<'a, E: Entity> {
     Population(usize),
     #[allow(dead_code)]
     Entity(EntityId<E>),
-    IndexSet(Ref<'a, IndexSet<EntityId<E>>>),
+    IndexSet(&'a IndexSet<EntityId<E>>),
     PropertySet(BxPropertySource<'a, E>),
 }
 
@@ -311,7 +310,6 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         // Check for an index.
         {
             match property_store.get_index_set_with_hash_for_property_id(
-                context,
                 P::index_id(),
                 P::hash_property_value(&value.make_canonical()),
             ) {
@@ -379,8 +377,6 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::*;
     use crate::{define_derived_property, define_entity, define_property};
 
@@ -417,12 +413,10 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(singleton_ids, vec![EntityId::new(9)]);
 
-        let ids = RefCell::new(
-            [EntityId::new(1), EntityId::new(4), EntityId::new(8)]
-                .into_iter()
-                .collect::<IndexSet<_>>(),
-        );
-        let ids_ref = ids.borrow();
+        let ids = [EntityId::new(1), EntityId::new(4), EntityId::new(8)]
+            .into_iter()
+            .collect::<IndexSet<_>>();
+        let ids_ref = &ids;
         let indexed = SourceSet::<Person>::IndexSet(ids_ref);
         assert_eq!(indexed.sort_key(), (3, 3));
         assert!(indexed.contains(EntityId::new(4)));

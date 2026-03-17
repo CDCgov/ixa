@@ -114,8 +114,15 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
         T::contains_properties(property_type_ids)
     }
 
-    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
-        self.inner.set_values_for_entity(entity_id, property_store)
+    fn set_values_for_new_entity(
+        &self,
+        entity_id: EntityId<E>,
+        property_store: &mut PropertyStore<E>,
+    ) {
+        let tuple = *self;
+        tuple
+            .into_inner()
+            .set_values_for_new_entity(entity_id, property_store)
     }
 }
 

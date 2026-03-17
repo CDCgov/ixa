@@ -312,8 +312,6 @@ impl<'a, E: Entity> IntoIterator for EntitySet<'a, E> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::*;
     use crate::entity::ContextEntitiesExt;
     use crate::hashing::IndexSet;
@@ -322,17 +320,15 @@ mod tests {
     define_entity!(Person);
     define_property!(struct Age(u8), Person);
 
-    fn finite_set(ids: &[usize]) -> RefCell<IndexSet<EntityId<Person>>> {
-        RefCell::new(
-            ids.iter()
-                .copied()
-                .map(EntityId::<Person>::new)
-                .collect::<IndexSet<_>>(),
-        )
+    fn finite_set(ids: &[usize]) -> IndexSet<EntityId<Person>> {
+        ids.iter()
+            .copied()
+            .map(EntityId::<Person>::new)
+            .collect::<IndexSet<_>>()
     }
 
-    fn as_entity_set(set: &RefCell<IndexSet<EntityId<Person>>>) -> EntitySet<Person> {
-        EntitySet::from_source(SourceSet::IndexSet(set.borrow()))
+    fn as_entity_set(set: &IndexSet<EntityId<Person>>) -> EntitySet<Person> {
+        EntitySet::from_source(SourceSet::IndexSet(set))
     }
 
     #[test]
@@ -470,16 +466,13 @@ mod tests {
         let b = finite_set(&[2, 3, 4]);
 
         let union = as_entity_set(&a).union(as_entity_set(&b));
-        assert_eq!(union.sort_key(), (a.borrow().len() + b.borrow().len(), 3));
+        assert_eq!(union.sort_key(), (a.len() + b.len(), 3));
 
         let intersection = as_entity_set(&a).intersection(as_entity_set(&b));
-        assert_eq!(
-            intersection.sort_key(),
-            (a.borrow().len().min(b.borrow().len()), 6)
-        );
+        assert_eq!(intersection.sort_key(), (a.len().min(b.len()), 6));
 
         let difference = as_entity_set(&a).difference(as_entity_set(&b));
-        assert_eq!(difference.sort_key(), (a.borrow().len(), 6));
+        assert_eq!(difference.sort_key(), (a.len(), 6));
     }
 
     #[test]
@@ -525,12 +518,10 @@ mod tests {
         let population = EntitySet::<Person>::from_source(SourceSet::Population(5));
         assert_eq!(population.try_len(), Some(5));
 
-        let index_data = RefCell::new(
-            [EntityId::new(1), EntityId::new(2), EntityId::new(3)]
-                .into_iter()
-                .collect::<IndexSet<_>>(),
-        );
-        let indexed = EntitySet::<Person>::from_source(SourceSet::IndexSet(index_data.borrow()));
+        let index_data = [EntityId::new(1), EntityId::new(2), EntityId::new(3)]
+            .into_iter()
+            .collect::<IndexSet<_>>();
+        let indexed = EntitySet::<Person>::from_source(SourceSet::IndexSet(&index_data));
         assert_eq!(indexed.try_len(), Some(3));
 
         let mut context = Context::new();
