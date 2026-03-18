@@ -32,6 +32,8 @@ impl Serialize for SerializableDuration {
 #[derive(Serialize)]
 struct SerializableExecutionStatistics {
     max_memory_usage: u64,
+    max_plans_in_flight: u64,
+    max_plan_queue_memory_in_use: u64,
     cpu_time: SerializableDuration,
     wall_time: SerializableDuration,
 }
@@ -41,6 +43,8 @@ impl From<ExecutionStatistics> for SerializableExecutionStatistics {
     fn from(value: ExecutionStatistics) -> Self {
         SerializableExecutionStatistics {
             max_memory_usage: value.max_memory_usage,
+            max_plans_in_flight: value.max_plans_in_flight,
+            max_plan_queue_memory_in_use: value.max_plan_queue_memory_in_use,
             cpu_time: SerializableDuration(value.cpu_time),
             wall_time: SerializableDuration(value.wall_time),
         }
@@ -189,6 +193,8 @@ mod tests {
 
         let exec_stats = ExecutionStatistics {
             max_memory_usage: 1024 * 1024,
+            max_plans_in_flight: 12,
+            max_plan_queue_memory_in_use: 4096,
             cpu_time: Duration::from_secs(1),
             wall_time: Duration::from_secs(2),
         };
@@ -210,6 +216,11 @@ mod tests {
         assert_eq!(
             json["execution_statistics"]["max_memory_usage"],
             1024 * 1024
+        );
+        assert_eq!(json["execution_statistics"]["max_plans_in_flight"], 12);
+        assert_eq!(
+            json["execution_statistics"]["max_plan_queue_memory_in_use"],
+            4096
         );
 
         let counts = json["named_counts"].as_array().unwrap();
@@ -238,6 +249,8 @@ mod tests {
 
         let exec_stats = ExecutionStatistics {
             max_memory_usage: 2048,
+            max_plans_in_flight: 3,
+            max_plan_queue_memory_in_use: 8192,
             cpu_time: Duration::from_secs_f64(1.5),
             wall_time: Duration::from_secs_f64(2.5),
         };

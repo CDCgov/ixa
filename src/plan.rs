@@ -31,7 +31,14 @@ use crate::{trace, HashMap, HashMapExt};
 pub struct Queue<T, P: Eq + PartialEq + Ord> {
     queue: BinaryHeap<PlanSchedule<P>>,
     data_map: HashMap<u64, T>,
+    /// The number of plans that have been added; equivalently, the next plan ID that
+    /// will be issued.
     plan_counter: u64,
+    /// Tracks the high water mark of plans in flight (scheduled but not yet executed).
+    /// This is the max of `self.queue.len()`, not of `self.data_map.len()`.
+    pub(crate) max_plans_in_flight: u64,
+    /// Tracks the high water mark of memory allocated (capacity, not use) by this structure
+    pub(crate) max_memory_in_use: u64,
 }
 
 impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
@@ -42,6 +49,8 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
             queue: BinaryHeap::new(),
             data_map: HashMap::new(),
             plan_counter: 0,
+            max_plans_in_flight: 0,
+            max_memory_in_use: 0,
         }
     }
 
@@ -60,6 +69,11 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         });
         self.data_map.insert(plan_id, data);
         self.plan_counter += 1;
+        self.max_plans_in_flight = self.max_plans_in_flight.max(self.queue.len() as u64);
+        self.max_memory_in_use = self
+            .max_memory_in_use
+            .max(self.estimated_memory_in_use() as u64);
+
         PlanId(plan_id)
     }
 
@@ -147,6 +161,14 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
     #[doc(hidden)]
     pub(crate) fn remaining_plan_count(&self) -> usize {
         self.queue.len()
+    }
+
+    fn estimated_memory_in_use(&self) -> usize {
+        let queue_bytes = self.queue.capacity() * size_of::<PlanSchedule<P>>();
+
+        let map_entry_bytes = self.data_map.capacity() * size_of::<(u64, T)>();
+
+        queue_bytes + map_entry_bytes
     }
 }
 

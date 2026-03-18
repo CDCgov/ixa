@@ -31,6 +31,8 @@ pub fn get_high_res_time() -> f64 {
 #[derive(Serialize)]
 pub struct ExecutionStatistics {
     pub max_memory_usage: u64,
+    pub max_plans_in_flight: u64,
+    pub max_plan_queue_memory_in_use: u64,
     pub cpu_time: Duration,
     pub wall_time: Duration,
 }
@@ -171,6 +173,8 @@ impl ExecutionProfilingCollector {
 
         ExecutionStatistics {
             max_memory_usage: self.max_memory_usage,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
             cpu_time,
             wall_time,
         }
@@ -190,6 +194,15 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
             "Max memory usage:",
             ByteSize::b(summary.max_memory_usage)
         );
+        println!(
+            "{:<25}{}",
+            "Max plans in flight:", summary.max_plans_in_flight
+        );
+        println!(
+            "{:<25}{}",
+            "Max plan queue memory:",
+            ByteSize::b(summary.max_plan_queue_memory_in_use)
+        );
         println!("{:<25}{}", "CPU time:", format_duration(summary.cpu_time));
     }
 
@@ -205,6 +218,11 @@ pub fn log_execution_statistics(stats: &ExecutionStatistics) {
         info!("Memory and CPU statistics are not available on your platform.");
     } else {
         info!("Max memory usage: {}", ByteSize::b(stats.max_memory_usage));
+        info!("Max plans in flight: {}", stats.max_plans_in_flight);
+        info!(
+            "Max plan queue memory: {}",
+            ByteSize::b(stats.max_plan_queue_memory_in_use)
+        );
         info!("CPU time: {}", format_duration(stats.cpu_time));
     }
     info!("Wall time: {}", format_duration(stats.wall_time));
@@ -251,6 +269,8 @@ mod tests {
 
         // Fields should be non-zero
         assert!(stats.max_memory_usage > 0);
+        assert_eq!(stats.max_plans_in_flight, 0);
+        assert_eq!(stats.max_plan_queue_memory_in_use, 0);
         assert!(stats.wall_time > Duration::ZERO);
     }
 
