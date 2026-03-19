@@ -1,4 +1,5 @@
 use std::any::{Any, TypeId};
+use std::hash::Hash;
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
@@ -6,10 +7,89 @@ use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
 use crate::entity::query::Query;
+use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::rand::Rng;
 use crate::random::sample_multiple_from_known_length;
-use crate::{warn, Context, ContextRandomExt, IxaError, RngId};
+use crate::{warn, Context, ContextRandomExt, ExecutionPhase, IxaError, RngId};
+
+fn handle_periodic_value_change_count_event<E, PL, P, F>(
+    context: &mut Context,
+    period: f64,
+    counter_id: usize,
+    handler: F,
+) where
+    E: Entity,
+    PL: PropertyList<E> + Eq + Hash,
+    P: Property<E> + Eq + Hash,
+    F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+{
+    let mut counter = {
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
+        let slot = property_value_store
+            .value_change_counters
+            .get_mut(counter_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "No value change counter found for property {} with counter_id {}",
+                    P::name(),
+                    counter_id
+                )
+            });
+        std::mem::replace(
+            slot.get_mut(),
+            Box::new(StratifiedValueChangeCounter::<E, PL, P>::new()),
+        )
+    };
+
+    {
+        let counter = counter
+            .as_any_mut()
+            .downcast_mut::<StratifiedValueChangeCounter<E, PL, P>>()
+            .unwrap_or_else(|| {
+                panic!(
+                    "Value change counter for property {} and counter_id {} had unexpected type",
+                    P::name(),
+                    counter_id
+                )
+            });
+
+        handler(context, counter);
+        counter.clear();
+    }
+
+    {
+        let property_value_store = context.get_property_value_store_mut::<E, P>();
+        let slot = property_value_store
+            .value_change_counters
+            .get_mut(counter_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "No value change counter found for property {} with counter_id {}",
+                    P::name(),
+                    counter_id
+                )
+            });
+
+        // Swap back the cleared counter to retain its allocated capacity.
+        let _ = std::mem::replace(slot.get_mut(), counter);
+    }
+
+    if context.remaining_plan_count() == 0 {
+        return;
+    }
+
+    let next_time = context.get_current_time() + period;
+    context.add_plan_with_phase(
+        next_time,
+        move |context| {
+            handle_periodic_value_change_count_event::<E, PL, P, F>(
+                context, period, counter_id, handler,
+            );
+        },
+        ExecutionPhase::Last,
+    );
+}
 
 const BULK_ADD_CHUNK_SIZE: usize = 8192;
 
@@ -44,6 +124,14 @@ fn flush_bulk_add_chunk<E: Entity, PL: PropertyList<E>>(
         chunk,
         context.entity_store.get_property_store::<E>(),
     );
+
+    let context_ptr: *const Context = context;
+    let property_store = context.entity_store.get_property_store_mut::<E>();
+    // SAFETY: We create a shared `&Context` for read-only property access while mutably
+    // borrowing the property store to update index internals.
+    unsafe {
+        property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
+    }
 }
 
 /// A trait extension for [`Context`] that exposes entity-related
@@ -91,12 +179,12 @@ pub trait ContextEntitiesExt {
         property_value: P,
     );
 
-    /// Enables indexing of property values for the property `P`.
+    /// Enables full indexing of property values for the property `P`.
     ///
     /// This method is called with the turbo-fish syntax:
     ///     `context.index_property::<Person, Age>()`
-    /// The actual computation of the index is done lazily as needed upon execution of queries,
-    /// not when this method is called.
+    ///
+    /// This method both enables the index and catches it up to the current population.
     fn index_property<E: Entity, P: Property<E>>(&mut self);
 
     /// Enables value-count indexing of property values for the property `P`.
@@ -104,6 +192,30 @@ pub trait ContextEntitiesExt {
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
     fn index_property_counts<E: Entity, P: Property<E>>(&mut self);
+
+    /// Tracks periodic value change counts for a newly created counter.
+    ///
+    /// Also panics if `period` is not finite and strictly positive.
+    ///
+    /// Recording starts at `ExecutionPhase::First` at simulation start time. The
+    /// first report runs at simulation start time in `ExecutionPhase::Last`, then at
+    /// each subsequent `start_time + k * period`. After the handler returns, the
+    /// matched counter is cleared.
+    ///
+    /// ```rust,ignore
+    /// context.track_periodic_value_change_counts::<Person, (InfectionStatus,), Age>(
+    ///     30.0,
+    ///     |_context, counter| {
+    ///         let _ = counter;
+    ///     },
+    /// );
+    /// ```
+    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
+    where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash,
+        F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static;
 
     /// Checks if a property `P` is indexed.
     ///
@@ -202,8 +314,19 @@ impl ContextEntitiesExt for Context {
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
-        property_list
-            .set_values_for_entity(new_entity_id, self.entity_store.get_property_store::<E>());
+        property_list.set_values_for_new_entity(
+            new_entity_id,
+            self.entity_store.get_property_store_mut::<E>(),
+        );
+
+        // Keep all enabled indexes caught up as entities are created.
+        let context_ptr: *const Context = self;
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        // SAFETY: We create a shared `&Context` for read-only property access while mutably
+        // borrowing the property store to update index internals.
+        unsafe {
+            property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
+        }
 
         // Emit an `EntityCreatedEvent<Entity>`.
         if self.has_event_handlers::<EntityCreatedEvent<E>>() {
@@ -287,6 +410,14 @@ impl ContextEntitiesExt for Context {
             self.entity_store.get_property_store::<E>(),
         );
 
+        let context_ptr: *const Context = self;
+        let property_store = self.entity_store.get_property_store_mut::<E>();
+        // SAFETY: We create a shared `&Context` for read-only property access while mutably
+        // borrowing the property store to update index internals.
+        unsafe {
+            property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
+        }
+
         Ok(entity_id_range.map(EntityId::new).collect())
     }
 
@@ -306,24 +437,12 @@ impl ContextEntitiesExt for Context {
     ) {
         debug_assert!(!P::is_derived(), "cannot set a derived property");
 
-        // The algorithm is as follows
-        // 1. Get the previous value of the property.
-        //    1.1 If it's the same as `property_value`, exit.
-        //    1.2 Otherwise, create a `PartialPropertyChangeEvent<E, P>`.
-        // 2. Remove the `entity_id` from the index bucket corresponding to its old value.
-        // 3. For each dependent of the property, do the analog of steps 1 & 2:
-        //    3.1 Compute the previous value of the dependent property `Q`, creating a
-        //        `PartialPropertyChangeEvent<E, Q>` instance if necessary.
-        //    3.2 Remove the `entity_id` from the index bucket corresponding to the old value of `Q`.
-        // 4. Set the new value of the (main) property in the property store.
-        // 5. Update the property index: Insert the `entity_id` into the index bucket corresponding to the new value.
-        // 6. Emit the property change event: convert the `PartialPropertyChangeEvent<E, P>` into a
-        //    `event: PropertyChangeEvent<E, P>` and call `Context::emit_event(event)`.
-        // 7. For each dependent of the property, do the analog of steps 4-6:
-        //    7.1 Compute the new value of the dependent property
-        //    7.2 Add `entity_id` to the index bucket corresponding to the new value.
-        //    7.3 convert the `PartialPropertyChangeEvent<E, Q>` into a
-        //        `event: PropertyChangeEvent<E, Q>` and call `Context::emit_event(event)`.
+        // The algorithm is as follows:
+        // 1. Snapshot previous values for the main property and its dependents by creating
+        //    `PartialPropertyChangeEvent` instances.
+        // 2. Set the new value of the main property in the property store.
+        // 3. Emit each partial event; during emission each event computes the current value,
+        //    updates its index (remove old/add new), and emits a `PropertyChangeEvent`.
 
         // We need two passes over the dependents: one pass to compute all the old values and
         // another to compute all the new values. We group the steps for each dependent (and, it
@@ -347,32 +466,48 @@ impl ContextEntitiesExt for Context {
         // - There may be use cases for listening to "writes" that don't actually change values.
 
         let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![];
-        let property_store = self.entity_store.get_property_store::<E>();
 
-        // Create the partial property change for this value.
-        dependents.push(property_store.create_partial_property_change(P::id(), entity_id, self));
-        // Now create partial property change events for each dependent.
-        for dependent_idx in P::dependents() {
+        // Immutable: Collect the previous value to create partial property change events
+        {
+            let property_store = self.entity_store.get_property_store::<E>();
+
+            // Create the partial property change for this value.
             dependents.push(property_store.create_partial_property_change(
-                *dependent_idx,
+                P::id(),
                 entity_id,
                 self,
             ));
+            // Now create partial property change events for each dependent.
+            for dependent_idx in P::dependents() {
+                dependents.push(property_store.create_partial_property_change(
+                    *dependent_idx,
+                    entity_id,
+                    self,
+                ));
+            }
         }
 
         // Update the value
         let property_value_store = self.get_property_value_store::<E, P>();
         property_value_store.set(entity_id, property_value);
 
-        // After updating the value
+        // Mutable: After updating the value, we update its dependents, removing old values and
+        // storing the new values in their respective indexes, and emit the property change event.
         for dependent in dependents.into_iter() {
             dependent.emit_in_context(self)
         }
     }
 
     fn index_property<E: Entity, P: Property<E>>(&mut self) {
+        let property_id = P::index_id();
+        let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
         property_store.set_property_indexed::<P>(PropertyIndexType::FullIndex);
+        // SAFETY: This only creates a shared reference to `Context` while mutably borrowing
+        // the property store to update index internals.
+        unsafe {
+            property_store.index_unindexed_entities_for_property_id(&*context_ptr, property_id);
+        }
     }
 
     fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
@@ -381,6 +516,44 @@ impl ContextEntitiesExt for Context {
         if current_index_type != PropertyIndexType::FullIndex {
             property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
         }
+    }
+
+    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
+    where
+        E: Entity,
+        PL: PropertyList<E> + Eq + Hash,
+        P: Property<E> + Eq + Hash,
+        F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
+    {
+        assert!(
+            period > 0.0 && !period.is_nan() && !period.is_infinite(),
+            "Period must be greater than 0"
+        );
+        let start_time = self.get_start_time().unwrap_or(0.0);
+        self.add_plan_with_phase(
+            start_time,
+            move |context| {
+                // We create the counter at simulation start so initialization-time
+                // property writes are never recorded.
+                let counter_id = context
+                    .entity_store
+                    .get_property_store_mut::<E>()
+                    .create_value_change_counter::<PL, P>();
+
+                // We defer the first handler plan until now because it needs
+                // `counter_id`, and it must run in `ExecutionPhase::Last`.
+                context.add_plan_with_phase(
+                    context.get_current_time(),
+                    move |context| {
+                        handle_periodic_value_change_count_event::<E, PL, P, F>(
+                            context, period, counter_id, handler,
+                        );
+                    },
+                    ExecutionPhase::Last,
+                );
+            },
+            ExecutionPhase::First,
+        );
     }
 
     #[cfg(test)]
@@ -401,7 +574,6 @@ impl ContextEntitiesExt for Context {
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             match property_store.get_index_set_with_hash_for_property_id(
-                self,
                 multi_property_id,
                 query.multi_property_value_hash(),
             ) {
@@ -441,7 +613,6 @@ impl ContextEntitiesExt for Context {
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             match property_store.get_index_count_with_hash_for_property_id(
-                self,
                 multi_property_id,
                 query.multi_property_value_hash(),
             ) {
@@ -558,14 +729,17 @@ impl ContextEntitiesExt for Context {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Ref, RefCell};
+    use std::cell::RefCell;
     use std::rc::Rc;
+
+    use serde::Serialize;
 
     use super::*;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, define_rng,
+        impl_property,
     };
 
     define_entity!(Animal);
@@ -575,6 +749,18 @@ mod tests {
     define_entity!(Person);
 
     define_property!(struct Age(u8), Person);
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    struct CounterValue(u8);
+    impl_property!(CounterValue, Person, default_const = CounterValue(0));
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    struct CounterStratum(bool);
+    impl_property!(
+        CounterStratum,
+        Person,
+        default_const = CounterStratum(false)
+    );
 
     define_property!(
         enum InfectionStatus {
@@ -996,7 +1182,7 @@ mod tests {
     }
 
     // Helper for index tests
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     enum IndexMode {
         Unindexed,
         FullIndex,
@@ -1036,7 +1222,7 @@ mod tests {
             context.with_query_results((existing_value,), &mut |people_set| {
                 existing_len = people_set.into_iter().count();
             });
-            assert_eq!(existing_len, 2);
+            assert_eq!(existing_len, 2, "Wrong length for {mode:?}");
 
             let mut missing_len = 0;
             context.with_query_results((missing_value,), &mut |people_set| {
@@ -1414,7 +1600,7 @@ mod tests {
 
         let property_store = context.entity_store.get_property_store::<Person>();
         let property_value_store = property_store.get_with_id(index_id);
-        let bucket: Ref<IndexSet<EntityId<Person>>> = property_value_store
+        let bucket: &IndexSet<EntityId<Person>> = property_value_store
             .get_index_set_with_hash(
                 (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
             )
@@ -1550,5 +1736,120 @@ mod tests {
         }
 
         assert_eq!(context.query_entity_count((AdultAthlete(false),)), 10);
+    }
+
+    #[test]
+    fn track_periodic_value_change_counts_uses_distinct_counters() {
+        let mut context = Context::new();
+
+        context.track_periodic_value_change_counts::<Person, (CounterStratum,), CounterValue, _>(
+            1.0,
+            move |_context, _counter| {},
+        );
+
+        context.track_periodic_value_change_counts::<Person, (CounterStratum,), CounterValue, _>(
+            1.0,
+            move |_context, _counter| {},
+        );
+
+        let property_value_store = context.get_property_value_store::<Person, CounterValue>();
+        assert_eq!(property_value_store.value_change_counters.len(), 0);
+
+        context.add_plan(0.5, Context::shutdown);
+        context.execute();
+
+        let property_value_store = context.get_property_value_store::<Person, CounterValue>();
+        assert_eq!(property_value_store.value_change_counters.len(), 2);
+    }
+
+    #[test]
+    fn value_change_counter_updates_on_true_transitions() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::<(usize, usize)>::new()));
+        let observed_clone = observed.clone();
+
+        context.track_periodic_value_change_counts(1.0, move |_context, counter| {
+            observed_clone.borrow_mut().push((
+                counter.get_count((CounterStratum(true),), CounterValue(1)),
+                counter.get_count((CounterStratum(true),), CounterValue(2)),
+            ));
+        });
+
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+        context.add_plan(0.1, move |context| {
+            context.set_property(person, CounterValue(1));
+            context.set_property(person, CounterValue(1));
+            context.set_property(person, CounterValue(2));
+        });
+
+        context.execute();
+        assert_eq!(*observed.borrow(), vec![(0, 0), (1, 1)]);
+    }
+
+    #[test]
+    fn periodic_value_change_counts_report_and_clear() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+
+        let observed = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let observed_clone = observed.clone();
+
+        context.track_periodic_value_change_counts(1.0, move |_context, counter| {
+            observed_clone
+                .borrow_mut()
+                .push(counter.get_count((CounterStratum(true),), CounterValue(1)));
+        });
+
+        context.add_plan(0.5, move |context| {
+            context.set_property(person, CounterValue(1));
+        });
+        context.add_plan(1.5, move |context| {
+            context.set_property(person, CounterValue(1));
+        });
+
+        context.execute();
+        assert_eq!(*observed.borrow(), vec![0, 1, 0]);
+    }
+
+    #[test]
+    fn periodic_value_change_counts_start_time_and_phase_behavior() {
+        let mut context = Context::new();
+        context.set_start_time(-2.0);
+
+        let person = context
+            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .unwrap();
+
+        let observed_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        let observed_counts = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let observed_times_clone = observed_times.clone();
+        let observed_counts_clone = observed_counts.clone();
+
+        context.track_periodic_value_change_counts(1.0, move |context, counter| {
+            observed_times_clone
+                .borrow_mut()
+                .push(context.get_current_time());
+            observed_counts_clone
+                .borrow_mut()
+                .push(counter.get_count((CounterStratum(true),), CounterValue(1)));
+        });
+
+        context.add_plan_with_phase(
+            -2.0,
+            move |context| {
+                context.set_property(person, CounterValue(1));
+            },
+            ExecutionPhase::Normal,
+        );
+        context.add_plan(0.0, |_| {});
+
+        context.execute();
+
+        assert_eq!(*observed_times.borrow(), vec![-2.0, -1.0, 0.0]);
+        assert_eq!(*observed_counts.borrow(), vec![1, 0, 0]);
     }
 }

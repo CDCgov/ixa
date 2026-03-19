@@ -38,8 +38,10 @@ use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEvent;
 use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
+use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{EntityId, HashValueType, PropertyIndexType};
 use crate::Context;
 
@@ -351,29 +353,53 @@ impl<E: Entity> PropertyStore<E> {
         property_value_store.set_indexed(index_type);
     }
 
+    /// Creates a stratified value change counter for tracked property `P` with strata `PL`.
+    ///
+    /// Returns the counter ID.
+    pub fn create_value_change_counter<PL, P>(&mut self) -> usize
+    where
+        PL: PropertyList<E> + Eq + std::hash::Hash,
+        P: Property<E> + Eq + std::hash::Hash,
+    {
+        let property_value_store = self.get_mut::<P>();
+        property_value_store.add_value_change_counter(Box::new(StratifiedValueChangeCounter::<
+            E,
+            PL,
+            P,
+        >::new()))
+    }
+
     /// Updates the index of the property having the given ID for any entities that have been added to the context
-    /// since the last time the index was updated. As a convenience, returns `false` if this property is not indexed,
-    /// `true` otherwise.
-    pub fn index_unindexed_entities_for_property_id(&self, context: &Context, property_id: usize) {
+    /// since the last time the index was updated.
+    pub fn index_unindexed_entities_for_property_id(
+        &mut self,
+        context: &Context,
+        property_id: usize,
+    ) {
         self.items[property_id].index_unindexed_entities(context)
+    }
+
+    /// Updates all indexed properties for any entities that have been added since the last update.
+    pub fn index_unindexed_entities_for_all_properties(&mut self, context: &Context) {
+        for store in &mut self.items {
+            store.index_unindexed_entities(context);
+        }
     }
 
     pub fn get_index_set_with_hash_for_property_id(
         &self,
-        context: &Context,
         property_id: usize,
         hash: HashValueType,
     ) -> IndexSetResult<'_, E> {
-        self.items[property_id].get_index_set_with_hash_result(context, hash)
+        self.items[property_id].get_index_set_with_hash_result(hash)
     }
 
     pub fn get_index_count_with_hash_for_property_id(
         &self,
-        context: &Context,
         property_id: usize,
         hash: HashValueType,
     ) -> IndexCountResult {
-        self.items[property_id].get_index_count_with_hash_result(context, hash)
+        self.items[property_id].get_index_count_with_hash_result(hash)
     }
 }
 
@@ -476,34 +502,23 @@ mod tests {
 
         // FullIndex + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Count(2)
         );
 
         // FullIndex + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Empty
         ));
         assert!(matches!(
             property_store.get_index_set_with_hash_for_property_id(
-                &context,
                 Age::index_id(),
                 existing_hash,
             ),
@@ -528,37 +543,23 @@ mod tests {
 
         // ValueCountIndex + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Count(2)
         );
 
         // ValueCountIndex + set (unsupported)
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexSetResult::Unsupported
         ));
     }
@@ -578,37 +579,23 @@ mod tests {
 
         // Unindexed + count
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexCountResult::Unsupported
         );
         assert_eq!(
-            property_store.get_index_count_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store
+                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexCountResult::Unsupported
         );
 
         // Unindexed + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                missing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
-                &context,
-                Age::index_id(),
-                existing_hash,
-            ),
+            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
             IndexSetResult::Unsupported
         ));
     }

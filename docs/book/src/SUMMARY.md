@@ -12,6 +12,7 @@
   - [Next Steps](first_model/next-steps.md)
 - [Topics](topics/topics.md)
   - [Indexing](topics/indexing.md)
+  - [Burn-in Periods and Negative Time](topics/burn-in-and-negative-time.md)
   - [Performance and Profiling](topics/performance.md)
   - [Profiling Module](topics/profiling-module.md)
   - [`random` module](topics/random-module.md)

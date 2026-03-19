@@ -591,7 +591,10 @@ impl Context {
     }
 
     pub fn get_execution_statistics(&mut self) -> ExecutionStatistics {
-        self.execution_profiler.compute_final_statistics()
+        let mut stats = self.execution_profiler.compute_final_statistics();
+        stats.max_plans_in_flight = self.plan_queue.max_plans_in_flight;
+        stats.max_plan_queue_memory_in_use = self.plan_queue.max_memory_in_use;
+        stats
     }
 }
 

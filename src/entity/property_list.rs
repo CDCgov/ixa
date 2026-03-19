@@ -26,7 +26,8 @@ use seq_macro::seq;
 use super::entity::{Entity, EntityId};
 use super::property::{Property, PropertyInitializationKind};
 use super::property_store::PropertyStore;
-use crate::IxaError;
+use crate::entity::ContextEntitiesExt;
+use crate::{Context, IxaError};
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
@@ -43,6 +44,19 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Assigns the given entity the property values in `self` in the `property_store`.
     /// This method does NOT emit property change events, as it is called upon entity creation.
     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
+
+    /// Assigns the given entity the property values in `self` in the `property_store`.
+    /// This method does NOT emit property change events, as it is called upon entity creation.
+    fn set_values_for_new_entity(
+        &self,
+        entity_id: EntityId<E>,
+        property_store: &mut PropertyStore<E>,
+    ) {
+        self.set_values_for_entity(entity_id, property_store);
+    }
+
+    /// Gets the tuple of property values for the given entity.
+    fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 
     /// Assigns property values for many entities in one call.
     ///
@@ -134,6 +148,8 @@ impl<E: Entity> PropertyList<E> for () {
     ) {
         // No properties to reserve.
     }
+
+    fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> Self {}
 }
 
 // An Entity ZST itself is an empty `PropertyList` for that entity.
@@ -157,6 +173,10 @@ impl<E: Entity + Copy> PropertyList<E> for E {
     ) {
         // No values to assign.
     }
+
+    fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> E {
+        E::default()
+    }
 }
 
 // ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
@@ -171,8 +191,8 @@ impl<E: Entity + Copy> PropertyList<E> for E {
 //         property_type_ids.len() == 0
 //             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
 //     }
-//     fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
-//         let property_value_store = property_store.get::<P>();
+//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>) {
+//         let property_value_store = property_store.get_mut::<P>();
 //         property_value_store.set(entity_id, *self);
 //     }
 // }
@@ -229,6 +249,10 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         {
             property_store.get::<P>().reserve(additional);
         }
+    }
+
+    fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
+        (context.get_property::<E, P>(entity_id),)
     }
 }
 
@@ -318,6 +342,10 @@ macro_rules! impl_property_list {
                             property_store.get::<P~N>().reserve(additional);
                         }
                     })*
+                }
+
+                fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
+                    (#(context.get_property::<E, P~N>(entity_id), )*)
                 }
             }
         });

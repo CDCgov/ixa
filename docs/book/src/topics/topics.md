@@ -1,6 +1,7 @@
 # Topics
 
 - [Indexing](indexing.md)
+- [Burn-in Periods and Negative Time](burn-in-and-negative-time.md)
 - [Performance and Profiling](performance.md)
 - [Profiling Module](profiling-module.md)
 - [`random` module](random-module.md)

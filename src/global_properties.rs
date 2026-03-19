@@ -18,6 +18,7 @@
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
+use std::error::Error;
 use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;
@@ -66,7 +67,12 @@ where
                 setter: Box::new(
                     |context: &mut Context, name, value| -> Result<(), IxaError> {
                         let val: T::Value = serde_json::from_value(value)?;
-                        T::validate(&val)?;
+                        T::validate(&val).map_err(|source| {
+                            IxaError::IllegalGlobalPropertyValue {
+                                name: T::name().to_string(),
+                                source,
+                            }
+                        })?;
                         if context.get_global_property_value(T::new()).is_some() {
                             return Err(IxaError::DuplicateProperty {
                                 name: name.to_string(),
@@ -96,14 +102,27 @@ fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
 
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
-/// [`define_global_property!`](crate::define_global_property!)
+/// [`define_global_property!`](crate::define_global_property!).
+///
+/// Validation errors are produced by client code and should be returned as
+/// `Box<dyn std::error::Error + 'static>`. Ixa wraps those values in
+/// [`IxaError::IllegalGlobalPropertyValue`]
+/// when a global property is set or loaded.
 pub trait GlobalProperty: Any {
-    type Value: Any; // The actual type of the data.
+    /// The actual type of the data stored in the global property
+    type Value: Any;
 
     fn new() -> Self;
-    #[allow(clippy::missing_errors_doc)]
-    // A function which validates the global property.
-    fn validate(value: &Self::Value) -> Result<(), IxaError>;
+
+    fn name() -> &'static str {
+        let full = std::any::type_name::<Self>();
+        full.rsplit("::").next().unwrap()
+    }
+
+    /// A function which validates the global property.
+    ///
+    /// Client code should box any produced error itself.
+    fn validate(value: &Self::Value) -> Result<(), Box<dyn Error + 'static>>;
 }
 
 struct GlobalPropertiesDataContainer {
@@ -157,7 +176,10 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
         property: T,
         value: T::Value,
     ) -> Result<(), IxaError> {
-        T::validate(&value)?;
+        T::validate(&value).map_err(|source| IxaError::IllegalGlobalPropertyValue {
+            name: T::name().to_string(),
+            source,
+        })?;
         let data_container = self.get_data_mut(GlobalPropertiesPlugin);
         data_container.set_global_property_value(&property, value)
     }
@@ -257,6 +279,8 @@ impl ContextGlobalPropertiesExt for Context {
 
 #[cfg(test)]
 mod test {
+    use std::error::Error;
+    use std::fmt;
     use std::path::PathBuf;
 
     use serde::{Deserialize, Serialize};
@@ -266,6 +290,19 @@ mod test {
     use crate::context::Context;
     use crate::define_global_property;
     use crate::error::IxaError;
+
+    #[derive(Debug)]
+    struct InvalidProperty3Value {
+        field_int: u32,
+    }
+
+    impl fmt::Display for InvalidProperty3Value {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "field_int must be zero, got {}", self.field_int)
+        }
+    }
+
+    impl Error for InvalidProperty3Value {}
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ParamType {
@@ -423,10 +460,9 @@ mod test {
     define_global_property!(Property3, Property3Type, |v: &Property3Type| {
         match v.field_int {
             0 => Ok(()),
-            _ => Err(IxaError::IllegalGlobalPropertyValue {
-                field: "field_int".to_string(),
-                value: v.field_int.to_string(),
-            }),
+            _ => Err(Box::new(InvalidProperty3Value {
+                field_int: v.field_int,
+            }) as Box<dyn Error + 'static>),
         }
     });
 
@@ -441,10 +477,20 @@ mod test {
     #[test]
     fn validate_property_set_failure() {
         let mut context = Context::new();
-        assert!(matches!(
-            context.set_global_property_value(Property3, Property3Type { field_int: 1 }),
-            Err(IxaError::IllegalGlobalPropertyValue { .. })
-        ));
+        let error = context
+            .set_global_property_value(Property3, Property3Type { field_int: 1 })
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "illegal value for global property `Property3`: field_int must be zero, got 1"
+        );
+        match error {
+            IxaError::IllegalGlobalPropertyValue { name, source } => {
+                assert_eq!(name, "Property3");
+                assert_eq!(source.to_string(), "field_int must be zero, got 1");
+            }
+            _ => panic!("Unexpected error type"),
+        }
     }
 
     #[test]
@@ -460,10 +506,18 @@ mod test {
         let mut context = Context::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/global_properties_invalid.json");
-        assert!(matches!(
-            context.load_global_properties(&path),
-            Err(IxaError::IllegalGlobalPropertyValue { .. })
-        ));
+        let error = context.load_global_properties(&path).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "illegal value for global property `Property3`: field_int must be zero, got 42"
+        );
+        match error {
+            IxaError::IllegalGlobalPropertyValue { name, source } => {
+                assert_eq!(name, "Property3");
+                assert_eq!(source.to_string(), "field_int must be zero, got 42");
+            }
+            _ => panic!("Unexpected error type"),
+        }
     }
 
     #[test]

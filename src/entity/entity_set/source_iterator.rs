@@ -15,7 +15,6 @@
 //!   (`ConcretePropertySource` and `DerivedPropertySource`), which serve as both
 //!   set-facing wrappers and iterators.
 
-use std::cell::Ref;
 use std::fmt::{Debug, Formatter};
 
 use ouroboros::self_referencing;
@@ -29,14 +28,14 @@ use crate::hashing::{IndexSet, IndexSetIter};
 /// iterator in the `Iterator` implementation on `SourceIterator`.
 #[self_referencing]
 pub(super) struct IndexSetIterator<'a, E: Entity> {
-    index_set: Ref<'a, IndexSet<EntityId<E>>>,
+    index_set: &'a IndexSet<EntityId<E>>,
     #[borrows(index_set)]
     #[covariant]
     iter: IndexSetIter<'this, EntityId<E>>,
 }
 
 impl<'a, E: Entity> IndexSetIterator<'a, E> {
-    pub fn from_index_set(index_set: Ref<'a, IndexSet<EntityId<E>>>) -> Self {
+    pub fn from_index_set(index_set: &'a IndexSet<EntityId<E>>) -> Self {
         IndexSetIteratorBuilder {
             index_set,
             iter_builder: |index_set| index_set.iter(),
@@ -226,8 +225,6 @@ impl<'c, E: Entity> std::iter::FusedIterator for SourceIterator<'c, E> {}
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::super::source_set::{ConcretePropertySource, SourceSet};
     use crate::entity::property_value_store_core::RawPropertyValueVec;
     use crate::entity::EntityId;
@@ -247,8 +244,7 @@ mod tests {
             EntityId::new(3),
             EntityId::new(6),
         ]);
-        let people_set = RefCell::new(people_set);
-        let people_set_ref = people_set.borrow();
+        let people_set_ref = &people_set;
 
         let mut iter = SourceSet::IndexSet(people_set_ref).into_iter();
         assert_eq!(iter.next(), Some(EntityId::new(0)));

@@ -1,7 +1,13 @@
 /// Defines a global property with the following parameters:
 /// * `$global_property`: Name for the identifier type of the global property
 /// * `$value`: The type of the property's value
-/// * `$validate`: A function (or closure) that checks the validity of the property (optional)
+/// * `$validate`: A function (or closure) that checks the validity of the property and returns
+///   `Result<(), Box<dyn std::error::Error + 'static>>` (optional)
+///
+/// Validator code is client code, so it should create and box its own error values.
+/// Ixa wraps any returned error in
+/// [`IxaError::IllegalGlobalPropertyValue`](crate::error::IxaError::IllegalGlobalPropertyValue)
+/// when the property is set or loaded.
 #[macro_export]
 macro_rules! define_global_property {
     ($global_property:ident, $value:ty, $validate: expr) => {
@@ -15,7 +21,12 @@ macro_rules! define_global_property {
                 $global_property
             }
 
-            fn validate(val: &$value) -> Result<(), $crate::error::IxaError> {
+            fn name() -> &'static str {
+                let full = std::any::type_name::<Self>();
+                full.rsplit("::").next().unwrap()
+            }
+
+            fn validate(val: &$value) -> Result<(), Box<dyn std::error::Error + 'static>> {
                 $validate(val)
             }
         }
