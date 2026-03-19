@@ -26,7 +26,8 @@ use seq_macro::seq;
 use super::entity::{Entity, EntityId};
 use super::property::Property;
 use super::property_store::PropertyStore;
-use crate::IxaError;
+use crate::entity::ContextEntitiesExt;
+use crate::{Context, IxaError};
 
 pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
@@ -47,6 +48,9 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
         entity_id: EntityId<E>,
         property_store: &mut PropertyStore<E>,
     );
+
+    /// Gets the tuple of property values for the given entity.
+    fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
@@ -64,6 +68,8 @@ impl<E: Entity> PropertyList<E> for () {
     ) {
         // No values to assign.
     }
+
+    fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> Self {}
 }
 
 // An Entity ZST itself is an empty `PropertyList` for that entity.
@@ -81,6 +87,10 @@ impl<E: Entity + Copy> PropertyList<E> for E {
         _property_store: &mut PropertyStore<E>,
     ) {
         // No values to assign.
+    }
+
+    fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> E {
+        E::default()
     }
 }
 
@@ -119,6 +129,10 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         let property_value_store = property_store.get_mut::<P>();
         property_value_store.set(entity_id, self.0);
     }
+
+    fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
+        (context.get_property::<E, P>(entity_id),)
+    }
 }
 
 // Used only within this module.
@@ -155,6 +169,10 @@ macro_rules! impl_property_list {
                         let property_value_store = property_store.get_mut::<P~N>();
                         property_value_store.set(entity_id, self.N);
                     })*
+                }
+
+                fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
+                    (#(context.get_property::<E, P~N>(entity_id), )*)
                 }
             }
         });

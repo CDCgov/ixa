@@ -124,6 +124,10 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
             .into_inner()
             .set_values_for_new_entity(entity_id, property_store)
     }
+
+    fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
+        EntityPropertyTuple::new(T::get_values_for_entity(context, entity_id))
+    }
 }
 
 /// Encapsulates a query.
