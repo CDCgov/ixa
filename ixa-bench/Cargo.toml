@@ -103,3 +103,8 @@ harness = false
 name = "set_property"
 path = "criterion/set_property.rs"
 harness = false
+
+[[bench]]
+name = "property_semantics"
+path = "criterion/property_semantics.rs"
+harness = false
