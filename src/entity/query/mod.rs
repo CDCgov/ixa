@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_index;
-use crate::entity::property_list::PropertyList;
+use crate::entity::property_list::{sealed, PropertyList};
 use crate::entity::property_store::PropertyStore;
 use crate::entity::{Entity, HashValueType};
 use crate::hashing::HashMap;
@@ -105,6 +105,7 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
     }
 }
 
+impl<E: Entity, T: PropertyList<E>> sealed::SealedPropertyList<E> for EntityPropertyTuple<E, T> {}
 impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T> {
     fn validate() -> Result<(), IxaError> {
         T::validate()

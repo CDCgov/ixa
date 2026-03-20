@@ -13,6 +13,10 @@ use crate::rand::Rng;
 use crate::random::sample_multiple_from_known_length;
 use crate::{warn, Context, ContextRandomExt, ExecutionPhase, IxaError, RngId};
 
+pub(crate) mod sealed {
+    pub trait SealedContextEntitiesExt {}
+}
+
 fn handle_periodic_value_change_count_event<E, PL, P, F>(
     context: &mut Context,
     period: f64,
@@ -136,7 +140,8 @@ fn flush_bulk_add_chunk<E: Entity, PL: PropertyList<E>>(
 
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
-pub trait ContextEntitiesExt {
+#[allow(private_bounds)]
+pub trait ContextEntitiesExt: sealed::SealedContextEntitiesExt {
     fn add_entity<E: Entity, PL: PropertyList<E>>(
         &mut self,
         property_list: PL,
@@ -296,6 +301,7 @@ pub trait ContextEntitiesExt {
     fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q);
 }
 
+impl sealed::SealedContextEntitiesExt for Context {}
 impl ContextEntitiesExt for Context {
     fn add_entity<E: Entity, PL: PropertyList<E>>(
         &mut self,

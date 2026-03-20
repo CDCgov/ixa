@@ -29,7 +29,14 @@ use super::property_store::PropertyStore;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
 
-pub trait PropertyList<E: Entity>: Copy + 'static {
+pub(crate) mod sealed {
+    use crate::entity::Entity;
+
+    pub trait SealedPropertyList<E: Entity> {}
+}
+
+#[allow(private_bounds)]
+pub trait PropertyList<E: Entity>: sealed::SealedPropertyList<E> + Copy + 'static {
     /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
     fn validate() -> Result<(), IxaError>;
 
@@ -109,6 +116,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
+impl<E: Entity> sealed::SealedPropertyList<E> for () {}
 impl<E: Entity> PropertyList<E> for () {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -154,6 +162,7 @@ impl<E: Entity> PropertyList<E> for () {
 
 // An Entity ZST itself is an empty `PropertyList` for that entity.
 // This allows `context.add_entity(Person)` instead of `context.add_entity(())`.
+impl<E: Entity + Copy> sealed::SealedPropertyList<E> for E {}
 impl<E: Entity + Copy> PropertyList<E> for E {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -198,6 +207,7 @@ impl<E: Entity + Copy> PropertyList<E> for E {
 // }
 
 // A single `Property` tuple is a `PropertyList` of length 1
+impl<E: Entity, P: Property<E>> sealed::SealedPropertyList<E> for (P,) {}
 impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -260,6 +270,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
 macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
+            impl<E: Entity, #( P~N: Property<E>,)*> sealed::SealedPropertyList<E> for (#(P~N, )*) {}
             impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
                 fn validate() -> Result<(), IxaError> {
                     // For `Property` distinctness check
