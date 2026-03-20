@@ -36,8 +36,9 @@ pub struct Queue<T, P: Eq + PartialEq + Ord> {
     plan_counter: u64,
     /// Tracks the high water mark of plans in flight (scheduled but not yet executed).
     /// This is the max of `self.queue.len()`, not of `self.data_map.len()`.
+    #[cfg(feature = "profiling")]
     pub(crate) max_plans_in_flight: u64,
-    /// Tracks the high water mark of memory allocated (capacity, not use) by this structure
+    #[cfg(feature = "profiling")]
     pub(crate) max_memory_in_use: u64,
 }
 
@@ -49,7 +50,9 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
             queue: BinaryHeap::new(),
             data_map: HashMap::new(),
             plan_counter: 0,
+            #[cfg(feature = "profiling")]
             max_plans_in_flight: 0,
+            #[cfg(feature = "profiling")]
             max_memory_in_use: 0,
         }
     }
@@ -69,10 +72,13 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         });
         self.data_map.insert(plan_id, data);
         self.plan_counter += 1;
-        self.max_plans_in_flight = self.max_plans_in_flight.max(self.queue.len() as u64);
-        self.max_memory_in_use = self
-            .max_memory_in_use
-            .max(self.estimated_memory_in_use() as u64);
+        #[cfg(feature = "profiling")]
+        {
+            self.max_plans_in_flight = self.max_plans_in_flight.max(self.queue.len() as u64);
+            self.max_memory_in_use = self
+                .max_memory_in_use
+                .max(self.estimated_memory_in_use() as u64);
+        }
 
         PlanId(plan_id)
     }
@@ -163,6 +169,7 @@ impl<T, P: Eq + PartialEq + Ord> Queue<T, P> {
         self.queue.len()
     }
 
+    #[cfg(feature = "profiling")]
     fn estimated_memory_in_use(&self) -> usize {
         let queue_bytes = self.queue.capacity() * size_of::<PlanSchedule<P>>();
 

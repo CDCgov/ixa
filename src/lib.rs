@@ -87,15 +87,11 @@ pub mod hashing;
 pub mod numeric;
 
 // Re-export for macros
-pub use bincode;
-pub use csv;
-pub use ctor;
 pub use ixa_derive::{
     impl_make_canonical, impl_people_make_canonical, reorder_closure, sorted_tag,
     sorted_value_type, unreorder_closure,
 };
-pub use paste;
-pub use rand;
+pub use {bincode, csv, ctor, paste, rand};
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
