@@ -24,12 +24,19 @@ use std::any::TypeId;
 use seq_macro::seq;
 
 use super::entity::{Entity, EntityId};
-use super::property::Property;
+use super::property::{Property, PropertyInitializationKind};
 use super::property_store::PropertyStore;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
 
-pub trait PropertyList<E: Entity>: Copy + 'static {
+pub(crate) mod sealed {
+    use crate::entity::Entity;
+
+    pub trait SealedPropertyList<E: Entity> {}
+}
+
+#[allow(private_bounds)]
+pub trait PropertyList<E: Entity>: sealed::SealedPropertyList<E> + Copy + 'static {
     /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
     fn validate() -> Result<(), IxaError>;
 
@@ -43,17 +50,73 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 
     /// Assigns the given entity the property values in `self` in the `property_store`.
     /// This method does NOT emit property change events, as it is called upon entity creation.
+    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>);
+
+    /// Assigns the given entity the property values in `self` in the `property_store`.
+    /// This method does NOT emit property change events, as it is called upon entity creation.
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
         property_store: &mut PropertyStore<E>,
-    );
+    ) {
+        self.set_values_for_entity(entity_id, property_store);
+    }
 
     /// Gets the tuple of property values for the given entity.
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
+
+    /// Assigns property values for many entities in one call.
+    ///
+    /// The default implementation calls [`set_values_for_entity`](PropertyList::set_values_for_entity)
+    /// once per entity. Tuple impls override this with a columnar write (one property column at a
+    /// time) to reduce repeated property store lookups during bulk entity creation.
+    ///
+    /// Custom `PropertyList` implementations may rely on this default; the bulk API will work
+    /// correctly, though without the columnar optimization.
+    fn set_values_for_entities(
+        start_entity_index: usize,
+        property_values: &[Self],
+        property_store: &PropertyStore<E>,
+    ) {
+        for (offset, val) in property_values.iter().enumerate() {
+            val.set_values_for_entity(EntityId::new(start_entity_index + offset), property_store);
+        }
+    }
+
+    /// Assigns this property list to `n` consecutive entities starting at `start_entity_index`.
+    ///
+    /// The default implementation writes one entity at a time. Tuple impls override this so
+    /// constant properties whose repeated value equals their default can be skipped entirely.
+    fn set_values_for_repeated_entities(
+        &self,
+        start_entity_index: usize,
+        n: usize,
+        property_store: &PropertyStore<E>,
+    ) {
+        for offset in 0..n {
+            self.set_values_for_entity(EntityId::new(start_entity_index + offset), property_store);
+        }
+    }
+
+    /// Reserves additional capacity in each concrete property value store touched by this list.
+    ///
+    /// The default implementation is a no-op. Tuple impls override this to pre-allocate storage,
+    /// which avoids repeated reallocations during bulk entity creation.
+    ///
+    /// Custom `PropertyList` implementations may rely on this default safely.
+    fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {}
+
+    /// Reserves additional capacity for writing the same property list repeatedly.
+    ///
+    /// The default implementation falls back to the type-level reservation logic. Tuple impls
+    /// override this so repeated constant-default values do not reserve storage they will never use.
+    fn reserve_for_repeated_entities(&self, property_store: &PropertyStore<E>, additional: usize) {
+        Self::reserve_for_entities(property_store, additional);
+    }
 }
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
+impl<E: Entity> sealed::SealedPropertyList<E> for () {}
 impl<E: Entity> PropertyList<E> for () {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -61,12 +124,37 @@ impl<E: Entity> PropertyList<E> for () {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
-    fn set_values_for_new_entity(
-        &self,
-        _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+
+    fn set_values_for_entities(
+        _start_entity_index: usize,
+        _property_values: &[Self],
+        _property_store: &PropertyStore<E>,
     ) {
         // No values to assign.
+    }
+
+    fn set_values_for_repeated_entities(
+        &self,
+        _start_entity_index: usize,
+        _n: usize,
+        _property_store: &PropertyStore<E>,
+    ) {
+        // No values to assign.
+    }
+
+    fn reserve_for_entities(_property_store: &PropertyStore<E>, _additional: usize) {
+        // No properties to reserve.
+    }
+
+    fn reserve_for_repeated_entities(
+        &self,
+        _property_store: &PropertyStore<E>,
+        _additional: usize,
+    ) {
+        // No properties to reserve.
     }
 
     fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> Self {}
@@ -74,6 +162,7 @@ impl<E: Entity> PropertyList<E> for () {
 
 // An Entity ZST itself is an empty `PropertyList` for that entity.
 // This allows `context.add_entity(Person)` instead of `context.add_entity(())`.
+impl<E: Entity + Copy> sealed::SealedPropertyList<E> for E {}
 impl<E: Entity + Copy> PropertyList<E> for E {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -81,10 +170,15 @@ impl<E: Entity + Copy> PropertyList<E> for E {
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
-    fn set_values_for_new_entity(
+    fn set_values_for_entity(&self, _entity_id: EntityId<E>, _property_store: &PropertyStore<E>) {
+        // No values to assign.
+    }
+
+    fn set_values_for_repeated_entities(
         &self,
-        _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+        _start_entity_index: usize,
+        _n: usize,
+        _property_store: &PropertyStore<E>,
     ) {
         // No values to assign.
     }
@@ -113,6 +207,7 @@ impl<E: Entity + Copy> PropertyList<E> for E {
 // }
 
 // A single `Property` tuple is a `PropertyList` of length 1
+impl<E: Entity, P: Property<E>> sealed::SealedPropertyList<E> for (P,) {}
 impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -121,13 +216,49 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         property_type_ids.is_empty()
             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
     }
-    fn set_values_for_new_entity(
-        &self,
-        entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
-    ) {
-        let property_value_store = property_store.get_mut::<P>();
+    fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>) {
+        let property_value_store = property_store.get::<P>();
         property_value_store.set(entity_id, self.0);
+    }
+
+    fn set_values_for_entities(
+        start_entity_index: usize,
+        property_values: &[Self],
+        property_store: &PropertyStore<E>,
+    ) {
+        let property_value_store = property_store.get::<P>();
+        property_value_store.set_contiguous_from_rows(
+            start_entity_index,
+            property_values,
+            |values| values.0,
+        );
+    }
+
+    fn set_values_for_repeated_entities(
+        &self,
+        start_entity_index: usize,
+        n: usize,
+        property_store: &PropertyStore<E>,
+    ) {
+        if P::initialization_kind() != PropertyInitializationKind::Constant
+            || self.0 != P::default_const()
+        {
+            property_store
+                .get::<P>()
+                .set_contiguous_repeated(start_entity_index, n, self.0);
+        }
+    }
+
+    fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
+        property_store.get::<P>().reserve(additional);
+    }
+
+    fn reserve_for_repeated_entities(&self, property_store: &PropertyStore<E>, additional: usize) {
+        if P::initialization_kind() != PropertyInitializationKind::Constant
+            || self.0 != P::default_const()
+        {
+            property_store.get::<P>().reserve(additional);
+        }
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
@@ -139,6 +270,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
 macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
+            impl<E: Entity, #( P~N: Property<E>,)*> sealed::SealedPropertyList<E> for (#(P~N, )*) {}
             impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
                 fn validate() -> Result<(), IxaError> {
                     // For `Property` distinctness check
@@ -164,10 +296,62 @@ macro_rules! impl_property_list {
                     property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
                 }
 
-                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>){
+                fn set_values_for_entity(&self, entity_id: EntityId<E>, property_store: &PropertyStore<E>){
                     #({
-                        let property_value_store = property_store.get_mut::<P~N>();
+                        let property_value_store = property_store.get::<P~N>();
                         property_value_store.set(entity_id, self.N);
+                    })*
+                }
+
+                fn set_values_for_entities(
+                    start_entity_index: usize,
+                    property_values: &[Self],
+                    property_store: &PropertyStore<E>,
+                ) {
+                    #({
+                        let property_value_store = property_store.get::<P~N>();
+                        property_value_store.set_contiguous_from_rows(
+                            start_entity_index,
+                            property_values,
+                            |values| values.N,
+                        );
+                    })*
+                }
+
+                fn set_values_for_repeated_entities(
+                    &self,
+                    start_entity_index: usize,
+                    n: usize,
+                    property_store: &PropertyStore<E>,
+                ) {
+                    #({
+                        if P~N::initialization_kind() != PropertyInitializationKind::Constant
+                            || self.N != P~N::default_const()
+                        {
+                            property_store
+                                .get::<P~N>()
+                                .set_contiguous_repeated(start_entity_index, n, self.N);
+                        }
+                    })*
+                }
+
+                fn reserve_for_entities(property_store: &PropertyStore<E>, additional: usize) {
+                    #({
+                        property_store.get::<P~N>().reserve(additional);
+                    })*
+                }
+
+                fn reserve_for_repeated_entities(
+                    &self,
+                    property_store: &PropertyStore<E>,
+                    additional: usize,
+                ) {
+                    #({
+                        if P~N::initialization_kind() != PropertyInitializationKind::Constant
+                            || self.N != P~N::default_const()
+                        {
+                            property_store.get::<P~N>().reserve(additional);
+                        }
                     })*
                 }
 

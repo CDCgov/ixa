@@ -98,3 +98,8 @@ harness = false
 name = "sample_entity_scaling"
 path = "criterion/sample_entity_scaling.rs"
 harness = false
+
+[[bench]]
+name = "bulk_add_people"
+path = "criterion/bulk_add_people.rs"
+harness = false

@@ -141,6 +141,7 @@ depends = "install-nightly"
 run = [
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
+  "rustc +nightly --version",
   "cargo check --all-targets --workspace --all-features",
   "cargo +nightly fmt --check",
   "cargo +nightly clippy --workspace --all-targets --all-features -- -D warnings",
