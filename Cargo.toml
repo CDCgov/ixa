@@ -83,7 +83,7 @@ logging = ["log4rs", "fern", "wasm-bindgen", "web-sys"]
 debugger = ["shlex", "rustyline"]
 progress_bar = ["dep:progress_bar", "anyhow"]
 
-profiling = []
+profiling = ["dep:sysinfo", "dep:bytesize"]
 
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
@@ -103,9 +103,9 @@ serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
 delegate.workspace = true
-sysinfo.workspace = true
+sysinfo = { workspace = true, optional = true }
 humantime.workspace = true
-bytesize.workspace = true
+bytesize = { workspace = true, optional = true }
 hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true

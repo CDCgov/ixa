@@ -5,19 +5,17 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
-use bytesize::ByteSize;
 use humantime::format_duration;
-use log::{debug, error, info};
+use log::info;
+#[cfg(feature = "profiling")]
+use log::{debug, error};
 use serde_derive::Serialize;
+#[cfg(feature = "profiling")]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use web_sys::window;
-
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-/// How frequently we update the max memory used value.
-const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -37,6 +35,12 @@ pub struct ExecutionStatistics {
     pub wall_time: Duration,
 }
 
+#[cfg(feature = "profiling")]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+/// How frequently we update the max memory used value.
+const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
+
+#[cfg(feature = "profiling")]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) struct ExecutionProfilingCollector {
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
@@ -63,6 +67,7 @@ pub(crate) struct ExecutionProfilingCollector {
     process_id: Option<Pid>,
 }
 
+#[cfg(feature = "profiling")]
 impl ExecutionProfilingCollector {
     pub fn new() -> ExecutionProfilingCollector {
         let process_id = sysinfo::get_current_pid().ok();
@@ -181,6 +186,47 @@ impl ExecutionProfilingCollector {
     }
 }
 
+#[cfg(not(feature = "profiling"))]
+pub(crate) struct ExecutionProfilingCollector {
+    #[cfg(not(target_arch = "wasm32"))]
+    start_time: Instant,
+    #[cfg(target_arch = "wasm32")]
+    start_time: f64,
+}
+
+#[cfg(not(feature = "profiling"))]
+impl ExecutionProfilingCollector {
+    pub fn new() -> ExecutionProfilingCollector {
+        #[cfg(target_arch = "wasm32")]
+        let now = get_high_res_time();
+        #[cfg(not(target_arch = "wasm32"))]
+        let now = Instant::now();
+
+        ExecutionProfilingCollector { start_time: now }
+    }
+
+    #[inline]
+    pub fn refresh(&mut self) {}
+
+    pub fn compute_final_statistics(&mut self) -> ExecutionStatistics {
+        #[cfg(target_arch = "wasm32")]
+        let wall_time = get_high_res_time() - self.start_time;
+        #[cfg(not(target_arch = "wasm32"))]
+        let wall_time = self.start_time.elapsed();
+
+        #[cfg(target_arch = "wasm32")]
+        let wall_time = Duration::from_millis(wall_time as u64);
+
+        ExecutionStatistics {
+            max_memory_usage: 0,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
+            cpu_time: Duration::ZERO,
+            wall_time,
+        }
+    }
+}
+
 /// Prints execution statistics to the console.
 ///
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
@@ -189,21 +235,24 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
     if summary.max_memory_usage == 0 {
         println!("Memory and CPU statistics are not available on your platform.");
     } else {
-        println!(
-            "{:<25}{}",
-            "Max memory usage:",
-            ByteSize::b(summary.max_memory_usage)
-        );
-        println!(
-            "{:<25}{}",
-            "Max plans in flight:", summary.max_plans_in_flight
-        );
-        println!(
-            "{:<25}{}",
-            "Max plan queue memory:",
-            ByteSize::b(summary.max_plan_queue_memory_in_use)
-        );
-        println!("{:<25}{}", "CPU time:", format_duration(summary.cpu_time));
+        #[cfg(feature = "profiling")]
+        {
+            println!(
+                "{:<25}{}",
+                "Max memory usage:",
+                bytesize::ByteSize::b(summary.max_memory_usage)
+            );
+            println!(
+                "{:<25}{}",
+                "Max plans in flight:", summary.max_plans_in_flight
+            );
+            println!(
+                "{:<25}{}",
+                "Max plan queue memory:",
+                bytesize::ByteSize::b(summary.max_plan_queue_memory_in_use)
+            );
+            println!("{:<25}{}", "CPU time:", format_duration(summary.cpu_time));
+        }
     }
 
     println!("{:<25}{}", "Wall time:", format_duration(summary.wall_time));
@@ -217,18 +266,24 @@ pub fn log_execution_statistics(stats: &ExecutionStatistics) {
     if stats.max_memory_usage == 0 {
         info!("Memory and CPU statistics are not available on your platform.");
     } else {
-        info!("Max memory usage: {}", ByteSize::b(stats.max_memory_usage));
-        info!("Max plans in flight: {}", stats.max_plans_in_flight);
-        info!(
-            "Max plan queue memory: {}",
-            ByteSize::b(stats.max_plan_queue_memory_in_use)
-        );
-        info!("CPU time: {}", format_duration(stats.cpu_time));
+        #[cfg(feature = "profiling")]
+        {
+            info!(
+                "Max memory usage: {}",
+                bytesize::ByteSize::b(stats.max_memory_usage)
+            );
+            info!("Max plans in flight: {}", stats.max_plans_in_flight);
+            info!(
+                "Max plan queue memory: {}",
+                bytesize::ByteSize::b(stats.max_plan_queue_memory_in_use)
+            );
+            info!("CPU time: {}", format_duration(stats.cpu_time));
+        }
     }
     info!("Wall time: {}", format_duration(stats.wall_time));
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "profiling"))]
 mod tests {
     use std::thread;
     use std::time::Duration;
