@@ -40,6 +40,31 @@ test('simulation error (simulated panic) as expected', async ({ page }) => {
     expect(result.status).toBe('error');
 });
 
+test('simulation completes successfully in a web worker', async ({ page }) => {
+    await page.goto('http://localhost:8080');
+
+    const result = await page.evaluate(async () => {
+        return new Promise((resolve, reject) => {
+            const worker = new Worker('/worker.js', { type: 'module' });
+            worker.onmessage = (e) => {
+                worker.terminate();
+                if (e.data.status === 'ok') {
+                    resolve(e.data.result);
+                } else {
+                    reject(new Error(e.data.message));
+                }
+            };
+            worker.onerror = (e) => {
+                worker.terminate();
+                reject(new Error(e.message));
+            };
+            worker.postMessage('start');
+        });
+    });
+
+    expect(result).toContain('Simulation complete');
+});
+
 test('real wasm panic emits console error', async ({ page }) => {
     const consoleMessages = [];
     page.on('console', msg => consoleMessages.push(msg.text()));

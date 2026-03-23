@@ -14,15 +14,21 @@ use serde_derive::Serialize;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
-use web_sys::window;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 /// The `wasm` target does not support `std::time::Instant::now()`.
+/// Works in both Window and Web Worker contexts.
 pub fn get_high_res_time() -> f64 {
-    let perf = window().unwrap().performance().unwrap();
-    perf.now() // Returns time in milliseconds as f64
+    use web_sys::js_sys::Reflect;
+    let global = web_sys::js_sys::global();
+    let performance = Reflect::get(&global, &"performance".into())
+        .ok()
+        .and_then(|v: JsValue| v.dyn_into::<web_sys::Performance>().ok());
+    match performance {
+        Some(perf) => perf.now(),
+        None => 0.0,
+    }
 }
 
 /// A container struct for computed final statistics.
