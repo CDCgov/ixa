@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta1.1...ixa-v2.0.0-beta2) - 2026-03-23
+
+### Added
+
+- gate execution stats and plan queue tracking behind profiling feature ([#817](https://github.com/CDCgov/ixa/pull/817))
+- Add execution statistics for max plans in flight and plan queue memory usage ([#815](https://github.com/CDCgov/ixa/pull/815))
+- Incidence tracking
+- Removed RefCell from indexes ([#799](https://github.com/CDCgov/ixa/pull/799))
+- `EntitySet` and `EntitySetIterator` ([#786](https://github.com/CDCgov/ixa/pull/786))
+
+### Fixed
+
+- use web worker compatible timing strategy for wasm ([#820](https://github.com/CDCgov/ixa/pull/820))
+- global property validation now returns type erased boxed error ([#811](https://github.com/CDCgov/ixa/pull/811))
+
+### Other
+
+- Added handling errors ([#809](https://github.com/CDCgov/ixa/pull/809))
+- bump release-plz/action from 0.5.127 to 0.5.128 ([#807](https://github.com/CDCgov/ixa/pull/807))
+- Negative time ([#803](https://github.com/CDCgov/ixa/pull/803))
+- bump release-plz/action from 0.5.126 to 0.5.127 ([#774](https://github.com/CDCgov/ixa/pull/774))
+- bump actions/download-artifact from 6 to 8 ([#800](https://github.com/CDCgov/ixa/pull/800))
+- bump actions/upload-artifact from 6 to 7 ([#801](https://github.com/CDCgov/ixa/pull/801))
+
 ## [2.0.0-beta1.1](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta1...ixa-v2.0.0-beta1.1) - 2026-02-23
 
 ### Added
