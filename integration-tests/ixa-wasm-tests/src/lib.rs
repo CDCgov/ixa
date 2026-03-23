@@ -4,7 +4,7 @@ use ixa::LevelFilter;
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-use web_sys::window;
+use web_sys::js_sys;
 
 pub mod infection_manager;
 pub mod people;
@@ -37,10 +37,11 @@ pub fn setup_error_hook() {
 pub fn run_simulation() -> Promise {
     // Wrap our async simulation in a JS Promise
     future_to_promise(async {
-        // Start timing
-        let performance = window()
-            .ok_or("no window object")?
-            .performance()
+        // Start timing (works in both Window and Web Worker contexts)
+        let global = js_sys::global();
+        let performance = js_sys::Reflect::get(&global, &"performance".into())
+            .ok()
+            .and_then(|v: JsValue| v.dyn_into::<web_sys::Performance>().ok())
             .ok_or("performance not available")?;
         let start = performance.now();
 
