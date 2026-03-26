@@ -1,8 +1,8 @@
 //! Iterator implementation for [`EntitySet`].
 //!
 //! `EntitySetIterator` mirrors an `EntitySet` expression tree and evaluates nodes lazily.
-//! - `Source` iterates a concrete backing source (`Population`, singleton `Entity`, index set,
-//!   or property-backed source).
+//! - `Source` iterates a concrete backing source (contiguous population range,
+//!   index set, or property-backed source).
 //! - `Intersection` and `Difference` drive iteration from one branch and filter candidates using
 //!   membership checks.
 //! - `Union` yields the left branch first, then lazily activates the right branch (`Pending` to
@@ -56,7 +56,7 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
     fn from_entity_set(set: EntitySet<'a, E>) -> Self {
         match set.into_inner() {
             EntitySetInner::Source(source) => {
-                if matches!(source, SourceSet::Empty) {
+                if source.try_len() == Some(0) {
                     Self::Empty
                 } else {
                     Self::Source(source.into_iter())
@@ -231,7 +231,10 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
 
     pub(crate) fn from_population_iterator(iter: PopulationIterator<E>) -> Self {
         EntitySetIterator {
-            inner: EntitySetIteratorInner::Source(SourceIterator::Population(iter)),
+            inner: EntitySetIteratorInner::Source(SourceIterator::Population {
+                range: iter.range(),
+                iter,
+            }),
         }
     }
 
@@ -911,8 +914,9 @@ mod tests {
 
     #[test]
     fn test_expression_intersection_iteration() {
-        let set = EntitySet::from_source(SourceSet::<Person>::Population(10))
-            .intersection(EntitySet::from_source(SourceSet::<Person>::Population(6)));
+        let set = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..10)).intersection(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..6)),
+        );
 
         let ids = set.into_iter().collect::<Vec<_>>();
         let expected = (0..6).map(EntityId::new).collect::<Vec<_>>();
@@ -921,8 +925,8 @@ mod tests {
 
     #[test]
     fn test_expression_difference_iteration() {
-        let set = EntitySet::from_source(SourceSet::<Person>::Population(5)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(2))),
+        let set = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3)),
         );
 
         let ids = set.into_iter().collect::<Vec<_>>();
@@ -937,11 +941,11 @@ mod tests {
 
     #[test]
     fn test_expression_union_deduplicates() {
-        let left = EntitySet::from_source(SourceSet::<Person>::Population(3)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(99))),
+        let left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..3)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(99..100)),
         );
-        let right = EntitySet::from_source(SourceSet::<Person>::Population(5)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(99))),
+        let right = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(99..100)),
         );
         let set = left.union(right);
 
@@ -952,11 +956,11 @@ mod tests {
 
     #[test]
     fn test_expression_union_overlap_no_duplicates() {
-        let left = EntitySet::from_source(SourceSet::<Person>::Population(5)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(4))),
+        let left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(4..5)),
         );
-        let right = EntitySet::from_source(SourceSet::<Person>::Population(7)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(0))),
+        let right = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..7)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..1)),
         );
 
         let ids = left.union(right).into_iter().collect::<IndexSet<_>>();
@@ -966,20 +970,20 @@ mod tests {
 
     #[test]
     fn test_expression_intersection_of_unions() {
-        let ab = EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(1)))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(2),
-            )))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(3),
-            )));
-        let cd = EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(2)))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(3),
-            )))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(4),
-            )));
+        let ab = EntitySet::from_source(SourceSet::<Person>::PopulationRange(1..2))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(2..3),
+            ))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(3..4),
+            ));
+        let cd = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(3..4),
+            ))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(4..5),
+            ));
 
         let ids = ab.intersection(cd).into_iter().collect::<Vec<_>>();
         assert_eq!(ids, vec![EntityId::new(2), EntityId::new(3)]);
@@ -987,41 +991,40 @@ mod tests {
 
     #[test]
     fn test_expression_difference_not_commutative() {
-        let left = EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(1)))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(2),
-            )))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(3),
-            )));
-        let right = EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(2)))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(3),
-            )))
-            .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                EntityId::new(4),
-            )));
+        let left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(1..2))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(2..3),
+            ))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(3..4),
+            ));
+        let right = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(3..4),
+            ))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(4..5),
+            ));
 
         let left_minus_right = left.difference(right).into_iter().collect::<Vec<_>>();
-        let right_minus_left =
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(2)))
-                .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                    EntityId::new(3),
-                )))
-                .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                    EntityId::new(4),
-                )))
-                .difference(
-                    EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(1)))
-                        .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                            EntityId::new(2),
-                        )))
-                        .union(EntitySet::from_source(SourceSet::<Person>::Entity(
-                            EntityId::new(3),
-                        ))),
-                )
-                .into_iter()
-                .collect::<Vec<_>>();
+        let right_minus_left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(3..4),
+            ))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::PopulationRange(4..5),
+            ))
+            .difference(
+                EntitySet::from_source(SourceSet::<Person>::PopulationRange(1..2))
+                    .union(EntitySet::from_source(
+                        SourceSet::<Person>::PopulationRange(2..3),
+                    ))
+                    .union(EntitySet::from_source(
+                        SourceSet::<Person>::PopulationRange(3..4),
+                    )),
+            )
+            .into_iter()
+            .collect::<Vec<_>>();
 
         assert_eq!(left_minus_right, vec![EntityId::new(1)]);
         assert_eq!(right_minus_left, vec![EntityId::new(4)]);
@@ -1029,11 +1032,11 @@ mod tests {
 
     #[test]
     fn test_union_size_hint_pending_right_is_unknown() {
-        let left = EntitySet::from_source(SourceSet::<Person>::Population(2)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(99))),
+        let left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..2)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(99..100)),
         );
-        let right = EntitySet::from_source(SourceSet::<Person>::Population(4)).difference(
-            EntitySet::from_source(SourceSet::<Person>::Entity(EntityId::new(98))),
+        let right = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..4)).difference(
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(98..99)),
         );
         let iter = left.union(right).into_iter();
 
@@ -1042,7 +1045,8 @@ mod tests {
 
     #[test]
     fn test_nth_and_count_on_source() {
-        let mut iter = EntitySet::from_source(SourceSet::<Person>::Population(5)).into_iter();
+        let mut iter =
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).into_iter();
         assert_eq!(iter.nth(2), Some(EntityId::new(2)));
 
         let remaining = iter.count();
@@ -1145,7 +1149,8 @@ mod tests {
 
     #[test]
     fn prototype_size_hint_single_source_and_partial_consume() {
-        let mut iter = EntitySet::from_source(SourceSet::<Person>::Population(5)).into_iter();
+        let mut iter =
+            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).into_iter();
         assert_eq!(iter.size_hint(), (5, Some(5)));
         iter.next();
         assert_eq!(iter.size_hint(), (4, Some(4)));

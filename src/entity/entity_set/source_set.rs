@@ -20,9 +20,9 @@
 //! `AbstractPropertySource` API and `Iterator`.
 //!
 //! `EntitySetIterator<'c>` uses `SourceSet<'c>` and `SourceIterator<'c>` to
-//! evaluate intersections. Sources may be empty, whole-population, index-backed,
-//! singleton, or property-backed. The iterator chooses the smallest source as the driver and
-//! checks candidate IDs against remaining sources.
+//! evaluate intersections. Sources may be contiguous population ranges,
+//! index-backed, or property-backed. The iterator chooses the smallest source as
+//! the driver and checks candidate IDs against remaining sources.
 //!
 //! ## Source ordering and `cost_hint`
 //!
@@ -35,16 +35,17 @@
 //! membership/iteration work. It is not a correctness value; it is only used to
 //! break ties when upper bounds are equal.
 //!
-//! | Source kind                  | `cost_hint` |
-//! | ---------------------------- | ----------- |
-//! | `SourceSet::Empty`           | `0`         |
-//! | `SourceSet::Entity`          | `1`         |
-//! | `SourceSet::Population`      | `2`         |
-//! | `SourceSet::IndexSet`        | `3`         |
-//! | `ConcretePropertySource`     | `5`         |
-//! | `DerivedPropertySource`      | `6`         |
+//! | Source kind                           | `cost_hint` |
+//! | ------------------------------------- | ----------- |
+//! | `SourceSet::PopulationRange(0..0)`    | `0`         |
+//! | `SourceSet::PopulationRange(i..i+1)`  | `1`         |
+//! | Other `SourceSet::PopulationRange`s   | `2`         |
+//! | `SourceSet::IndexSet`                 | `3`         |
+//! | `ConcretePropertySource`              | `5`         |
+//! | `DerivedPropertySource`               | `6`         |
 
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
@@ -253,10 +254,7 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
 
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
 pub(crate) enum SourceSet<'a, E: Entity> {
-    Empty,
-    Population(usize),
-    #[allow(dead_code)]
-    Entity(EntityId<E>),
+    PopulationRange(Range<usize>),
     IndexSet(&'a IndexSet<EntityId<E>>),
     PropertySet(BxPropertySource<'a, E>),
 }
@@ -264,9 +262,7 @@ pub(crate) enum SourceSet<'a, E: Entity> {
 impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Empty, Self::Empty) => true,
-            (Self::Population(left), Self::Population(right)) => left == right,
-            (Self::Entity(left), Self::Entity(right)) => left == right,
+            (Self::PopulationRange(left), Self::PopulationRange(right)) => left == right,
             (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
             (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
             _ => false,
@@ -279,9 +275,7 @@ impl<'a, E: Entity> Eq for SourceSet<'a, E> {}
 impl<'a, E: Entity> SourceSet<'a, E> {
     pub(super) fn try_len(&self) -> Option<usize> {
         match self {
-            SourceSet::Empty => Some(0),
-            SourceSet::Population(population) => Some(*population),
-            SourceSet::Entity(_) => Some(1),
+            SourceSet::PopulationRange(range) => Some(range.len()),
             SourceSet::IndexSet(source) => Some(source.len()),
             SourceSet::PropertySet(_) => None,
         }
@@ -290,9 +284,11 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// Ordering key used for source selection.
     pub(super) fn sort_key(&self) -> (usize, u8) {
         match self {
-            SourceSet::Empty => (0, 0),
-            SourceSet::Entity(_) => (1, 1),
-            SourceSet::Population(population) => (*population, 2),
+            SourceSet::PopulationRange(range) => match range.len() {
+                0 => (0, 0),
+                1 => (1, 1),
+                len => (len, 2),
+            },
             SourceSet::IndexSet(source) => (source.len(), 3),
             SourceSet::PropertySet(source) => source.sort_key(),
         }
@@ -349,9 +345,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn contains(&self, id: EntityId<E>) -> bool {
         match self {
-            SourceSet::Empty => false,
-            SourceSet::Population(population) => id.0 < *population,
-            SourceSet::Entity(entity_id) => *entity_id == id,
+            SourceSet::PopulationRange(range) => range.contains(&id.0),
             SourceSet::IndexSet(source) => source.contains(&id),
             SourceSet::PropertySet(source) => source.contains(id),
         }
@@ -359,13 +353,9 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn into_iter(self) -> SourceIterator<'a, E> {
         match self {
-            SourceSet::Empty => SourceIterator::Empty,
-            SourceSet::Population(population) => {
-                SourceIterator::Population(PopulationIterator::new(population))
-            }
-            SourceSet::Entity(entity_id) => SourceIterator::Entity {
-                id: entity_id,
-                exhausted: false,
+            SourceSet::PopulationRange(range) => SourceIterator::Population {
+                range: range.clone(),
+                iter: PopulationIterator::from_range(range),
             },
             SourceSet::IndexSet(ids) => {
                 SourceIterator::IndexIter(IndexSetIterator::from_index_set(ids))
@@ -387,16 +377,16 @@ mod tests {
 
     #[test]
     fn source_set_variants_basic_behavior() {
-        let empty = SourceSet::<Person>::Empty;
+        let empty = SourceSet::<Person>::PopulationRange(0..0);
         assert_eq!(empty.sort_key(), (0, 0));
         assert!(!empty.contains(EntityId::new(0)));
         assert_eq!(empty.into_iter().count(), 0);
 
-        let population = SourceSet::<Person>::Population(3);
+        let population = SourceSet::<Person>::PopulationRange(0..3);
         assert_eq!(population.sort_key(), (3, 2));
         assert!(population.contains(EntityId::new(0)));
         assert!(!population.contains(EntityId::new(3)));
-        let population_ids = SourceSet::<Person>::Population(3)
+        let population_ids = SourceSet::<Person>::PopulationRange(0..3)
             .into_iter()
             .collect::<Vec<_>>();
         assert_eq!(
@@ -404,11 +394,11 @@ mod tests {
             vec![EntityId::new(0), EntityId::new(1), EntityId::new(2)]
         );
 
-        let singleton = SourceSet::<Person>::Entity(EntityId::new(9));
+        let singleton = SourceSet::<Person>::PopulationRange(9..10);
         assert_eq!(singleton.sort_key(), (1, 1));
         assert!(singleton.contains(EntityId::new(9)));
         assert!(!singleton.contains(EntityId::new(8)));
-        let singleton_ids = SourceSet::<Person>::Entity(EntityId::new(9))
+        let singleton_ids = SourceSet::<Person>::PopulationRange(9..10)
             .into_iter()
             .collect::<Vec<_>>();
         assert_eq!(singleton_ids, vec![EntityId::new(9)]);

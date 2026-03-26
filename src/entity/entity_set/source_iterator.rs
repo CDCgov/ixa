@@ -2,8 +2,8 @@
 //! `EntitySetIterator`.
 //!
 //! It encapsulates the concrete source chosen for traversal: an index-set
-//! iterator, a property-source iterator, a whole-population iterator, or an
-//! empty iterator.
+//! iterator, a property-source iterator, or a contiguous population-range
+//! iterator.
 //!
 //! `SourceSet` (defined in `source_set.rs`) builds `SourceIterator` values,
 //! and `EntitySetIterator` drives them while applying remaining set-membership
@@ -50,12 +50,11 @@ pub(super) enum SourceIterator<'a, E: Entity> {
     IndexIter(IndexSetIterator<'a, E>),
     /// An iterator over a property vector
     PropertyVecIter(Box<dyn AbstractPropertySource<'a, E> + 'a>),
-    /// An iterator over the entire population
-    Population(PopulationIterator<E>),
-    /// A singleton iterator
-    Entity { id: EntityId<E>, exhausted: bool },
-    /// An empty iterator
-    Empty,
+    /// An iterator over a contiguous range of entity IDs
+    Population {
+        range: std::ops::Range<usize>,
+        iter: PopulationIterator<E>,
+    },
 }
 
 impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
@@ -63,9 +62,7 @@ impl<'a, E: Entity> Debug for SourceIterator<'a, E> {
         match self {
             SourceIterator::IndexIter(_iter) => write!(f, "IndexIter"),
             SourceIterator::PropertyVecIter(_iter) => write!(f, "PropertyVecIter"),
-            SourceIterator::Population { .. } => write!(f, "WholePopulation"),
-            SourceIterator::Entity { .. } => write!(f, "Entity"),
-            SourceIterator::Empty => write!(f, "Empty"),
+            SourceIterator::Population { .. } => write!(f, "PopulationRange"),
         }
     }
 }
@@ -80,9 +77,7 @@ impl<'a, E: Entity> SourceIterator<'a, E> {
                 iter.with_index_set(|index_set| index_set.contains(&id))
             }
             SourceIterator::PropertyVecIter(source) => source.contains(id),
-            SourceIterator::Population(source) => id.0 < source.population(),
-            SourceIterator::Entity { id: entity_id, .. } => *entity_id == id,
-            SourceIterator::Empty => false,
+            SourceIterator::Population { range, .. } => range.contains(&id.0),
         }
     }
 }
@@ -97,16 +92,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                 index_set_iter.with_iter_mut(|iter| iter.next().copied())
             }
             SourceIterator::PropertyVecIter(iter) => iter.next(),
-            SourceIterator::Population(iter) => iter.next(),
-            SourceIterator::Entity { id, exhausted } => {
-                if *exhausted {
-                    None
-                } else {
-                    *exhausted = true;
-                    Some(*id)
-                }
-            }
-            SourceIterator::Empty => None,
+            SourceIterator::Population { iter, .. } => iter.next(),
         }
     }
 
@@ -115,15 +101,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
         match self {
             SourceIterator::IndexIter(iter) => iter.with_iter(|iter| iter.size_hint()),
             SourceIterator::PropertyVecIter(iter) => iter.size_hint(),
-            SourceIterator::Population(iter) => iter.size_hint(),
-            SourceIterator::Entity { exhausted, .. } => {
-                if *exhausted {
-                    (0, Some(0))
-                } else {
-                    (1, Some(1))
-                }
-            }
-            SourceIterator::Empty => (0, Some(0)),
+            SourceIterator::Population { iter, .. } => iter.size_hint(),
         }
     }
 
@@ -133,15 +111,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
         match self {
             SourceIterator::IndexIter(mut iter) => iter.with_iter_mut(|iter| iter.count()),
             SourceIterator::PropertyVecIter(iter) => iter.count(),
-            SourceIterator::Population(iter) => iter.count(),
-            SourceIterator::Entity { exhausted, .. } => {
-                if exhausted {
-                    0
-                } else {
-                    1
-                }
-            }
-            SourceIterator::Empty => 0,
+            SourceIterator::Population { iter, .. } => iter.count(),
         }
     }
 
@@ -149,15 +119,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
         match self {
             Self::IndexIter(mut iter) => iter.with_iter_mut(|iter| iter.last().copied()),
             Self::PropertyVecIter(iter) => iter.last(),
-            Self::Population(iter) => iter.last(),
-            Self::Entity { id, exhausted } => {
-                if exhausted {
-                    None
-                } else {
-                    Some(id)
-                }
-            }
-            Self::Empty => None,
+            Self::Population { iter, .. } => iter.last(),
         }
     }
 
@@ -166,17 +128,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
         match self {
             Self::IndexIter(iter) => iter.with_iter_mut(|iter| iter.nth(n).copied()),
             Self::PropertyVecIter(iter) => iter.nth(n),
-            Self::Population(iter) => iter.nth(n),
-            Self::Entity { id, exhausted } => {
-                if n == 0 && !*exhausted {
-                    *exhausted = true;
-                    Some(*id)
-                } else {
-                    *exhausted = true;
-                    None
-                }
-            }
-            Self::Empty => None,
+            Self::Population { iter, .. } => iter.nth(n),
         }
     }
 
@@ -189,13 +141,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                 iter.with_iter_mut(|iter| iter.for_each(|entity_id| f(*entity_id)))
             }
             Self::PropertyVecIter(iter) => iter.for_each(f),
-            Self::Population(iter) => iter.for_each(f),
-            Self::Entity { id, exhausted } => {
-                if !exhausted {
-                    f(id);
-                }
-            }
-            Self::Empty => {}
+            Self::Population { iter, .. } => iter.for_each(f),
         }
     }
 
@@ -208,15 +154,7 @@ impl<'a, E: Entity> Iterator for SourceIterator<'a, E> {
                 iter.with_iter_mut(|iter| iter.fold(init, |acc, entity_id| f(acc, *entity_id)))
             }
             Self::PropertyVecIter(iter) => iter.fold(init, f),
-            Self::Population(iter) => iter.fold(init, f),
-            Self::Entity { id, exhausted } => {
-                if exhausted {
-                    init
-                } else {
-                    f(init, id)
-                }
-            }
-            Self::Empty => init,
+            Self::Population { iter, .. } => iter.fold(init, f),
         }
     }
 }
@@ -267,8 +205,8 @@ mod tests {
     }
 
     #[test]
-    fn source_iterator_contains_for_population_and_empty() {
-        let mut population_iter = SourceSet::<Person>::Population(5).into_iter();
+    fn source_iterator_contains_for_population_ranges() {
+        let mut population_iter = SourceSet::<Person>::PopulationRange(0..5).into_iter();
         assert_eq!(population_iter.next(), Some(EntityId::new(0)));
         assert_eq!(population_iter.next(), Some(EntityId::new(1)));
 
@@ -276,13 +214,13 @@ mod tests {
         assert!(population_iter.contains(EntityId::new(4)));
         assert!(!population_iter.contains(EntityId::new(5)));
 
-        let empty_iter = SourceSet::<Person>::Empty.into_iter();
+        let empty_iter = SourceSet::<Person>::PopulationRange(0..0).into_iter();
         assert!(!empty_iter.contains(EntityId::new(0)));
     }
 
     #[test]
-    fn source_iterator_contains_for_entity_uses_original_set() {
-        let mut iter = SourceSet::<Person>::Entity(EntityId::new(11)).into_iter();
+    fn source_iterator_contains_for_singleton_range_uses_original_set() {
+        let mut iter = SourceSet::<Person>::PopulationRange(11..12).into_iter();
         assert_eq!(iter.next(), Some(EntityId::new(11)));
 
         assert!(iter.contains(EntityId::new(11)));
