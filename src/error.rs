@@ -43,11 +43,6 @@ pub enum IxaError {
         second_index: usize,
     },
 
-    #[error("breakpoint time {time} is in the past")]
-    BreakpointTimeInPast { time: f64 },
-    #[error("attempted to delete a nonexistent breakpoint {id}")]
-    BreakpointNotFound { id: u32 },
-
     #[error("invalid key in pair: {pair}")]
     InvalidLogLevelKey { pair: String },
     #[error("invalid value in pair: {pair}")]
