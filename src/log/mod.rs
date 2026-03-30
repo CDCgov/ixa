@@ -62,10 +62,7 @@ use crate::HashMap;
 // Logging only errors by default.
 pub const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Error;
 // Default module specific filters
-const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 1] = [
-    // `rustyline` logs are noisy.
-    ("rustyline", LevelFilter::Off),
-];
+const DEFAULT_MODULE_FILTERS: [(&str, LevelFilter); 0] = [];
 
 /// A global instance of the logging configuration.
 static LOG_CONFIGURATION: LazyLock<Mutex<LogConfiguration>> = LazyLock::new(Mutex::default);
@@ -284,19 +281,12 @@ mod tests {
         set_log_level(LevelFilter::Trace);
         {
             let config = get_log_configuration();
-            // There is only one filer...
-            assert_eq!(config.module_configurations.len(), 1);
-            // ...and that filter is for `rustyline`
-            let expected = ("rustyline", LevelFilter::Off).into();
-            assert_eq!(
-                config.module_configurations.get("rustyline"),
-                Some(&expected)
-            );
+            assert!(config.module_configurations.is_empty());
         }
 
         let filters: [(&&str, LevelFilter); 2] = [
-            (&"rustyline", LevelFilter::Error),
             (&"ixa", LevelFilter::Debug),
+            (&"ixa::runner", LevelFilter::Error),
         ];
         // Install new filters
         set_module_filters(&filters);
@@ -314,11 +304,11 @@ mod tests {
         }
 
         // Remove one filter
-        remove_module_filter("rustyline");
+        remove_module_filter("ixa::runner");
         // Check that it was removed
         {
             let config = get_log_configuration();
-            // There is only one filer...
+            // There is only one filter...
             assert_eq!(config.module_configurations.len(), 1);
             // ...and that filter is for `ixa`
             assert_eq!(

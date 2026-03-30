@@ -29,13 +29,9 @@
 //!
 //! ## Features
 //!
-//! - **`debugger`**: enables the interactive debugger, an interactive console-based REPL
-//!   (Read-Eval-Print Loop) that allows you to pause simulation execution, inspect state, and
-//!   control simulation flow through commands like breakpoints, population queries, and
-//!   step-by-step execution.
-//! - **`web_api`**: enables the web API, an HTTP-based remote control interface that allows
-//!   external applications to monitor simulation state, control execution, and query data through
-//!   REST endpoints. This feature implies the `debugger` feature.
+//! - **`logging`**: enables structured logging for native and wasm targets.
+//! - **`progress_bar`**: enables the timeline progress bar for long-running simulations.
+//! - **`profiling`**: enables collection and reporting of execution profiling statistics.
 
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
@@ -69,9 +65,6 @@ pub use report::{ConfigReportOptions, ContextReportExt, Report};
 pub mod runner;
 pub use runner::{run_with_args, run_with_custom_args, BaseArgs};
 
-#[cfg(feature = "debugger")]
-pub mod debugger;
-
 pub mod log;
 pub use log::{
     debug, disable_logging, enable_logging, error, info, set_log_level, set_module_filter,
@@ -81,8 +74,6 @@ pub use log::{
 #[cfg(feature = "progress_bar")]
 pub mod progress;
 
-#[cfg(feature = "debugger")]
-pub mod external_api;
 pub mod hashing;
 pub mod numeric;
 
@@ -118,11 +109,6 @@ pub use entity::{ContextEntitiesExt, EntityPropertyTuple};
 pub mod execution_stats;
 pub mod profiling;
 mod value_vec;
-
-#[cfg(all(target_arch = "wasm32", feature = "debugger"))]
-compile_error!(
-    "Target `wasm32` and feature `debugger` are mutually exclusive — enable at most one."
-);
 
 #[cfg(all(target_arch = "wasm32", feature = "progress_bar"))]
 compile_error!(
