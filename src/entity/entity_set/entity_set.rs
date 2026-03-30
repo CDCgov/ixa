@@ -315,7 +315,7 @@ mod tests {
     use super::*;
     use crate::entity::ContextEntitiesExt;
     use crate::hashing::IndexSet;
-    use crate::{define_entity, define_property, Context};
+    use crate::{define_entity, define_property, with, Context};
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person);
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(indexed.try_len(), Some(3));
 
         let mut context = Context::new();
-        context.add_entity((Age(10),)).unwrap();
+        context.add_entity(with!(Person, Age(10),)).unwrap();
         let property_source = SourceSet::<Person>::new(Age(10), &context).unwrap();
         assert!(matches!(property_source, SourceSet::PropertySet(_)));
         let property_set = EntitySet::<Person>::from_source(property_source);

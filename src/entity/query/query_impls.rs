@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::sync::{Mutex, OnceLock};
 
 use seq_macro::seq;
 
@@ -6,11 +7,13 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
-use crate::hashing::one_shot_128;
+use crate::entity::{
+    ContextEntitiesExt, Entity, EntityId, EntityPropertyTuple, HashValueType, Query,
+};
+use crate::hashing::{one_shot_128, HashMap};
 use crate::Context;
 
-impl<E: Entity> Query<E> for () {
+trait QueryTuple<E: Entity>: Copy + 'static {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         Vec::new()
     }
@@ -19,8 +22,25 @@ impl<E: Entity> Query<E> for () {
         Vec::new()
     }
 
+    fn is_empty_query(&self) -> bool {
+        false
+    }
+
     fn multi_property_id(&self) -> Option<usize> {
-        None
+        static REGISTRY: OnceLock<Mutex<HashMap<TypeId, &'static Option<usize>>>> = OnceLock::new();
+
+        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
+        let mut map = map.lock().unwrap();
+        let query_type_id = TypeId::of::<(E, Self)>();
+        let entry = *map.entry(query_type_id).or_insert_with(|| {
+            let mut types = self.get_type_ids();
+            types.sort_unstable();
+            Box::leak(Box::new(
+                crate::entity::multi_property::type_ids_to_multi_property_index(types.as_slice()),
+            ))
+        });
+
+        *entry
     }
 
     fn multi_property_value_hash(&self) -> HashValueType {
@@ -46,8 +66,52 @@ impl<E: Entity> Query<E> for () {
     }
 }
 
+impl<E: Entity, T: QueryTuple<E>> Query<E> for EntityPropertyTuple<E, T> {
+    fn get_query(&self) -> Vec<(usize, HashValueType)> {
+        self.inner.get_query()
+    }
+
+    fn get_type_ids(&self) -> Vec<TypeId> {
+        self.inner.get_type_ids()
+    }
+
+    fn is_empty_query(&self) -> bool {
+        self.inner.is_empty_query()
+    }
+
+    fn multi_property_id(&self) -> Option<usize> {
+        self.inner.multi_property_id()
+    }
+
+    fn multi_property_value_hash(&self) -> HashValueType {
+        self.inner.multi_property_value_hash()
+    }
+
+    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
+        self.inner.new_query_result(context)
+    }
+
+    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
+        self.inner.new_query_result_iterator(context)
+    }
+
+    fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
+        self.inner.match_entity(entity_id, context)
+    }
+
+    fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
+        self.inner.filter_entities(entities, context)
+    }
+}
+
+impl<E: Entity> QueryTuple<E> for () {
+    fn is_empty_query(&self) -> bool {
+        true
+    }
+}
+
 // An Entity ZST itself is an empty query matching all entities of that type.
-// This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
+// This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, with!(Person))`.
 impl<E: Entity + Copy> Query<E> for E {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         Vec::new()
@@ -55,6 +119,10 @@ impl<E: Entity + Copy> Query<E> for E {
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
+    }
+
+    fn is_empty_query(&self) -> bool {
+        true
     }
 
     fn multi_property_id(&self) -> Option<usize> {
@@ -85,7 +153,7 @@ impl<E: Entity + Copy> Query<E> for E {
 }
 
 // Implement the query version with one parameter.
-impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
+impl<E: Entity, P1: Property<E>> QueryTuple<E> for (P1,) {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         let value = P1::make_canonical(self.0);
         vec![(P1::id(), P1::hash_property_value(&value))]
@@ -191,7 +259,7 @@ macro_rules! impl_query {
                 #(
                     T~N : Property<E>,
                 )*
-            > Query<E> for (
+            > QueryTuple<E> for (
                 #(
                     T~N,
                 )*

@@ -1,4 +1,4 @@
-/// Creates a query matching all entities of a given type, optionally filtered by properties.
+/// Creates an entity-scoped property bundle for queries and `add_entity(...)`.
 ///
 /// # Examples
 ///
@@ -16,7 +16,7 @@
 /// ```
 #[macro_export]
 macro_rules! with {
-    // No properties - generates empty tuple query
+    // No properties - generates an empty entity-scoped property bundle
     ($entity:ty) => {
         $crate::EntityPropertyTuple::<$entity, _>::new(())
     };

@@ -161,7 +161,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::{define_derived_property, define_entity, define_property, Context};
+    use crate::{define_derived_property, define_entity, define_property, with, Context};
 
     define_entity!(Person);
 
@@ -242,7 +242,7 @@ mod tests {
         );
 
         let person_id = context
-            .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
+            .add_entity(with!(Person, Age(9), RunningShoes(33), RiskCategory::Low))
             .unwrap();
 
         context.set_property(person_id, RiskCategory::High);
@@ -263,7 +263,7 @@ mod tests {
         );
         // Does not emit a change event.
         let person_id = context
-            .add_entity((Age(9), RunningShoes(33), RiskCategory::Low))
+            .add_entity(with!(Person, Age(9), RunningShoes(33), RiskCategory::Low))
             .unwrap();
         // Emits a change event.
         context.set_property(person_id, RunningShoes(42));
@@ -275,7 +275,7 @@ mod tests {
     fn get_entity_property_change_event() {
         let mut context = Context::new();
         let person = context
-            .add_entity((Age(17), RunningShoes(33), RiskCategory::Low))
+            .add_entity(with!(Person, Age(17), RunningShoes(33), RiskCategory::Low))
             .unwrap();
 
         let flag = Rc::new(RefCell::new(false));
