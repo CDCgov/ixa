@@ -708,6 +708,43 @@ mod tests {
     }
 
     #[test]
+    fn legacy_tuple_queries_remain_supported() {
+        let mut context = Context::new();
+        let p1 = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::High))
+            .unwrap();
+
+        assert_eq!(context.query_entity_count((Age(42),)), 2);
+        assert_eq!(context.query_entity_count((Age(42), RiskCategory::High)), 1);
+        assert!(context.match_entity(p1, (Age(42), RiskCategory::High)));
+
+        context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
+            assert!(people.contains(p1));
+            assert_eq!(people.into_iter().count(), 1);
+        });
+    }
+
+    #[test]
+    fn legacy_empty_tuple_query_remains_supported() {
+        let mut context = Context::new();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::Low))
+            .unwrap();
+
+        assert_eq!(context.query_entity_count::<Person, _>(()), 2);
+        assert_eq!(context.query_result_iterator::<Person, _>(()).count(), 2);
+    }
+
+    #[test]
     fn entity_property_tuple_singleton() {
         use super::EntityPropertyTuple;
 
