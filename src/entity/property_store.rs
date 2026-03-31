@@ -35,7 +35,7 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
-use crate::entity::events::PartialPropertyChangeEvent;
+use crate::entity::events::PartialPropertyChangeEventBox;
 use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
@@ -320,7 +320,7 @@ impl<E: Entity> PropertyStore<E> {
         property_index: usize,
         entity_id: EntityId<E>,
         context: &Context,
-    ) -> Box<dyn PartialPropertyChangeEvent> {
+    ) -> PartialPropertyChangeEventBox {
         let property_value_store = self.items
                                        .get(property_index)
             .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));

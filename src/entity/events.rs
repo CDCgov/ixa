@@ -27,23 +27,39 @@ because a non-derived p
 */
 
 use ixa_derive::IxaEvent;
+use smallbox::space::S4;
+use smallbox::SmallBox;
 
 use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, IxaEvent};
 
+// We choose the size parameter for `PartialPropertyChangeEventBox` based on the assumption that
+// most properties are 64 bits or fewer. The concrete object behind `PartialPropertyChangeEventBox`
+// (the alias for the `SmallBox`) is `PartialPropertyChangeEventCore<E, P>`, which is
+// `#[repr(transparent)]` over `PropertyChangeEvent<E, P>`. That event stores
+//
+// - `EntityId<E>`, one `usize`, so 8 bytes.
+// - `current`: a property value, typically <= 8 bytes
+// - `current`: a property value, typically <= 8 bytes
+//
+// That puts the payload at 24 bytes, with 8-byte alignment. The `S4` size is 4 `usize`s of inline
+// storage, i.e. 32 bytes, and inline storage is used when the payload size and alignment fit. So
+// `S4` comfortably holds the common 24-byte case inline with 8 bytes of slack.
+pub(crate) type PartialPropertyChangeEventBox = SmallBox<dyn PartialPropertyChangeEvent, S4>;
+
 /// Type-erased interface to `PartialPropertyChangeEvent<E, P>`.
 /// Interacts with the index on behalf of the erased type.
 pub(crate) trait PartialPropertyChangeEvent {
     /// Updates the index with the current property value and emits a change event.
-    fn emit_in_context(self: Box<Self>, context: &mut Context);
+    fn emit_in_context(&mut self, context: &mut Context);
 }
 
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
     for PartialPropertyChangeEventCore<E, P>
 {
     /// Updates the index with the current property value and emits a change event.
-    fn emit_in_context(mut self: Box<Self>, context: &mut Context) {
+    fn emit_in_context(&mut self, context: &mut Context) {
         self.0.current = context.get_property(self.0.entity_id);
 
         {
@@ -82,8 +98,9 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 /// Represents a partially created `PropertyChangeEvent` of a derived property during the computation of property
 /// changes during the update of one of its non-derived property dependencies.
 ///
-/// A `Box<PartialPropertyChangeEventCore<E, P>>` can be transformed into a `Box<PropertyChangeEvent<E, P>>` in place,
-/// avoiding an allocation.
+/// A `PartialPropertyChangeEventCore<E, P>` is layout-compatible with
+/// `PropertyChangeEvent<E, P>`, so converting via `to_event()` does not require an extra heap
+/// allocation.
 #[repr(transparent)]
 pub(crate) struct PartialPropertyChangeEventCore<E: Entity, P: Property<E>>(
     PropertyChangeEvent<E, P>,
