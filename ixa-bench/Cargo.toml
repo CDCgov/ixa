@@ -98,3 +98,8 @@ harness = false
 name = "sample_entity_scaling"
 path = "criterion/sample_entity_scaling.rs"
 harness = false
+
+[[bench]]
+name = "set_property"
+path = "criterion/set_property.rs"
+harness = false
