@@ -7,13 +7,17 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
-use crate::entity::{
-    ContextEntitiesExt, Entity, EntityId, EntityPropertyTuple, HashValueType, Query,
-};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityPropertyTuple, HashValueType};
 use crate::hashing::{one_shot_128, HashMap};
 use crate::Context;
 
-trait QueryTuple<E: Entity>: Copy + 'static {
+/// Internal implementation detail for tuple payloads stored inside
+/// [`EntityPropertyTuple<E, T>`](crate::EntityPropertyTuple).
+///
+/// Property-based queries are intentionally exposed only through `with!(E, ...)`,
+/// but the tuple-backed implementation is still useful as the payload carried by
+/// `EntityPropertyTuple`.
+trait Query<E: Entity>: Copy + 'static {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         Vec::new()
     }
@@ -66,7 +70,7 @@ trait QueryTuple<E: Entity>: Copy + 'static {
     }
 }
 
-impl<E: Entity, T: QueryTuple<E>> Query<E> for EntityPropertyTuple<E, T> {
+impl<E: Entity, T: Query<E>> crate::entity::Query<E> for EntityPropertyTuple<E, T> {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         self.inner.get_query()
     }
@@ -104,53 +108,15 @@ impl<E: Entity, T: QueryTuple<E>> Query<E> for EntityPropertyTuple<E, T> {
     }
 }
 
-impl<E: Entity> QueryTuple<E> for () {
+impl<E: Entity> Query<E> for () {
     fn is_empty_query(&self) -> bool {
         true
     }
 }
 
-impl<E: Entity> Query<E> for () {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        QueryTuple::<E>::get_query(self)
-    }
-
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        QueryTuple::<E>::get_type_ids(self)
-    }
-
-    fn is_empty_query(&self) -> bool {
-        QueryTuple::<E>::is_empty_query(self)
-    }
-
-    fn multi_property_id(&self) -> Option<usize> {
-        QueryTuple::<E>::multi_property_id(self)
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        QueryTuple::<E>::multi_property_value_hash(self)
-    }
-
-    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
-        QueryTuple::<E>::new_query_result(self, context)
-    }
-
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
-        QueryTuple::<E>::new_query_result_iterator(self, context)
-    }
-
-    fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-        QueryTuple::<E>::match_entity(self, entity_id, context)
-    }
-
-    fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
-        QueryTuple::<E>::filter_entities(self, entities, context)
-    }
-}
-
 // An Entity ZST itself is an empty query matching all entities of that type.
 // This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, with!(Person))`.
-impl<E: Entity + Copy> Query<E> for E {
+impl<E: Entity + Copy> crate::entity::Query<E> for E {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         Vec::new()
     }
@@ -191,7 +157,7 @@ impl<E: Entity + Copy> Query<E> for E {
 }
 
 // Implement the query version with one parameter.
-impl<E: Entity, P1: Property<E>> QueryTuple<E> for (P1,) {
+impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
     fn get_query(&self) -> Vec<(usize, HashValueType)> {
         let value = P1::make_canonical(self.0);
         vec![(P1::id(), P1::hash_property_value(&value))]
@@ -218,10 +184,10 @@ impl<E: Entity, P1: Property<E>> QueryTuple<E> for (P1,) {
         // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
         // multi-property is unindexed, we fall through to create `SourceSet`s for the components
         // rather than wrapping a `DerivedPropertySource`.
-        if let Some(multi_property_id) = QueryTuple::<E>::multi_property_id(self) {
+        if let Some(multi_property_id) = Query::<E>::multi_property_id(self) {
             match property_store.get_index_set_with_hash_for_property_id(
                 multi_property_id,
-                QueryTuple::<E>::multi_property_value_hash(self),
+                Query::<E>::multi_property_value_hash(self),
             ) {
                 IndexSetResult::Set(people_set) => {
                     return EntitySet::from_source(SourceSet::IndexSet(people_set));
@@ -252,10 +218,10 @@ impl<E: Entity, P1: Property<E>> QueryTuple<E> for (P1,) {
         // first is a micro-optimization improving tight-loop benchmark performance.
         let property_store = context.entity_store.get_property_store::<E>();
 
-        if let Some(multi_property_id) = QueryTuple::<E>::multi_property_id(self) {
+        if let Some(multi_property_id) = Query::<E>::multi_property_id(self) {
             match property_store.get_index_set_with_hash_for_property_id(
                 multi_property_id,
-                QueryTuple::<E>::multi_property_value_hash(self),
+                Query::<E>::multi_property_value_hash(self),
             ) {
                 IndexSetResult::Set(people_set) => {
                     return EntitySetIterator::from_index_set(people_set);
@@ -289,44 +255,6 @@ impl<E: Entity, P1: Property<E>> QueryTuple<E> for (P1,) {
     }
 }
 
-impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        QueryTuple::<E>::get_query(self)
-    }
-
-    fn get_type_ids(&self) -> Vec<TypeId> {
-        QueryTuple::<E>::get_type_ids(self)
-    }
-
-    fn is_empty_query(&self) -> bool {
-        QueryTuple::<E>::is_empty_query(self)
-    }
-
-    fn multi_property_id(&self) -> Option<usize> {
-        QueryTuple::<E>::multi_property_id(self)
-    }
-
-    fn multi_property_value_hash(&self) -> HashValueType {
-        QueryTuple::<E>::multi_property_value_hash(self)
-    }
-
-    fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
-        QueryTuple::<E>::new_query_result(self, context)
-    }
-
-    fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
-        QueryTuple::<E>::new_query_result_iterator(self, context)
-    }
-
-    fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-        QueryTuple::<E>::match_entity(self, entity_id, context)
-    }
-
-    fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
-        QueryTuple::<E>::filter_entities(self, entities, context)
-    }
-}
-
 macro_rules! impl_query {
     ($ct:expr) => {
         seq!(N in 0..$ct {
@@ -335,7 +263,7 @@ macro_rules! impl_query {
                 #(
                     T~N : Property<E>,
                 )*
-            > QueryTuple<E> for (
+            > Query<E> for (
                 #(
                     T~N,
                 )*
@@ -397,11 +325,11 @@ macro_rules! impl_query {
                     // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
                     // multi-property is unindexed, we fall through to create `SourceSet`s for the components
                     // rather than wrapping a `DerivedPropertySource`.
-                    if let Some(multi_property_id) = QueryTuple::<E>::multi_property_id(self) {
+                    if let Some(multi_property_id) = Query::<E>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
                             multi_property_id,
-                            QueryTuple::<E>::multi_property_value_hash(self),
+                            Query::<E>::multi_property_value_hash(self),
                         ) {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 return EntitySet::from_source(SourceSet::IndexSet(entity_set));
@@ -432,11 +360,11 @@ macro_rules! impl_query {
                 fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
                     // Constructing the `EntitySetIterator` directly instead of constructing an `EntitySet`
                     // first is a micro-optimization improving tight-loop benchmark performance.
-                    if let Some(multi_property_id) = QueryTuple::<E>::multi_property_id(self) {
+                    if let Some(multi_property_id) = Query::<E>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
                             multi_property_id,
-                            QueryTuple::<E>::multi_property_value_hash(self),
+                            Query::<E>::multi_property_value_hash(self),
                         ) {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 return EntitySetIterator::from_index_set(entity_set);
@@ -475,11 +403,11 @@ macro_rules! impl_query {
 
                 fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
                     // The fast path: If this query is indexed, we only have to do one pass over the entities.
-                    if let Some(multi_property_id) = QueryTuple::<E>::multi_property_id(self) {
+                    if let Some(multi_property_id) = Query::<E>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
                         match property_store.get_index_set_with_hash_for_property_id(
                             multi_property_id,
-                            QueryTuple::<E>::multi_property_value_hash(self),
+                            Query::<E>::multi_property_value_hash(self),
                         ) {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 entities.retain(|entity_id| entity_set.contains(entity_id));
@@ -505,53 +433,6 @@ macro_rules! impl_query {
                             );
                         }
                     )*
-                }
-            }
-
-            impl<
-                E: Entity,
-                #(
-                    T~N : Property<E>,
-                )*
-            > Query<E> for (
-                #(
-                    T~N,
-                )*
-            ) {
-                fn get_query(&self) -> Vec<(usize, HashValueType)> {
-                    QueryTuple::<E>::get_query(self)
-                }
-
-                fn get_type_ids(&self) -> Vec<TypeId> {
-                    QueryTuple::<E>::get_type_ids(self)
-                }
-
-                fn is_empty_query(&self) -> bool {
-                    QueryTuple::<E>::is_empty_query(self)
-                }
-
-                fn multi_property_id(&self) -> Option<usize> {
-                    QueryTuple::<E>::multi_property_id(self)
-                }
-
-                fn multi_property_value_hash(&self) -> HashValueType {
-                    QueryTuple::<E>::multi_property_value_hash(self)
-                }
-
-                fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
-                    QueryTuple::<E>::new_query_result(self, context)
-                }
-
-                fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
-                    QueryTuple::<E>::new_query_result_iterator(self, context)
-                }
-
-                fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-                    QueryTuple::<E>::match_entity(self, entity_id, context)
-                }
-
-                fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
-                    QueryTuple::<E>::filter_entities(self, entities, context)
                 }
             }
         });

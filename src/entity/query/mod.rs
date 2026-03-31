@@ -105,7 +105,11 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
 /// actually takes an instance of [`Query`], but because
 /// we implement [`Query`] for entity-scoped constructors like `with!(Person, ...)`,
 /// that's largely invisible to the caller.
-/// to the caller. Do not use this trait directly.
+///
+/// Property-based queries must be constructed with `with!(Entity, ...)`. Raw tuples
+/// intentionally do not implement [`Query`].
+///
+/// Do not use this trait directly.
 pub trait Query<E: Entity>: Copy + 'static {
     /// Returns a list of `(type_id, hash)` pairs where `hash` is the hash of the property value
     /// and `type_id` is `Property.type_id()`.
@@ -705,43 +709,6 @@ mod tests {
         let query: EntityPropertyTuple<Person, _> = EntityPropertyTuple::new(());
 
         assert_eq!(context.query_entity_count(query), 2);
-    }
-
-    #[test]
-    fn legacy_tuple_queries_remain_supported() {
-        let mut context = Context::new();
-        let p1 = context
-            .add_entity(with!(Person, Age(42), RiskCategory::High))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::Low))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(30), RiskCategory::High))
-            .unwrap();
-
-        assert_eq!(context.query_entity_count((Age(42),)), 2);
-        assert_eq!(context.query_entity_count((Age(42), RiskCategory::High)), 1);
-        assert!(context.match_entity(p1, (Age(42), RiskCategory::High)));
-
-        context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
-            assert!(people.contains(p1));
-            assert_eq!(people.into_iter().count(), 1);
-        });
-    }
-
-    #[test]
-    fn legacy_empty_tuple_query_remains_supported() {
-        let mut context = Context::new();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::High))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(30), RiskCategory::Low))
-            .unwrap();
-
-        assert_eq!(context.query_entity_count::<Person, _>(()), 2);
-        assert_eq!(context.query_result_iterator::<Person, _>(()).count(), 2);
     }
 
     #[test]
