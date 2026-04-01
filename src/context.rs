@@ -20,8 +20,6 @@ use crate::execution_stats::{
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
-#[cfg(feature = "debugger")]
-use crate::{debugger::enter_debugger, plan::PlanSchedule};
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
 /// The common callback used by multiple [`Context`] methods for future events
@@ -88,15 +86,9 @@ pub struct Context {
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     pub(crate) entity_store: EntityStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
-    #[cfg(feature = "debugger")]
-    breakpoints_scheduled: Queue<Box<Callback>, ExecutionPhase>,
     current_time: Option<f64>,
     start_time: Option<f64>,
     shutdown_requested: bool,
-    #[cfg(feature = "debugger")]
-    break_requested: bool,
-    #[cfg(feature = "debugger")]
-    breakpoints_enabled: bool,
     execution_profiler: ExecutionProfilingCollector,
     pub(crate) print_execution_statistics: bool,
 }
@@ -116,15 +108,9 @@ impl Context {
             event_handlers: HashMap::new(),
             entity_store: EntityStore::new(),
             data_plugins,
-            #[cfg(feature = "debugger")]
-            breakpoints_scheduled: Queue::new(),
             current_time: None,
             start_time: None,
             shutdown_requested: false,
-            #[cfg(feature = "debugger")]
-            break_requested: false,
-            #[cfg(feature = "debugger")]
-            breakpoints_enabled: true,
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
         }
@@ -141,26 +127,6 @@ impl Context {
         self.entity_store
             .get_property_store_mut::<E>()
             .get_mut::<P>()
-    }
-
-    /// Schedule the simulation to pause at time t and start the debugger.
-    /// This will give you a REPL which allows you to inspect the state of
-    /// the simulation (type help to see a list of commands)
-    ///
-    /// # Errors
-    /// Internal debugger errors e.g., reading or writing to stdin/stdout;
-    /// errors in Ixa are printed to stdout
-    #[cfg(feature = "debugger")]
-    pub fn schedule_debugger(
-        &mut self,
-        time: f64,
-        priority: Option<ExecutionPhase>,
-        callback: Box<Callback>,
-    ) {
-        trace!("scheduling debugger");
-        let priority = priority.unwrap_or(ExecutionPhase::First);
-        self.breakpoints_scheduled
-            .add_plan(time, callback, priority);
     }
 
     /// Register to handle emission of events of type E
@@ -436,58 +402,6 @@ impl Context {
         self.start_time
     }
 
-    /// Request to enter a debugger session at next event loop
-    #[cfg(feature = "debugger")]
-    pub fn request_debugger(&mut self) {
-        self.break_requested = true;
-    }
-
-    /// Request to enter a debugger session at next event loop
-    #[cfg(feature = "debugger")]
-    pub fn cancel_debugger_request(&mut self) {
-        self.break_requested = false;
-    }
-
-    /// Disable breakpoints
-    #[cfg(feature = "debugger")]
-    pub fn disable_breakpoints(&mut self) {
-        self.breakpoints_enabled = false;
-    }
-
-    /// Enable breakpoints
-    #[cfg(feature = "debugger")]
-    pub fn enable_breakpoints(&mut self) {
-        self.breakpoints_enabled = true;
-    }
-
-    /// Returns `true` if breakpoints are enabled.
-    #[must_use]
-    #[cfg(feature = "debugger")]
-    pub fn breakpoints_are_enabled(&self) -> bool {
-        self.breakpoints_enabled
-    }
-
-    /// Delete the breakpoint with the given ID
-    #[cfg(feature = "debugger")]
-    pub fn delete_breakpoint(&mut self, breakpoint_id: u64) -> Option<Box<Callback>> {
-        self.breakpoints_scheduled
-            .cancel_plan(&PlanId(breakpoint_id))
-    }
-
-    /// Returns a list of length `at_most`, or unbounded if `at_most=0`, of active scheduled
-    /// `PlanSchedule`s ordered as they are in the queue itself.
-    #[must_use]
-    #[cfg(feature = "debugger")]
-    pub fn list_breakpoints(&self, at_most: usize) -> Vec<&PlanSchedule<ExecutionPhase>> {
-        self.breakpoints_scheduled.list_schedules(at_most)
-    }
-
-    /// Deletes all breakpoints.
-    #[cfg(feature = "debugger")]
-    pub fn clear_breakpoints(&mut self) {
-        self.breakpoints_scheduled.clear();
-    }
-
     /// Execute the simulation until the plan and callback queues are empty
     pub fn execute(&mut self) {
         trace!("entering event loop");
@@ -503,10 +417,7 @@ impl Context {
                 update_timeline_progress(self.get_current_time());
             }
 
-            #[cfg(feature = "debugger")]
-            if self.break_requested {
-                enter_debugger(self);
-            } else if self.shutdown_requested {
+            if self.shutdown_requested {
                 self.shutdown_requested = false;
                 break;
             } else {
@@ -514,14 +425,6 @@ impl Context {
             }
 
             self.execution_profiler.refresh();
-
-            #[cfg(not(feature = "debugger"))]
-            if self.shutdown_requested {
-                self.shutdown_requested = false;
-                break;
-            } else {
-                self.execute_single_step();
-            }
         }
 
         let stats = self.get_execution_statistics();
@@ -535,40 +438,10 @@ impl Context {
     }
 
     /// Executes a single step of the simulation, prioritizing tasks as follows:
-    ///   1. Breakpoints
-    ///   2. Callbacks
-    ///   3. Plans
-    ///   4. Shutdown
+    ///   1. Callbacks
+    ///   2. Plans
+    ///   3. Shutdown
     pub fn execute_single_step(&mut self) {
-        // This always runs the breakpoint before anything scheduled in the task queue regardless
-        // of the `ExecutionPhase` of the breakpoint. If breakpoints are disabled, they are still
-        // popped from the breakpoint queue at the time they are scheduled even though they are not
-        // executed.
-        #[cfg(feature = "debugger")]
-        if let Some((bp, _)) = self.breakpoints_scheduled.peek() {
-            // If the priority of bp is `ExecutionPhase::First`, and if the next scheduled plan
-            // is scheduled at or after bp's time (or doesn't exist), run bp.
-            // If the priority of bp is `ExecutionPhase::Last`, and if the next scheduled plan
-            // is scheduled strictly after bp's time (or doesn't exist), run bp.
-            if let Some(plan_time) = self.plan_queue.next_time() {
-                if (bp.priority == ExecutionPhase::First && bp.time <= plan_time)
-                    || (bp.priority == ExecutionPhase::Last && bp.time < plan_time)
-                {
-                    self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
-                    if self.breakpoints_enabled {
-                        self.break_requested = true;
-                        return;
-                    }
-                }
-            } else {
-                self.breakpoints_scheduled.get_next_plan(); // Pop the breakpoint
-                if self.breakpoints_enabled {
-                    self.break_requested = true;
-                    return;
-                }
-            }
-        }
-
         // If there is a callback, run it.
         if let Some(callback) = self.callback_queue.pop_front() {
             trace!("calling callback");

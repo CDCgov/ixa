@@ -10,7 +10,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-ixa = { path = "../../", features = ["logging", "debugger", "progress_bar", "profiling"] }
+ixa = { path = "../../", features = ["logging", "progress_bar", "profiling"] }
 clap.workspace = true
 
 [dev-dependencies]
@@ -28,8 +28,8 @@ path = "bin/runner_test_custom_args.rs"
 bench = false
 
 [[bin]]
-name = "runner_test_debug"
-path = "bin/runner_test_debug.rs"
+name = "runner_generic"
+path = "bin/runner_generic.rs"
 bench = false
 
 [[bin]]
