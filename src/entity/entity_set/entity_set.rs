@@ -11,6 +11,8 @@
 //!
 //! [`contains`]: EntitySet::contains
 
+use std::ops::Range;
+
 use super::{EntitySetIterator, SourceSet};
 use crate::entity::{Entity, EntityId};
 
@@ -49,7 +51,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Create an empty entity set.
     pub fn empty() -> Self {
-        EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(0..0)))
+        EntitySet(EntitySetInner::Source(SourceSet::empty_range()))
     }
 
     /// Create an entity set from a single source set.
@@ -85,6 +87,23 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         if self.structurally_eq(&other) {
             return self;
         }
+        if let (Some(left_range), Some(right_range)) =
+            (self.as_population_range(), other.as_population_range())
+        {
+            if let Some(range) = Self::merge_population_ranges(&left_range, &right_range) {
+                return Self::from_source(SourceSet::population_range(range));
+            }
+        }
+        if let Some(range) = self.as_population_range() {
+            if other.is_subset_of_range(&range) {
+                return self;
+            }
+        }
+        if let Some(range) = other.as_population_range() {
+            if self.is_subset_of_range(&range) {
+                return other;
+            }
+        }
         // Singleton absorption: {e} ∪ A = A if e ∈ A
         if let Some(e) = self.as_singleton() {
             if other.contains(e) {
@@ -114,6 +133,22 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         // Idempotence: A ∩ A = A
         if self.structurally_eq(&other) {
             return self;
+        }
+        if let (Some(left_range), Some(right_range)) =
+            (self.as_population_range(), other.as_population_range())
+        {
+            let range = Self::intersect_population_ranges(&left_range, &right_range);
+            return Self::from_source(SourceSet::population_range(range));
+        }
+        if let Some(range) = self.as_population_range() {
+            if other.is_subset_of_range(&range) {
+                return other;
+            }
+        }
+        if let Some(range) = other.as_population_range() {
+            if self.is_subset_of_range(&range) {
+                return self;
+            }
         }
         // Singleton restriction:
         // {e} ∩ A = {e} if e ∈ A, otherwise ∅
@@ -156,6 +191,18 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         // Self-subtraction: A \ A = ∅
         if self.structurally_eq(&other) {
             return Self::empty();
+        }
+        if let Some(range) = other.as_population_range() {
+            if self.is_subset_of_range(&range) {
+                return Self::empty();
+            }
+        }
+        if let (Some(left_range), Some(right_range)) =
+            (self.as_population_range(), other.as_population_range())
+        {
+            if let Some(range) = Self::difference_population_ranges(&left_range, &right_range) {
+                return Self::from_source(SourceSet::population_range(range));
+            }
         }
         // Singleton restriction:
         // {e} \ A = {e} if e ∉ A, otherwise ∅
@@ -201,27 +248,84 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         }
     }
 
+    fn as_source(&self) -> Option<&SourceSet<'a, E>> {
+        match self {
+            EntitySet(EntitySetInner::Source(source)) => Some(source),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if this set is the abstract empty set (`∅`).
     ///
     /// A return value of `false` does not guarantee the set is non-empty.
     /// For example, it may be an intersection of disjoint sets.
     fn is_empty(&self) -> bool {
-        matches!(
-            self,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range)))
-                if range.is_empty()
-        )
+        match self.as_source() {
+            Some(source) => source.is_empty(),
+            None => false,
+        }
     }
+
     /// Returns the contained entity id if this set is a singleton leaf.
     fn as_singleton(&self) -> Option<EntityId<E>> {
-        match self {
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range)))
-                if range.len() == 1 =>
-            {
-                Some(EntityId::new(range.start))
-            }
-            _ => None,
+        match self.as_source() {
+            Some(source) => source.as_singleton(),
+            None => None,
         }
+    }
+
+    fn as_population_range(&self) -> Option<Range<usize>> {
+        match self.as_source() {
+            Some(source) => source.as_population_range(),
+            None => None,
+        }
+    }
+
+    /// Conservative subset proof used to enable safe simplifications.
+    ///
+    /// False negatives are acceptable here; false positives are not.
+    fn is_subset_of_range(&self, range: &Range<usize>) -> bool {
+        match self {
+            EntitySet(EntitySetInner::Source(source)) => source.is_subset_of_range(range),
+            EntitySet(EntitySetInner::Union(left, right)) => {
+                left.is_subset_of_range(range) && right.is_subset_of_range(range)
+            }
+            EntitySet(EntitySetInner::Intersection(sets)) => {
+                sets.iter().any(|set| set.is_subset_of_range(range))
+            }
+            EntitySet(EntitySetInner::Difference(left, _)) => left.is_subset_of_range(range),
+        }
+    }
+
+    fn merge_population_ranges(left: &Range<usize>, right: &Range<usize>) -> Option<Range<usize>> {
+        if left.end < right.start || right.end < left.start {
+            None
+        } else {
+            Some(left.start.min(right.start)..left.end.max(right.end))
+        }
+    }
+
+    fn intersect_population_ranges(left: &Range<usize>, right: &Range<usize>) -> Range<usize> {
+        left.start.max(right.start)..left.end.min(right.end)
+    }
+
+    fn difference_population_ranges(
+        left: &Range<usize>,
+        right: &Range<usize>,
+    ) -> Option<Range<usize>> {
+        if right.end <= left.start || left.end <= right.start {
+            return Some(left.clone());
+        }
+        if right.start <= left.start && left.end <= right.end {
+            return Some(0..0);
+        }
+        if right.start <= left.start && right.end < left.end {
+            return Some(right.end..left.end);
+        }
+        if left.start < right.start && left.end <= right.end {
+            return Some(left.start..right.start);
+        }
+        None
     }
 
     fn sort_key(&self) -> (usize, u8) {
@@ -316,7 +420,7 @@ mod tests {
 
     #[test]
     fn from_source_empty_is_empty() {
-        let es = EntitySet::<Person>::from_source(SourceSet::PopulationRange(0..0));
+        let es = EntitySet::<Person>::from_source(SourceSet::empty_range());
         assert_eq!(es.sort_key().0, 0);
         for value in 0..10 {
             assert!(!es.contains(EntityId::<Person>::new(value)));
@@ -325,12 +429,12 @@ mod tests {
 
     #[test]
     fn from_source_entity_and_population() {
-        let entity = EntitySet::from_source(SourceSet::<Person>::PopulationRange(5..6));
+        let entity = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(5)));
         assert!(entity.contains(EntityId::<Person>::new(5)));
         assert!(!entity.contains(EntityId::<Person>::new(4)));
         assert_eq!(entity.sort_key().0, 1);
 
-        let population = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..3));
+        let population = EntitySet::from_source(SourceSet::<Person>::full_population(3));
         assert!(population.contains(EntityId::<Person>::new(0)));
         assert!(population.contains(EntityId::<Person>::new(2)));
         assert!(!population.contains(EntityId::<Person>::new(3)));
@@ -341,23 +445,30 @@ mod tests {
     fn union_algebraic_reductions() {
         let a = finite_set(&[1, 2, 3]);
         let e = EntitySet::<Person>::empty();
+        let u = EntitySet::from_source(SourceSet::<Person>::full_population(10));
 
         let a_union_empty = as_entity_set(&a).union(e);
         assert!(a_union_empty.contains(EntityId::<Person>::new(1)));
         assert!(!a_union_empty.contains(EntityId::<Person>::new(4)));
+
+        let u_union_a = u.union(as_entity_set(&a));
+        assert!(matches!(
+            u_union_a,
+            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (0..10)
+        ));
     }
 
     #[test]
     fn union_entity_absorption() {
         let a = finite_set(&[1, 2, 3]);
-        let absorbed = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
+        let absorbed = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(2)))
             .union(as_entity_set(&a));
         assert!(absorbed.contains(EntityId::<Person>::new(1)));
         assert!(absorbed.contains(EntityId::<Person>::new(2)));
         assert!(absorbed.contains(EntityId::<Person>::new(3)));
 
         let b = finite_set(&[1, 2, 3]);
-        let not_absorbed = EntitySet::from_source(SourceSet::<Person>::PopulationRange(8..9))
+        let not_absorbed = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(8)))
             .union(as_entity_set(&b));
         assert!(not_absorbed.contains(EntityId::<Person>::new(8)));
         assert!(not_absorbed.contains(EntityId::<Person>::new(1)));
@@ -365,8 +476,17 @@ mod tests {
 
     #[test]
     fn intersection_algebraic_reductions() {
+        let a = finite_set(&[1, 2, 3]);
+        let u = EntitySet::from_source(SourceSet::<Person>::full_population(10));
+
+        let a_inter_u = as_entity_set(&a).intersection(u);
+        assert!(matches!(
+            a_inter_u,
+            EntitySet(EntitySetInner::Source(SourceSet::IndexSet(_)))
+        ));
+
         let b = finite_set(&[1, 2, 3]);
-        let present = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
+        let present = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(2)))
             .intersection(as_entity_set(&b));
         assert!(matches!(
             present,
@@ -374,7 +494,7 @@ mod tests {
         ));
 
         let c = finite_set(&[1, 2, 3]);
-        let absent = EntitySet::from_source(SourceSet::<Person>::PopulationRange(7..8))
+        let absent = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(7)))
             .intersection(as_entity_set(&c));
         assert!(!absent.contains(EntityId::<Person>::new(7)));
     }
@@ -387,15 +507,70 @@ mod tests {
         assert!(minus_empty.contains(EntityId::<Person>::new(1)));
         assert!(!minus_empty.contains(EntityId::<Person>::new(9)));
 
+        let minus_universe =
+            as_entity_set(&a).difference(EntitySet::from_source(
+                SourceSet::<Person>::full_population(10),
+            ));
+        for value in 0..10 {
+            assert!(!minus_universe.contains(EntityId::<Person>::new(value)));
+        }
+
         let b = finite_set(&[1, 2, 3]);
-        let singleton_absent = EntitySet::from_source(SourceSet::<Person>::PopulationRange(8..9))
-            .difference(as_entity_set(&b));
+        let singleton_absent =
+            EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(8)))
+                .difference(as_entity_set(&b));
         assert!(singleton_absent.contains(EntityId::<Person>::new(8)));
 
         let c = finite_set(&[1, 2, 3]);
-        let singleton_present = EntitySet::from_source(SourceSet::<Person>::PopulationRange(2..3))
-            .difference(as_entity_set(&c));
+        let singleton_present =
+            EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(2)))
+                .difference(as_entity_set(&c));
         assert!(!singleton_present.contains(EntityId::<Person>::new(2)));
+    }
+
+    #[test]
+    fn interval_aware_simplifications() {
+        let overlapping_union = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::population_range(4..9),
+            ));
+        assert!(matches!(
+            overlapping_union,
+            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (2..9)
+        ));
+
+        let contiguous_union = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
+            .union(EntitySet::from_source(
+                SourceSet::<Person>::population_range(6..9),
+            ));
+        assert!(matches!(
+            contiguous_union,
+            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (2..9)
+        ));
+
+        let overlapping_intersection =
+            EntitySet::from_source(SourceSet::<Person>::population_range(2..6)).intersection(
+                EntitySet::from_source(SourceSet::<Person>::population_range(4..9)),
+            );
+        assert!(matches!(
+            overlapping_intersection,
+            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (4..6)
+        ));
+
+        let disjoint_intersection =
+            EntitySet::from_source(SourceSet::<Person>::population_range(2..6)).intersection(
+                EntitySet::from_source(SourceSet::<Person>::population_range(8..9)),
+            );
+        assert!(disjoint_intersection.is_empty());
+
+        let trimmed_difference =
+            EntitySet::from_source(SourceSet::<Person>::population_range(2..8)).difference(
+                EntitySet::from_source(SourceSet::<Person>::population_range(5..10)),
+            );
+        assert!(matches!(
+            trimmed_difference,
+            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (2..5)
+        ));
     }
 
     #[test]
@@ -456,20 +631,20 @@ mod tests {
 
     #[test]
     fn population_zero_is_empty() {
-        let es = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..0));
+        let es = EntitySet::from_source(SourceSet::<Person>::empty_range());
         assert_eq!(es.sort_key().0, 0);
         assert!(!es.contains(EntityId::<Person>::new(0)));
     }
 
     #[test]
     fn try_len_known_only_for_non_property_sources() {
-        let empty = EntitySet::<Person>::from_source(SourceSet::PopulationRange(0..0));
+        let empty = EntitySet::<Person>::from_source(SourceSet::empty_range());
         assert_eq!(empty.try_len(), Some(0));
 
-        let singleton = EntitySet::<Person>::from_source(SourceSet::PopulationRange(42..43));
+        let singleton = EntitySet::<Person>::from_source(SourceSet::singleton(EntityId::new(42)));
         assert_eq!(singleton.try_len(), Some(1));
 
-        let population = EntitySet::<Person>::from_source(SourceSet::PopulationRange(0..5));
+        let population = EntitySet::<Person>::from_source(SourceSet::full_population(5));
         assert_eq!(population.try_len(), Some(5));
 
         let index_data = [EntityId::new(1), EntityId::new(2), EntityId::new(3)]
@@ -485,8 +660,9 @@ mod tests {
         let property_set = EntitySet::<Person>::from_source(property_source);
         assert_eq!(property_set.try_len(), None);
 
-        let composed = EntitySet::<Person>::from_source(SourceSet::PopulationRange(0..3))
-            .difference(EntitySet::from_source(SourceSet::PopulationRange(1..2)));
+        let composed = EntitySet::<Person>::from_source(SourceSet::full_population(3)).difference(
+            EntitySet::from_source(SourceSet::singleton(EntityId::new(1))),
+        );
         assert_eq!(composed.try_len(), None);
     }
 }

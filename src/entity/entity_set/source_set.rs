@@ -37,12 +37,29 @@
 //!
 //! | Source kind                           | `cost_hint` |
 //! | ------------------------------------- | ----------- |
-//! | `SourceSet::PopulationRange(0..0)`    | `0`         |
-//! | `SourceSet::PopulationRange(i..i+1)`  | `1`         |
-//! | Other `SourceSet::PopulationRange`s   | `2`         |
+//! | `SourceSet::empty_range()`            | `0`         |
+//! | `SourceSet::singleton(entity_id)`     | `1`         |
+//! | Other `SourceSet::population_range`s  | `2`         |
 //! | `SourceSet::IndexSet`                 | `3`         |
 //! | `ConcretePropertySource`              | `5`         |
 //! | `DerivedPropertySource`               | `6`         |
+//!
+//! ## Design Invariants
+//!
+//! The range-based representation depends on a few cross-module invariants:
+//!
+//! - `PopulationIterator` retains its original meaning: it is a snapshot of the entire population
+//!   `0..population` at iterator creation time. Arbitrary contiguous subranges are represented by
+//!   `SourceSet::PopulationRange` and iterated internally by `SourceIterator::PopulationRange`.
+//! - Callers should construct population-backed sources through
+//!   `SourceSet::population_range()` / `empty_range()` / `full_population()` / `singleton()`
+//!   instead of directly building `SourceSet::PopulationRange`. `population_range()` canonicalizes
+//!   every logical empty set to `0..0`, which keeps empty-set comparisons and simplifications
+//!   stable.
+//! - Range subset checks are intentionally conservative. `SourceSet::is_subset_of_range()` and
+//!   `EntitySet::is_subset_of_range()` are allowed to return false negatives, but never false
+//!   positives. In particular, property-backed sources only prove subset against
+//!   `0..entity_id_upper_bound()`, not arbitrary offset ranges.
 
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -50,7 +67,7 @@ use std::ops::Range;
 use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, PopulationIterator};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::hashing::{HashValueType, IndexSet};
 use crate::prelude::Property;
 use crate::Context;
@@ -78,6 +95,9 @@ pub(crate) trait AbstractPropertySource<'a, E: Entity>:
 
     /// Ordering key used for source selection.
     fn sort_key(&self) -> (usize, u8);
+
+    /// An exclusive upper bound on entity IDs that may be produced by this source.
+    fn entity_id_upper_bound(&self) -> usize;
 }
 
 /// To iterate over the values of an unindexed derived property,
@@ -128,6 +148,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
 
     fn sort_key(&self) -> (usize, u8) {
         (self.context.get_entity_count::<E>(), 6)
+    }
+
+    fn entity_id_upper_bound(&self) -> usize {
+        self.population_size
     }
 }
 
@@ -220,6 +244,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
         };
         (upper, 5)
     }
+
+    fn entity_id_upper_bound(&self) -> usize {
+        self.population_size
+    }
 }
 
 impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P> {
@@ -262,7 +290,9 @@ pub(crate) enum SourceSet<'a, E: Entity> {
 impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::PopulationRange(left), Self::PopulationRange(right)) => left == right,
+            (Self::PopulationRange(left), Self::PopulationRange(right)) => {
+                left == right || (left.is_empty() && right.is_empty())
+            }
             (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
             (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
             _ => false,
@@ -273,6 +303,66 @@ impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
 impl<'a, E: Entity> Eq for SourceSet<'a, E> {}
 
 impl<'a, E: Entity> SourceSet<'a, E> {
+    /// Construct a population-backed source, canonicalizing all logical empty ranges to `0..0`.
+    pub(crate) fn population_range(range: Range<usize>) -> Self {
+        if range.is_empty() {
+            Self::PopulationRange(0..0)
+        } else {
+            Self::PopulationRange(range)
+        }
+    }
+
+    pub(crate) fn empty_range() -> Self {
+        Self::population_range(0..0)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn singleton(entity_id: EntityId<E>) -> Self {
+        Self::population_range(entity_id.0..entity_id.0 + 1)
+    }
+
+    pub(crate) fn full_population(population: usize) -> Self {
+        Self::population_range(0..population)
+    }
+
+    pub(super) fn as_population_range(&self) -> Option<Range<usize>> {
+        match self {
+            SourceSet::PopulationRange(range) => Some(range.clone()),
+            _ => None,
+        }
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        matches!(self, SourceSet::PopulationRange(range) if range.is_empty())
+    }
+
+    pub(super) fn as_singleton(&self) -> Option<EntityId<E>> {
+        match self {
+            SourceSet::PopulationRange(range) if range.len() == 1 => {
+                Some(EntityId::new(range.start))
+            }
+            _ => None,
+        }
+    }
+
+    /// Conservative subset proof used only for simplification.
+    ///
+    /// Returning `false` does not imply the source is not a subset. The important invariant is
+    /// that this method never returns `true` unless the subset relation is guaranteed.
+    pub(super) fn is_subset_of_range(&self, range: &Range<usize>) -> bool {
+        match self {
+            SourceSet::PopulationRange(source_range) => {
+                source_range.start >= range.start && source_range.end <= range.end
+            }
+            SourceSet::IndexSet(source) => {
+                source.iter().all(|entity_id| range.contains(&entity_id.0))
+            }
+            SourceSet::PropertySet(source) => {
+                range.start == 0 && source.entity_id_upper_bound() <= range.end
+            }
+        }
+    }
+
     pub(super) fn try_len(&self) -> Option<usize> {
         match self {
             SourceSet::PopulationRange(range) => Some(range.len()),
@@ -353,10 +443,9 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn into_iter(self) -> SourceIterator<'a, E> {
         match self {
-            SourceSet::PopulationRange(range) => SourceIterator::Population {
-                range: range.clone(),
-                iter: PopulationIterator::from_range(range),
-            },
+            SourceSet::PopulationRange(range) => SourceIterator::PopulationRange(
+                super::source_iterator::EntityIdRangeIterator::new(range),
+            ),
             SourceSet::IndexSet(ids) => {
                 SourceIterator::IndexIter(IndexSetIterator::from_index_set(ids))
             }
@@ -377,16 +466,16 @@ mod tests {
 
     #[test]
     fn source_set_variants_basic_behavior() {
-        let empty = SourceSet::<Person>::PopulationRange(0..0);
+        let empty = SourceSet::<Person>::empty_range();
         assert_eq!(empty.sort_key(), (0, 0));
         assert!(!empty.contains(EntityId::new(0)));
         assert_eq!(empty.into_iter().count(), 0);
 
-        let population = SourceSet::<Person>::PopulationRange(0..3);
+        let population = SourceSet::<Person>::full_population(3);
         assert_eq!(population.sort_key(), (3, 2));
         assert!(population.contains(EntityId::new(0)));
         assert!(!population.contains(EntityId::new(3)));
-        let population_ids = SourceSet::<Person>::PopulationRange(0..3)
+        let population_ids = SourceSet::<Person>::full_population(3)
             .into_iter()
             .collect::<Vec<_>>();
         assert_eq!(
@@ -394,11 +483,11 @@ mod tests {
             vec![EntityId::new(0), EntityId::new(1), EntityId::new(2)]
         );
 
-        let singleton = SourceSet::<Person>::PopulationRange(9..10);
+        let singleton = SourceSet::<Person>::singleton(EntityId::new(9));
         assert_eq!(singleton.sort_key(), (1, 1));
         assert!(singleton.contains(EntityId::new(9)));
         assert!(!singleton.contains(EntityId::new(8)));
-        let singleton_ids = SourceSet::<Person>::PopulationRange(9..10)
+        let singleton_ids = SourceSet::<Person>::singleton(EntityId::new(9))
             .into_iter()
             .collect::<Vec<_>>();
         assert_eq!(singleton_ids, vec![EntityId::new(9)]);
@@ -411,6 +500,19 @@ mod tests {
         assert_eq!(indexed.sort_key(), (3, 3));
         assert!(indexed.contains(EntityId::new(4)));
         assert!(!indexed.contains(EntityId::new(2)));
+    }
+
+    #[test]
+    fn source_set_population_range_helpers_and_subset_checks() {
+        assert!(SourceSet::<Person>::population_range(4..4) == SourceSet::<Person>::empty_range());
+
+        let range = SourceSet::<Person>::population_range(2..7);
+        assert_eq!(range.try_len(), Some(5));
+        assert!(range.contains(EntityId::new(2)));
+        assert!(range.contains(EntityId::new(6)));
+        assert!(!range.contains(EntityId::new(7)));
+        assert!(range.is_subset_of_range(&(0..10)));
+        assert!(!range.is_subset_of_range(&(3..10)));
     }
 
     #[test]

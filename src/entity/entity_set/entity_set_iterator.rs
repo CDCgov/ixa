@@ -231,10 +231,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
 
     pub(crate) fn from_population_iterator(iter: PopulationIterator<E>) -> Self {
         EntitySetIterator {
-            inner: EntitySetIteratorInner::Source(SourceIterator::Population {
-                range: iter.range(),
-                iter,
-            }),
+            inner: EntitySetIteratorInner::Source(SourceIterator::Population(iter)),
         }
     }
 
@@ -452,7 +449,9 @@ mod tests {
 
     use indexmap::IndexSet;
 
+    use super::EntitySetIterator;
     use crate::entity::entity_set::{EntitySet, SourceSet};
+    use crate::entity::PopulationIterator;
     use crate::hashing::IndexSet as FxIndexSet;
     use crate::prelude::*;
     use crate::{define_derived_property, define_property};
@@ -1031,7 +1030,7 @@ mod tests {
     }
 
     #[test]
-    fn test_union_size_hint_pending_right_is_unknown() {
+    fn test_union_size_hint_is_exact_after_range_simplification() {
         let left = EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..2)).difference(
             EntitySet::from_source(SourceSet::<Person>::PopulationRange(99..100)),
         );
@@ -1040,17 +1039,42 @@ mod tests {
         );
         let iter = left.union(right).into_iter();
 
-        assert_eq!(iter.size_hint(), (0, None));
+        assert_eq!(iter.size_hint(), (4, Some(4)));
     }
 
     #[test]
     fn test_nth_and_count_on_source() {
-        let mut iter =
-            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).into_iter();
+        let mut iter = EntitySet::from_source(SourceSet::<Person>::full_population(5)).into_iter();
         assert_eq!(iter.nth(2), Some(EntityId::new(2)));
 
         let remaining = iter.count();
         assert_eq!(remaining, 2);
+    }
+
+    #[test]
+    fn from_population_iterator_keeps_original_membership_after_partial_consumption() {
+        let mut population_iter = PopulationIterator::<Person>::new(7);
+        assert_eq!(population_iter.next(), Some(EntityId::new(0)));
+        assert_eq!(population_iter.next(), Some(EntityId::new(1)));
+
+        let iter = EntitySetIterator::from_population_iterator(population_iter);
+        let collected = iter.collect::<Vec<_>>();
+        assert_eq!(
+            collected,
+            vec![
+                EntityId::new(2),
+                EntityId::new(3),
+                EntityId::new(4),
+                EntityId::new(5),
+                EntityId::new(6),
+            ]
+        );
+
+        let mut check_iter = EntitySetIterator::from_population_iterator(population_iter);
+        assert_eq!(check_iter.next(), Some(EntityId::new(2)));
+        assert!(check_iter.inner.contains(EntityId::new(0)));
+        assert!(check_iter.inner.contains(EntityId::new(6)));
+        assert!(!check_iter.inner.contains(EntityId::new(7)));
     }
 
     fn finite_set(ids: &[usize]) -> FxIndexSet<EntityId<Person>> {
@@ -1149,8 +1173,7 @@ mod tests {
 
     #[test]
     fn prototype_size_hint_single_source_and_partial_consume() {
-        let mut iter =
-            EntitySet::from_source(SourceSet::<Person>::PopulationRange(0..5)).into_iter();
+        let mut iter = EntitySet::from_source(SourceSet::<Person>::full_population(5)).into_iter();
         assert_eq!(iter.size_hint(), (5, Some(5)));
         iter.next();
         assert_eq!(iter.size_hint(), (4, Some(4)));

@@ -22,7 +22,6 @@ use std::any::{Any, TypeId};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
@@ -123,15 +122,17 @@ pub trait Entity: Any + Default {
 
 pub type BxEntity = Box<dyn Entity>;
 
-/// An iterator over a contiguous range of `EntityId<E>`s at the time of iterator creation.
+/// An iterator over the total population of `EntityId<E>`s at the time of iterator creation.
 ///
-/// `PopulationIterator::new(population)` iterates `0..population`. If entities are added
-/// _after_ this iterator has been created, this iterator will _not_ produce the
-/// `EntityId<E>`s of the newly added entities.
-#[derive(Clone)]
+/// If entities are added _after_ this iterator has been created, this iterator will _not_ produce the `EntityId<E>`s
+/// of the newly added entities.
+#[derive(Copy, Clone)]
 pub struct PopulationIterator<E: Entity> {
-    /// The remaining contiguous range of `EntityId<E>` indices.
-    range: Range<usize>,
+    /// The total count of all entities of this type at the time this iterator was created
+    population: usize,
+    /// The next `EntityId<E>` this iterator will produce (assuming `entity_id < population`)
+    entity_id: usize,
+
     _phantom: PhantomData<E>,
 }
 
@@ -139,19 +140,16 @@ impl<E: Entity> PopulationIterator<E> {
     // Only internal ixa code can create a new `PopulationIterator<E>` in order to guarantee only valid
     // `EntityId<E>` values are ever created.
     pub(crate) fn new(population: usize) -> Self {
-        Self::from_range(0..population)
-    }
-
-    pub(crate) fn from_range(range: Range<usize>) -> Self {
         PopulationIterator::<E> {
-            range,
+            population,
+            entity_id: 0,
             _phantom: PhantomData,
         }
     }
 
     #[must_use]
-    pub(crate) fn range(&self) -> Range<usize> {
-        self.range.clone()
+    pub(crate) fn population(&self) -> usize {
+        self.population
     }
 }
 
@@ -159,28 +157,39 @@ impl<E: Entity> Iterator for PopulationIterator<E> {
     type Item = EntityId<E>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.range.next().map(EntityId::new)
+        if self.entity_id < self.population {
+            let current_id = self.entity_id;
+            // `self.entity_id` saturates to `self.population`.
+            self.entity_id += 1;
+            Some(EntityId::new(current_id))
+        } else {
+            None
+        }
     }
 
     // This iterator knows how many elements it will iterate over.
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.range.size_hint()
+        let remaining = self.len();
+        (remaining, Some(remaining))
     }
 
     // Fast consuming count
     fn count(self) -> usize {
-        self.range.count()
+        self.len()
     }
 
     // Fast "seeking" operation.
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.range.nth(n).map(EntityId::new)
+        // `self.entity_id` saturates to `self.population`.
+        self.entity_id = (self.entity_id + n).min(self.population);
+        self.next()
     }
 }
 
 impl<E: Entity> ExactSizeIterator for PopulationIterator<E> {
     fn len(&self) -> usize {
-        self.range.len()
+        // Safety: Since `self.entity_id` saturates to `self.population`, we do not need `saturating_sub` here.
+        self.population - self.entity_id
     }
 }
 // Once `PopulationIterator<E>` returns `None`, it will always return `None`.
@@ -251,7 +260,7 @@ mod tests {
         let mut iter = PopulationIterator::<DummyEntity>::new(5);
         iter.next();
 
-        let mut cloned = iter.clone();
+        let mut cloned = iter;
         assert_eq!(iter.next(), cloned.next());
         assert_eq!(iter.size_hint(), cloned.size_hint());
     }
