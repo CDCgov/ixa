@@ -106,8 +106,15 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
 /// we implement [`Query`] for entity-scoped constructors like `with!(Person, ...)`,
 /// that's largely invisible to the caller.
 ///
-/// Property-based queries must be constructed with `with!(Entity, ...)`. Raw tuples
-/// intentionally do not implement [`Query`].
+/// Breaking change: property-based queries must be constructed with
+/// `with!(Entity, ...)`. Raw tuples intentionally do not implement [`Query`].
+///
+/// Migration examples:
+/// - `context.query_entity_count((Age(42),))`
+///   becomes `context.query_entity_count(with!(Person, Age(42)))`
+/// - `context.with_query_results((Age(42), RiskCategory::High), ...)`
+///   becomes `context.with_query_results(with!(Person, Age(42), RiskCategory::High), ...)`
+/// - whole-population queries use `Person` or `with!(Person)` instead of `()`
 ///
 /// Do not use this trait directly.
 pub trait Query<E: Entity>: Copy + 'static {

@@ -12,7 +12,12 @@
 ///
 /// // A query matching multiple properties
 /// let query = with!(Person, Age(12), RiskCategory::High);
-/// let count = context.count_entities(query);
+/// let count = context.query_entity_count(query);
+///
+/// // `with!` is also the replacement for raw tuple queries.
+/// // Old: context.query_entity_count((Age(12), RiskCategory::High));
+/// // New:
+/// let count = context.query_entity_count(with!(Person, Age(12), RiskCategory::High));
 /// ```
 #[macro_export]
 macro_rules! with {

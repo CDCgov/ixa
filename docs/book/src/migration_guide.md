@@ -160,6 +160,31 @@ Adding a new entity with just one property value:
 let person_id = context.add_entity(with!(Person, Age(25))).unwrap();
 ```
 
+### Query syntax
+
+Property-based queries are now entity-scoped. Raw tuples such as
+`(Age(25),)` and `(Age(25), InfectionStatus::Infected)` no longer implement
+the public query API.
+
+Use `with!(Entity, ...)` instead:
+
+```rust
+let count = context.query_entity_count(with!(Person, Age(25), InfectionStatus::Infected));
+
+context.with_query_results(with!(Person, Age(25)), &mut |people| {
+    let _ = people;
+});
+
+let sampled = context.sample_entity(MyRng, with!(Person, Age(25)));
+```
+
+For whole-population queries, use the entity type itself or `with!(Entity)`:
+
+```rust
+let any_person = context.sample_entity(MyRng, Person);
+let everyone = context.query_entity_count(with!(Person));
+```
+
 ### Getting a property value for an entity
 
 ```rust
