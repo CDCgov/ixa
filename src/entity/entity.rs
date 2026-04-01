@@ -80,6 +80,18 @@ impl<E: Entity> EntityId<E> {
     pub(crate) fn new(index: usize) -> Self {
         Self(index, PhantomData)
     }
+
+    /// Create an EntityId from a raw index. Useful for storing entity IDs
+    /// in array properties or for sentinel values.
+    /// The caller must ensure the index corresponds to a valid entity
+    /// (or is used as a sentinel like `usize::MAX`).
+    pub const fn from_raw(index: usize) -> Self {
+        Self(index, PhantomData)
+    }
+
+    pub const fn as_raw(&self) -> usize {
+        self.0
+    }
 }
 
 /// All entities must implement this trait using the `define_entity!` macro.
