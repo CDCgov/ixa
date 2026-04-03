@@ -76,6 +76,8 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::NonZero;
 
+use serde::{Deserialize, Serialize};
+
 use crate::errors::FIPSError;
 use crate::states::USState;
 use crate::{
@@ -87,7 +89,10 @@ use crate::{
 /// Encodes a hierarchical FIPS geographic region code in 64 bits. Excludes the nonhierarchical codes places,
 /// congressional or state legislative districts, and ZIP code tabulation areas. (See the
 /// [module level documentation](`crate::fips_code`).)
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+///
+/// Serde serializes this type transparently as its packed `u64` representation.
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct FIPSCode(NonZero<u64>);
 
 impl FIPSCode {
