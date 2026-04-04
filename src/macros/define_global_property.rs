@@ -46,6 +46,6 @@ macro_rules! define_global_property {
     };
 
     ($global_property: ident, $value: ty) => {
-        define_global_property!($global_property, $value, |_| { Ok(()) });
+        $crate::define_global_property!($global_property, $value, |_| { Ok(()) });
     };
 }
