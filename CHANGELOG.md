@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2.1](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2...ixa-v2.0.0-beta2.1) - 2026-04-06
+
+### Added
+
+- `smallvec` and `smallbox` optimization in `set_property` ([#835](https://github.com/CDCgov/ixa/pull/835))
+
+### Other
+
+- remove debugger ([#828](https://github.com/CDCgov/ixa/pull/828))
+- bump actions/deploy-pages from 4 to 5 ([#830](https://github.com/CDCgov/ixa/pull/830))
+- bump actions/configure-pages from 5 to 6 ([#831](https://github.com/CDCgov/ixa/pull/831))
+
 ## [2.0.0-beta2](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta1.1...ixa-v2.0.0-beta2) - 2026-03-23
 
 ### Added
