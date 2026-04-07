@@ -25,6 +25,23 @@ pub(super) enum EntitySetInner<'a, E: Entity> {
     Difference(Box<EntitySet<'a, E>>, Box<EntitySet<'a, E>>),
 }
 
+impl<'a, E: Entity> Clone for EntitySet<'a, E> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<'a, E: Entity> Clone for EntitySetInner<'a, E> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Source(source) => Self::Source(source.clone()),
+            Self::Union(left, right) => Self::Union(left.clone(), right.clone()),
+            Self::Intersection(sets) => Self::Intersection(sets.clone()),
+            Self::Difference(left, right) => Self::Difference(left.clone(), right.clone()),
+        }
+    }
+}
+
 impl<'a, E: Entity> Default for EntitySet<'a, E> {
     fn default() -> Self {
         Self::empty()
@@ -315,10 +332,11 @@ mod tests {
     use super::*;
     use crate::entity::ContextEntitiesExt;
     use crate::hashing::IndexSet;
-    use crate::{define_entity, define_property, Context};
+    use crate::{define_derived_property, define_entity, define_property, Context};
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person);
+    define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
 
     fn finite_set(ids: &[usize]) -> IndexSet<EntityId<Person>> {
         ids.iter()
@@ -501,6 +519,28 @@ mod tests {
     }
 
     #[test]
+    fn clone_preserves_composite_expression_behavior() {
+        let a = finite_set(&[1, 2, 3, 4]);
+        let b = finite_set(&[3, 4, 5]);
+        let c = finite_set(&[2]);
+
+        let set = as_entity_set(&a)
+            .difference(as_entity_set(&c))
+            .union(as_entity_set(&b));
+        let cloned = set.clone();
+
+        for value in 0..7 {
+            let entity_id = EntityId::<Person>::new(value);
+            assert_eq!(set.contains(entity_id), cloned.contains(entity_id));
+        }
+
+        assert_eq!(
+            set.into_iter().collect::<Vec<_>>(),
+            cloned.into_iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn population_zero_is_empty() {
         let es = EntitySet::from_source(SourceSet::<Person>::Population(0));
         assert_eq!(es.sort_key().0, 0);
@@ -534,5 +574,42 @@ mod tests {
         let composed = EntitySet::<Person>::from_source(SourceSet::Population(3))
             .difference(EntitySet::from_source(SourceSet::Entity(EntityId::new(1))));
         assert_eq!(composed.try_len(), None);
+    }
+
+    #[test]
+    fn clone_preserves_unindexed_concrete_property_query_results() {
+        let mut context = Context::new();
+        let p1 = context.add_entity((Age(10),)).unwrap();
+        let p2 = context.add_entity((Age(10),)).unwrap();
+        let _p3 = context.add_entity((Age(11),)).unwrap();
+
+        let set = context.query::<Person, _>((Age(10),));
+        assert_eq!(set.try_len(), None);
+        let cloned = set.clone();
+
+        let mut iter = set.into_iter();
+        assert_eq!(iter.next(), Some(p1));
+        assert_eq!(iter.collect::<Vec<_>>(), vec![p2]);
+
+        assert!(cloned.contains(p1));
+        assert!(cloned.contains(p2));
+        assert_eq!(cloned.into_iter().collect::<Vec<_>>(), vec![p1, p2]);
+    }
+
+    #[test]
+    fn clone_preserves_unindexed_derived_property_query_results() {
+        let mut context = Context::new();
+        let _p1 = context.add_entity((Age(64),)).unwrap();
+        let p2 = context.add_entity((Age(65),)).unwrap();
+        let p3 = context.add_entity((Age(90),)).unwrap();
+
+        let set = context.query::<Person, _>((Senior(true),));
+        assert_eq!(set.try_len(), None);
+        let cloned = set.clone();
+
+        assert!(set.contains(p2));
+        assert!(set.contains(p3));
+        assert_eq!(set.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
+        assert_eq!(cloned.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
     }
 }
