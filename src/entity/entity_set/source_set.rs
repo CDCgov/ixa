@@ -20,9 +20,10 @@
 //! `AbstractPropertySource` API and `Iterator`.
 //!
 //! `EntitySetIterator<'c>` uses `SourceSet<'c>` and `SourceIterator<'c>` to
-//! evaluate intersections. Sources may be contiguous population ranges,
-//! index-backed, or property-backed. The iterator chooses the smallest source as
-//! the driver and checks candidate IDs against remaining sources.
+//! evaluate intersections. Sources may be whole-population snapshots,
+//! contiguous population ranges, index-backed, or property-backed. The
+//! iterator chooses the smallest source as the driver and checks candidate IDs
+//! against remaining sources.
 //!
 //! ## Source ordering and `cost_hint`
 //!
@@ -39,6 +40,7 @@
 //! | ------------------------------------- | ----------- |
 //! | `SourceSet::empty_range()`            | `0`         |
 //! | `SourceSet::singleton(entity_id)`     | `1`         |
+//! | `SourceSet::full_population(n)`       | `2`         |
 //! | Other `SourceSet::population_range`s  | `2`         |
 //! | `SourceSet::IndexSet`                 | `3`         |
 //! | `ConcretePropertySource`              | `5`         |
@@ -49,7 +51,8 @@
 //! The range-based representation depends on a few cross-module invariants:
 //!
 //! - `PopulationIterator` retains its original meaning: it is a snapshot of the entire population
-//!   `0..population` at iterator creation time. Arbitrary contiguous subranges are represented by
+//!   `0..population` at iterator creation time. Whole-population snapshots are represented by
+//!   `SourceSet::FullPopulation`, while arbitrary contiguous subranges are represented by
 //!   `SourceSet::PopulationRange` and iterated internally by `SourceIterator::PopulationRange`.
 //! - Callers should construct population-backed sources through
 //!   `SourceSet::population_range()` / `empty_range()` / `full_population()` / `singleton()`
@@ -67,7 +70,7 @@ use std::ops::Range;
 use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, PopulationIterator};
 use crate::hashing::{HashValueType, IndexSet};
 use crate::prelude::Property;
 use crate::Context;
@@ -282,6 +285,7 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
 
 /// Represents the set of `EntityId<E>`s for which a particular `Property` has a particular value.
 pub(crate) enum SourceSet<'a, E: Entity> {
+    FullPopulation(usize),
     PopulationRange(Range<usize>),
     IndexSet(&'a IndexSet<EntityId<E>>),
     PropertySet(BxPropertySource<'a, E>),
@@ -290,6 +294,9 @@ pub(crate) enum SourceSet<'a, E: Entity> {
 impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::FullPopulation(left), Self::FullPopulation(right)) => left == right,
+            (Self::FullPopulation(0), Self::PopulationRange(right))
+            | (Self::PopulationRange(right), Self::FullPopulation(0)) => right.is_empty(),
             (Self::PopulationRange(left), Self::PopulationRange(right)) => {
                 left == right || (left.is_empty() && right.is_empty())
             }
@@ -322,7 +329,15 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     }
 
     pub(crate) fn full_population(population: usize) -> Self {
-        Self::population_range(0..population)
+        if population == 0 {
+            Self::empty_range()
+        } else {
+            Self::FullPopulation(population)
+        }
+    }
+
+    pub(super) fn is_full_population(&self) -> bool {
+        matches!(self, SourceSet::FullPopulation(population) if *population > 0)
     }
 
     pub(super) fn as_population_range(&self) -> Option<Range<usize>> {
@@ -334,6 +349,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn is_empty(&self) -> bool {
         matches!(self, SourceSet::PopulationRange(range) if range.is_empty())
+            || matches!(self, SourceSet::FullPopulation(0))
     }
 
     pub(super) fn as_singleton(&self) -> Option<EntityId<E>> {
@@ -351,6 +367,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// that this method never returns `true` unless the subset relation is guaranteed.
     pub(super) fn is_subset_of_range(&self, range: &Range<usize>) -> bool {
         match self {
+            SourceSet::FullPopulation(population) => range.start == 0 && *population <= range.end,
             SourceSet::PopulationRange(source_range) => {
                 source_range.start >= range.start && source_range.end <= range.end
             }
@@ -365,6 +382,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn try_len(&self) -> Option<usize> {
         match self {
+            SourceSet::FullPopulation(population) => Some(*population),
             SourceSet::PopulationRange(range) => Some(range.len()),
             SourceSet::IndexSet(source) => Some(source.len()),
             SourceSet::PropertySet(_) => None,
@@ -374,6 +392,8 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     /// Ordering key used for source selection.
     pub(super) fn sort_key(&self) -> (usize, u8) {
         match self {
+            SourceSet::FullPopulation(0) => (0, 0),
+            SourceSet::FullPopulation(population) => (*population, 2),
             SourceSet::PopulationRange(range) => match range.len() {
                 0 => (0, 0),
                 1 => (1, 1),
@@ -435,6 +455,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn contains(&self, id: EntityId<E>) -> bool {
         match self {
+            SourceSet::FullPopulation(population) => id.0 < *population,
             SourceSet::PopulationRange(range) => range.contains(&id.0),
             SourceSet::IndexSet(source) => source.contains(&id),
             SourceSet::PropertySet(source) => source.contains(id),
@@ -443,6 +464,9 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
     pub(super) fn into_iter(self) -> SourceIterator<'a, E> {
         match self {
+            SourceSet::FullPopulation(population) => {
+                SourceIterator::Population(PopulationIterator::new(population))
+            }
             SourceSet::PopulationRange(range) => SourceIterator::PopulationRange(
                 super::source_iterator::EntityIdRangeIterator::new(range),
             ),
@@ -500,6 +524,19 @@ mod tests {
         assert_eq!(indexed.sort_key(), (3, 3));
         assert!(indexed.contains(EntityId::new(4)));
         assert!(!indexed.contains(EntityId::new(2)));
+    }
+
+    #[test]
+    fn direct_full_population_zero_behaves_like_empty() {
+        let invalid = SourceSet::<Person>::FullPopulation(0);
+        let canonical_empty = SourceSet::<Person>::empty_range();
+
+        assert!(invalid.is_empty());
+        assert!(!invalid.is_full_population());
+        assert_eq!(invalid.try_len(), Some(0));
+        assert_eq!(invalid.sort_key(), (0, 0));
+        assert!(invalid == canonical_empty);
+        assert_eq!(invalid.into_iter().count(), 0);
     }
 
     #[test]

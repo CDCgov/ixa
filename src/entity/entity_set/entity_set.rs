@@ -87,6 +87,13 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         if self.structurally_eq(&other) {
             return self;
         }
+        // Universal absorption: U ∪ A = U, A ∪ U = U
+        if self.is_universal() {
+            return self;
+        }
+        if other.is_universal() {
+            return other;
+        }
         if let (Some(left_range), Some(right_range)) =
             (self.as_population_range(), other.as_population_range())
         {
@@ -132,6 +139,13 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         }
         // Idempotence: A ∩ A = A
         if self.structurally_eq(&other) {
+            return self;
+        }
+        // Identity: U ∩ A = A
+        if self.is_universal() {
+            return other;
+        }
+        if other.is_universal() {
             return self;
         }
         if let (Some(left_range), Some(right_range)) =
@@ -190,6 +204,10 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         }
         // Self-subtraction: A \ A = ∅
         if self.structurally_eq(&other) {
+            return Self::empty();
+        }
+        // Universal subtraction: A \ U = ∅
+        if other.is_universal() {
             return Self::empty();
         }
         if let Some(range) = other.as_population_range() {
@@ -262,6 +280,14 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     fn is_empty(&self) -> bool {
         match self.as_source() {
             Some(source) => source.is_empty(),
+            None => false,
+        }
+    }
+
+    /// Returns `true` if this set represents the entire entity population snapshot.
+    fn is_universal(&self) -> bool {
+        match self.as_source() {
+            Some(source) => source.is_full_population(),
             None => false,
         }
     }
@@ -454,7 +480,7 @@ mod tests {
         let u_union_a = u.union(as_entity_set(&a));
         assert!(matches!(
             u_union_a,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) if range == (0..10)
+            EntitySet(EntitySetInner::Source(SourceSet::FullPopulation(10)))
         ));
     }
 

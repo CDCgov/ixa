@@ -1,8 +1,8 @@
 //! Iterator implementation for [`EntitySet`].
 //!
 //! `EntitySetIterator` mirrors an `EntitySet` expression tree and evaluates nodes lazily.
-//! - `Source` iterates a concrete backing source (contiguous population range,
-//!   index set, or property-backed source).
+//! - `Source` iterates a concrete backing source (whole-population snapshot,
+//!   contiguous population range, index set, or property-backed source).
 //! - `Intersection` and `Difference` drive iteration from one branch and filter candidates using
 //!   membership checks.
 //! - `Union` yields the left branch first, then lazily activates the right branch (`Pending` to
