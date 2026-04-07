@@ -10,7 +10,7 @@
 //! - Computed statistics – define custom, derived metrics over collected data.
 //! - A default computed statistic, infection forecasting efficiency.
 //!
-//! Feature flag: all functionality is gated behind the `profiling` feature (enabled by default).
+//! Feature flag: all functionality is gated behind the `profiling` feature (disabled by default).
 //! When the feature is disabled, the public API remains available but becomes a no-op and gets
 //! optimized away by the compiler, so you can leave profiling calls in your code at zero cost.
 //!
@@ -173,7 +173,7 @@ pub use reporting::*;
 
 use crate::{error, Context, ContextReportExt};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "profiling"))]
 /// Publicly expose access to profiling data only for testing.
 pub fn get_profiling_data() -> std::sync::MutexGuard<'static, ProfilingData> {
     profiling_data()

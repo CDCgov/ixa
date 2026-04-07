@@ -31,7 +31,7 @@
 //!
 //! - **`logging`**: enables structured logging for native and wasm targets.
 //! - **`progress_bar`**: enables the timeline progress bar for long-running simulations.
-//! - **`profiling`**: enables collection and reporting of execution profiling statistics.
+//! - **`profiling`**: enables collection and reporting of execution profiling statistics. Disabled by default.
 
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 

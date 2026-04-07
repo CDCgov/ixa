@@ -51,7 +51,7 @@ pub trait ProfilingContextExt: ContextReportExt {
 }
 impl ProfilingContextExt for Context {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "profiling"))]
 mod tests {
     use std::fs;
     use std::time::Duration;

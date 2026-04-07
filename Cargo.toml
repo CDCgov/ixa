@@ -77,7 +77,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging", "progress_bar", "profiling"]
+default = ["logging", "progress_bar"]
 
 logging = ["log4rs", "fern", "wasm-bindgen", "web-sys"]
 progress_bar = ["dep:progress_bar", "anyhow"]
