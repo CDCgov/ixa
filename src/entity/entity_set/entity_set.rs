@@ -19,6 +19,13 @@ use crate::entity::{Entity, EntityId};
 /// Opaque public wrapper around the internal set-expression tree.
 pub struct EntitySet<'a, E: Entity>(EntitySetInner<'a, E>);
 
+struct SetFacts<E: Entity> {
+    is_empty: bool,
+    is_universal: bool,
+    population_range: Option<Range<usize>>,
+    singleton: Option<EntityId<E>>,
+}
+
 /// Internal set-expression tree used to represent composed query sources.
 pub(super) enum EntitySetInner<'a, E: Entity> {
     Source(SourceSet<'a, E>),
@@ -76,51 +83,66 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     pub fn union(self, other: Self) -> Self {
-        // Identity: A ∪ ∅ = A, ∅ ∪ B = B
-        if self.is_empty() {
-            return other;
+        let self_facts = self.simplification_facts();
+        let other_facts = other.simplification_facts();
+
+        match (&self_facts, &other_facts) {
+            // Identity: A ∪ ∅ = A, ∅ ∪ B = B
+            (SetFacts { is_empty: true, .. }, _) => return other,
+            (_, SetFacts { is_empty: true, .. }) => return self,
+            // Universal absorption: U ∪ A = U, A ∪ U = U
+            (
+                SetFacts {
+                    is_universal: true, ..
+                },
+                _,
+            ) => return self,
+            (
+                _,
+                SetFacts {
+                    is_universal: true, ..
+                },
+            ) => return other,
+            (
+                SetFacts {
+                    population_range: Some(left_range),
+                    ..
+                },
+                SetFacts {
+                    population_range: Some(right_range),
+                    ..
+                },
+            ) if Self::merge_population_ranges(left_range, right_range).is_some() => {
+                let range = Self::merge_population_ranges(left_range, right_range).unwrap();
+                return Self::from_source(SourceSet::population_range(range));
+            }
+            (
+                SetFacts {
+                    population_range: Some(range),
+                    ..
+                },
+                _,
+            ) if other.is_subset_of_range(range) => return self,
+            (
+                _,
+                SetFacts {
+                    population_range: Some(range),
+                    ..
+                },
+            ) if self.is_subset_of_range(range) => return other,
+            _ => {}
         }
-        if other.is_empty() {
-            return self;
-        }
+
         // Idempotence: A ∪ A = A  (same structure over same sources)
         if self.structurally_eq(&other) {
             return self;
         }
-        // Universal absorption: U ∪ A = U, A ∪ U = U
-        if self.is_universal() {
-            return self;
-        }
-        if other.is_universal() {
-            return other;
-        }
-        if let (Some(left_range), Some(right_range)) =
-            (self.as_population_range(), other.as_population_range())
-        {
-            if let Some(range) = Self::merge_population_ranges(&left_range, &right_range) {
-                return Self::from_source(SourceSet::population_range(range));
-            }
-        }
-        if let Some(range) = self.as_population_range() {
-            if other.is_subset_of_range(&range) {
-                return self;
-            }
-        }
-        if let Some(range) = other.as_population_range() {
-            if self.is_subset_of_range(&range) {
-                return other;
-            }
-        }
-        // Singleton absorption: {e} ∪ A = A if e ∈ A
-        if let Some(e) = self.as_singleton() {
-            if other.contains(e) {
-                return other;
-            }
-        }
-        if let Some(e) = other.as_singleton() {
-            if self.contains(e) {
-                return self;
-            }
+
+        match (self_facts.singleton, other_facts.singleton) {
+            // Singleton absorption: {e} ∪ A = A if e ∈ A
+            (Some(entity_id), _) if other.contains(entity_id) => return other,
+            (_, Some(entity_id)) if self.contains(entity_id) => return self,
+            _ => {}
         }
 
         // Larger set on LHS: more likely to short-circuit `||`.
@@ -133,52 +155,80 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     pub fn intersection(self, other: Self) -> Self {
-        // Annihilator: A ∩ ∅ = ∅
-        if self.is_empty() || other.is_empty() {
-            return Self::empty();
+        let self_facts = self.simplification_facts();
+        let other_facts = other.simplification_facts();
+
+        match (&self_facts, &other_facts) {
+            // Annihilator: A ∩ ∅ = ∅
+            (SetFacts { is_empty: true, .. }, _) | (_, SetFacts { is_empty: true, .. }) => {
+                return Self::empty();
+            }
+            // Identity: U ∩ A = A
+            (
+                SetFacts {
+                    is_universal: true, ..
+                },
+                _,
+            ) => return other,
+            (
+                _,
+                SetFacts {
+                    is_universal: true, ..
+                },
+            ) => return self,
+            (
+                SetFacts {
+                    population_range: Some(left_range),
+                    ..
+                },
+                SetFacts {
+                    population_range: Some(right_range),
+                    ..
+                },
+            ) => {
+                let range = Self::intersect_population_ranges(left_range, right_range);
+                return Self::from_source(SourceSet::population_range(range));
+            }
+            (
+                SetFacts {
+                    population_range: Some(range),
+                    ..
+                },
+                _,
+            ) if other.is_subset_of_range(range) => return other,
+            (
+                _,
+                SetFacts {
+                    population_range: Some(range),
+                    ..
+                },
+            ) if self.is_subset_of_range(range) => return self,
+            _ => {}
         }
+
         // Idempotence: A ∩ A = A
         if self.structurally_eq(&other) {
             return self;
         }
-        // Identity: U ∩ A = A
-        if self.is_universal() {
-            return other;
-        }
-        if other.is_universal() {
-            return self;
-        }
-        if let (Some(left_range), Some(right_range)) =
-            (self.as_population_range(), other.as_population_range())
-        {
-            let range = Self::intersect_population_ranges(&left_range, &right_range);
-            return Self::from_source(SourceSet::population_range(range));
-        }
-        if let Some(range) = self.as_population_range() {
-            if other.is_subset_of_range(&range) {
-                return other;
+
+        match (self_facts.singleton, other_facts.singleton) {
+            // Singleton restriction:
+            // {e} ∩ A = {e} if e ∈ A, otherwise ∅
+            (Some(entity_id), _) => {
+                return if other.contains(entity_id) {
+                    self
+                } else {
+                    Self::empty()
+                };
             }
-        }
-        if let Some(range) = other.as_population_range() {
-            if self.is_subset_of_range(&range) {
-                return self;
+            (_, Some(entity_id)) => {
+                return if self.contains(entity_id) {
+                    other
+                } else {
+                    Self::empty()
+                };
             }
-        }
-        // Singleton restriction:
-        // {e} ∩ A = {e} if e ∈ A, otherwise ∅
-        if let Some(e) = self.as_singleton() {
-            return if other.contains(e) {
-                self
-            } else {
-                Self::empty()
-            };
-        }
-        if let Some(e) = other.as_singleton() {
-            return if self.contains(e) {
-                other
-            } else {
-                Self::empty()
-            };
+            _ => {}
         }
 
         let mut sets = match self {
@@ -194,43 +244,59 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     pub fn difference(self, other: Self) -> Self {
-        // Identity: A \ ∅ = A
-        if other.is_empty() {
-            return self;
+        let self_facts = self.simplification_facts();
+        let other_facts = other.simplification_facts();
+
+        match (&self_facts, &other_facts) {
+            // Identity: A \ ∅ = A
+            (_, SetFacts { is_empty: true, .. }) => return self,
+            // Annihilator: ∅ \ B = ∅
+            (SetFacts { is_empty: true, .. }, _) => return Self::empty(),
+            // Universal subtraction: A \ U = ∅
+            (
+                _,
+                SetFacts {
+                    is_universal: true, ..
+                },
+            ) => return Self::empty(),
+            (
+                _,
+                SetFacts {
+                    population_range: Some(range),
+                    ..
+                },
+            ) if self.is_subset_of_range(range) => return Self::empty(),
+            (
+                SetFacts {
+                    population_range: Some(left_range),
+                    ..
+                },
+                SetFacts {
+                    population_range: Some(right_range),
+                    ..
+                },
+            ) if Self::difference_population_ranges(left_range, right_range).is_some() => {
+                let range = Self::difference_population_ranges(left_range, right_range).unwrap();
+                return Self::from_source(SourceSet::population_range(range));
+            }
+            _ => {}
         }
-        // Annihilator: ∅ \ B = ∅
-        if self.is_empty() {
-            return Self::empty();
-        }
+
         // Self-subtraction: A \ A = ∅
         if self.structurally_eq(&other) {
             return Self::empty();
         }
-        // Universal subtraction: A \ U = ∅
-        if other.is_universal() {
-            return Self::empty();
-        }
-        if let Some(range) = other.as_population_range() {
-            if self.is_subset_of_range(&range) {
-                return Self::empty();
-            }
-        }
-        if let (Some(left_range), Some(right_range)) =
-            (self.as_population_range(), other.as_population_range())
-        {
-            if let Some(range) = Self::difference_population_ranges(&left_range, &right_range) {
-                return Self::from_source(SourceSet::population_range(range));
-            }
-        }
+
         // Singleton restriction:
         // {e} \ A = {e} if e ∉ A, otherwise ∅
-        if let Some(e) = self.as_singleton() {
-            return if other.contains(e) {
+        if let Some(entity_id) = self_facts.singleton {
+            return if other.contains(entity_id) {
                 Self::empty()
             } else {
                 self
             };
         }
+
         EntitySet(EntitySetInner::Difference(Box::new(self), Box::new(other)))
     }
 
@@ -304,6 +370,15 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         match self.as_source() {
             Some(source) => source.as_population_range(),
             None => None,
+        }
+    }
+
+    fn simplification_facts(&self) -> SetFacts<E> {
+        SetFacts {
+            is_empty: self.is_empty(),
+            is_universal: self.is_universal(),
+            population_range: self.as_population_range(),
+            singleton: self.as_singleton(),
         }
     }
 
