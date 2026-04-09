@@ -13,22 +13,8 @@ use crate::hashing::HashMap;
 use crate::prelude::EntityId;
 use crate::{Context, IxaError};
 
-/// A newtype wrapper that associates a tuple of property values with an entity type.
-///
-/// This is not meant to be used directly, but rather as the backing for the `with!` macro.
-///
-/// # Example
-/// ```ignore
-/// use ixa::{EntityPropertyTuple, define_entity, define_property};
-///
-/// define_entity!(Person);
-/// define_property!(struct Age(u8), Person, default_const = Age(0));
-///
-/// // Use the with! macro
-/// let query = with!(Person, Age(42));
-/// // Under the hood this is:
-/// // EntityPropertyTuple::<Person>::new((Age(42),));
-/// ```
+/// Internal wrapper used by the `with!` macro.
+#[doc(hidden)]
 pub struct EntityPropertyTuple<E: Entity, T> {
     inner: T,
     _marker: PhantomData<E>,
@@ -55,22 +41,12 @@ impl<E: Entity, T: std::fmt::Debug> std::fmt::Debug for EntityPropertyTuple<E, T
 }
 
 impl<E: Entity, T> EntityPropertyTuple<E, T> {
-    /// Create a new `EntityPropertyTuple` wrapping the given tuple.
+    #[doc(hidden)]
     pub fn new(inner: T) -> Self {
         Self {
             inner,
             _marker: PhantomData,
         }
-    }
-
-    /// Returns a reference to the inner tuple.
-    pub fn inner(&self) -> &T {
-        &self.inner
-    }
-
-    /// Consumes self and returns the inner tuple.
-    pub fn into_inner(self) -> T {
-        self.inner
     }
 }
 
@@ -88,9 +64,7 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
         entity_id: EntityId<E>,
         property_store: &mut PropertyStore<E>,
     ) {
-        let tuple = *self;
-        tuple
-            .into_inner()
+        self.inner
             .set_values_for_new_entity(entity_id, property_store)
     }
 
@@ -670,94 +644,6 @@ mod tests {
     }
 
     #[test]
-    fn entity_property_tuple_basic() {
-        use super::EntityPropertyTuple;
-
-        let mut context = Context::new();
-        let p1 = context
-            .add_entity(with!(Person, Age(42), RiskCategory::High))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::Low))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(30), RiskCategory::High))
-            .unwrap();
-
-        // Create query using EntityPropertyTuple
-        let query: EntityPropertyTuple<Person, _> =
-            EntityPropertyTuple::new((Age(42), RiskCategory::High));
-
-        context.with_query_results(query, &mut |people| {
-            assert!(people.contains(p1));
-            assert_eq!(people.into_iter().count(), 1);
-        });
-
-        // Test match_entity
-        assert!(context.match_entity(p1, query));
-
-        // Test query_entity_count
-        assert_eq!(context.query_entity_count(query), 1);
-    }
-
-    #[test]
-    fn entity_property_tuple_empty_query() {
-        use super::EntityPropertyTuple;
-
-        let mut context = Context::new();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::High))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(30), RiskCategory::Low))
-            .unwrap();
-
-        // Empty query matches all entities
-        let query: EntityPropertyTuple<Person, _> = EntityPropertyTuple::new(());
-
-        assert_eq!(context.query_entity_count(query), 2);
-    }
-
-    #[test]
-    fn entity_property_tuple_singleton() {
-        use super::EntityPropertyTuple;
-
-        let mut context = Context::new();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::High))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(42), RiskCategory::Low))
-            .unwrap();
-        let _ = context
-            .add_entity(with!(Person, Age(30), RiskCategory::High))
-            .unwrap();
-
-        // Single property query
-        let query: EntityPropertyTuple<Person, _> = EntityPropertyTuple::new((Age(42),));
-
-        assert_eq!(context.query_entity_count(query), 2);
-    }
-
-    #[test]
-    fn entity_property_tuple_inner_access() {
-        use super::EntityPropertyTuple;
-
-        let query: EntityPropertyTuple<Person, _> =
-            EntityPropertyTuple::new((Age(42), RiskCategory::High));
-
-        // Test inner() accessor
-        let inner = query.inner();
-        assert_eq!(inner.0, Age(42));
-        assert_eq!(inner.1, RiskCategory::High);
-
-        // Test into_inner()
-        let (age, risk) = query.into_inner();
-        assert_eq!(age, Age(42));
-        assert_eq!(risk, RiskCategory::High);
-    }
-
-    #[test]
     fn all_macro_no_properties() {
         use crate::with;
 
@@ -833,32 +719,6 @@ mod tests {
 
         let query = with!(Person, Age(42), RiskCategory::High);
         assert_eq!(context.query_entity_count(query), 1);
-    }
-
-    #[test]
-    fn entity_property_tuple_as_property_list() {
-        use super::EntityPropertyTuple;
-        use crate::entity::property_list::PropertyList;
-
-        // Test validate
-        assert!(EntityPropertyTuple::<Person, (Age,)>::validate().is_ok());
-        assert!(EntityPropertyTuple::<Person, (Age, RiskCategory)>::validate().is_ok());
-
-        // Test contains_properties
-        assert!(EntityPropertyTuple::<Person, (Age,)>::contains_properties(
-            &[Age::type_id()]
-        ));
-        assert!(
-            EntityPropertyTuple::<Person, (Age, RiskCategory)>::contains_properties(&[
-                Age::type_id()
-            ])
-        );
-        assert!(
-            EntityPropertyTuple::<Person, (Age, RiskCategory)>::contains_properties(&[
-                Age::type_id(),
-                RiskCategory::type_id()
-            ])
-        );
     }
 
     #[test]

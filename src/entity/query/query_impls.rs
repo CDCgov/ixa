@@ -3,16 +3,17 @@ use std::sync::{Mutex, OnceLock};
 
 use seq_macro::seq;
 
+use super::EntityPropertyTuple;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, EntityPropertyTuple, HashValueType};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType};
 use crate::hashing::{one_shot_128, HashMap};
 use crate::Context;
 
-/// Internal implementation detail for tuple payloads stored inside
-/// [`EntityPropertyTuple<E, T>`](crate::EntityPropertyTuple).
+/// Internal implementation detail for tuple payloads stored inside the
+/// wrapper returned by `with!(E, ...)`.
 ///
 /// Property-based queries are intentionally exposed only through `with!(E, ...)`,
 /// but the tuple-backed implementation is still useful as the payload carried by

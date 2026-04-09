@@ -23,11 +23,11 @@
 macro_rules! with {
     // No properties - generates an empty entity-scoped property bundle
     ($entity:ty) => {
-        $crate::EntityPropertyTuple::<$entity, _>::new(())
+        $crate::entity::query::EntityPropertyTuple::<$entity, _>::new(())
     };
     // One or more properties
     ($entity:ty, $($prop:expr),+ $(,)?) => {
-        $crate::EntityPropertyTuple::<$entity, _>::new(($($prop,)+))
+        $crate::entity::query::EntityPropertyTuple::<$entity, _>::new(($($prop,)+))
     };
 }
 
