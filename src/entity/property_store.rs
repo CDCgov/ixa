@@ -495,8 +495,8 @@ mod tests {
         let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
         let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 
@@ -536,8 +536,8 @@ mod tests {
         let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
         let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 
@@ -572,8 +572,8 @@ mod tests {
         let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
         let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value,)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 

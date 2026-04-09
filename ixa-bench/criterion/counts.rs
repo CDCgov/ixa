@@ -37,7 +37,8 @@ fn populate_entities(context: &mut Context, n: usize) {
     context.init_random(SEED);
 
     for person in generate_population_with_seed(n, 0.2, 10.0, Some(SEED)) {
-        let _ = context.add_entity((
+        let _ = context.add_entity(with!(
+            Person,
             Age(person.age),
             HomeId(person.home_id as u32),
             SchoolId(person.school_id as u32),
@@ -59,14 +60,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // Unindexed single property
     group.bench_function("single_property_unindexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((HomeId(HOME_VAL),))));
+            black_box(context.query_entity_count(black_box(with!(Person, HomeId(HOME_VAL),))));
         });
     });
 
     // Unindexed concrete + unindexed derived property
     group.bench_function("concrete_plus_derived_unindexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((HomeId(HOME_VAL), AgeGroupFoi(1)))));
+            black_box(context.query_entity_count(black_box(with!(
+                Person,
+                HomeId(HOME_VAL),
+                AgeGroupFoi(1)
+            ))));
         });
     });
 
@@ -74,14 +79,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     context.index_property::<Person, HomeId>();
     group.bench_function("single_property_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((HomeId(HOME_VAL),))));
+            black_box(context.query_entity_count(black_box(with!(Person, HomeId(HOME_VAL),))));
         });
     });
 
     // Unindexed multi-property
     group.bench_function("multi_property_unindexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((Age(30), SchoolId(1)))));
+            black_box(context.query_entity_count(black_box(with!(Person, Age(30), SchoolId(1)))));
         });
     });
 
@@ -89,7 +94,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     context.index_property::<Person, (Age, SchoolId, WorkplaceId)>();
     group.bench_function("multi_property_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count(black_box((
+            black_box(context.query_entity_count(black_box(with!(
+                Person,
                 Age(30),
                 SchoolId(1),
                 WorkplaceId(1),
@@ -107,7 +113,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             },
             |mut ctx| {
                 ctx.index_property::<Person, HomeId>();
-                black_box(ctx.query_entity_count(black_box((HomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(with!(Person, HomeId(HOME_VAL),))));
             },
         );
     });
@@ -119,13 +125,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut ctx = Context::new();
                 populate_entities(&mut ctx, 5_000);
                 ctx.index_property::<Person, HomeId>();
-                black_box(ctx.query_entity_count(black_box((HomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(with!(Person, HomeId(HOME_VAL),))));
                 ctx
             },
             |mut ctx| {
                 populate_entities(&mut ctx, 2_000);
                 ctx.index_property::<Person, HomeId>();
-                black_box(ctx.query_entity_count(black_box((HomeId(HOME_VAL),))));
+                black_box(ctx.query_entity_count(black_box(with!(Person, HomeId(HOME_VAL),))));
             },
         );
     });

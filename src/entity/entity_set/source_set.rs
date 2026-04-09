@@ -426,7 +426,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{define_derived_property, define_entity, define_property};
+    use crate::{define_derived_property, define_entity, define_property, with};
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person, default_const = Age(0));
@@ -475,7 +475,9 @@ mod tests {
     fn source_set_new_uses_indexed_or_unindexed_backing() {
         let mut context = Context::new();
         for age in [1u8, 2, 2, 3] {
-            context.add_entity((Age(age), Flag(true))).unwrap();
+            context
+                .add_entity(with!(Person, Age(age), Flag(true)))
+                .unwrap();
         }
 
         assert!(matches!(
@@ -503,9 +505,15 @@ mod tests {
     #[test]
     fn source_set_new_derived_vs_nonderived_backing() {
         let mut context = Context::new();
-        context.add_entity((Age(12), Flag(true))).unwrap();
-        context.add_entity((Age(20), Flag(true))).unwrap();
-        context.add_entity((Age(44), Flag(false))).unwrap();
+        context
+            .add_entity(with!(Person, Age(12), Flag(true)))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Age(20), Flag(true)))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Age(44), Flag(false)))
+            .unwrap();
 
         let nonderived = SourceSet::<Person>::new::<Age>(Age(20), &context).unwrap();
         assert!(matches!(nonderived, SourceSet::PropertySet(_)));
