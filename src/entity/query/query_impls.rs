@@ -273,7 +273,12 @@ macro_rules! impl_query {
                 fn get_query(&self) -> Vec<(usize, HashValueType)> {
                     let mut ordered_items = vec![
                     #(
-                        (T~N::id(), T~N::hash_property_value(&T~N::make_canonical(self.N))),
+                        (
+                            <T~N as $crate::entity::property::Property<E>>::id(),
+                            <T~N as $crate::entity::property::Property<E>>::hash_property_value(
+                                &<T~N as $crate::entity::property::Property<E>>::make_canonical(self.N)
+                            ),
+                        ),
                     )*
                     ];
                     ordered_items.sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -283,7 +288,7 @@ macro_rules! impl_query {
                 fn get_type_ids(&self) -> Vec<TypeId> {
                     vec![
                         #(
-                            T~N::type_id(),
+                            <T~N as $crate::entity::property::Property<E>>::type_id(),
                         )*
                     ]
                 }
@@ -303,7 +308,7 @@ macro_rules! impl_query {
                     // ];
                     let keys: [&str; $ct] = [
                         #(
-                            T~N::name(),
+                            <T~N as $crate::entity::property::Property<E>>::name(),
                         )*
                     ];
                     // It is convenient to have the elements of the array to be `Copy` in the `static_apply_reordering`
@@ -312,7 +317,11 @@ macro_rules! impl_query {
                     // keep the referenced value in scope.)
                     let mut values: [&Vec<u8>; $ct] = [
                         #(
-                            &$crate::bincode::serde::encode_to_vec(self.N, bincode::config::standard()).unwrap(),
+                            &$crate::bincode::serde::encode_to_vec(
+                                self.N,
+                                $crate::bincode::config::standard(),
+                            )
+                            .unwrap(),
                         )*
                     ];
                     static_reorder_by_keys(&keys, &mut values);

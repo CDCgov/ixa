@@ -62,10 +62,12 @@ bytesize = "^2.0.1"
 hashbrown = "^0.16.0"
 ouroboros = "^0.18.5"
 thiserror = "^2.0.11"
+smallbox = "^0.8.8"
+smallvec = "^1.15.1"
 
 [package]
 name = "ixa"
-version = "2.0.0-beta2"
+version = "2.0.0-beta2.1"
 rust-version = "1.88.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
@@ -107,6 +109,8 @@ hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
+smallvec.workspace = true
+smallbox.workspace = true
 
 # Building docs
 clap-markdown = { workspace = true, optional = true }

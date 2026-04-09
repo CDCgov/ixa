@@ -309,7 +309,8 @@ macro_rules! define_property {
 ///   * `make_uncanonical = <expr>` — Function converting from `CanonicalValue` to `Self`; defaults to `std::convert::identity`.
 /// * Optional parameters that should generally be left alone, used internally to implement derived properties and
 ///   multi-properties:
-///   * `index_id_fn = <expr>` — Function used to initialize the property index id; defaults to `Self::id()`.
+///   * `index_id_fn = <expr>` — Function used to initialize the property index id; defaults to
+///     `<Self as $crate::entity::property::Property<$entity>>::id()`.
 ///   * `collect_deps_fn = <expr>` — Function used to collect property dependencies; defaults to an empty implementation.
 ///   * `ctor_registration = <expr>` — Code run in the `ctor` for property registration.
 ///
@@ -683,10 +684,10 @@ macro_rules! impl_derived_property {
                 ),
                 collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
                     $(
-                        if $dependency::is_derived() {
-                            $dependency::collect_non_derived_dependencies(deps);
+                        if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                            <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
                         } else {
-                            deps.insert($dependency::id());
+                            deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
                         }
                     )*
                 }
@@ -800,17 +801,17 @@ macro_rules! define_multi_property {
 
                     collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
                         $(
-                            if $dependency::is_derived() {
-                                $dependency::collect_non_derived_dependencies(deps);
+                            if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                                <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
                             } else {
-                                deps.insert($dependency::id());
+                                deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
                             }
                         )*
                     },
 
                     ctor_registration = {
-                        // Ensure `Self::index_id()` is initialized at startup.
-                        let _ = [<$($dependency)*>]::index_id();
+                        // Ensure the property's `index_id()` is initialized at startup.
+                        let _ = < [<$($dependency)*>] as $crate::entity::property::Property::<$entity> >::index_id();
                         $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
                     }
                 );

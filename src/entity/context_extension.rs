@@ -1,7 +1,9 @@
 use std::hash::Hash;
 
+use smallvec::SmallVec;
+
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
-use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEvent};
+use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
@@ -313,7 +315,11 @@ impl ContextEntitiesExt for Context {
         //   their own if they need to.
         // - There may be use cases for listening to "writes" that don't actually change values.
 
-        let mut dependents: Vec<Box<dyn PartialPropertyChangeEvent>> = vec![];
+        // `SmallVec` inline capacity balances stack footprint against heap allocations: a larger
+        // inline size avoids spills for more dependents, while a smaller one keeps every
+        // set_property call lighter when most properties have few dependents. A value of 5 is
+        // chosen somewhat arbitrarily.
+        let mut dependents: SmallVec<[PartialPropertyChangeEventBox; 5]> = SmallVec::new();
 
         // Immutable: Collect the previous value to create partial property change events
         {
@@ -341,7 +347,7 @@ impl ContextEntitiesExt for Context {
 
         // Mutable: After updating the value, we update its dependents, removing old values and
         // storing the new values in their respective indexes, and emit the property change event.
-        for dependent in dependents.into_iter() {
+        for mut dependent in dependents {
             dependent.emit_in_context(self)
         }
     }
