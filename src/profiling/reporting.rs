@@ -52,7 +52,7 @@ pub trait ProfilingContextExt: ContextReportExt {
 impl ProfilingContextExt for Context {}
 
 #[cfg(all(test, feature = "profiling"))]
-mod tests {
+mod profiling_tests {
     use std::fs;
     use std::time::Duration;
 
@@ -181,5 +181,18 @@ mod tests {
             content, "OLD",
             "File content should be updated when overwrite=true"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProfilingContextExt;
+    use crate::context::Context;
+
+    #[test]
+    fn context_implements_profiling_extension() {
+        let mut context = Context::new();
+        context.print_execution_statistics(false);
+        context.write_profiling_data();
     }
 }
