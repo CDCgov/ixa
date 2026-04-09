@@ -8,8 +8,15 @@ Ixa includes a lightweight, feature-gated profiling module you can use to:
 - Write results to a JSON file along with execution statistics
 
 The API lives under `ixa::profiling` and is behind the `profiling` Cargo feature
-(enabled by default). If you disable the feature, the API becomes a no-op so you
-can leave profiling calls in your code.
+(disabled by default). If you do not enable the feature, the API becomes a no-op
+so you can leave profiling calls in your code.
+
+When running the built-in profiling example from the root crate, enable the
+feature explicitly:
+
+```sh
+cargo run --example profiling --features profiling
+```
 
 ## Example console output
 

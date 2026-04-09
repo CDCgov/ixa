@@ -29,7 +29,7 @@ Demonstrates the profiling module: counting events, opening spans, computing
 statistics, and writing profiling data to JSON.
 
 ```sh
-cargo run --example profiling
+cargo run --example profiling --features profiling
 ```
 
 ## End-to-end Examples
