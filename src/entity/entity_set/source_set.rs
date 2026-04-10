@@ -92,6 +92,9 @@ pub(crate) trait AbstractPropertySource<'a, E: Entity>:
     /// Identity of the logical property query represented by this source.
     fn id(&self) -> PropertySourceId;
 
+    /// Clone this type-erased source, preserving its current cursor state.
+    fn clone_box(&self) -> BxPropertySource<'a, E>;
+
     /// A test that `entity_id` is contained in the (abstractly
     /// defined) set. This operation is very efficient.
     fn contains(&self, entity_id: EntityId<E>) -> bool;
@@ -135,6 +138,18 @@ impl<'a, E: Entity, P: Property<E>> DerivedPropertySource<'a, E, P> {
     }
 }
 
+impl<'a, E: Entity, P: Property<E>> Clone for DerivedPropertySource<'a, E, P> {
+    fn clone(&self) -> Self {
+        Self {
+            context: self.context,
+            value: self.value,
+            next_index: self.next_index,
+            population_size: self.population_size,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for DerivedPropertySource<'a, E, P>
 {
@@ -147,6 +162,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
 
     fn contains(&self, entity_id: EntityId<E>) -> bool {
         P::compute_derived(self.context, entity_id) == self.value
+    }
+
+    fn clone_box(&self) -> BxPropertySource<'a, E> {
+        Box::new((*self).clone())
     }
 
     fn sort_key(&self) -> (usize, u8) {
@@ -217,6 +236,19 @@ impl<'a, E: Entity, P: Property<E>> ConcretePropertySource<'a, E, P> {
     }
 }
 
+impl<'a, E: Entity, P: Property<E>> Clone for ConcretePropertySource<'a, E, P> {
+    fn clone(&self) -> Self {
+        Self {
+            values: self.values,
+            value: self.value,
+            next_index: self.next_index,
+            is_default_value: self.is_default_value,
+            population_size: self.population_size,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for ConcretePropertySource<'a, E, P>
 {
@@ -235,6 +267,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
             // Unset values are implicitly equal to the default value.
             self.is_default_value
         }
+    }
+
+    fn clone_box(&self) -> BxPropertySource<'a, E> {
+        Box::new((*self).clone())
     }
 
     fn sort_key(&self) -> (usize, u8) {
@@ -289,6 +325,17 @@ pub(crate) enum SourceSet<'a, E: Entity> {
     PopulationRange(Range<usize>),
     IndexSet(&'a IndexSet<EntityId<E>>),
     PropertySet(BxPropertySource<'a, E>),
+}
+
+impl<'a, E: Entity> Clone for SourceSet<'a, E> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::FullPopulation(population) => Self::FullPopulation(*population),
+            Self::PopulationRange(range) => Self::PopulationRange(range.clone()),
+            Self::IndexSet(index_set) => Self::IndexSet(index_set),
+            Self::PropertySet(source) => Self::PropertySet(source.clone_box()),
+        }
+    }
 }
 
 impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
