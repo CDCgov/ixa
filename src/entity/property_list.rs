@@ -142,7 +142,7 @@ macro_rules! impl_property_list {
             impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
                 fn validate() -> Result<(), IxaError> {
                     // For `Property` distinctness check
-                    let property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];
+                    let property_type_ids: [TypeId; $ct] = [#(<P~N as $crate::entity::property::Property<E>>::type_id(),)*];
 
                     for i in 0..$ct - 1 {
                         for j in (i + 1)..$ct {
@@ -159,7 +159,7 @@ macro_rules! impl_property_list {
                 }
 
                 fn contains_properties(property_type_ids: &[TypeId]) -> bool {
-                    let self_property_type_ids: [TypeId; $ct] = [#(P~N::type_id(),)*];
+                    let self_property_type_ids: [TypeId; $ct] = [#(<P~N as $crate::entity::property::Property<E>>::type_id(),)*];
 
                     property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
                 }

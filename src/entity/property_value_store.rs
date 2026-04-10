@@ -14,7 +14,9 @@ use std::any::Any;
 
 use log::{error, trace};
 
-use crate::entity::events::{PartialPropertyChangeEvent, PartialPropertyChangeEventCore};
+use crate::entity::events::{
+    PartialPropertyChangeEvent, PartialPropertyChangeEventBox, PartialPropertyChangeEventCore,
+};
 use crate::entity::index::{
     FullIndex, IndexCountResult, IndexSetResult, PropertyIndex, PropertyIndexType, ValueCountIndex,
 };
@@ -37,7 +39,7 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
         // The entity_id has been type-erased but is guaranteed by the caller to be an `EntityId<E>`.
         entity_id: EntityId<E>,
         context: &Context,
-    ) -> Box<dyn PartialPropertyChangeEvent>;
+    ) -> PartialPropertyChangeEventBox;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
 
@@ -80,7 +82,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         &self,
         entity_id: EntityId<E>,
         context: &Context,
-    ) -> Box<dyn PartialPropertyChangeEvent> {
+    ) -> PartialPropertyChangeEventBox {
         // Compute the existing value of the property for the given `entity_id` and return a
         // `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
 
@@ -90,7 +92,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
             self.get(entity_id)
         };
 
-        Box::new(PartialPropertyChangeEventCore::<E, P>::new(
+        smallbox::smallbox!(PartialPropertyChangeEventCore::<E, P>::new(
             entity_id,
             previous_value,
         ))

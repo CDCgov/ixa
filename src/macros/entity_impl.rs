@@ -12,7 +12,7 @@ macro_rules! define_entity {
         impl $entity_name {
             #[allow(unused)]
             pub fn new() -> Self {
-                Self::default()
+                <Self as std::default::Default>::default()
             }
         }
 

@@ -10,7 +10,7 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-ixa = { path = "../../" }
+ixa = { path = "../../", features = ["profiling"] }
 serde_json.workspace = true
 
 [lints]

@@ -6,8 +6,6 @@ use clap::{ArgAction, Args, Command, FromArgMatches as _};
 use clap_markdown::{help_markdown_command_custom, MarkdownOptions};
 
 use crate::context::Context;
-#[cfg(feature = "debugger")]
-use crate::debugger::enter_debugger;
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::log::level_to_string_list;
@@ -97,14 +95,6 @@ pub struct BaseArgs {
     #[arg(long)]
     pub trace: bool,
 
-    /// Set a breakpoint at a given time and start the debugger. Defaults to t=0.0
-    #[arg(short, long)]
-    pub debugger: Option<Option<f64>>,
-
-    /// Enable the Web API at a given time. Defaults to t=0.0
-    #[arg(short, long)]
-    pub web: Option<Option<u16>>,
-
     /// Enable the timeline progress bar with a maximum time.
     #[arg(short, long)]
     pub timeline_progress_max: Option<f64>,
@@ -129,8 +119,6 @@ impl BaseArgs {
             warn: false,
             debug: false,
             trace: false,
-            debugger: None,
-            web: None,
             timeline_progress_max: None,
             no_stats: false,
         }
@@ -318,27 +306,6 @@ where
     }
 
     context.init_random(args.random_seed);
-
-    // If a breakpoint is provided, stop at that time
-    #[cfg(feature = "debugger")]
-    if let Some(t) = args.debugger {
-        assert!(
-            args.web.is_none(),
-            "Cannot run with both the debugger and the Web API"
-        );
-        match t {
-            None => {
-                context.request_debugger();
-            }
-            Some(time) => {
-                context.schedule_debugger(time, None, Box::new(enter_debugger));
-            }
-        }
-    }
-    #[cfg(not(feature = "debugger"))]
-    if args.debugger.is_some() {
-        warn!("Ixa was not compiled with the debugger feature, but a debugger option was provided");
-    }
 
     if let Some(max_time) = args.timeline_progress_max {
         // We allow a `max_time` of `0.0` to mean "disable timeline progress bar".
