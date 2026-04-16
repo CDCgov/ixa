@@ -87,6 +87,7 @@ pub use ixa_derive::{
 };
 pub use paste;
 pub use rand;
+pub use rkyv;
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};

@@ -10,6 +10,7 @@ implementation.
 
 use std::any::TypeId;
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use serde::Serialize;
 
@@ -58,7 +59,9 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 }
 
 /// All properties must implement this trait using one of the `define_property` macros.
-pub trait Property<E: Entity>: AnyProperty {
+///
+/// Property values must implement `Eq` and `Hash` so they can participate in property indexes.
+pub trait Property<E: Entity>: AnyProperty + Eq + Hash {
     /// Some properties might store a transformed version of the value in the index. This is the
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;
