@@ -28,6 +28,75 @@ pub type IndexSet<T> = RawIndexSet<T, FxBuildHasher>;
 
 pub type HashValueType = u128;
 
+/// A `rkyv` writer that streams serialized bytes directly into a `Hasher`.
+pub struct HasherWriter<'a, H> {
+    hasher: &'a mut H,
+    pos: usize,
+}
+
+impl<'a, H> HasherWriter<'a, H> {
+    #[must_use]
+    pub fn new(hasher: &'a mut H) -> Self {
+        Self { hasher, pos: 0 }
+    }
+}
+
+impl<H: Hasher> rkyv::ser::Positional for HasherWriter<'_, H> {
+    fn pos(&self) -> usize {
+        self.pos
+    }
+}
+
+impl<H: Hasher> rkyv::ser::Writer<rkyv::rancor::Error> for HasherWriter<'_, H> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), rkyv::rancor::Error> {
+        self.hasher.write(bytes);
+        self.pos += bytes.len();
+        Ok(())
+    }
+}
+
+/// A fixed-size `rkyv` writer used by macro-generated equality implementations.
+pub struct EqualityBufferWriter<const N: usize> {
+    buf: [u8; N],
+    pos: usize,
+}
+
+impl<const N: usize> EqualityBufferWriter<N> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            buf: [0; N],
+            pos: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn as_written(&self) -> &[u8] {
+        &self.buf[..self.pos]
+    }
+}
+
+impl<const N: usize> rkyv::ser::Positional for EqualityBufferWriter<N> {
+    fn pos(&self) -> usize {
+        self.pos
+    }
+}
+
+impl<const N: usize, E: rkyv::rancor::Source> rkyv::ser::Writer<E> for EqualityBufferWriter<N> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), E> {
+        let end = self.pos + bytes.len();
+        assert!(
+            end <= N,
+            "serialized form exceeded fixed buffer size: {} > {}",
+            end,
+            N
+        );
+        self.buf[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
+        Ok(())
+    }
+}
+
 /// Provides API parity with `std::collections::HashMap`.
 pub trait HashMapExt {
     fn new() -> Self;
