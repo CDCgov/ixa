@@ -1,9 +1,10 @@
+use std::collections::HashSet;
+
 use ixa::log::info;
 use ixa::prelude::*;
 use ixa::{impl_property, ExecutionPhase};
 use rand_distr::Gamma;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 use crate::network::get_contacts;
 use crate::parameters::Parameters;
