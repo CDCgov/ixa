@@ -40,20 +40,22 @@ and to inner fields of tuple structs in the expansion.
 
 # [`impl_property!`][macro@crate::impl_property]
 
-You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
-[`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
-have to remember to derive or implement `Copy`, `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash`, and `Serialize` for your type.
+You can implement [`Property`][crate::entity::property::Property] for existing types using the
+[`impl_property!`][macro@crate::impl_property] macro. This macro defines the
+[`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care
+of the `#[derive(..)]` boilerplate, so you have to remember to derive or implement the traits
+required by [`AnyProperty`][crate::entity::property::AnyProperty] for your type: `Copy`, `Clone`,
+`Debug`, `PartialEq`, `Eq`, `Hash`, and `Serialize`.
 
 Some examples:
 
 ```rust,ignore
 define_entity!(Person);
 
-// The `define_property!` automatically adds `pub` visibility to the struct and its tuple
-// fields. If we want to restrict the visibility of our `Property` type, we can use the
-// `impl_property!` macro instead. The only
-// catch is, we have to remember to derive or implement `Copy`, `Clone`, `Debug`,
-// `PartialEq`, `Eq`, `Hash`, and `Serialize`.
+// The `define_property!` automatically adds `pub` visibility to the struct and its tuple fields. If
+// we want to restrict the visibility of our `Property` type, we can use the `impl_property!` macro
+// instead. The only catch is, we have to remember to derive or implement the traits required by
+// `AnyProperty`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 struct Age(pub u8);
 impl_property!(Age, Person);
@@ -103,6 +105,8 @@ The `Property::CanonicalValue` type is used to store the property value in
 the index. If the property type is different from the value type, you can
 specify a custom canonical type using the `canonical_value` parameter, but
 you also must provide a conversion function to and from the canonical type.
+Because the canonical value participates directly in index hashing and equality,
+it must satisfy [`AnyProperty`][crate::entity::property::AnyProperty].
 
 ```rust,ignore
 define_entity!(WeatherStation);

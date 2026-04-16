@@ -17,12 +17,12 @@ define_property!(
     Person,
     default_const = HashStruct { bucket: 0, code: 0 }
 );
-define_property!(struct HashFloat(f64), Person, default_const = HashFloat(0.0));
+define_property!(struct HashFloat(f64), Person, impl_eq_hash = both, default_const = HashFloat(0.0));
 define_property!(struct MultiHashByte(u8), Person, default_const = MultiHashByte(0));
-define_property!(struct MultiHashFloat(f64), Person, default_const = MultiHashFloat(0.0));
+define_property!(struct MultiHashFloat(f64), Person, impl_eq_hash = both, default_const = MultiHashFloat(0.0));
 define_multi_property!((MultiHashByte, MultiHashFloat), Person);
 
-define_property!(struct FloatQueryValue(f64), Person, default_const = FloatQueryValue(0.0));
+define_property!(struct FloatQueryValue(f64), Person, impl_eq_hash = both, default_const = FloatQueryValue(0.0));
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 struct CounterBucket(pub u8);

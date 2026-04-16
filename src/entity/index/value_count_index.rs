@@ -112,7 +112,7 @@ impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
 mod tests {
     use crate::entity::index::ValueCountIndex;
     use crate::entity::PropertyIndexType;
-    use crate::hashing::{hash_serialized_128, one_shot_128};
+    use crate::hashing::one_shot_128;
     use crate::prelude::*;
 
     define_entity!(Person);
@@ -163,9 +163,9 @@ mod tests {
 
     #[test]
     fn test_index_value_compute_same_values() {
-        let value = hash_serialized_128("test value");
-        let value2 = hash_serialized_128("test value");
-        assert_eq!(one_shot_128(&value), one_shot_128(&value2));
+        let value = one_shot_128(&"test value");
+        let value2 = one_shot_128(&"test value");
+        assert_eq!(value, value2);
     }
 
     #[test]
