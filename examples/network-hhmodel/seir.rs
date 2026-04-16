@@ -38,7 +38,7 @@ fn expose(context: &mut Context, infector: PersonId, infectee: PersonId) {
         context.get_current_time()
     );
     context.set_property(infectee, DiseaseStatus::E);
-    context.set_property(infectee, with!(InfectedBy, Some(infector)));
+    context.set_property(infectee, InfectedBy(Some(infector)));
 }
 
 fn schedule_waiting_event(
