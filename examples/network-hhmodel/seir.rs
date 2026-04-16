@@ -1,8 +1,6 @@
-use std::collections::HashSet;
-
 use ixa::log::info;
 use ixa::prelude::*;
-use ixa::{impl_property, ExecutionPhase};
+use ixa::{impl_property, ExecutionPhase, HashSet, HashSetExt};
 use rand_distr::Gamma;
 use serde::{Deserialize, Serialize};
 
