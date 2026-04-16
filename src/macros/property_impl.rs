@@ -30,6 +30,10 @@ The primary advantage of using this macro is that it automatically derives the l
 [`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
+If you need the macro to generate `Eq` and/or `Hash` manually instead of deriving them, use the
+optional `impl_eq_hash = ...` argument with one of the following values: `Eq`, `Hash`, `both`, or
+`neither`.
+
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
 specify the visibility. A `pub` visibility is added automatically to the struct
 and to inner fields of tuple structs in the expansion.
@@ -38,7 +42,7 @@ and to inner fields of tuple structs in the expansion.
 
 You can implement [`Property`][crate::entity::property::Property] for existing types using the [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care of the `#[derive(..)]` boilerplate, so you
-have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize` in your type declaration.
+have to remember to derive or implement `Copy`, `Clone`, `Debug`, `PartialEq`, `Eq`, `Hash`, and `Serialize` for your type.
 
 Some examples:
 
@@ -48,15 +52,16 @@ define_entity!(Person);
 // The `define_property!` automatically adds `pub` visibility to the struct and its tuple
 // fields. If we want to restrict the visibility of our `Property` type, we can use the
 // `impl_property!` macro instead. The only
-// catch is, we have to remember to `derive` all of `Copy, Clone, Debug, PartialEq, Serialize`.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+// catch is, we have to remember to derive or implement `Copy`, `Clone`, `Debug`,
+// `PartialEq`, `Eq`, `Hash`, and `Serialize`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 struct Age(pub u8);
 impl_property!(Age, Person);
 
 // Here we derive `Default`, which also requires an attribute on one
 // of the variants. (`Property` has its own independent mechanism for
 // assigning default values for entities unrelated to the `Default` trait.)
-#[derive(Copy, Clone, Debug, PartialEq, Default, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default, Serialize)]
 enum InfectionStatus {
     #[default]
     Susceptible,
@@ -68,7 +73,7 @@ impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Suscept
 
 // Exactly equivalent to
 //    `define_property!(struct Vaccinated(pub bool), Person, default_const = Vaccinated(false));`
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 ```
@@ -102,10 +107,10 @@ you also must provide a conversion function to and from the canonical type.
 ```rust,ignore
 define_entity!(WeatherStation);
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 pub struct DegreesFahrenheit(pub f64);
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 pub struct DegreesCelsius(pub f64);
 
 // Custom canonical type
@@ -138,7 +143,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 /// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
@@ -159,7 +164,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
 /// impl_property!(Coordinates, Person);
 /// ```
@@ -182,7 +187,7 @@ impl_property!(
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
 ///     Susceptible,
 ///     Infectious,
@@ -193,72 +198,341 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - The generated type always derives the following traits:
-///   `Debug`, `PartialEq`, `Eq`, `Clone`, `Copy`, and `Serialize`.
+/// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`, and `Serialize`.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
+/// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` as the first optional argument to suppress the default
+///   `Eq`/`Hash` derives and switch to generated or user-supplied implementations.
+/// - Remaining optional arguments follow the same ordering as [`impl_property!`][macro@crate::impl_property].
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
 ///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
 #[macro_export]
 macro_rules! define_property {
-    // Struct (tuple) with single Option<T> field (special case)
-    (
-        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
-        $entity:ident
-        $(, $($extra:tt)+),*
-    ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name(pub Option<$inner_ty>);
+    (@decorate default, $item:item) => {
+        #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
+        $item
+    };
+    (@decorate Eq, $item:item) => {
+        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[rkyv(crate = $crate::rkyv)]
+        $item
+    };
+    (@decorate Hash, $item:item) => {
+        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[rkyv(crate = $crate::rkyv)]
+        $item
+    };
+    (@decorate both, $item:item) => {
+        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[rkyv(crate = $crate::rkyv)]
+        $item
+    };
+    (@decorate neither, $item:item) => {
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
+        $item
+    };
 
-        // Use impl_property! to provide a custom display implementation
+    (@eq_hash_impls default, $name:ident) => {};
+    (@eq_hash_impls neither, $name:ident) => {};
+    (@eq_hash_impls Eq, $name:ident) => {
+        impl core::cmp::PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                const N: usize = core::mem::size_of::<<$name as $crate::rkyv::Archive>::Archived>();
+
+                let left = $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
+                    self,
+                    $crate::hashing::EqualityBufferWriter::<N>::new(),
+                )
+                .expect("serializing left value for equality comparison failed");
+
+                let right = $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
+                    other,
+                    $crate::hashing::EqualityBufferWriter::<N>::new(),
+                )
+                .expect("serializing right value for equality comparison failed");
+
+                left.as_written() == right.as_written()
+            }
+        }
+
+        impl core::cmp::Eq for $name {}
+    };
+    (@eq_hash_impls Hash, $name:ident) => {
+        impl core::hash::Hash for $name {
+            fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+                $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
+                    self,
+                    $crate::hashing::HasherWriter::new(state),
+                )
+                .expect("serialization failed while hashing");
+            }
+        }
+    };
+    (@eq_hash_impls both, $name:ident) => {
+        $crate::define_property!(@eq_hash_impls Eq, $name);
+        $crate::define_property!(@eq_hash_impls Hash, $name);
+    };
+
+    (@emit_with_optional_mode [], $($rest:tt)*) => {
+        $crate::define_property!(@emit default, $($rest)*);
+    };
+    (@emit_with_optional_mode [Eq], $($rest:tt)*) => {
+        $crate::define_property!(@emit Eq, $($rest)*);
+    };
+    (@emit_with_optional_mode [Hash], $($rest:tt)*) => {
+        $crate::define_property!(@emit Hash, $($rest)*);
+    };
+    (@emit_with_optional_mode [both], $($rest:tt)*) => {
+        $crate::define_property!(@emit both, $($rest)*);
+    };
+    (@emit_with_optional_mode [neither], $($rest:tt)*) => {
+        $crate::define_property!(@emit neither, $($rest)*);
+    };
+    (@emit_with_optional_mode [$mode:ident], $($rest:tt)*) => {
+        compile_error!("define_property!: `impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
+    };
+
+    (@emit $mode:ident, struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ), $entity:ident
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::define_property!(@decorate $mode, pub struct $name(pub Option<$inner_ty>););
+        $crate::define_property!(@eq_hash_impls $mode, $name);
+
         $crate::impl_property!(
             $name,
             $entity
-            $(, $($extra)+)*
-            , display_impl = |value: &Self| {
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            , display_impl = $crate::impl_property!(@unwrap_or $($display_impl)?, |value: &Self| {
                 match value.0 {
                     Some(v) => format!("{:?}", v),
                     None => "None".to_string(),
                 }
-            }
+            })
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
+    (@emit $mode:ident, struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ), $entity:ident
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::define_property!(@decorate $mode, pub struct $name($(pub $field_ty),*););
+        $crate::define_property!(@eq_hash_impls $mode, $name);
+        $crate::impl_property!(
+            $name,
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
+    (@emit $mode:ident, struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? }, $entity:ident
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::define_property!(@decorate $mode, pub struct $name { $(pub $field_name : $field_ty),* });
+        $crate::define_property!(@eq_hash_impls $mode, $name);
+        $crate::impl_property!(
+            $name,
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
+    (@emit $mode:ident, enum $name:ident { $($variant:ident),* $(,)? }, $entity:ident
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::define_property!(@decorate $mode, pub enum $name { $($variant),* });
+        $crate::define_property!(@eq_hash_impls $mode, $name);
+        $crate::impl_property!(
+            $name,
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
         );
     };
 
-    // Struct (tuple)
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident
+        $(, impl_eq_hash = $impl_eq_hash:ident)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::define_property!(
+            @emit_with_optional_mode
+            [$($impl_eq_hash)?],
+            struct $name ( $visibility Option<$inner_ty> ),
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
+
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident
-        $(, $($extra:tt)+),*
+        $(, impl_eq_hash = $impl_eq_hash:ident)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name($(pub $field_ty),*);
-        $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::define_property!(
+            @emit_with_optional_mode
+            [$($impl_eq_hash)?],
+            struct $name ( $($visibility $field_ty),* ),
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
     };
 
-    // Struct (named fields)
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident
-        $(, $($extra:tt)+),*
+        $(, impl_eq_hash = $impl_eq_hash:ident)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub struct $name { $(pub $field_name : $field_ty),* }
-        $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::define_property!(
+            @emit_with_optional_mode
+            [$($impl_eq_hash)?],
+            struct $name { $($visibility $field_name : $field_ty),* },
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
     };
 
-    // Enum
     (
         enum $name:ident {
             $($variant:ident),* $(,)?
         },
         $entity:ident
-        $(, $($extra:tt)+),*
+        $(, impl_eq_hash = $impl_eq_hash:ident)?
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
     ) => {
-        #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
-        pub enum $name {
-            $($variant),*
-        }
-        $crate::impl_property!($name, $entity $(, $($extra)+)*);
+        $crate::define_property!(
+            @emit_with_optional_mode
+            [$($impl_eq_hash)?],
+            enum $name {
+                $($variant),*
+            },
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, display_impl = $display_impl)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
     };
 }
 
@@ -280,7 +554,7 @@ macro_rules! define_property {
 /// # use ixa::{impl_property, define_entity};
 /// # use serde::Serialize;
 /// # define_entity!(Person);
-/// #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+/// #[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 /// pub enum InfectionStatus {
 ///     #[default]
 ///     Susceptible,
@@ -524,9 +798,35 @@ macro_rules! impl_property {
 /// * `[$($dependency),+]`: A list of person properties the derived property depends on.
 /// * `[$(global_dependency),*]`: A list of global properties the derived property depends on. Can optionally be omitted if empty.
 /// * `$calculate`: A closure that takes the values of each dependency and returns the derived value.
-/// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property].
+/// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property],
+///   plus `impl_eq_hash = Eq | Hash | both | neither` to control whether `Eq`/`Hash` are derived or generated
+///   for the declared type, mirroring [`define_property!`][macro@crate::define_property].
 #[macro_export]
 macro_rules! define_derived_property {
+    (@decorate_with_optional_mode [], $item:item, $name:ident) => {
+        $crate::define_property!(@decorate default, $item);
+        $crate::define_property!(@eq_hash_impls default, $name);
+    };
+    (@decorate_with_optional_mode [Eq], $item:item, $name:ident) => {
+        $crate::define_property!(@decorate Eq, $item);
+        $crate::define_property!(@eq_hash_impls Eq, $name);
+    };
+    (@decorate_with_optional_mode [Hash], $item:item, $name:ident) => {
+        $crate::define_property!(@decorate Hash, $item);
+        $crate::define_property!(@eq_hash_impls Hash, $name);
+    };
+    (@decorate_with_optional_mode [both], $item:item, $name:ident) => {
+        $crate::define_property!(@decorate both, $item);
+        $crate::define_property!(@eq_hash_impls both, $name);
+    };
+    (@decorate_with_optional_mode [neither], $item:item, $name:ident) => {
+        $crate::define_property!(@decorate neither, $item);
+        $crate::define_property!(@eq_hash_impls neither, $name);
+    };
+    (@decorate_with_optional_mode [$mode:ident], $item:item, $name:ident) => {
+        compile_error!("define_derived_property!: `impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
+    };
+
     // The calls to `$crate::impl_derived_property!` are all the same except for
     // this first case of a newtype for an `Option<T>`, which has a special `display_impl`.
 
@@ -536,12 +836,47 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr
-        // For `canonical_value` implementations:
-        $(, $($extra:tt)+),*
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub struct $name(pub Option<$inner_ty>);
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [$impl_eq_hash],
+            pub struct $name(pub Option<$inner_ty>);,
+            $name
+        );
+
+        // Use impl_derived_property! to provide a custom display implementation
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn,
+            display_impl = |value: &Option<$inner_ty>| {
+                match value {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            }
+            $(, $($extra)+)*
+        );
+    };
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+        $(, $($extra:tt)+)*
+    ) => {
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [],
+            pub struct $name(pub Option<$inner_ty>);,
+            $name
+        );
 
         // Use impl_derived_property! to provide a custom display implementation
         $crate::impl_derived_property!(
@@ -566,12 +901,40 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr
-        // For `canonical_value` implementations:
-        $(, $($extra:tt)+),*
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub struct $name( $(pub $field_ty),* );
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [$impl_eq_hash],
+            pub struct $name( $(pub $field_ty),* );,
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
+        );
+    };
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+        $(, $($extra:tt)+)*
+    ) => {
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [],
+            pub struct $name( $(pub $field_ty),* );,
+            $name
+        );
 
         $crate::impl_derived_property!(
             $name,
@@ -589,12 +952,40 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr
-        // For `canonical_value` implementations:
-        $(, $($extra:tt)+),*
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub struct $name { $($visibility $field_name : $field_ty),* }
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [$impl_eq_hash],
+            pub struct $name { $($visibility $field_name : $field_ty),* },
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
+        );
+    };
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+        $(, $($extra:tt)+)*
+    ) => {
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [],
+            pub struct $name { $($visibility $field_name : $field_ty),* },
+            $name
+        );
 
         $crate::impl_derived_property!(
             $name,
@@ -614,14 +1005,46 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr
-        // For `canonical_value` implementations:
-        $(, $($extra:tt)+),*
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)*
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
-        pub enum $name {
-            $($variant),*
-        }
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [$impl_eq_hash],
+            pub enum $name {
+                $($variant),*
+            },
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)*
+        );
+    };
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+        $(, $($extra:tt)+)*
+    ) => {
+        $crate::define_derived_property!(
+            @decorate_with_optional_mode
+            [],
+            pub enum $name {
+                $($variant),*
+            },
+            $name
+        );
 
         $crate::impl_derived_property!(
             $name,
@@ -837,7 +1260,7 @@ mod tests {
     define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
     define_property!(struct Name(&'static str), Person, default_const = Name(""));
     define_property!(struct Age(u8), Person, default_const = Age(0));
-    define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
+    define_property!(struct Weight(f64), Person, impl_eq_hash = both, default_const = Weight(0.0));
 
     // A struct with named fields
     define_property!(
@@ -846,6 +1269,7 @@ mod tests {
             dose: u8,
         },
         Person,
+        impl_eq_hash = both,
         default_const = Innocculation { time: 0.0, dose: 0 }
     );
 
@@ -888,8 +1312,16 @@ mod tests {
         }
     );
 
+    define_derived_property!(
+        struct DerivedWeight(f64),
+        Person,
+        [Age],
+        |age| DerivedWeight(age.0 as f64),
+        impl_eq_hash = both
+    );
+
     // A property type for two distinct entities.
-    #[derive(Debug, PartialEq, Clone, Copy, Serialize)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
     pub enum InfectionKind {
         Respiratory,
         Genetic,
@@ -1041,6 +1473,7 @@ mod tests {
         let mut expected_dependents = [
             AgeGroup::id(),
             DerivedProp::id(),
+            DerivedWeight::id(),
             ProfileNAW::id(),
             ProfileAWN::id(),
             ProfileWAN::id(),
@@ -1086,5 +1519,12 @@ mod tests {
         let property = POu32(Some(22));
         let debug_str = format!("{:?}", property);
         assert_eq!(debug_str, "POu32(Some(22))");
+    }
+
+    #[test]
+    fn test_define_derived_property_impl_eq_hash() {
+        let mut values = crate::HashSet::default();
+        values.insert(DerivedWeight(3.0));
+        assert!(values.contains(&DerivedWeight(3.0)));
     }
 }

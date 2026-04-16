@@ -57,6 +57,9 @@ use crate::Context;
 pub(super) type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
+/// Identifies the logical property query represented by a property-backed source,
+/// i.e. "entities whose property `P` equals value `V`", regardless of how
+/// that set is produced internally.
 pub(crate) struct PropertySourceId {
     pub property_id: usize,
     pub value_hash: HashValueType,
