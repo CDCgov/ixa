@@ -28,6 +28,8 @@ pub type IndexSet<T> = RawIndexSet<T, FxBuildHasher>;
 
 pub type HashValueType = u128;
 
+pub(crate) type DeterministicHasher = Xxh3Default;
+
 /// A `rkyv` writer that streams serialized bytes directly into a `Hasher`.
 pub struct HasherWriter<'a, H> {
     hasher: &'a mut H,
@@ -151,11 +153,18 @@ pub fn hash_str(data: &str) -> u64 {
     hasher.finish()
 }
 
-// Helper for any T: Hash
+/// This if factored out for cases of implementations using the `Hash` trait to compute a 128-bit
+/// hash. This provides a unified interface to the implementation-specific 128-bit "finish" method.
+#[must_use]
+pub(crate) fn finish_deterministic_hash_128(hasher: DeterministicHasher) -> HashValueType {
+    hasher.digest128()
+}
+
+/// Helper for any `T: Hash` using the crate's deterministic hasher.
 pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
-    let mut h = Xxh3Default::default();
-    value.hash(&mut h);
-    h.digest128()
+    let mut hasher = DeterministicHasher::default();
+    value.hash(&mut hasher);
+    finish_deterministic_hash_128(hasher)
 }
 
 pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
@@ -167,8 +176,9 @@ pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
 
 #[cfg(test)]
 mod tests {
+    use std::hash::Hash;
+
     use bincode::serde::encode_to_vec as serialize_to_vec;
-    use serde::Serialize;
 
     use super::*;
 
@@ -210,39 +220,14 @@ mod tests {
     }
 
     #[test]
-    fn serialization_is_concatenation() {
-        // We rely on the fact that the serialization of a tuple is the concatenation of the
-        // component types, and likewise for structs. This tests that invariant.
+    fn hashing_tuple_matches_hashing_components_in_order() {
+        let tuple = ("John", 25_u32, true);
 
-        #[derive(Debug, Serialize)]
-        struct MyStruct {
-            name: &'static str,
-            age: i32,
-            height: f64,
-        }
+        let mut hasher = DeterministicHasher::default();
+        tuple.0.hash(&mut hasher);
+        tuple.1.hash(&mut hasher);
+        tuple.2.hash(&mut hasher);
 
-        let my_struct = MyStruct {
-            name: "John",
-            age: 25,
-            height: 1.80,
-        };
-        let my_tuple = ("John", 25, 1.80);
-
-        let encoded_struct = serialize_to_vec(my_struct, bincode::config::standard()).unwrap();
-        let encoded_tuple = serialize_to_vec(my_tuple, bincode::config::standard()).unwrap();
-
-        assert_eq!(encoded_struct, encoded_tuple);
-
-        let encoded_str = bincode::encode_to_vec("John", bincode::config::standard()).unwrap();
-        let encoded_int = bincode::encode_to_vec(25, bincode::config::standard()).unwrap();
-        let encoded_float = bincode::encode_to_vec(1.80, bincode::config::standard()).unwrap();
-        let flattened = encoded_str
-            .iter()
-            .copied()
-            .chain(encoded_int.iter().copied())
-            .chain(encoded_float.iter().copied())
-            .collect::<Vec<u8>>();
-
-        assert_eq!(flattened, encoded_tuple);
+        assert_eq!(finish_deterministic_hash_128(hasher), one_shot_128(&tuple));
     }
 }

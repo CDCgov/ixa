@@ -7,7 +7,7 @@ use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
-use crate::hashing::one_shot_128;
+use crate::hashing::{finish_deterministic_hash_128, one_shot_128, DeterministicHasher};
 use crate::Context;
 
 impl<E: Entity> Query<E> for () {
@@ -221,40 +221,27 @@ macro_rules! impl_query {
                 }
 
                 fn multi_property_value_hash(&self) -> HashValueType {
-                    // This needs to be kept in sync with how multi-properties compute their hash. We are
-                    // exploiting the fact that `bincode` encodes tuples as the concatenation of their
-                    // elements. Unfortunately, `bincode` allocates, but we avoid more allocations by
-                    // using stack allocated arrays.
-
-                    // Multi-properties order their values by lexicographic order of the component
-                    // properties, not `TypeId` order.
-                    // let type_ids: [TypeId; $ct] = [
-                    //     #(
-                    //         T~N::type_id(),
-                    //     )*
-                    // ];
+                    // This needs to be kept in sync with how multi-properties compute their hash.
+                    // Multi-properties hash their tuple value in canonical component-name order, so
+                    // queries reorder the per-field hash operations into that same runtime order.
                     let keys: [&str; $ct] = [
                         #(
                             <T~N as $crate::entity::property::Property<E>>::name(),
                         )*
                     ];
-                    // It is convenient to have the elements of the array to be `Copy` in the `static_apply_reordering`
-                    // function. Since references are trivially copyable, we construct `values` below to be an array
-                    // of _references_ to the `Vec`s returned from `encode_to_vec`. (The compiler is smart enough to
-                    // keep the referenced value in scope.)
-                    let mut values: [&Vec<u8>; $ct] = [
+                    let mut hash_fns: [fn(&Self, &mut DeterministicHasher); $ct] = [
                         #(
-                            &$crate::bincode::serde::encode_to_vec(
-                                self.N,
-                                $crate::bincode::config::standard(),
-                            )
-                            .unwrap(),
+                            |value, state| value.N.hash(state),
                         )*
                     ];
-                    static_reorder_by_keys(&keys, &mut values);
+                    static_reorder_by_keys(&keys, &mut hash_fns);
 
-                    let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
-                    one_shot_128(&data.as_slice())
+                    let mut hasher = DeterministicHasher::default();
+                    for hash_fn in hash_fns {
+                        hash_fn(self, &mut hasher);
+                    }
+
+                    finish_deterministic_hash_128(hasher)
                 }
 
                 fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {

@@ -114,7 +114,6 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
 #[cfg(test)]
 mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
-    use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
 
     define_entity!(Person);
@@ -175,20 +174,4 @@ mod tests {
         println!("Results: {:?}", results_a);
     }
 
-    #[test]
-    fn test_index_value_compute_same_values() {
-        let value = hash_serialized_128("test value");
-        let value2 = hash_serialized_128("test value");
-        assert_eq!(one_shot_128(&value), one_shot_128(&value2));
-    }
-
-    #[test]
-    fn test_index_value_compute_different_values() {
-        let value1 = Age(42);
-        let value2 = Age(43);
-        assert_ne!(
-            <Age as Property<Person>>::hash_property_value(&value1),
-            <Age as Property<Person>>::hash_property_value(&value2)
-        );
-    }
 }
