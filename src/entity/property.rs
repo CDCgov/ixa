@@ -16,7 +16,7 @@ use serde::Serialize;
 
 use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
-use crate::hashing::hash_serialized_128;
+use crate::hashing::one_shot_128;
 use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
@@ -36,9 +36,12 @@ pub enum PropertyInitializationKind {
     Constant,
 }
 
-// A type-erased interface for properties.
-pub trait AnyProperty: Copy + Debug + PartialEq + Serialize + 'static {}
-impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Serialize + 'static {}
+/// Shared trait bounds for property values and canonical values.
+///
+/// These values must be copyable, serializable, and support equality and deterministic hashing so
+/// they can participate in indexing.
+pub trait AnyProperty: Copy + Debug + PartialEq + Eq + Hash + Serialize + 'static {}
+impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Eq + Hash + Serialize + 'static {}
 
 /// `const fn` string equality — `==` on `&str` isn't `const` on stable.
 #[must_use]
@@ -60,8 +63,9 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 
 /// All properties must implement this trait using one of the `define_property` macros.
 ///
-/// Property values must implement `Eq` and `Hash` so they can participate in property indexes.
-pub trait Property<E: Entity>: AnyProperty + Eq + Hash {
+/// Property values and canonical values must satisfy `AnyProperty` so they can participate in
+/// property indexes.
+pub trait Property<E: Entity>: AnyProperty {
     /// Some properties might store a transformed version of the value in the index. This is the
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;
@@ -111,10 +115,12 @@ pub trait Property<E: Entity>: AnyProperty + Eq + Hash {
     #[must_use]
     fn get_display(&self) -> String;
 
-    /// For cases when the property's hash needs to be computed in a special way.
+    /// Computes the deterministic hash of the canonical value used for indexing.
+    ///
+    /// Override this only when the property's index hash must be computed in a special way.
     #[must_use]
     fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
-        hash_serialized_128(value)
+        one_shot_128(value)
     }
 
     /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
