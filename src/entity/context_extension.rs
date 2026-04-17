@@ -451,7 +451,7 @@ impl ContextEntitiesExt for Context {
         // Special case the empty query, which creates a set containing the entire population.
         if query.type_id() == TypeId::of::<()>() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
-            callback(EntitySet::from_source(SourceSet::Population(
+            callback(EntitySet::from_source(SourceSet::full_population(
                 self.get_entity_count::<E>(),
             )));
             return;

@@ -29,7 +29,7 @@ impl<E: Entity> Query<E> for () {
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
-        EntitySet::from_source(SourceSet::Population(context.get_entity_count::<E>()))
+        EntitySet::from_source(SourceSet::full_population(context.get_entity_count::<E>()))
     }
 
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
@@ -67,7 +67,7 @@ impl<E: Entity + Copy> Query<E> for E {
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
-        EntitySet::from_source(SourceSet::Population(context.get_entity_count::<E>()))
+        EntitySet::from_source(SourceSet::full_population(context.get_entity_count::<E>()))
     }
 
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
