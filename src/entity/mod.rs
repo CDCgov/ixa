@@ -53,7 +53,3 @@ pub use entity_set::EntitySetIterator;
 pub use index::PropertyIndexType;
 pub use query::EntityPropertyTuple;
 pub(crate) use query::Query;
-
-/// The type used in the indexing infrastructure. This type alias is
-/// public, because it is used by any implementor of `Property<E: Entity>`.
-pub type HashValueType = u128;

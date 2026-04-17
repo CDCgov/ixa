@@ -185,6 +185,32 @@ pub fn unreorder_closure(input: TokenStream) -> TokenStream {
     output.into()
 }
 
+pub fn canonical_from_sorted_query_parts_closure(input: TokenStream) -> TokenStream {
+    let tag = syn::parse_macro_input!(input as TypeTuple);
+    let mut sorted_idents = tag.0.clone();
+    sorted_idents.sort_unstable_by_key(|a| a.to_string());
+
+    let vars: Vec<_> = (0..sorted_idents.len())
+        .map(|i| format_ident!("p{}", i))
+        .collect();
+    let patterns = vars.iter().map(|var| quote! { #var });
+    let downcasted = vars
+        .iter()
+        .zip(sorted_idents.iter())
+        .map(|(var, ident)| quote! { *#var.downcast_ref::<#ident>()? });
+
+    let output = quote! {
+        |parts: &[&dyn std::any::Any]| -> Option<(#( #sorted_idents ),*,)> {
+            let [ #( #patterns ),*, ] = parts else {
+                return None;
+            };
+            Some(( #( #downcasted ),*, ))
+        }
+    };
+
+    output.into()
+}
+
 /// Expands to an `impl $struct_name` block that defines variants of `make_canonical` and `make_uncanonical` methods
 /// that take and produce pure tuples.
 pub fn impl_reorder_fns(input: TokenStream) -> TokenStream {

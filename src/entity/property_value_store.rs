@@ -22,7 +22,7 @@ use crate::entity::index::{
 };
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
-use crate::entity::{Entity, EntityId, HashValueType};
+use crate::entity::{Entity, EntityId};
 use crate::hashing::IndexSet;
 use crate::{Context, ContextEntitiesExt};
 
@@ -43,20 +43,9 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
 
-    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
-    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>);
+    fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E>;
 
-    /// Fetches the hash bucket corresponding to the provided hash value. Returns `None` if either the
-    /// property is not indexed or there is no bucket corresponding to the hash value.
-    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<&IndexSet<EntityId<E>>>;
-
-    /// Fetches the hash bucket corresponding to the provided hash value.
-    /// Returns `Unsupported` if there is no index or the index cannot return sets.
-    fn get_index_set_with_hash_result(&self, hash: HashValueType) -> IndexSetResult<'_, E>;
-
-    /// Fetches the count corresponding to the provided hash value.
-    /// Returns `Unsupported` if there is no index or the index cannot return counts.
-    fn get_index_count_with_hash_result(&self, hash: HashValueType) -> IndexCountResult;
+    fn get_index_count_for_query_parts(&self, parts: &[&dyn Any]) -> IndexCountResult;
 
     /// Returns the index type used by this `PropertyValueStore` instance.
     fn index_type(&self) -> PropertyIndexType;
@@ -98,32 +87,18 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         ))
     }
 
-    fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        if self.index.index_type() != PropertyIndexType::Unindexed {
-            self.index.add_entity_with_hash(hash, entity_id);
-        } else {
-            error!("attempted to add an entity to an index for an unindexed property");
+    fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E> {
+        match P::canonical_from_sorted_query_parts(parts) {
+            Some(value) => self.index.get_index_set_result(&value),
+            None => IndexSetResult::Empty,
         }
     }
 
-    fn remove_entity_from_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        if self.index.index_type() != PropertyIndexType::Unindexed {
-            self.index.remove_entity_with_hash(hash, entity_id);
-        } else {
-            error!("attempted to remove an entity from an index for an unindexed property");
+    fn get_index_count_for_query_parts(&self, parts: &[&dyn Any]) -> IndexCountResult {
+        match P::canonical_from_sorted_query_parts(parts) {
+            Some(value) => self.index.get_index_count_result(&value),
+            None => IndexCountResult::Count(0),
         }
-    }
-
-    fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<&IndexSet<EntityId<E>>> {
-        self.index.get_index_set_with_hash(hash)
-    }
-
-    fn get_index_set_with_hash_result(&self, hash: HashValueType) -> IndexSetResult<'_, E> {
-        self.index.get_index_set_with_hash_result(hash)
-    }
-
-    fn get_index_count_with_hash_result(&self, hash: HashValueType) -> IndexCountResult {
-        self.index.get_index_count_with_hash_result(hash)
     }
 
     fn index_type(&self) -> PropertyIndexType {

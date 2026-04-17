@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use ixa::hashing::hash_serialized_128;
+use ixa::hashing::one_shot_128;
 use ixa::prelude::*;
 use serde::Serialize;
 
@@ -57,11 +57,7 @@ fn hash_benchmarks(criterion: &mut Criterion) {
 
     let scalar = HashScalar(42);
     group.bench_function("scalar_property_hash", |bencher| {
-        bencher.iter(|| {
-            black_box(HashScalar::hash_property_value(
-                &HashScalar::make_canonical(black_box(scalar)),
-            ))
-        });
+        bencher.iter(|| black_box(one_shot_128(&HashScalar::make_canonical(black_box(scalar)))));
     });
 
     let structured = HashStruct {
@@ -70,18 +66,18 @@ fn hash_benchmarks(criterion: &mut Criterion) {
     };
     group.bench_function("struct_property_hash", |bencher| {
         bencher.iter(|| {
-            black_box(HashStruct::hash_property_value(
-                &HashStruct::make_canonical(black_box(structured)),
-            ))
+            black_box(one_shot_128(&HashStruct::make_canonical(black_box(
+                structured,
+            ))))
         });
     });
 
     let float_value = HashFloat(1234.5);
     group.bench_function("float_property_hash", |bencher| {
         bencher.iter(|| {
-            black_box(HashFloat::hash_property_value(&HashFloat::make_canonical(
-                black_box(float_value),
-            )))
+            black_box(one_shot_128(&HashFloat::make_canonical(black_box(
+                float_value,
+            ))))
         });
     });
 
@@ -89,17 +85,11 @@ fn hash_benchmarks(criterion: &mut Criterion) {
     let multi_canonical =
         <(MultiHashByte, MultiHashFloat) as Property<Person>>::make_canonical(multi_value);
     group.bench_function("multi_property_hash", |bencher| {
-        bencher.iter(|| {
-            black_box(
-                <(MultiHashByte, MultiHashFloat) as Property<Person>>::hash_property_value(
-                    black_box(&multi_canonical),
-                ),
-            )
-        });
+        bencher.iter(|| black_box(one_shot_128(black_box(&multi_canonical))));
     });
 
     group.bench_function("raw_one_shot_hash_scalar", |bencher| {
-        bencher.iter(|| black_box(hash_serialized_128(black_box(42u8))));
+        bencher.iter(|| black_box(one_shot_128(black_box(&42u8))));
     });
 
     group.finish();

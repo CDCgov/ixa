@@ -47,6 +47,11 @@ pub fn unreorder_closure(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
+pub fn canonical_from_sorted_query_parts_closure(input: TokenStream) -> TokenStream {
+    reorder_fn::canonical_from_sorted_query_parts_closure(input)
+}
+
+#[proc_macro]
 pub fn impl_people_make_canonical(input: TokenStream) -> TokenStream {
     reorder_fn::impl_people_reorder_fns(input)
 }

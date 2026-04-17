@@ -427,10 +427,10 @@ impl ContextEntitiesExt for Context {
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
-            match property_store.get_index_set_with_hash_for_property_id(
-                multi_property_id,
-                query.multi_property_value_hash(),
-            ) {
+            let query_parts = query.query_parts();
+            let lookup_result = property_store
+                .get_index_set_for_query_parts(multi_property_id, query_parts.as_ref());
+            match lookup_result {
                 IndexSetResult::Set(people_set) => {
                     callback(EntitySet::from_source(SourceSet::IndexSet(people_set)));
                     return;
@@ -466,10 +466,10 @@ impl ContextEntitiesExt for Context {
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
-            match property_store.get_index_count_with_hash_for_property_id(
-                multi_property_id,
-                query.multi_property_value_hash(),
-            ) {
+            let query_parts = query.query_parts();
+            let lookup_result = property_store
+                .get_index_count_for_query_parts(multi_property_id, query_parts.as_ref());
+            match lookup_result {
                 IndexCountResult::Count(count) => return count,
                 IndexCountResult::Unsupported => {}
             }
@@ -586,8 +586,6 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use serde::Serialize;
-
     use super::*;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
@@ -604,11 +602,11 @@ mod tests {
 
     define_property!(struct Age(u8), Person);
 
-    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     struct CounterValue(u8);
     impl_property!(CounterValue, Person, default_const = CounterValue(0));
 
-    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     struct CounterStratum(bool);
     impl_property!(
         CounterStratum,
@@ -1101,12 +1099,13 @@ mod tests {
         let index_id = InfectionStatusVaccinated::index_id();
 
         let property_store = context.entity_store.get_property_store::<Person>();
-        let property_value_store = property_store.get_with_id(index_id);
-        let bucket: &IndexSet<EntityId<Person>> = property_value_store
-            .get_index_set_with_hash(
-                (InfectionStatus::Susceptible, Vaccinated(true)).multi_property_value_hash(),
-            )
-            .unwrap();
+        let query = (InfectionStatus::Susceptible, Vaccinated(true));
+        let query_parts = query.query_parts();
+        let bucket =
+            match property_store.get_index_set_for_query_parts(index_id, query_parts.as_ref()) {
+                IndexSetResult::Set(bucket) => bucket,
+                other => panic!("expected indexed query bucket, found {other:?}"),
+            };
 
         let expected_entities = bucket.iter().copied().collect::<IndexSet<_>>();
         assert_eq!(expected_entities, result_entities);
