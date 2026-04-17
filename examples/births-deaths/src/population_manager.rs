@@ -3,6 +3,7 @@ use std::fmt;
 use ixa::impl_derived_property;
 use ixa::prelude::*;
 use rand_distr::{Exp, Uniform};
+use serde::Serialize;
 
 use crate::parameters_loader::Parameters;
 
@@ -12,15 +13,14 @@ static MAX_AGE: u8 = 100;
 
 define_entity!(Person);
 
-define_property!(
-    enum InfectionStatus {
-        S,
-        I,
-        R,
-    },
-    Person,
-    default_const = InfectionStatus::S
-);
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+pub enum InfectionStatus {
+    S,
+    I,
+    R,
+}
+
+impl_property!(InfectionStatus, Person, default_const = InfectionStatus::S);
 define_property!(
     struct Age(u8),
     Person

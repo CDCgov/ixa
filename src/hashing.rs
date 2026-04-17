@@ -15,11 +15,9 @@
 
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 
-use bincode::serde::encode_to_vec as serialize_to_vec;
 pub use indexmap::set::Iter as IndexSetIter;
 use indexmap::IndexSet as RawIndexSet;
 pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher};
-use serde::Serialize;
 use xxhash_rust::xxh3::Xxh3Default;
 
 type FxBuildHasher = BuildHasherDefault<FxHasher>;
@@ -167,30 +165,11 @@ pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
     finish_deterministic_hash_128(hasher)
 }
 
-pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
-    let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
-    // The `xxh3_128` should be a little faster, but it is not guaranteed to produce the same hash.
-    // xxh3_128(serialized.as_slice())
-    one_shot_128(&serialized.as_slice())
-}
-
 #[cfg(test)]
 mod tests {
     use std::hash::Hash;
 
-    use bincode::serde::encode_to_vec as serialize_to_vec;
-
     use super::*;
-
-    #[test]
-    fn hash_serialized_equals_one_shot() {
-        let value = "hello";
-        let a = hash_serialized_128(value);
-        let serialized = serialize_to_vec(value, bincode::config::standard()).unwrap();
-        let b = one_shot_128(&serialized.as_slice());
-
-        assert_eq!(a, b);
-    }
 
     #[test]
     fn hashes_strings() {

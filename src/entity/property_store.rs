@@ -42,7 +42,7 @@ use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
-use crate::entity::{EntityId, HashValueType, PropertyIndexType};
+use crate::entity::{EntityId, PropertyIndexType};
 use crate::Context;
 
 /// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
@@ -246,12 +246,6 @@ impl<E: Entity> PropertyStore<E> {
         Self { items }
     }
 
-    /// Fetches an immutable reference to the type-erased `PropertyValueStore<E>`.
-    #[cfg(test)]
-    pub(crate) fn get_with_id(&self, property_id: usize) -> &dyn PropertyValueStore<E> {
-        self.items[property_id].as_ref()
-    }
-
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
     pub fn get<P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
@@ -386,26 +380,28 @@ impl<E: Entity> PropertyStore<E> {
         }
     }
 
-    pub fn get_index_set_with_hash_for_property_id(
+    pub fn get_index_set_for_query_parts(
         &self,
         property_id: usize,
-        hash: HashValueType,
+        query_parts: &[&dyn Any],
     ) -> IndexSetResult<'_, E> {
-        self.items[property_id].get_index_set_with_hash_result(hash)
+        self.items[property_id].get_index_set_for_query_parts(query_parts)
     }
 
-    pub fn get_index_count_with_hash_for_property_id(
+    pub fn get_index_count_for_query_parts(
         &self,
         property_id: usize,
-        hash: HashValueType,
+        query_parts: &[&dyn Any],
     ) -> IndexCountResult {
-        self.items[property_id].get_index_count_with_hash_result(hash)
+        self.items[property_id].get_index_count_for_query_parts(query_parts)
     }
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]
+    use std::any::Any;
+
     use super::*;
     use crate::entity::index::{IndexCountResult, IndexSetResult};
     use crate::prelude::*;
@@ -492,8 +488,8 @@ mod tests {
 
         let existing_value = Age(12);
         let missing_value = Age(99);
-        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
-        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+        let existing_query_parts = [&existing_value as &dyn Any];
+        let missing_query_parts = [&missing_value as &dyn Any];
 
         let _ = context.add_entity((existing_value,)).unwrap();
         let _ = context.add_entity((existing_value,)).unwrap();
@@ -502,25 +498,23 @@ mod tests {
 
         // FullIndex + count
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
             IndexCountResult::Count(2)
         );
 
         // FullIndex + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexSetResult::Empty
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(
+            property_store.get_index_set_for_query_parts(
                 Age::index_id(),
-                existing_hash,
+                &existing_query_parts,
             ),
             IndexSetResult::Set(set) if set.len() == 2
         ));
@@ -533,8 +527,8 @@ mod tests {
 
         let existing_value = Age(12);
         let missing_value = Age(99);
-        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
-        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+        let existing_query_parts = [&existing_value as &dyn Any];
+        let missing_query_parts = [&missing_value as &dyn Any];
 
         let _ = context.add_entity((existing_value,)).unwrap();
         let _ = context.add_entity((existing_value,)).unwrap();
@@ -543,23 +537,21 @@ mod tests {
 
         // ValueCountIndex + count
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
             IndexCountResult::Count(2)
         );
 
         // ValueCountIndex + set (unsupported)
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
+            property_store.get_index_set_for_query_parts(Age::index_id(), &existing_query_parts,),
             IndexSetResult::Unsupported
         ));
     }
@@ -569,8 +561,8 @@ mod tests {
         let mut context = Context::new();
         let existing_value = Age(12);
         let missing_value = Age(99);
-        let existing_hash = <Age as Property<Person>>::hash_property_value(&existing_value);
-        let missing_hash = <Age as Property<Person>>::hash_property_value(&missing_value);
+        let existing_query_parts = [&existing_value as &dyn Any];
+        let missing_query_parts = [&missing_value as &dyn Any];
 
         let _ = context.add_entity((existing_value,)).unwrap();
         let _ = context.add_entity((existing_value,)).unwrap();
@@ -579,23 +571,21 @@ mod tests {
 
         // Unindexed + count
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexCountResult::Unsupported
         );
         assert_eq!(
-            property_store
-                .get_index_count_with_hash_for_property_id(Age::index_id(), existing_hash,),
+            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
             IndexCountResult::Unsupported
         );
 
         // Unindexed + set
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), missing_hash,),
+            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_with_hash_for_property_id(Age::index_id(), existing_hash,),
+            property_store.get_index_set_for_query_parts(Age::index_id(), &existing_query_parts,),
             IndexSetResult::Unsupported
         ));
     }
