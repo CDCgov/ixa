@@ -56,6 +56,7 @@ impl<H: Hasher> rkyv::ser::Writer<rkyv::rancor::Error> for HasherWriter<'_, H> {
 }
 
 /// A fixed-size `rkyv` writer used by macro-generated equality implementations.
+#[derive(Debug, Clone, Copy)]
 pub struct EqualityBufferWriter<const N: usize> {
     buf: [u8; N],
     pos: usize,
@@ -73,6 +74,12 @@ impl<const N: usize> EqualityBufferWriter<N> {
     #[must_use]
     pub fn as_written(&self) -> &[u8] {
         &self.buf[..self.pos]
+    }
+}
+
+impl<const N: usize> Default for EqualityBufferWriter<N> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

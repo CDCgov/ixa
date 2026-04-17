@@ -606,12 +606,12 @@ macro_rules! impl_property {
         ( $($dependency:ident),+ )
         $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
         $(, index_id_fn = $index_id_fn:expr)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
@@ -675,12 +675,12 @@ macro_rules! impl_property {
         $entity:ident
         $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
         $(, index_id_fn = $index_id_fn:expr)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         // Enforce mutual exclusivity at compile time.
@@ -999,8 +999,8 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn,
-            display_impl = |value: &Option<$inner_ty>| {
-                match value {
+            display_impl = |value: &$name| {
+                match value.0 {
                     Some(v) => format!("{:?}", v),
                     None => "None".to_string(),
                 }
@@ -1282,19 +1282,6 @@ macro_rules! define_multi_property {
                             $(context.get_property::<$entity, $dependency>(entity_id)),+
                         )
                     },
-                    display_impl = |val: &( $($dependency),+ )| {
-                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
-                        let mut displayed = String::from("(");
-                        $(
-                            displayed.push_str(
-                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
-                            );
-                            displayed.push_str(", ");
-                        )+
-                        displayed.truncate(displayed.len() - 2);
-                        displayed.push_str(")");
-                        displayed
-                    },
                     canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
                     make_canonical = $crate::reorder_closure!(( $($dependency),+ )),
                     make_uncanonical = $crate::unreorder_closure!(( $($dependency),+ )),
@@ -1346,6 +1333,20 @@ macro_rules! define_multi_property {
                                 deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
                             }
                         )*
+                    },
+
+                    display_impl = |val: &( $($dependency),+ )| {
+                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
+                        let mut displayed = String::from("(");
+                        $(
+                            displayed.push_str(
+                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
+                            );
+                            displayed.push_str(", ");
+                        )+
+                        displayed.truncate(displayed.len() - 2);
+                        displayed.push_str(")");
+                        displayed
                     },
 
                     ctor_registration = {
