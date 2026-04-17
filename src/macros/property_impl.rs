@@ -954,16 +954,16 @@ mod tests {
         let mut context = Context::new();
 
         context
-            .add_entity((Name("John"), Age(42), Weight(220.5)))
+            .add_entity(with!(Person, Name("John"), Age(42), Weight(220.5)))
             .unwrap();
         context
-            .add_entity((Name("Jane"), Age(22), Weight(180.5)))
+            .add_entity(with!(Person, Name("Jane"), Age(22), Weight(180.5)))
             .unwrap();
         context
-            .add_entity((Name("Bob"), Age(32), Weight(190.5)))
+            .add_entity(with!(Person, Name("Bob"), Age(32), Weight(190.5)))
             .unwrap();
         context
-            .add_entity((Name("Alice"), Age(22), Weight(170.5)))
+            .add_entity(with!(Person, Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
 
         context.index_property::<_, ProfileNAW>();
@@ -998,9 +998,8 @@ mod tests {
         assert_eq!(indexed_count, 1);
 
         {
-            let example_query = (Name("Alice"), Age(22), Weight(170.5));
-            let query_multi_property_id =
-                <(Name, Age, Weight) as Query<Person>>::multi_property_id(&example_query);
+            let example_query = with!(Person, Name("Alice"), Age(22), Weight(170.5));
+            let query_multi_property_id = Query::multi_property_id(&example_query);
             assert!(query_multi_property_id.is_some());
             assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
             assert_eq!(
@@ -1011,9 +1010,12 @@ mod tests {
             );
         }
 
-        context.with_query_results(((Name("John"), Age(42), Weight(220.5)),), &mut |results| {
-            assert_eq!(results.into_iter().count(), 1);
-        });
+        context.with_query_results(
+            with!(Person, (Name("John"), Age(42), Weight(220.5))),
+            &mut |results| {
+                assert_eq!(results.into_iter().count(), 1);
+            },
+        );
     }
 
     #[test]
@@ -1052,7 +1054,9 @@ mod tests {
     #[test]
     fn test_get_display() {
         let mut context = Context::new();
-        let person = context.add_entity((POu32(Some(42)), Pu32(22))).unwrap();
+        let person = context
+            .add_entity(with!(Person, POu32(Some(42)), Pu32(22)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",
@@ -1067,7 +1071,9 @@ mod tests {
             ),
             "Pu32(22)"
         );
-        let person2 = context.add_entity((POu32(None), Pu32(11))).unwrap();
+        let person2 = context
+            .add_entity(with!(Person, POu32(None), Pu32(11)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",

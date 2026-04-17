@@ -57,7 +57,8 @@ mod tests {
 
         // Entity properties: add a Person with TestPropU32
         let pid: EntityId<Person> = ctx
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 TestPropU32(10u32),
                 TestPropU32b(20u32),
                 TestPropOpt(Some(3u8)),
@@ -83,10 +84,10 @@ mod tests {
 
         // Edge type (entity-based network): create two people and add an edge of type TestEdge
         let p1 = ctx
-            .add_entity((TestPropU32(1u32), TestPropU32b(1u32)))
+            .add_entity(with!(Person, TestPropU32(1u32), TestPropU32b(1u32)))
             .unwrap();
         let p2 = ctx
-            .add_entity((TestPropU32(2u32), TestPropU32b(2u32)))
+            .add_entity(with!(Person, TestPropU32(2u32), TestPropU32b(2u32)))
             .unwrap();
         ctx.add_edge::<Person, TestEdge>(p1, p2, 1.0, TestEdge)
             .unwrap();

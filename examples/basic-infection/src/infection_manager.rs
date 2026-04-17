@@ -43,7 +43,7 @@ mod test {
     use ixa::prelude::*;
 
     use crate::infection_manager::InfectionStatusEvent;
-    use crate::people::InfectionStatus;
+    use crate::people::{InfectionStatus, Person};
 
     define_data_plugin!(RecoveryPlugin, usize, 0);
 
@@ -66,7 +66,9 @@ mod test {
 
         let population_size = 10;
         for _ in 0..population_size {
-            let person_id = context.add_entity((InfectionStatus::S,)).unwrap();
+            let person_id = context
+                .add_entity(with!(Person, InfectionStatus::S,))
+                .unwrap();
             context.set_property(person_id, InfectionStatus::I);
         }
 
