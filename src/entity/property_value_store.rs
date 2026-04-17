@@ -16,6 +16,7 @@ use log::{error, trace};
 
 use crate::entity::events::{
     PartialPropertyChangeEvent, PartialPropertyChangeEventBox, PartialPropertyChangeEventCore,
+    PropertyChangeEvent,
 };
 use crate::entity::index::{
     FullIndex, IndexCountResult, IndexSetResult, PropertyIndex, PropertyIndexType, ValueCountIndex,
@@ -40,6 +41,11 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
         entity_id: EntityId<E>,
         context: &Context,
     ) -> PartialPropertyChangeEventBox;
+
+    /// Returns whether a property write needs the partial change-event machinery.
+    ///
+    /// This is true if the property has change-event subscribers, value change counters, or an index.
+    fn should_create_partial_change(&self, context: &Context) -> bool;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
 
@@ -96,6 +102,12 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
             entity_id,
             previous_value,
         ))
+    }
+
+    fn should_create_partial_change(&self, context: &Context) -> bool {
+        context.has_event_handlers::<PropertyChangeEvent<E, P>>()
+            || !self.value_change_counters.is_empty()
+            || self.index.index_type() != PropertyIndexType::Unindexed
     }
 
     fn add_entity_to_index_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {

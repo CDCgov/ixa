@@ -328,6 +328,19 @@ impl<E: Entity> PropertyStore<E> {
         property_value_store.create_partial_property_change(entity_id, context)
     }
 
+    /// Returns whether the property with `property_index` needs partial change-event processing.
+    pub(crate) fn should_create_partial_property_change(
+        &self,
+        property_index: usize,
+        context: &Context,
+    ) -> bool {
+        let property_value_store = self.items
+                                       .get(property_index)
+            .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
+
+        property_value_store.should_create_partial_change(context)
+    }
+
     /// Returns whether or not the property `P` is indexed.
     ///
     /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,

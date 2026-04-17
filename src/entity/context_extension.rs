@@ -288,8 +288,8 @@ impl ContextEntitiesExt for Context {
         debug_assert!(!P::is_derived(), "cannot set a derived property");
 
         // The algorithm is as follows:
-        // 1. Snapshot previous values for the main property and its dependents by creating
-        //    `PartialPropertyChangeEvent` instances.
+        // 1. Snapshot previous values for the main property and any dependents that need change
+        //    processing by creating `PartialPropertyChangeEvent` instances.
         // 2. Set the new value of the main property in the property store.
         // 3. Emit each partial event; during emission each event computes the current value,
         //    updates its index (remove old/add new), and emits a `PropertyChangeEvent`.
@@ -326,18 +326,22 @@ impl ContextEntitiesExt for Context {
             let property_store = self.entity_store.get_property_store::<E>();
 
             // Create the partial property change for this value.
-            dependents.push(property_store.create_partial_property_change(
-                P::id(),
-                entity_id,
-                self,
-            ));
-            // Now create partial property change events for each dependent.
-            for dependent_idx in P::dependents() {
+            if property_store.should_create_partial_property_change(P::id(), self) {
                 dependents.push(property_store.create_partial_property_change(
-                    *dependent_idx,
+                    P::id(),
                     entity_id,
                     self,
                 ));
+            }
+            // Now create partial property change events for each dependent.
+            for dependent_idx in P::dependents() {
+                if property_store.should_create_partial_property_change(*dependent_idx, self) {
+                    dependents.push(property_store.create_partial_property_change(
+                        *dependent_idx,
+                        entity_id,
+                        self,
+                    ));
+                }
             }
         }
 
