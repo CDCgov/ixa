@@ -1,11 +1,10 @@
 use ixa::log::info;
-use ixa::network::edge::EdgeType;
 use ixa::prelude::*;
-use ixa::{impl_property, ExecutionPhase};
-use rand_distr::{Bernoulli, Gamma};
+use ixa::{impl_property, ExecutionPhase, HashSet, HashSetExt};
+use rand_distr::Gamma;
 use serde::{Deserialize, Serialize};
 
-use crate::network::{Age5to17, AgeUnder5, Household};
+use crate::network::get_contacts;
 use crate::parameters::Parameters;
 use crate::{Person, PersonId};
 
@@ -27,36 +26,18 @@ define_property!(
     default_const = InfectedBy(None)
 );
 
-fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
-    1.0 - (1.0 - sar).powf(1.0 / infectious_period)
-}
-
 fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f64 {
     let d = Gamma::new(shape, mean_period / shape).unwrap();
     context.sample_distr(SeirRng, d)
 }
 
-fn expose_network<ET: EdgeType<Person>>(context: &mut Context, beta: f64) {
-    let infectious_people = context.query((DiseaseStatus::I,)).to_owned_vec();
-
-    for infectious in infectious_people {
-        let edges = context.get_matching_edges::<Person, ET>(infectious, |context, edge| {
-            context.match_entity(edge.neighbor, (DiseaseStatus::S,))
-        });
-
-        for e in edges {
-            if context.sample_distr(SeirRng, Bernoulli::new(beta).unwrap()) {
-                context.set_property(e.neighbor, DiseaseStatus::E);
-                info!(
-                    "Person {} exposed person {} at time {}.",
-                    infectious,
-                    e.neighbor,
-                    context.get_current_time()
-                );
-                context.set_property(e.neighbor, InfectedBy(Some(infectious)));
-            }
-        }
-    }
+fn expose(context: &mut Context, infector: PersonId, infectee: PersonId) {
+    info!(
+        "{infector:?} exposed {infectee:?} at time {}.",
+        context.get_current_time()
+    );
+    context.set_property(infectee, DiseaseStatus::E);
+    context.set_property(infectee, InfectedBy(Some(infector)));
 }
 
 fn schedule_waiting_event(
@@ -104,34 +85,22 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     );
 }
 
-pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>) {
+pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>, period: f64) {
     context.add_periodic_plan_with_phase(
-        1.0,
-        |context| {
-            let parameters = context
-                .get_global_property_value(Parameters)
-                .unwrap()
-                .clone();
+        period,
+        move |context| {
+            // get all infector-infectee pairs
+            let mut pairs = HashSet::new();
+            for infector in context.query(with!(Person, DiseaseStatus::I)) {
+                for infectee in get_contacts(context, infector, period) {
+                    pairs.insert((infector, infectee));
+                }
+            }
 
-            // infect the networks
-            expose_network::<Household>(
-                context,
-                sar_to_beta(parameters.sar, parameters.incubation_period),
-            );
-            expose_network::<AgeUnder5>(
-                context,
-                sar_to_beta(
-                    parameters.sar / parameters.between_hh_transmission_reduction,
-                    parameters.incubation_period,
-                ),
-            );
-            expose_network::<Age5to17>(
-                context,
-                sar_to_beta(
-                    parameters.sar / parameters.between_hh_transmission_reduction,
-                    parameters.incubation_period,
-                ),
-            );
+            // do the exposures
+            for (infector, infectee) in pairs {
+                expose(context, infector, infectee)
+            }
         },
         ExecutionPhase::Normal,
     );
@@ -191,7 +160,7 @@ mod tests {
             to_infect.extend(people);
         });
 
-        init(&mut context, &to_infect);
+        init(&mut context, &to_infect, 1.0);
 
         context.execute();
 
