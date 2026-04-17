@@ -8,7 +8,7 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_index;
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
-use crate::entity::{Entity, HashValueType};
+use crate::entity::Entity;
 use crate::hashing::HashMap;
 use crate::prelude::EntityId;
 use crate::{Context, IxaError};
@@ -76,9 +76,10 @@ impl<E: Entity, T> EntityPropertyTuple<E, T> {
 }
 
 impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        self.inner.get_query()
-    }
+    type QueryParts<'a>
+        = T::QueryParts<'a>
+    where
+        Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         self.inner.get_type_ids()
@@ -88,8 +89,8 @@ impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
         self.inner.multi_property_id()
     }
 
-    fn multi_property_value_hash(&self) -> HashValueType {
-        self.inner.multi_property_value_hash()
+    fn query_parts(&self) -> Self::QueryParts<'_> {
+        self.inner.query_parts()
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
@@ -137,9 +138,10 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
 /// we implement Query for tuples of up to size 20, that's invisible
 /// to the caller. Do not use this trait directly.
 pub trait Query<E: Entity>: Copy + 'static {
-    /// Returns a list of `(type_id, hash)` pairs where `hash` is the hash of the property value
-    /// and `type_id` is `Property.type_id()`.
-    fn get_query(&self) -> Vec<(usize, HashValueType)>;
+    /// Allocation-free representation of the query parts exposed by this query.
+    type QueryParts<'a>: AsRef<[&'a dyn std::any::Any]>
+    where
+        Self: 'a;
 
     /// Returns an unordered list of type IDs of the properties in this query.
     fn get_type_ids(&self) -> Vec<TypeId>;
@@ -162,9 +164,8 @@ pub trait Query<E: Entity>: Copy + 'static {
         *entry
     }
 
-    /// If this query is a multi-property query, this method computes the hash of the
-    /// multi-property value.
-    fn multi_property_value_hash(&self) -> HashValueType;
+    /// Exposes the query parts without allocating.
+    fn query_parts(&self) -> Self::QueryParts<'_>;
 
     /// Creates a new query result as an `EntitySet`.
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E>;
