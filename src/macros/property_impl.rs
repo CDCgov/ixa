@@ -209,33 +209,166 @@ impl_property!(
 ///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
 #[macro_export]
 macro_rules! define_property {
-    (@decorate default, $item:item) => {
+    // Implementation Notes
+    //
+    // To implement the optional `impl_eq_hash` keyword argument, we have the following choices:
+    //
+    // 1. Have a single public match branch per type form with `$(, impl_eq_hash =
+    //    $impl_eq_hash:ident)?`, but explicitly list all the keyword options. This option disallows
+    //    the `$(, $($extra:tt)+)*` pattern for the tail.
+    // 2. Have two branches per type form, one with the `impl_eq_hash = ...` keyword present and one
+    //    with it absent, and use the `$(, $($extra:tt)+)*` pattern for the tail. This duplicates the
+    //    number of public match arms, but it allows us to keep the keyword arguments defined in
+    //    `impl_property!` instead of repeated throughout the code.
+    // 3. Use a proc macro or "TT munching", both of which are more heavy weight.
+    //
+    // We choose the second option. Unfortunately, this doesn't completely eliminate repetition of
+    // the list of keyword arguments. We still have them in the
+    // `impl_derived_property!(@with_option_display_default ...)` and
+    // `impl_property!(@with_option_display_default ...)` subcommands.
+
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            pub struct $name(pub Option<$inner_ty>);,
+            $name
+        );
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            pub struct $name(pub Option<$inner_ty>);,
+            $name
+        );
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+    };
+
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            pub struct $name($(pub $field_ty),*);,
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            pub struct $name($(pub $field_ty),*);,
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            pub struct $name { $(pub $field_name : $field_ty),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            pub struct $name { $(pub $field_name : $field_ty),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            pub enum $name { $($variant),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            pub enum $name { $($variant),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+
+    // Both `define_property!` and `define_derived_property!` need to attach derives to a
+    // concrete item, so the mode table lives here as a shared internal subcommand.
+    (@apply_property_decoration , $item:item, $name:ident) => {
         #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
         $item
     };
-    (@decorate Eq, $item:item) => {
+    (@apply_property_decoration Eq, $item:item, $name:ident) => {
         #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
+        $crate::define_property!(@apply_property_decoration_eq_impl $name);
     };
-    (@decorate Hash, $item:item) => {
+    (@apply_property_decoration Hash, $item:item, $name:ident) => {
         #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
+        $crate::define_property!(@apply_property_decoration_hash_impl $name);
     };
-    (@decorate both, $item:item) => {
+    (@apply_property_decoration both, $item:item, $name:ident) => {
         #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
+        $crate::define_property!(@apply_property_decoration_eq_impl $name);
+        $crate::define_property!(@apply_property_decoration_hash_impl $name);
     };
-    (@decorate neither, $item:item) => {
+    (@apply_property_decoration neither, $item:item, $name:ident) => {
         #[derive(Debug, Clone, Copy, serde::Serialize)]
         $item
     };
+    (@apply_property_decoration $mode:ident, $item:item, $name:ident) => {
+        compile_error!("`impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
+    };
 
-    (@eq_hash_impls default, $name:ident) => {};
-    (@eq_hash_impls neither, $name:ident) => {};
-    (@eq_hash_impls Eq, $name:ident) => {
+    (@apply_property_decoration_eq_impl $name:ident) => {
         impl core::cmp::PartialEq for $name {
             fn eq(&self, other: &Self) -> bool {
                 const N: usize = core::mem::size_of::<<$name as $crate::rkyv::Archive>::Archived>();
@@ -258,7 +391,7 @@ macro_rules! define_property {
 
         impl core::cmp::Eq for $name {}
     };
-    (@eq_hash_impls Hash, $name:ident) => {
+    (@apply_property_decoration_hash_impl $name:ident) => {
         impl core::hash::Hash for $name {
             fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
                 $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
@@ -269,272 +402,7 @@ macro_rules! define_property {
             }
         }
     };
-    (@eq_hash_impls both, $name:ident) => {
-        $crate::define_property!(@eq_hash_impls Eq, $name);
-        $crate::define_property!(@eq_hash_impls Hash, $name);
-    };
 
-    (@emit_with_optional_mode [], $($rest:tt)*) => {
-        $crate::define_property!(@emit default, $($rest)*);
-    };
-    (@emit_with_optional_mode [Eq], $($rest:tt)*) => {
-        $crate::define_property!(@emit Eq, $($rest)*);
-    };
-    (@emit_with_optional_mode [Hash], $($rest:tt)*) => {
-        $crate::define_property!(@emit Hash, $($rest)*);
-    };
-    (@emit_with_optional_mode [both], $($rest:tt)*) => {
-        $crate::define_property!(@emit both, $($rest)*);
-    };
-    (@emit_with_optional_mode [neither], $($rest:tt)*) => {
-        $crate::define_property!(@emit neither, $($rest)*);
-    };
-    (@emit_with_optional_mode [$mode:ident], $($rest:tt)*) => {
-        compile_error!("define_property!: `impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
-    };
-
-    (@emit $mode:ident, struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ), $entity:ident
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(@decorate $mode, pub struct $name(pub Option<$inner_ty>););
-        $crate::define_property!(@eq_hash_impls $mode, $name);
-
-        $crate::impl_property!(
-            $name,
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            , display_impl = $crate::impl_property!(@unwrap_or $($display_impl)?, |value: &Self| {
-                match value.0 {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
-            })
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-    (@emit $mode:ident, struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ), $entity:ident
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(@decorate $mode, pub struct $name($(pub $field_ty),*););
-        $crate::define_property!(@eq_hash_impls $mode, $name);
-        $crate::impl_property!(
-            $name,
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-    (@emit $mode:ident, struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? }, $entity:ident
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(@decorate $mode, pub struct $name { $(pub $field_name : $field_ty),* });
-        $crate::define_property!(@eq_hash_impls $mode, $name);
-        $crate::impl_property!(
-            $name,
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-    (@emit $mode:ident, enum $name:ident { $($variant:ident),* $(,)? }, $entity:ident
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(@decorate $mode, pub enum $name { $($variant),* });
-        $crate::define_property!(@eq_hash_impls $mode, $name);
-        $crate::impl_property!(
-            $name,
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    (
-        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
-        $entity:ident
-        $(, impl_eq_hash = $impl_eq_hash:ident)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(
-            @emit_with_optional_mode
-            [$($impl_eq_hash)?],
-            struct $name ( $visibility Option<$inner_ty> ),
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    (
-        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
-        $entity:ident
-        $(, impl_eq_hash = $impl_eq_hash:ident)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(
-            @emit_with_optional_mode
-            [$($impl_eq_hash)?],
-            struct $name ( $($visibility $field_ty),* ),
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    (
-        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
-        $entity:ident
-        $(, impl_eq_hash = $impl_eq_hash:ident)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(
-            @emit_with_optional_mode
-            [$($impl_eq_hash)?],
-            struct $name { $($visibility $field_name : $field_ty),* },
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
-
-    (
-        enum $name:ident {
-            $($variant:ident),* $(,)?
-        },
-        $entity:ident
-        $(, impl_eq_hash = $impl_eq_hash:ident)?
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::define_property!(
-            @emit_with_optional_mode
-            [$($impl_eq_hash)?],
-            enum $name {
-                $($variant),*
-            },
-            $entity
-            $(, compute_derived_fn = $compute_derived_fn)?
-            $(, default_const = $default_const)?
-            $(, display_impl = $display_impl)?
-            $(, canonical_value = $canonical_value)?
-            $(, make_canonical = $make_canonical)?
-            $(, make_uncanonical = $make_uncanonical)?
-            $(, index_id_fn = $index_id_fn)?
-            $(, collect_deps_fn = $collect_deps_fn)?
-            $(, ctor_registration = $ctor_registration)?
-        );
-    };
 }
 
 /// Implements the [`Property`][crate::entity::property::Property] trait for the given property type and entity.
@@ -600,87 +468,16 @@ macro_rules! define_property {
 #[macro_export]
 macro_rules! impl_property {
     (
-        @multi_property
-        $property:ident,
-        $entity:ident,
-        ( $($dependency:ident),+ )
-        $(, compute_derived_fn = $compute_derived_fn:expr)?
-        $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
-        $(, canonical_value = $canonical_value:ty)?
-        $(, make_canonical = $make_canonical:expr)?
-        $(, make_uncanonical = $make_uncanonical:expr)?
-        $(, index_id_fn = $index_id_fn:expr)?
-        $(, collect_deps_fn = $collect_deps_fn:expr)?
-        $(, ctor_registration = $ctor_registration:expr)?
-    ) => {
-        $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
-
-        $crate::impl_property!(
-            @__impl_property_common
-            $property,
-            $entity,
-            $crate::impl_property!(@unwrap_or_ty $($canonical_value)?, $property),
-            $crate::impl_property!(@select_initialization_kind $($compute_derived_fn)? ; $($default_const)?),
-            $crate::impl_property!(
-                @unwrap_or
-                $($compute_derived_fn)?,
-                |_, _| panic!("property {} is not derived", stringify!($property))
-            ),
-            $crate::impl_property!(
-                @unwrap_or
-                $($default_const)?,
-                panic!("property {} has no default value", stringify!($property))
-            ),
-            $crate::impl_property!(@unwrap_or $($make_canonical)?, std::convert::identity),
-            $crate::impl_property!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
-            [&'a dyn std::any::Any; $crate::impl_property!(@count_tts $($dependency),+)],
-            $crate::canonical_from_sorted_query_parts_closure!(( $($dependency),+ )),
-            {
-                $crate::paste::paste! {
-                    fn multi_property_query_parts_for_value<'a>(
-                        value: &'a $property,
-                    ) -> [&'a dyn std::any::Any; $crate::impl_property!(@count_tts $($dependency),+)] {
-                        let keys = [
-                            $(
-                                <$dependency as $crate::entity::property::Property<$entity>>::name(),
-                            )+
-                        ];
-                        let ( $( [<_ $dependency:lower>] ),+ ) = value;
-                        let mut parts = [
-                            $(
-                                [<_ $dependency:lower>] as &'a dyn std::any::Any,
-                            )+
-                        ];
-                        $crate::entity::multi_property::static_reorder_by_keys(&keys, &mut parts);
-                        parts
-                    }
-
-                    multi_property_query_parts_for_value
-                }
-            },
-            $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
-            $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
-                <Self as $crate::entity::property::Property<$entity>>::id()
-            }),
-            $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
-            $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
-                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
-            }),
-        );
-    };
-
-    (
         $property:ident,
         $entity:ident
         $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, default_const = $default_const:expr)?
-        $(, display_impl = $display_impl:expr)?
         $(, canonical_value = $canonical_value:ty)?
         $(, make_canonical = $make_canonical:expr)?
         $(, make_uncanonical = $make_uncanonical:expr)?
         $(, index_id_fn = $index_id_fn:expr)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
     ) => {
         // Enforce mutual exclusivity at compile time.
@@ -757,6 +554,111 @@ macro_rules! impl_property {
             ),
 
             // ctor_registration
+            $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
+                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+            }),
+        );
+    };
+
+    (
+        @with_option_display_default
+        $property:ident,
+        $entity:ident
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::impl_property!(
+            $property,
+            $entity
+            $(, compute_derived_fn = $compute_derived_fn)?
+            $(, default_const = $default_const)?
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            , display_impl = $crate::impl_property!(@unwrap_or $($display_impl)?, |value: &Self| {
+                match value.0 {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
+                }
+            })
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
+
+    (
+        @multi_property
+        $property:ident,
+        $entity:ident,
+        ( $($dependency:ident),+ )
+        $(, compute_derived_fn = $compute_derived_fn:expr)?
+        $(, default_const = $default_const:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
+
+        $crate::impl_property!(
+            @__impl_property_common
+            $property,
+            $entity,
+            $crate::impl_property!(@unwrap_or_ty $($canonical_value)?, $property),
+            $crate::impl_property!(@select_initialization_kind $($compute_derived_fn)? ; $($default_const)?),
+            $crate::impl_property!(
+                @unwrap_or
+                $($compute_derived_fn)?,
+                |_, _| panic!("property {} is not derived", stringify!($property))
+            ),
+            $crate::impl_property!(
+                @unwrap_or
+                $($default_const)?,
+                panic!("property {} has no default value", stringify!($property))
+            ),
+            $crate::impl_property!(@unwrap_or $($make_canonical)?, std::convert::identity),
+            $crate::impl_property!(@unwrap_or $($make_uncanonical)?, std::convert::identity),
+            [&'a dyn std::any::Any; $crate::impl_property!(@count_tts $($dependency),+)],
+            $crate::canonical_from_sorted_query_parts_closure!(( $($dependency),+ )),
+            {
+                $crate::paste::paste! {
+                    fn multi_property_query_parts_for_value<'a>(
+                        value: &'a $property,
+                    ) -> [&'a dyn std::any::Any; $crate::impl_property!(@count_tts $($dependency),+)] {
+                        let keys = [
+                            $(
+                                <$dependency as $crate::entity::property::Property<$entity>>::name(),
+                            )+
+                        ];
+                        let ( $( [<_ $dependency:lower>] ),+ ) = value;
+                        let mut parts = [
+                            $(
+                                [<_ $dependency:lower>] as &'a dyn std::any::Any,
+                            )+
+                        ];
+                        $crate::entity::multi_property::static_reorder_by_keys(&keys, &mut parts);
+                        parts
+                    }
+
+                    multi_property_query_parts_for_value
+                }
+            },
+            $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
+            $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
+                <Self as $crate::entity::property::Property<$entity>>::id()
+            }),
+            $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
             }),
@@ -917,34 +819,14 @@ macro_rules! impl_property {
 ///   for the declared type, mirroring [`define_property!`][macro@crate::define_property].
 #[macro_export]
 macro_rules! define_derived_property {
-    (@decorate_with_optional_mode [], $item:item, $name:ident) => {
-        $crate::define_property!(@decorate default, $item);
-        $crate::define_property!(@eq_hash_impls default, $name);
-    };
-    (@decorate_with_optional_mode [Eq], $item:item, $name:ident) => {
-        $crate::define_property!(@decorate Eq, $item);
-        $crate::define_property!(@eq_hash_impls Eq, $name);
-    };
-    (@decorate_with_optional_mode [Hash], $item:item, $name:ident) => {
-        $crate::define_property!(@decorate Hash, $item);
-        $crate::define_property!(@eq_hash_impls Hash, $name);
-    };
-    (@decorate_with_optional_mode [both], $item:item, $name:ident) => {
-        $crate::define_property!(@decorate both, $item);
-        $crate::define_property!(@eq_hash_impls both, $name);
-    };
-    (@decorate_with_optional_mode [neither], $item:item, $name:ident) => {
-        $crate::define_property!(@decorate neither, $item);
-        $crate::define_property!(@eq_hash_impls neither, $name);
-    };
-    (@decorate_with_optional_mode [$mode:ident], $item:item, $name:ident) => {
-        compile_error!("define_derived_property!: `impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
-    };
+    // Implementation Notes
+    //
+    // We reuse `define_property!`'s shared decoration helper, then delegate the derived-property
+    // behavior to `impl_derived_property!`.
+    //
+    // See `derive_property!` implementation notes for why each type form is duplicated.
 
-    // The calls to `$crate::impl_derived_property!` are all the same except for
-    // this first case of a newtype for an `Option<T>`, which has a special `display_impl`.
-
-    // Struct (tuple) with single Option<T> field (special case)
+    // Struct (tuple) with single Option<T> field
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
@@ -954,26 +836,20 @@ macro_rules! define_derived_property {
         impl_eq_hash = $impl_eq_hash:ident
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [$impl_eq_hash],
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
 
-        // Use impl_derived_property! to provide a custom display implementation
         $crate::impl_derived_property!(
+            @with_option_display_default
             $name,
             $entity,
             [$($dependency),*],
             [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn,
-            display_impl = |value: &Option<$inner_ty>| {
-                match value {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
-            }
+            |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
     };
@@ -985,26 +861,20 @@ macro_rules! define_derived_property {
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [],
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
 
-        // Use impl_derived_property! to provide a custom display implementation
         $crate::impl_derived_property!(
+            @with_option_display_default
             $name,
             $entity,
             [$($dependency),*],
             [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn,
-            display_impl = |value: &Option<$inner_ty>| {
-                match value {
-                    Some(v) => format!("{:?}", v),
-                    None => "None".to_string(),
-                }
-            }
+            |$($param),+| $derive_fn
             $(, $($extra)+)*
         );
     };
@@ -1019,9 +889,9 @@ macro_rules! define_derived_property {
         impl_eq_hash = $impl_eq_hash:ident
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [$impl_eq_hash],
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
             pub struct $name( $(pub $field_ty),* );,
             $name
         );
@@ -1043,9 +913,9 @@ macro_rules! define_derived_property {
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [],
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
             pub struct $name( $(pub $field_ty),* );,
             $name
         );
@@ -1070,9 +940,9 @@ macro_rules! define_derived_property {
         impl_eq_hash = $impl_eq_hash:ident
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [$impl_eq_hash],
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
             pub struct $name { $($visibility $field_name : $field_ty),* },
             $name
         );
@@ -1094,9 +964,9 @@ macro_rules! define_derived_property {
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [],
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
             pub struct $name { $($visibility $field_name : $field_ty),* },
             $name
         );
@@ -1123,9 +993,9 @@ macro_rules! define_derived_property {
         impl_eq_hash = $impl_eq_hash:ident
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [$impl_eq_hash],
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
             pub enum $name {
                 $($variant),*
             },
@@ -1151,9 +1021,9 @@ macro_rules! define_derived_property {
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_derived_property!(
-            @decorate_with_optional_mode
-            [],
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
             pub enum $name {
                 $($variant),*
             },
@@ -1166,6 +1036,45 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
+            $(, $($extra)+)*
+        );
+    };
+}
+
+/// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
+///
+/// Accepts the same parameters as [`define_derived_property!`][macro@crate::define_derived_property], except the first parameter is the name of a
+/// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
+/// of [`impl_property!`][macro@crate::impl_property]. It calls [`impl_property!`][macro@crate::impl_property] with the appropriate derived property parameters.
+#[macro_export]
+macro_rules! impl_derived_property {
+    (
+        $name:ident,
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+        $(, $($extra:tt)+)*
+    ) => {
+        $crate::impl_property!(
+            $name,
+            $entity,
+            compute_derived_fn = $crate::impl_derived_property!(
+                @construct_compute_fn
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+            ),
+            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
+                $(
+                    if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                        <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
+                    } else {
+                        deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
+                    }
+                )*
+            }
             $(, $($extra)+)*
         );
     };
@@ -1192,69 +1101,49 @@ macro_rules! define_derived_property {
             $derive_fn
         }
     };
-}
 
-/// Implements the [`Property`][crate::entity::property::Property] trait for an existing type as a derived property.
-///
-/// Accepts the same parameters as [`define_derived_property!`][macro@crate::define_derived_property], except the first parameter is the name of a
-/// type assumed to already be declared rather than a type declaration. This is the derived property equivalent
-/// of [`impl_property!`][macro@crate::impl_property]. It calls [`impl_property!`][macro@crate::impl_property] with the appropriate derived property parameters.
-#[macro_export]
-macro_rules! impl_derived_property {
-        (
-            $name:ident,
-            $entity:ident,
-            [$($dependency:ident),*]
-            $(, [$($global_dependency:ident),*])?,
-            |$($param:ident),+| $derive_fn:expr
-            $(, $($extra:tt)+)*
-        ) => {
-            $crate::impl_property!(
-                $name,
-                $entity,
-                compute_derived_fn = $crate::impl_derived_property!(
-                    @construct_compute_fn
-                    $entity,
-                    [$($dependency),*],
-                    [$($($global_dependency),*)?],
-                    |$($param),+| $derive_fn
-                ),
-                collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                    $(
-                        if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
-                            <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
-                        } else {
-                            deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
-                        }
-                    )*
+    (@unwrap_or $value:expr, $_default:expr) => { $value };
+    (@unwrap_or, $default:expr) => { $default };
+
+    (
+        @with_option_display_default
+        $name:ident,
+        $entity:ident,
+        [$($dependency:ident),*],
+        [$($global_dependency:ident),*],
+        |$($param:ident),+| $derive_fn:expr
+        $(, default_const = $default_const:expr)?
+        $(, display_impl = $display_impl:expr)?
+        $(, canonical_value = $canonical_value:ty)?
+        $(, make_canonical = $make_canonical:expr)?
+        $(, make_uncanonical = $make_uncanonical:expr)?
+        $(, index_id_fn = $index_id_fn:expr)?
+        $(, collect_deps_fn = $collect_deps_fn:expr)?
+        $(, ctor_registration = $ctor_registration:expr)?
+    ) => {
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($global_dependency),*],
+            |$($param),+| $derive_fn
+            $(, default_const = $default_const)?
+            , display_impl = $crate::impl_derived_property!(@unwrap_or $($display_impl)?, |value: &$name| {
+                match value.0 {
+                    Some(v) => format!("{:?}", v),
+                    None => "None".to_string(),
                 }
-                $(, $($extra)+)*
-            );
-        };
+            })
+            $(, canonical_value = $canonical_value)?
+            $(, make_canonical = $make_canonical)?
+            $(, make_uncanonical = $make_uncanonical)?
+            $(, index_id_fn = $index_id_fn)?
+            $(, collect_deps_fn = $collect_deps_fn)?
+            $(, ctor_registration = $ctor_registration)?
+        );
+    };
 
-        // Internal branch to construct the compute function.
-        (
-            @construct_compute_fn
-            $entity:ident,
-            [$($dependency:ident),*],
-            [$($global_dependency:ident),*],
-            |$($param:ident),+| $derive_fn:expr
-        ) => {
-            |context: &$crate::Context, entity_id| {
-                #[allow(unused_imports)]
-                use $crate::global_properties::ContextGlobalPropertiesExt;
-                #[allow(unused_parens)]
-                let ($($param,)*) = (
-                    $(context.get_property::<$entity, $dependency>(entity_id)),*,
-                    $(
-                        context.get_global_property_value($global_dependency)
-                            .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
-                    ),*
-                );
-                $derive_fn
-            }
-        };
-    }
+}
 
 /// Defines a derived property consisting of a (named) tuple of other properties. The primary use case
 /// is for indexing and querying properties jointly.
@@ -1281,19 +1170,6 @@ macro_rules! define_multi_property {
                         (
                             $(context.get_property::<$entity, $dependency>(entity_id)),+
                         )
-                    },
-                    display_impl = |val: &( $($dependency),+ )| {
-                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
-                        let mut displayed = String::from("(");
-                        $(
-                            displayed.push_str(
-                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
-                            );
-                            displayed.push_str(", ");
-                        )+
-                        displayed.truncate(displayed.len() - 2);
-                        displayed.push_str(")");
-                        displayed
                     },
                     canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
                     make_canonical = $crate::reorder_closure!(( $($dependency),+ )),
@@ -1348,6 +1224,20 @@ macro_rules! define_multi_property {
                         )*
                     },
 
+                    display_impl = |val: &( $($dependency),+ )| {
+                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
+                        let mut displayed = String::from("(");
+                        $(
+                            displayed.push_str(
+                                &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
+                            );
+                            displayed.push_str(", ");
+                        )+
+                        displayed.truncate(displayed.len() - 2);
+                        displayed.push_str(")");
+                        displayed
+                    },
+
                     ctor_registration = {
                         // Ensure the property's `index_id()` is initialized at startup.
                         let _ = < [<$($dependency)*>] as $crate::entity::property::Property::<$entity> >::index_id();
@@ -1372,6 +1262,21 @@ mod tests {
 
     define_property!(struct Pu32(u32), Person, default_const = Pu32(0));
     define_property!(struct POu32(Option<u32>), Person, default_const = POu32(None));
+    define_property!(
+        struct POFloat(Option<f64>),
+        Person,
+        impl_eq_hash = both,
+        default_const = POFloat(None)
+    );
+    define_property!(
+        struct POu32Custom(Option<u32>),
+        Person,
+        default_const = POu32Custom(None),
+        display_impl = |value: &POu32Custom| match value.0 {
+            Some(v) => format!("custom:{v}"),
+            None => "custom:none".to_string(),
+        }
+    );
     define_property!(struct Name(&'static str), Person, default_const = Name(""));
     define_property!(struct Age(u8), Person, default_const = Age(0));
     define_property!(struct Weight(f64), Person, impl_eq_hash = both, default_const = Weight(0.0));
@@ -1423,6 +1328,32 @@ mod tests {
     define_derived_property!(struct DerivedProp(bool), Person, [Age],
         |age| {
             DerivedProp(age.0 % 2 == 0)
+        }
+    );
+
+    define_derived_property!(
+        struct DerivedMaybeAge(Option<u8>),
+        Person,
+        [Age],
+        |age| DerivedMaybeAge((age.0 != 0).then_some(age.0))
+    );
+
+    define_derived_property!(
+        struct DerivedMaybeWeight(Option<f64>),
+        Person,
+        [Age],
+        |age| DerivedMaybeWeight((age.0 != 0).then_some(age.0 as f64)),
+        impl_eq_hash = both
+    );
+
+    define_derived_property!(
+        struct DerivedMaybeAgeCustom(Option<u8>),
+        Person,
+        [Age],
+        |age| DerivedMaybeAgeCustom((age.0 != 0).then_some(age.0)),
+        display_impl = |value: &DerivedMaybeAgeCustom| match value.0 {
+            Some(v) => format!("derived:{v}"),
+            None => "derived:none".to_string(),
         }
     );
 
@@ -1585,6 +1516,9 @@ mod tests {
         let mut expected_dependents = [
             AgeGroup::id(),
             DerivedProp::id(),
+            DerivedMaybeAge::id(),
+            DerivedMaybeWeight::id(),
+            DerivedMaybeAgeCustom::id(),
             DerivedWeight::id(),
             ProfileNAW::id(),
             ProfileAWN::id(),
@@ -1619,6 +1553,93 @@ mod tests {
                 POu32::get_display(&context.get_property::<_, POu32>(person2))
             ),
             "None"
+        );
+    }
+
+    #[test]
+    fn test_option_property_display_patterns() {
+        let mut context = Context::new();
+
+        let some_person = context
+            .add_entity((
+                POu32(Some(42)),
+                POFloat(Some(3.5)),
+                POu32Custom(Some(7)),
+                Pu32(1),
+            ))
+            .unwrap();
+        let none_person = context
+            .add_entity((POu32(None), POFloat(None), POu32Custom(None), Pu32(2)))
+            .unwrap();
+
+        assert_eq!(
+            POu32::get_display(&context.get_property::<_, POu32>(some_person)),
+            "42"
+        );
+        assert_eq!(
+            POu32::get_display(&context.get_property::<_, POu32>(none_person)),
+            "None"
+        );
+
+        assert_eq!(
+            POFloat::get_display(&context.get_property::<_, POFloat>(some_person)),
+            "3.5"
+        );
+        assert_eq!(
+            POFloat::get_display(&context.get_property::<_, POFloat>(none_person)),
+            "None"
+        );
+
+        assert_eq!(
+            POu32Custom::get_display(&context.get_property::<_, POu32Custom>(some_person)),
+            "custom:7"
+        );
+        assert_eq!(
+            POu32Custom::get_display(&context.get_property::<_, POu32Custom>(none_person)),
+            "custom:none"
+        );
+    }
+
+    #[test]
+    fn test_option_derived_property_display_patterns() {
+        let mut context = Context::new();
+
+        let some_person = context.add_entity::<Person, _>((Age(42),)).unwrap();
+        let none_person = context.add_entity::<Person, _>((Age(0),)).unwrap();
+
+        assert_eq!(
+            DerivedMaybeAge::get_display(&context.get_property::<_, DerivedMaybeAge>(some_person)),
+            "42"
+        );
+        assert_eq!(
+            DerivedMaybeAge::get_display(&context.get_property::<_, DerivedMaybeAge>(none_person)),
+            "None"
+        );
+
+        assert_eq!(
+            DerivedMaybeWeight::get_display(
+                &context.get_property::<_, DerivedMaybeWeight>(some_person)
+            ),
+            "42.0"
+        );
+        assert_eq!(
+            DerivedMaybeWeight::get_display(
+                &context.get_property::<_, DerivedMaybeWeight>(none_person)
+            ),
+            "None"
+        );
+
+        assert_eq!(
+            DerivedMaybeAgeCustom::get_display(
+                &context.get_property::<_, DerivedMaybeAgeCustom>(some_person)
+            ),
+            "derived:42"
+        );
+        assert_eq!(
+            DerivedMaybeAgeCustom::get_display(
+                &context.get_property::<_, DerivedMaybeAgeCustom>(none_person)
+            ),
+            "derived:none"
         );
     }
 
