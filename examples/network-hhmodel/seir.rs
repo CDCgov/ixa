@@ -32,12 +32,15 @@ fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f6
 }
 
 fn expose(context: &mut Context, infector: PersonId, infectee: PersonId) {
-    info!(
-        "{infector:?} exposed {infectee:?} at time {}.",
-        context.get_current_time()
-    );
-    context.set_property(infectee, DiseaseStatus::E);
-    context.set_property(infectee, InfectedBy(Some(infector)));
+    let infectee_status: DiseaseStatus = context.get_property(infectee);
+    if infectee_status == DiseaseStatus::S {
+        info!(
+            "{infector:?} exposed {infectee:?} at time {}.",
+            context.get_current_time()
+        );
+        context.set_property(infectee, DiseaseStatus::E);
+        context.set_property(infectee, InfectedBy(Some(infector)));
+    }
 }
 
 fn schedule_waiting_event(
@@ -47,15 +50,15 @@ fn schedule_waiting_event(
     mean_period: f64,
     new_status: DiseaseStatus,
 ) {
-    let ct = context.get_current_time();
-    let waiting_time = calculate_waiting_time(context, shape, mean_period);
+    let t = context.get_current_time() + calculate_waiting_time(context, shape, mean_period);
 
-    context.add_plan(ct + waiting_time, move |context| {
+    context.add_plan(t, move |context| {
+        trace!("{person_id:?} changed to disease state {new_status:?} at t={t:?}");
         context.set_property(person_id, new_status);
     });
 }
 
-fn schedule_infection(context: &mut Context, person_id: PersonId) {
+fn schedule_infectiousness(context: &mut Context, person_id: PersonId) {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -107,7 +110,7 @@ pub fn init(context: &mut Context, initial_infections: &Vec<PersonId>, period: f
 
     context.subscribe_to_event(
         move |context, event: PropertyChangeEvent<Person, DiseaseStatus>| match event.current {
-            DiseaseStatus::E => schedule_infection(context, event.entity_id),
+            DiseaseStatus::E => schedule_infectiousness(context, event.entity_id),
             DiseaseStatus::I => schedule_recovery(context, event.entity_id),
             _ => (),
         },
