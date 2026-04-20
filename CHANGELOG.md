@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2.2](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.1...ixa-v2.0.0-beta2.2) - 2026-04-20
+
+### Added
+
+- Optimize `set_property` if dependent does not need partial change-event processing ([#844](https://github.com/CDCgov/ixa/pull/844))
+
+### Other
+
+- turn off profiling by default ([#842](https://github.com/CDCgov/ixa/pull/842))
+- add clone support for entityset ([#837](https://github.com/CDCgov/ixa/pull/837))
+
 ## [2.0.0-beta2.1](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2...ixa-v2.0.0-beta2.1) - 2026-04-06
 
 ### Added

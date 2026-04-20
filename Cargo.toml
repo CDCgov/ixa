@@ -67,7 +67,7 @@ smallvec = "^1.15.1"
 
 [package]
 name = "ixa"
-version = "2.0.0-beta2.1"
+version = "2.0.0-beta2.2"
 rust-version = "1.88.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
