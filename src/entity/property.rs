@@ -39,15 +39,36 @@ pub enum PropertyInitializationKind {
 pub trait AnyProperty: Copy + Debug + PartialEq + Serialize + 'static {}
 impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Serialize + 'static {}
 
+/// `const fn` string equality — `==` on `&str` isn't `const` on stable.
+#[must_use]
+pub const fn const_str_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// All properties must implement this trait using one of the `define_property` macros.
 pub trait Property<E: Entity>: AnyProperty {
     /// Some properties might store a transformed version of the value in the index. This is the
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;
 
+    /// Source-level name, set by the macros to `stringify!($property)`. Used by
+    /// `define_multi_property!` to reject type aliases (see issue #843).
+    const NAME: &'static str;
+
     fn name() -> &'static str {
-        let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap()
+        Self::NAME
     }
 
     /// The kind of initialization this property has.
