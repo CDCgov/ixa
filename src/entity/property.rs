@@ -8,14 +8,12 @@ implementation.
 
 */
 
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::fmt::Debug;
-
-use serde::Serialize;
+use std::hash::Hash;
 
 use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
-use crate::hashing::hash_serialized_128;
 use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
@@ -35,15 +33,26 @@ pub enum PropertyInitializationKind {
     Constant,
 }
 
-// A type-erased interface for properties.
-pub trait AnyProperty: Copy + Debug + PartialEq + Serialize + 'static {}
-impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Serialize + 'static {}
+/// Shared trait bounds for property values and canonical values.
+///
+/// These values must be copyable and support equality and deterministic hashing so they can
+/// participate in indexing.
+pub trait AnyProperty: Copy + Debug + PartialEq + Eq + Hash + 'static {}
+impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Eq + Hash + 'static {}
 
 /// All properties must implement this trait using one of the `define_property` macros.
+///
+/// Property values and canonical values must satisfy `AnyProperty` so they can participate in
+/// property indexes.
 pub trait Property<E: Entity>: AnyProperty {
     /// Some properties might store a transformed version of the value in the index. This is the
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;
+
+    /// Allocation-free representation of the query parts contributed by a property value.
+    type QueryParts<'a>: AsRef<[&'a dyn Any]>
+    where
+        Self: 'a;
 
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
@@ -87,11 +96,27 @@ pub trait Property<E: Entity>: AnyProperty {
     #[must_use]
     fn get_display(&self) -> String;
 
-    /// For cases when the property's hash needs to be computed in a special way.
+    /// Reconstruct the canonical query value used for indexed lookup.
+    ///
+    /// Ordinary properties expect a single query part containing `Self` and canonicalize that
+    /// value. Multi-properties override this to rebuild their canonical tuple value directly from
+    /// the already-sorted type-erased query parts.
     #[must_use]
-    fn hash_property_value(value: &Self::CanonicalValue) -> u128 {
-        hash_serialized_128(value)
+    fn canonical_from_sorted_query_parts(parts: &[&dyn Any]) -> Option<Self::CanonicalValue> {
+        let [part] = parts else {
+            return None;
+        };
+        part.downcast_ref::<Self>()
+            .copied()
+            .map(Self::make_canonical)
     }
+
+    /// Expose the query parts for a concrete property value without allocating.
+    ///
+    /// Ordinary properties contribute a single value. Multi-properties override this so singleton
+    /// queries over a multi-property can still be matched against a shared equivalent index.
+    #[must_use]
+    fn query_parts_for_value(value: &Self) -> Self::QueryParts<'_>;
 
     /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
     /// with the same component types in a different order will have the same type ID.

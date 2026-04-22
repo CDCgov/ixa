@@ -50,13 +50,16 @@ use super::source_iterator::{IndexSetIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId, PopulationIterator};
-use crate::hashing::{HashValueType, IndexSet};
+use crate::hashing::{one_shot_128, HashValueType, IndexSet};
 use crate::prelude::Property;
 use crate::Context;
 
 pub(super) type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
+/// Identifies the logical property query represented by a property-backed source,
+/// i.e. "entities whose property `P` equals value `V`", regardless of how
+/// that set is produced internally.
 pub(crate) struct PropertySourceId {
     pub property_id: usize,
     pub value_hash: HashValueType,
@@ -132,7 +135,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     fn id(&self) -> PropertySourceId {
         PropertySourceId {
             property_id: P::index_id(),
-            value_hash: P::hash_property_value(&self.value.make_canonical()),
+            value_hash: one_shot_128(&self.value.make_canonical()),
         }
     }
 
@@ -227,7 +230,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     fn id(&self) -> PropertySourceId {
         PropertySourceId {
             property_id: P::index_id(),
-            value_hash: P::hash_property_value(&self.value.make_canonical()),
+            value_hash: one_shot_128(&self.value.make_canonical()),
         }
     }
 
@@ -357,10 +360,10 @@ impl<'a, E: Entity> SourceSet<'a, E> {
 
         // Check for an index.
         {
-            match property_store.get_index_set_with_hash_for_property_id(
-                P::index_id(),
-                P::hash_property_value(&value.make_canonical()),
-            ) {
+            let query_parts = P::query_parts_for_value(&value);
+            let lookup_result =
+                property_store.get_index_set_for_query_parts(P::index_id(), query_parts.as_ref());
+            match lookup_result {
                 IndexSetResult::Set(entity_set) => {
                     return Some(SourceSet::IndexSet(entity_set));
                 }

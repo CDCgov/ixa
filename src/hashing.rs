@@ -15,11 +15,9 @@
 
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 
-use bincode::serde::encode_to_vec as serialize_to_vec;
 pub use indexmap::set::Iter as IndexSetIter;
 use indexmap::IndexSet as RawIndexSet;
 pub use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher};
-use serde::Serialize;
 use xxhash_rust::xxh3::Xxh3Default;
 
 type FxBuildHasher = BuildHasherDefault<FxHasher>;
@@ -27,6 +25,84 @@ type FxBuildHasher = BuildHasherDefault<FxHasher>;
 pub type IndexSet<T> = RawIndexSet<T, FxBuildHasher>;
 
 pub type HashValueType = u128;
+
+pub(crate) type DeterministicHasher = Xxh3Default;
+
+/// A `rkyv` writer that streams serialized bytes directly into a `Hasher`.
+pub struct HasherWriter<'a, H> {
+    hasher: &'a mut H,
+    pos: usize,
+}
+
+impl<'a, H> HasherWriter<'a, H> {
+    #[must_use]
+    pub fn new(hasher: &'a mut H) -> Self {
+        Self { hasher, pos: 0 }
+    }
+}
+
+impl<H: Hasher> rkyv::ser::Positional for HasherWriter<'_, H> {
+    fn pos(&self) -> usize {
+        self.pos
+    }
+}
+
+impl<H: Hasher> rkyv::ser::Writer<rkyv::rancor::Error> for HasherWriter<'_, H> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), rkyv::rancor::Error> {
+        self.hasher.write(bytes);
+        self.pos += bytes.len();
+        Ok(())
+    }
+}
+
+/// A fixed-size `rkyv` writer used by macro-generated equality implementations.
+#[derive(Debug, Clone, Copy)]
+pub struct EqualityBufferWriter<const N: usize> {
+    buf: [u8; N],
+    pos: usize,
+}
+
+impl<const N: usize> EqualityBufferWriter<N> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            buf: [0; N],
+            pos: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn as_written(&self) -> &[u8] {
+        &self.buf[..self.pos]
+    }
+}
+
+impl<const N: usize> Default for EqualityBufferWriter<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize> rkyv::ser::Positional for EqualityBufferWriter<N> {
+    fn pos(&self) -> usize {
+        self.pos
+    }
+}
+
+impl<const N: usize, E: rkyv::rancor::Source> rkyv::ser::Writer<E> for EqualityBufferWriter<N> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), E> {
+        let end = self.pos + bytes.len();
+        assert!(
+            end <= N,
+            "serialized form exceeded fixed buffer size: {} > {}",
+            end,
+            N
+        );
+        self.buf[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
+        Ok(())
+    }
+}
 
 /// Provides API parity with `std::collections::HashMap`.
 pub trait HashMapExt {
@@ -82,36 +158,25 @@ pub fn hash_str(data: &str) -> u64 {
     hasher.finish()
 }
 
-// Helper for any T: Hash
-pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
-    let mut h = Xxh3Default::default();
-    value.hash(&mut h);
-    h.digest128()
+/// This if factored out for cases of implementations using the `Hash` trait to compute a 128-bit
+/// hash. This provides a unified interface to the implementation-specific 128-bit "finish" method.
+#[must_use]
+pub(crate) fn finish_deterministic_hash_128(hasher: DeterministicHasher) -> HashValueType {
+    hasher.digest128()
 }
 
-pub fn hash_serialized_128<T: Serialize>(value: T) -> u128 {
-    let serialized = serialize_to_vec(&value, bincode::config::standard()).unwrap();
-    // The `xxh3_128` should be a little faster, but it is not guaranteed to produce the same hash.
-    // xxh3_128(serialized.as_slice())
-    one_shot_128(&serialized.as_slice())
+/// Helper for any `T: Hash` using the crate's deterministic hasher.
+pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
+    let mut hasher = DeterministicHasher::default();
+    value.hash(&mut hasher);
+    finish_deterministic_hash_128(hasher)
 }
 
 #[cfg(test)]
 mod tests {
-    use bincode::serde::encode_to_vec as serialize_to_vec;
-    use serde::Serialize;
+    use std::hash::Hash;
 
     use super::*;
-
-    #[test]
-    fn hash_serialized_equals_one_shot() {
-        let value = "hello";
-        let a = hash_serialized_128(value);
-        let serialized = serialize_to_vec(value, bincode::config::standard()).unwrap();
-        let b = one_shot_128(&serialized.as_slice());
-
-        assert_eq!(a, b);
-    }
 
     #[test]
     fn hashes_strings() {
@@ -141,39 +206,14 @@ mod tests {
     }
 
     #[test]
-    fn serialization_is_concatenation() {
-        // We rely on the fact that the serialization of a tuple is the concatenation of the
-        // component types, and likewise for structs. This tests that invariant.
+    fn hashing_tuple_matches_hashing_components_in_order() {
+        let tuple = ("John", 25_u32, true);
 
-        #[derive(Debug, Serialize)]
-        struct MyStruct {
-            name: &'static str,
-            age: i32,
-            height: f64,
-        }
+        let mut hasher = DeterministicHasher::default();
+        tuple.0.hash(&mut hasher);
+        tuple.1.hash(&mut hasher);
+        tuple.2.hash(&mut hasher);
 
-        let my_struct = MyStruct {
-            name: "John",
-            age: 25,
-            height: 1.80,
-        };
-        let my_tuple = ("John", 25, 1.80);
-
-        let encoded_struct = serialize_to_vec(my_struct, bincode::config::standard()).unwrap();
-        let encoded_tuple = serialize_to_vec(my_tuple, bincode::config::standard()).unwrap();
-
-        assert_eq!(encoded_struct, encoded_tuple);
-
-        let encoded_str = bincode::encode_to_vec("John", bincode::config::standard()).unwrap();
-        let encoded_int = bincode::encode_to_vec(25, bincode::config::standard()).unwrap();
-        let encoded_float = bincode::encode_to_vec(1.80, bincode::config::standard()).unwrap();
-        let flattened = encoded_str
-            .iter()
-            .copied()
-            .chain(encoded_int.iter().copied())
-            .chain(encoded_float.iter().copied())
-            .collect::<Vec<u8>>();
-
-        assert_eq!(flattened, encoded_tuple);
+        assert_eq!(finish_deterministic_hash_128(hasher), one_shot_128(&tuple));
     }
 }

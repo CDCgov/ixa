@@ -9,7 +9,7 @@
 //! To ensure that queries can efficiently find matching indexes, multi-properties that consist
 //! of the same set of component properties are considered equivalent, regardless of their
 //! definition order. The system achieves this by:
-//! 1.  **Canonicalization**: Component properties are sorted based on their unique identifiers.
+//! 1.  **Canonicalization**: Component properties are sorted alphabetically by property name.
 //! 2.  **Shared Indexes**: The index subsystem reuses a single `Index` instance for all
 //!     multi-properties that are equivalent up to reordering.
 //!
@@ -68,10 +68,9 @@ pub fn register_type_ids_to_multi_property_index(type_ids: &[TypeId], index: usi
         .insert(hash, index);
 }
 
-// The following free functions are utilities used in the macro implementation of `Query::multi_property_value_hash`,
-// which computes the same hash as an equivalent multi-property. This requires the values to be ordered according to
-// the lexicographic order of the property type names, which for queries must be done dynamically, as queries do
-// not (and cannot) have a proc macro trait impl.
+// The following free functions are utilities used to normalize query parts into the same order as
+// an equivalent multi-property canonical value. Query tuple impls have to do this dynamically,
+// because they do not (and cannot) have a proc-macro-generated trait impl.
 
 /// An iota function that returns an array of the form `[0, 1, 2, 3, ..., N-1]`. The size of the array
 /// is statically known, avoiding `Vec` allocations.
