@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_index;
-use crate::entity::property_list::PropertyList;
+use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::property_store::PropertyStore;
 use crate::entity::Entity;
 use crate::hashing::HashMap;
@@ -134,6 +134,8 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
         EntityPropertyTuple::new(T::get_values_for_entity(context, entity_id))
     }
 }
+
+impl<E: Entity, PL: PropertyList<E>> PropertyInitializationList<E> for EntityPropertyTuple<E, PL> {}
 
 /// Internal query machinery.
 ///
