@@ -1,21 +1,32 @@
 /*!
 
-A [`PropertyList<E>`] is just a tuple of distinct properties of the same [`Entity`] `E`. It
-is used in two distinct places: as an initialization list for a new entity, and as a query.
+[`PropertyList<E>`] is the tuple-capable internal/type-level list of properties for an
+[`Entity`] `E`.
 
-Both use cases have the following two constraints:
+It remains in use in two places:
+
+1. internally, to perform entity initialization work once an accepted initialization bundle has
+   been received, and
+2. publicly, as the type-level strata list used by value-change counting APIs such as
+   `track_periodic_value_change_counts`.
+
+Both uses have the following two constraints:
 
 1. The properties are properties of the same entity.
 2. The properties are distinct.
 
 We enforce the first constraint with the type system by only implementing `PropertyList<E>`
 for tuples of types implementing `Property<E>` (of length up to some max). Using properties
-for mismatched entities will result in a nice compile-time error at the point of use.
+for mismatched entities will result in a compile-time error at the point of use.
 
-Unfortunately, the second constraint has to be enforced at runtime. We implement `PropertyList::validate()` to do this.
+The second constraint has to be enforced at runtime, so `PropertyList::validate()` checks for
+duplicates.
 
-For both use cases, the order in which the properties appear is
-unimportant in spite of the Rust language semantics of tuple types.
+For tuple-capable uses, the order in which the properties appear is unimportant in spite of the
+Rust language semantics of tuple types.
+
+Public entity initialization no longer accepts naked tuples directly. The `add_entity` API now
+accepts `with!(...)` or a naked `Entity` value representing an "empty" initialization list.
 
 */
 
@@ -52,6 +63,9 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     /// Gets the tuple of property values for the given entity.
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 }
+
+/// Public marker trait for values accepted by `ContextEntitiesExt::add_entity`.
+pub trait PropertyInitializationList<E: Entity>: PropertyList<E> {}
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
 impl<E: Entity> PropertyList<E> for () {
@@ -94,6 +108,8 @@ impl<E: Entity + Copy> PropertyList<E> for E {
     }
 }
 
+impl<E: Entity + Copy> PropertyInitializationList<E> for E {}
+
 // ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
 //     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
 //     whether the conflict actually exists.
@@ -112,7 +128,8 @@ impl<E: Entity + Copy> PropertyList<E> for E {
 //     }
 // }
 
-// A single `Property` tuple is a `PropertyList` of length 1
+// A single `Property` tuple is a `PropertyList` of length 1. This supports internal tuple
+// machinery, but naked tuples are not accepted directly by `add_entity`.
 impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn validate() -> Result<(), IxaError> {
         Ok(())
@@ -179,7 +196,9 @@ macro_rules! impl_property_list {
     };
 }
 
-// Generate impls for tuple lengths 2 through 20. (The 0 and 1 case are implemented above.)
+// Generate impls for tuple lengths 2 through 20. These tuple impls remain available for internal
+// initialization/query machinery and for type-level strata lists, but not as direct `add_entity`
+// inputs.
 seq!(Z in 2..=20 {
     impl_property_list!(Z);
 });

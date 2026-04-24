@@ -6,7 +6,7 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
-use crate::entity::property_list::PropertyList;
+use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
@@ -95,7 +95,7 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
 pub trait ContextEntitiesExt {
-    fn add_entity<E: Entity, PL: PropertyList<E>>(
+    fn add_entity<E: Entity, PL: PropertyInitializationList<E>>(
         &mut self,
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError>;
@@ -233,7 +233,7 @@ pub trait ContextEntitiesExt {
 }
 
 impl ContextEntitiesExt for Context {
-    fn add_entity<E: Entity, PL: PropertyList<E>>(
+    fn add_entity<E: Entity, PL: PropertyInitializationList<E>>(
         &mut self,
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError> {
