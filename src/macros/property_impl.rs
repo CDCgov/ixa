@@ -450,6 +450,8 @@ macro_rules! impl_property {
         impl $crate::entity::property::Property<$entity> for $property {
             type CanonicalValue = $canonical_value;
 
+            const NAME: &'static str = stringify!($property);
+
             fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
                 $initialization_kind
             }
@@ -726,6 +728,17 @@ macro_rules! impl_derived_property {
 /// reordering of the component properties. The querying subsystem is able to detect when its multiple
 /// component properties are equivalent to an indexed multi-property and use that index to perform the
 /// query.
+///
+/// Components must be the underlying property type, not a type alias (see issue #843):
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// type Years = Age;
+/// define_multi_property!((Years, Height), Person);
+/// ```
 #[macro_export]
 macro_rules! define_multi_property {
         (
@@ -734,6 +747,21 @@ macro_rules! define_multi_property {
         ) => {
             $crate::paste::paste! {
                 type [<$($dependency)*>] = ( $($dependency),+ );
+
+                // Reject type aliases; see issue #843.
+                $(
+                    const _: () = assert!(
+                        $crate::entity::property::const_str_eq(
+                            stringify!($dependency),
+                            <$dependency as $crate::entity::property::Property<$entity>>::NAME,
+                        ),
+                        concat!(
+                            "define_multi_property!: `",
+                            stringify!($dependency),
+                            "` is a type alias; use the underlying property type (see issue #843)."
+                        ),
+                    );
+                )+
 
                 $crate::impl_property!(
                     [<$($dependency)*>],
