@@ -456,7 +456,7 @@ mod tests {
     use crate::entity::entity_set::{EntitySet, SourceSet};
     use crate::hashing::IndexSet as FxIndexSet;
     use crate::prelude::*;
-    use crate::{define_derived_property, define_property};
+    use crate::{define_derived_property, define_property, with};
 
     define_entity!(Person);
 
@@ -505,7 +505,11 @@ mod tests {
         let mut people = Vec::new();
         for i in 0..size {
             let person = context
-                .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(i % 2 == 0)))
+                .add_entity(with!(
+                    Person,
+                    ExplicitProp((i % 20) as u8),
+                    ExplicitProp2(i % 2 == 0)
+                ))
                 .unwrap();
             people.push(person);
         }
@@ -521,7 +525,7 @@ mod tests {
         setup_test_population(&mut context, 100);
 
         let results = context
-            .query_result_iterator((ExplicitProp(5),))
+            .query_result_iterator(with!(Person, ExplicitProp(5)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5); // 5, 25, 45, 65, 85
@@ -541,7 +545,7 @@ mod tests {
         setup_test_population(&mut context, 100);
 
         let results = context
-            .query_result_iterator((ExplicitProp(7),))
+            .query_result_iterator(with!(Person, ExplicitProp(7)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5); // 7, 27, 47, 67, 87
@@ -560,12 +564,12 @@ mod tests {
         // Create people without setting ConstantProp - they'll use default value 42
         for _ in 0..50 {
             context
-                .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                .add_entity(with!(Person, ExplicitProp(1), ExplicitProp2(false)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(42), ExplicitProp2(false)))
+            .query_result_iterator(with!(Person, ConstantProp(42), ExplicitProp2(false)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 50);
@@ -585,12 +589,12 @@ mod tests {
 
         for _ in 0..50 {
             context
-                .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                .add_entity(with!(Person, ExplicitProp(1), ExplicitProp2(false)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(42),))
+            .query_result_iterator(with!(Person, ConstantProp(42)))
             .collect::<Vec<_>>();
         assert_eq!(results.len(), 50);
     }
@@ -603,17 +607,22 @@ mod tests {
         for i in 0..50 {
             if i < 10 {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false), ConstantProp(99)))
+                    .add_entity(with!(
+                        Person,
+                        ExplicitProp(1),
+                        ExplicitProp2(false),
+                        ConstantProp(99)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                    .add_entity(with!(Person, ExplicitProp(1), ExplicitProp2(false)))
                     .unwrap();
             }
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99),))
+            .query_result_iterator(with!(Person, ConstantProp(99)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -634,17 +643,22 @@ mod tests {
         for i in 0..50 {
             if i < 10 {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false), ConstantProp(99)))
+                    .add_entity(with!(
+                        Person,
+                        ExplicitProp(1),
+                        ExplicitProp2(false),
+                        ConstantProp(99)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(1), ExplicitProp2(false)))
+                    .add_entity(with!(Person, ExplicitProp(1), ExplicitProp2(false)))
                     .unwrap();
             }
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99),))
+            .query_result_iterator(with!(Person, ConstantProp(99)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -657,12 +671,12 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(false)))
+                .add_entity(with!(Person, ExplicitProp(i as u8), ExplicitProp2(false)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((DerivedProp(true),))
+            .query_result_iterator(with!(Person, DerivedProp(true)))
             .collect::<Vec<_>>();
 
         // DerivedProp is true when ExplicitProp is even
@@ -683,12 +697,12 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(false)))
+                .add_entity(with!(Person, ExplicitProp(i as u8), ExplicitProp2(false)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((DerivedProp(false),))
+            .query_result_iterator(with!(Person, DerivedProp(false)))
             .collect::<Vec<_>>();
 
         // DerivedProp is false when ExplicitProp is odd
@@ -711,11 +725,15 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(i % 2 == 0)))
+                .add_entity(with!(
+                    Person,
+                    ExplicitProp((i % 20) as u8),
+                    ExplicitProp2(i % 2 == 0)
+                ))
                 .unwrap();
         }
 
-        let results = context.query_result_iterator(()).collect::<Vec<_>>();
+        let results = context.query_result_iterator(Person).collect::<Vec<_>>();
         for person in results {
             let explicit_prop = context.get_property::<Person, ExplicitProp>(person);
             let explicit_prop2 = context.get_property::<Person, ExplicitProp2>(person);
@@ -724,7 +742,7 @@ mod tests {
 
         // ExplicitProp2 has only 2 values, so it will be the smaller source
         let results = context
-            .query_result_iterator((ExplicitProp(5), ExplicitProp2(false)))
+            .query_result_iterator(with!(Person, ExplicitProp(5), ExplicitProp2(false)))
             .collect::<Vec<_>>();
 
         // Looking for ExplicitProp=5 AND ExplicitProp2=true
@@ -754,7 +772,8 @@ mod tests {
         for i in 0..100 {
             if i < 10 {
                 context
-                    .add_entity((
+                    .add_entity(with!(
+                        Person,
                         ExplicitProp(7),
                         ExplicitProp2(false),
                         ConstantProp2(200), // Non-default for smaller source
@@ -762,13 +781,17 @@ mod tests {
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(false)))
+                    .add_entity(with!(
+                        Person,
+                        ExplicitProp((i % 20) as u8),
+                        ExplicitProp2(false)
+                    ))
                     .unwrap();
             }
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp(7), ConstantProp2(200)))
+            .query_result_iterator(with!(Person, ExplicitProp(7), ConstantProp2(200)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -783,17 +806,21 @@ mod tests {
         for i in 0..100 {
             if i < 5 {
                 context
-                    .add_entity((ExplicitProp(99), ExplicitProp2(false)))
+                    .add_entity(with!(Person, ExplicitProp(99), ExplicitProp2(false)))
                     .unwrap(); // ConstantProp uses default
             } else {
                 context
-                    .add_entity((ExplicitProp((i % 20) as u8), ExplicitProp2(false)))
+                    .add_entity(with!(
+                        Person,
+                        ExplicitProp((i % 20) as u8),
+                        ExplicitProp2(false)
+                    ))
                     .unwrap();
             }
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp(99), ConstantProp(42)))
+            .query_result_iterator(with!(Person, ExplicitProp(99), ConstantProp(42)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 5);
@@ -815,17 +842,22 @@ mod tests {
         for i in 0..100 {
             if i < 10 {
                 context
-                    .add_entity((ConstantProp(99), ExplicitProp(0), ExplicitProp2(true)))
+                    .add_entity(with!(
+                        Person,
+                        ConstantProp(99),
+                        ExplicitProp(0),
+                        ExplicitProp2(true)
+                    ))
                     .unwrap();
             } else {
                 context
-                    .add_entity((ExplicitProp(0), ExplicitProp2(false)))
+                    .add_entity(with!(Person, ExplicitProp(0), ExplicitProp2(false)))
                     .unwrap();
             }
         }
 
         let results = context
-            .query_result_iterator((ConstantProp(99), ExplicitProp2(true)))
+            .query_result_iterator(with!(Person, ConstantProp(99), ExplicitProp2(true)))
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 10);
@@ -839,12 +871,12 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(i < 50)))
+                .add_entity(with!(Person, ExplicitProp(i as u8), ExplicitProp2(i < 50)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp2(true), DerivedProp(true)))
+            .query_result_iterator(with!(Person, ExplicitProp2(true), DerivedProp(true)))
             .collect::<Vec<_>>();
 
         // ExplicitProp2=true for i<50, DerivedProp=true when ExplicitProp is even
@@ -861,12 +893,12 @@ mod tests {
 
         for i in 0..100 {
             context
-                .add_entity((ExplicitProp(i as u8), ExplicitProp2(i < 30)))
+                .add_entity(with!(Person, ExplicitProp(i as u8), ExplicitProp2(i < 30)))
                 .unwrap();
         }
 
         let results = context
-            .query_result_iterator((ExplicitProp2(true), DerivedProp(false)))
+            .query_result_iterator(with!(Person, ExplicitProp2(true), DerivedProp(false)))
             .collect::<Vec<_>>();
 
         // ExplicitProp2=true for i<30, DerivedProp=false when ExplicitProp is odd
@@ -883,7 +915,8 @@ mod tests {
 
         for age in 0..100 {
             context
-                .add_entity((
+                .add_entity(with!(
+                    Person,
                     Age(age),
                     ExplicitProp(age.wrapping_mul(7) % 100),
                     ExplicitProp2(false),
@@ -892,7 +925,8 @@ mod tests {
         }
         for age in 0..100 {
             context
-                .add_entity((
+                .add_entity(with!(
+                    Person,
                     Age(age),
                     ExplicitProp(age.wrapping_mul(14) % 100),
                     ExplicitProp2(false),
@@ -902,8 +936,8 @@ mod tests {
 
         // Since both queries include `Age`, both will attempt to index unindexed entities. This tests that there is
         // no double borrow error.
-        let results = context.query_result_iterator((Age(25),));
-        let more_results = context.query_result_iterator((Age(25), ExplicitProp(75)));
+        let results = context.query_result_iterator(with!(Person, Age(25)));
+        let more_results = context.query_result_iterator(with!(Person, Age(25), ExplicitProp(75)));
 
         let collected_results = results.collect::<IndexSet<_>>();
         let other_collected_results = more_results.collect::<IndexSet<_>>();

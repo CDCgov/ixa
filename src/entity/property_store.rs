@@ -418,7 +418,7 @@ mod tests {
     use super::*;
     use crate::entity::index::{IndexCountResult, IndexSetResult};
     use crate::prelude::*;
-    use crate::{define_entity, define_property, Context};
+    use crate::{define_entity, define_property, with, Context};
 
     define_entity!(Person);
 
@@ -504,8 +504,8 @@ mod tests {
         let existing_query_parts = [&existing_value as &dyn Any];
         let missing_query_parts = [&missing_value as &dyn Any];
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 
@@ -543,8 +543,8 @@ mod tests {
         let existing_query_parts = [&existing_value as &dyn Any];
         let missing_query_parts = [&missing_value as &dyn Any];
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 
@@ -577,8 +577,8 @@ mod tests {
         let existing_query_parts = [&existing_value as &dyn Any];
         let missing_query_parts = [&missing_value as &dyn Any];
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
 
         let property_store = context.entity_store.get_property_store::<Person>();
 

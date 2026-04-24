@@ -50,7 +50,8 @@ fn setup() -> (Context, Vec<u8>) {
     // Add population
     for _ in 0..100_000 {
         context
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 Property10(context.sample_range(SampleBenchRng, 0..10)),
                 Property100(context.sample_range(SampleBenchRng, 0..100)),
                 Unindexed10(context.sample_range(SampleBenchRng, 0..10)),
@@ -72,9 +73,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let counts = black_box(&counts);
 
             for value in counts {
-                let _selected = black_box(
-                    context.sample_entity(SampleBenchRng, black_box((Property100(*value),))),
-                );
+                let _selected = black_box(context.sample_entity(
+                    SampleBenchRng,
+                    black_box(with!(Person, Property100(*value))),
+                ));
             }
         });
     });
@@ -88,7 +90,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for value in counts {
                     let _selected = black_box(context.count_and_sample_entity(
                         SampleBenchRng,
-                        black_box((Property100(*value),)),
+                        black_box(with!(Person, Property100(*value))),
                     ));
                 }
             });
@@ -104,7 +106,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entity(
                     SampleBenchRng,
-                    black_box((Property10(*value % 10), Property100(*value))),
+                    black_box(with!(Person, Property10(*value % 10), Property100(*value))),
                 ));
             }
         });
@@ -118,7 +120,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
-                    black_box((Property100(*value),)),
+                    black_box(with!(Person, Property100(*value))),
                     *black_box(value) as usize,
                 ));
             }
@@ -134,7 +136,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
-                    black_box((Property10(*value % 10), Property100(*value))),
+                    black_box(with!(Person, Property10(*value % 10), Property100(*value))),
                     *black_box(value) as usize,
                 ));
             }
@@ -148,9 +150,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             let counts = black_box(&counts);
 
             for value in counts {
-                let _selected = black_box(
-                    context.sample_entity(SampleBenchRng, black_box((Unindexed10(*value % 10),))),
-                );
+                let _selected = black_box(context.sample_entity(
+                    SampleBenchRng,
+                    black_box(with!(Person, Unindexed10(*value % 10))),
+                ));
             }
         });
     });
@@ -164,7 +167,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for value in counts {
                 let _selected = black_box(context.sample_entities(
                     SampleBenchRng,
-                    black_box((Unindexed10(*value % 10),)),
+                    black_box(with!(Person, Unindexed10(*value % 10))),
                     *black_box(value) as usize,
                 ));
             }
@@ -181,7 +184,11 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for value in counts {
                     let _selected = black_box(context.sample_entity(
                         SampleBenchRng,
-                        black_box((Unindexed10(*value % 10), AgeGroupFoi(*value % 3))),
+                        black_box(with!(
+                            Person,
+                            Unindexed10(*value % 10),
+                            AgeGroupFoi(*value % 3)
+                        )),
                     ));
                 }
             });
@@ -197,7 +204,11 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for value in counts {
                     let _selected = black_box(context.count_and_sample_entity(
                         SampleBenchRng,
-                        black_box((Unindexed10(*value % 10), AgeGroupFoi(*value % 3))),
+                        black_box(with!(
+                            Person,
+                            Unindexed10(*value % 10),
+                            AgeGroupFoi(*value % 3)
+                        )),
                     ));
                 }
             });

@@ -22,7 +22,7 @@ fn create_household_networks(context: &mut Context, people: &[PersonId]) {
         let household_id: HouseholdId = context.get_property(*person_id);
         if households.insert(household_id) {
             let mut members: Vec<PersonId> = Vec::new();
-            context.with_query_results((household_id,), &mut |results| {
+            context.with_query_results(with!(Person, household_id), &mut |results| {
                 members = results.to_owned_vec()
             });
             // create a dense network
@@ -43,13 +43,13 @@ fn load_edge_list<ET: EdgeType<Person>>(context: &mut Context, file_name: &str, 
     for result in reader.deserialize() {
         let record: EdgeRecord = result.expect("Failed to parse edge");
         let mut p1_vec = Vec::new();
-        context.with_query_results((Id(record.v1),), &mut |people| {
+        context.with_query_results(with!(Person, Id(record.v1)), &mut |people| {
             p1_vec = people.to_owned_vec()
         });
         assert_eq!(p1_vec.len(), 1);
         let p1 = p1_vec[0];
         let mut p2_vec = Vec::new();
-        context.with_query_results((Id(record.v2),), &mut |people| {
+        context.with_query_results(with!(Person, Id(record.v2)), &mut |people| {
             p2_vec = people.to_owned_vec()
         });
         assert_eq!(p2_vec.len(), 1);

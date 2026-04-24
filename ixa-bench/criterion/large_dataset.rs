@@ -37,7 +37,8 @@ define_multi_property!((Age, SchoolId, WorkplaceId), Person);
 fn initialize_entities(context: &mut Context) {
     for person in generate_population_with_seed(10_000, 0.2, 10.0, Some(SEED)) {
         context
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 Age(person.age),
                 HomeId(person.home_id as u32),
                 SchoolId(person.school_id as u32),
@@ -58,7 +59,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
 
     criterion.bench_function("bench_query_population_property_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count((HomeId(1),)));
+            black_box(context.query_entity_count(with!(Person, HomeId(1))));
         });
     });
 
@@ -67,7 +68,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_indexed_property_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count((HomeId(1),)));
+                black_box(context.query_entity_count(with!(Person, HomeId(1))));
             });
         },
     );
@@ -76,7 +77,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_derived_property_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count((AgeGroupRisk::Senior,)));
+                black_box(context.query_entity_count(with!(Person, AgeGroupRisk::Senior)));
             });
         },
     );
@@ -86,7 +87,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         "bench_query_population_multi_unindexed_entities",
         |bencher| {
             bencher.iter(|| {
-                black_box(context.query_entity_count((Age(30), SchoolId(1), WorkplaceId(1))));
+                black_box(context.query_entity_count(with!(
+                    Person,
+                    Age(30),
+                    SchoolId(1),
+                    WorkplaceId(1)
+                )));
             });
         },
     );
@@ -94,7 +100,12 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     context.index_property::<Person, (Age, SchoolId, WorkplaceId)>();
     criterion.bench_function("bench_query_population_multi_indexed_entities", |bencher| {
         bencher.iter(|| {
-            black_box(context.query_entity_count((Age(30), SchoolId(1), WorkplaceId(1))));
+            black_box(context.query_entity_count(with!(
+                Person,
+                Age(30),
+                SchoolId(1),
+                WorkplaceId(1)
+            )));
         });
     });
 
@@ -106,7 +117,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 black_box(context.match_entity(
                     entity_ids[person_idx % total_population],
-                    (Age(30u8), SchoolId(1u32), WorkplaceId(1u32)),
+                    with!(Person, Age(30u8), SchoolId(1u32), WorkplaceId(1u32)),
                 ));
                 person_idx += 1;
             });
@@ -121,7 +132,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 |mut entities| {
                     context.filter_entities(
                         &mut entities,
-                        (Age(30u8), SchoolId(1u32), WorkplaceId(1u32)),
+                        with!(Person, Age(30u8), SchoolId(1u32), WorkplaceId(1u32)),
                     );
                 },
                 BatchSize::SmallInput,
@@ -137,7 +148,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 |mut entities| {
                     context.filter_entities(
                         &mut entities,
-                        (Age(30u8), HomeId(1u32), WorkplaceId(1u32)),
+                        with!(Person, Age(30u8), HomeId(1u32), WorkplaceId(1u32)),
                     );
                 },
                 BatchSize::SmallInput,
