@@ -1254,7 +1254,7 @@ mod tests {
     // We define unused properties to test macro implementation.
     #![allow(dead_code)]
 
-    use crate::entity::{PropertyIndexType, Query};
+    use crate::entity::{PropertyIndexType, QueryInternal};
     use crate::prelude::*;
     use crate::with;
 
@@ -1477,10 +1477,10 @@ mod tests {
         {
             let example_query = (Name("Alice"), Age(22), Weight(170.5));
             let query_multi_property_id =
-                <(Name, Age, Weight) as Query<Person>>::multi_property_id(&example_query);
+                <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query);
             assert!(query_multi_property_id.is_some());
             assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
-            let query_parts = Query::query_parts(&example_query);
+            let query_parts = QueryInternal::query_parts(&example_query);
             assert_eq!(
                 ProfileNAW::canonical_from_sorted_query_parts(query_parts.as_ref()),
                 Some((Name("Alice"), Age(22), Weight(170.5)).make_canonical())

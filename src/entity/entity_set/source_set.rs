@@ -350,7 +350,7 @@ impl<'a, E: Entity> SourceSet<'a, E> {
     }
 
     /// A constructor for `SourceSet`s during construction of `EntitySet` in
-    /// `Query<E>::new_query_result()`. Returns `None` if the set is empty.
+    /// `QueryInternal<E>::new_query_result()`. Returns `None` if the set is empty.
     ///
     /// We first look for an index set. If not found, we check if the property is derived.
     /// For derived properties, we wrap a reference to the `Context`. For nonderived
