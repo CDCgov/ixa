@@ -23,6 +23,10 @@ impl<E: Entity> QueryInternal<E> for () {
         None
     }
 
+    fn is_empty_query(&self) -> bool {
+        true
+    }
+
     fn query_parts(&self) -> Self::QueryParts<'_> {
         []
     }
@@ -61,6 +65,10 @@ impl<E: Entity> QueryInternal<E> for E {
 
     fn multi_property_id(&self) -> Option<usize> {
         None
+    }
+
+    fn is_empty_query(&self) -> bool {
+        true
     }
 
     fn query_parts(&self) -> Self::QueryParts<'_> {

@@ -1,4 +1,3 @@
-use std::any::{Any, TypeId};
 use std::hash::Hash;
 
 use smallvec::SmallVec;
@@ -8,7 +7,7 @@ use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
-use crate::entity::query::QueryInternal;
+use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::rand::Rng;
@@ -168,7 +167,7 @@ pub trait ContextEntitiesExt {
     /// This method gives client code direct access to the query result as an `EntitySet`.
     /// This is especially efficient for indexed queries, as this method can reduce to wrapping
     /// a single indexed source.
-    fn with_query_results<'a, E: Entity, Q: QueryInternal<E>>(
+    fn with_query_results<'a, E: Entity, Q: Query<E>>(
         &'a self,
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
@@ -178,7 +177,7 @@ pub trait ContextEntitiesExt {
     /// efficient for indexed queries.
     ///
     /// Supplying an empty query `()` is equivalent to calling `get_entity_count::<E>()`.
-    fn query_entity_count<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> usize;
+    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
@@ -187,7 +186,7 @@ pub trait ContextEntitiesExt {
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -198,7 +197,7 @@ pub trait ContextEntitiesExt {
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -210,7 +209,7 @@ pub trait ContextEntitiesExt {
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -221,27 +220,16 @@ pub trait ContextEntitiesExt {
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
     /// Generates an `EntitySet` representing the query results.
-    fn query<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> EntitySet<E>;
+    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
 
     /// Generates an iterator over the results of the query.
-    fn query_result_iterator<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        query: Q,
-    ) -> EntitySetIterator<E>;
+    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
 
     /// Determines if the given person matches this query.
-    fn match_entity<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        entity_id: EntityId<E>,
-        query: Q,
-    ) -> bool;
+    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match the given query.
-    fn filter_entities<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        entities: &mut Vec<EntityId<E>>,
-        query: Q,
-    );
+    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q);
 }
 
 impl ContextEntitiesExt for Context {
@@ -431,7 +419,7 @@ impl ContextEntitiesExt for Context {
         property_store.is_property_indexed::<P>()
     }
 
-    fn with_query_results<'a, E: Entity, Q: QueryInternal<E>>(
+    fn with_query_results<'a, E: Entity, Q: Query<E>>(
         &'a self,
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
@@ -460,7 +448,7 @@ impl ContextEntitiesExt for Context {
         }
 
         // Special case the empty query, which creates a set containing the entire population.
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
             callback(EntitySet::from_source(SourceSet::PopulationRange(
                 0..self.get_entity_count::<E>(),
@@ -475,7 +463,7 @@ impl ContextEntitiesExt for Context {
         callback(self.query(query));
     }
 
-    fn query_entity_count<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> usize {
+    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
         // The fast path for indexed queries.
         //
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
@@ -496,11 +484,11 @@ impl ContextEntitiesExt for Context {
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -523,11 +511,11 @@ impl ContextEntitiesExt for Context {
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -549,11 +537,11 @@ impl ContextEntitiesExt for Context {
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
-        Q: QueryInternal<E>,
+        Q: Query<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -579,30 +567,19 @@ impl ContextEntitiesExt for Context {
         self.entity_store.get_entity_iterator::<E>()
     }
 
-    fn query<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> EntitySet<E> {
+    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
         query.new_query_result(self)
     }
 
-    fn query_result_iterator<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        query: Q,
-    ) -> EntitySetIterator<E> {
+    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
         query.new_query_result_iterator(self)
     }
 
-    fn match_entity<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        entity_id: EntityId<E>,
-        query: Q,
-    ) -> bool {
+    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
         query.match_entity(entity_id, self)
     }
 
-    fn filter_entities<E: Entity, Q: QueryInternal<E>>(
-        &self,
-        entities: &mut Vec<EntityId<E>>,
-        query: Q,
-    ) {
+    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
         query.filter_entities(entities, self);
     }
 }
@@ -613,6 +590,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::entity::query::QueryInternal;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
     use crate::{

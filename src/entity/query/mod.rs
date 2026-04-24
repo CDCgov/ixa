@@ -89,6 +89,10 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
         self.inner.multi_property_id()
     }
 
+    fn is_empty_query(&self) -> bool {
+        self.inner.is_empty_query()
+    }
+
     fn query_parts(&self) -> Self::QueryParts<'_> {
         self.inner.query_parts()
     }
@@ -163,6 +167,11 @@ pub trait QueryInternal<E: Entity>: 'static {
         *entry
     }
 
+    /// Indicates whether this query matches the entire population for `E`.
+    fn is_empty_query(&self) -> bool {
+        false
+    }
+
     /// Exposes the query parts without allocating.
     fn query_parts(&self) -> Self::QueryParts<'_>;
 
@@ -180,6 +189,12 @@ pub trait QueryInternal<E: Entity>: 'static {
     /// Removes all `EntityId`s from the given vector that do not match this query.
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
 }
+
+/// Public marker trait accepted by user-facing query APIs.
+pub trait Query<E: Entity>: QueryInternal<E> {}
+
+impl<E: Entity, QI: QueryInternal<E>> Query<E> for EntityPropertyTuple<E, QI> {}
+impl<E: Entity> Query<E> for E {}
 
 #[cfg(test)]
 mod tests {
