@@ -5,10 +5,11 @@ use seq_macro::seq;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
 use crate::entity::property::Property;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, Query};
+use crate::entity::query::QueryInternal;
+use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::Context;
 
-impl<E: Entity> Query<E> for () {
+impl<E: Entity> QueryInternal<E> for () {
     type QueryParts<'a>
         = [&'a dyn std::any::Any; 0]
     where
@@ -48,7 +49,7 @@ impl<E: Entity> Query<E> for () {
 
 // An Entity ZST itself is an empty query matching all entities of that type.
 // This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
-impl<E: Entity + Copy> Query<E> for E {
+impl<E: Entity> QueryInternal<E> for E {
     type QueryParts<'a>
         = [&'a dyn std::any::Any; 0]
     where
@@ -87,7 +88,7 @@ impl<E: Entity + Copy> Query<E> for E {
 }
 
 // Implement the query version with one parameter.
-impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
+impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     type QueryParts<'a>
         = P1::QueryParts<'a>
     where
@@ -193,7 +194,7 @@ macro_rules! impl_query {
                 #(
                     T~N : Property<E>,
                 )*
-            > Query<E> for (
+            > QueryInternal<E> for (
                 #(
                     T~N,
                 )*
@@ -229,9 +230,9 @@ macro_rules! impl_query {
                     // This mirrors the indexed case in `SourceSet<'a, E>::new()`. The difference is, if the
                     // multi-property is unindexed, we fall through to create `SourceSet`s for the components
                     // rather than wrapping a `DerivedPropertySource`.
-                    if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
+                    if let Some(multi_property_id) = <Self as $crate::entity::QueryInternal<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let query_parts = <Self as $crate::entity::QueryInternal<E>>::query_parts(self);
                         let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
                             query_parts.as_ref(),
@@ -266,9 +267,9 @@ macro_rules! impl_query {
                 fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
                     // Constructing the `EntitySetIterator` directly instead of constructing an `EntitySet`
                     // first is a micro-optimization improving tight-loop benchmark performance.
-                    if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
+                    if let Some(multi_property_id) = <Self as $crate::entity::QueryInternal<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let query_parts = <Self as $crate::entity::QueryInternal<E>>::query_parts(self);
                         let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
                             query_parts.as_ref(),
@@ -311,9 +312,9 @@ macro_rules! impl_query {
 
                 fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
                     // The fast path: If this query is indexed, we only have to do one pass over the entities.
-                    if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
+                    if let Some(multi_property_id) = <Self as $crate::entity::QueryInternal<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let query_parts = <Self as $crate::entity::QueryInternal<E>>::query_parts(self);
                         let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
                             query_parts.as_ref(),

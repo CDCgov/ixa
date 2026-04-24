@@ -75,7 +75,7 @@ impl<E: Entity, T> EntityPropertyTuple<E, T> {
     }
 }
 
-impl<E: Entity, T: Query<E>> Query<E> for EntityPropertyTuple<E, T> {
+impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E, T> {
     type QueryParts<'a>
         = T::QueryParts<'a>
     where
@@ -131,13 +131,12 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
     }
 }
 
-/// Encapsulates a query.
+/// Internal query machinery.
 ///
 /// [`ContextEntitiesExt::query_result_iterator`](crate::entity::context_extension::ContextEntitiesExt::query_result_iterator)
-/// actually takes an instance of [`Query`], but because
-/// we implement Query for tuples of up to size 20, that's invisible
-/// to the caller. Do not use this trait directly.
-pub trait Query<E: Entity>: Copy + 'static {
+/// uses this trait internally. Tuples implement this trait for up to size 20, but this is not
+/// intended to be the long-term public API acceptance marker.
+pub trait QueryInternal<E: Entity>: 'static {
     /// Allocation-free representation of the query parts exposed by this query.
     type QueryParts<'a>: AsRef<[&'a dyn std::any::Any]>
     where

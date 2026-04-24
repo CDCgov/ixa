@@ -8,7 +8,7 @@ use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_list::PropertyList;
-use crate::entity::query::Query;
+use crate::entity::query::QueryInternal;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::rand::Rng;
@@ -168,7 +168,7 @@ pub trait ContextEntitiesExt {
     /// This method gives client code direct access to the query result as an `EntitySet`.
     /// This is especially efficient for indexed queries, as this method can reduce to wrapping
     /// a single indexed source.
-    fn with_query_results<'a, E: Entity, Q: Query<E>>(
+    fn with_query_results<'a, E: Entity, Q: QueryInternal<E>>(
         &'a self,
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
@@ -178,7 +178,7 @@ pub trait ContextEntitiesExt {
     /// efficient for indexed queries.
     ///
     /// Supplying an empty query `()` is equivalent to calling `get_entity_count::<E>()`.
-    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
+    fn query_entity_count<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
@@ -187,7 +187,7 @@ pub trait ContextEntitiesExt {
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -198,7 +198,7 @@ pub trait ContextEntitiesExt {
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -210,7 +210,7 @@ pub trait ContextEntitiesExt {
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng;
 
@@ -221,16 +221,27 @@ pub trait ContextEntitiesExt {
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
     /// Generates an `EntitySet` representing the query results.
-    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
+    fn query<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> EntitySet<E>;
 
     /// Generates an iterator over the results of the query.
-    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
+    fn query_result_iterator<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        query: Q,
+    ) -> EntitySetIterator<E>;
 
     /// Determines if the given person matches this query.
-    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
+    fn match_entity<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        entity_id: EntityId<E>,
+        query: Q,
+    ) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match the given query.
-    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q);
+    fn filter_entities<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        entities: &mut Vec<EntityId<E>>,
+        query: Q,
+    );
 }
 
 impl ContextEntitiesExt for Context {
@@ -420,14 +431,14 @@ impl ContextEntitiesExt for Context {
         property_store.is_property_indexed::<P>()
     }
 
-    fn with_query_results<'a, E: Entity, Q: Query<E>>(
+    fn with_query_results<'a, E: Entity, Q: QueryInternal<E>>(
         &'a self,
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
     ) {
         // The fast path for indexed queries.
 
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
@@ -464,10 +475,10 @@ impl ContextEntitiesExt for Context {
         callback(self.query(query));
     }
 
-    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
+    fn query_entity_count<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> usize {
         // The fast path for indexed queries.
         //
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             let query_parts = query.query_parts();
@@ -485,7 +496,7 @@ impl ContextEntitiesExt for Context {
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
@@ -512,7 +523,7 @@ impl ContextEntitiesExt for Context {
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
@@ -538,7 +549,7 @@ impl ContextEntitiesExt for Context {
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
-        Q: Query<E>,
+        Q: QueryInternal<E>,
         R: RngId + 'static,
         R::RngType: Rng,
     {
@@ -568,19 +579,30 @@ impl ContextEntitiesExt for Context {
         self.entity_store.get_entity_iterator::<E>()
     }
 
-    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
+    fn query<E: Entity, Q: QueryInternal<E>>(&self, query: Q) -> EntitySet<E> {
         query.new_query_result(self)
     }
 
-    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
+    fn query_result_iterator<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        query: Q,
+    ) -> EntitySetIterator<E> {
         query.new_query_result_iterator(self)
     }
 
-    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
+    fn match_entity<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        entity_id: EntityId<E>,
+        query: Q,
+    ) -> bool {
         query.match_entity(entity_id, self)
     }
 
-    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
+    fn filter_entities<E: Entity, Q: QueryInternal<E>>(
+        &self,
+        entities: &mut Vec<EntityId<E>>,
+        query: Q,
+    ) {
         query.filter_entities(entities, self);
     }
 }
