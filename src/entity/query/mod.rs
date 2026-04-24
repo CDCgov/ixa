@@ -208,9 +208,11 @@ mod tests {
     #[test]
     fn with_query_results() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -219,7 +221,7 @@ mod tests {
     fn with_query_results_empty() {
         let context = Context::new();
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 0);
         });
     }
@@ -227,26 +229,36 @@ mod tests {
     #[test]
     fn query_entity_count() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
 
-        assert_eq!(context.query_entity_count((RiskCategory::High,)), 1);
+        assert_eq!(
+            context.query_entity_count(with!(Person, RiskCategory::High)),
+            1
+        );
     }
 
     #[test]
     fn query_entity_count_empty() {
         let context = Context::new();
 
-        assert_eq!(context.query_entity_count((RiskCategory::High,)), 0);
+        assert_eq!(
+            context.query_entity_count(with!(Person, RiskCategory::High)),
+            0
+        );
     }
 
     #[test]
     fn with_query_results_macro_index_first() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
         context.index_property::<_, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -254,9 +266,9 @@ mod tests {
     #[test]
     fn with_query_results_macro_index_second() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,));
+        let _ = context.add_entity(with!(Person, RiskCategory::High));
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
         assert!(!context.is_property_indexed::<Person, RiskCategory>());
@@ -264,7 +276,7 @@ mod tests {
         context.index_property::<Person, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -272,22 +284,24 @@ mod tests {
     #[test]
     fn with_query_results_macro_change() {
         let mut context = Context::new();
-        let person1 = context.add_entity((RiskCategory::High,)).unwrap();
+        let person1 = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
 
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
 
-        context.with_query_results((RiskCategory::Low,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::Low), &mut |people| {
             assert_eq!(people.into_iter().count(), 0);
         });
 
         context.set_property(person1, RiskCategory::Low);
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 0);
         });
 
-        context.with_query_results((RiskCategory::Low,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::Low), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -295,10 +309,12 @@ mod tests {
     #[test]
     fn with_query_results_index_after_add() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
         context.index_property::<Person, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -306,15 +322,19 @@ mod tests {
     #[test]
     fn with_query_results_add_after_index() {
         let mut context = Context::new();
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
         context.index_property::<Person, RiskCategory>();
         assert!(context.is_property_indexed::<Person, RiskCategory>());
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
 
-        let _ = context.add_entity((RiskCategory::High,)).unwrap();
-        context.with_query_results((RiskCategory::High,), &mut |people| {
+        let _ = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
+        context.with_query_results(with!(Person, RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 2);
         });
     }
@@ -322,9 +342,11 @@ mod tests {
     #[test]
     fn with_query_results_cast_value() {
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
 
-        context.with_query_results((Age(42),), &mut |people| {
+        context.with_query_results(with!(Person, Age(42)), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -332,11 +354,17 @@ mod tests {
     #[test]
     fn with_query_results_intersection() {
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(40), RiskCategory::Low)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(40), RiskCategory::Low))
+            .unwrap();
 
-        context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
+        context.with_query_results(with!(Person, Age(42), RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -344,11 +372,17 @@ mod tests {
     #[test]
     fn with_query_results_intersection_non_macro() {
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(40), RiskCategory::Low)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(40), RiskCategory::Low))
+            .unwrap();
 
-        context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
+        context.with_query_results(with!(Person, Age(42), RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -356,12 +390,18 @@ mod tests {
     #[test]
     fn with_query_results_intersection_one_indexed() {
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(40), RiskCategory::Low)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(40), RiskCategory::Low))
+            .unwrap();
 
         context.index_property::<Person, Age>();
-        context.with_query_results((Age(42), RiskCategory::High), &mut |people| {
+        context.with_query_results(with!(Person, Age(42), RiskCategory::High), &mut |people| {
             assert_eq!(people.into_iter().count(), 1);
         });
     }
@@ -371,15 +411,19 @@ mod tests {
         let mut context = Context::new();
         define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
 
-        let person = context.add_entity((Age(64), RiskCategory::High)).unwrap();
-        context.add_entity((Age(88), RiskCategory::High)).unwrap();
+        let person = context
+            .add_entity(with!(Person, Age(64), RiskCategory::High))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Age(88), RiskCategory::High))
+            .unwrap();
 
         let mut not_seniors = Vec::new();
-        context.with_query_results((Senior(false),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(false)), &mut |people| {
             not_seniors = people.to_owned_vec();
         });
         let mut seniors = Vec::new();
-        context.with_query_results((Senior(true),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(true)), &mut |people| {
             seniors = people.to_owned_vec();
         });
         assert_eq!(seniors.len(), 1, "One senior");
@@ -387,10 +431,10 @@ mod tests {
 
         context.set_property(person, Age(65));
 
-        context.with_query_results((Senior(false),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(false)), &mut |people| {
             not_seniors = people.to_owned_vec()
         });
-        context.with_query_results((Senior(true),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(true)), &mut |people| {
             seniors = people.to_owned_vec()
         });
 
@@ -404,15 +448,17 @@ mod tests {
         define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
 
         context.index_property::<Person, Senior>();
-        let person = context.add_entity((Age(64), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(88), RiskCategory::Low));
+        let person = context
+            .add_entity(with!(Person, Age(64), RiskCategory::Low))
+            .unwrap();
+        let _ = context.add_entity(with!(Person, Age(88), RiskCategory::Low));
 
         let mut not_seniors = Vec::new();
-        context.with_query_results((Senior(false),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(false)), &mut |people| {
             not_seniors = people.to_owned_vec()
         });
         let mut seniors = Vec::new();
-        context.with_query_results((Senior(true),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(true)), &mut |people| {
             seniors = people.to_owned_vec()
         });
         assert_eq!(seniors.len(), 1, "One senior");
@@ -420,10 +466,10 @@ mod tests {
 
         context.set_property(person, Age(65));
 
-        context.with_query_results((Senior(false),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(false)), &mut |people| {
             not_seniors = people.to_owned_vec()
         });
-        context.with_query_results((Senior(true),), &mut |people| {
+        context.with_query_results(with!(Person, Senior(true)), &mut |people| {
             seniors = people.to_owned_vec()
         });
 
@@ -448,64 +494,115 @@ mod tests {
         );
 
         // add some people
-        let _ = context.add_entity((Age(64), County(2), Height(120), RiskCategory::Low));
-        let _ = context.add_entity((Age(88), County(2), Height(130), RiskCategory::Low));
+        let _ = context.add_entity(with!(
+            Person,
+            Age(64),
+            County(2),
+            Height(120),
+            RiskCategory::Low
+        ));
+        let _ = context.add_entity(with!(
+            Person,
+            Age(88),
+            County(2),
+            Height(130),
+            RiskCategory::Low
+        ));
         let p2 = context
-            .add_entity((Age(8), County(1), Height(140), RiskCategory::Low))
+            .add_entity(with!(
+                Person,
+                Age(8),
+                County(1),
+                Height(140),
+                RiskCategory::Low
+            ))
             .unwrap();
         let p3 = context
-            .add_entity((Age(28), County(1), Height(140), RiskCategory::Low))
+            .add_entity(with!(
+                Person,
+                Age(28),
+                County(1),
+                Height(140),
+                RiskCategory::Low
+            ))
             .unwrap();
         let p4 = context
-            .add_entity((Age(28), County(2), Height(160), RiskCategory::Low))
+            .add_entity(with!(
+                Person,
+                Age(28),
+                County(2),
+                Height(160),
+                RiskCategory::Low
+            ))
             .unwrap();
         let p5 = context
-            .add_entity((Age(28), County(2), Height(160), RiskCategory::Low))
+            .add_entity(with!(
+                Person,
+                Age(28),
+                County(2),
+                Height(160),
+                RiskCategory::Low
+            ))
             .unwrap();
 
         // 'regular' derived property
-        context.with_query_results((Ach(28, 2, 160),), &mut |people| {
+        context.with_query_results(with!(Person, Ach(28, 2, 160)), &mut |people| {
             assert!(people.contains(p4));
             assert!(people.contains(p5));
             assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
         });
 
         // multi-property index
-        context.with_query_results((Age(28), County(2), Height(160)), &mut |people| {
-            assert!(people.contains(p4));
-            assert!(people.contains(p5));
-            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
-        });
+        context.with_query_results(
+            with!(Person, Age(28), County(2), Height(160)),
+            &mut |people| {
+                assert!(people.contains(p4));
+                assert!(people.contains(p5));
+                assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
+            },
+        );
 
         // multi-property index with different order
-        context.with_query_results((County(2), Height(160), Age(28)), &mut |people| {
-            assert!(people.contains(p4));
-            assert!(people.contains(p5));
-            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
-        });
+        context.with_query_results(
+            with!(Person, County(2), Height(160), Age(28)),
+            &mut |people| {
+                assert!(people.contains(p4));
+                assert!(people.contains(p5));
+                assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
+            },
+        );
 
         // multi-property index with different order
-        context.with_query_results((Height(160), County(2), Age(28)), &mut |people| {
-            assert!(people.contains(p4));
-            assert!(people.contains(p5));
-            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
-        });
+        context.with_query_results(
+            with!(Person, Height(160), County(2), Age(28)),
+            &mut |people| {
+                assert!(people.contains(p4));
+                assert!(people.contains(p5));
+                assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
+            },
+        );
 
         // multi-property index with different order and different value
-        context.with_query_results((Height(140), County(1), Age(28)), &mut |people| {
-            assert!(people.contains(p3));
-            assert_eq!(people.into_iter().count(), 1, "Should have 1 matches");
-        });
+        context.with_query_results(
+            with!(Person, Height(140), County(1), Age(28)),
+            &mut |people| {
+                assert!(people.contains(p3));
+                assert_eq!(people.into_iter().count(), 1, "Should have 1 matches");
+            },
+        );
 
         context.set_property(p2, Age(28));
         // multi-property index again after changing the value
-        context.with_query_results((Height(140), County(1), Age(28)), &mut |people| {
-            assert!(people.contains(p2));
-            assert!(people.contains(p3));
-            assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
-        });
+        context.with_query_results(
+            with!(Person, Height(140), County(1), Age(28)),
+            &mut |people| {
+                assert!(people.contains(p2));
+                assert!(people.contains(p3));
+                assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
+            },
+        );
 
-        context.with_query_results((Height(140), County(1)), &mut |people| {
+        context.with_query_results(with!(Person, Height(140), County(1)), &mut |people| {
             assert!(people.contains(p2));
             assert!(people.contains(p3));
             assert_eq!(people.into_iter().count(), 2, "Should have 2 matches");
@@ -516,12 +613,18 @@ mod tests {
     fn test_match_entity() {
         let mut context = Context::new();
         let person = context
-            .add_entity((Age(28), County(2), Height(160), RiskCategory::Low))
+            .add_entity(with!(
+                Person,
+                Age(28),
+                County(2),
+                Height(160),
+                RiskCategory::Low
+            ))
             .unwrap();
-        assert!(context.match_entity(person, (Age(28), County(2), Height(160))));
-        assert!(!context.match_entity(person, (Age(13), County(2), Height(160))));
-        assert!(!context.match_entity(person, (Age(28), County(33), Height(160))));
-        assert!(!context.match_entity(person, (Age(28), County(2), Height(9))));
+        assert!(context.match_entity(person, with!(Person, Age(28), County(2), Height(160))));
+        assert!(!context.match_entity(person, with!(Person, Age(13), County(2), Height(160))));
+        assert!(!context.match_entity(person, with!(Person, Age(28), County(33), Height(160))));
+        assert!(!context.match_entity(person, with!(Person, Age(28), County(2), Height(9))));
     }
 
     #[test]
@@ -531,14 +634,20 @@ mod tests {
 
         for idx in 0..10 {
             let person = context
-                .add_entity((Age(28), County(idx % 2), Height(160), RiskCategory::Low))
+                .add_entity(with!(
+                    Person,
+                    Age(28),
+                    County(idx % 2),
+                    Height(160),
+                    RiskCategory::Low
+                ))
                 .unwrap();
             people.push(person);
         }
 
         context.filter_entities(
             &mut people,
-            (Age(28), County(0), Height(160), RiskCategory::Low),
+            with!(Person, Age(28), County(0), Height(160), RiskCategory::Low),
         );
 
         let expected = (0..5)
@@ -556,12 +665,18 @@ mod tests {
 
         for idx in 0..10 {
             let person = context
-                .add_entity((Age(28), County(idx % 2), Height(160), RiskCategory::Low))
+                .add_entity(with!(
+                    Person,
+                    Age(28),
+                    County(idx % 2),
+                    Height(160),
+                    RiskCategory::Low
+                ))
                 .unwrap();
             people.push(person);
         }
 
-        context.filter_entities(&mut people, (County(0), Age(28)));
+        context.filter_entities(&mut people, with!(Person, County(0), Age(28)));
 
         let expected = (0..5)
             .map(|idx| PersonId::new(idx * 2))
@@ -574,9 +689,15 @@ mod tests {
         use super::EntityPropertyTuple;
 
         let mut context = Context::new();
-        let p1 = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
+        let p1 = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::High))
+            .unwrap();
 
         // Create query using EntityPropertyTuple
         let query: EntityPropertyTuple<Person, _> =
@@ -599,8 +720,12 @@ mod tests {
         use super::EntityPropertyTuple;
 
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::Low)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::Low))
+            .unwrap();
 
         // Empty query matches all entities
         let query: EntityPropertyTuple<Person, _> = EntityPropertyTuple::new(());
@@ -613,9 +738,15 @@ mod tests {
         use super::EntityPropertyTuple;
 
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::High))
+            .unwrap();
 
         // Single property query
         let query: EntityPropertyTuple<Person, _> = EntityPropertyTuple::new((Age(42),));
@@ -646,8 +777,12 @@ mod tests {
         use crate::with;
 
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::Low)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::Low))
+            .unwrap();
 
         // with!(Person) should match all Person entities
         let query = with!(Person);
@@ -659,9 +794,15 @@ mod tests {
         use crate::with;
 
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::High))
+            .unwrap();
 
         // with!(Person, Age(42)) should match entities with Age = 42
         let query = with!(Person, Age(42));
@@ -673,9 +814,15 @@ mod tests {
         use crate::with;
 
         let mut context = Context::new();
-        let p1 = context.add_entity((Age(42), RiskCategory::High)).unwrap();
-        let _ = context.add_entity((Age(42), RiskCategory::Low)).unwrap();
-        let _ = context.add_entity((Age(30), RiskCategory::High)).unwrap();
+        let p1 = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(30), RiskCategory::High))
+            .unwrap();
 
         // with!(Person, Age(42), RiskCategory::High) should match one entity
         let query = with!(Person, Age(42), RiskCategory::High);
@@ -691,7 +838,9 @@ mod tests {
         use crate::with;
 
         let mut context = Context::new();
-        let _ = context.add_entity((Age(42), RiskCategory::High)).unwrap();
+        let _ = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
 
         // Trailing comma should work
         let query = with!(Person, Age(42));

@@ -529,7 +529,7 @@ mod test_api {
     use crate::network::ContextNetworkExt;
     use crate::prelude::*;
     use crate::random::ContextRandomExt;
-    use crate::{define_edge_type, define_entity, define_property, define_rng};
+    use crate::{define_edge_type, define_entity, define_property, define_rng, with};
 
     define_entity!(Person);
 
@@ -538,8 +538,8 @@ mod test_api {
 
     fn setup() -> (Context, PersonId, PersonId) {
         let mut context = Context::new();
-        let person1 = context.add_entity((Age(1),)).unwrap();
-        let person2 = context.add_entity((Age(2),)).unwrap();
+        let person1 = context.add_entity(with!(Person, Age(1))).unwrap();
+        let person2 = context.add_entity(with!(Person, Age(2))).unwrap();
 
         (context, person1, person2)
     }
@@ -638,7 +638,7 @@ mod test_api {
     #[test]
     fn get_matching_edges_weight() {
         let (mut context, person1, person2) = setup();
-        let person3 = context.add_entity((Age(3),)).unwrap();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
 
         context
             .add_edge::<Person, EdgeType1>(person1, person2, 0.01, EdgeType1(1))
@@ -655,7 +655,7 @@ mod test_api {
     #[test]
     fn get_matching_edges_inner() {
         let (mut context, person1, person2) = setup();
-        let person3 = context.add_entity((Age(3),)).unwrap();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
 
         context
             .add_edge::<Person, EdgeType1>(person1, person2, 0.01, EdgeType1(1))
@@ -672,7 +672,7 @@ mod test_api {
     #[test]
     fn get_matching_edges_person_property() {
         let (mut context, person1, person2) = setup();
-        let person3 = context.add_entity((Age(3),)).unwrap();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
 
         context
             .add_edge::<Person, EdgeType1>(person1, person2, 0.01, EdgeType1(1))
@@ -681,7 +681,7 @@ mod test_api {
             .add_edge::<Person, EdgeType1>(person1, person3, 0.03, EdgeType1(3))
             .unwrap();
         let edges = context.get_matching_edges::<Person, EdgeType1>(person1, |context, edge| {
-            context.match_entity(edge.neighbor, (Age(3),))
+            context.match_entity(edge.neighbor, with!(Person, Age(3)))
         });
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].neighbor, person3);
@@ -692,7 +692,7 @@ mod test_api {
         define_rng!(NetworkTestRng);
 
         let (mut context, person1, person2) = setup();
-        let person3 = context.add_entity((Age(3),)).unwrap();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
         context.init_random(42);
 
         context

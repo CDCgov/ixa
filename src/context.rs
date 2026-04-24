@@ -534,7 +534,7 @@ mod tests {
     use ixa_derive::IxaEvent;
 
     use super::*;
-    use crate::{define_data_plugin, define_entity, define_property, ContextEntitiesExt};
+    use crate::{define_data_plugin, define_entity, define_property, with, ContextEntitiesExt};
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 
@@ -1188,7 +1188,7 @@ mod tests {
         // This test verifies that shutdown_requested is properly reset after
         // being acted upon. This allows the context to be reused after shutdown.
         let mut context = Context::new();
-        let _: PersonId = context.add_entity((Age(50),)).unwrap();
+        let _: PersonId = context.add_entity(with!(Person, Age(50))).unwrap();
 
         // Schedule a plan at time 0.0 that calls shutdown
         context.add_plan(0.0, |ctx| {
@@ -1202,7 +1202,7 @@ mod tests {
 
         // Add a new plan at time 2.0
         context.add_plan(2.0, |ctx| {
-            let _: PersonId = ctx.add_entity((Age(50),)).unwrap();
+            let _: PersonId = ctx.add_entity(with!(Person, Age(50))).unwrap();
         });
 
         // Second execute - should execute the new plan

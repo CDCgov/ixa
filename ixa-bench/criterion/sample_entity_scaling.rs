@@ -29,7 +29,8 @@ fn setup_context(population_size: usize) -> Context {
 
     for _ in 0..population_size {
         context
-            .add_entity((
+            .add_entity(with!(
+                Mosquito,
                 Species(context.sample_range(SampleScalingRng, 0..10)),
                 Region(context.sample_range(SampleScalingRng, 0..10)),
                 Unindexed10(context.sample_range(SampleScalingRng, 0..10)),
@@ -101,7 +102,8 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _: Option<EntityId<Mosquito>> = context.sample_entity(SampleScalingRng, ());
+                let _: Option<EntityId<Mosquito>> =
+                    context.sample_entity(SampleScalingRng, Mosquito);
             });
 
             results
@@ -123,7 +125,7 @@ pub fn bench_sample_entity_single_property_indexed(c: &mut Criterion, results: R
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _ = context.sample_entity(SampleScalingRng, (Species(5),));
+                let _ = context.sample_entity(SampleScalingRng, with!(Mosquito, Species(5)));
             });
 
             results
@@ -145,7 +147,8 @@ pub fn bench_sample_entity_multi_property_indexed(c: &mut Criterion, results: Re
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _ = context.sample_entity(SampleScalingRng, (Species(5), Region(3)));
+                let _ =
+                    context.sample_entity(SampleScalingRng, with!(Mosquito, Species(5), Region(3)));
             });
 
             results
@@ -169,7 +172,7 @@ pub fn bench_sample_entity_single_property_unindexed(c: &mut Criterion, results:
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _ = context.sample_entity(SampleScalingRng, (Unindexed10(5),));
+                let _ = context.sample_entity(SampleScalingRng, with!(Mosquito, Unindexed10(5)));
             });
 
             results
