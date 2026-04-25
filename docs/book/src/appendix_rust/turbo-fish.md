@@ -21,8 +21,8 @@ let status: InfectionStatus = context.get_property(person_id);
 context.set_property(other_person_id, status);
 ```
 
-The generic types for querying and sampling
-methods can usually be inferred by the compiler:
+The generic types for querying, sampling, and entity initialization can usually
+be inferred by the compiler:
 
 ```rust
 // A silly example, but no turbo fish is required.
@@ -30,6 +30,12 @@ context.with_query_results(
     with!(Person, Age(30), Alive(true)),
     |people_set| println("{:?}", people_set)
 );
+
+let person_id = context
+    .add_entity(with!(Person, Age(30), Alive(true)))
+    .unwrap();
+
+let population = context.query_entity_count(Person);
 ```
 
 A few methods always require the user to specify the generic type when they are

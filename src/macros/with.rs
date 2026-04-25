@@ -1,13 +1,15 @@
-/// Creates a query matching all entities of a given type, optionally filtered by properties.
+/// Creates an entity-scoped bundle of property values for queries and entity initialization.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// // Add an entity with default properties
-/// let query = with!(Person);
-/// context.add_entity(query)?;
+/// // Add an entity with selected property values
+/// let person = context.add_entity(with!(Person, Age(12), RiskCategory::High))?;
 ///
-/// // An inline query matching a single property
+/// // Query the whole population by passing the entity type directly
+/// let count = context.query_entity_count(Person);
+///
+/// // An inline query matching one property
 /// let person = context.sample_entity(MyRng, with!(Person, Age(12)))?;
 ///
 /// // A query matching multiple properties
