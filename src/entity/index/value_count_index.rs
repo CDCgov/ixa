@@ -135,28 +135,28 @@ mod tests {
         property_store.set_property_indexed::<WHA>(PropertyIndexType::ValueCountIndex);
 
         context
-            .add_entity((Age(1u8), Weight(2u8), Height(3u8)))
+            .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
             .unwrap();
 
         assert_eq!(
-            context.query_entity_count((Age(1u8), Weight(2u8), Height(3u8))),
+            context.query_entity_count(with!(Person, Age(1u8), Weight(2u8), Height(3u8))),
             1
         );
         assert_eq!(
-            context.query_entity_count((Weight(2u8), Height(3u8), Age(1u8))),
+            context.query_entity_count(with!(Person, Weight(2u8), Height(3u8), Age(1u8))),
             1
         );
 
         context
-            .add_entity((Weight(1u8), Height(2u8), Age(3u8)))
+            .add_entity(with!(Person, Weight(1u8), Height(2u8), Age(3u8)))
             .unwrap();
 
         assert_eq!(
-            context.query_entity_count((Weight(1u8), Height(2u8), Age(3u8))),
+            context.query_entity_count(with!(Person, Weight(1u8), Height(2u8), Age(3u8))),
             1
         );
         assert_eq!(
-            context.query_entity_count((Age(3u8), Weight(1u8), Height(2u8))),
+            context.query_entity_count(with!(Person, Age(3u8), Weight(1u8), Height(2u8))),
             1
         );
     }

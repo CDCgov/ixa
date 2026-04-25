@@ -1,4 +1,4 @@
-/// Creates a query matching all entities of a given type, optionally filtered by properties.
+/// Creates an entity-scoped property bundle for queries and `add_entity(...)`.
 ///
 /// # Examples
 ///
@@ -12,17 +12,22 @@
 ///
 /// // A query matching multiple properties
 /// let query = with!(Person, Age(12), RiskCategory::High);
-/// let count = context.count_entities(query);
+/// let count = context.query_entity_count(query);
+///
+/// // `with!` is also the replacement for raw tuple queries.
+/// // Old: context.query_entity_count((Age(12), RiskCategory::High));
+/// // New:
+/// let count = context.query_entity_count(with!(Person, Age(12), RiskCategory::High));
 /// ```
 #[macro_export]
 macro_rules! with {
-    // No properties - generates empty tuple query
+    // No properties - generates an empty entity-scoped property bundle
     ($entity:ty) => {
-        $crate::EntityPropertyTuple::<$entity, _>::new(())
+        $crate::entity::query::EntityPropertyTuple::<$entity, _>::new(())
     };
     // One or more properties
     ($entity:ty, $($prop:expr),+ $(,)?) => {
-        $crate::EntityPropertyTuple::<$entity, _>::new(($($prop,)+))
+        $crate::entity::query::EntityPropertyTuple::<$entity, _>::new(($($prop,)+))
     };
 }
 
