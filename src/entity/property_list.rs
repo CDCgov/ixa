@@ -1,32 +1,21 @@
 /*!
 
-[`PropertyList<E>`] is the tuple-capable internal/type-level list of properties for an
-[`Entity`] `E`.
+This module supports two user-facing patterns:
 
-It remains in use in two places:
+1. initializing a new entity with [`ContextEntitiesExt::add_entity`], and
+2. specifying strata for value-change counting APIs such as
+   [`ContextEntitiesExt::track_periodic_value_change_counts`].
 
-1. internally, to perform entity initialization work once an accepted initialization bundle has
-   been received, and
-2. publicly, as the type-level strata list used by value-change counting APIs such as
-   `track_periodic_value_change_counts`.
+For `add_entity`, pass either:
 
-Both uses have the following two constraints:
+- the entity type directly, such as `Person`, to use default property values, or
+- [`with!`](crate::with) to provide one or more initial property values, such as
+  `with!(Person, Age(25), InfectionStatus::Infected)`.
 
-1. The properties are properties of the same entity.
-2. The properties are distinct.
+For value-change counting APIs, use tuple types in the generic parameter list, such as
+`(InfectionStatus,)` or `(AgeGroup, InfectionStatus)`.
 
-We enforce the first constraint with the type system by only implementing `PropertyList<E>`
-for tuples of types implementing `Property<E>` (of length up to some max). Using properties
-for mismatched entities will result in a compile-time error at the point of use.
-
-The second constraint has to be enforced at runtime, so `PropertyList::validate()` checks for
-duplicates.
-
-For tuple-capable uses, the order in which the properties appear is unimportant in spite of the
-Rust language semantics of tuple types.
-
-Public entity initialization no longer accepts naked tuples directly. The `add_entity` API now
-accepts `with!(...)` or a naked `Entity` value representing an "empty" initialization list.
+In both cases, all properties must belong to the same entity, and property values must be distinct.
 
 */
 
@@ -64,7 +53,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 }
 
-/// Public marker trait for values accepted by `ContextEntitiesExt::add_entity`.
+/// Values accepted by [`ContextEntitiesExt::add_entity`].
 pub trait PropertyInitializationList<E: Entity>: PropertyList<E> {}
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.

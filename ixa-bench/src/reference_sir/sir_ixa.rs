@@ -52,7 +52,7 @@ impl InfectionLoop for Context {
         self.get_data(ModelStatsPlugin)
     }
     fn infected_people(&self) -> usize {
-        self.query_entity_count::<Person, _>(with!(Person, InfectionStatus::Infectious))
+        self.query_entity_count(with!(Person, InfectionStatus::Infectious))
     }
     fn random_person(&mut self) -> Option<PersonId> {
         self.sample_entity(NextPersonRng, Person)
@@ -149,7 +149,7 @@ impl InfectionLoop for Context {
 
         // Set up population
         for _ in 0..population {
-            self.add_entity::<Person, _>(Person).unwrap();
+            self.add_entity(Person).unwrap();
         }
 
         // Seed infections

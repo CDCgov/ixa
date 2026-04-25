@@ -20,15 +20,13 @@ use crate::{Context, IxaError};
 ///
 /// # Example
 /// ```ignore
-/// use ixa::{EntityPropertyTuple, define_entity, define_property};
+/// use ixa::{define_entity, define_property, with};
 ///
 /// define_entity!(Person);
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 ///
-/// // Use the all macro
+/// // Build a query for people with Age(42).
 /// let query = with!(Person, Age(42));
-/// // Under the hood this is:
-/// // EntityPropertyTuple::<Person>::new((Age(42),));
 /// ```
 pub struct EntityPropertyTuple<E: Entity, T> {
     inner: T,
@@ -138,10 +136,6 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
 impl<E: Entity, PL: PropertyList<E>> PropertyInitializationList<E> for EntityPropertyTuple<E, PL> {}
 
 /// Internal query machinery.
-///
-/// [`ContextEntitiesExt::query_result_iterator`](crate::entity::context_extension::ContextEntitiesExt::query_result_iterator)
-/// uses this trait internally. Tuples implement this trait for up to size 20, but this is not
-/// intended to be the long-term public API acceptance marker.
 pub trait QueryInternal<E: Entity>: 'static {
     /// Allocation-free representation of the query parts exposed by this query.
     type QueryParts<'a>: AsRef<[&'a dyn std::any::Any]>
@@ -192,7 +186,13 @@ pub trait QueryInternal<E: Entity>: 'static {
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
 }
 
-/// Public marker trait accepted by user-facing query APIs.
+/// Values accepted by user-facing query APIs such as
+/// [`ContextEntitiesExt::query`](crate::entity::context_extension::ContextEntitiesExt::query)
+/// and
+/// [`ContextEntitiesExt::sample_entity`](crate::entity::context_extension::ContextEntitiesExt::sample_entity).
+///
+/// Use [`with!`](crate::with) to query for specific property values, or pass the entity type
+/// directly to work with the entire population.
 pub trait Query<E: Entity>: QueryInternal<E> {}
 
 impl<E: Entity, QI: QueryInternal<E>> Query<E> for EntityPropertyTuple<E, QI> {}

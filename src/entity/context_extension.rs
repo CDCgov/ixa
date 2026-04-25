@@ -176,13 +176,13 @@ pub trait ContextEntitiesExt {
     /// Gives the count of distinct entity IDs satisfying the query. This is especially
     /// efficient for indexed queries.
     ///
-    /// Supplying an empty query `()` is equivalent to calling `get_entity_count::<E>()`.
+    /// Supplying a naked entity, e.g. `Person`, is equivalent to calling `get_entity_count::<Person>()`.
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
     ///
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
@@ -193,7 +193,7 @@ pub trait ContextEntitiesExt {
     /// Count query results and sample a single entity uniformly from them.
     ///
     /// Returns `(count, sample)`, where `sample` is `None` iff `count == 0`.
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
@@ -205,7 +205,7 @@ pub trait ContextEntitiesExt {
     /// query's result set has fewer than `requested` entities, the entire result
     /// set is returned.
     ///
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
@@ -447,7 +447,7 @@ impl ContextEntitiesExt for Context {
             // If the property is not indexed, we fall through.
         }
 
-        // Special case the empty query, which creates a set containing the entire population.
+        // Special case a whole-population query.
         if query.is_empty_query() {
             warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
             callback(EntitySet::from_source(SourceSet::PopulationRange(
