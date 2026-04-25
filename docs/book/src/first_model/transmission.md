@@ -93,7 +93,7 @@ accomplishes the three tasks above. A few observations:
   which can have the value of `Some(PersonId)` or `None`. In this case, we use
   `Person` and no property filters, which means we want to sample from the
   entire population. If we wanted to, we could pass filters with the `with!` macro
-  (e.g., `with!(Person, Region("California"))`) The population will
+  (e.g., `with!(Person, Region("California"))`). The population will
   never be empty, so the result will never be `None`, and so we just call
   `unwrap()` on the `Some(PersonId)` value to get the `PersonId`.
 - If the sampled person is not susceptible, then the only thing this function

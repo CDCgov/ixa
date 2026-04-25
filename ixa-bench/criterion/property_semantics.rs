@@ -99,7 +99,9 @@ fn build_float_query_context() -> Context {
     let mut context = Context::new();
     for i in 0..100_000 {
         let value = ((i % 2048) as f64) * 0.25;
-        context.add_entity((FloatQueryValue(value),)).unwrap();
+        context
+            .add_entity(with!(Person, FloatQueryValue(value)))
+            .unwrap();
     }
     context.index_property::<Person, FloatQueryValue>();
     context
@@ -114,7 +116,9 @@ fn float_query_benchmarks(criterion: &mut Criterion) {
     group.bench_function("float_query_entity_count_indexed", |bencher| {
         bencher.iter(|| {
             for probe in &probes {
-                black_box(context.query_entity_count(black_box((FloatQueryValue(*probe),))));
+                black_box(
+                    context.query_entity_count(black_box(with!(Person, FloatQueryValue(*probe)))),
+                );
             }
         });
     });
@@ -123,7 +127,7 @@ fn float_query_benchmarks(criterion: &mut Criterion) {
         bencher.iter(|| {
             for probe in &probes {
                 context.with_query_results(
-                    black_box((FloatQueryValue(*probe),)),
+                    black_box(with!(Person, FloatQueryValue(*probe))),
                     &mut |entity_ids| {
                         black_box(entity_ids.try_len());
                     },
@@ -141,7 +145,8 @@ fn build_value_change_counter_context() -> Context {
 
     for i in 0..10_000 {
         let entity_id = context
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 CounterBucket((i % 32) as u8),
                 FloatCounterValue(((i % 256) as f64) * 0.5),
             ))

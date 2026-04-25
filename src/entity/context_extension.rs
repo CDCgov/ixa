@@ -1,4 +1,3 @@
-use std::any::{Any, TypeId};
 use std::hash::Hash;
 
 use smallvec::SmallVec;
@@ -7,7 +6,7 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
-use crate::entity::property_list::PropertyList;
+use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
@@ -96,7 +95,7 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
 /// A trait extension for [`Context`] that exposes entity-related
 /// functionality.
 pub trait ContextEntitiesExt {
-    fn add_entity<E: Entity, PL: PropertyList<E>>(
+    fn add_entity<E: Entity, PL: PropertyInitializationList<E>>(
         &mut self,
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError>;
@@ -177,13 +176,13 @@ pub trait ContextEntitiesExt {
     /// Gives the count of distinct entity IDs satisfying the query. This is especially
     /// efficient for indexed queries.
     ///
-    /// Supplying an empty query `()` is equivalent to calling `get_entity_count::<E>()`.
+    /// Supplying a naked entity, e.g. `Person`, is equivalent to calling `get_entity_count::<Person>()`.
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
     ///
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
@@ -194,7 +193,7 @@ pub trait ContextEntitiesExt {
     /// Count query results and sample a single entity uniformly from them.
     ///
     /// Returns `(count, sample)`, where `sample` is `None` iff `count == 0`.
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
@@ -206,7 +205,7 @@ pub trait ContextEntitiesExt {
     /// query's result set has fewer than `requested` entities, the entire result
     /// set is returned.
     ///
-    /// To sample from the entire population, pass in the empty query `()`.
+    /// To sample from the entire population, pass the entity type directly, for example `Person`.
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
@@ -234,7 +233,7 @@ pub trait ContextEntitiesExt {
 }
 
 impl ContextEntitiesExt for Context {
-    fn add_entity<E: Entity, PL: PropertyList<E>>(
+    fn add_entity<E: Entity, PL: PropertyInitializationList<E>>(
         &mut self,
         property_list: PL,
     ) -> Result<EntityId<E>, IxaError> {
@@ -427,7 +426,7 @@ impl ContextEntitiesExt for Context {
     ) {
         // The fast path for indexed queries.
 
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
         // The difference is, we access the index set if we find it.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
@@ -448,9 +447,9 @@ impl ContextEntitiesExt for Context {
             // If the property is not indexed, we fall through.
         }
 
-        // Special case the empty query, which creates a set containing the entire population.
-        if query.type_id() == TypeId::of::<()>() {
-            warn!("Called Context::with_query_results() with an empty query. Prefer Context::get_entity_iterator::<E>() for working with the entire population.");
+        // Special case a whole-population query.
+        if query.is_empty_query() {
+            warn!("Called Context::with_query_results() for the entire population. Prefer Context::get_entity_iterator::<E>() when you want to iterate over every entity.");
             callback(EntitySet::from_source(SourceSet::Population(
                 self.get_entity_count::<E>(),
             )));
@@ -467,7 +466,7 @@ impl ContextEntitiesExt for Context {
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
         // The fast path for indexed queries.
         //
-        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `Query::new_query_result`.
+        // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
         if let Some(multi_property_id) = query.multi_property_id() {
             let property_store = self.entity_store.get_property_store::<E>();
             let query_parts = query.query_parts();
@@ -489,7 +488,7 @@ impl ContextEntitiesExt for Context {
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -516,7 +515,7 @@ impl ContextEntitiesExt for Context {
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -542,7 +541,7 @@ impl ContextEntitiesExt for Context {
         R: RngId + 'static,
         R::RngType: Rng,
     {
-        if query.type_id() == TypeId::of::<()>() {
+        if query.is_empty_query() {
             let population = self.get_entity_count::<E>();
             return self.sample(rng_id, move |rng| {
                 if population == 0 {
@@ -591,11 +590,12 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::entity::query::QueryInternal;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, define_rng,
-        impl_property,
+        impl_property, with,
     };
 
     define_entity!(Animal);
@@ -725,15 +725,22 @@ mod tests {
         let mut context = Context::new();
 
         let _person1 = context
-            .add_entity((Age(12), InfectionStatus::Susceptible, Vaccinated(true)))
+            .add_entity(with!(
+                Person,
+                Age(12),
+                InfectionStatus::Susceptible,
+                Vaccinated(true)
+            ))
             .unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 1);
 
-        let _person2 = context.add_entity((Age(34), Vaccinated(true))).unwrap();
+        let _person2 = context
+            .add_entity(with!(Person, Age(34), Vaccinated(true)))
+            .unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 2);
 
         // Age is the only required property
-        let _person3 = context.add_entity((Age(120),)).unwrap();
+        let _person3 = context.add_entity(with!(Person, Age(120))).unwrap();
         assert_eq!(context.get_entity_count::<Person>(), 3);
     }
 
@@ -765,8 +772,8 @@ mod tests {
         let existing_value = Age(12);
         let missing_value = Age(99);
 
-        let _ = context.add_entity((existing_value,)).unwrap();
-        let _ = context.add_entity((existing_value,)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
+        let _ = context.add_entity(with!(Person, existing_value)).unwrap();
 
         (context, existing_value, missing_value)
     }
@@ -783,32 +790,40 @@ mod tests {
             let (context, existing_value, missing_value) = setup_context_for_index_tests(mode);
 
             let mut existing_len = 0;
-            context.with_query_results((existing_value,), &mut |people_set| {
+            context.with_query_results(with!(Person, existing_value), &mut |people_set| {
                 existing_len = people_set.into_iter().count();
             });
             assert_eq!(existing_len, 2, "Wrong length for {mode:?}");
 
             let mut missing_len = 0;
-            context.with_query_results((missing_value,), &mut |people_set| {
+            context.with_query_results(with!(Person, missing_value), &mut |people_set| {
                 missing_len = people_set.into_iter().count();
             });
             assert_eq!(missing_len, 0);
 
-            let existing_count = context.query_result_iterator((existing_value,)).count();
+            let existing_count = context
+                .query_result_iterator(with!(Person, existing_value))
+                .count();
             assert_eq!(existing_count, 2);
 
-            let missing_count = context.query_result_iterator((missing_value,)).count();
+            let missing_count = context
+                .query_result_iterator(with!(Person, missing_value))
+                .count();
             assert_eq!(missing_count, 0);
 
-            assert_eq!(context.query_entity_count((existing_value,)), 2);
-            assert_eq!(context.query_entity_count((missing_value,)), 0);
+            assert_eq!(context.query_entity_count(with!(Person, existing_value)), 2);
+            assert_eq!(context.query_entity_count(with!(Person, missing_value)), 0);
         }
     }
 
     #[test]
     fn add_an_entity_without_required_properties() {
         let mut context = Context::new();
-        let result = context.add_entity((InfectionStatus::Susceptible, Vaccinated(true)));
+        let result = context.add_entity(with!(
+            Person,
+            InfectionStatus::Susceptible,
+            Vaccinated(true)
+        ));
 
         assert!(matches!(
             result,
@@ -821,7 +836,7 @@ mod tests {
         let mut context = Context::new();
 
         // Create a person with required Age property
-        let person = context.add_entity((Age(25),)).unwrap();
+        let person = context.add_entity(with!(Person, Age(25))).unwrap();
 
         // Retrieve and check their values
         let age: Age = context.get_property(person);
@@ -851,7 +866,12 @@ mod tests {
 
         // Create a person with explicit property values
         let person = context
-            .add_entity((Age(25), InfectionStatus::Recovered, Vaccinated(true)))
+            .add_entity(with!(
+                Person,
+                Age(25),
+                InfectionStatus::Recovered,
+                Vaccinated(true)
+            ))
             .unwrap();
 
         // Retrieve and check their values
@@ -885,17 +905,17 @@ mod tests {
 
         // Create entities of different kinds
         for _ in 0..7 {
-            let _: PersonId = context.add_entity((Age(25),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(25))).unwrap();
         }
         for _ in 0..5 {
-            let _: AnimalId = context.add_entity((Legs(2),)).unwrap();
+            let _: AnimalId = context.add_entity(with!(Animal, Legs(2))).unwrap();
         }
 
         assert_eq!(context.get_entity_count::<Animal>(), 5);
         assert_eq!(context.get_entity_count::<Person>(), 7);
 
-        let _: PersonId = context.add_entity((Age(30),)).unwrap();
-        let _: AnimalId = context.add_entity((Legs(8),)).unwrap();
+        let _: PersonId = context.add_entity(with!(Person, Age(30))).unwrap();
+        let _: AnimalId = context.add_entity(with!(Animal, Legs(8))).unwrap();
 
         assert_eq!(context.get_entity_count::<Animal>(), 6);
         assert_eq!(context.get_entity_count::<Person>(), 8);
@@ -906,11 +926,11 @@ mod tests {
         let mut context = Context::new();
         context.init_random(42);
         for age in [10u8, 20, 30] {
-            let _: PersonId = context.add_entity((Age(age),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(age))).unwrap();
         }
 
         let (count, sampled) =
-            context.count_and_sample_entity::<Person, _, _>(EntityContextTestRng, ());
+            context.count_and_sample_entity::<Person, _, _>(EntityContextTestRng, Person);
         assert_eq!(count, 3);
         assert!(sampled.is_some());
     }
@@ -920,10 +940,10 @@ mod tests {
         let mut context = Context::new();
         context.init_random(43);
         for age in [10u8, 20, 30, 80] {
-            let _: PersonId = context.add_entity((Age(age),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(age))).unwrap();
         }
 
-        let query = (AgeGroup::Adult,);
+        let query = with!(Person, AgeGroup::Adult);
         let expected_count = context.query_entity_count(query);
         let (count, sampled) = context.count_and_sample_entity(EntityContextTestRng, query);
         assert_eq!(count, expected_count);
@@ -938,13 +958,28 @@ mod tests {
         let mut context = Context::new();
 
         let expected_high_id: PersonId = context
-            .add_entity((Age(77), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(with!(
+                Person,
+                Age(77),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
         let expected_med_id: PersonId = context
-            .add_entity((Age(30), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(with!(
+                Person,
+                Age(30),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
         let expected_low_id: PersonId = context
-            .add_entity((Age(3), Vaccinated(true), InfectionStatus::Recovered))
+            .add_entity(with!(
+                Person,
+                Age(3),
+                Vaccinated(true),
+                InfectionStatus::Recovered
+            ))
             .unwrap();
 
         let actual_high: RiskLevel = context.get_property(expected_high_id);
@@ -987,7 +1022,12 @@ mod tests {
 
         // Should not emit change events
         let expected_high_id: PersonId = context
-            .add_entity((Age(77), Vaccinated(false), InfectionStatus::Susceptible))
+            .add_entity(with!(
+                Person,
+                Age(77),
+                Vaccinated(false),
+                InfectionStatus::Susceptible
+            ))
             .unwrap();
 
         // Should emit change events
@@ -1008,8 +1048,8 @@ mod tests {
         let mut context = Context::new();
 
         context.set_global_property_value(GlobalDummy, 18).unwrap();
-        let child = context.add_entity((Age(17),)).unwrap();
-        let adult = context.add_entity((Age(19),)).unwrap();
+        let child = context.add_entity(with!(Person, Age(17))).unwrap();
+        let adult = context.add_entity(with!(Person, Age(19))).unwrap();
 
         let child_computed: MyDerivedProperty = context.get_property(child);
         assert_eq!(child_computed, MyDerivedProperty(17+18));
@@ -1022,7 +1062,9 @@ mod tests {
     #[test]
     fn observe_diamond_property_change() {
         let mut context = Context::new();
-        let person = context.add_entity((Age(17), IsSwimmer(true))).unwrap();
+        let person = context
+            .add_entity(with!(Person, Age(17), IsSwimmer(true)))
+            .unwrap();
 
         let is_adult_athlete: AdultAthlete = context.get_property(person);
         assert!(!is_adult_athlete.0);
@@ -1071,17 +1113,26 @@ mod tests {
             let vaccination_status: bool = rng.random_bool(0.5);
             let age: u8 = rng.random_range(0..100);
             context
-                .add_entity((Age(age), infection_status, Vaccinated(vaccination_status)))
+                .add_entity(with!(
+                    Person,
+                    Age(age),
+                    infection_status,
+                    Vaccinated(vaccination_status)
+                ))
                 .unwrap();
         }
         context.index_property::<Person, InfectionStatusVaccinated>();
         // Force an index build by running a query.
-        let _ = context.query_result_iterator((InfectionStatus::Susceptible, Vaccinated(true)));
+        let _ = context.query_result_iterator(with!(
+            Person,
+            InfectionStatus::Susceptible,
+            Vaccinated(true)
+        ));
 
         // Capture the set given by `with_query_results`.
         let mut result_entities: IndexSet<EntityId<Person>> = IndexSet::default();
         context.with_query_results(
-            (InfectionStatus::Susceptible, Vaccinated(true)),
+            with!(Person, InfectionStatus::Susceptible, Vaccinated(true)),
             &mut |result_set| {
                 result_entities = result_set.into_iter().collect::<IndexSet<_>>();
             },
@@ -1119,16 +1170,31 @@ mod tests {
     fn query_returns_entity_set_and_query_result_iterator_remains_compatible() {
         let mut context = Context::new();
         let p1 = context
-            .add_entity((Age(21), InfectionStatus::Susceptible, Vaccinated(true)))
+            .add_entity(with!(
+                Person,
+                Age(21),
+                InfectionStatus::Susceptible,
+                Vaccinated(true)
+            ))
             .unwrap();
         let _p2 = context
-            .add_entity((Age(22), InfectionStatus::Susceptible, Vaccinated(false)))
+            .add_entity(with!(
+                Person,
+                Age(22),
+                InfectionStatus::Susceptible,
+                Vaccinated(false)
+            ))
             .unwrap();
         let p3 = context
-            .add_entity((Age(23), InfectionStatus::Infected, Vaccinated(true)))
+            .add_entity(with!(
+                Person,
+                Age(23),
+                InfectionStatus::Infected,
+                Vaccinated(true)
+            ))
             .unwrap();
 
-        let query = (Vaccinated(true),);
+        let query = with!(Person, Vaccinated(true));
 
         let from_set = context
             .query::<Person, _>(query)
@@ -1150,60 +1216,114 @@ mod tests {
         context.index_property::<Person, InfectionStatus>();
         context.index_property::<Person, AgeGroup>();
 
-        let person1 = context.add_entity((Age(22),)).unwrap();
-        let person2 = context.add_entity((Age(22),)).unwrap();
+        let person1 = context.add_entity(with!(Person, Age(22))).unwrap();
+        let person2 = context.add_entity(with!(Person, Age(22))).unwrap();
         for _ in 0..4 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(22))).unwrap();
         }
 
         // Check non-derived property index is correctly maintained
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(with!(Person, InfectionStatus::Susceptible)),
             6
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Infected)),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Recovered)),
+            0
+        );
 
         context.set_property(person1, InfectionStatus::Infected);
 
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(with!(Person, InfectionStatus::Susceptible)),
             5
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 1);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 0);
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Infected)),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Recovered)),
+            0
+        );
 
         context.set_property(person1, InfectionStatus::Recovered);
 
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(with!(Person, InfectionStatus::Susceptible)),
             5
         );
-        assert_eq!(context.query_entity_count((InfectionStatus::Infected,)), 0);
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 1);
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Infected)),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Recovered)),
+            1
+        );
 
         // Check derived property index is correctly maintained.
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 6);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Child)),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Adult)),
+            6
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Senior)),
+            0
+        );
 
         context.set_property(person2, Age(12));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 5);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 0);
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Child)),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Adult)),
+            5
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Senior)),
+            0
+        );
 
         context.set_property(person1, Age(75));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 1);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 1);
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Child)),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Adult)),
+            4
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Senior)),
+            1
+        );
 
         context.set_property(person2, Age(77));
 
-        assert_eq!(context.query_entity_count((AgeGroup::Child,)), 0);
-        assert_eq!(context.query_entity_count((AgeGroup::Adult,)), 4);
-        assert_eq!(context.query_entity_count((AgeGroup::Senior,)), 2);
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Child)),
+            0
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Adult)),
+            4
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, AgeGroup::Senior)),
+            2
+        );
     }
 
     #[test]
@@ -1213,21 +1333,24 @@ mod tests {
         // Half will have the default value.
         for idx in 0..10 {
             if idx % 2 == 0 {
-                context.add_entity((Age(22),)).unwrap();
+                context.add_entity(with!(Person, Age(22))).unwrap();
             } else {
                 context
-                    .add_entity((Age(22), InfectionStatus::Recovered))
+                    .add_entity(with!(Person, Age(22), InfectionStatus::Recovered))
                     .unwrap();
             }
         }
         // The tail also has the default value
         for _ in 0..10 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(22))).unwrap();
         }
 
-        assert_eq!(context.query_entity_count((InfectionStatus::Recovered,)), 5);
         assert_eq!(
-            context.query_entity_count((InfectionStatus::Susceptible,)),
+            context.query_entity_count(with!(Person, InfectionStatus::Recovered)),
+            5
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, InfectionStatus::Susceptible)),
             15
         );
     }
@@ -1237,10 +1360,13 @@ mod tests {
         let mut context = Context::new();
 
         for _ in 0..10 {
-            let _: PersonId = context.add_entity((Age(22),)).unwrap();
+            let _: PersonId = context.add_entity(with!(Person, Age(22))).unwrap();
         }
 
-        assert_eq!(context.query_entity_count((AdultAthlete(false),)), 10);
+        assert_eq!(
+            context.query_entity_count(with!(Person, AdultAthlete(false))),
+            10
+        );
     }
 
     #[test]
@@ -1281,7 +1407,12 @@ mod tests {
         });
 
         let person = context
-            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .add_entity(with!(
+                Person,
+                Age(10),
+                CounterValue(0),
+                CounterStratum(true)
+            ))
             .unwrap();
         context.add_plan(0.1, move |context| {
             context.set_property(person, CounterValue(1));
@@ -1297,7 +1428,12 @@ mod tests {
     fn periodic_value_change_counts_report_and_clear() {
         let mut context = Context::new();
         let person = context
-            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .add_entity(with!(
+                Person,
+                Age(10),
+                CounterValue(0),
+                CounterStratum(true)
+            ))
             .unwrap();
 
         let observed = Rc::new(RefCell::new(Vec::<usize>::new()));
@@ -1326,7 +1462,12 @@ mod tests {
         context.set_start_time(-2.0);
 
         let person = context
-            .add_entity((Age(10), CounterValue(0), CounterStratum(true)))
+            .add_entity(with!(
+                Person,
+                Age(10),
+                CounterValue(0),
+                CounterStratum(true)
+            ))
             .unwrap();
 
         let observed_times = Rc::new(RefCell::new(Vec::<f64>::new()));

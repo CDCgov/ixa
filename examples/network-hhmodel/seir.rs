@@ -37,11 +37,13 @@ fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f6
 }
 
 fn expose_network<ET: EdgeType<Person>>(context: &mut Context, beta: f64) {
-    let infectious_people = context.query((DiseaseStatus::I,)).to_owned_vec();
+    let infectious_people = context
+        .query(with!(Person, DiseaseStatus::I))
+        .to_owned_vec();
 
     for infectious in infectious_people {
         let edges = context.get_matching_edges::<Person, ET>(infectious, |context, edge| {
-            context.match_entity(edge.neighbor, (DiseaseStatus::S,))
+            context.match_entity(edge.neighbor, with!(Person, DiseaseStatus::S))
         });
 
         for e in edges {
@@ -187,7 +189,7 @@ mod tests {
         network::init(&mut context, &people);
 
         let mut to_infect = Vec::<PersonId>::new();
-        context.with_query_results((Id(71),), &mut |people| {
+        context.with_query_results(with!(Person, Id(71)), &mut |people| {
             to_infect.extend(people);
         });
 
@@ -196,19 +198,19 @@ mod tests {
         context.execute();
 
         assert_eq!(
-            context.query_entity_count::<Person, _>((DiseaseStatus::S,)),
+            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::S)),
             399
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>((DiseaseStatus::E,)),
+            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::E)),
             0
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>((DiseaseStatus::I,)),
+            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::I)),
             0
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>((DiseaseStatus::R,)),
+            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::R)),
             1207
         );
     }

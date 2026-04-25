@@ -1254,8 +1254,9 @@ mod tests {
     // We define unused properties to test macro implementation.
     #![allow(dead_code)]
 
-    use crate::entity::{PropertyIndexType, Query};
+    use crate::entity::{PropertyIndexType, QueryInternal};
     use crate::prelude::*;
+    use crate::with;
 
     define_entity!(Person);
     define_entity!(Group);
@@ -1430,16 +1431,16 @@ mod tests {
         let mut context = Context::new();
 
         context
-            .add_entity((Name("John"), Age(42), Weight(220.5)))
+            .add_entity(with!(Person, Name("John"), Age(42), Weight(220.5)))
             .unwrap();
         context
-            .add_entity((Name("Jane"), Age(22), Weight(180.5)))
+            .add_entity(with!(Person, Name("Jane"), Age(22), Weight(180.5)))
             .unwrap();
         context
-            .add_entity((Name("Bob"), Age(32), Weight(190.5)))
+            .add_entity(with!(Person, Name("Bob"), Age(32), Weight(190.5)))
             .unwrap();
         context
-            .add_entity((Name("Alice"), Age(22), Weight(170.5)))
+            .add_entity(with!(Person, Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
 
         context.index_property::<_, ProfileNAW>();
@@ -1476,28 +1477,37 @@ mod tests {
         {
             let example_query = (Name("Alice"), Age(22), Weight(170.5));
             let query_multi_property_id =
-                <(Name, Age, Weight) as Query<Person>>::multi_property_id(&example_query);
+                <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query);
             assert!(query_multi_property_id.is_some());
             assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
-            let query_parts = Query::query_parts(&example_query);
+            let query_parts = QueryInternal::query_parts(&example_query);
             assert_eq!(
                 ProfileNAW::canonical_from_sorted_query_parts(query_parts.as_ref()),
                 Some((Name("Alice"), Age(22), Weight(170.5)).make_canonical())
             );
         }
 
-        context.with_query_results(((Name("John"), Age(42), Weight(220.5)),), &mut |results| {
-            assert_eq!(results.into_iter().count(), 1);
-        });
+        context.with_query_results(
+            with!(Person, (Name("John"), Age(42), Weight(220.5))),
+            &mut |results| {
+                assert_eq!(results.into_iter().count(), 1);
+            },
+        );
     }
 
     #[test]
     fn test_derived_property() {
         let mut context = Context::new();
 
-        let senior = context.add_entity::<Person, _>((Age(92),)).unwrap();
-        let child = context.add_entity::<Person, _>((Age(12),)).unwrap();
-        let adult = context.add_entity::<Person, _>((Age(44),)).unwrap();
+        let senior = context
+            .add_entity::<Person, _>(with!(Person, Age(92)))
+            .unwrap();
+        let child = context
+            .add_entity::<Person, _>(with!(Person, Age(12)))
+            .unwrap();
+        let adult = context
+            .add_entity::<Person, _>(with!(Person, Age(44)))
+            .unwrap();
 
         let senior_group: AgeGroup = context.get_property(senior);
         let child_group: AgeGroup = context.get_property(child);
@@ -1531,7 +1541,9 @@ mod tests {
     #[test]
     fn test_get_display() {
         let mut context = Context::new();
-        let person = context.add_entity((POu32(Some(42)), Pu32(22))).unwrap();
+        let person = context
+            .add_entity(with!(Person, POu32(Some(42)), Pu32(22)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",
@@ -1546,7 +1558,9 @@ mod tests {
             ),
             "Pu32(22)"
         );
-        let person2 = context.add_entity((POu32(None), Pu32(11))).unwrap();
+        let person2 = context
+            .add_entity(with!(Person, POu32(None), Pu32(11)))
+            .unwrap();
         assert_eq!(
             format!(
                 "{:}",
@@ -1561,7 +1575,8 @@ mod tests {
         let mut context = Context::new();
 
         let some_person = context
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 POu32(Some(42)),
                 POFloat(Some(3.5)),
                 POu32Custom(Some(7)),
@@ -1569,7 +1584,13 @@ mod tests {
             ))
             .unwrap();
         let none_person = context
-            .add_entity((POu32(None), POFloat(None), POu32Custom(None), Pu32(2)))
+            .add_entity(with!(
+                Person,
+                POu32(None),
+                POFloat(None),
+                POu32Custom(None),
+                Pu32(2)
+            ))
             .unwrap();
 
         assert_eq!(
@@ -1604,8 +1625,12 @@ mod tests {
     fn test_option_derived_property_display_patterns() {
         let mut context = Context::new();
 
-        let some_person = context.add_entity::<Person, _>((Age(42),)).unwrap();
-        let none_person = context.add_entity::<Person, _>((Age(0),)).unwrap();
+        let some_person = context
+            .add_entity::<Person, _>(with!(Person, Age(42)))
+            .unwrap();
+        let none_person = context
+            .add_entity::<Person, _>(with!(Person, Age(0)))
+            .unwrap();
 
         assert_eq!(
             DerivedMaybeAge::get_display(&context.get_property::<_, DerivedMaybeAge>(some_person)),

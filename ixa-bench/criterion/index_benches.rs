@@ -20,7 +20,8 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
     let mut context = Context::new();
     for _ in 0..100_000 {
         context
-            .add_entity((
+            .add_entity(with!(
+                Person,
                 Property10(context.sample_range(IndexBenchRng, 0..10)),
                 Property100(context.sample_range(IndexBenchRng, 0..100)),
                 MultiProperty10(context.sample_range(IndexBenchRng, 0..10)),
@@ -44,7 +45,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     context.with_query_results(
-                        black_box((Property10(number % 10),)),
+                        black_box(with!(Person, Property10(number % 10))),
                         &mut |entity_ids| {
                             black_box(entity_ids.try_len());
                         },
@@ -60,9 +61,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     context.with_query_results(
-                        black_box((
+                        black_box(with!(
+                            Person,
                             Property10(number.wrapping_mul(3) % 10),
-                            Property100(*number),
+                            Property100(*number)
                         )),
                         &mut |entity_ids| {
                             black_box(entity_ids.try_len());
@@ -80,9 +82,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for number in &numbers {
                     context.with_query_results(
                         // We are using the fact that a query detects when it is equivalent to a multi-property.
-                        black_box((
+                        black_box(with!(
+                            Person,
                             MultiProperty10(number.wrapping_mul(3) % 10),
-                            MultiProperty100(*number),
+                            MultiProperty100(*number)
                         )),
                         &mut |entity_ids| {
                             black_box(entity_ids.try_len());
@@ -98,7 +101,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         |bencher| {
             bencher.iter(|| {
                 for number in &numbers {
-                    black_box(context.query_entity_count(black_box((Property10(number % 10),))));
+                    black_box(
+                        context
+                            .query_entity_count(black_box(with!(Person, Property10(number % 10)))),
+                    );
                 }
             });
         },
@@ -109,9 +115,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         |bencher| {
             bencher.iter(|| {
                 for number in &numbers {
-                    black_box(context.query_entity_count(black_box((
+                    black_box(context.query_entity_count(black_box(with!(
+                        Person,
                         Property10(number.wrapping_mul(3) % 10),
-                        Property100(*number),
+                        Property100(*number)
                     ))));
                 }
             });
@@ -125,9 +132,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 for number in &numbers {
                     black_box(
                         // We are using the fact that a query detects when it is equivalent to a multi-property.
-                        context.query_entity_count(black_box((
+                        context.query_entity_count(black_box(with!(
+                            Person,
                             MultiProperty10(number.wrapping_mul(3) % 10),
-                            MultiProperty100(*number),
+                            MultiProperty100(*number)
                         ))),
                     );
                 }
@@ -139,8 +147,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
         bencher.iter(|| {
             for number in &numbers {
                 // There is no exact equivalent to `Context::query_people`.
-                let result_iter =
-                    black_box(context.query_result_iterator(black_box((Property10(number % 10),))));
+                let result_iter = black_box(
+                    context
+                        .query_result_iterator(black_box(with!(Person, Property10(number % 10)))),
+                );
                 black_box(result_iter.collect::<Vec<_>>());
             }
         });
@@ -152,9 +162,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             bencher.iter(|| {
                 for number in &numbers {
                     // There is no exact equivalent to `Context::query_people`.
-                    let result_iter = black_box(context.query_result_iterator(black_box((
+                    let result_iter = black_box(context.query_result_iterator(black_box(with!(
+                        Person,
                         Property10(number % 10),
-                        Property100(*number),
+                        Property100(*number)
                     ))));
                     black_box(result_iter.collect::<Vec<_>>());
                 }
@@ -167,9 +178,10 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             for number in &numbers {
                 // There is no exact equivalent to `Context::query_people`.
                 // We are using the fact that a query detects when it is equivalent to a multi-property.
-                let result_iter = black_box(context.query_result_iterator(black_box((
+                let result_iter = black_box(context.query_result_iterator(black_box(with!(
+                    Person,
                     MultiProperty10(number % 10),
-                    MultiProperty100(*number),
+                    MultiProperty100(*number)
                 ))));
                 black_box(result_iter.collect::<Vec<_>>());
             }

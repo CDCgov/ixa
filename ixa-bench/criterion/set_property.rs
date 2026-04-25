@@ -83,7 +83,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("set_property_no_dependents", |bencher| {
         let mut context = Context::new();
-        let person = context.add_entity((IndependentValue(0),)).unwrap();
+        let person = context
+            .add_entity(with!(Person, IndependentValue(0)))
+            .unwrap();
         let mut next_value = 0u64;
 
         bencher.iter(|| {
@@ -94,7 +96,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("set_property_three_dependents", |bencher| {
         let mut context = Context::new();
-        let person = context.add_entity((BaseValue(0),)).unwrap();
+        let person = context.add_entity(with!(Person, BaseValue(0))).unwrap();
         let mut next_value = 0u64;
 
         bencher.iter(|| {
@@ -106,7 +108,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("set_property_three_dependents_mixed", |bencher| {
         let mut context = Context::new();
         let person = context
-            .add_entity((MixedBaseValue(0), IndependentValue(0)))
+            .add_entity(with!(Person, MixedBaseValue(0), IndependentValue(0)))
             .unwrap();
 
         context.index_property::<Person, MixedDerivedIndexed>();

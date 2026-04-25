@@ -41,7 +41,13 @@ struct PeopleRecord {
 
 fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
     context
-        .add_entity((record.id, record.age_group, record.sex, record.household_id))
+        .add_entity(with!(
+            Person,
+            record.id,
+            record.age_group,
+            record.sex,
+            record.household_id
+        ))
         .unwrap()
 }
 
@@ -94,19 +100,37 @@ mod tests {
         let person = people[0];
         assert!(context.match_entity(
             person,
-            (Id(676), AgeGroup::Age18to64, Sex::Female, HouseholdId(1))
+            with!(
+                Person,
+                Id(676),
+                AgeGroup::Age18to64,
+                Sex::Female,
+                HouseholdId(1)
+            )
         ));
 
         let person = people[246];
         assert!(context.match_entity(
             person,
-            (Id(213), AgeGroup::AgeUnder5, Sex::Female, HouseholdId(162))
+            with!(
+                Person,
+                Id(213),
+                AgeGroup::AgeUnder5,
+                Sex::Female,
+                HouseholdId(162)
+            )
         ));
 
         let person = people[1591];
         assert!(context.match_entity(
             person,
-            (Id(1591), AgeGroup::Age65Plus, Sex::Male, HouseholdId(496))
+            with!(
+                Person,
+                Id(1591),
+                AgeGroup::Age65Plus,
+                Sex::Male,
+                HouseholdId(496)
+            )
         ));
     }
 }

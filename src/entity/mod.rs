@@ -52,4 +52,4 @@ pub use entity::*;
 pub use entity_set::EntitySetIterator;
 pub use index::PropertyIndexType;
 pub use query::EntityPropertyTuple;
-pub(crate) use query::Query;
+pub(crate) use query::QueryInternal;
