@@ -26,6 +26,7 @@ use std::marker::PhantomData;
 use serde::{Deserialize, Serialize};
 
 use super::entity_store::get_entity_metadata_static;
+use crate::indexable_map::Indexable;
 
 /// A type that can be named and used (copied, cloned) but not created outside of this crate.
 /// In the `define_entity!` macro we define the alias `pub type MyEntityId = EntityId<MyEntity>`.
@@ -79,6 +80,13 @@ impl<E: Entity> EntityId<E> {
     /// Only constructible from this crate.
     pub(crate) fn new(index: usize) -> Self {
         Self(index, PhantomData)
+    }
+}
+
+impl<E: Entity> Indexable for EntityId<E> {
+    #[inline]
+    fn index(self) -> usize {
+        self.0
     }
 }
 

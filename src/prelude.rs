@@ -4,6 +4,7 @@ pub use crate::entity::property::Property;
 pub use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 pub use crate::error::IxaError;
 pub use crate::global_properties::ContextGlobalPropertiesExt;
+pub use crate::indexable_map::{Indexable, IndexableMap};
 pub use crate::log::{debug, error, info, trace, warn};
 pub use crate::network::ContextNetworkExt;
 pub use crate::random::ContextRandomExt;

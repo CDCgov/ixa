@@ -90,6 +90,11 @@ path = "criterion/index_benches.rs"
 harness = false
 
 [[bench]]
+name = "index_map"
+path = "criterion/index_map.rs"
+harness = false
+
+[[bench]]
 name = "counts"
 path = "criterion/counts.rs"
 harness = false

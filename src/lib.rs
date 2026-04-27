@@ -75,6 +75,7 @@ pub use log::{
 pub mod progress;
 
 pub mod hashing;
+pub mod indexable_map;
 pub mod numeric;
 
 // Re-export for macros
@@ -90,6 +91,7 @@ pub use rand;
 
 // Deterministic hashing data structures
 pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
+pub use crate::indexable_map::{Indexable, IndexableMap};
 
 // Preludes
 pub mod prelude;
