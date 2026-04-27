@@ -436,21 +436,22 @@ mod tests {
 
     #[test]
     fn test_get_property_store() {
-        let property_store = PropertyStore::new();
+        let mut property_store = PropertyStore::new();
 
         {
-            let ages: &PropertyValueStoreCore<_, Age> = property_store.get();
+            let ages: &mut PropertyValueStoreCore<_, Age> = property_store.get_mut();
             ages.set(EntityId::<Person>::new(0), Age(12));
             ages.set(EntityId::<Person>::new(1), Age(33));
             ages.set(EntityId::<Person>::new(2), Age(44));
 
-            let infection_statuses: &PropertyValueStoreCore<_, InfectionStatus> =
-                property_store.get();
+            let infection_statuses: &mut PropertyValueStoreCore<_, InfectionStatus> =
+                property_store.get_mut();
             infection_statuses.set(EntityId::<Person>::new(0), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(1), InfectionStatus::Susceptible);
             infection_statuses.set(EntityId::<Person>::new(2), InfectionStatus::Infected);
 
-            let vaccine_status: &PropertyValueStoreCore<_, Vaccinated> = property_store.get();
+            let vaccine_status: &mut PropertyValueStoreCore<_, Vaccinated> =
+                property_store.get_mut();
             vaccine_status.set(EntityId::<Person>::new(0), Vaccinated(true));
             vaccine_status.set(EntityId::<Person>::new(1), Vaccinated(false));
             vaccine_status.set(EntityId::<Person>::new(2), Vaccinated(true));

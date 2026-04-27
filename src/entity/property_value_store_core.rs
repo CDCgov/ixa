@@ -9,16 +9,15 @@ A higher level interface to the `Index` is provided through the `PropertyValueSt
 */
 
 use std::cell::RefCell;
+use std::vec::Vec;
 
 use super::entity::{Entity, EntityId};
 use super::property::{Property, PropertyInitializationKind};
 use crate::entity::index::{PropertyIndex, PropertyIndexType};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::value_change_counter::ValueChangeCounter;
-use crate::value_vec::ValueVec;
-
 /// The underlying storage type for property values.
-pub(crate) type RawPropertyValueVec<P> = ValueVec<P>;
+pub(crate) type RawPropertyValueVec<P> = Vec<P>;
 
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
@@ -32,7 +31,7 @@ pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
 impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
-            data: ValueVec::default(),
+            data: RawPropertyValueVec::default(),
             index: PropertyIndex::Unindexed,
             value_change_counters: Vec::new(),
         }
@@ -50,7 +49,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: ValueVec::with_capacity(capacity),
+            data: RawPropertyValueVec::with_capacity(capacity),
             index: PropertyIndex::Unindexed,
             value_change_counters: Vec::new(),
         }
@@ -71,7 +70,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Ensures capacity for at least `additional` more elements
-    pub fn reserve(&self, additional: usize) {
+    pub fn reserve(&mut self, additional: usize) {
         self.data.reserve(additional);
     }
 
@@ -81,7 +80,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             !P::is_derived(),
             "Tried to get a derived property value from property value store."
         );
-        self.data.get(entity_id.0).unwrap_or_else(
+        self.data.get(entity_id.0).copied().unwrap_or_else(
             // `None` means index was out of bounds, which means the property has not been set.
             // Return the default.
             P::default_const,
@@ -89,7 +88,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`.
-    pub fn set(&self, entity_id: EntityId<E>, value: P) {
+    pub fn set(&mut self, entity_id: EntityId<E>, value: P) {
         debug_assert!(
             !P::is_derived(),
             "Tried to set a derived property value in property value store."
@@ -99,7 +98,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
         if index < len {
             // The index is in bounds, so we can just set the value directly.
-            self.data.set(index, value);
+            self.data[index] = value;
             return;
         }
 
@@ -133,7 +132,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`, returning the previous value.
-    pub fn replace(&self, entity_id: EntityId<E>, value: P) -> P {
+    pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
         debug_assert!(
             !P::is_derived(),
             "Tried to replace a derived property value in property value store."
@@ -143,7 +142,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
         if index < len {
             // The index is in bounds, so we can just set the value directly.
-            return self.data.replace(index, value);
+            return std::mem::replace(&mut self.data[index], value);
         }
 
         // The index is out of bounds.
