@@ -26,32 +26,20 @@ hyperfine_group!(
     large_sir {
         // Static implementation without Ixa, homogeneous mixing
         baseline => {
-            sir_baseline::Model::new(
-                build_params(HOMOGENEOUS),
-                sir_baseline::ModelOptions::default(),
-            ).run();
+            sir_baseline::Model::new(build_params(HOMOGENEOUS)).run();
         },
         // Static implementation without Ixa, 50% of contacts via household Vec lookup
         baseline_households => {
-            sir_baseline::Model::new(
-                build_params(HALF_HOUSEHOLD),
-                sir_baseline::ModelOptions::default(),
-            ).run();
+            sir_baseline::Model::new(build_params(HALF_HOUSEHOLD)).run();
         },
         // The equivalent Ixa implementation, homogeneous mixing (no household structure)
         entities => {
-            sir_ixa::Model::new(
-                build_params(HOMOGENEOUS),
-                sir_ixa::ModelOptions::default(),
-            ).run();
+            sir_ixa::Model::new(build_params(HOMOGENEOUS)).run();
         },
         // Same Ixa implementation, with 50% of contacts drawn from the
         // infectious person's household via an IndexableMap lookup.
         households => {
-            sir_ixa::Model::new(
-                build_params(HALF_HOUSEHOLD),
-                sir_ixa::ModelOptions::default(),
-            ).run();
+            sir_ixa::Model::new(build_params(HALF_HOUSEHOLD)).run();
         }
     }
 );

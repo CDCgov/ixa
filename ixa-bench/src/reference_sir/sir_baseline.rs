@@ -7,9 +7,6 @@ use super::{ModelStats, Parameters};
 
 const MIN_HOUSEHOLD_SIZE: usize = 5;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ModelOptions {}
-
 #[derive(Clone, Copy)]
 pub enum InfectionStatus {
     Susceptible,
@@ -34,7 +31,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(parameters: Parameters, _options: ModelOptions) -> Model {
+    pub fn new(parameters: Parameters) -> Model {
         let stats = ModelStats::new(parameters.initial_infections, parameters.population, 0.2);
         Model {
             infection_status_lookup: Vec::new(),
@@ -232,7 +229,6 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-            ModelOptions::default(),
         );
         context.run();
 
@@ -255,7 +251,6 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-            ModelOptions::default(),
         );
         model.run();
 

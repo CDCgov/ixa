@@ -3,17 +3,12 @@ use ixa::{
     define_data_plugin, define_entity, define_global_property, define_property, define_rng, Context,
 };
 use rand_distr::Exp;
-use serde::{Deserialize, Serialize};
 
 use crate::reference_sir::{ModelStats, Parameters};
 
 const MIN_HOUSEHOLD_SIZE: usize = 5;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
-pub struct ModelOptions {}
-
 define_global_property!(Params, Parameters);
-define_global_property!(Options, ModelOptions);
 
 define_rng!(NextPersonRng);
 define_rng!(NextEventRng);
@@ -256,10 +251,9 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(params: Parameters, options: ModelOptions) -> Self {
+    pub fn new(params: Parameters) -> Self {
         let mut ctx = Context::new();
         ctx.set_global_property_value(Params, params).unwrap();
-        ctx.set_global_property_value(Options, options).unwrap();
         Self { ctx }
     }
     pub fn get_stats(&self) -> &ModelStats {
@@ -288,7 +282,7 @@ mod test {
 
     #[test]
     fn infected_counts() {
-        let mut model = Model::new(Parameters::default(), ModelOptions::default());
+        let mut model = Model::new(Parameters::default());
         model.ctx.setup();
         assert_eq!(model.ctx.infected_people(), 5);
         let p = model
@@ -305,7 +299,7 @@ mod test {
 
     #[test]
     fn get_random_infected_person() {
-        let mut model = Model::new(Parameters::default(), ModelOptions::default());
+        let mut model = Model::new(Parameters::default());
         model.ctx.setup();
         let p = model.ctx.random_infected_person();
         assert!(p.is_some());
@@ -324,7 +318,6 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-            ModelOptions::default(),
         );
         model.run();
 
@@ -347,7 +340,6 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-            ModelOptions::default(),
         );
         model.run();
 
