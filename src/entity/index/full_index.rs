@@ -53,6 +53,7 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
 mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
     use crate::prelude::*;
+    use crate::with;
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person, default_const = Age(0));
@@ -73,38 +74,42 @@ mod tests {
         context.index_property::<Person, AWH>();
 
         context
-            .add_entity((Age(1u8), Weight(2u8), Height(3u8)))
+            .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((Age(1u8), Weight(2u8), Height(3u8)), &mut |results| {
-            results_a = results.into_iter().collect::<Vec<_>>()
-        });
+        context.with_query_results(
+            with!(Person, Age(1u8), Weight(2u8), Height(3u8)),
+            &mut |results| results_a = results.into_iter().collect::<Vec<_>>(),
+        );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((Weight(2u8), Height(3u8), Age(1u8)), &mut |results| {
-            results_b = results.into_iter().collect::<Vec<_>>()
-        });
+        context.with_query_results(
+            with!(Person, Weight(2u8), Height(3u8), Age(1u8)),
+            &mut |results| results_b = results.into_iter().collect::<Vec<_>>(),
+        );
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
         println!("Results: {:?}", results_a);
 
         context
-            .add_entity((Weight(1u8), Height(2u8), Age(3u8)))
+            .add_entity(with!(Person, Weight(1u8), Height(2u8), Age(3u8)))
             .unwrap();
 
         let mut results_a = Default::default();
-        context.with_query_results((Weight(1u8), Height(2u8), Age(3u8)), &mut |results| {
-            results_a = results.into_iter().collect::<Vec<_>>()
-        });
+        context.with_query_results(
+            with!(Person, Weight(1u8), Height(2u8), Age(3u8)),
+            &mut |results| results_a = results.into_iter().collect::<Vec<_>>(),
+        );
         assert_eq!(results_a.len(), 1);
 
         let mut results_b = Default::default();
-        context.with_query_results((Age(3u8), Weight(1u8), Height(2u8)), &mut |results| {
-            results_b = results.into_iter().collect::<Vec<_>>()
-        });
+        context.with_query_results(
+            with!(Person, Age(3u8), Weight(1u8), Height(2u8)),
+            &mut |results| results_b = results.into_iter().collect::<Vec<_>>(),
+        );
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);

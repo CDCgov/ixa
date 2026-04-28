@@ -302,7 +302,7 @@ mod tests {
         add_to_entity_registry, get_registered_entity_count, initialize_entity_index, EntityStore,
     };
     use crate::entity::Entity;
-    use crate::{impl_entity, Context, ContextEntitiesExt, HashMap};
+    use crate::{impl_entity, with, Context, ContextEntitiesExt, HashMap};
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
     pub struct TestItem1 {
@@ -705,10 +705,14 @@ mod tests {
         // Add different numbers of entities for each type
         // Note: add_entity returns Result<EntityId<E>, ...>, we unwrap for the test.
         for _ in 0..5 {
-            context.add_entity::<TestItem1, _>(()).unwrap();
+            context
+                .add_entity::<TestItem1, _>(with!(TestItem1))
+                .unwrap();
         }
         for _ in 0..3 {
-            context.add_entity::<TestItem2, _>(()).unwrap();
+            context
+                .add_entity::<TestItem2, _>(with!(TestItem2))
+                .unwrap();
         }
         // TestItem3 remains at 0 for now
 
@@ -736,7 +740,9 @@ mod tests {
         // Iterators created now should not see entities added later
         let snapshot_iter = context.get_entity_iterator::<TestItem1>();
 
-        context.add_entity::<TestItem1, _>(()).unwrap();
+        context
+            .add_entity::<TestItem1, _>(with!(TestItem1))
+            .unwrap();
 
         assert_eq!(context.get_entity_count::<TestItem1>(), 6);
         assert_eq!(snapshot_iter.count(), 5); // Still sees original population

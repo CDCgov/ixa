@@ -154,11 +154,24 @@ property values. The properties must be distinct, of course, and there must be
 a value for every "required" property, that is, for every (non-derived)
 property that doesn't have a default value.
 
+Public entity initialization no longer accepts naked tuples such as
+`(Age(25), InfectionStatus::Infected)`. Use `with!(Person, ...)` when you want
+to provide one or more property values.
+
 Adding a new entity with just one property value:
 
 ```rust
 let person_id = context.add_entity(with!(Person, Age(25))).unwrap();
 ```
+
+To initialize an entity with only default values, pass the entity type directly:
+
+```rust
+let person_id = context.add_entity(Person).unwrap();
+```
+
+The same pattern applies to queries. Use `with!(Person, ...)` to filter by property values, or use `Person` when you
+want to work with the entire population. Public query APIs no longer accept naked tuples such as `(Age(25),)`.
 
 ### Getting a property value for an entity
 
