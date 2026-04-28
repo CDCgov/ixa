@@ -90,8 +90,8 @@ path = "criterion/index_benches.rs"
 harness = false
 
 [[bench]]
-name = "index_map"
-path = "criterion/index_map.rs"
+name = "indexable_map"
+path = "criterion/indexable_map.rs"
 harness = false
 
 [[bench]]
