@@ -1,64 +1,67 @@
-use ixa::network::edge::EdgeType;
 use ixa::prelude::*;
 use ixa::{HashSet, HashSetExt};
 use rand_distr::Bernoulli;
-use serde::Deserialize;
 
 use crate::loader::{open_csv, HouseholdId, Id};
 use crate::parameters::Parameters;
 use crate::{Person, PersonId};
 
-define_edge_type!(struct Household, Person);
-define_edge_type!(struct AgeUnder5, Person);
-define_edge_type!(struct Age5to17, Person);
+define_entity!(Edge);
+// relative transmission rate
+define_property!(struct RR(f64), Edge);
+define_property!(struct Node1(PersonId), Edge);
+define_property!(struct Node2(PersonId), Edge);
 
 define_rng!(NetworkRng);
 
-#[derive(Deserialize, Debug)]
-struct EdgeRecord {
-    v1: u16,
-    v2: u16,
+fn add_bidi_edge(context: &mut Context, p1: PersonId, p2: PersonId, rr: RR) {
+    context
+        .add_entity(with!(Edge, Node1(p1), Node2(p2), rr))
+        .unwrap();
+    context
+        .add_entity(with!(Edge, Node2(p1), Node1(p2), rr))
+        .unwrap();
 }
 
-fn create_household_networks(context: &mut Context, people: &[PersonId]) {
+fn create_household_networks(context: &mut Context, rr: RR) {
     let mut households = HashSet::new();
+    let people: Vec<PersonId> = context.query(with!(Person)).into_iter().collect();
+
+    // for every person, check what household they are in
     for person_id in people {
-        let household_id: HouseholdId = context.get_property(*person_id);
+        let household_id: HouseholdId = context.get_property(person_id);
+        // if we haven't seen this household before, find all its member,
+        // and connect them in a dense network
         if households.insert(household_id) {
-            let mut members: Vec<PersonId> = Vec::new();
-            context.with_query_results(with!(Person, household_id), &mut |results| {
-                members = results.to_owned_vec()
-            });
-            // create a dense network
-            while let Some(person) = members.pop() {
-                for other_person in &members {
-                    context
-                        .add_edge_bidi(person, *other_person, 1.0, Household)
-                        .unwrap();
+            let members: Vec<PersonId> = context
+                .query(with!(Person, household_id))
+                .into_iter()
+                .collect();
+
+            for i in 0..(members.len() - 1) {
+                for j in (i + 1)..(members.len()) {
+                    add_bidi_edge(context, members[i], members[j], rr);
                 }
             }
         }
     }
 }
 
-fn load_edge_list<ET: EdgeType<Person>>(context: &mut Context, file_name: &str, inner: ET) {
+// Assert there is only one person with data ID `id`, then get their entity ID
+fn get_entity_id_by_data_id(context: &mut Context, id: u16) -> PersonId {
+    let v: Vec<PersonId> = context.query(with!(Person, Id(id))).into_iter().collect();
+    assert_eq!(v.len(), 1);
+    v[0]
+}
+
+fn load_edge_list(context: &mut Context, file_name: &str, rr: RR) {
     let mut reader = open_csv(file_name);
 
     for result in reader.deserialize() {
-        let record: EdgeRecord = result.expect("Failed to parse edge");
-        let mut p1_vec = Vec::new();
-        context.with_query_results(with!(Person, Id(record.v1)), &mut |people| {
-            p1_vec = people.to_owned_vec()
-        });
-        assert_eq!(p1_vec.len(), 1);
-        let p1 = p1_vec[0];
-        let mut p2_vec = Vec::new();
-        context.with_query_results(with!(Person, Id(record.v2)), &mut |people| {
-            p2_vec = people.to_owned_vec()
-        });
-        assert_eq!(p2_vec.len(), 1);
-        let p2 = p2_vec[0];
-        context.add_edge_bidi(p1, p2, 1.0, inner.clone()).unwrap();
+        let record: (u16, u16) = result.expect("Failed to parse edge");
+        let p1 = get_entity_id_by_data_id(context, record.0);
+        let p2 = get_entity_id_by_data_id(context, record.1);
+        add_bidi_edge(context, p1, p2, rr);
     }
 }
 
@@ -66,103 +69,72 @@ fn sar_to_beta(sar: f64, infectious_period: f64) -> f64 {
     1.0 - (1.0 - sar).powf(1.0 / infectious_period)
 }
 
-/// Get all the contacts a person will have over a certain duration
+/// Get all the effective contacts a person will have over a certain duration
 pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> HashSet<PersonId> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
 
-    // Probability of contact during the duration. Note that this assumes that the duration is not too high!
-    let p_hh = duration * sar_to_beta(parameters.sar, parameters.incubation_period);
-    let p_other = duration
-        * sar_to_beta(
-            parameters.sar / parameters.between_hh_transmission_reduction,
-            parameters.incubation_period,
-        );
+    // Base probability of contact during the duration. Note that this assumes that the duration is not too high!
+    let base_p = duration * sar_to_beta(parameters.sar, parameters.incubation_period);
 
-    let mut infectees = HashSet::new();
-    infectees.extend(
-        get_contacts_by_edge_type::<Household>(context, person_id)
-            .iter()
-            .filter(|_| context.sample_distr(NetworkRng, Bernoulli::new(p_hh).unwrap())),
-    );
+    // Find all the people this person has edges to. Those people are contacts in this
+    // duration, with a certain probability
+    let mut contacts = HashSet::new();
+    for edge in context.query(with!(Edge, Node1(person_id))) {
+        let RR(rr) = context.get_property(edge);
+        let Node2(person2) = context.get_property(edge);
+        if context.sample_distr(NetworkRng, Bernoulli::new(base_p * rr).unwrap()) {
+            contacts.insert(person2);
+        }
+    }
 
-    infectees.extend(
-        get_contacts_by_edge_type::<AgeUnder5>(context, person_id)
-            .iter()
-            .filter(|_| context.sample_distr(NetworkRng, Bernoulli::new(p_other).unwrap())),
-    );
-
-    infectees.extend(
-        get_contacts_by_edge_type::<Age5to17>(context, person_id)
-            .iter()
-            .filter(|_| context.sample_distr(NetworkRng, Bernoulli::new(p_other).unwrap())),
-    );
-
-    infectees
+    contacts
 }
 
-/// Get the contacts by edge type
-fn get_contacts_by_edge_type<ET: EdgeType<Person> + 'static>(
-    context: &Context,
-    person_id: PersonId,
-) -> HashSet<PersonId> {
-    context
-        .get_edges::<Person, ET>(person_id)
-        .iter()
-        .map(|e| e.neighbor)
-        .collect()
-}
+pub fn init(context: &mut Context, between_hh_transmission_reduction: f64) {
+    // relative risk of transmission between (vs. within) households
+    let rr = 1.0 / between_hh_transmission_reduction;
 
-pub fn init(context: &mut Context, people: &[PersonId]) {
     // Create dense household networks
-    create_household_networks(context, people);
-
-    // Add U5 edges from csv
-    load_edge_list(context, "AgeUnder5Edges.csv", AgeUnder5);
-
-    // Add U18 edges from csv
-    load_edge_list(context, "Age5to17Edges.csv", Age5to17);
+    create_household_networks(context, RR(1.0));
+    // Add other edges from csv's with lower transmission rate
+    load_edge_list(context, "AgeUnder5Edges.csv", RR(rr));
+    load_edge_list(context, "Age5to17Edges.csv", RR(rr));
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::{loader, network};
 
-    const N_SIZE_12: usize = 1;
-    const N_SIZE_11: usize = 1;
-    const N_SIZE_3: usize = 122;
-
-    #[test]
-    fn test_expected_12_member_household() {
+    // Assert that person with `id` has `n` contacts (i.e., edges going from
+    // them, and also edges going to them)
+    fn assert_has_n_contacts(id: u16, n: usize) {
         let mut context = Context::new();
-        context.init_random(42);
-        let people = loader::init(&mut context);
-        network::init(&mut context, &people);
-        let deg11 = context.find_entities_by_degree::<Person, Household>(11);
-        assert_eq!(deg11.len(), 12 * N_SIZE_12);
+        loader::init(&mut context);
+        network::init(&mut context, 1.0);
+
+        let eid = get_entity_id_by_data_id(&mut context, id);
+
+        let n_to = context.query_entity_count(with!(Edge, Node1(eid)));
+        let n_from = context.query_entity_count(with!(Edge, Node2(eid)));
+        assert_eq!(n_to, n);
+        assert_eq!(n_from, n);
     }
 
     #[test]
-    fn test_expected_11_member_household() {
-        let mut context = Context::new();
-        context.init_random(42);
-        let people = loader::init(&mut context);
-        network::init(&mut context, &people);
-        let deg10 = context.find_entities_by_degree::<Person, Household>(10);
-        assert_eq!(deg10.len(), 11 * N_SIZE_11);
+    fn test_person_826() {
+        // Person 826 is in a household of 5 with no other contacts.
+        // There should be 4 edges going from them, and 4 going to them.
+        assert_has_n_contacts(826, 4);
     }
 
     #[test]
-    fn test_expected_3_member_household() {
-        let mut context = Context::new();
-        context.init_random(42);
-        let people = loader::init(&mut context);
-        network::init(&mut context, &people);
-        let deg10 = context.find_entities_by_degree::<Person, Household>(2);
-        assert_eq!(deg10.len(), 3 * N_SIZE_3);
+    fn test_person_243() {
+        // Person 243 is in a household of size 6 (i.e., 5 hh contacts)
+        // and has 4 other contacts
+        assert_has_n_contacts(243, 5 + 4);
     }
 }

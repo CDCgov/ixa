@@ -137,10 +137,8 @@ mod tests {
     #[test]
     fn test_disease_status() {
         let mut context = Context::new();
-
         context.init_random(42);
-
-        let people = loader::init(&mut context);
+        loader::init(&mut context);
 
         // set sar and between_hh_transmission_reduction to 1.0 so that
         // beta is 1.0
@@ -150,7 +148,7 @@ mod tests {
             sar: 1.0,
             shape: 15.0,
             infection_duration: 5.0,
-            between_hh_transmission_reduction: 1.0,
+            between_hh_transmission_rr: 1.0,
             data_dir: "examples/network-hhmodel/tests".to_owned(),
             output_dir: "examples/network-hhmodel/tests".to_owned(),
         };
@@ -158,7 +156,7 @@ mod tests {
             .set_global_property_value(Parameters, parameters)
             .unwrap();
 
-        network::init(&mut context, &people);
+        network::init(&mut context, 1.0);
 
         let mut to_infect = Vec::<PersonId>::new();
         context.with_query_results(with!(Person, Id(71)), &mut |people| {
@@ -170,19 +168,19 @@ mod tests {
         context.execute();
 
         assert_eq!(
-            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::S)),
+            context.query_entity_count(with!(Person, DiseaseStatus::S)),
             399
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::E)),
+            context.query_entity_count(with!(Person, DiseaseStatus::E)),
             0
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::I)),
+            context.query_entity_count(with!(Person, DiseaseStatus::I)),
             0
         );
         assert_eq!(
-            context.query_entity_count::<Person, _>(with!(Person, DiseaseStatus::R)),
+            context.query_entity_count(with!(Person, DiseaseStatus::R)),
             1207
         );
     }

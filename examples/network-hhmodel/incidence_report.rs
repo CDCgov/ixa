@@ -145,8 +145,8 @@ mod test {
                 .set_global_property_value(Parameters, parameters.clone())
                 .unwrap();
 
-            let people = loader::init(&mut context);
-            network::init(&mut context, &people);
+            loader::init(&mut context);
+            network::init(&mut context, 1.0);
             incidence_report::init(&mut context).unwrap();
 
             context.subscribe_to_event(
