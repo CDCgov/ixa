@@ -5,7 +5,7 @@ use ixa::impl_property;
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{example_dir, Person, PersonId};
+use crate::{example_dir, Person};
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Id(pub u16);
@@ -39,32 +39,24 @@ struct PeopleRecord {
     household_id: HouseholdId,
 }
 
-fn create_person_from_record(context: &mut Context, record: &PeopleRecord) -> PersonId {
-    context
-        .add_entity((record.id, record.age_group, record.sex, record.household_id))
-        .unwrap()
-}
-
 pub fn open_csv(file_name: &str) -> Reader<File> {
     let current_dir = example_dir();
     let file_path = current_dir.join(file_name);
     csv::Reader::from_path(file_path).unwrap()
 }
 
-pub fn init(context: &mut Context) -> Vec<PersonId> {
+pub fn init(context: &mut Context) {
     // Load csv and deserialize records
     let mut reader = open_csv("Households.csv");
-    let mut people = Vec::new();
 
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
-        people.push(create_person_from_record(context, &record));
+        let _ = context.add_entity((record.id, record.age_group, record.sex, record.household_id));
     }
 
     context.index_property::<Person, Id>();
     context.index_property::<Person, HouseholdId>();
 
-    people
 }
 
 #[cfg(test)]

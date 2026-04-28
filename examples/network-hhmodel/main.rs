@@ -27,14 +27,14 @@ fn initialize(context: &mut Context) {
     context.init_random(1);
 
     // Load people from csv and set up some base properties
-    let people = loader::init(context);
+    loader::init(context);
 
     // Load parameters from json
     let file_path = example_dir().join("config.json");
     context.load_global_properties(&file_path).unwrap();
 
     // Load network
-    network::init(context, &people);
+    network::init(context);
 
     // Initialize incidence report
     incidence_report::init(context).unwrap();
