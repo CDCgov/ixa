@@ -1,10 +1,9 @@
 //! Full property-value index that maps each distinct value to the set of matching entity IDs.
 
-use hashbrown::HashTable;
-use log::{error, trace};
+use log::trace;
 
-use crate::entity::{Entity, EntityId, HashValueType};
-use crate::hashing::IndexSet;
+use crate::entity::{Entity, EntityId};
+use crate::hashing::{HashMap, IndexSet};
 use crate::prelude::Property;
 
 /// An index that maintains a full set of entity IDs for each distinct property value.
@@ -12,10 +11,7 @@ use crate::prelude::Property;
 /// direct indexing (fast random sampling).
 #[derive(Default)]
 pub struct FullIndex<E: Entity, P: Property<E>> {
-    // We store a copy of the value here so that we can iterate over
-    // it in the typed API, and so that the type-erased API can
-    // access some serialization of it.
-    data: HashTable<(P::CanonicalValue, IndexSet<EntityId<E>>)>,
+    data: HashMap<P::CanonicalValue, IndexSet<EntityId<E>>>,
 
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
@@ -26,7 +22,7 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data: HashTable::default(),
+            data: HashMap::default(),
             max_indexed: 0,
         }
     }
@@ -35,86 +31,27 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
     /// exist.
     pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
         trace!("adding entity {:?} to index {}", entity_id, P::name());
-        let hash = P::hash_property_value(key);
-
-        // `hasher` is called if entries need to be moved or copied to a new table.
-        // This must return the same hash value that each entry was inserted with.
-        #[allow(clippy::cast_possible_truncation)]
-        let hasher = |(stored_value, _stored_set): &_| P::hash_property_value(stored_value) as u64;
-        // Equality is determined by comparing the full 128-bit hashes. We do not expect any
-        // collisions before the heat death of the universe.
-        let hash128_equality = |(stored_value, _): &_| P::hash_property_value(stored_value) == hash;
-        #[allow(clippy::cast_possible_truncation)]
-        self.data
-            .entry(hash as u64, hash128_equality, hasher)
-            .or_insert_with(|| (*key, IndexSet::default()))
-            .get_mut()
-            .1
-            .insert(entity_id);
+        self.data.entry(*key).or_default().insert(entity_id);
     }
 
     pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
-        let hash = P::hash_property_value(key);
-        self.remove_entity_with_hash(hash, entity_id);
-    }
-
-    /// Because the property value is stored beside the set of entities, the bucket for the value
-    /// has to already be in the index in order to add an entity using only the property value hash.
-    pub fn add_entity_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        // Equality is determined by comparing the full 128-bit hashes. We do not expect any
-        // collisions before the heat death of the universe.
-        let hash128_equality = |(stored_value, _): &_| P::hash_property_value(stored_value) == hash;
-
-        #[allow(clippy::cast_possible_truncation)]
-        if let Ok(mut entry) = self.data.find_entry(hash as u64, hash128_equality) {
-            let (_, set) = entry.get_mut();
-            set.insert(entity_id);
-        } else {
-            error!(
-                "could not find entry for hash {} when adding person {:?} to index",
-                hash, entity_id
-            );
-        }
-    }
-
-    /// Removing an entity only requires the hash.
-    pub fn remove_entity_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        // Equality is determined by comparing the full 128-bit hashes. We do not expect any
-        // collisions before the heat death of the universe.
-        let hash128_equality = |(stored_value, _): &_| P::hash_property_value(stored_value) == hash;
-
-        #[allow(clippy::cast_possible_truncation)]
-        if let Ok(mut entry) = self.data.find_entry(hash as u64, hash128_equality) {
-            let (_, set) = entry.get_mut();
+        if let Some(set) = self.data.get_mut(key) {
             set.swap_remove(&entity_id);
             // Clean up the entry if there are no entities
             if set.is_empty() {
-                entry.remove();
+                self.data.remove(key);
             }
-        } else {
-            error!(
-                "could not find entry for hash {} when removing entity {:?} from index",
-                hash, entity_id
-            );
         }
     }
 
-    /// Fetching a set only requires the hash.
-    pub fn get_with_hash(&self, hash: HashValueType) -> Option<&IndexSet<EntityId<E>>> {
-        // Equality is determined by comparing the full 128-bit hashes. We do not expect
-        // any collisions before the heat death of the universe.
-        let hash128_equality = |(stored_value, _): &_| P::hash_property_value(stored_value) == hash;
-        #[allow(clippy::cast_possible_truncation)]
-        self.data
-            .find(hash as u64, hash128_equality)
-            .map(|(_, set)| set)
+    pub fn get(&self, key: &P::CanonicalValue) -> Option<&IndexSet<EntityId<E>>> {
+        self.data.get(key)
     }
 }
 
 #[cfg(test)]
 mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
-    use crate::hashing::{hash_serialized_128, one_shot_128};
     use crate::prelude::*;
 
     define_entity!(Person);
@@ -173,22 +110,5 @@ mod tests {
         assert_eq!(results_a, results_b);
 
         println!("Results: {:?}", results_a);
-    }
-
-    #[test]
-    fn test_index_value_compute_same_values() {
-        let value = hash_serialized_128("test value");
-        let value2 = hash_serialized_128("test value");
-        assert_eq!(one_shot_128(&value), one_shot_128(&value2));
-    }
-
-    #[test]
-    fn test_index_value_compute_different_values() {
-        let value1 = Age(42);
-        let value2 = Age(43);
-        assert_ne!(
-            <Age as Property<Person>>::hash_property_value(&value1),
-            <Age as Property<Person>>::hash_property_value(&value2)
-        );
     }
 }

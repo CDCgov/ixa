@@ -1,6 +1,6 @@
 //! Index types for property-value lookups.
 
-use crate::entity::{Entity, EntityId, HashValueType};
+use crate::entity::{Entity, EntityId};
 use crate::hashing::IndexSet;
 use crate::prelude::Property;
 
@@ -50,38 +50,10 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn add_entity_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        match self {
-            Self::Unindexed => {}
-            Self::FullIndex(index) => index.add_entity_with_hash(hash, entity_id),
-            Self::ValueCountIndex(index) => {
-                index.add_entity_with_hash(hash, entity_id);
-            }
-        }
-    }
-
-    pub fn remove_entity_with_hash(&mut self, hash: HashValueType, entity_id: EntityId<E>) {
-        match self {
-            Self::Unindexed => {}
-            Self::FullIndex(index) => index.remove_entity_with_hash(hash, entity_id),
-            Self::ValueCountIndex(index) => {
-                index.remove_entity_with_hash(hash, entity_id);
-            }
-        }
-    }
-
-    pub fn get_index_set_with_hash(&self, hash: HashValueType) -> Option<&IndexSet<EntityId<E>>> {
-        match self {
-            Self::Unindexed => None,
-            Self::FullIndex(index) => index.get_with_hash(hash),
-            Self::ValueCountIndex(_) => None,
-        }
-    }
-
-    pub fn get_index_set_with_hash_result(&self, hash: HashValueType) -> IndexSetResult<'_, E> {
+    pub fn get_index_set_result(&self, value: &P::CanonicalValue) -> IndexSetResult<'_, E> {
         match self {
             Self::Unindexed => IndexSetResult::<'_, E>::Unsupported,
-            Self::FullIndex(index) => match index.get_with_hash(hash) {
+            Self::FullIndex(index) => match index.get(value) {
                 Some(set) => IndexSetResult::Set(set),
                 None => IndexSetResult::Empty,
             },
@@ -89,16 +61,14 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn get_index_count_with_hash_result(&self, hash: HashValueType) -> IndexCountResult {
+    pub fn get_index_count_result(&self, value: &P::CanonicalValue) -> IndexCountResult {
         match self {
             Self::Unindexed => IndexCountResult::Unsupported,
             Self::FullIndex(index) => {
-                let count = index.get_with_hash(hash).map_or(0, |set| set.len());
+                let count = index.get(value).map_or(0, |set| set.len());
                 IndexCountResult::Count(count)
             }
-            Self::ValueCountIndex(index) => {
-                IndexCountResult::Count(index.get_with_hash(hash).unwrap_or(0))
-            }
+            Self::ValueCountIndex(index) => IndexCountResult::Count(index.get(value).unwrap_or(0)),
         }
     }
 

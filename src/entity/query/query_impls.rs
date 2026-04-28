@@ -4,16 +4,15 @@ use seq_macro::seq;
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
-use crate::entity::multi_property::static_reorder_by_keys;
 use crate::entity::property::Property;
-use crate::entity::{ContextEntitiesExt, Entity, EntityId, HashValueType, Query};
-use crate::hashing::one_shot_128;
+use crate::entity::{ContextEntitiesExt, Entity, EntityId, Query};
 use crate::Context;
 
 impl<E: Entity> Query<E> for () {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        Vec::new()
-    }
+    type QueryParts<'a>
+        = [&'a dyn std::any::Any; 0]
+    where
+        Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
@@ -23,9 +22,8 @@ impl<E: Entity> Query<E> for () {
         None
     }
 
-    fn multi_property_value_hash(&self) -> HashValueType {
-        let empty: &[u128] = &[];
-        one_shot_128(&empty)
+    fn query_parts(&self) -> Self::QueryParts<'_> {
+        []
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
@@ -49,9 +47,10 @@ impl<E: Entity> Query<E> for () {
 // An Entity ZST itself is an empty query matching all entities of that type.
 // This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
 impl<E: Entity + Copy> Query<E> for E {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        Vec::new()
-    }
+    type QueryParts<'a>
+        = [&'a dyn std::any::Any; 0]
+    where
+        Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
@@ -61,9 +60,8 @@ impl<E: Entity + Copy> Query<E> for E {
         None
     }
 
-    fn multi_property_value_hash(&self) -> HashValueType {
-        let empty: &[u128] = &[];
-        one_shot_128(&empty)
+    fn query_parts(&self) -> Self::QueryParts<'_> {
+        []
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
@@ -86,10 +84,10 @@ impl<E: Entity + Copy> Query<E> for E {
 
 // Implement the query version with one parameter.
 impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
-    fn get_query(&self) -> Vec<(usize, HashValueType)> {
-        let value = P1::make_canonical(self.0);
-        vec![(P1::id(), P1::hash_property_value(&value))]
-    }
+    type QueryParts<'a>
+        = P1::QueryParts<'a>
+    where
+        Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         vec![P1::type_id()]
@@ -101,8 +99,8 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         Some(P1::index_id())
     }
 
-    fn multi_property_value_hash(&self) -> HashValueType {
-        P1::hash_property_value(&P1::make_canonical(self.0))
+    fn query_parts(&self) -> Self::QueryParts<'_> {
+        P1::query_parts_for_value(&self.0)
     }
 
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
@@ -113,10 +111,10 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         // multi-property is unindexed, we fall through to create `SourceSet`s for the components
         // rather than wrapping a `DerivedPropertySource`.
         if let Some(multi_property_id) = self.multi_property_id() {
-            match property_store.get_index_set_with_hash_for_property_id(
-                multi_property_id,
-                self.multi_property_value_hash(),
-            ) {
+            let query_parts = P1::query_parts_for_value(&self.0);
+            let lookup_result = property_store
+                .get_index_set_for_query_parts(multi_property_id, query_parts.as_ref());
+            match lookup_result {
                 IndexSetResult::Set(people_set) => {
                     return EntitySet::from_source(SourceSet::IndexSet(people_set));
                 }
@@ -147,10 +145,10 @@ impl<E: Entity, P1: Property<E>> Query<E> for (P1,) {
         let property_store = context.entity_store.get_property_store::<E>();
 
         if let Some(multi_property_id) = self.multi_property_id() {
-            match property_store.get_index_set_with_hash_for_property_id(
-                multi_property_id,
-                self.multi_property_value_hash(),
-            ) {
+            let query_parts = P1::query_parts_for_value(&self.0);
+            let lookup_result = property_store
+                .get_index_set_for_query_parts(multi_property_id, query_parts.as_ref());
+            match lookup_result {
                 IndexSetResult::Set(people_set) => {
                     return EntitySetIterator::from_index_set(people_set);
                 }
@@ -197,20 +195,7 @@ macro_rules! impl_query {
                 )*
             )
             {
-                fn get_query(&self) -> Vec<(usize, HashValueType)> {
-                    let mut ordered_items = vec![
-                    #(
-                        (
-                            <T~N as $crate::entity::property::Property<E>>::id(),
-                            <T~N as $crate::entity::property::Property<E>>::hash_property_value(
-                                &<T~N as $crate::entity::property::Property<E>>::make_canonical(self.N)
-                            ),
-                        ),
-                    )*
-                    ];
-                    ordered_items.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-                    ordered_items
-                }
+                type QueryParts<'a> = [&'a dyn std::any::Any; $ct] where Self: 'a;
 
                 fn get_type_ids(&self) -> Vec<TypeId> {
                     vec![
@@ -220,41 +205,19 @@ macro_rules! impl_query {
                     ]
                 }
 
-                fn multi_property_value_hash(&self) -> HashValueType {
-                    // This needs to be kept in sync with how multi-properties compute their hash. We are
-                    // exploiting the fact that `bincode` encodes tuples as the concatenation of their
-                    // elements. Unfortunately, `bincode` allocates, but we avoid more allocations by
-                    // using stack allocated arrays.
-
-                    // Multi-properties order their values by lexicographic order of the component
-                    // properties, not `TypeId` order.
-                    // let type_ids: [TypeId; $ct] = [
-                    //     #(
-                    //         T~N::type_id(),
-                    //     )*
-                    // ];
-                    let keys: [&str; $ct] = [
+                fn query_parts(&self) -> Self::QueryParts<'_> {
+                    let keys = [
                         #(
                             <T~N as $crate::entity::property::Property<E>>::name(),
                         )*
                     ];
-                    // It is convenient to have the elements of the array to be `Copy` in the `static_apply_reordering`
-                    // function. Since references are trivially copyable, we construct `values` below to be an array
-                    // of _references_ to the `Vec`s returned from `encode_to_vec`. (The compiler is smart enough to
-                    // keep the referenced value in scope.)
-                    let mut values: [&Vec<u8>; $ct] = [
+                    let mut query_parts = [
                         #(
-                            &$crate::bincode::serde::encode_to_vec(
-                                self.N,
-                                $crate::bincode::config::standard(),
-                            )
-                            .unwrap(),
+                            &self.N as &dyn std::any::Any,
                         )*
                     ];
-                    static_reorder_by_keys(&keys, &mut values);
-
-                    let data = values.into_iter().flatten().copied().collect::<Vec<u8>>();
-                    one_shot_128(&data.as_slice())
+                    $crate::entity::multi_property::static_reorder_by_keys(&keys, &mut query_parts);
+                    query_parts
                 }
 
                 fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E> {
@@ -264,10 +227,12 @@ macro_rules! impl_query {
                     // rather than wrapping a `DerivedPropertySource`.
                     if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        match property_store.get_index_set_with_hash_for_property_id(
+                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
-                            <Self as $crate::entity::Query<E>>::multi_property_value_hash(self),
-                        ) {
+                            query_parts.as_ref(),
+                        );
+                        match lookup_result {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 return EntitySet::from_source(SourceSet::IndexSet(entity_set));
                             }
@@ -299,10 +264,12 @@ macro_rules! impl_query {
                     // first is a micro-optimization improving tight-loop benchmark performance.
                     if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        match property_store.get_index_set_with_hash_for_property_id(
+                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
-                            <Self as $crate::entity::Query<E>>::multi_property_value_hash(self),
-                        ) {
+                            query_parts.as_ref(),
+                        );
+                        match lookup_result {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 return EntitySetIterator::from_index_set(entity_set);
                             }
@@ -342,10 +309,12 @@ macro_rules! impl_query {
                     // The fast path: If this query is indexed, we only have to do one pass over the entities.
                     if let Some(multi_property_id) = <Self as $crate::entity::Query<E>>::multi_property_id(self) {
                         let property_store = context.entity_store.get_property_store::<E>();
-                        match property_store.get_index_set_with_hash_for_property_id(
+                        let query_parts = <Self as $crate::entity::Query<E>>::query_parts(self);
+                        let lookup_result = property_store.get_index_set_for_query_parts(
                             multi_property_id,
-                            <Self as $crate::entity::Query<E>>::multi_property_value_hash(self),
-                        ) {
+                            query_parts.as_ref(),
+                        );
+                        match lookup_result {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
                                 entities.retain(|entity_id| entity_set.contains(entity_id));
                                 return;
