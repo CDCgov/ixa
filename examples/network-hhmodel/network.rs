@@ -1,51 +1,75 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{Hash};
 
 use ixa::prelude::*;
 use ixa::{HashSet, HashSetExt};
 use rand_distr::Bernoulli;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
+use std::{
+    ops::{Index, IndexMut},
+};
 
 use crate::loader::{open_csv, HouseholdId, Id};
 use crate::parameters::Parameters;
 use crate::{Person, PersonId};
+use strum::{EnumCount as EnumCountMacro, EnumIter};
 
-// ixa properties must implement `Eq` and `Hash`, but `f64`
-// does not. This example manually implements that logic manually.
-#[derive(Copy, Clone, Serialize, Debug)]
-pub struct FloatEq(f64);
 
-impl PartialEq for FloatEq {
-    fn eq(&self, other: &Self) -> bool {
-        (self.0.is_nan() && other.0.is_nan()) || (self.0 == other.0)
+// could also generalize to a Vec of edge value structs where you store 
+// the edge index in Edge property below - that gives you full flex
+// to have arbitrary edge information
+#[derive(
+    Serialize, Deserialize, PartialEq, Debug, Clone, Copy, Eq, Hash, EnumCountMacro, EnumIter,
+)]
+#[repr(u8)]
+pub enum EdgeTypeValue {
+    Household = 0,
+    Age5to17,
+    AgeUnder5,
+}
+
+pub const EDGE_TYPE_COUNT: usize = EdgeTypeValue::COUNT;
+
+impl<T> Index<EdgeTypeValue> for [T; EDGE_TYPE_COUNT] {
+    type Output = T;
+    fn index(&self, index: EdgeTypeValue) -> &Self::Output {
+        &self[index as usize]
     }
 }
 
-impl Hash for FloatEq {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
+impl<T> IndexMut<EdgeTypeValue> for [T; EDGE_TYPE_COUNT] {
+    fn index_mut(&mut self, index: EdgeTypeValue) -> &mut Self::Output {
+        &mut self[index as usize]
     }
 }
 
-impl Eq for FloatEq {}
+define_global_property!(EdgeTypeRRs, [f64; EDGE_TYPE_COUNT]);
 
 define_entity!(Edge);
 // relative transmission rate
-define_property!(struct RR(FloatEq), Edge);
+define_property!(struct EdgeType(EdgeTypeValue), Edge);
 define_property!(struct Node1(PersonId), Edge);
 define_property!(struct Node2(PersonId), Edge);
 
+define_derived_property!(
+    struct RR(f64),
+    Edge,
+    [EdgeType], [EdgeTypeRRs],
+    |et, etrrs| RR(etrrs[et.0 as usize]),
+    impl_eq_hash = both
+);
+
 define_rng!(NetworkRng);
 
-fn add_bidi_edge(context: &mut Context, p1: PersonId, p2: PersonId, rr: RR) {
+fn add_bidi_edge(context: &mut Context, p1: PersonId, p2: PersonId, etv: EdgeTypeValue) {
     context
-        .add_entity(with!(Edge, Node1(p1), Node2(p2), rr))
+        .add_entity(with!(Edge, Node1(p1), Node2(p2), EdgeType(etv)))
         .unwrap();
     context
-        .add_entity(with!(Edge, Node2(p1), Node1(p2), rr))
+        .add_entity(with!(Edge, Node2(p1), Node1(p2), EdgeType(etv)))
         .unwrap();
 }
 
-fn create_household_networks(context: &mut Context, rr: RR) {
+fn create_household_networks(context: &mut Context) {
     let mut households = HashSet::new();
     let people: Vec<PersonId> = context.query(with!(Person)).into_iter().collect();
 
@@ -62,7 +86,7 @@ fn create_household_networks(context: &mut Context, rr: RR) {
 
             for i in 0..(members.len() - 1) {
                 for j in (i + 1)..(members.len()) {
-                    add_bidi_edge(context, members[i], members[j], rr);
+                    add_bidi_edge(context, members[i], members[j], EdgeTypeValue::Household);
                 }
             }
         }
@@ -76,14 +100,20 @@ fn get_entity_id_by_data_id(context: &mut Context, id: u16) -> PersonId {
     v[0]
 }
 
-fn load_edge_list(context: &mut Context, file_name: &str, rr: RR) {
+fn load_edge_list(context: &mut Context, file_name: &str) {
     let mut reader = open_csv(file_name);
 
     for result in reader.deserialize() {
         let record: (u16, u16) = result.expect("Failed to parse edge");
         let p1 = get_entity_id_by_data_id(context, record.0);
         let p2 = get_entity_id_by_data_id(context, record.1);
-        add_bidi_edge(context, p1, p2, rr);
+        let etv = match file_name {
+            "Age5to17Edges.csv" => EdgeTypeValue::AgeUnder5,
+            "AgeUnder5Edges.csv" => EdgeTypeValue::Age5to17,
+            _ => panic!("unexpected edge file name encountered"),
+        };
+
+        add_bidi_edge(context, p1, p2, etv);
     }
 }
 
@@ -105,7 +135,7 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
     // duration, with a certain probability
     let mut contacts = HashSet::new();
     for edge in context.query(with!(Edge, Node1(person_id))) {
-        let RR(FloatEq(rr)) = context.get_property(edge);
+        let RR(rr) = context.get_property(edge);
         let Node2(person2) = context.get_property(edge);
         if context.sample_distr(NetworkRng, Bernoulli::new(base_p * rr).unwrap()) {
             contacts.insert(person2);
@@ -118,10 +148,14 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
 // `rr`: relative rate of transmission between (vs. within) households
 pub fn init(context: &mut Context, rr: f64) {
     // Create dense household networks
-    create_household_networks(context, RR(FloatEq(1.0)));
+    create_household_networks(context);
+
     // Add other edges from csv's with lower transmission rate
-    load_edge_list(context, "AgeUnder5Edges.csv", RR(FloatEq(rr)));
-    load_edge_list(context, "Age5to17Edges.csv", RR(FloatEq(rr)));
+    load_edge_list(context, "AgeUnder5Edges.csv");
+    load_edge_list(context, "Age5to17Edges.csv");
+
+    context.set_global_property_value(EdgeTypeRRs, [1.0, rr, rr]).expect("error setting RRs");
+
 }
 
 #[cfg(test)]
