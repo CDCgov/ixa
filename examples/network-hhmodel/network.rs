@@ -115,10 +115,8 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
     contacts
 }
 
-pub fn init(context: &mut Context, between_hh_transmission_reduction: f64) {
-    // relative rate of transmission between (vs. within) households
-    let rr = 1.0 / between_hh_transmission_reduction;
-
+// `rr`: relative rate of transmission between (vs. within) households
+pub fn init(context: &mut Context, rr: f64) {
     // Create dense household networks
     create_household_networks(context, RR(FloatEq(1.0)));
     // Add other edges from csv's with lower transmission rate
