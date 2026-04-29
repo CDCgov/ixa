@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use ixa::log::info;
 use ixa::prelude::*;
-use ixa::{impl_property, ExecutionPhase, HashSet, HashSetExt};
+use ixa::{impl_property, ExecutionPhase};
 use rand_distr::Gamma;
 use serde::{Deserialize, Serialize};
 
@@ -158,11 +158,7 @@ mod tests {
 
         network::init(&mut context, 1.0);
 
-        let mut to_infect = Vec::<PersonId>::new();
-        context.with_query_results(with!(Person, Id(71)), &mut |people| {
-            to_infect.extend(people);
-        });
-
+        let to_infect = context.query(with!(Person, Id(71))).into_iter().collect();
         init(&mut context, &to_infect, 1.0);
 
         context.execute();

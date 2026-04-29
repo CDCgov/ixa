@@ -124,7 +124,7 @@ mod test {
             sar: 1.0,
             shape: 15.0,
             infection_duration: 5.0,
-            between_hh_transmission_reduction: 1.0,
+            between_hh_transmission_rr: 1.0,
             data_dir: output_dir.to_str().unwrap().to_string(),
             output_dir: output_dir.to_str().unwrap().to_string(),
         };

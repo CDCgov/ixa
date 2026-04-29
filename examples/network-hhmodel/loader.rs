@@ -52,7 +52,13 @@ pub fn init(context: &mut Context) {
     for result in reader.deserialize() {
         let record: PeopleRecord = result.expect("Failed to parse record");
         context
-            .add_entity((record.id, record.age_group, record.sex, record.household_id))
+            .add_entity(with!(
+                Person,
+                record.id,
+                record.age_group,
+                record.sex,
+                record.household_id
+            ))
             .unwrap();
     }
 }

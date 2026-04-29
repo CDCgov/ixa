@@ -41,7 +41,7 @@ fn initialize(context: &mut Context) {
         .clone();
 
     // Load network
-    network::init(context, parameters.between_hh_transmission_reduction);
+    network::init(context, parameters.between_hh_transmission_rr);
 
     // Initialize incidence report
     incidence_report::init(context).unwrap();

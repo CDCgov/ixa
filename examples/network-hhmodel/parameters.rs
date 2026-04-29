@@ -11,7 +11,7 @@ pub struct ParametersValues {
     pub sar: f64,
     pub shape: f64,
     pub infection_duration: f64,
-    pub between_hh_transmission_reduction: f64,
+    pub between_hh_transmission_rr: f64,
     pub output_dir: String,
     pub data_dir: String,
 }
