@@ -34,7 +34,7 @@ fn create_household_networks(context: &mut Context, rr: RR) {
             // create a dense network
             for i in 0..(members.len() - 1) {
                 for j in (i + 1)..members.len() {
-                    assert!(i != j);
+                    debug_assert!(i != j);
                     add_bidi_edge(context, members[i], members[j], rr);
                 }
             }
