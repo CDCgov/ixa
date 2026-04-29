@@ -345,7 +345,7 @@ impl ContextEntitiesExt for Context {
         }
 
         // Update the value
-        let property_value_store = self.get_property_value_store::<E, P>();
+        let property_value_store = self.get_property_value_store_mut::<E, P>();
         property_value_store.set(entity_id, property_value);
 
         // Mutable: After updating the value, we update its dependents, removing old values and

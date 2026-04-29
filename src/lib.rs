@@ -108,7 +108,8 @@ pub use entity::{ContextEntitiesExt, EntityPropertyTuple};
 
 pub mod execution_stats;
 pub mod profiling;
-mod value_vec;
+
+pub mod data_structures;
 
 #[cfg(all(target_arch = "wasm32", feature = "progress_bar"))]
 compile_error!(
