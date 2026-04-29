@@ -138,7 +138,7 @@ mod tests {
 
         context.init_random(42);
 
-        let people = loader::init(&mut context);
+        loader::init(&mut context);
 
         // set sar and between_hh_transmission_reduction to 1.0 so that
         // beta is 1.0
@@ -156,7 +156,7 @@ mod tests {
             .set_global_property_value(Parameters, parameters)
             .unwrap();
 
-        network::init(&mut context, &people);
+        network::init(&mut context);
 
         let mut to_infect = Vec::<PersonId>::new();
         context.with_query_results((Id(71),), &mut |people| {

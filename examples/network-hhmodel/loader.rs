@@ -62,7 +62,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod tests {
     use ixa::context::Context;
-    use ixa::random::ContextRandomExt;
+    use ixa::random::{ContextRandomExt};
 
     use super::*;
 
@@ -79,26 +79,17 @@ mod tests {
     #[test]
     fn test_some_people_load_correctly() {
         let mut context = Context::new();
-        context.init_random(42);
+        init(&mut context);
 
-        let people = init(&mut context);
+        // only one with the given id
+        assert_eq!(context.query_entity_count(with!(Person, Id(676))), 1);
+        assert_eq!(context.query_entity_count(with!(Person, Id(213))), 1);
+        assert_eq!(context.query_entity_count(with!(Person, Id(1591))), 1);
 
-        let person = people[0];
-        assert!(context.match_entity(
-            person,
-            (Id(676), AgeGroup::Age18to64, Sex::Female, HouseholdId(1))
-        ));
+        // test exist fully specified
+        assert_eq!(context.query_entity_count((Id(676), AgeGroup::Age18to64, Sex::Female, HouseholdId(1))), 1);
+        assert_eq!(context.query_entity_count((Id(213), AgeGroup::AgeUnder5, Sex::Female, HouseholdId(162))), 1);
+        assert_eq!(context.query_entity_count((Id(1591), AgeGroup::Age65Plus, Sex::Male, HouseholdId(496))), 1);
 
-        let person = people[246];
-        assert!(context.match_entity(
-            person,
-            (Id(213), AgeGroup::AgeUnder5, Sex::Female, HouseholdId(162))
-        ));
-
-        let person = people[1591];
-        assert!(context.match_entity(
-            person,
-            (Id(1591), AgeGroup::Age65Plus, Sex::Male, HouseholdId(496))
-        ));
     }
 }

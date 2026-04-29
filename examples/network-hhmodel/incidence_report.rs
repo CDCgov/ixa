@@ -146,7 +146,7 @@ mod test {
                 .unwrap();
 
             let people = loader::init(&mut context);
-            network::init(&mut context, &people);
+            network::init(&mut context);
             incidence_report::init(&mut context).unwrap();
 
             context.subscribe_to_event(

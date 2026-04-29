@@ -16,10 +16,10 @@ define_rng!(NetworkRng);
 
 fn add_bidi_edge(context: &mut Context, p1: EntityId<Person>, p2: EntityId<Person>, rr: RR) {
     context
-        .add_entity(with!(Edge, Node1(p1), Node2(p2), rr))
+        .add_entity((Node1(p1), Node2(p2), rr))
         .unwrap();
     context
-        .add_entity(with!(Edge, Node2(p1), Node1(p2), rr))
+        .add_entity((Node1(p2), Node2(p1), rr))
         .unwrap();
 }
 
@@ -29,14 +29,13 @@ fn create_household_networks(context: &mut Context, rr: RR) {
     for person in people {
         let household_id: HouseholdId = context.get_property(person);
         if households.insert(household_id) {
-            let mut members = Vec::new();
-            context.with_query_results((household_id,), &mut |results| {
-                members = results.to_owned_vec()
-            });
+            let members: Vec<EntityId<Person>> =  context.query((household_id,)).into_iter().collect();
+
             // create a dense network
-            while let Some(person) = members.pop() {
-                for other_person in &members {
-                    add_bidi_edge(context, person, *other_person, rr);
+            for i in 0..(members.len() - 1) {
+                for j in (i + 1)..members.len() {
+                    assert!(i != j);
+                    add_bidi_edge(context, members[i], members[j], rr);
                 }
             }
         }
@@ -48,19 +47,11 @@ fn load_edge_list(context: &mut Context, file_name: &str, rr: RR) {
 
     for result in reader.deserialize() {
         let record: (u16, u16) = result.expect("Failed to parse edge");
-        let mut p1_vec = Vec::new();
-        context.with_query_results((Id(record.0),), &mut |people| {
-            p1_vec = people.to_owned_vec()
-        });
+        let p1_vec: Vec<EntityId<Person>> = context.query(((Id(record.0)),)).into_iter().collect();
         assert_eq!(p1_vec.len(), 1);
-        let p1 = p1_vec[0];
-        let mut p2_vec = Vec::new();
-        context.with_query_results((Id(record.1),), &mut |people| {
-            p2_vec = people.to_owned_vec()
-        });
+        let p2_vec: Vec<EntityId<Person>> = context.query(((Id(record.1)),)).into_iter().collect();
         assert_eq!(p2_vec.len(), 1);
-        let p2 = p2_vec[0];
-        add_bidi_edge(context, p1, p2, rr);
+        add_bidi_edge(context, p1_vec[0], p2_vec[0], rr);
     }
 }
 
@@ -80,7 +71,7 @@ pub fn get_contacts(context: &Context, person: EntityId<Person>, duration: f64) 
 
     let mut contacts: Vec<EntityId<Person>> = Vec::new();
 
-    for edge in context.query(with!(Edge, Node1(person))) {
+    for edge in context.query((Node1(person), )) {
         let RR(rr): RR = context.get_property(edge);
         let Node2(person2): Node2 = context.get_property(edge);
 
@@ -114,20 +105,32 @@ pub fn init(context: &mut Context) {
 mod tests {
     use super::*;
     use crate::{loader, network, Person};
+    use crate::parameters::ParametersValues;
 
     // Assert that person with `id` has `n` contacts (i.e., edges going from
     // them, and also edges going to them)
     fn assert_has_n_contacts(id: u16, n: usize) {
         let mut context = Context::new();
         context.init_random(42);
-        let people = loader::init(&mut context);
+        loader::init(&mut context);
+        let parameters = ParametersValues {
+            incubation_period: 8.0,
+            infectious_period: 27.0,
+            sar: 1.0,
+            shape: 15.0,
+            infection_duration: 5.0,
+            between_hh_transmission_reduction: 1.0,
+            data_dir: "examples/network-hhmodel/tests".to_owned(),
+            output_dir: "examples/network-hhmodel/tests".to_owned(),
+        };
+        context
+            .set_global_property_value(Parameters, parameters)
+            .unwrap();
         network::init(&mut context);
 
-        // `id` is the data ID, the one in the csv's
-        // `pid` is the integer inside Person(pid)
-        let person = context.query(with!(Person, Id(id))).into_iter().next().unwrap();
-        let n_to = context.query_entity_count(with!(Edge, Node1(person)));
-        let n_from = context.query_entity_count(with!(Edge, Node2(person)));
+        let person = context.query((Id(id),)).into_iter().next().unwrap();
+        let n_to = context.query_entity_count((Node1(person),));
+        let n_from = context.query_entity_count((Node2(person), ));
         assert_eq!(n_to, n);
         assert_eq!(n_from, n);
     }
@@ -141,8 +144,8 @@ mod tests {
 
     #[test]
     fn test_person_243() {
-        // Person 243 is in a household of size 5, with 4 other contacts,
-        // for 8 total contacts.
-        assert_has_n_contacts(243, 8);
+        // Person 243 is in a household of size 6, with 3 other contacts,
+        // for 9 total contacts.
+        assert_has_n_contacts(243, 9);
     }
 }
