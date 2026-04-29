@@ -20,13 +20,7 @@ impl PartialEq for FloatEq {
 
 impl Hash for FloatEq {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Normalize -0.0 to 0.0
-        let bits = if self.0 == 0.0 {
-            0.0f64.to_bits()
-        } else {
-            self.0.to_bits()
-        };
-        bits.hash(state);
+        self.0.to_bits().hash(state);
     }
 }
 
