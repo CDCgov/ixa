@@ -23,6 +23,8 @@ The simulation runs via:
   by whom during the simulation and saves the information to a csv in an `\output`
   folder.
 
+Note that the relative rate of transmission between households (relative to within households) is a property of the network edges. For technical reasons, ixa properties must implement `Eq`, which Rust floats do not. This example manually implements equality logic; future ixa versions may have other solutions.
+
 ## How to run the model
 
 `cargo run --example network-hhmodel`

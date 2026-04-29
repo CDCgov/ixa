@@ -9,6 +9,8 @@ use crate::loader::{open_csv, HouseholdId, Id};
 use crate::parameters::Parameters;
 use crate::{Person, PersonId};
 
+// ixa properties must implement `Eq` and `Hash`, but `f64`
+// does not. This example manually implements that logic manually.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub struct FloatEq(f64);
 
@@ -114,7 +116,7 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
 }
 
 pub fn init(context: &mut Context, between_hh_transmission_reduction: f64) {
-    // relative risk of transmission between (vs. within) households
+    // relative rate of transmission between (vs. within) households
     let rr = 1.0 / between_hh_transmission_reduction;
 
     // Create dense household networks
