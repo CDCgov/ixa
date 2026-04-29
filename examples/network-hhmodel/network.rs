@@ -1,14 +1,36 @@
+use std::hash::{Hash, Hasher};
+
 use ixa::prelude::*;
 use ixa::{HashSet, HashSetExt};
 use rand_distr::Bernoulli;
+use serde::Serialize;
 
 use crate::loader::{open_csv, HouseholdId, Id};
 use crate::parameters::Parameters;
 use crate::{Person, PersonId};
 
+// ixa properties must implement `Eq` and `Hash`, but `f64`
+// does not. This example manually implements that logic manually.
+#[derive(Copy, Clone, Serialize, Debug)]
+pub struct FloatEq(f64);
+
+impl PartialEq for FloatEq {
+    fn eq(&self, other: &Self) -> bool {
+        (self.0.is_nan() && other.0.is_nan()) || (self.0 == other.0)
+    }
+}
+
+impl Hash for FloatEq {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
+impl Eq for FloatEq {}
+
 define_entity!(Edge);
 // relative transmission rate
-define_property!(struct RR(f64), Edge);
+define_property!(struct RR(FloatEq), Edge);
 define_property!(struct Node1(PersonId), Edge);
 define_property!(struct Node2(PersonId), Edge);
 
@@ -83,7 +105,7 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
     // duration, with a certain probability
     let mut contacts = HashSet::new();
     for edge in context.query(with!(Edge, Node1(person_id))) {
-        let RR(rr) = context.get_property(edge);
+        let RR(FloatEq(rr)) = context.get_property(edge);
         let Node2(person2) = context.get_property(edge);
         if context.sample_distr(NetworkRng, Bernoulli::new(base_p * rr).unwrap()) {
             contacts.insert(person2);
@@ -94,14 +116,14 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
 }
 
 pub fn init(context: &mut Context, between_hh_transmission_reduction: f64) {
-    // relative risk of transmission between (vs. within) households
+    // relative rate of transmission between (vs. within) households
     let rr = 1.0 / between_hh_transmission_reduction;
 
     // Create dense household networks
-    create_household_networks(context, RR(1.0));
+    create_household_networks(context, RR(FloatEq(1.0)));
     // Add other edges from csv's with lower transmission rate
-    load_edge_list(context, "AgeUnder5Edges.csv", RR(rr));
-    load_edge_list(context, "Age5to17Edges.csv", RR(rr));
+    load_edge_list(context, "AgeUnder5Edges.csv", RR(FloatEq(rr)));
+    load_edge_list(context, "Age5to17Edges.csv", RR(FloatEq(rr)));
 }
 
 #[cfg(test)]
