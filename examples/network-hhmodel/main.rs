@@ -7,6 +7,8 @@ mod parameters;
 mod seir;
 use std::path::PathBuf;
 
+use parameters::Parameters;
+
 define_entity!(Person);
 define_rng!(MainRng);
 
@@ -27,14 +29,19 @@ fn initialize(context: &mut Context) {
     context.init_random(1);
 
     // Load people from csv and set up some base properties
-    let people = loader::init(context);
+    loader::init(context);
 
     // Load parameters from json
     let file_path = example_dir().join("config.json");
     context.load_global_properties(&file_path).unwrap();
 
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
+
     // Load network
-    network::init(context, &people);
+    network::init(context, parameters.between_hh_transmission_rr);
 
     // Initialize incidence report
     incidence_report::init(context).unwrap();
@@ -43,6 +50,6 @@ fn initialize(context: &mut Context) {
     let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
 
     #[allow(clippy::vec_init_then_push)]
-    seir::init(context, &to_infect);
+    seir::init(context, &to_infect, 1.0);
     context.execute();
 }

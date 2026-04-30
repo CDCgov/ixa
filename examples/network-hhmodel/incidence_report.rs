@@ -124,7 +124,7 @@ mod test {
             sar: 1.0,
             shape: 15.0,
             infection_duration: 5.0,
-            between_hh_transmission_reduction: 1.0,
+            between_hh_transmission_rr: 1.0,
             data_dir: output_dir.to_str().unwrap().to_string(),
             output_dir: output_dir.to_str().unwrap().to_string(),
         };
@@ -145,8 +145,8 @@ mod test {
                 .set_global_property_value(Parameters, parameters.clone())
                 .unwrap();
 
-            let people = loader::init(&mut context);
-            network::init(&mut context, &people);
+            loader::init(&mut context);
+            network::init(&mut context, 1.0);
             incidence_report::init(&mut context).unwrap();
 
             context.subscribe_to_event(
@@ -158,7 +158,7 @@ mod test {
             let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
 
             #[allow(clippy::vec_init_then_push)]
-            seir::init(&mut context, &to_infect);
+            seir::init(&mut context, &to_infect, 1.0);
 
             context.execute();
         }
