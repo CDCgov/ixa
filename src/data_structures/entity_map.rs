@@ -1,10 +1,10 @@
 /*!
 
-A `DenseEntityMap<E, V>` is a map from `EntityId<E>` to values of type `V` with a hash-map-like API
+An `EntityMap<E, V>` is a map from `EntityId<E>` to values of type `V` with a hash-map-like API
 optimized for densely populated maps.
 
-A `DenseEntityMap` is "dense" in the sense that it uses a vector `Vec<Option<V>>` internally for
-storage, using the `EntityId<E>` to index into the vector. Use a `DenseEntityMap` in any of the
+An `EntityMap` is "dense" in the sense that it uses a vector `Vec<Option<V>>` internally for
+storage, using the `EntityId<E>` to index into the vector. Use an `EntityMap` in any of the
 following cases:
 
  - The number of entities is small
@@ -12,33 +12,32 @@ following cases:
  - Access or creation speed is important
  - You want access to the `EntityId<E>` key a value was stored with
 
-A `DenseEntityMap` allocates lazily by default, only allocating enough memory to access the item for
-the largest entity ID stored in the map. If you know beforehand how many entities you expect to
-store, you can use the `DenseEntityMap::with_capacity` constructor or `DenseEntityMap::reserve` to
-preallocate the map, which avoids reallocations.
+If you know beforehand how many entities you expect to store, use the `EntityMap::with_capacity`
+constructor or `EntityMap::reserve` to preallocate the map, as that is more efficient than letting
+it lazily reallocate as needed.
 
-Because every value added to a `DenseEntityMap` is accompanied by a valid `EntityId<E>`,
-`DenseEntityMap` is guaranteed to only "store" valid entity IDs. You can therefore use it as a
-replacement for `EntityVec<E, V>` (or just `Vec<V>`) for cases where you need to recover the original
-entity ID that a value was stored with, for example, by iterating over the (entity ID, value) pairs
-returned by `DenseEntityMap::iter`. The only cost you pay for this is the extra memory needed to
-store `Option<V>` values instead of `V` values, which in some cases is nothing. The `EntityId<E>`
-itself is not stored.
+Because every value added to an `EntityMap` is accompanied by a valid `EntityId<E>`, `EntityMap` is
+guaranteed to only "store" valid entity IDs. You can therefore use it as a replacement for
+`EntityVec<E, V>` (or just `Vec<V>`) for cases where you need to recover the original entity ID that
+a value was stored with, for example, by iterating over the (entity ID, value) pairs returned by
+`EntityMap::iter`. The only cost you pay for this is the extra memory needed to store `Option<V>`
+values instead of `V` values, which in some cases is nothing. The `EntityId<E>` itself is not
+stored.
 
-A `DenseEntityMap<E, V>` can be cheaply converted to an `EntityVec<E, Option<V>>` using the
-`DenseEntityMap::into_entity_vec` method.
+An `EntityMap<E, V>` can be cheaply converted to an `EntityVec<E, Option<V>>` using the
+`EntityMap::into_entity_vec` method.
 
 ## Example
 
 Imagine you have `Person` and `Setting` entities, and you want an efficient way to store for each
 `SettingId` a `Vec<PersonId>` representing all the people that can be found in the setting. It is
-possible to use a `HashMap<SettingId, Vec<PersonId>>` to store this information, but a
-`DenseEntityMap<SettingId, Vec<PersonId>>` would be more efficient.
+possible to use a `HashMap<SettingId, Vec<PersonId>>` to store this information, but an
+`EntityMap<SettingId, Vec<PersonId>>` is more efficient.
 
 ```rust,ignore
-use ixa::data_structures::DenseEntityMap;
+use ixa::data_structures::entity_map::EntityMap;
 
-let mut setting_membership = DenseEntityMap::<SettingId, Vec<PersonId>>::new();
+let mut setting_membership = EntityMap::<SettingId, Vec<PersonId>>::new();
 
 // During population initialization you might initialize the map with data in, say, a `PersonRecord`
 // struct that has a `home_id` field of type `SettingId`.
@@ -66,18 +65,16 @@ use std::marker::PhantomData;
 use crate::data_structures::entity_vec::EntityVec;
 use crate::entity::{Entity, EntityId};
 
-/**
-A `Vec`-backed map keyed by `EntityId<E>`.
-*/
+/// A `Vec`-backed map keyed by `EntityId<E>`.
 #[derive(Clone, PartialEq, Eq)]
-pub struct DenseEntityMap<E: Entity, V> {
+pub struct EntityMap<E: Entity, V> {
     data: Vec<Option<V>>,
     len: usize,
     _phantom: PhantomData<E>,
 }
 
-impl<E: Entity, V> DenseEntityMap<E, V> {
-    /// Creates an empty `DenseEntityMap`.
+impl<E: Entity, V> EntityMap<E, V> {
+    /// Creates an empty `EntityMap`.
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
@@ -86,7 +83,7 @@ impl<E: Entity, V> DenseEntityMap<E, V> {
         }
     }
 
-    /// Creates an empty `DenseEntityMap` with space for at least `capacity` entity IDs.
+    /// Creates an empty `EntityMap` with space for at least `capacity` values.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
@@ -106,7 +103,7 @@ impl<E: Entity, V> DenseEntityMap<E, V> {
         self.len
     }
 
-    /// Returns the capacity of the backing vector.
+    /// Returns the capacity of the backing storage.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
@@ -118,14 +115,16 @@ impl<E: Entity, V> DenseEntityMap<E, V> {
         self.len == 0
     }
 
-    /// Reserves capacity for at least `additional` more entity IDs.
+    /// Reserves capacity for at least `additional` more values.
     pub fn reserve(&mut self, additional: usize) {
         self.data.reserve(additional);
     }
 
     /// Shrinks the backing vector to fit the highest occupied entity ID.
     pub fn shrink_to_fit(&mut self) {
-        self.trim_trailing_empty_slots();
+        while self.data.last().is_some_and(Option::is_none) {
+            self.data.pop();
+        }
         self.data.shrink_to_fit();
     }
 
@@ -186,7 +185,6 @@ impl<E: Entity, V> DenseEntityMap<E, V> {
         let removed = self.data.get_mut(entity_id.0).and_then(Option::take);
         if removed.is_some() {
             self.len -= 1;
-            self.trim_trailing_empty_slots();
         }
         removed
     }
@@ -205,27 +203,21 @@ impl<E: Entity, V> DenseEntityMap<E, V> {
             _phantom: PhantomData,
         }
     }
-
-    fn trim_trailing_empty_slots(&mut self) {
-        while self.data.last().is_some_and(Option::is_none) {
-            self.data.pop();
-        }
-    }
 }
 
-impl<E: Entity, V> Default for DenseEntityMap<E, V> {
+impl<E: Entity, V> Default for EntityMap<E, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E: Entity, V: Debug> Debug for DenseEntityMap<E, V> {
+impl<E: Entity, V: Debug> Debug for EntityMap<E, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<E: Entity, V> Extend<(EntityId<E>, V)> for DenseEntityMap<E, V> {
+impl<E: Entity, V> Extend<(EntityId<E>, V)> for EntityMap<E, V> {
     fn extend<I: IntoIterator<Item = (EntityId<E>, V)>>(&mut self, iter: I) {
         for (entity_id, value) in iter {
             let _ = self.insert(entity_id, value);
@@ -233,7 +225,7 @@ impl<E: Entity, V> Extend<(EntityId<E>, V)> for DenseEntityMap<E, V> {
     }
 }
 
-impl<E: Entity, V> FromIterator<(EntityId<E>, V)> for DenseEntityMap<E, V> {
+impl<E: Entity, V> FromIterator<(EntityId<E>, V)> for EntityMap<E, V> {
     fn from_iter<I: IntoIterator<Item = (EntityId<E>, V)>>(iter: I) -> Self {
         let mut map = Self::new();
         map.extend(iter);
@@ -241,7 +233,7 @@ impl<E: Entity, V> FromIterator<(EntityId<E>, V)> for DenseEntityMap<E, V> {
     }
 }
 
-impl<'a, E: Entity, V> IntoIterator for &'a DenseEntityMap<E, V> {
+impl<'a, E: Entity, V> IntoIterator for &'a EntityMap<E, V> {
     type Item = (EntityId<E>, &'a V);
     type IntoIter = Iter<'a, E, V>;
 
@@ -250,7 +242,7 @@ impl<'a, E: Entity, V> IntoIterator for &'a DenseEntityMap<E, V> {
     }
 }
 
-/// Iterator over `(EntityId<E>, &V)` pairs from a `DenseEntityMap<E, V>`.
+/// Iterator over `(EntityId<E>, &V)` pairs from an `EntityMap<E, V>`.
 pub struct Iter<'a, E: Entity, V> {
     inner: std::iter::Enumerate<std::slice::Iter<'a, Option<V>>>,
     remaining: usize,
@@ -311,7 +303,7 @@ impl<'a, E: Entity, V> FusedIterator for Iter<'a, E, V> {}
 
 #[cfg(test)]
 mod tests {
-    use super::DenseEntityMap;
+    use super::EntityMap;
     use crate::define_entity;
     use crate::entity::EntityId;
 
@@ -319,7 +311,7 @@ mod tests {
 
     #[test]
     fn new_is_empty() {
-        let map = DenseEntityMap::<TestEntity, i32>::new();
+        let map = EntityMap::<TestEntity, i32>::new();
 
         assert_eq!(map.len(), 0);
         assert!(map.is_empty());
@@ -328,7 +320,7 @@ mod tests {
 
     #[test]
     fn with_capacity_sets_initial_capacity() {
-        let map = DenseEntityMap::<TestEntity, i32>::with_capacity(8);
+        let map = EntityMap::<TestEntity, i32>::with_capacity(8);
 
         assert_eq!(map.len(), 0);
         assert!(map.capacity() >= 8);
@@ -336,7 +328,7 @@ mod tests {
 
     #[test]
     fn insert_and_get_work_for_sparse_ids() {
-        let mut map = DenseEntityMap::<TestEntity, &'static str>::new();
+        let mut map = EntityMap::<TestEntity, &'static str>::new();
         let id2 = EntityId::new(2);
         let id5 = EntityId::new(5);
 
@@ -353,7 +345,7 @@ mod tests {
 
     #[test]
     fn insert_replaces_existing_value_without_changing_len() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id = EntityId::new(3);
 
         assert_eq!(map.insert(id, 10), None);
@@ -365,7 +357,7 @@ mod tests {
 
     #[test]
     fn get_mut_updates_value() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id = EntityId::new(1);
         let _ = map.insert(id, 10);
 
@@ -377,7 +369,7 @@ mod tests {
 
     #[test]
     fn get_or_insert_inserts_missing_value_and_returns_mutable_reference() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id = EntityId::new(3);
 
         let value = map.get_or_insert(id, 10);
@@ -389,7 +381,7 @@ mod tests {
 
     #[test]
     fn get_or_insert_does_not_replace_existing_value() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id = EntityId::new(2);
         let _ = map.insert(id, 20);
 
@@ -402,7 +394,7 @@ mod tests {
 
     #[test]
     fn get_or_insert_with_only_evaluates_closure_for_missing_key() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let missing_id = EntityId::new(1);
         let existing_id = EntityId::new(4);
         let _ = map.insert(existing_id, 40);
@@ -426,7 +418,7 @@ mod tests {
 
     #[test]
     fn contains_key_tracks_presence() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id = EntityId::new(4);
 
         assert!(!map.contains_key(id));
@@ -437,7 +429,7 @@ mod tests {
 
     #[test]
     fn remove_returns_value_and_decrements_len() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let id1 = EntityId::new(1);
         let id4 = EntityId::new(4);
         let _ = map.insert(id1, 10);
@@ -452,23 +444,22 @@ mod tests {
     }
 
     #[test]
-    fn remove_highest_key_removes_entry_cleanly() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+    fn remove_missing_key_returns_none_without_changing_len() {
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(1), 10);
         let _ = map.insert(EntityId::new(8), 80);
 
-        assert_eq!(map.remove(EntityId::new(8)), Some(80));
-        assert_eq!(map.remove(EntityId::new(1)), Some(10));
+        assert_eq!(map.remove(EntityId::new(4)), None);
 
-        assert_eq!(map.len(), 0);
-        assert!(map.is_empty());
-        assert!(!map.contains_key(EntityId::new(1)));
-        assert_eq!(map.get(EntityId::new(8)), None);
+        assert_eq!(map.len(), 2);
+        assert!(!map.is_empty());
+        assert_eq!(map.get(EntityId::new(1)), Some(&10));
+        assert_eq!(map.get(EntityId::new(8)), Some(&80));
     }
 
     #[test]
     fn clear_removes_all_entries() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(0), 1);
         let _ = map.insert(EntityId::new(2), 2);
 
@@ -482,7 +473,7 @@ mod tests {
 
     #[test]
     fn reserve_and_shrink_to_fit_manage_capacity() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         map.reserve(16);
         assert!(map.capacity() >= 16);
 
@@ -500,7 +491,7 @@ mod tests {
 
     #[test]
     fn iter_yields_only_present_entries_in_entity_id_order() {
-        let mut map = DenseEntityMap::<TestEntity, &'static str>::new();
+        let mut map = EntityMap::<TestEntity, &'static str>::new();
         let _ = map.insert(EntityId::new(3), "three");
         let _ = map.insert(EntityId::new(0), "zero");
         let _ = map.insert(EntityId::new(5), "five");
@@ -519,7 +510,7 @@ mod tests {
 
     #[test]
     fn iter_size_hint_len_and_count_track_remaining_entries() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(1), 10);
         let _ = map.insert(EntityId::new(4), 40);
         let _ = map.insert(EntityId::new(7), 70);
@@ -536,7 +527,7 @@ mod tests {
 
     #[test]
     fn iter_nth_skips_missing_entries_and_updates_remaining_len() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(2), 20);
         let _ = map.insert(EntityId::new(5), 50);
         let _ = map.insert(EntityId::new(8), 80);
@@ -551,7 +542,7 @@ mod tests {
 
     #[test]
     fn iter_nth_past_end_returns_none_and_exhausts_iterator() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(1), 10);
         let _ = map.insert(EntityId::new(3), 30);
 
@@ -563,7 +554,7 @@ mod tests {
 
     #[test]
     fn debug_formats_like_a_map() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(1), 10);
         let _ = map.insert(EntityId::new(4), 40);
 
@@ -575,7 +566,7 @@ mod tests {
 
     #[test]
     fn default_matches_new() {
-        let map = DenseEntityMap::<TestEntity, i32>::default();
+        let map = EntityMap::<TestEntity, i32>::default();
 
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
@@ -585,12 +576,12 @@ mod tests {
     fn extend_and_from_iter_insert_all_entries() {
         let entries = vec![(EntityId::new(2), 20), (EntityId::new(5), 50)];
 
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         map.extend(entries.clone());
         assert_eq!(map.get(EntityId::new(2)), Some(&20));
         assert_eq!(map.get(EntityId::new(5)), Some(&50));
 
-        let collected = DenseEntityMap::<TestEntity, i32>::from_iter(entries);
+        let collected = EntityMap::<TestEntity, i32>::from_iter(entries);
         assert_eq!(collected.get(EntityId::new(2)), Some(&20));
         assert_eq!(collected.get(EntityId::new(5)), Some(&50));
         assert_eq!(collected.len(), 2);
@@ -598,7 +589,7 @@ mod tests {
 
     #[test]
     fn into_iterator_for_reference_matches_iter() {
-        let mut map = DenseEntityMap::<TestEntity, i32>::new();
+        let mut map = EntityMap::<TestEntity, i32>::new();
         let _ = map.insert(EntityId::new(0), 10);
         let _ = map.insert(EntityId::new(2), 20);
 

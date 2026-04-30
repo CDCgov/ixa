@@ -11,9 +11,9 @@ construct an `EntityId<E>` value itself, because it does not guarantee that its 
 exceed the range of valid `EntityId<E>` values. This allows methods like `EntityVec::push` and
 `EntityVec::extend` that extend the length of the vector to remain unconstrained. If you need to be
 able to retrieve the `EntityId<E>` that a value is associated with (e.g. by iterating over
-(entity ID, value) pairs), use a [`DenseEntityMap`](super::dense_entity_map::DenseEntityMap) instead.
+(entity ID, value) pairs), use an [`EntityMap`](super::entity_map::EntityMap) instead.
 
-For a hash-map-like API, see [`DenseEntityMap`](super::dense_entity_map::DenseEntityMap).
+For a hash-map-like API, see [`EntityMap`](super::entity_map::EntityMap).
 
 ## Example
 
