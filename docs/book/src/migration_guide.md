@@ -2,7 +2,10 @@
 
 ## Properties in the new Entity system
 
-In the new Entity system, properties work a little differently.
+In the new Entity system, properties work a little differently. We now have a
+[chapter devoted to properties in the ixa book](topics/properties.md). This section
+of the migration guide describes the changes in the new system relative to the
+old system.
 
 ### The Old Way to Define a Property
 

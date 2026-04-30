@@ -1,10 +1,10 @@
 # Properties
 
 Properties are the data attached to an entity. For example, a `Person` entity might have the properties `Age` and
-`InfectionStatus`. In ixa, the property's value type is also the property type: the implementation of the trait
+`InfectionStatus`. In Ixa, the property's value type is also the property type: the implementation of the trait
 `Property\<Person>` by the concrete property type is what ties that Rust type to the `Person` entity.
 
-Never implement `Property\<T>` for a type `T` directly. Instead, use one of the provided macros:
+Never implement `Property\<E>` for an `Entity` type `E` directly. Instead, use one of the provided macros:
 
 | Macro                      | Use case                                      |
 |:---------------------------|:----------------------------------------------|
@@ -44,15 +44,49 @@ Without it, every call to `add_entity` requires a value for the property.
 
 More advanced use cases and options are covered in the sections below.
 
+> [!INFO] The newtype idiom in Rust
+>
+> For properties whose values are essentially [primitive types](https://doc.rust-lang.org/rust-by-example/primitives.html) like `bool` or `u64`, we always use the [newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html). A "newtype" is a tuple struct with a single field that wraps an existing type to give it a new, distinct identity:
+>
+> ```rust
+> struct Age(u8);
+> ```
+>
+> Even though `Age` is "just" a `u8` under the hood, the Rust compiler treats `Age` and `u8` as completely different
+> types. You cannot accidentally pass a `u8` where an `Age` is expected, nor mix up an `Age` with some other newtype like
+> `struct BirthYear(u8)`. This is exactly what we want for properties: in Ixa, each property is identified by its Rust
+> type, so `Age` and `BirthYear` must be distinct types even when they happen to wrap the same primitive.
+>
+> To read the inner value out of a newtype, use the tuple field accessor `.0`. To produce a new value, wrap a primitive
+> with the type's constructor:
+>
+> ```rust
+> let age: Age = context.get_property(person_id);
+> let new_age = Age(age.0 + 1);   // unwrap with `.0`, do arithmetic, re-wrap
+> context.set_property(person_id, new_age);
+> ```
+>
+> If unwrapping and re-wrapping becomes tedious, you can implement methods or operator traits like `Add` directly on
+> your newtype so that model code can work with it more naturally. For a more thorough treatment of newtypes and what
+> they're good for, see the chapter on
+> [advanced types](https://doc.rust-lang.org/book/ch20-03-advanced-types.html#using-the-newtype-pattern-for-type-safety-and-abstraction)
+> in *The Rust Book*.
+
 ### Property Initialization
 
+Every property of an entity instance must have a value. (See the section [Optional Properties](#optional-properties) for how to deal with
+properties that are not always present.) How a property is initialized depends on how the property is defined and on
+the property values supplied to `add_entity`.
 Every property has one of three initialization behaviors:
 
-| Kind       | How to define it                       | How new entities get a value                                      |
-| ---------- | -------------------------------------- | ----------------------------------------------------------------- |
-| Explicit   | Omit `default_const`                   | The value must be supplied to `add_entity` with `with!`            |
-| Constant   | Add `default_const = ...`              | The default is used unless a value is supplied with `with!`        |
-| Derived    | Use `define_derived_property!`         | The value is computed from other properties and cannot be set      |
+| Kind       | How to define it                       | How new entities get a value                                  |
+| ---------- | -------------------------------------- | ------------------------------------------------------------- |
+| Explicit   | Omit `default_const = ...`             | The value must be supplied to `add_entity` with `with!`       |
+| Constant   | Add `default_const = ...`              | The default is used unless a value is supplied with `with!`   |
+| Derived    | Use `define_derived_property!`         | The value is computed from other properties and cannot be set |
+
+Derived properties are covered in the section [Derived Properties](#derived-properties). They are computed from other
+properties by definition, so it doesn't make sense to initialize them explicitly.
 
 An explicit property must be provided when the entity is created:
 
@@ -78,27 +112,33 @@ define_property!(
 let person = context.add_entity(Person)?;
 ```
 
-You can still override a constant property's initial value:
+You can still override a property's initial value constant:
 
 ```rust
 let person = context.add_entity(with!(Person, InfectionStatus::Infectious))?;
 ```
+
+The word "constant" refers to the fact that the default value is not itself computed—it is a static value provided in
+the property definition. The property itself, however, can still be overwritten after the fact with
+`context.set_property` regardless of how it was initialized.
 
 ### Getting and Setting Properties
 
 Once an entity exists, use `get_property` and `set_property`:
 
 ```rust
-let age: Age = context.get_property(person);
-context.set_property(person, Age(age.0 + 1));
+// The person with ID `person_id` had a birthday.
+let age: Age = context.get_property(person_id);
+context.set_property(person_id, Age(age.0 + 1));
 ```
 
-`set_property` works only for non-derived properties. Derived properties are
-computed from their dependencies and update when those dependencies change.
+Derived properties are computed from their dependencies and update when those dependencies change. Therefore, you
+cannot set a derived property directly with `set_property`.
 
 You can also query by property values with `with!`:
 
 ```rust
+// Get the set of all people who are infectious.
 let infectious = context.query_result_iterator(with!(
     Person,
     InfectionStatus::Infectious
@@ -108,9 +148,33 @@ let infectious = context.query_result_iterator(with!(
 For performance-sensitive queries, see the chapter on
 [Indexing](indexing.md).
 
+### Optional Properties
+
+Sometimes you want a property that does not always have a meaningful value.
+The idiomatic way to do this is to use a type of the form `struct MyProperty(Option\<ValueType>)`.
+For example, you might store the time of a person's last vaccination
+as `struct LastVaccination(Option\<f64>)`.
+
+```rust
+define_property!(
+    struct LastVaccination(Option<f64>),
+    Person,
+    impl_hash_eq = both,
+    default_const = LastVaccination(None)
+);
+```
+
+Notice that we provided a default of `LastVaccination(None)`, which stands for "no value set". We also provide
+`impl_hash_eq = both` because our type contains an `f64`; see the section on [Floating Point Types and Implementing `Eq`
+and `Hash`](#floating-point-types-and-implementing-eq-and-hash) for more details.
+
+This is such a common pattern that Ixa detects the `Option` and provides a custom "display function" for it
+for writing values to reports and diagnostics; see the section on
+[Custom Display and Option Properties](#custom-display-and-option-properties).
+
 ## Custom Display and Option Properties
 
-ixa uses each property's display implementation in places where a property value
+Ixa uses each property's display implementation in places where a property value
 is rendered as text, including reports and diagnostics. By default,
 `impl_property!` uses the property's `Debug` representation.
 
@@ -120,8 +184,8 @@ is rendered as text, including reports and diagnostics. By default,
 > automatically `derive`d, shows a value in a developer-focused way, and is typically used for things like error
 > messages or logs. `Display` shows a value in a user-facing way. You write it yourself to produce clean, readable
 > output.
-> 
-> In the context of `ixa` properties, a property's "display function" is the function that is used to render a property
+>
+> In the context of Ixa properties, a property's "display function" is the function that is used to render a property
 > for reports. We use the type's `Debug` representation by default because it can be automatically `derive`d for most
 > types. Properties do not need to implement `Display` even if you supply a custom display function, although it can be
 > useful to do so.
@@ -171,7 +235,7 @@ define_property!(
 );
 ```
 
-Since the `display_impl` argument is attached to the `impl Property<Entity> for ConcretePropertyType`, a single
+Since the `display_impl` argument is attached to the `impl Property\<Entity> for ConcretePropertyType`, a single
 `ConcretePropertyType` can have different display functions for different entities for which it is a property.
 
 ## When to Use `impl_property!`
@@ -201,7 +265,7 @@ define_property!(
 ```
 
 For these forms, `define_property!` creates the type, makes it public, adds the
-standard derives ixa needs, and then calls `impl_property!` for you. The
+standard derives Ixa needs, and then calls `impl_property!` for you. The
 standard derives are `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`, and
 `serde::Serialize`. The `serde::Serialize` trait is not strictly required, but
 it is derived for convenience and compatibility with the reporting system.
@@ -216,7 +280,7 @@ needs syntax that `define_property!` does not support. The common reasons are:
   entity types.
 
 When you use `impl_property!`, you are responsible for making sure the type
-implements the traits ixa requires: `Copy`, `Clone`, `Debug`, `PartialEq`,
+implements the traits Ixa requires: `Copy`, `Clone`, `Debug`, `PartialEq`,
 `Eq`, and `Hash`.
 
 ### Example: You require different derives
@@ -338,8 +402,8 @@ define_derived_property!(
 );
 ```
 
-The dependency list tells ixa which stored properties affect the derived value.
-When one of those dependencies changes, ixa can update indexes and property
+The dependency list tells Ixa which stored properties affect the derived value.
+When one of those dependencies changes, Ixa can update indexes and property
 change events for the derived property.
 
 Derived properties can depend on more than one property:
@@ -390,7 +454,11 @@ floating-point values.
 
 There are three reasonable ways to handle this.
 
-### Let ixa generate equality and hashing
+1. [Let Ixa generate equality and hashing for you](#let-ixa-generate-equality-and-hashing).
+2. [Implement equality and hashing yourself](#implement-equality-and-hashing-yourself).
+3. [Use an alternative floating-point type](#use-an-alternative-floating-point-type).
+
+### Let Ixa generate equality and hashing
 
 Pass `impl_eq_hash = both` as the first optional argument to
 `define_property!` or `define_derived_property!`:
@@ -405,12 +473,12 @@ define_property!(
 ```
 
 This is the shortest option when you want to keep the property as an `f64` and
-you are comfortable with ixa's generated equality and hashing behavior. It is a
+you are comfortable with Ixa's generated equality and hashing behavior. It is a
 good fit for simple measured quantities where model code still wants direct
 access to a floating-point value.
 
 You can also use only `impl_eq_hash = Eq` or only `impl_eq_hash = Hash` when
-one trait can still be derived but the other needs ixa's generated
+one trait can still be derived but the other needs Ixa's generated
 implementation. Floating-point properties usually need `both`.
 
 The generated implementations are reasonably efficient, but they are not optimal.
@@ -419,7 +487,7 @@ If performance is absolutely critical, use either of the other options.
 ### Implement equality and hashing yourself
 
 Pass `impl_eq_hash = neither` when you want `define_property!` to create the
-type but you want to provide `PartialEq`, `Eq`, and `Hash` yourself:
+type but you want to provide `PartialEq` / `Eq` and `Hash` yourself:
 
 ```rust
 use std::hash::{Hash, Hasher};
@@ -464,7 +532,7 @@ For sensible equality semantics, equality should also be reflexive, symmetric, a
 Use a wrapper type from a crate such as
 [`decorum`](https://crates.io/crates/decorum) or
 [`ordered-float`](https://crates.io/crates/ordered-float) when you want a type
-that gives floating-point values a total ordering and implements the traits ixa
+that gives floating-point values a total ordering and implements the traits Ixa
 needs:
 
 ```rust
@@ -493,10 +561,9 @@ away.
 
 ## Canonical Values
 
-Sometimes the value you want model code to use is not the value you want ixa to
-store in indexes. The `canonical_value`, `make_canonical`, and
-`make_uncanonical` options let you define a normalized representation for
-indexing and querying:
+Sometimes the value you want model code to use is not the value you want Ixa to store in indexes. The `canonical_value`,
+`make_canonical`, and `make_uncanonical` options let you define a standard representation for internal indexing and
+querying that is different from the external value you want to expose to model code:
 
 ```rust
 define_entity!(WeatherStation);
@@ -580,11 +647,13 @@ the trait `std::cmp::Eq` is not implemented for `f64`
 ```
 
 This happens because `define_property!` normally derives `Eq` and `Hash`, but
-Rust floating-point types do not implement those traits. Choose one of the
-floating-point strategies above:
+Rust floating-point types do not implement those traits. See
+[Floating Point Types and Implementing `Eq` and `Hash`](#floating-point-types-and-implementing-eq-and-hash)
+for the full discussion. In short, choose one of these strategies:
 
-- Add `impl_eq_hash = both` and let ixa generate equality and hashing.
-- Add `impl_eq_hash = neither` and manually implement `PartialEq`, `Eq`, and
-  `Hash`.
-- Wrap the value in a type such as `ordered_float::NotNan\<f64>` or a type from
-  `decorum`.
+- [Let Ixa generate equality and hashing](#let-ixa-generate-equality-and-hashing)
+  with `impl_eq_hash = both`.
+- [Implement equality and hashing yourself](#implement-equality-and-hashing-yourself)
+  with `impl_eq_hash = neither`, plus manual `PartialEq`, `Eq`, and `Hash` implementations.
+- [Use an alternative floating-point type](#use-an-alternative-floating-point-type),
+  such as `ordered_float::NotNan\<f64>` or a type from `decorum`.
