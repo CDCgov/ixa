@@ -390,6 +390,10 @@ floating-point values.
 
 There are three reasonable ways to handle this.
 
+1. Let ixa generate equality and hashing for you.
+2. Implement equality and hashing yourself.
+3. Use an alternative floating-point type.
+
 ### Let ixa generate equality and hashing
 
 Pass `impl_eq_hash = both` as the first optional argument to
@@ -419,7 +423,7 @@ If performance is absolutely critical, use either of the other options.
 ### Implement equality and hashing yourself
 
 Pass `impl_eq_hash = neither` when you want `define_property!` to create the
-type but you want to provide `PartialEq`, `Eq`, and `Hash` yourself:
+type but you want to provide `PartialEq` / `Eq` and `Hash` yourself:
 
 ```rust
 use std::hash::{Hash, Hasher};
@@ -493,10 +497,9 @@ away.
 
 ## Canonical Values
 
-Sometimes the value you want model code to use is not the value you want ixa to
-store in indexes. The `canonical_value`, `make_canonical`, and
-`make_uncanonical` options let you define a normalized representation for
-indexing and querying:
+Sometimes the value you want model code to use is not the value you want ixa to store in indexes. The `canonical_value`,
+`make_canonical`, and `make_uncanonical` options let you define a standard representation for internal indexing and
+querying that is different from the external value you want to expose to model code:
 
 ```rust
 define_entity!(WeatherStation);
