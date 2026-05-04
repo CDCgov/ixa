@@ -3,7 +3,7 @@
 //! Global properties are not mutable and represent variables that are
 //! required in a global scope during the simulation, such as
 //! simulation parameters.
-//! A global property can be of any type, and is is just a value
+//! A global property can be of any type and is just a value
 //! stored in the context. Global properties are defined by the
 //! [`crate::define_global_property!()`] macro and can then be
 //! set in one of two ways:
@@ -15,21 +15,21 @@
 //! will result in an error.
 //!
 //! Global properties can be read with [`Context::get_global_property_value()`]
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::error::Error;
 use std::fmt::Debug;
 use std::fs;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use serde::de::DeserializeOwned;
 
 use crate::context::Context;
 use crate::error::IxaError;
-use crate::{define_data_plugin, trace, ContextBase, HashMap, HashMapExt};
+use crate::{trace, ContextBase, HashMap, HashMapExt};
 
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
@@ -51,6 +51,38 @@ pub struct PropertyAccessors {
 #[doc(hidden)]
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertyAccessors>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
+
+/// Global property ID counter, keeps track of the ID that will be assigned to
+/// the next global property that requests an ID.
+static NEXT_GLOBAL_PROPERTY_ID: Mutex<usize> = Mutex::new(0);
+
+/// A convenience getter for `NEXT_GLOBAL_PROPERTY_ID`.
+pub fn get_global_property_count() -> usize {
+    *NEXT_GLOBAL_PROPERTY_ID.lock().unwrap()
+}
+
+/// Encapsulates the synchronization logic for initializing a global property's ID.
+///
+/// Acquires a global lock on the next available global property ID, but only
+/// increments it if we successfully initialize the provided ID. The ID of a
+/// global property is assigned at runtime but only once per type.
+pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
+    let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
+    let candidate = *guard;
+
+    match global_property_id.compare_exchange(
+        usize::MAX,
+        candidate,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Ok(_) => {
+            *guard += 1;
+            candidate
+        }
+        Err(existing) => existing,
+    }
+}
 
 #[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
@@ -112,6 +144,8 @@ pub trait GlobalProperty: Any {
     /// The actual type of the data stored in the global property
     type Value: Any;
 
+    fn id() -> usize;
+
     fn new() -> Self;
 
     fn name() -> &'static str {
@@ -119,51 +153,10 @@ pub trait GlobalProperty: Any {
         full.rsplit("::").next().unwrap()
     }
 
-    /// A function which validates the global property.
+    /// A function that validates the global property.
     ///
     /// Client code should box any produced error itself.
     fn validate(value: &Self::Value) -> Result<(), Box<dyn Error + 'static>>;
-}
-
-struct GlobalPropertiesDataContainer {
-    global_property_container: HashMap<TypeId, Box<dyn Any>>,
-}
-
-define_data_plugin!(
-    GlobalPropertiesPlugin,
-    GlobalPropertiesDataContainer,
-    GlobalPropertiesDataContainer {
-        global_property_container: HashMap::default(),
-    }
-);
-
-impl GlobalPropertiesDataContainer {
-    fn set_global_property_value<T: GlobalProperty + 'static>(
-        &mut self,
-        _property: &T,
-        value: T::Value,
-    ) -> Result<(), IxaError> {
-        match self.global_property_container.entry(TypeId::of::<T>()) {
-            Entry::Vacant(entry) => {
-                entry.insert(Box::new(value));
-                Ok(())
-            }
-            // Note: If we change global properties to be mutable, we'll need to
-            // update define_derived_person_property to either handle updates or only
-            // allow immutable properties.
-            Entry::Occupied(_) => Err(IxaError::EntryAlreadyExists),
-        }
-    }
-
-    #[must_use]
-    fn get_global_property_value<T: GlobalProperty + 'static>(&self) -> Option<&T::Value> {
-        let data_container = self.global_property_container.get(&TypeId::of::<T>());
-
-        match data_container {
-            Some(property) => Some(property.downcast_ref::<T::Value>().unwrap()),
-            None => None,
-        }
-    }
 }
 
 pub trait ContextGlobalPropertiesExt: ContextBase {
@@ -175,24 +168,14 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
         &mut self,
         property: T,
         value: T::Value,
-    ) -> Result<(), IxaError> {
-        T::validate(&value).map_err(|source| IxaError::IllegalGlobalPropertyValue {
-            name: T::name().to_string(),
-            source,
-        })?;
-        let data_container = self.get_data_mut(GlobalPropertiesPlugin);
-        data_container.set_global_property_value(&property, value)
-    }
+    ) -> Result<(), IxaError>;
 
     /// Return value of global property T
     #[allow(unused_variables)]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         _property: T,
-    ) -> Option<&T::Value> {
-        self.get_data(GlobalPropertiesPlugin)
-            .get_global_property_value::<T>()
-    }
+    ) -> Option<&T::Value>;
 
     fn list_registered_global_properties(&self) -> Vec<String> {
         let properties = GLOBAL_PROPERTIES.lock().unwrap();
@@ -249,6 +232,54 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
 impl ContextGlobalPropertiesExt for Context {
+    fn set_global_property_value<T: GlobalProperty + 'static>(
+        &mut self,
+        _property: T,
+        value: T::Value,
+    ) -> Result<(), IxaError> {
+        T::validate(&value).map_err(|source| IxaError::IllegalGlobalPropertyValue {
+            name: T::name().to_string(),
+            source,
+        })?;
+        let index = T::id();
+        let cell = self.global_properties.get_mut(index).unwrap_or_else(|| {
+            panic!(
+                "No global property found with index = {index:?}. You must use the \
+                 `define_global_property!` macro to create a global property."
+            )
+        });
+        if cell.get().is_some() {
+            // Note: If we change global properties to be mutable, we'll need to
+            // update define_derived_person_property to either handle updates or only
+            // allow immutable properties.
+            return Err(IxaError::EntryAlreadyExists);
+        }
+        let _ = cell.set(Box::new(value));
+        Ok(())
+    }
+
+    fn get_global_property_value<T: GlobalProperty + 'static>(
+        &self,
+        _property: T,
+    ) -> Option<&T::Value> {
+        let index = T::id();
+        self.global_properties
+            .get(index)
+            .unwrap_or_else(|| {
+                panic!(
+                    "No global property found with index = {index:?}. You must use the \
+                     `define_global_property!` macro to create a global property."
+                )
+            })
+            .get()
+            .map(|property| {
+                property.downcast_ref::<T::Value>().expect(
+                    "TypeID does not match global property type. You must use the \
+                     `define_global_property!` macro to create a global property.",
+                )
+            })
+    }
+
     fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
         let accessor = get_global_property_accessor(name);
         match accessor {

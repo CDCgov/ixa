@@ -17,6 +17,7 @@ use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
 };
+use crate::global_properties::get_global_property_count;
 use crate::plan::{PlanId, Queue};
 #[cfg(feature = "progress_bar")]
 use crate::progress::update_timeline_progress;
@@ -86,6 +87,7 @@ pub struct Context {
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     pub(crate) entity_store: EntityStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
+    pub(crate) global_properties: Vec<OnceCell<Box<dyn Any>>>,
     current_time: Option<f64>,
     start_time: Option<f64>,
     shutdown_requested: bool,
@@ -101,6 +103,9 @@ impl Context {
         let data_plugins = std::iter::repeat_with(OnceCell::new)
             .take(get_data_plugin_count())
             .collect();
+        let global_properties = std::iter::repeat_with(OnceCell::new)
+            .take(get_global_property_count())
+            .collect();
 
         Context {
             plan_queue: Queue::new(),
@@ -108,6 +113,7 @@ impl Context {
             event_handlers: HashMap::new(),
             entity_store: EntityStore::new(),
             data_plugins,
+            global_properties,
             current_time: None,
             start_time: None,
             shutdown_requested: false,
