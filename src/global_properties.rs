@@ -34,13 +34,6 @@ use crate::{trace, ContextBase, HashMap, HashMapExt};
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
-type PropertyGetterFn = dyn Fn(&Context) -> Result<Option<String>, IxaError> + Send + Sync;
-
-pub struct PropertyAccessors {
-    setter: Box<PropertySetterFn>,
-    getter: Box<PropertyGetterFn>,
-}
-
 #[allow(clippy::type_complexity)]
 // This is a global list of all the global properties that
 // are compiled in. Fundamentally it's a HashMap of property
@@ -49,7 +42,7 @@ pub struct PropertyAccessors {
 // shared and initialized at startup time while still being
 // safe.
 #[doc(hidden)]
-pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertyAccessors>>>>> =
+pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
 /// Global property ID counter, keeps track of the ID that will be assigned to
@@ -87,7 +80,7 @@ pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize 
 #[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
-    for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de> + serde::Serialize,
+    for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     trace!("Adding global property {name}");
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
@@ -95,38 +88,27 @@ where
         .borrow_mut()
         .insert(
             name.to_string(),
-            Arc::new(PropertyAccessors {
-                setter: Box::new(
-                    |context: &mut Context, name, value| -> Result<(), IxaError> {
-                        let val: T::Value = serde_json::from_value(value)?;
-                        T::validate(&val).map_err(|source| {
-                            IxaError::IllegalGlobalPropertyValue {
-                                name: T::name().to_string(),
-                                source,
-                            }
-                        })?;
-                        if context.get_global_property_value(T::new()).is_some() {
-                            return Err(IxaError::DuplicateProperty {
-                                name: name.to_string(),
-                            });
-                        }
-                        context.set_global_property_value(T::new(), val)?;
-                        Ok(())
-                    },
-                ),
-                getter: Box::new(|context: &Context| -> Result<Option<String>, IxaError> {
-                    let value = context.get_global_property_value(T::new());
-                    match value {
-                        Some(val) => Ok(Some(serde_json::to_string(val)?)),
-                        None => Ok(None),
+            Arc::new(
+                |context: &mut Context, name, value| -> Result<(), IxaError> {
+                    let val: T::Value = serde_json::from_value(value)?;
+                    T::validate(&val).map_err(|source| IxaError::IllegalGlobalPropertyValue {
+                        name: T::name().to_string(),
+                        source,
+                    })?;
+                    if context.get_global_property_value(T::new()).is_some() {
+                        return Err(IxaError::DuplicateProperty {
+                            name: name.to_string(),
+                        });
                     }
-                }),
-            }),
+                    context.set_global_property_value(T::new(), val)?;
+                    Ok(())
+                },
+            ),
         )
         .inspect(|_| panic!("Duplicate global property {}", name));
 }
 
-fn get_global_property_accessor(name: &str) -> Option<Arc<PropertyAccessors>> {
+fn get_global_property_setter(name: &str) -> Option<Arc<PropertySetterFn>> {
     let properties = GLOBAL_PROPERTIES.lock().unwrap();
     let tmp = properties.borrow();
     tmp.get(name).map(Arc::clone)
@@ -176,19 +158,6 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
         &self,
         _property: T,
     ) -> Option<&T::Value>;
-
-    fn list_registered_global_properties(&self) -> Vec<String> {
-        let properties = GLOBAL_PROPERTIES.lock().unwrap();
-        let tmp = properties.borrow();
-        tmp.keys().cloned().collect()
-    }
-
-    /// Return the serialized value of a global property by fully qualified name
-    ///
-    /// # Errors
-    ///
-    /// Will return an [`IxaError`] if the property does not exist
-    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError>;
 
     /// Given a file path for a valid json file, deserialize parameter values
     /// for a given struct T
@@ -280,16 +249,6 @@ impl ContextGlobalPropertiesExt for Context {
             })
     }
 
-    fn get_serialized_value_by_string(&self, name: &str) -> Result<Option<String>, IxaError> {
-        let accessor = get_global_property_accessor(name);
-        match accessor {
-            Some(accessor) => (accessor.getter)(self),
-            None => Err(IxaError::NoGlobalProperty {
-                name: name.to_string(),
-            }),
-        }
-    }
-
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError> {
         trace!("Loading global properties from {file_name:?}");
         let config_file = fs::File::open(file_name)?;
@@ -297,8 +256,8 @@ impl ContextGlobalPropertiesExt for Context {
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
 
         for (k, v) in val {
-            if let Some(accessor) = get_global_property_accessor(&k) {
-                (accessor.setter)(self, &k, v)?;
+            if let Some(setter) = get_global_property_setter(&k) {
+                setter(self, &k, v)?;
             } else {
                 return Err(IxaError::NoGlobalProperty { name: k });
             }
@@ -549,30 +508,5 @@ mod test {
             }
             _ => panic!("Unexpected error type"),
         }
-    }
-
-    #[test]
-    fn list_registered_global_properties() {
-        let context = Context::new();
-        let properties = context.list_registered_global_properties();
-        assert!(properties.contains(&"ixa.DiseaseParams".to_string()));
-    }
-
-    #[test]
-    fn get_serialized_value_by_string() {
-        let mut context = Context::new();
-        context
-            .set_global_property_value(
-                DiseaseParams,
-                ParamType {
-                    days: 10,
-                    diseases: 2,
-                },
-            )
-            .unwrap();
-        let serialized = context
-            .get_serialized_value_by_string("ixa.DiseaseParams")
-            .unwrap();
-        assert_eq!(serialized, Some("{\"days\":10,\"diseases\":2}".to_string()));
     }
 }
