@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2.3](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.2...ixa-v2.0.0-beta2.3) - 2026-05-04
+
+### Added
+
+- Introduce `EntityMap`, `EntityVec` ([#863](https://github.com/CDCgov/ixa/pull/863))
+- `SourceSet::PopulationRange` subsumes `Empty`, `Entity`, and `WholePopulation` variants ([#854](https://github.com/CDCgov/ixa/pull/854))
+- implement `Eq` and `Hash` for `Property` ([#848](https://github.com/CDCgov/ixa/pull/848))
+
+### Fixed
+
+- reject type aliases in define_multi_property! ([#852](https://github.com/CDCgov/ixa/pull/852))
+
+### Other
+
+- Replace `ValueVec` with `Vec` in `PropertyValueStoreCore` implementation ([#861](https://github.com/CDCgov/ixa/pull/861))
+- migrate all queries and `add_entity` calls to use `with!` syntax. ([#856](https://github.com/CDCgov/ixa/pull/856))
+- *(deps)* bump follow-redirects in /integration-tests/ixa-wasm-tests ([#845](https://github.com/CDCgov/ixa/pull/845))
+- bump actions/upload-pages-artifact from 4 to 5 ([#850](https://github.com/CDCgov/ixa/pull/850))
+
 ## [2.0.0-beta2.2](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.1...ixa-v2.0.0-beta2.2) - 2026-04-20
 
 ### Added
