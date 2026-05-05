@@ -8,9 +8,8 @@ use crate::{
 /// for plugins implementing [`Context`] extensions.
 ///
 /// Usage:
-// This example triggers the error "#[ctor]/#[dtor] is not supported
-// on the current target," which appears to be spurious, so we
-// ignore it.
+// This example uses ctor-based registration, which is not supported
+// on every rustdoc target, so we ignore it.
 /// ```ignore
 /// use ixa::prelude_for_plugins::*;
 /// define_data_plugin!(MyData, bool, false);

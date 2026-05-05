@@ -797,7 +797,7 @@ macro_rules! impl_property {
 
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
-                #[ctor]
+                #[ctor(unsafe)]
                 fn [<_register_property_ $entity:snake _ $property:snake>]() {
                     $ctor_registration
                 }
