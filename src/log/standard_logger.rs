@@ -4,8 +4,6 @@ use log4rs::config::{Appender, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::Config;
 
-#[cfg(feature = "progress_bar")]
-use super::progress_bar_encoder::PBWrapperEncoder;
 use crate::log::{LogConfiguration, ModuleLogConfiguration};
 
 // Use an ISO 8601 timestamp format and color coded level tag
@@ -21,9 +19,6 @@ impl LogConfiguration {
     /// Sets the global logger to conform to this [`LogConfiguration`].
     pub(in crate::log) fn set_config(&mut self) {
         let encoder = Box::new(PatternEncoder::new(DEFAULT_LOG_PATTERN));
-        // Appends an ANSI escape code to clear to end of line.
-        #[cfg(feature = "progress_bar")]
-        let encoder = Box::new(PBWrapperEncoder::new(encoder));
         let stdout: ConsoleAppender = ConsoleAppender::builder().encoder(encoder).build();
         let mut config: ConfigBuilder =
             Config::builder().appender(Appender::builder().build("stdout", Box::new(stdout)));

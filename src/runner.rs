@@ -9,8 +9,6 @@ use crate::context::Context;
 use crate::error::IxaError;
 use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::log::level_to_string_list;
-#[cfg(feature = "progress_bar")]
-use crate::progress::init_timeline_progress_bar;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
 use crate::{set_log_level, set_module_filters, warn, LevelFilter};
@@ -95,10 +93,6 @@ pub struct BaseArgs {
     #[arg(long)]
     pub trace: bool,
 
-    /// Enable the timeline progress bar with a maximum time.
-    #[arg(short, long)]
-    pub timeline_progress_max: Option<f64>,
-
     /// Suppresses the printout of summary statistics at the end of the simulation.
     #[arg(long)]
     pub no_stats: bool,
@@ -119,7 +113,6 @@ impl BaseArgs {
             warn: false,
             debug: false,
             trace: false,
-            timeline_progress_max: None,
             no_stats: false,
         }
     }
@@ -306,20 +299,6 @@ where
     }
 
     context.init_random(args.random_seed);
-
-    if let Some(max_time) = args.timeline_progress_max {
-        // We allow a `max_time` of `0.0` to mean "disable timeline progress bar".
-        if cfg!(not(feature = "progress_bar")) && max_time > 0.0 {
-            warn!("Ixa was not compiled with the progress_bar feature, but a progress_bar option was provided");
-        } else if max_time < 0.0 {
-            warn!("timeline progress maximum must be nonnegative");
-        }
-        #[cfg(feature = "progress_bar")]
-        if max_time > 0.0 {
-            println!("ProgressBar max set to {}", max_time);
-            init_timeline_progress_bar(max_time);
-        }
-    }
 
     if args.no_stats {
         context.print_execution_statistics = false;

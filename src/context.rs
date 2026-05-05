@@ -19,8 +19,6 @@ use crate::execution_stats::{
 };
 use crate::global_properties::get_global_property_count;
 use crate::plan::{PlanId, Queue};
-#[cfg(feature = "progress_bar")]
-use crate::progress::update_timeline_progress;
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
 /// The common callback used by multiple [`Context`] methods for future events
@@ -422,11 +420,6 @@ impl Context {
 
         // Start plan loop
         loop {
-            #[cfg(feature = "progress_bar")]
-            if crate::progress::MAX_TIME.get().is_some() {
-                update_timeline_progress(self.get_current_time());
-            }
-
             if self.shutdown_requested {
                 self.shutdown_requested = false;
                 break;
