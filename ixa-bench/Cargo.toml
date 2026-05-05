@@ -108,3 +108,8 @@ harness = false
 name = "property_semantics"
 path = "criterion/property_semantics.rs"
 harness = false
+
+[[bench]]
+name = "sample_single_excluding"
+path = "criterion/sample_single_excluding.rs"
+harness = false
