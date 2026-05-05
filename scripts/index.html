@@ -215,6 +215,11 @@
           Show band
         </label>
 
+        <label class="checkbox" title="Start the time-series y-axis at 0.0">
+          <input id="yAxisZero" type="checkbox" checked />
+          y-axis starts at 0.0
+        </label>
+
         <button id="reload" type="button">Reload</button>
       </div>
 
@@ -449,6 +454,7 @@
         benchmarkName,
         metric,
         showBand,
+        yAxisZero,
       }) {
         const allPoints = [];
         const lowerBand = [];
@@ -527,6 +533,7 @@
             },
             scales: {
               y: {
+                min: yAxisZero ? 0 : undefined,
                 title: { display: true, text: `Time (${unit.unit})` },
                 ticks: { callback: (v) => `${v} ${unit.unit}` },
               },
@@ -542,7 +549,7 @@
         });
       }
 
-      function renderTimeSeries({ suiteRuns, suite, benchmarkName, metric, showBand }) {
+      function renderTimeSeries({ suiteRuns, suite, benchmarkName, metric, showBand, yAxisZero }) {
         if (typeof Chart === "undefined") {
           throw new Error(
             "Chart.js failed to load (Chart is undefined). Check network access or CDN availability."
@@ -572,6 +579,7 @@
             benchmarkName,
             metric,
             showBand,
+            yAxisZero,
           });
         } else {
           const allWrap = $("tsAllWrap");
@@ -615,6 +623,7 @@
                 benchmarkName: name,
                 metric,
                 showBand,
+                yAxisZero,
               })
             );
           }
@@ -857,6 +866,7 @@
         const benchEl = $("benchmark");
         const metricEl = $("metric");
         const showBandEl = $("showBand");
+        const yAxisZeroEl = $("yAxisZero");
 
         const baseRunEl = $("baseRun");
         const cmpRunEl = $("cmpRun");
@@ -872,10 +882,11 @@
           const bench = benchEl.value;
           const metric = metricEl.value;
           const showBand = showBandEl.checked;
+          const yAxisZero = yAxisZeroEl.checked;
 
           benchEl.disabled = showAllEl.checked;
 
-          renderTimeSeries({ suiteRuns, suite, benchmarkName: bench, metric, showBand });
+          renderTimeSeries({ suiteRuns, suite, benchmarkName: bench, metric, showBand, yAxisZero });
           renderLatestDelta({
             suiteRuns,
             suite,
@@ -954,6 +965,7 @@
         benchEl.addEventListener("change", rerender);
         metricEl.addEventListener("change", rerender);
         showBandEl.addEventListener("change", rerender);
+        yAxisZeroEl.addEventListener("change", rerender);
 
         baseRunEl.addEventListener("change", rerender);
         cmpRunEl.addEventListener("change", rerender);
