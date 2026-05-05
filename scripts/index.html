@@ -220,6 +220,11 @@
           y-axis starts at 0.0
         </label>
 
+        <label class="checkbox" title="Clip extreme high outliers using a conservative MAD rule">
+          <input id="madClip" type="checkbox" checked />
+          MAD clipping
+        </label>
+
         <button id="reload" type="button">Reload</button>
       </div>
 
@@ -283,6 +288,11 @@
       /** @type {Chart | null} */
       let deltaChart = null;
 
+      const MAD_CLIP_MODIFIED_Z_THRESHOLD = 5.0;
+      const MAD_CLIP_MIN_POINTS = 8;
+      const MAD_CLIP_PADDING = 1.05;
+      const MAD_CLIP_MIN_SEPARATION_RATIO = 2.0;
+
       const $ = (id) => document.getElementById(id);
 
       function setError(message) {
@@ -322,6 +332,44 @@
       function safeSha(sha) {
         if (!sha) return "";
         return String(sha).slice(0, 7);
+      }
+
+      function median(sortedNumbers) {
+        const n = sortedNumbers.length;
+        if (!n) return null;
+        const mid = Math.floor(n / 2);
+        return n % 2
+          ? sortedNumbers[mid]
+          : (sortedNumbers[mid - 1] + sortedNumbers[mid]) / 2;
+      }
+
+      function madClipMaxSeconds(valuesSeconds) {
+        const finiteValues = valuesSeconds.filter((v) => Number.isFinite(v));
+        const positive = finiteValues
+          .filter((v) => Number.isFinite(v) && v > 0)
+          .map((v) => Math.log(v))
+          .sort((a, b) => a - b);
+        if (positive.length < MAD_CLIP_MIN_POINTS) return null;
+
+        const med = median(positive);
+        if (med == null) return null;
+
+        const deviations = positive.map((v) => Math.abs(v - med)).sort((a, b) => a - b);
+        const mad = median(deviations);
+        if (!mad || mad <= 0) return null;
+
+        const nonOutliers = finiteValues.filter((v) => {
+          if (v <= 0) return true;
+          const modifiedZ = (0.6745 * (Math.log(v) - med)) / mad;
+          return modifiedZ <= MAD_CLIP_MODIFIED_Z_THRESHOLD;
+        });
+        if (!nonOutliers.length || nonOutliers.length === finiteValues.length) return null;
+
+        const maxNonOutlier = Math.max(...nonOutliers);
+        if (!Number.isFinite(maxNonOutlier) || maxNonOutlier <= 0) return null;
+        const maxValue = Math.max(...finiteValues);
+        if (maxValue / maxNonOutlier < MAD_CLIP_MIN_SEPARATION_RATIO) return null;
+        return maxNonOutlier * MAD_CLIP_PADDING;
       }
 
       function destroyCharts() {
@@ -455,6 +503,7 @@
         metric,
         showBand,
         yAxisZero,
+        madClip,
       }) {
         const allPoints = [];
         const lowerBand = [];
@@ -509,6 +558,11 @@
           spanGaps: true,
         });
 
+        const clipMaxSeconds = madClip
+          ? madClipMaxSeconds([...allPoints, ...lowerBand, ...upperBand])
+          : null;
+        const clipMax = clipMaxSeconds == null ? undefined : clipMaxSeconds * unit.scale;
+
         return new Chart(canvas, {
           type: "line",
           data: { labels, datasets },
@@ -534,6 +588,7 @@
             scales: {
               y: {
                 min: yAxisZero ? 0 : undefined,
+                max: clipMax,
                 title: { display: true, text: `Time (${unit.unit})` },
                 ticks: { callback: (v) => `${v} ${unit.unit}` },
               },
@@ -549,7 +604,15 @@
         });
       }
 
-      function renderTimeSeries({ suiteRuns, suite, benchmarkName, metric, showBand, yAxisZero }) {
+      function renderTimeSeries({
+        suiteRuns,
+        suite,
+        benchmarkName,
+        metric,
+        showBand,
+        yAxisZero,
+        madClip,
+      }) {
         if (typeof Chart === "undefined") {
           throw new Error(
             "Chart.js failed to load (Chart is undefined). Check network access or CDN availability."
@@ -580,6 +643,7 @@
             metric,
             showBand,
             yAxisZero,
+            madClip,
           });
         } else {
           const allWrap = $("tsAllWrap");
@@ -624,6 +688,7 @@
                 metric,
                 showBand,
                 yAxisZero,
+                madClip,
               })
             );
           }
@@ -867,6 +932,7 @@
         const metricEl = $("metric");
         const showBandEl = $("showBand");
         const yAxisZeroEl = $("yAxisZero");
+        const madClipEl = $("madClip");
 
         const baseRunEl = $("baseRun");
         const cmpRunEl = $("cmpRun");
@@ -883,10 +949,19 @@
           const metric = metricEl.value;
           const showBand = showBandEl.checked;
           const yAxisZero = yAxisZeroEl.checked;
+          const madClip = madClipEl.checked;
 
           benchEl.disabled = showAllEl.checked;
 
-          renderTimeSeries({ suiteRuns, suite, benchmarkName: bench, metric, showBand, yAxisZero });
+          renderTimeSeries({
+            suiteRuns,
+            suite,
+            benchmarkName: bench,
+            metric,
+            showBand,
+            yAxisZero,
+            madClip,
+          });
           renderLatestDelta({
             suiteRuns,
             suite,
@@ -966,6 +1041,7 @@
         metricEl.addEventListener("change", rerender);
         showBandEl.addEventListener("change", rerender);
         yAxisZeroEl.addEventListener("change", rerender);
+        madClipEl.addEventListener("change", rerender);
 
         baseRunEl.addEventListener("change", rerender);
         cmpRunEl.addEventListener("change", rerender);
