@@ -135,7 +135,7 @@ pub trait GlobalProperty: Any {
         full.rsplit("::").next().unwrap()
     }
 
-    /// A function that validates the global property.
+    /// A function which validates the global property.
     ///
     /// Client code should box any produced error itself.
     fn validate(value: &Self::Value) -> Result<(), Box<dyn Error + 'static>>;
@@ -153,7 +153,6 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ) -> Result<(), IxaError>;
 
     /// Return value of global property T
-    #[allow(unused_variables)]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         _property: T,
