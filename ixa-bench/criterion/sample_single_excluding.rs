@@ -16,7 +16,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ixa::rand::rngs::StdRng;
 use ixa::rand::SeedableRng;
 use ixa::random::{
-    sample_excluding_iteration, sample_excluding_rejection, sample_single_excluding,
+    sample_single_excluding, sample_single_excluding_iteration, sample_single_excluding_rejection,
 };
 
 const SEED: u64 = 42;
@@ -65,9 +65,12 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
         group.bench_with_input(BenchmarkId::new("rejection", &id_param), &(), |b, _| {
             let mut rng = StdRng::seed_from_u64(SEED);
             let ns = bench_ns_per_sample(b, || {
-                let v =
-                    sample_excluding_rejection(black_box(&mut rng), black_box(&slice), excluded)
-                        .unwrap();
+                let v = sample_single_excluding_rejection(
+                    black_box(&mut rng),
+                    black_box(&slice),
+                    excluded,
+                )
+                .unwrap();
                 black_box(v);
             });
             record(results, "rejection", n, ns);
@@ -76,9 +79,12 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
         group.bench_with_input(BenchmarkId::new("iteration", &id_param), &(), |b, _| {
             let mut rng = StdRng::seed_from_u64(SEED);
             let ns = bench_ns_per_sample(b, || {
-                let v =
-                    sample_excluding_iteration(black_box(&mut rng), black_box(&slice), excluded)
-                        .unwrap();
+                let v = sample_single_excluding_iteration(
+                    black_box(&mut rng),
+                    black_box(&slice),
+                    excluded,
+                )
+                .unwrap();
                 black_box(v);
             });
             record(results, "iteration", n, ns);
