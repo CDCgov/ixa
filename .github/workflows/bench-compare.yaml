@@ -238,13 +238,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          tmp_history="$(mktemp)"
           if gh api \
-            -H "Accept: application/vnd.github+json" \
+            -H "Accept: application/vnd.github.raw+json" \
             "/repos/${GITHUB_REPOSITORY}/contents/bench-history.json?ref=${BENCH_HISTORY_BRANCH}" \
-            --jq '.content' > bench-history.b64 2>/dev/null; then
-            base64 -d bench-history.b64 > bench-history.json
+            > "$tmp_history" 2>/dev/null; then
+            jq -e '.schema == 1 and (.runs | type == "array")' "$tmp_history" >/dev/null
+            mv "$tmp_history" bench-history.json
             echo "Downloaded bench-history.json from ${BENCH_HISTORY_BRANCH}"
           else
+            rm -f "$tmp_history"
             echo "No bench-history.json found on ${BENCH_HISTORY_BRANCH} (first run?)."
           fi
 
