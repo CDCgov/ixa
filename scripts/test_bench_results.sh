@@ -29,6 +29,16 @@ cat >"$workdir/criterion-compare.txt" <<'TXT'
 Benchmarking sample_people/sampling_multiple_l_reservoir
 Benchmarking sample_people/another_bench
   time:   [10.771 ms 10.811 ms 10.866 ms]
+
+Benchmarking sample_entity_whole_population/1000
+Benchmarking sample_entity_whole_population/1000: Analyzing
+sample_entity_whole_population/1000
+  time:   [10.000 ns 11.000 ns 12.000 ns]
+
+Benchmarking sample_entity_whole_population/sentinel
+Benchmarking sample_entity_whole_population/sentinel: Analyzing
+sample_entity_whole_population/sentinel
+  time:   [4.000 ns 5.000 ns 6.000 ns]
 TXT
 
 cat >"$workdir/bench-history.json" <<'JSON'
@@ -100,5 +110,17 @@ if [[ "$low_ms" != "10.771 ms" ]]; then
   echo "Expected criterion low time 10.771 ms, got: $low_ms" >&2
   exit 1
 fi
+
+jq -e '
+  def abs: if . < 0 then -. else . end;
+  def close_to($expected): ((. - $expected) | abs) < 0.000000001;
+  .criterion.results[]
+  | select(.name=="sample_entity_whole_population/1000")
+  | .relative_to_sentinel.sentinel=="sample_entity_whole_population/sentinel"
+    and (.relative_to_sentinel.ratio[0] | close_to(10 / 6))
+    and (.relative_to_sentinel.ratio[1] | close_to(11 / 5))
+    and (.relative_to_sentinel.ratio[2] | close_to(12 / 4))
+    and (.relative_to_sentinel.ratio_text==["1.667x","2.200x","3.000x"])
+' "$workdir/bench-current.json" >/dev/null
 
 echo "OK: bench_results.mjs test passed"
