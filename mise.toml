@@ -49,6 +49,10 @@ run = '''
   mdbook build docs/book -d ../../website/book
 '''
 
+[tasks.'docs:internals']
+description = "Build the internal documentation book"
+run = "mdbook build docs/internals"
+
 [tasks.test-all]
 description = "Run all tests"
 depends = ["test:unit", "test:wasm"]
@@ -185,6 +189,7 @@ run = '''
   cargo clean
   rm -rf pkg integration-tests/ixa-wasm-tests/{pkg,node_modules}
   rm -rf website/{doc,debug,book}
+  rm -rf docs/internals/book
   rm -f website/{.rustc_info.json,.rustdoc_fingerprint.json}
   rm -rf examples/**/output/*.csv
 '''
