@@ -30,7 +30,6 @@
 //! ## Features
 //!
 //! - **`logging`**: enables structured logging for native and wasm targets.
-//! - **`progress_bar`**: enables the timeline progress bar for long-running simulations.
 //! - **`profiling`**: enables collection and reporting of execution profiling statistics. Disabled by default.
 
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
@@ -71,9 +70,6 @@ pub use log::{
     set_module_filters, trace, warn, LevelFilter,
 };
 
-#[cfg(feature = "progress_bar")]
-pub mod progress;
-
 pub mod hashing;
 pub mod numeric;
 
@@ -110,11 +106,6 @@ pub mod execution_stats;
 pub mod profiling;
 
 pub mod data_structures;
-
-#[cfg(all(target_arch = "wasm32", feature = "progress_bar"))]
-compile_error!(
-    "Target `wasm32` and feature `progress_bar` are mutually exclusive — enable at most one."
-);
 
 // The following is a workaround for an ICE involving wasm-bindgen:
 // https://github.com/CDCgov/ixa/actions/runs/16283417455/job/45977349528?pr=464

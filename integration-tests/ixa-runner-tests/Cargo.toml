@@ -10,7 +10,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-ixa = { path = "../../", features = ["logging", "progress_bar", "profiling"] }
+ixa = { path = "../../", features = ["logging", "profiling"] }
 clap.workspace = true
 
 [dev-dependencies]

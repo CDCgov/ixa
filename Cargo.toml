@@ -50,7 +50,6 @@ web-sys = "^0.3.77"
 getrandom = "0.3.4"
 fern = "^0.7.1"
 wasm-bindgen = "^0.2.100"
-progress_bar = "^1.2.1"
 anyhow = "^1.0.28"
 sysinfo = "^0.37.0"
 humantime = "^2.2.0"
@@ -74,10 +73,9 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging", "progress_bar"]
+default = ["logging"]
 
 logging = ["log4rs", "fern", "wasm-bindgen", "web-sys"]
-progress_bar = ["dep:progress_bar", "anyhow"]
 
 profiling = ["dep:sysinfo", "dep:bytesize"]
 
@@ -118,10 +116,6 @@ indexmap = "2.13.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Logging
 log4rs = { workspace = true, optional = true }
-
-# Progress Bar
-progress_bar = { workspace = true, optional = true, features = ["logger"] }
-anyhow = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fern = { workspace = true, optional = true }

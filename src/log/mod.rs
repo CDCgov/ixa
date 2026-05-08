@@ -47,8 +47,6 @@ mod wasm_logger;
 
 #[cfg(not(feature = "logging"))]
 mod null_logger;
-#[cfg(feature = "progress_bar")]
-mod progress_bar_encoder;
 
 use std::collections::hash_map::Entry;
 use std::sync::{LazyLock, Mutex, MutexGuard};
