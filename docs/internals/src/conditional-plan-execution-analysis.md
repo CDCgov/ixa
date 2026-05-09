@@ -1,6 +1,6 @@
 # Conditional plan execution: three possible approaches
 
-Here is my analysis of three different strategies for dealing with "canceling" in-flight plans associated with people who die. To understand _why_ the pros and cons are what they are, it helps to first explain how plans are stored internally in Ixa today.
+Here is my analysis of three different strategies for dealing with "canceling" in-flight plans associated with people who die. To understand *why* the pros and cons are what they are, it helps to first explain how plans are stored internally in Ixa today.
 
 ## How plans work internally
 
@@ -66,8 +66,6 @@ Disadvantages:
 - Requires support in ixa core, not just implementation in client code.
 - We'd still probably want a convenience method in client code of the form `add_plan_for_person` that is implemented in terms of `RunCondition` anyway. But this is easy to do.
 
-
-
 ## 3. A lightweight wrapper in client code: `add_plan_for_person`
 
 The simplest approach is to keep Ixa unchanged and handle the issue in model code. A helper like `add_plan_for_person` can wrap the user's callback in another callback that first checks whether the person is alive, and only then runs the original handler.
@@ -85,7 +83,7 @@ fn add_plan_for_person(
         time,
         |context| {
             // Only execute callback if the person is still alive.
-            let Alive(is_alive) = context.get_property::<Alive>(person_id);
+            let Alive(is_alive) = context.get_property(person_id);
             if is_alive {
               	callback(context)
           	}
@@ -127,13 +125,11 @@ Compared with the built-in `RunCondition` approach, the lightweight wrapper cont
 
 One consequence of this is, in the generalized wrapper design, the condition cannot naturally receive the `PlanId` unless the underlying scheduling API changes, whereas if we had full in-built support in ixa for `RunCondition`, we could include both `context: &Context` and `plan_id: PlanId` parameters to the `RunCondition::should_run` method. Still, for the immediate use case, that difference may not matter much. If all we need is "do nothing if the person is no longer alive," then the wrapper behaves almost the same as a built-in condition check.
 
-
-
 ## Overall comparison
 
 The plan-index strategy is the weakest of the three. It adds the most bookkeeping, stores extra information for the whole simulation, and gets less benefit than one might expect because cancelled plans still remain in the queue.
 
-The built-in `RunCondition` strategy is the most powerful and the cleanest if we want conditional execution to be a first-class concept within Ixa. It fits naturally with the current lazy approach to plan cancellation, avoids the cost of a separate index, and provides a scaffolding for richer plan execution semantics, introspection on execution conditions, statistics collection, and so forth, that we might want to conceptually attach to conditional execution. 
+The built-in `RunCondition` strategy is the most powerful and the cleanest if we want conditional execution to be a first-class concept within Ixa. It fits naturally with the current lazy approach to plan cancellation, avoids the cost of a separate index, and provides a scaffolding for richer plan execution semantics, introspection on execution conditions, statistics collection, and so forth, that we might want to conceptually attach to conditional execution.
 
 The lightweight wrapper strategy is the simplest. It solves the immediate problem with very little machinery, keeps the core plan system unchanged, and can be generalized enough to cover many practical cases. Its main limitation is that it remains agnostic about architecting richer support for inspecting or analyzing skipped plans.
 
@@ -142,6 +138,3 @@ My personal choice: lightweight wrappers give us the biggest payout for the lowe
 ## Shared API over all three strategies
 
 Under all three strategies you would have an `add_plan_for_person` helper method as the primary access point to the functionality for client code. In the jargon of software engineering, the `add_plan_for_person` helper provides an "abstraction boundary" that prevents us from having to change every single call site in client code in the event, for example, that we do decide to have first-class support for `RunCondition` execution gates in ixa core's plan execution subsystem. We would only have to change the implementation of `add_plan_for_person`. This reduces [coupling](https://en.wikipedia.org/wiki/Coupling_(computer_programming)) between client code implementation and implementation of ixa core.
-
-
-

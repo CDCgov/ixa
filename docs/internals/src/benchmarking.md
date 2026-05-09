@@ -1,73 +1,121 @@
-On the `v2.0.0` branch:
+# Benchmarking
 
-### Setup
-Make sure you have mise installed
+Ixa's benchmark harness lives in the `ixa-bench` package. The current benchmark
+tasks are defined in the top-level `mise.toml`; prefer those tasks over direct
+`cargo` commands when running routine benchmarks.
 
-```
+## Setup
+
+Install and activate mise, then trust the repository configuration:
+
+```sh
 curl https://mise.run | sh
-```
-
-And give permissions to mise.toml:
-
-```
 cd ixa
 mise trust mise.toml
 ```
 
-**You can always run mise run to get autocomplete for all the commands**:
+You can list the available tasks with:
 
-<img width="571" height="469" alt="image" src="https://github.com/user-attachments/assets/6bfbde7b-4709-4113-a9be-b047bc1f16a7" />
-
-
-## Running the reference SIR
-
-The baseline version:
+```sh
+mise tasks
 ```
+
+## Running Benchmarks
+
+Run all benchmark suites:
+
+```sh
+mise run bench
+```
+
+This runs the Hyperfine suite first and then the Criterion suite.
+
+## Hyperfine Benchmarks
+
+Hyperfine benchmarks are registered in `ixa-bench/src` with the
+`hyperfine_group!` macro. The current reference SIR comparison is the
+`large_sir` group, which compares:
+
+- `baseline`: static reference implementation without Ixa
+- `entities`: equivalent Ixa implementation with queries enabled
+
+Run all Hyperfine groups:
+
+```sh
+mise run bench:hyperfine
+```
+
+Run only the `large_sir` group:
+
+```sh
+mise run bench:hyperfine large_sir
+```
+
+Run a quick one-pass smoke test of the Hyperfine harness:
+
+```sh
+mise run test:hyperfine
+```
+
+The `bench:hyperfine` task builds the benchmark binaries first through the
+`build:hyperfine` task, then runs `target/release/hyperfine`.
+
+If you need to run one Hyperfine benchmark directly, use the `run_bench` binary:
+
+```sh
 cargo run --bin run_bench -p ixa-bench --release -- --group large_sir --bench baseline
-```
-
-The the entities version:
-```
 cargo run --bin run_bench -p ixa-bench --release -- --group large_sir --bench entities
 ```
 
+## Criterion Benchmarks
 
-### Running the SIR reference benchmark
+Run all Criterion benchmarks:
 
-```
-mise run bench:hyperfine
-````
-
-### Running the sample_entity benchmark
-
-This is a scaling analysis on `sample_entity`
-
-```
-mise run bench:criterion sample_entity
+```sh
+mise run bench:criterion
 ```
 
-At the end, you'll get a summary:
+Run a specific Criterion benchmark target:
 
-```
-=== Scaling summary: sample_entity_whole_population ===
-  baseline: n=1000, t=6.82 ns/sample
-  ratios vs baseline:
-    n=   1000:       6.82 ns/sample  (x1.000)
-    n=  10000:       6.71 ns/sample  (x0.984)
-    n= 100000:       6.78 ns/sample  (x0.995)
-
-=== Scaling summary: sample_entity_single_property_indexed ===
-  baseline: n=1000, t=51.15 ns/sample
-  ratios vs baseline:
-    n=   1000:      51.15 ns/sample  (x1.000)
-    n=  10000:      51.23 ns/sample  (x1.002)
-    n= 100000:      51.45 ns/sample  (x1.006)
-
-=== Scaling summary: sample_entity_multi_property_indexed ===
-  baseline: n=1000, t=102.70 ns/sample
-  ratios vs baseline:
-    n=   1000:     102.70 ns/sample  (x1.000)
-    n=  10000:     102.07 ns/sample  (x0.994)
-    n= 100000:     102.31 ns/sample  (x0.996)
+```sh
+mise run bench:criterion sample_entity_scaling
 ```
 
+The current Criterion benchmark targets are defined in `ixa-bench/Cargo.toml`.
+Examples include `examples`, `large_dataset`, `algorithms`, `sampling`,
+`indexing`, `counts`, `sample_entity_scaling`, `set_property`, and
+`property_semantics`.
+
+The `sample_entity_scaling` target prints a scaling summary for
+`sample_entity` cases, including whole-population sampling, indexed
+single-property sampling, indexed multi-property sampling, and unindexed
+single-property sampling.
+
+## Criterion Baselines
+
+Create a Criterion baseline:
+
+```sh
+mise run bench:create --baseline main
+```
+
+Create a baseline for one benchmark target:
+
+```sh
+mise run bench:create sample_entity_scaling --baseline main
+```
+
+Compare against a saved baseline:
+
+```sh
+mise run bench:compare --baseline main
+```
+
+Compare one benchmark target against a saved baseline:
+
+```sh
+mise run bench:compare sample_entity_scaling --baseline main
+```
+
+The `bench:compare` task runs `cargo bench` with the selected baseline and then
+runs the `check_criterion_regressions` utility.
