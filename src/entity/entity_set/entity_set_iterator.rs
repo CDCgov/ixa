@@ -10,18 +10,11 @@
 //!
 //! The iterator is created through `EntitySet::into_iter()`.
 
-use log::warn;
-use rand::Rng;
-
 use crate::entity::entity_set::entity_set::{EntitySet, EntitySetInner};
 use crate::entity::entity_set::source_iterator::{PopulationRangeIterator, SourceIterator};
 use crate::entity::entity_set::source_set::SourceSet;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
-use crate::random::{
-    count_and_sample_single_l_reservoir, sample_multiple_from_known_length,
-    sample_multiple_l_reservoir, sample_single_l_reservoir,
-};
 
 enum EntitySetIteratorInner<'a, E: Entity> {
     Source(SourceIterator<'a, E>),
@@ -271,66 +264,6 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     pub(super) fn new(set: EntitySet<'c, E>) -> Self {
         EntitySetIterator {
             inner: EntitySetIteratorInner::from_entity_set(set),
-        }
-    }
-
-    /// Sample a single entity uniformly from the query results. Returns `None` if the
-    /// query's result set is empty.
-    pub fn sample_entity<R>(mut self, rng: &mut R) -> Option<EntityId<E>>
-    where
-        R: Rng,
-    {
-        // The known length case
-        let (lower, upper) = self.size_hint();
-        if Some(lower) == upper {
-            if lower == 0 {
-                warn!("Requested a sample entity from an empty population");
-                return None;
-            }
-            // This little trick with `u32` makes this function 30% faster.
-            let index = rng.random_range(0..lower as u32);
-            return self.nth(index as usize);
-        }
-
-        // Slow path
-        sample_single_l_reservoir(rng, self)
-    }
-
-    /// Count query results and sample one entity uniformly from them.
-    ///
-    /// Returns `(count, sample)` where `sample` is `None` iff `count == 0`.
-    pub fn count_and_sample_entity<R>(mut self, rng: &mut R) -> (usize, Option<EntityId<E>>)
-    where
-        R: Rng,
-    {
-        let (lower, upper) = self.size_hint();
-        if Some(lower) == upper {
-            if lower == 0 {
-                return (0, None);
-            }
-            let index = rng.random_range(0..lower as u32);
-            return (lower, self.nth(index as usize));
-        }
-
-        count_and_sample_single_l_reservoir(rng, self)
-    }
-
-    /// Sample up to `requested` entities uniformly from the query results. If the
-    /// query's result set has fewer than `requested` entities, the entire result
-    /// set is returned.
-    pub fn sample_entities<R>(self, rng: &mut R, requested: usize) -> Vec<EntityId<E>>
-    where
-        R: Rng,
-    {
-        match self.size_hint() {
-            (lower, Some(upper)) if lower == upper => {
-                if lower == 0 {
-                    warn!("Requested a sample of entities from an empty population");
-                    return vec![];
-                }
-                sample_multiple_from_known_length(rng, self, requested)
-            }
-            _ => sample_multiple_l_reservoir(rng, self, requested),
         }
     }
 }

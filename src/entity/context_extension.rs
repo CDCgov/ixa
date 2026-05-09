@@ -504,7 +504,7 @@ impl ContextEntitiesExt for Context {
             });
         }
 
-        let query_result = self.query_result_iterator(query);
+        let query_result = self.query(query);
         self.sample(rng_id, move |rng| query_result.sample_entity(rng))
     }
 
@@ -530,7 +530,7 @@ impl ContextEntitiesExt for Context {
             });
         }
 
-        let query_result = self.query_result_iterator(query);
+        let query_result = self.query(query);
         self.sample(rng_id, move |rng| query_result.count_and_sample_entity(rng))
     }
 
@@ -555,7 +555,7 @@ impl ContextEntitiesExt for Context {
             });
         }
 
-        let query_result = self.query_result_iterator(query);
+        let query_result = self.query(query);
         self.sample(rng_id, move |rng| query_result.sample_entities(rng, n))
     }
 

@@ -13,11 +13,15 @@
 use std::borrow::Borrow;
 use std::ops::Range;
 
+use log::warn;
 use rand::Rng;
 
 use super::{EntitySetIterator, SourceSet};
 use crate::entity::{Entity, EntityId};
-use crate::random::sample_single_excluding_l_reservoir;
+use crate::random::{
+    count_and_sample_single_l_reservoir, sample_multiple_from_known_length,
+    sample_multiple_l_reservoir, sample_single_excluding_l_reservoir, sample_single_l_reservoir,
+};
 
 /// Opaque public wrapper around the internal set-expression tree.
 pub struct EntitySet<'a, E: Entity>(EntitySetInner<'a, E>);
@@ -251,6 +255,57 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             return self.try_nth(target);
         }
         sample_single_excluding_l_reservoir(rng, self.clone(), excluded)
+    }
+
+    /// Sample a single entity uniformly from this set. Returns `None` if the
+    /// set is empty.
+    pub fn sample_entity<R>(&self, rng: &mut R) -> Option<EntityId<E>>
+    where
+        R: Rng,
+    {
+        if let Some(n) = self.try_len() {
+            if n == 0 {
+                warn!("Requested a sample entity from an empty population");
+                return None;
+            }
+            // The `u32` cast makes this function 30% faster than `usize`.
+            let index = rng.random_range(0..n as u32) as usize;
+            return self.try_nth(index);
+        }
+        sample_single_l_reservoir(rng, self.clone())
+    }
+
+    /// Count the entities in this set and sample one uniformly from them.
+    ///
+    /// Returns `(count, sample)` where `sample` is `None` iff `count == 0`.
+    pub fn count_and_sample_entity<R>(&self, rng: &mut R) -> (usize, Option<EntityId<E>>)
+    where
+        R: Rng,
+    {
+        if let Some(n) = self.try_len() {
+            if n == 0 {
+                return (0, None);
+            }
+            let index = rng.random_range(0..n as u32) as usize;
+            return (n, self.try_nth(index));
+        }
+        count_and_sample_single_l_reservoir(rng, self.clone())
+    }
+
+    /// Sample up to `requested` entities uniformly from this set. If the set
+    /// has fewer than `requested` entities, the entire set is returned.
+    pub fn sample_entities<R>(&self, rng: &mut R, requested: usize) -> Vec<EntityId<E>>
+    where
+        R: Rng,
+    {
+        match self.try_len() {
+            Some(0) => {
+                warn!("Requested a sample of entities from an empty population");
+                vec![]
+            }
+            Some(_) => sample_multiple_from_known_length(rng, self.clone(), requested),
+            None => sample_multiple_l_reservoir(rng, self.clone(), requested),
+        }
     }
 
     /// Returns `Some(length)` only when the set length is trivially known.
