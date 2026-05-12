@@ -1,6 +1,6 @@
 [tools]
-node = "latest"
-pnpm = "latest"
+node = "22.20.0"
+pnpm = "10.33.0"
 "cargo:prek" = "latest"
 "prettier" = "3.6.2"
 "npm:@commitlint/cli" = "19.7.1"
