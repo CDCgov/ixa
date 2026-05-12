@@ -1,6 +1,8 @@
 //! Algorithms for uniform random sampling from hash sets or iterators. These algorithms are written to be generic
 //! over the container type using zero-cost trait abstractions.
 
+use std::borrow::Borrow;
+
 use crate::rand::seq::index::sample as choose_range;
 use crate::rand::Rng;
 
@@ -194,6 +196,122 @@ where
             None => return reservoir,
         }
     }
+}
+
+/// Samples one element uniformly at random from `slice`, excluding any element
+/// equal to `excluded`. Returns `None` if the slice is empty or every element
+/// equals `excluded`.
+///
+/// `excluded` accepts either an owned `T` or a borrowed `&T` via the
+/// `Borrow<T>` bound. Dispatches to `sample_single_excluding_iteration` for slices of
+/// length `< 4` and `sample_single_excluding_rejection` otherwise. Tuned via
+/// `ixa-bench/criterion/sample_single_excluding.rs`.
+pub fn sample_single_excluding<'a, R, T, E>(
+    rng: &mut R,
+    slice: &'a [T],
+    excluded: E,
+) -> Option<&'a T>
+where
+    R: Rng,
+    T: PartialEq,
+    E: Borrow<T>,
+{
+    const SMALL_SLICE: usize = 4;
+    let excluded = excluded.borrow();
+    if slice.len() < SMALL_SLICE {
+        sample_single_excluding_iteration(rng, slice, excluded)
+    } else {
+        sample_single_excluding_rejection(rng, slice, excluded)
+    }
+}
+
+/// Linear-scan implementation of `sample_single_excluding`. Counts non-excluded
+/// entries, then picks the k-th. Wins for very small slices (`n <= 3`) where
+/// the per-trial overhead of rejection sampling exceeds the cost of a tiny
+/// filter. Exposed so benchmarks can compare strategies directly.
+pub fn sample_single_excluding_iteration<'a, R, T, E>(
+    rng: &mut R,
+    slice: &'a [T],
+    excluded: E,
+) -> Option<&'a T>
+where
+    R: Rng,
+    T: PartialEq,
+    E: Borrow<T>,
+{
+    let excluded = excluded.borrow();
+    let valid_count = slice.iter().filter(|&x| x != excluded).count();
+    if valid_count == 0 {
+        return None;
+    }
+    let k = rng.random_range(0..valid_count as u32) as usize;
+    slice.iter().filter(|&x| x != excluded).nth(k)
+}
+
+/// Rejection-sampling implementation of `sample_single_excluding`. Picks a
+/// uniform index, accepts if not equal to `excluded`. Wins at `n >= 4` and is
+/// essentially constant time when `excluded` appears 0 or 1 times. Falls
+/// through to `sample_single_excluding_iteration` after at most 16 consecutive
+/// matches (or `n`, whichever is smaller), which also returns `None` when
+/// every element matches. Exposed so benchmarks can compare strategies
+/// directly.
+pub fn sample_single_excluding_rejection<'a, R, T, E>(
+    rng: &mut R,
+    slice: &'a [T],
+    excluded: E,
+) -> Option<&'a T>
+where
+    R: Rng,
+    T: PartialEq,
+    E: Borrow<T>,
+{
+    // The `u32` cast on `random_range` arguments is faster than the `usize`
+    // form (see `sample_single_from_known_length`).
+    //
+    // Cap trials at `min(MAX_REJECTIONS, n)`: once we've drawn `n` indices
+    // and all matched, almost the entire slice equals `excluded` and the
+    // iteration path is cheaper than retrying.
+    const MAX_REJECTIONS: usize = 16;
+    if slice.is_empty() {
+        return None;
+    }
+    let excluded = excluded.borrow();
+    let trials = MAX_REJECTIONS.min(slice.len());
+    for _ in 0..trials {
+        let i = rng.random_range(0..slice.len() as u32) as usize;
+        let candidate = &slice[i];
+        if candidate != excluded {
+            return Some(candidate);
+        }
+    }
+    sample_single_excluding_iteration(rng, slice, excluded)
+}
+
+/// Sample one element uniformly from an iterator, excluding any element equal
+/// to `excluded`. Returns `None` if the iterator is empty or every element
+/// equals `excluded`.
+///
+/// This is the iterator counterpart to [`sample_single_excluding`]. It runs
+/// in O(n) time and is correct even when the iterator does not report an
+/// exact length. Prefer [`sample_single_excluding`] for slices, which can
+/// dispatch to a faster rejection-sampling strategy backed by random access.
+pub fn sample_single_excluding_l_reservoir<I, R, T, E>(
+    rng: &mut R,
+    iterable: I,
+    excluded: E,
+) -> Option<T>
+where
+    R: Rng,
+    T: PartialEq,
+    I: IntoIterator<Item = T>,
+    E: Borrow<T>,
+{
+    let excluded = excluded.borrow();
+    let (_, chosen) = count_and_sample_single_l_reservoir(
+        rng,
+        iterable.into_iter().filter(|item| item != excluded),
+    );
+    chosen
 }
 
 #[cfg(test)]
@@ -660,5 +778,244 @@ mod tests {
 
         // Same seed should produce identical samples
         assert_eq!(sample1, sample2);
+    }
+
+    #[test]
+    fn sample_single_excluding_empty_slice_returns_none() {
+        let data: [u32; 0] = [];
+        let mut rng = StdRng::seed_from_u64(42);
+        assert_eq!(sample_single_excluding(&mut rng, &data, 7), None);
+    }
+
+    #[test]
+    fn sample_single_excluding_only_excluded_returns_none() {
+        let data = [9, 9, 9, 9];
+        let mut rng = StdRng::seed_from_u64(42);
+        assert_eq!(sample_single_excluding(&mut rng, &data, 9), None);
+    }
+
+    #[test]
+    fn sample_single_excluding_never_returns_excluded_small() {
+        let data: Vec<u32> = (0..10).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..1000 {
+            let v = sample_single_excluding(&mut rng, &data, 3).unwrap();
+            assert_ne!(*v, 3);
+            assert!(*v < 10);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_never_returns_excluded_large() {
+        // Large slice: exercises the rejection-sampling path.
+        let data: Vec<u32> = (0..1000).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..1000 {
+            let v = sample_single_excluding(&mut rng, &data, 500).unwrap();
+            assert_ne!(*v, 500);
+            assert!(*v < 1000);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_excluded_not_in_slice() {
+        let data: Vec<u32> = (0..10).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..100 {
+            let v = sample_single_excluding(&mut rng, &data, 999).unwrap();
+            assert!(*v < 10);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_falls_back_when_excluded_dominates() {
+        // 99.8% of values equal `excluded`: rejection retries get exhausted
+        // and the scan fallback runs. Both rare non-excluded values must show
+        // up across 200 samples.
+        let mut data = vec![0u32; 1000];
+        data[42] = 1;
+        data[800] = 2;
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut seen: Vec<u32> = (0..200)
+            .map(|_| *sample_single_excluding(&mut rng, &data, 0).unwrap())
+            .collect();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen, vec![1, 2]);
+    }
+
+    #[test]
+    fn sample_single_excluding_uniformity_small() {
+        // Small slice → iteration path.
+        let data: Vec<u32> = (0..20).collect();
+        let excluded = 7u32;
+        let num_runs = 50_000;
+        let mut counts = [0usize; 20];
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..num_runs {
+            let v = sample_single_excluding(&mut rng, &data, excluded).unwrap();
+            counts[*v as usize] += 1;
+        }
+        assert_eq!(counts[excluded as usize], 0);
+
+        let expected = num_runs as f64 / 19.0;
+        let chi_square: f64 = counts
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != excluded as usize)
+            .map(|(_, &obs)| {
+                let diff = obs as f64 - expected;
+                diff * diff / expected
+            })
+            .sum();
+        // df = 18, χ²_{0.999} ≈ 42.31
+        assert!(chi_square < 42.31, "χ² = {chi_square}");
+    }
+
+    #[test]
+    fn sample_single_excluding_uniformity_large() {
+        // Large slice: rejection-sampling path.
+        let data: Vec<u32> = (0..200).collect();
+        let excluded = 99u32;
+        let num_runs = 200_000;
+        let mut counts = vec![0usize; 200];
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..num_runs {
+            let v = sample_single_excluding(&mut rng, &data, excluded).unwrap();
+            counts[*v as usize] += 1;
+        }
+        assert_eq!(counts[excluded as usize], 0);
+
+        let expected = num_runs as f64 / 199.0;
+        let chi_square: f64 = counts
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != excluded as usize)
+            .map(|(_, &obs)| {
+                let diff = obs as f64 - expected;
+                diff * diff / expected
+            })
+            .sum();
+        // df = 198, χ²_{0.999} ≈ 264.69
+        assert!(chi_square < 264.69, "χ² = {chi_square}");
+    }
+
+    #[test]
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    fn sample_single_excluding_accepts_owned_or_borrowed_excluded() {
+        // The `Borrow<T>` bound on `excluded` lets callers pass either an owned
+        // `T` or a `&T`; both must compile and produce the same answer.
+        let data: Vec<u32> = (0..10).collect();
+        let mut rng_owned = StdRng::seed_from_u64(42);
+        let mut rng_ref = StdRng::seed_from_u64(42);
+        let excluded = 3u32;
+        for _ in 0..50 {
+            let owned = sample_single_excluding(&mut rng_owned, &data, excluded);
+            let borrowed = sample_single_excluding(&mut rng_ref, &data, &excluded);
+            assert_eq!(owned, borrowed);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_reproducibility() {
+        let data: Vec<u32> = (0..1000).collect();
+        let seed = 12345u64;
+
+        let mut rng1 = StdRng::seed_from_u64(seed);
+        let mut rng2 = StdRng::seed_from_u64(seed);
+        for _ in 0..100 {
+            let a = sample_single_excluding(&mut rng1, &data, 500);
+            let b = sample_single_excluding(&mut rng2, &data, 500);
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_l_reservoir_empty_returns_none() {
+        let data: [u32; 0] = [];
+        let mut rng = StdRng::seed_from_u64(42);
+        assert_eq!(
+            sample_single_excluding_l_reservoir(&mut rng, data, 7u32),
+            None
+        );
+    }
+
+    #[test]
+    fn sample_single_excluding_l_reservoir_only_excluded_returns_none() {
+        let data = [9u32, 9, 9, 9];
+        let mut rng = StdRng::seed_from_u64(42);
+        assert_eq!(
+            sample_single_excluding_l_reservoir(&mut rng, data, 9u32),
+            None
+        );
+    }
+
+    #[test]
+    fn sample_single_excluding_l_reservoir_never_returns_excluded() {
+        let data: Vec<u32> = (0..50).collect();
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..1000 {
+            let v =
+                sample_single_excluding_l_reservoir(&mut rng, data.iter().copied(), 17u32).unwrap();
+            assert_ne!(v, 17);
+            assert!(v < 50);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_l_reservoir_uniformity() {
+        let excluded = 7u32;
+        let data: Vec<u32> = (0..20).collect();
+        let num_runs = 50_000;
+        let mut counts = [0usize; 20];
+        let mut rng = StdRng::seed_from_u64(42);
+        for _ in 0..num_runs {
+            let v = sample_single_excluding_l_reservoir(&mut rng, data.iter().copied(), excluded)
+                .unwrap();
+            counts[v as usize] += 1;
+        }
+        assert_eq!(counts[excluded as usize], 0);
+
+        let expected = num_runs as f64 / 19.0;
+        let chi_square: f64 = counts
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != excluded as usize)
+            .map(|(_, &obs)| {
+                let diff = obs as f64 - expected;
+                diff * diff / expected
+            })
+            .sum();
+        // df = 18, χ²_{0.999} ≈ 42.31
+        assert!(chi_square < 42.31, "χ² = {chi_square}");
+    }
+
+    #[test]
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    fn sample_single_excluding_l_reservoir_accepts_owned_or_borrowed_excluded() {
+        let data: Vec<u32> = (0..10).collect();
+        let excluded = 3u32;
+        let mut rng_owned = StdRng::seed_from_u64(42);
+        let mut rng_ref = StdRng::seed_from_u64(42);
+        for _ in 0..50 {
+            let owned =
+                sample_single_excluding_l_reservoir(&mut rng_owned, data.iter().copied(), excluded);
+            let borrowed =
+                sample_single_excluding_l_reservoir(&mut rng_ref, data.iter().copied(), &excluded);
+            assert_eq!(owned, borrowed);
+        }
+    }
+
+    #[test]
+    fn sample_single_excluding_l_reservoir_reproducibility() {
+        let data: Vec<u32> = (0..1000).collect();
+        let seed = 12345u64;
+        let mut rng1 = StdRng::seed_from_u64(seed);
+        let mut rng2 = StdRng::seed_from_u64(seed);
+        for _ in 0..100 {
+            let a = sample_single_excluding_l_reservoir(&mut rng1, data.iter().copied(), 500u32);
+            let b = sample_single_excluding_l_reservoir(&mut rng2, data.iter().copied(), 500u32);
+            assert_eq!(a, b);
+        }
     }
 }
