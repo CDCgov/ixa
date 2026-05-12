@@ -67,7 +67,7 @@ jobs:
 
           git checkout --force "${{ github.event.pull_request.head.sha }}"
           if cargo bench -p ixa-bench --bench "$target" -- --baseline-lenient base 2>&1 | tee "criterion-compare-${group}.txt"; then
-            cargo run -q -p ixa-bench --bin check_criterion_regressions -- --allow-empty --baseline base 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
+            cargo run -q -p ixa-bench --bin check_criterion_regressions -- --baseline base 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
           else
             compare_status=$?
             echo "Criterion benchmark run failed for '${target}'." | tee "criterion-regressions-${group}.txt"
