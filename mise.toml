@@ -111,7 +111,7 @@ run = "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-basel
 [tasks.'bench:compare']
 description = "Compare benchmarks against a Criterion baseline"
 run = [
-  "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline {{arg(name='baseline')}}",
+  "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline-lenient {{arg(name='baseline')}}",
   "cargo run -q -p ixa-bench --bin check_criterion_regressions",
 ]
 
