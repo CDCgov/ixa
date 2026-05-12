@@ -27,7 +27,8 @@ serde_json = "^1.0.135"
 ixa-derive = { version = "2.0.0-beta.2", path = "ixa-derive" }
 seq-macro = "^0.3.5"
 paste = "^1.0.15"
-ctor = "^0.5.0"
+# We avoid the `priority` feature of `ctor`. See https://github.com/mmastrac/linktime/issues/454.
+ctor = { version = "^1.0.1", default-features = false, features = ["std", "proc_macro"] }
 clap = { version = "^4.5.26", features = ["derive"] }
 clap-markdown = "0.1.5"
 log = "^0.4.22"
@@ -38,9 +39,9 @@ xxhash-rust = { version = "^0.8.15", features = ["const_xxh3", "xxh3"] }
 rustc-hash = "^2.1.1"
 tempfile = "^3.15.0"
 assert_cmd = "^2.0.16"
-criterion = "^0.7.0"
+criterion = "^0.8.2"
 assert_approx_eq = "^1.1.0"
-strum = { version = "^0.27.1", features = ["derive"] }
+strum = { version = "^0.28.0", features = ["derive"] }
 quote = "^1.0.38"
 syn = { version = "^2.0.95" }
 proc-macro2 = "1.0.93"
@@ -51,10 +52,9 @@ getrandom = "0.3.4"
 fern = "^0.7.1"
 wasm-bindgen = "^0.2.100"
 anyhow = "^1.0.28"
-sysinfo = "^0.37.0"
+sysinfo = "^0.38.4"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
-hashbrown = "^0.16.0"
 ouroboros = "^0.18.5"
 thiserror = "^2.0.11"
 smallbox = "^0.8.8"
@@ -99,7 +99,6 @@ delegate.workspace = true
 sysinfo = { workspace = true, optional = true }
 humantime.workspace = true
 bytesize = { workspace = true, optional = true }
-hashbrown.workspace = true
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true

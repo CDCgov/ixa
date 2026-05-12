@@ -31,7 +31,7 @@ macro_rules! __define_data_plugin {
 
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
-                #[ctor]
+                #[ctor(unsafe)]
                 fn [<_register_plugin_$data_plugin:snake>]() {
                     $crate::add_data_plugin_to_registry::<$data_plugin>()
                 }

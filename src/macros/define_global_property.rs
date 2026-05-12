@@ -50,7 +50,7 @@ macro_rules! define_global_property {
 
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
-                #[ctor]
+                #[ctor(unsafe)]
                 fn [<$global_property:snake _register>]() {
                     let module = module_path!();
                     let mut name = module.split("::").next().unwrap().to_string();

@@ -20,7 +20,7 @@ macro_rules! hyperfine_group {
                     Ok(())
                 }
 
-                #[ctor::ctor]
+                #[ctor::ctor(unsafe)]
                 fn [<_register_group_$group_name:snake>]() {
                     registry::register_group(stringify!($group_name), registry::BenchGroupEntry {
                         name: stringify!($group_name),
