@@ -11,7 +11,7 @@ use crate::global_properties::ContextGlobalPropertiesExt;
 use crate::log::level_to_string_list;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{set_log_level, set_module_filters, warn, LevelFilter};
+use crate::{set_log_level, set_module_filters, LevelFilter};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, IxaError> {
@@ -300,14 +300,7 @@ where
 
     context.init_random(args.random_seed);
 
-    if args.no_stats {
-        context.print_execution_statistics = false;
-    } else {
-        if cfg!(target_family = "wasm") {
-            warn!("the print-stats option is enabled; some statistics are not supported for the wasm target family");
-        }
-        context.print_execution_statistics = true;
-    }
+    context.print_execution_statistics = !args.no_stats;
 
     // Run the provided Fn
     setup_fn(&mut context, args, custom_args)?;
