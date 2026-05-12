@@ -91,10 +91,6 @@ where
             Arc::new(
                 |context: &mut Context, name, value| -> Result<(), IxaError> {
                     let val: T::Value = serde_json::from_value(value)?;
-                    T::validate(&val).map_err(|source| IxaError::IllegalGlobalPropertyValue {
-                        name: T::name().to_string(),
-                        source,
-                    })?;
                     if context.get_global_property_value(T::new()).is_some() {
                         return Err(IxaError::DuplicateProperty {
                             name: name.to_string(),
