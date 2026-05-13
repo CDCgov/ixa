@@ -220,6 +220,10 @@ mod test {
         let mut context = Model::new(
             ParametersBuilder::default()
                 .population(100_000)
+                .itinerary(Itinerary {
+                    household: 0.0,
+                    community: 1.0,
+                })
                 .build()
                 .unwrap(),
         );
