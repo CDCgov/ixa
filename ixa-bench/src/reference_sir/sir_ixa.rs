@@ -45,7 +45,7 @@ define_property!(
 );
 
 #[derive(Default)]
-struct Households{
+struct Households {
     members: EntityMap<Household, Vec<PersonId>>,
     by_person: EntityMap<Person, HouseholdId>,
 }
@@ -331,7 +331,7 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-                ModelOptions::default(),
+            ModelOptions::default(),
         );
         model.run();
 
@@ -354,7 +354,7 @@ mod test {
                 })
                 .build()
                 .unwrap(),
-                ModelOptions::default(),
+            ModelOptions::default(),
         );
         model.run();
 
