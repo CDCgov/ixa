@@ -5,6 +5,8 @@ use rand_distr::Exp;
 
 use super::{ModelStats, Parameters};
 
+const MIN_HOUSEHOLD_SIZE: usize = 5;
+
 #[derive(Clone, Copy)]
 pub enum InfectionStatus {
     Susceptible,
@@ -22,6 +24,8 @@ pub struct Model {
     recovered_people: IndexSet<PersonId>,
     population: usize,
     stats: ModelStats,
+    household_members: Vec<Vec<PersonId>>,
+    household_of: Vec<usize>,
 }
 
 impl Model {
@@ -37,6 +41,8 @@ impl Model {
             parameters,
             time: 0.0,
             stats,
+            household_members: Vec::new(),
+            household_of: Vec::new(),
         }
     }
 
@@ -93,14 +99,65 @@ impl Model {
         PersonId { id: index }
     }
 
+    fn random_infectious_person(&mut self) -> PersonId {
+        let index = self.rng.random_range(0..self.infectious_people.len());
+        *self.infectious_people.get_index(index).unwrap()
+    }
+
+    fn random_contact(&mut self, source: PersonId) -> PersonId {
+        let itinerary = self.parameters.itinerary;
+        let total = itinerary.household + itinerary.community;
+        let from_household = itinerary.household > 0.0
+            && total > 0.0
+            && self.rng.random_bool(itinerary.household / total);
+        if !from_household {
+            return self.sample_random_person();
+        }
+        let household_idx = self.household_of[source.id];
+        let members = &self.household_members[household_idx];
+        if members.len() <= 1 {
+            return self.sample_random_person();
+        }
+        let self_idx = members.iter().position(|&p| p == source).unwrap();
+        // Sample over members.len() - 1, then shift past self_idx so source
+        // is never selected as their own contact.
+        let mut idx = self.rng.random_range(0..members.len() - 1);
+        if idx >= self_idx {
+            idx += 1;
+        }
+        members[idx]
+    }
+
     pub fn get_stats(&self) -> &ModelStats {
         &self.stats
     }
 
     pub fn run(&mut self) {
-        // Set up population
-        for _ in 0..self.parameters.population {
-            self.add_person(InfectionStatus::Susceptible);
+        // Set up households with at least MIN_HOUSEHOLD_SIZE members each, using
+        // the same algorithm as the Ixa implementation for fair comparison.
+        let population = self.parameters.population;
+        let num_households = (population / MIN_HOUSEHOLD_SIZE).max(1);
+        self.household_members.resize_with(num_households, Vec::new);
+
+        let mut assignment: Vec<usize> = Vec::with_capacity(population);
+        'fill: for h in 0..num_households {
+            for _ in 0..MIN_HOUSEHOLD_SIZE {
+                if assignment.len() == population {
+                    break 'fill;
+                }
+                assignment.push(h);
+            }
+        }
+        while assignment.len() < population {
+            let h = self.rng.random_range(0..num_households);
+            assignment.push(h);
+        }
+
+        // Add persons in assignment order and record their household.
+        for &h_idx in &assignment {
+            let person = self.add_person(InfectionStatus::Susceptible);
+            self.household_of.push(h_idx);
+            self.household_members[h_idx].push(person);
         }
 
         // Seed infections
@@ -123,7 +180,8 @@ impl Model {
             let recovery_event_time = self.rng.sample(Exp::new(recovery_event_rate).unwrap());
 
             if infection_event_time < recovery_event_time {
-                let person_to_infect = self.sample_random_person();
+                let source = self.random_infectious_person();
+                let person_to_infect = self.random_contact(source);
                 if let InfectionStatus::Susceptible = self.get_infection_status(person_to_infect) {
                     self.time += infection_event_time;
                     self.infect_person(person_to_infect, Some(self.time));
@@ -154,7 +212,7 @@ pub struct PersonId {
 mod test {
     use approx::assert_relative_eq;
 
-    use super::super::ParametersBuilder;
+    use super::super::{Itinerary, ParametersBuilder};
     use super::*;
 
     #[test]
@@ -162,6 +220,10 @@ mod test {
         let mut context = Model::new(
             ParametersBuilder::default()
                 .population(100_000)
+                .itinerary(Itinerary {
+                    household: 0.0,
+                    community: 1.0,
+                })
                 .build()
                 .unwrap(),
         );
@@ -171,5 +233,28 @@ mod test {
         let incidence = context.get_stats().get_cum_incidence() as f64;
         let expected = context.parameters.population as f64 * 0.59;
         assert_relative_eq!(incidence, expected, max_relative = 0.02);
+    }
+
+    #[test]
+    fn test_attack_rate_with_households() {
+        let population = 10_000;
+        let mut model = Model::new(
+            ParametersBuilder::default()
+                .population(population)
+                .initial_infections(100)
+                .itinerary(Itinerary {
+                    household: 0.5,
+                    community: 0.5,
+                })
+                .build()
+                .unwrap(),
+        );
+        model.run();
+
+        // 50% household-channel contacts (households of 5) suppress the
+        // homogeneous mixing ~59% final size to ~42%.
+        let incidence = model.get_stats().get_cum_incidence() as f64;
+        let expected = population as f64 * 0.42;
+        assert_relative_eq!(incidence, expected, max_relative = 0.04);
     }
 }
