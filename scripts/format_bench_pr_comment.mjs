@@ -2,7 +2,8 @@
 /*
 Builds a single PR comment markdown from benchmark artifacts.
 
-It consolidates Criterion output into 3 sections (Regressions/Improvements/Unchanged)
+It consolidates Criterion output into sections for regressions, improvements,
+unchanged results, and benchmarks that could not be compared yet.
 that each include all groups.
 
 Inputs:
@@ -22,7 +23,9 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-const SECTION_TITLES = ['Regressions', 'Improvements', 'Unchanged'];
+const CHANGE_SECTION_TITLES = ['Regressions', 'Improvements', 'Unchanged'];
+const NOT_COMPARED_SECTION_TITLE = 'Not Compared';
+const ALL_SECTION_TITLES = [...CHANGE_SECTION_TITLES, NOT_COMPARED_SECTION_TITLE];
 const SAMPLE_ENTITY_PREFIX = 'sample_entity_';
 
 function readTextIfExists(filePath) {
@@ -59,6 +62,14 @@ function isHeaderOrDividerLine(line) {
   return false;
 }
 
+function isNotComparedHeaderOrDividerLine(line) {
+  const t = String(line || '').trim();
+  if (!t) return true;
+  if (/^Group\s+Bench\s+Reason\s*$/i.test(t)) return true;
+  if (/^-{3,}(\s+-{3,})+\s*$/.test(t)) return true;
+  return false;
+}
+
 function parseCriterionBodyToRows(body) {
   const lines = String(body || '').split(/\r?\n/);
   const rows = [];
@@ -91,6 +102,26 @@ function parseCriterionBodyToRows(body) {
       changePct,
       ciLowerPct,
       ciUpperPct,
+    });
+  }
+
+  return rows;
+}
+
+function parseNotComparedBodyToRows(body) {
+  const lines = String(body || '').split(/\r?\n/);
+  const rows = [];
+
+  for (const line of lines) {
+    if (isNotComparedHeaderOrDividerLine(line)) continue;
+    const parts = String(line).trim().split(/\s{2,}/);
+    if (parts.length < 3) continue;
+
+    const [group, bench, ...reasonParts] = parts;
+    rows.push({
+      group,
+      bench,
+      reason: reasonParts.join('  '),
     });
   }
 
@@ -140,10 +171,28 @@ function buildMarkdownTable(rows) {
   return lines.join('\n');
 }
 
+function buildNotComparedMarkdownTable(rows) {
+  const lines = [];
+  lines.push('| Group | Bench | Reason |');
+  lines.push('|:--|:--|:--|');
+
+  for (const row of rows) {
+    lines.push(
+      `| ${escapePipeCell(row.group)} | ${formatBenchCell(row.bench)} | ${escapePipeCell(row.reason)} |`,
+    );
+  }
+
+  if (rows.length === 0) {
+    lines.push('| (none) |  |  |');
+  }
+
+  return lines.join('\n');
+}
+
 function extractNamedSection(text, title) {
   const lines = String(text || '').split(/\r?\n/);
   const headerRe = new RegExp(`^${title}:`);
-  const anyHeaderRe = /^(Regressions|Improvements|Unchanged):/;
+  const anyHeaderRe = /^(Regressions|Improvements|Unchanged|Not Compared):/;
 
   let start = -1;
   for (let i = 0; i < lines.length; i += 1) {
@@ -184,6 +233,7 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
     Improvements: [],
     Unchanged: [],
   };
+  const notCompared = [];
 
   for (const group of groups) {
     if (!isSafeGroupName(group)) {
@@ -194,12 +244,19 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
     const p = safeJoinWithin(criterionDir, `criterion-regressions-${group}.txt`);
     const raw = readTextIfExists(p).trimEnd();
 
-    const extracted = Object.fromEntries(SECTION_TITLES.map((t) => [t, extractNamedSectionBody(raw, t)]));
-    for (const t of SECTION_TITLES) {
+    const extracted = Object.fromEntries(
+      ALL_SECTION_TITLES.map((t) => [t, extractNamedSectionBody(raw, t)]),
+    );
+    for (const t of CHANGE_SECTION_TITLES) {
       const body = extracted[t];
       if (body == null) continue;
       const rows = parseCriterionBodyToRows(body);
       bySection[t].push(...rows);
+    }
+
+    const notComparedBody = extracted[NOT_COMPARED_SECTION_TITLE];
+    if (notComparedBody != null) {
+      notCompared.push(...parseNotComparedBodyToRows(notComparedBody));
     }
   }
 
@@ -215,7 +272,7 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
 
   lines.push('#### Criterion', '');
 
-  for (const title of SECTION_TITLES) {
+  for (const title of CHANGE_SECTION_TITLES) {
     const heading =
       title === 'Regressions'
         ? '##### Regressions (slower)'
@@ -227,6 +284,12 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
     lines.push(heading, '');
     lines.push(buildMarkdownTable(rows), '');
   }
+
+  notCompared.sort(
+    (a, b) => a.group.localeCompare(b.group) || a.bench.localeCompare(b.bench),
+  );
+  lines.push('##### Not Compared (no baseline yet)', '');
+  lines.push(buildNotComparedMarkdownTable(notCompared), '');
 
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
   return lines.join('\n') + '\n';
