@@ -137,7 +137,7 @@ pub struct PopulationIterator<E: Entity> {
 }
 
 impl<E: Entity> PopulationIterator<E> {
-    // Only internal ixa code can create a new `PopulationIterator<E>` in order to guarantee only valid
+    // Only internal Ixa code can create a new `PopulationIterator<E>` in order to guarantee only valid
     // `EntityId<E>` values are ever created.
     pub(crate) fn new(population: usize) -> Self {
         PopulationIterator::<E> {

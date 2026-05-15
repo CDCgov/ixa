@@ -9,7 +9,7 @@ struct ReportItem {
     // Arbitrary (serializable) data fields.
 }
 
-// Define the report item in ixa.
+// Define the report item in Ixa.
 define_report!(ReportItem);
 
 // Somewhere during context initialization, initialize the report:
@@ -50,7 +50,7 @@ The report API takes care of a lot of details so you don't have to.
 - **Automatic headers** - Column names are derived from your report structure
 - **Hook into global configuration** - Control file names, prefixes, output
   directories, and whether existing output files are overwritten using a
-  configuration file or ixa's command line arguments
+  configuration file or Ixa's command line arguments
 - **Streaming output** - Data is written incrementally during simulation
   execution
 
@@ -104,7 +104,7 @@ few rows might look like this:
 | 0.02187737003255150  | 879       | I                |
 | &vellip;             | &vellip;  | &vellip;         |
 
-As far as ixa's report system is concerned, we really only need four ingredients
+As far as Ixa's report system is concerned, we really only need four ingredients
 for a simple report:
 
 1. A _report item_ type that will represent one row of data in our report,
@@ -139,7 +139,7 @@ struct IncidenceReportItem {
     infection_status: InfectionStatusValue,
 }
 
-/// 2. Tell ixa that we want a report for `IncidenceReportItem`.
+/// 2. Tell Ixa that we want a report for `IncidenceReportItem`.
 define_report!(IncidenceReportItem);
 
 /// This and other auxiliary types would typically live in a different
@@ -379,7 +379,7 @@ struct AggregateSIRReportItem {
     infected_count: usize,
     recovered_count: usize,
 }
-// Tell ixa it is a report item.
+// Tell Ixa it is a report item.
 define_report!(AggregateSIRReportItem);
 ```
 

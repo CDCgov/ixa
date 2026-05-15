@@ -66,7 +66,7 @@ pub enum ModelError {
     #[error("model error: {0}")]
     ModelError(String),
 
-    #[error("ixa error")]
+    #[error("Ixa error")]
     IxaError(#[from] IxaError),
 
     #[error("string error")]
@@ -75,7 +75,7 @@ pub enum ModelError {
     #[error("parse int error")]
     ParseIntError(#[from] std::num::ParseIntError),
 
-    #[error("ixa csv error")]
+    #[error("Ixa csv error")]
     CsvError(#[from] ixa::csv::Error),
 }
 ```
