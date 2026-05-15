@@ -146,7 +146,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
 /// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
@@ -166,7 +166,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
 /// impl_property!(Coordinates, Person);
 /// ```
@@ -188,7 +188,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
+/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
 /// pub enum InfectionStatus {
 ///     Susceptible,
 ///     Infectious,
@@ -338,30 +338,30 @@ macro_rules! define_property {
     // Both `define_property!` and `define_derived_property!` need to attach derives to a
     // concrete item, so the mode table lives here as a shared internal subcommand.
     (@apply_property_decoration , $item:item, $name:ident) => {
-        #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
         $item
     };
     (@apply_property_decoration Eq, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
         $crate::define_property!(@apply_property_decoration_eq_impl $name);
     };
     (@apply_property_decoration Hash, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
         $crate::define_property!(@apply_property_decoration_hash_impl $name);
     };
     (@apply_property_decoration both, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
         #[rkyv(crate = $crate::rkyv)]
         $item
         $crate::define_property!(@apply_property_decoration_eq_impl $name);
         $crate::define_property!(@apply_property_decoration_hash_impl $name);
     };
     (@apply_property_decoration neither, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize)]
+        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
         $item
     };
     (@apply_property_decoration $mode:ident, $item:item, $name:ident) => {
