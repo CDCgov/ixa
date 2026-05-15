@@ -8,7 +8,7 @@ The following examples are included in the [`examples/`](https://github.com/CDCg
 
 A minimal example that creates a `Context`, schedules a single plan, and prints
 the current simulation time. Good starting point for understanding the basic
-structure of an ixa model.
+structure of an Ixa model.
 
 ```sh
 cargo run --example basic
@@ -56,7 +56,7 @@ cargo run --example births-deaths
 
 ### `network-hhmodel`
 
-A network module (using ixa's `network` extentension) which loads a population
+A network module (using Ixa's `network` extentension) which loads a population
 with household structure from CSV files and spreads infection along network edges
 with different transmission rates by edge type.
 

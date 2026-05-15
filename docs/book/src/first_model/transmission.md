@@ -45,7 +45,7 @@ There are at least three ways to implement this model:
    the total number of people.
 
 These three approaches are mathematically equivalent. Here we demonstrate the third
-approach because it is the simplest to implement in ixa.
+approach because it is the simplest to implement in Ixa.
 
 We have already dealt with constants when we defined the constant `POPULATION`
 in `main.rs`. Let's define `FORCE_OF_INFECTION` right next to it. We also cap

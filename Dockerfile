@@ -1,4 +1,4 @@
-# Dockerfile for running Rust bench tests in the ixa project
+# Dockerfile for running Rust bench tests in the Ixa project
 FROM rust:slim
 
 # make sure we have the latest CA certificates, including CDC ones

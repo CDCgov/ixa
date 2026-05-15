@@ -1,10 +1,10 @@
 #!/bin/sh
-# ixa_setup.sh: Download latest ixa code to current directory without git
+# ixa_setup.sh: Download latest Ixa code to current directory without git
 
 ZIP_URL="https://github.com/CDCgov/ixa/archive/refs/heads/main.zip"
 TARGET_DIR="ixa"
 
-echo "Downloading latest ixa code..."
+echo "Downloading latest Ixa code..."
 curl -L "$ZIP_URL" -o ixa.zip
 
 echo "Unzipping..."
@@ -19,4 +19,4 @@ fi
 
 rm ixa.zip
 
-echo "Latest ixa code downloaded to ./$TARGET_DIR"
+echo "Latest Ixa code downloaded to ./$TARGET_DIR"

@@ -62,11 +62,11 @@ description = "Run all unit tests"
 run = "cargo test --all-targets --workspace"
 
 [tasks.'test:core']
-description = "Run just the core ixa tests (much faster)"
+description = "Run just the core Ixa tests (much faster)"
 run = "cargo test -p ixa"
 
 [tasks.'test:book']
-description = "Build and run the Ixa Book disease model example against local ixa"
+description = "Build and run the Ixa Book disease model example against local Ixa"
 dir = "docs/book/models/disease_model"
 run = '''
   cargo run \
@@ -80,7 +80,7 @@ depends = ["wasm:pnpm", "wasm:compile"]
 run = "pnpm exec playwright test"
 
 [tasks.'test:features']
-description = "Run just the core ixa tests (much faster)"
+description = "Run just the core Ixa tests (much faster)"
 run = "cargo test --no-default-features"
 
 [tasks.'wasm:pnpm']
