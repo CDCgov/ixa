@@ -27,6 +27,7 @@ const CHANGE_SECTION_TITLES = ['Regressions', 'Improvements', 'Unchanged'];
 const NOT_COMPARED_SECTION_TITLE = 'Not Compared';
 const ALL_SECTION_TITLES = [...CHANGE_SECTION_TITLES, NOT_COMPARED_SECTION_TITLE];
 const SAMPLE_ENTITY_PREFIX = 'sample_entity_';
+const SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL = 'sample_entity_whole_population/sentinel';
 
 function readTextIfExists(filePath) {
   if (!filePath) return '';
@@ -106,6 +107,17 @@ function parseCriterionBodyToRows(body) {
   }
 
   return rows;
+}
+
+function criterionBenchmarkNameForRow(row) {
+  if (row.group === 'sample_entity') {
+    return row.param ? `${row.bench}/${row.param}` : row.bench;
+  }
+  return row.param ? `${row.group}/${row.bench}/${row.param}` : `${row.group}/${row.bench}`;
+}
+
+function isInternalCriterionBenchmarkName(name) {
+  return name === SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL;
 }
 
 function parseNotComparedBodyToRows(body) {
@@ -250,7 +262,9 @@ function buildMarkdown({ hyperfineMd, criterionDir, groups }) {
     for (const t of CHANGE_SECTION_TITLES) {
       const body = extracted[t];
       if (body == null) continue;
-      const rows = parseCriterionBodyToRows(body);
+      const rows = parseCriterionBodyToRows(body).filter(
+        (row) => !isInternalCriterionBenchmarkName(criterionBenchmarkNameForRow(row)),
+      );
       bySection[t].push(...rows);
     }
 

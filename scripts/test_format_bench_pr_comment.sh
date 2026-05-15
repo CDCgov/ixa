@@ -33,6 +33,7 @@ Regressions:
   sample_entity_multi_property_indexed     1000                                               0.774%    0.193%    1.318%
   sampling                                 sampling_multiple_unindexed_entities               2.509%    1.929%    3.084%
   sample_entity_whole_population           100000                                             2.338%    1.628%    3.068%
+  sample_entity_whole_population           sentinel                                           99.000%   98.000%  100.000%
 
 Improvements:
   Group                                    Bench                                              Change  CI Lower  CI Upper
