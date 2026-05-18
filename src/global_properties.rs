@@ -110,6 +110,16 @@ fn get_global_property_setter(name: &str) -> Option<Arc<PropertySetterFn>> {
     tmp.get(name).map(Arc::clone)
 }
 
+fn get_global_property_setter_for_config_key(name: &str) -> Option<Arc<PropertySetterFn>> {
+    get_global_property_setter(name).or_else(|| {
+        if name.contains('-') {
+            get_global_property_setter(&name.replace('-', "_"))
+        } else {
+            None
+        }
+    })
+}
+
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
 /// [`define_global_property!`](crate::define_global_property!).
@@ -177,7 +187,9 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// The expected structure is a dictionary with each name being
     /// the name of the struct prefixed with the crate name, as in:
     /// `ixa.NumFluVariants` and the value being an object which can
-    /// serde deserialize into the relevant struct.
+    /// serde deserialize into the relevant struct. If a package name contains
+    /// hyphens, either the package spelling or Rust's underscore-normalized
+    /// crate spelling can be used.
     ///
     /// # Errors
     /// Will return an [`IxaError`] if:
@@ -251,7 +263,7 @@ impl ContextGlobalPropertiesExt for Context {
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
 
         for (k, v) in val {
-            if let Some(setter) = get_global_property_setter(&k) {
+            if let Some(setter) = get_global_property_setter_for_config_key(&k) {
                 setter(self, &k, v)?;
             } else {
                 return Err(IxaError::NoGlobalProperty { name: k });
