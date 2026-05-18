@@ -87,7 +87,7 @@ run = "cargo test --no-default-features"
 dir = "integration-tests/ixa-wasm-tests"
 run = [
   "pnpm install --frozen-lockfile",
-  "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 timeout 10m pnpm exec playwright install chromium",
+  "if [ -f /etc/ssl/certs/ca-certificates.crt ]; then export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt; fi; PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 timeout 10m pnpm exec playwright install --only-shell chromium",
 ]
 sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
 outputs = 'node_modules/.pnpm/lock.yaml'
