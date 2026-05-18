@@ -1,13 +1,15 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use ixa::rand::prelude::ThreadRng;
+use ixa::rand::rngs::SmallRng;
 use ixa::rand::seq::IteratorRandom;
-use ixa::rand::{rng, Rng};
+use ixa::rand::{Rng, SeedableRng};
 use ixa::random::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
 };
+
+const SEED: u64 = 42;
 
 /// A wrapper around any iterator that prevents it from exposing `ExactSizeIterator`, `DoubleEndedIterator`, etc.
 /// This is needed to test the "slow path" with `rand`'s implementation, as `rand` has an optimization for when
@@ -34,8 +36,8 @@ where
     }
 }
 
-fn setup() -> (Vec<u8>, Vec<usize>, ThreadRng) {
-    let mut rng: ThreadRng = rng();
+fn setup() -> (Vec<u8>, Vec<usize>, SmallRng) {
+    let mut rng = SmallRng::seed_from_u64(SEED);
     // The number of items to choose out of the data set for multiple sampling
     let mut counts: Vec<usize> = Vec::with_capacity(1000);
     for _ in 0..1000 {

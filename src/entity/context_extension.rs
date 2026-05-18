@@ -1098,8 +1098,11 @@ mod tests {
 
     #[test]
     fn with_query_results_finds_multi_index() {
+        use crate::rand::rngs::SmallRng;
         use crate::rand::seq::IndexedRandom;
-        let mut rng = crate::rand::rng();
+        use crate::rand::SeedableRng;
+
+        let mut rng = SmallRng::seed_from_u64(42);
         let mut context = Context::new();
 
         for _ in 0..10_000usize {
