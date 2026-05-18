@@ -38,12 +38,6 @@ define_property!(
     default_const = InfectionStatus::Susceptible
 );
 
-define_property!(
-    struct Dummy(bool),
-    Person,
-    default_const = Dummy(false)
-);
-
 #[derive(Default)]
 struct Households {
     members: EntityMap<Household, Vec<PersonId>>,
@@ -216,6 +210,11 @@ impl InfectionLoop for Context {
         while assignment.len() < population {
             let h = self.sample_range(HouseholdRng, 0..num_households);
             assignment.push(h);
+        }
+        {
+            let households_data = self.get_data_mut(HouseholdPlugin);
+            households_data.members.reserve(num_households);
+            households_data.by_person.reserve(population);
         }
 
         // Add people in assignment order and record their household.
