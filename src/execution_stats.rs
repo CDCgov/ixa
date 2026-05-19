@@ -41,33 +41,6 @@ pub struct ExecutionStatistics {
     pub wall_time: Duration,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum ResourceStatisticsStatus {
-    #[cfg(not(feature = "profiling"))]
-    Disabled,
-    #[cfg(feature = "profiling")]
-    Unavailable,
-    #[cfg(feature = "profiling")]
-    Available,
-}
-
-fn resource_statistics_status(stats: &ExecutionStatistics) -> ResourceStatisticsStatus {
-    #[cfg(not(feature = "profiling"))]
-    {
-        let _ = stats;
-        ResourceStatisticsStatus::Disabled
-    }
-
-    #[cfg(feature = "profiling")]
-    {
-        if stats.max_memory_usage == 0 {
-            ResourceStatisticsStatus::Unavailable
-        } else {
-            ResourceStatisticsStatus::Available
-        }
-    }
-}
-
 #[cfg(feature = "profiling")]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 /// How frequently we update the max memory used value.
@@ -265,15 +238,11 @@ impl ExecutionProfilingCollector {
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn print_execution_statistics(summary: &ExecutionStatistics) {
     println!("━━━━ Execution Summary ━━━━");
-    match resource_statistics_status(summary) {
-        #[cfg(not(feature = "profiling"))]
-        ResourceStatisticsStatus::Disabled => {}
-        #[cfg(feature = "profiling")]
-        ResourceStatisticsStatus::Unavailable => {
+    #[cfg(feature = "profiling")]
+    {
+        if cfg!(target_family = "wasm") {
             println!("Memory and CPU statistics are not available on your platform.");
-        }
-        #[cfg(feature = "profiling")]
-        ResourceStatisticsStatus::Available => {
+        } else {
             println!(
                 "{:<25}{}",
                 "Max memory usage:",
@@ -300,15 +269,11 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn log_execution_statistics(stats: &ExecutionStatistics) {
     info!("Execution complete.");
-    match resource_statistics_status(stats) {
-        #[cfg(not(feature = "profiling"))]
-        ResourceStatisticsStatus::Disabled => {}
-        #[cfg(feature = "profiling")]
-        ResourceStatisticsStatus::Unavailable => {
+    #[cfg(feature = "profiling")]
+    {
+        if cfg!(target_family = "wasm") {
             info!("Memory and CPU statistics are not available on your platform.");
-        }
-        #[cfg(feature = "profiling")]
-        ResourceStatisticsStatus::Available => {
+        } else {
             info!(
                 "Max memory usage: {}",
                 bytesize::ByteSize::b(stats.max_memory_usage)
@@ -322,48 +287,6 @@ pub fn log_execution_statistics(stats: &ExecutionStatistics) {
         }
     }
     info!("Wall time: {}", format_duration(stats.wall_time));
-}
-
-#[cfg(test)]
-mod availability_tests {
-    use super::*;
-
-    fn stats_with_memory(max_memory_usage: u64) -> ExecutionStatistics {
-        ExecutionStatistics {
-            max_memory_usage,
-            max_plans_in_flight: 0,
-            max_plan_queue_memory_in_use: 0,
-            cpu_time: Duration::ZERO,
-            wall_time: Duration::ZERO,
-        }
-    }
-
-    #[cfg(not(feature = "profiling"))]
-    #[test]
-    fn resource_statistics_are_disabled_without_profiling() {
-        assert_eq!(
-            resource_statistics_status(&stats_with_memory(0)),
-            ResourceStatisticsStatus::Disabled
-        );
-    }
-
-    #[cfg(feature = "profiling")]
-    #[test]
-    fn resource_statistics_are_unavailable_when_memory_is_zero() {
-        assert_eq!(
-            resource_statistics_status(&stats_with_memory(0)),
-            ResourceStatisticsStatus::Unavailable
-        );
-    }
-
-    #[cfg(feature = "profiling")]
-    #[test]
-    fn resource_statistics_are_available_when_memory_is_nonzero() {
-        assert_eq!(
-            resource_statistics_status(&stats_with_memory(1)),
-            ResourceStatisticsStatus::Available
-        );
-    }
 }
 
 #[cfg(all(test, feature = "profiling"))]
