@@ -1,6 +1,6 @@
 [tools]
-node = "22.20.0"
-pnpm = "10.33.0"
+node = "latest"
+pnpm = "latest"
 "cargo:prek" = "latest"
 "prettier" = "3.6.2"
 "npm:@commitlint/cli" = "19.7.1"
@@ -85,7 +85,10 @@ run = "cargo test --no-default-features"
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
-run = ["pnpm install", "pnpm exec playwright install"]
+run = [
+  "pnpm install --frozen-lockfile",
+  "if [ -f /etc/ssl/certs/ca-certificates.crt ]; then export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt; fi; PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 timeout 10m pnpm exec playwright install --only-shell chromium",
+]
 sources = ['package.json', 'pnpm-lock.yaml', 'mise.toml']
 outputs = 'node_modules/.pnpm/lock.yaml'
 
