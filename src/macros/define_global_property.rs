@@ -2,7 +2,7 @@
 /// * `$global_property`: Name for the identifier type of the global property
 /// * `$value`: The type of the property's value
 /// * `$validate`: A function (or closure) that checks the validity of the property and returns
-///   `Result<(), Box<dyn std::error::Error + 'static>>` (optional)
+///   `Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>` (optional)
 ///
 /// Validator code is client code, so it should create and box its own error values.
 /// Ixa wraps any returned error in
@@ -43,7 +43,9 @@ macro_rules! define_global_property {
                 full.rsplit("::").next().unwrap()
             }
 
-            fn validate(val: &$value) -> Result<(), Box<dyn std::error::Error + 'static>> {
+            fn validate(
+                val: &$value,
+            ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
                 $validate(val)
             }
         }
