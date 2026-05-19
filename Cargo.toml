@@ -67,7 +67,7 @@ rkyv = "^0.8.15"
 
 [package]
 name = "ixa"
-version = "2.0.0-beta2.3"
+version = "2.0.0-beta2.4"
 rust-version = "1.88.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
