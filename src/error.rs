@@ -32,7 +32,7 @@ pub enum IxaError {
     #[error("illegal value for global property `{name}`: {source}")]
     IllegalGlobalPropertyValue {
         name: String,
-        source: Box<dyn Error + 'static>,
+        source: Box<dyn Error + Send + Sync + 'static>,
     },
 
     #[error(
@@ -64,4 +64,30 @@ pub enum IxaError {
 
     #[error("initialization list is missing required properties")]
     MissingRequiredInitializationProperties,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IxaError;
+
+    // `anyhow::Error` requires the wrapped error to be `Send + Sync + 'static`.
+    // These tests guard against a regression where a new variant (or a boxed
+    // source) loses those bounds and breaks interop with `anyhow`.
+
+    fn assert_send_sync<T: Send + Sync + 'static>() {}
+
+    #[test]
+    fn ixa_error_is_send_sync() {
+        assert_send_sync::<IxaError>();
+    }
+
+    #[test]
+    fn ixa_error_converts_to_anyhow() {
+        fn returns_anyhow() -> anyhow::Result<()> {
+            Err(IxaError::EntryAlreadyExists)?;
+            Ok(())
+        }
+        let err = returns_anyhow().unwrap_err();
+        assert!(err.downcast_ref::<IxaError>().is_some());
+    }
 }

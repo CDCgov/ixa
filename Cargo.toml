@@ -127,6 +127,7 @@ wasm-bindgen = { workspace = true, optional = true }
 web-sys = { workspace = true, optional = true, features = ["console", "Performance", "Window"] }
 
 [dev-dependencies]
+anyhow.workspace = true
 assert_approx_eq.workspace = true
 assert_cmd.workspace = true
 criterion.workspace = true

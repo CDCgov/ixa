@@ -115,8 +115,8 @@ fn get_global_property_setter(name: &str) -> Option<Arc<PropertySetterFn>> {
 /// [`define_global_property!`](crate::define_global_property!).
 ///
 /// Validation errors are produced by client code and should be returned as
-/// `Box<dyn std::error::Error + 'static>`. Ixa wraps those values in
-/// [`IxaError::IllegalGlobalPropertyValue`]
+/// `Box<dyn std::error::Error + Send + Sync + 'static>`. Ixa wraps those
+/// values in [`IxaError::IllegalGlobalPropertyValue`]
 /// when a global property is set or loaded.
 pub trait GlobalProperty: Any {
     /// The actual type of the data stored in the global property
@@ -134,7 +134,7 @@ pub trait GlobalProperty: Any {
     /// A function which validates the global property.
     ///
     /// Client code should box any produced error itself.
-    fn validate(value: &Self::Value) -> Result<(), Box<dyn Error + 'static>>;
+    fn validate(value: &Self::Value) -> Result<(), Box<dyn Error + Send + Sync + 'static>>;
 }
 
 pub trait ContextGlobalPropertiesExt: ContextBase {
@@ -447,7 +447,7 @@ mod test {
             0 => Ok(()),
             _ => Err(Box::new(InvalidProperty3Value {
                 field_int: v.field_int,
-            }) as Box<dyn Error + 'static>),
+            }) as Box<dyn Error + Send + Sync + 'static>),
         }
     });
 
