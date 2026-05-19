@@ -70,7 +70,7 @@ macro_rules! impl_entity {
         // if we were willing to have a mechanism for interior mutability for `EntityStore`.
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
-                #[ctor]
+                #[ctor(unsafe)]
                 fn [<_register_entity_$entity_name:snake>]() {
                     $crate::entity::entity_store::add_to_entity_registry::<$entity_name>();
                 }

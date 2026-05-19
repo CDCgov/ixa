@@ -71,7 +71,7 @@ macro_rules! impl_edge_type {
 
         $crate::paste::paste! {
             $crate::ctor::declarative::ctor!{
-                #[ctor]
+                #[ctor(unsafe)]
                 fn [<_register_edge_type_ $edge_type:snake _for_ $entity:snake>]() {
                     $crate::network::edge::add_to_edge_type_to_registry::<$entity, $edge_type>();
                 }

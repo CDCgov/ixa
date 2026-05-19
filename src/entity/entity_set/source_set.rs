@@ -352,6 +352,15 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         }
     }
 
+    /// Random-access lookup. Defined for the same variants as `try_len`.
+    pub(super) fn try_nth(&self, idx: usize) -> Option<EntityId<E>> {
+        match self {
+            SourceSet::PopulationRange(range) => range.clone().nth(idx).map(EntityId::new),
+            SourceSet::IndexSet(source) => source.get_index(idx).copied(),
+            SourceSet::PropertySet(_) => None,
+        }
+    }
+
     /// Ordering key used for source selection.
     pub(super) fn sort_key(&self) -> (usize, u8) {
         match self {

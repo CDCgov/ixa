@@ -32,7 +32,7 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, IxaError> {
         .collect()
 }
 
-/// Default cli arguments for ixa runner
+/// Default cli arguments for Ixa runner
 #[derive(Args, Debug)]
 pub struct BaseArgs {
     #[cfg(feature = "write_cli_usage")]

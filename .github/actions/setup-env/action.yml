@@ -4,7 +4,7 @@ runs:
   using: composite
   steps:
     - name: Cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/bin/
@@ -20,7 +20,7 @@ runs:
       uses: cargo-bins/cargo-binstall@v1.15.6
 
     - name: Setup mise
-      uses: jdx/mise-action@v2
+      uses: jdx/mise-action@v4
 
     - name: Install nightly
       shell: bash

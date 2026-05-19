@@ -1,6 +1,6 @@
 # Specifying Generic Types and the Turbo Fish
 
-Rust and ixa in particular make heavy use of type generics, a way of writing a
+Rust and Ixa in particular make heavy use of type generics, a way of writing a
 single piece of code, a function for example, for a whole family of types at
 once. A nice feature of Rust is that the compiler can often infer the generic
 types at the point the function is used instead of relying on the programmer to

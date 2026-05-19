@@ -1,5 +1,6 @@
 # Topics
 
+- [Properties](properties.md)
 - [Indexing](indexing.md)
 - [Burn-in Periods and Negative Time](burn-in-and-negative-time.md)
 - [Handling Errors](handling-errors.md)

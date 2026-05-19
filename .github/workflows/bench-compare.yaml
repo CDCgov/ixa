@@ -49,25 +49,35 @@ jobs:
           target="${{ matrix.criterion_target }}"
 
           base_status=0
+          base_missing_target=0
           compare_status=0
           regress_status=0
 
           git checkout --force "origin/${{ github.event.pull_request.base.ref }}"
-          cargo bench -p ixa-bench --bench "$target" -- --save-baseline base 2>&1 | tee "criterion-base-${group}.txt" || base_status=$?
+          if cargo bench -p ixa-bench --bench "$target" -- --save-baseline base 2>&1 | tee "criterion-base-${group}.txt"; then
+            base_status=0
+          else
+            base_status=$?
+            if grep -F "no bench target named" "criterion-base-${group}.txt" >/dev/null && grep -F "$target" "criterion-base-${group}.txt" >/dev/null; then
+              base_missing_target=1
+              base_status=0
+              echo "Note: bench target '${target}' does not exist on the base branch; head benchmarks will be recorded without baseline comparison." | tee -a "criterion-base-${group}.txt"
+            fi
+          fi
 
           git checkout --force "${{ github.event.pull_request.head.sha }}"
-          if cargo bench -p ixa-bench --bench "$target" -- --baseline base 2>&1 | tee "criterion-compare-${group}.txt"; then
-            cargo run -q -p ixa-bench --bin check_criterion_regressions 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
+          if cargo bench -p ixa-bench --bench "$target" -- --baseline-lenient base 2>&1 | tee "criterion-compare-${group}.txt"; then
+            cargo run -q -p ixa-bench --bin check_criterion_regressions -- --baseline base 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
           else
             compare_status=$?
-            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" | tee "criterion-regressions-${group}.txt"
-            cargo bench -p ixa-bench --bench "$target" 2>&1 | tee -a "criterion-compare-${group}.txt" || true
+            echo "Criterion benchmark run failed for '${target}'." | tee "criterion-regressions-${group}.txt"
           fi
 
           {
             echo "group=${group}"
             echo "target=${target}"
             echo "base_status=${base_status}"
+            echo "base_missing_target=${base_missing_target}"
             echo "compare_status=${compare_status}"
             echo "regress_status=${regress_status}"
             echo "base_ref=${{ github.event.pull_request.base.ref }}"
@@ -92,6 +102,7 @@ jobs:
             source "status-${group}.env"
           else
             base_status="unknown"
+            base_missing_target="unknown"
             compare_status="unknown"
             regress_status="unknown"
             base_ref="${{ github.event.pull_request.base.ref }}"
@@ -105,7 +116,7 @@ jobs:
             echo
             printf -- '- Base: `%s` (`%s`)\n' "$base_ref" "$base_sha"
             printf -- '- Head: `%s` (`%s`)\n' "$head_ref" "$head_sha"
-            printf -- '- Statuses: baseline=`%s`, compare=`%s`, regressions=`%s`\n' "$base_status" "$compare_status" "$regress_status"
+            printf -- '- Statuses: baseline=`%s`, base_missing_target=`%s`, compare=`%s`, regressions=`%s`\n' "$base_status" "$base_missing_target" "$compare_status" "$regress_status"
             echo
             echo '```'
             if [ -f "criterion-regressions-${group}.txt" ]; then

@@ -106,28 +106,3 @@ pub mod execution_stats;
 pub mod profiling;
 
 pub mod data_structures;
-
-// The following is a workaround for an ICE involving wasm-bindgen:
-// https://github.com/CDCgov/ixa/actions/runs/16283417455/job/45977349528?pr=464
-#[cfg(target_family = "wasm")]
-use wasm_bindgen::prelude::wasm_bindgen;
-
-// See: https://github.com/rustwasm/wasm-bindgen/issues/4446
-#[cfg(target_family = "wasm")]
-mod wasm_workaround {
-    extern "C" {
-        pub(super) fn __wasm_call_ctors();
-    }
-}
-
-// See: https://github.com/rustwasm/wasm-bindgen/issues/4446
-#[cfg(target_family = "wasm")]
-#[wasm_bindgen(start)]
-fn start() {
-    // fix:
-    // Error: Read a negative address value from the stack. Did we run out of memory?
-    #[cfg(target_family = "wasm")]
-    unsafe {
-        wasm_workaround::__wasm_call_ctors()
-    };
-}

@@ -2,7 +2,7 @@
 # curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
 # or if you want to use a specific branch and not the cargo release
 # curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s <ixa-branch>
-# ixa-branch: the branch of ixa to use, default is main
+# ixa-branch: the branch of Ixa to use, default is main
 ixa_branch="main"
 
 urlencode() {
@@ -33,7 +33,7 @@ check_success() {
     fi
 }
 
-echo "Setting up new ixa project with branch $ixa_branch"
+echo "Setting up new Ixa project with branch $ixa_branch"
 
 # check if cargo is installed
 if [ -z "$(command -v cargo)" ]; then
@@ -54,18 +54,18 @@ else
     cargo add --git "https://github.com/CDCgov/ixa" ixa --branch $ixa_branch
 fi
 
-# add .gitignore from ixa
+# add .gitignore from Ixa
 curl -s -f -o .gitignore "https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/.gitignore"
-check_success "Failed to download .gitignore from ixa"
+check_success "Failed to download .gitignore from Ixa"
 
-# add the clippy.toml from ixa
+# add the clippy.toml from Ixa
 curl -s -f -o clippy.toml https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/clippy.toml
-check_success "Failed to download clippy.toml from ixa"
+check_success "Failed to download clippy.toml from Ixa"
 
-# override main.rs with ixa basic example
+# override main.rs with Ixa basic example
 curl -s -f -o src/main.rs https://raw.githubusercontent.com/CDCgov/ixa/$ixa_branch/examples/basic/main.rs
-check_success "Failed to download main.rs from ixa"
+check_success "Failed to download main.rs from Ixa"
 
 echo "Project setup complete from branch $ixa_branch"
 echo "Run 'cargo run' to test the example code"
-echo "Check out the ixa documentation for more examples and usage: https://ixa.rs/"
+echo "Check out the Ixa documentation for more examples and usage: https://ixa.rs/"

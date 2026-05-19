@@ -1,7 +1,7 @@
 [package]
 name = "ixa-integration-tests"
 version = "0.0.1"
-description = "Integration tests for ixa"
+description = "Integration tests for Ixa"
 publish = false
 repository.workspace = true
 license.workspace = true

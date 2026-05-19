@@ -1,7 +1,7 @@
 [package]
 name = "ixa-bench"
 version = "0.0.1"
-description = "Benchmarks for ixa"
+description = "Benchmarks for Ixa"
 publish = false
 repository.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ release = false
 [features]
 default = []
 
-# This option includes benchmarks for algorithms we do not use in ixa.
+# This option includes benchmarks for algorithms we do not use in Ixa.
 # This allows us to compare our implementations to alternatives.
 alternative_algorithm_benches = []
 
@@ -107,4 +107,9 @@ harness = false
 [[bench]]
 name = "property_semantics"
 path = "criterion/property_semantics.rs"
+harness = false
+
+[[bench]]
+name = "sample_single_excluding"
+path = "criterion/sample_single_excluding.rs"
 harness = false

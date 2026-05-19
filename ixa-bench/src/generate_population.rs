@@ -1,10 +1,11 @@
 use std::iter::FusedIterator;
 
 use ixa::rand::rngs::StdRng;
-use ixa::rand::{rng, Rng, RngCore, SeedableRng};
+use ixa::rand::{Rng, RngCore, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;
+const DEFAULT_POPULATION_SEED: u64 = 0;
 const SCHOOL_AGE_MIN: u8 = 5;
 const SCHOOL_AGE_MAX: u8 = 18;
 const WORK_AGE_MIN: u8 = 18;
@@ -51,7 +52,7 @@ impl PopulationIterator {
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
         let rng: Box<dyn RngCore> = match seed {
             Some(s) => Box::new(StdRng::seed_from_u64(s)),
-            None => Box::new(rng()),
+            None => Box::new(StdRng::seed_from_u64(DEFAULT_POPULATION_SEED)),
         };
         PopulationIterator {
             n,

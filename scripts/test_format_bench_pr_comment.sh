@@ -60,6 +60,11 @@ Unchanged:
   large_dataset                            bench_query_population_derived_property_entities   0.011%   -0.529%    0.545%
   large_dataset                            bench_query_population_indexed_property_entities  -0.466%   -0.992%    0.018%
   sample_entity_whole_population           1000                                              -1.203%   -2.912%    0.150%
+
+Not Compared:
+  Group      Bench             Reason
+  ---------  ----------------  ------------------------
+  sampling   new_sampling_fn   No baseline named 'base'
 TXT
 
 # Group 2: empty output to ensure concatenation has no blank line between groups
@@ -122,6 +127,12 @@ _Hyperfine output missing._
 | large_dataset | `bench_query_population_multi_indexed_entities` |  | 0.191% | -0.490% | 0.849% |
 | large_dataset | `bench_match_entity` |  | 0.144% | -1.151% | 1.235% |
 | large_dataset | `bench_query_population_derived_property_entities` |  | 0.011% | -0.529% | 0.545% |
+
+##### Not Compared (no baseline yet)
+
+| Group | Bench | Reason |
+|:--|:--|:--|
+| sampling | `new_sampling_fn` | No baseline named 'base' |
 MD
 
 # Normalize CRLF if any
