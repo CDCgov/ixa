@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2.4](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.3...ixa-v2.0.0-beta2.4) - 2026-05-19
+
+### Added
+
+- add `sample_single_excluding`and `EntitySet::sample_entity_excluding` ([#877](https://github.com/CDCgov/ixa/pull/877))
+- Add benchmark chart toggles for y-axis starting at 0.0, outlier clipping ([#875](https://github.com/CDCgov/ixa/pull/875))
+
+### Fixed
+
+- make IxaError compatible with anyhow ([#912](https://github.com/CDCgov/ixa/pull/912))
+
+### Other
+
+- update action versions (cache, mise) ([#913](https://github.com/CDCgov/ixa/pull/913))
+- add timeout for playwright browser install ([#902](https://github.com/CDCgov/ixa/pull/902))
+- reference sir with EntityMap ([#895](https://github.com/CDCgov/ixa/pull/895))
+- Make rand usage deterministic and disable default features ([#905](https://github.com/CDCgov/ixa/pull/905))
+- impl Deserialize for properties ([#899](https://github.com/CDCgov/ixa/pull/899))
+- Consistent Ixa capitalization ([#896](https://github.com/CDCgov/ixa/pull/896))
+- handle new Criterion benchmarks in CI ([#894](https://github.com/CDCgov/ixa/pull/894))
+- Properties chapter of the Ixa Book ([#866](https://github.com/CDCgov/ixa/pull/866))
+- bump release-plz/action from 0.5.128 to 0.5.129 ([#885](https://github.com/CDCgov/ixa/pull/885))
+- remove double vaidate on add global prop ([#891](https://github.com/CDCgov/ixa/pull/891))
+- Update several dependencies ([#880](https://github.com/CDCgov/ixa/pull/880))
+- Remove progress bar feature ([#879](https://github.com/CDCgov/ixa/pull/879))
+- fetch benchmark history with raw GitHub media type ([#882](https://github.com/CDCgov/ixa/pull/882))
+- Refactor `global_properties` to use the registry pattern ([#873](https://github.com/CDCgov/ixa/pull/873))
+
 ## [2.0.0-beta2.3](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.2...ixa-v2.0.0-beta2.3) - 2026-05-04
 
 ### Added

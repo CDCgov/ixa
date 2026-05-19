@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.4...ixa-fips-v0.1.5) - 2026-05-19
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.4](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.3...ixa-fips-v0.1.4) - 2025-12-09
 
 ### Fixed
