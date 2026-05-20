@@ -41,7 +41,7 @@ fn initialize(context: &mut Context) {
         .clone();
 
     // Load network
-    network::init(context, parameters.between_hh_transmission_rr);
+    network::init(context, parameters.relative_rate);
 
     // Initialize incidence report
     incidence_report::init(context).unwrap();
@@ -51,5 +51,4 @@ fn initialize(context: &mut Context) {
 
     #[allow(clippy::vec_init_then_push)]
     seir::init(context, &to_infect, 1.0);
-    context.execute();
 }

@@ -138,15 +138,13 @@ mod tests {
         context.init_random(42);
         loader::init(&mut context);
 
-        // set sar and between_hh_transmission_reduction to 1.0 so that
-        // beta is 1.0
         let parameters = ParametersValues {
             incubation_period: 8.0,
             infectious_period: 27.0,
             sar: 1.0,
             shape: 15.0,
             infection_duration: 5.0,
-            between_hh_transmission_rr: 1.0,
+            relative_rate: 0.5,
             data_dir: "examples/network-hhmodel/tests".to_owned(),
             output_dir: "examples/network-hhmodel/tests".to_owned(),
         };

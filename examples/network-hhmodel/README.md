@@ -10,6 +10,8 @@ There are three data files:
 - `AgeUnder5Edges.csv` contains the edges connecting those aged under 5.
 - `Age5to17Edges.csv` contains the edges connecting those aged 5-17.
 
+The parameter `sar` is the secondary attack rate within each household, used to compute the within-household transmission rate. The parameter `relative_rate` is the ratio of the transmission rates between versus within households; it should be less than one.
+
 The simulation runs via:
 
 - `parameters.rs` sets up global properties for the model.
