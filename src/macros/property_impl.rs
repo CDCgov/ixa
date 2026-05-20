@@ -2047,15 +2047,15 @@ mod tests {
 
     #[test]
     fn test_primitive_property_change_event() {
-        // Subscribers receive the wrapper (`MyAge`), not the inner primitive. This pins the
-        // intentional asymmetry: events carry `P`, only `get_property` unwraps to `P::Value`.
+        // Events expose `P::Value`: for primitive-form properties subscribers see the inner
+        // primitive directly, not the wrapper.
         use std::cell::RefCell;
         use std::rc::Rc;
 
         let mut context = Context::new();
         let person = context.add_entity(with!(Person, MyAge(10))).unwrap();
 
-        let observed: Rc<RefCell<Option<(MyAge, MyAge)>>> = Rc::new(RefCell::new(None));
+        let observed: Rc<RefCell<Option<(u8, u8)>>> = Rc::new(RefCell::new(None));
         let observed_clone = Rc::clone(&observed);
         context.subscribe_to_event(move |_ctx, event: PropertyChangeEvent<Person, MyAge>| {
             *observed_clone.borrow_mut() = Some((event.previous, event.current));
@@ -2065,8 +2065,8 @@ mod tests {
         context.execute();
 
         let (prev, curr) = observed.borrow().expect("event should have fired");
-        assert_eq!(prev, MyAge(10));
-        assert_eq!(curr, MyAge(25));
+        assert_eq!(prev, 10u8);
+        assert_eq!(curr, 25u8);
     }
 
     define_multi_property!((Name, MyAge), Person);

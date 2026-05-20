@@ -89,7 +89,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
 
         smallbox::smallbox!(PartialPropertyChangeEventCore::<E, P>::new(
             entity_id,
-            previous_value,
+            previous_value.into_value(),
         ))
     }
 
