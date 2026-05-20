@@ -238,11 +238,11 @@ impl ExecutionProfilingCollector {
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn print_execution_statistics(summary: &ExecutionStatistics) {
     println!("━━━━ Execution Summary ━━━━");
-    if summary.max_memory_usage == 0 {
-        println!("Memory and CPU statistics are not available on your platform.");
-    } else {
-        #[cfg(feature = "profiling")]
-        {
+    #[cfg(feature = "profiling")]
+    {
+        if cfg!(target_family = "wasm") {
+            println!("Memory and CPU statistics are not available on your platform.");
+        } else {
             println!(
                 "{:<25}{}",
                 "Max memory usage:",
@@ -269,11 +269,11 @@ pub fn print_execution_statistics(summary: &ExecutionStatistics) {
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn log_execution_statistics(stats: &ExecutionStatistics) {
     info!("Execution complete.");
-    if stats.max_memory_usage == 0 {
-        info!("Memory and CPU statistics are not available on your platform.");
-    } else {
-        #[cfg(feature = "profiling")]
-        {
+    #[cfg(feature = "profiling")]
+    {
+        if cfg!(target_family = "wasm") {
+            info!("Memory and CPU statistics are not available on your platform.");
+        } else {
             info!(
                 "Max memory usage: {}",
                 bytesize::ByteSize::b(stats.max_memory_usage)
