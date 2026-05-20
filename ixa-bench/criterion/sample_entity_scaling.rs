@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ixa::prelude::*;
+use ixa::rand::Rng;
 
 define_rng!(SampleScalingRng);
 
@@ -16,6 +17,9 @@ define_multi_property!((Species, Region), Mosquito);
 define_property!(struct Unindexed10(u8), Mosquito);
 
 const POPULATION_SIZES: [usize; 3] = [1_000, 10_000, 100_000];
+const WHOLE_POPULATION_SENTINEL: &str = "sentinel";
+const WHOLE_POPULATION_SENTINEL_UPPER: u32 = 100_000;
+const WHOLE_POPULATION_SENTINEL_RESULTS_SIZE: usize = 0;
 
 // Shared place to stash "ns per sample" per (bench_name, size)
 type Results = Arc<Mutex<BTreeMap<(String, usize), f64>>>;
@@ -69,6 +73,28 @@ fn print_scaling_summary(results: &BTreeMap<(String, usize), f64>, bench_name: &
     }
 }
 
+fn print_whole_population_sentinel_summary(
+    results: &BTreeMap<(String, usize), f64>,
+    bench_name: &str,
+) {
+    let sentinel_name = format!("{bench_name}/{WHOLE_POPULATION_SENTINEL}");
+    let Some(sentinel_ns) = results.get(&(sentinel_name, WHOLE_POPULATION_SENTINEL_RESULTS_SIZE))
+    else {
+        return;
+    };
+
+    eprintln!("\n=== Sentinel-relative summary: {bench_name} ===");
+    for &size in &POPULATION_SIZES {
+        let Some(sample_ns) = results.get(&(bench_name.to_string(), size)) else {
+            continue;
+        };
+        eprintln!(
+            "  n={size:>7}: sample={sample_ns:.2} ns/sample, sentinel={sentinel_ns:.2} ns/sample, ratio={:.3}x",
+            sample_ns / sentinel_ns,
+        );
+    }
+}
+
 // This is so we can do an O_n analysis of the benchmark
 fn bench_ns_per_sample<F>(bencher: &mut criterion::Bencher, mut f: F) -> f64
 where
@@ -102,8 +128,9 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let ns = bench_ns_per_sample(b, || {
-                let _: Option<EntityId<Mosquito>> =
+                let sampled: Option<EntityId<Mosquito>> =
                     context.sample_entity(SampleScalingRng, Mosquito);
+                black_box(sampled);
             });
 
             results
@@ -112,6 +139,24 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
                 .insert((bench_name.to_string(), size), ns);
         });
     }
+
+    let sentinel_context = setup_context(WHOLE_POPULATION_SENTINEL_UPPER as usize);
+    group.bench_function(WHOLE_POPULATION_SENTINEL, |b| {
+        let ns = bench_ns_per_sample(b, || {
+            let sampled = sentinel_context.sample(SampleScalingRng, |rng| {
+                rng.random_range(0..WHOLE_POPULATION_SENTINEL_UPPER)
+            });
+            black_box(sampled);
+        });
+
+        results.lock().unwrap().insert(
+            (
+                format!("{bench_name}/{WHOLE_POPULATION_SENTINEL}"),
+                WHOLE_POPULATION_SENTINEL_RESULTS_SIZE,
+            ),
+            ns,
+        );
+    });
 
     group.finish();
 }
@@ -205,6 +250,7 @@ fn sample_entity_scaling(c: &mut Criterion) {
     print_scaling_summary(&results, "sample_entity_single_property_indexed");
     print_scaling_summary(&results, "sample_entity_multi_property_indexed");
     print_scaling_summary(&results, "sample_entity_single_property_unindexed");
+    print_whole_population_sentinel_summary(&results, "sample_entity_whole_population");
 }
 
 criterion_group!(benches, sample_entity_scaling);

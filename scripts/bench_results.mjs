@@ -25,6 +25,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 
 const DEFAULT_MAX_INPUT_BYTES = 100 * 1024 * 1024; // 100 MiB
+const SAMPLE_ENTITY_WHOLE_POPULATION_PREFIX = 'sample_entity_whole_population/';
+const SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL = 'sample_entity_whole_population/sentinel';
+const SAMPLE_ENTITY_WHOLE_POPULATION_SIZES = ['1000', '10000', '100000'];
 
 function maxInputBytes() {
   const raw = process.env.BENCH_RESULTS_MAX_INPUT_BYTES;
@@ -150,6 +153,48 @@ function parseCriterionCompareLog(text) {
   return Array.from(resultsByName.values());
 }
 
+function hasFinitePositiveTriple(values) {
+  return (
+    Array.isArray(values) &&
+    values.length >= 3 &&
+    values.slice(0, 3).every((value) => Number.isFinite(value) && value > 0)
+  );
+}
+
+function ratioText(value) {
+  return `${value.toFixed(3)}x`;
+}
+
+function addSampleEntityWholePopulationSentinelRatios(criterionTimings) {
+  const byName = new Map(criterionTimings.map((entry) => [entry.name, entry]));
+  const sentinel = byName.get(SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL);
+  if (!hasFinitePositiveTriple(sentinel?.time_sec)) return criterionTimings;
+
+  for (const size of SAMPLE_ENTITY_WHOLE_POPULATION_SIZES) {
+    const sampleName = `${SAMPLE_ENTITY_WHOLE_POPULATION_PREFIX}${size}`;
+    const sample = byName.get(sampleName);
+    if (!hasFinitePositiveTriple(sample?.time_sec)) continue;
+
+    const ratio = [
+      sample.time_sec[0] / sentinel.time_sec[2],
+      sample.time_sec[1] / sentinel.time_sec[1],
+      sample.time_sec[2] / sentinel.time_sec[0],
+    ];
+    if (!ratio.every((value) => Number.isFinite(value) && value > 0)) continue;
+
+    sample.relative_to_sentinel = {
+      kind: 'sentinel_ratio',
+      sentinel: SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL,
+      ratio,
+      ratio_text: ratio.map(ratioText),
+      method:
+        'sample_time / sentinel_time; lower=sample_lower/sentinel_upper; estimate=sample_estimate/sentinel_estimate; upper=sample_upper/sentinel_lower',
+    };
+  }
+
+  return criterionTimings;
+}
+
 function parseHyperfineJson(hyperfineJson) {
   if (!hyperfineJson || !Array.isArray(hyperfineJson.results)) return [];
 
@@ -224,7 +269,9 @@ function main() {
   const hyperfineTimings = parseHyperfineJson(hyperfineJson);
 
   const criterionCompareLog = readTextIfExists(criterionLogPath);
-  const criterionTimings = parseCriterionCompareLog(criterionCompareLog);
+  const criterionTimings = addSampleEntityWholePopulationSentinelRatios(
+    parseCriterionCompareLog(criterionCompareLog)
+  );
 
   const payload = {
     schema: 1,

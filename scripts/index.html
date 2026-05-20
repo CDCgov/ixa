@@ -215,6 +215,11 @@
           Show band
         </label>
 
+        <label class="checkbox" title="Overlay ratio to the same-job sentinel when available">
+          <input id="showRelative" type="checkbox" checked />
+          Show sentinel-relative line
+        </label>
+
         <label class="checkbox" title="Start the time-series y-axis at 0.0">
           <input id="yAxisZero" type="checkbox" checked />
           y-axis starts at 0.0
@@ -292,6 +297,8 @@
       const MAD_CLIP_MIN_POINTS = 8;
       const MAD_CLIP_PADDING = 1.05;
       const MAD_CLIP_MIN_SEPARATION_RATIO = 2.0;
+      const SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL =
+        "sample_entity_whole_population/sentinel";
 
       const $ = (id) => document.getElementById(id);
 
@@ -407,11 +414,21 @@
         return map;
       }
 
+      function isInternalCriterionBenchmarkName(name) {
+        return name === SAMPLE_ENTITY_WHOLE_POPULATION_SENTINEL;
+      }
+
       function listBenchmarks(suiteRuns) {
         const set = new Set();
         for (const r of suiteRuns) {
           for (const e of r.entries) {
-            if (e && typeof e.name === "string") set.add(e.name);
+            if (
+              e &&
+              typeof e.name === "string" &&
+              !isInternalCriterionBenchmarkName(e.name)
+            ) {
+              set.add(e.name);
+            }
           }
         }
         return [...set].sort((a, b) => a.localeCompare(b));
@@ -473,6 +490,29 @@
         return { lower, upper };
       }
 
+      function readRelativeRatio(entry, metric) {
+        const ratio = entry?.relative_to_sentinel?.ratio;
+        if (!Array.isArray(ratio) || ratio.length < 3) return null;
+        const lower = Number(ratio[0]);
+        const estimate = Number(ratio[1]);
+        const upper = Number(ratio[2]);
+        if (![lower, estimate, upper].every((value) => Number.isFinite(value))) {
+          return null;
+        }
+        if (metric === "lower") return lower;
+        if (metric === "upper") return upper;
+        return estimate;
+      }
+
+      function readRelativeBand(entry) {
+        const ratio = entry?.relative_to_sentinel?.ratio;
+        if (!Array.isArray(ratio) || ratio.length < 3) return null;
+        const lower = Number(ratio[0]);
+        const upper = Number(ratio[2]);
+        if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
+        return { lower, upper };
+      }
+
       function makeLabels(suiteRuns) {
         return suiteRuns.map((r) => {
           const sha = safeSha(r?.head?.sha);
@@ -502,12 +542,17 @@
         benchmarkName,
         metric,
         showBand,
+        showRelative,
         yAxisZero,
         madClip,
       }) {
         const allPoints = [];
         const lowerBand = [];
         const upperBand = [];
+        const relativePoints = [];
+        const relativeLowerBand = [];
+        const relativeUpperBand = [];
+        const canShowRelative = suite === "criterion" && showRelative;
 
         for (const r of suiteRuns) {
           const byName = indexByName(r.entries);
@@ -516,9 +561,17 @@
           const band = showBand ? readBandSeconds(suite, entry) : null;
           lowerBand.push(band ? band.lower : null);
           upperBand.push(band ? band.upper : null);
+
+          const relativeValue = canShowRelative ? readRelativeRatio(entry, metric) : null;
+          relativePoints.push(relativeValue);
+          const relativeBand = canShowRelative && showBand ? readRelativeBand(entry) : null;
+          relativeLowerBand.push(relativeBand ? relativeBand.lower : null);
+          relativeUpperBand.push(relativeBand ? relativeBand.upper : null);
         }
 
         const vals = allPoints.filter((x) => Number.isFinite(x));
+        const relativeVals = relativePoints.filter((x) => Number.isFinite(x));
+        const hasRelative = relativeVals.length > 0;
         const unit = vals.length
           ? bestUnit(vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)])
           : { scale: 1, unit: "s" };
@@ -533,6 +586,8 @@
             borderWidth: 0,
             tension: 0.15,
             spanGaps: true,
+            yAxisID: "y",
+            showInLegend: false,
           });
           datasets.push({
             label: "upper",
@@ -544,6 +599,8 @@
             fill: "-1",
             tension: 0.15,
             spanGaps: true,
+            yAxisID: "y",
+            showInLegend: false,
           });
         }
 
@@ -556,12 +613,90 @@
           borderWidth: 2,
           tension: 0.15,
           spanGaps: true,
+          yAxisID: "y",
+          showInLegend: true,
         });
+
+        if (hasRelative && showBand) {
+          datasets.push({
+            label: "relative lower",
+            data: relativeLowerBand,
+            borderColor: "rgba(0,0,0,0)",
+            pointRadius: 0,
+            borderWidth: 0,
+            tension: 0.15,
+            spanGaps: true,
+            yAxisID: "yRelative",
+            showInLegend: false,
+          });
+          datasets.push({
+            label: "relative upper",
+            data: relativeUpperBand,
+            borderColor: "rgba(0,0,0,0)",
+            pointRadius: 0,
+            borderWidth: 0,
+            backgroundColor: "rgba(219, 111, 35, 0.14)",
+            fill: "-1",
+            tension: 0.15,
+            spanGaps: true,
+            yAxisID: "yRelative",
+            showInLegend: false,
+          });
+        }
+
+        if (hasRelative) {
+          datasets.push({
+            label: "Relative to sentinel",
+            data: relativePoints,
+            yAxisID: "yRelative",
+            borderColor: "rgba(219, 111, 35, 0.95)",
+            backgroundColor: "rgba(219, 111, 35, 0.15)",
+            pointRadius: 2,
+            borderWidth: 2,
+            tension: 0.15,
+            spanGaps: true,
+            showInLegend: true,
+          });
+        }
 
         const clipMaxSeconds = madClip
           ? madClipMaxSeconds([...allPoints, ...lowerBand, ...upperBand])
           : null;
         const clipMax = clipMaxSeconds == null ? undefined : clipMaxSeconds * unit.scale;
+        const relativeClipMax =
+          madClip && hasRelative
+            ? madClipMaxSeconds([...relativePoints, ...relativeLowerBand, ...relativeUpperBand])
+            : null;
+
+        const scales = {
+          y: {
+            min: yAxisZero ? 0 : undefined,
+            max: clipMax,
+            title: { display: true, text: `Time (${unit.unit})` },
+            ticks: { callback: (v) => `${v} ${unit.unit}` },
+          },
+          x: {
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 6,
+            },
+          },
+        };
+
+        if (hasRelative) {
+          scales.yRelative = {
+            type: "linear",
+            position: "right",
+            grid: { drawOnChartArea: false },
+            min: yAxisZero ? 0 : undefined,
+            max: relativeClipMax == null ? undefined : relativeClipMax,
+            title: { display: true, text: "Relative (x sentinel)" },
+            ticks: {
+              callback: (value) => `${Number(value).toFixed(2)}x`,
+            },
+          };
+        }
 
         return new Chart(canvas, {
           type: "line",
@@ -571,35 +706,29 @@
             maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
             plugins: {
-              legend: { display: false },
+              legend: {
+                display: hasRelative,
+                labels: {
+                  filter: (item, data) => {
+                    const dataset = data?.datasets?.[item.datasetIndex];
+                    return dataset?.showInLegend !== false;
+                  },
+                },
+              },
               tooltip: {
                 callbacks: {
                   label: (item) => {
-                    const scaled = item.parsed.y;
-                    if (scaled == null) return "(missing)";
-                    return `${item.dataset.label}: ${fmtSeconds(
-                      scaled / unit.scale,
-                      unit
-                    )}`;
+                    const value = item.parsed.y;
+                    if (value == null) return "(missing)";
+                    if (item.dataset.yAxisID === "yRelative") {
+                      return `${item.dataset.label}: ${Number(value).toFixed(3)}x sentinel`;
+                    }
+                    return `${item.dataset.label}: ${fmtSeconds(value / unit.scale, unit)}`;
                   },
                 },
               },
             },
-            scales: {
-              y: {
-                min: yAxisZero ? 0 : undefined,
-                max: clipMax,
-                title: { display: true, text: `Time (${unit.unit})` },
-                ticks: { callback: (v) => `${v} ${unit.unit}` },
-              },
-              x: {
-                ticks: {
-                  maxRotation: 0,
-                  autoSkip: true,
-                  maxTicksLimit: 6,
-                },
-              },
-            },
+            scales,
           },
         });
       }
@@ -610,6 +739,7 @@
         benchmarkName,
         metric,
         showBand,
+        showRelative,
         yAxisZero,
         madClip,
       }) {
@@ -642,6 +772,7 @@
             benchmarkName,
             metric,
             showBand,
+            showRelative,
             yAxisZero,
             madClip,
           });
@@ -687,6 +818,7 @@
                 benchmarkName: name,
                 metric,
                 showBand,
+                showRelative,
                 yAxisZero,
                 madClip,
               })
@@ -740,6 +872,7 @@
         /** @type {{name: string, pct: number}[]} */
         const changes = [];
         for (const [name, nextEntry] of nextMap.entries()) {
+          if (isInternalCriterionBenchmarkName(name)) continue;
           const prevEntry = prevMap.get(name);
           const a = readValueSeconds(suite, prevEntry, metric);
           const b = readValueSeconds(suite, nextEntry, metric);
@@ -931,6 +1064,7 @@
         const benchEl = $("benchmark");
         const metricEl = $("metric");
         const showBandEl = $("showBand");
+        const showRelativeEl = $("showRelative");
         const yAxisZeroEl = $("yAxisZero");
         const madClipEl = $("madClip");
 
@@ -948,6 +1082,7 @@
           const bench = benchEl.value;
           const metric = metricEl.value;
           const showBand = showBandEl.checked;
+          const showRelative = showRelativeEl.checked;
           const yAxisZero = yAxisZeroEl.checked;
           const madClip = madClipEl.checked;
 
@@ -959,6 +1094,7 @@
             benchmarkName: bench,
             metric,
             showBand,
+            showRelative,
             yAxisZero,
             madClip,
           });
@@ -1040,6 +1176,7 @@
         benchEl.addEventListener("change", rerender);
         metricEl.addEventListener("change", rerender);
         showBandEl.addEventListener("change", rerender);
+        showRelativeEl.addEventListener("change", rerender);
         yAxisZeroEl.addEventListener("change", rerender);
         madClipEl.addEventListener("change", rerender);
 
