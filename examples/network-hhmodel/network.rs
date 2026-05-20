@@ -19,7 +19,7 @@ struct EdgeRecord {
 fn create_household_networks(context: &mut Context, people: &[PersonId]) {
     let mut households = HashSet::new();
     for person_id in people {
-        let household_id: HouseholdId = context.get_property(*person_id);
+        let household_id: HouseholdId = context.get_property::<Person, HouseholdId>(*person_id);
         if households.insert(household_id) {
             let mut members: Vec<PersonId> = Vec::new();
             context.with_query_results(with!(Person, household_id), &mut |results| {

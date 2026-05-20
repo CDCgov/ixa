@@ -156,14 +156,14 @@ mod tests {
                 TestPropOpt(Some(3u8)),
             ))
             .unwrap();
-        let val: TestPropU32 = ctx.get_property(pid);
+        let val: TestPropU32 = ctx.get_property::<Person, TestPropU32>(pid);
         assert_eq!(val.0, 10u32);
         // Verify default property value is set for TestPropDefault
-        let default_val: TestPropDefault = ctx.get_property(pid);
+        let default_val: TestPropDefault = ctx.get_property::<Person, TestPropDefault>(pid);
         assert_eq!(default_val.0, 7u32);
 
         // Derived property should compute from TestPropU32
-        let d: DerivedProp = ctx.get_property(pid);
+        let d: DerivedProp = ctx.get_property::<Person, DerivedProp>(pid);
         assert_eq!(d.0, 11u32);
 
         // Derived property `impl_eq_hash = ...` variants should all compile and behave as hashable keys.

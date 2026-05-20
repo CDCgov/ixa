@@ -137,7 +137,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
-        (context.get_property::<E, P>(entity_id),)
+        (P::from_value(context.get_property::<E, P>(entity_id)),)
     }
 }
 
@@ -178,7 +178,7 @@ macro_rules! impl_property_list {
                 }
 
                 fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
-                    (#(context.get_property::<E, P~N>(entity_id), )*)
+                    (#(P~N::from_value(context.get_property::<E, P~N>(entity_id)), )*)
                 }
             }
         });

@@ -184,7 +184,7 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     }
 
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
-        let found_value: P1 = context.get_property(entity_id);
+        let found_value: P1 = P1::from_value(context.get_property::<E, P1>(entity_id));
         found_value == self.0
     }
 
@@ -309,7 +309,7 @@ macro_rules! impl_query {
                 fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool {
                     #(
                         {
-                            let found_value: T~N = context.get_property(entity_id);
+                            let found_value: T~N = T~N::from_value(context.get_property::<E, T~N>(entity_id));
                             if found_value != self.N {
                                 return false
                             }

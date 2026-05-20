@@ -22,7 +22,8 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
             .get(&age_group)
             .unwrap();
 
-        let person_status: InfectionStatus = context.get_property(person_to_infect);
+        let person_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person_to_infect);
 
         if person_status == InfectionStatus::S {
             context.set_property(person_to_infect, InfectionStatus::I);

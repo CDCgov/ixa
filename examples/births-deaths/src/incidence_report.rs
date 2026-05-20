@@ -22,8 +22,9 @@ fn handle_infection_status_change(
     context: &mut Context,
     event: PropertyChangeEvent<Person, InfectionStatus>,
 ) {
-    let age_person: Age = context.get_property(event.entity_id);
-    let age_group_person: AgeGroupRisk = context.get_property(event.entity_id);
+    let age_person: Age = context.get_property::<Person, Age>(event.entity_id);
+    let age_group_person: AgeGroupRisk =
+        context.get_property::<Person, AgeGroupRisk>(event.entity_id);
     context.send_report(IncidenceReportItem {
         time: context.get_current_time(),
         person_id: format!("{}", event.entity_id),

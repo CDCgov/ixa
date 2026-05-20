@@ -102,11 +102,14 @@ pub trait ContextEntitiesExt {
 
     /// Fetches the property value set for the given `entity_id`.
     ///
-    /// The easiest way to call this method is by assigning it to a variable with an explicit type:
+    /// Returns `P::Value` — for legacy newtype properties this is `Self` (the wrapper),
+    /// for primitive-form properties this is the inner primitive type.
+    ///
+    /// The recommended call style is to name the entity and property explicitly:
     /// ```rust, ignore
-    /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
+    /// let vaccine_status = context.get_property::<Person, VaccineStatus>(entity_id);
     /// ```
-    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
+    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P::Value;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
     fn set_property<E: Entity, P: Property<E>>(
@@ -270,12 +273,12 @@ impl ContextEntitiesExt for Context {
         Ok(new_entity_id)
     }
 
-    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P {
+    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P::Value {
         if P::is_derived() {
-            P::compute_derived(self, entity_id)
+            P::compute_derived(self, entity_id).into_value()
         } else {
             let property_store = self.get_property_value_store::<E, P>();
-            property_store.get(entity_id)
+            property_store.get(entity_id).into_value()
         }
     }
 
@@ -839,11 +842,12 @@ mod tests {
         let person = context.add_entity(with!(Person, Age(25))).unwrap();
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age: Age = context.get_property::<Person, Age>(person);
         assert_eq!(age, Age(25));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Susceptible);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated: Vaccinated = context.get_property::<Person, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(false));
 
         // Change them
@@ -852,11 +856,12 @@ mod tests {
         context.set_property(person, Vaccinated(true));
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age: Age = context.get_property::<Person, Age>(person);
         assert_eq!(age, Age(26));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Infected);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated: Vaccinated = context.get_property::<Person, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(true));
     }
 
@@ -875,11 +880,12 @@ mod tests {
             .unwrap();
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age: Age = context.get_property::<Person, Age>(person);
         assert_eq!(age, Age(25));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Recovered);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated: Vaccinated = context.get_property::<Person, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(true));
 
         // Change them
@@ -888,11 +894,12 @@ mod tests {
         context.set_property(person, Vaccinated(false));
 
         // Retrieve and check their values
-        let age: Age = context.get_property(person);
+        let age: Age = context.get_property::<Person, Age>(person);
         assert_eq!(age, Age(26));
-        let infection_status: InfectionStatus = context.get_property(person);
+        let infection_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person);
         assert_eq!(infection_status, InfectionStatus::Infected);
-        let vaccinated: Vaccinated = context.get_property(person);
+        let vaccinated: Vaccinated = context.get_property::<Person, Vaccinated>(person);
         assert_eq!(vaccinated, Vaccinated(false));
     }
 
@@ -982,11 +989,11 @@ mod tests {
             ))
             .unwrap();
 
-        let actual_high: RiskLevel = context.get_property(expected_high_id);
+        let actual_high: RiskLevel = context.get_property::<Person, RiskLevel>(expected_high_id);
         assert_eq!(actual_high, RiskLevel::High);
-        let actual_med: RiskLevel = context.get_property(expected_med_id);
+        let actual_med: RiskLevel = context.get_property::<Person, RiskLevel>(expected_med_id);
         assert_eq!(actual_med, RiskLevel::Medium);
-        let actual_low: RiskLevel = context.get_property(expected_low_id);
+        let actual_low: RiskLevel = context.get_property::<Person, RiskLevel>(expected_low_id);
         assert_eq!(actual_low, RiskLevel::Low);
     }
 
@@ -1066,7 +1073,7 @@ mod tests {
             .add_entity(with!(Person, Age(17), IsSwimmer(true)))
             .unwrap();
 
-        let is_adult_athlete: AdultAthlete = context.get_property(person);
+        let is_adult_athlete: AdultAthlete = context.get_property::<Person, AdultAthlete>(person);
         assert!(!is_adult_athlete.0);
 
         let flag = Rc::new(RefCell::new(0));
@@ -1082,7 +1089,7 @@ mod tests {
 
         context.set_property(person, Age(20));
         // Make sure the derived property is what we expect.
-        let is_adult_athlete: AdultAthlete = context.get_property(person);
+        let is_adult_athlete: AdultAthlete = context.get_property::<Person, AdultAthlete>(person);
         assert!(is_adult_athlete.0);
 
         // Execute queued event handlers

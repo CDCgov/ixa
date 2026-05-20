@@ -12,7 +12,8 @@ fn attempt_infection(context: &mut Context) {
     let population_size: usize = context.get_entity_count::<Person>();
     let person_to_infect: PersonId = context.sample_entity(TransmissionRng, Person).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
 
-    let person_status: InfectionStatus = context.get_property(person_to_infect);
+    let person_status: InfectionStatus =
+        context.get_property::<Person, InfectionStatus>(person_to_infect);
 
     if person_status == InfectionStatus::S {
         context.set_property(person_to_infect, InfectionStatus::I);
@@ -54,7 +55,8 @@ mod test {
         context.init_random(SEED);
         let person_id: PersonId = context.add_entity(Person).unwrap();
         attempt_infection(&mut context);
-        let person_status: InfectionStatus = context.get_property(person_id);
+        let person_status: InfectionStatus =
+            context.get_property::<Person, InfectionStatus>(person_id);
         assert_eq!(person_status, InfectionStatus::I);
         context.execute();
     }

@@ -56,9 +56,9 @@ impl fmt::Display for AgeGroupRisk {
 }
 
 fn schedule_aging(context: &mut Context, person_id: PersonId) {
-    let is_alive: Alive = context.get_property(person_id);
+    let is_alive: Alive = context.get_property::<Person, Alive>(person_id);
     if is_alive.0 {
-        let prev_age: Age = context.get_property(person_id);
+        let prev_age: Age = context.get_property::<Person, Age>(person_id);
         context.set_property(person_id, Age(prev_age.0 + 1));
         let next_age_event = context.get_current_time() + 365.0;
         context.add_plan(next_age_event, move |context| {
@@ -168,8 +168,8 @@ mod test {
         let population = context.get_entity_count::<Person>();
 
         // Even if these people have died during simulation, we can still get their properties
-        let age_0: Age = context.get_property(person1);
-        let age_1: Age = context.get_property((*person2).borrow().unwrap());
+        let age_0: Age = context.get_property::<Person, Age>(person1);
+        let age_1: Age = context.get_property::<Person, Age>((*person2).borrow().unwrap());
         assert_eq!(age_0.0, 10);
         assert_eq!(age_1.0, 0);
 

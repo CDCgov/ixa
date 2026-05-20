@@ -28,7 +28,7 @@ fn handle_infection_status_change(
     }
 
     // figure out who infected whom
-    let infected_by: InfectedBy = context.get_property(event.entity_id);
+    let infected_by: InfectedBy = context.get_property::<Person, InfectedBy>(event.entity_id);
     let infected_by_val = match infected_by.0 {
         None => "NA".to_string(),
         Some(id) => id.to_string(),
@@ -96,7 +96,7 @@ mod test {
             return;
         }
 
-        let infected_by: InfectedBy = context.get_property(event.entity_id);
+        let infected_by: InfectedBy = context.get_property::<Person, InfectedBy>(event.entity_id);
         let infected_by_val = match infected_by.0 {
             None => "NA".to_string(),
             Some(id) => id.to_string(),

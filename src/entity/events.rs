@@ -60,7 +60,7 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 {
     /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(&mut self, context: &mut Context) {
-        self.0.current = context.get_property(self.0.entity_id);
+        self.0.current = P::from_value(context.get_property::<E, P>(self.0.entity_id));
 
         {
             // Update value change counters
