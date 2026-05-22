@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::hash::{Hash, Hasher};
+    use std::rc::Rc;
 
     use ixa::prelude::*;
     use ixa::HashSet;
@@ -11,6 +13,21 @@ mod tests {
     // Test entity property / derived / multi-property macros
     define_property!(struct TestPropU32(u32), Person);
     define_property!(struct TestPropU32b(u32), Person);
+    define_property!(struct MacroAge(u8), Person, default_const = MacroAge(0));
+    define_property!(
+        struct MacroHighRisk(bool),
+        Person,
+        default_const = MacroHighRisk(false)
+    );
+    define_property!(
+        enum MacroInfectionStatus {
+            Susceptible,
+            Infected,
+            Recovered,
+        },
+        Person,
+        default_const = MacroInfectionStatus::Susceptible
+    );
     define_property!(
         struct TestPropDefault(u32),
         Person,
@@ -138,6 +155,12 @@ mod tests {
     // Test rng macro
     define_rng!(TestRngId);
 
+    fn as_context(context: &mut Context) -> &mut Context {
+        context
+    }
+
+    fn macro_named_value_change_handler<C>(_context: &mut Context, _counter: &mut C) {}
+
     #[test]
     fn compile_and_run_macros() {
         let mut ctx = Context::new();
@@ -237,5 +260,114 @@ mod tests {
         let a = 1.0f64;
         let b = 1.0f64 + 1e-12;
         ixa::assert_almost_eq!(a, b, 1e-10);
+    }
+
+    #[test]
+    fn track_periodic_value_change_counts_macro_forms() {
+        let mut ctx = Context::new();
+
+        let omitted_strata = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let empty_strata = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let singleton_strata = Rc::new(RefCell::new(Vec::<usize>::new()));
+        let multiple_strata = Rc::new(RefCell::new(Vec::<usize>::new()));
+
+        let omitted_strata_clone = omitted_strata.clone();
+        track_periodic_value_change_counts!(
+            as_context(&mut ctx),
+            Person,
+            MacroInfectionStatus,
+            0.5 + 0.5,
+            move |_context, counter| {
+                omitted_strata_clone
+                    .borrow_mut()
+                    .push(counter.get_count((), MacroInfectionStatus::Infected));
+            },
+        );
+
+        let empty_strata_clone = empty_strata.clone();
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            [],
+            1.0,
+            move |_context, counter| {
+                empty_strata_clone
+                    .borrow_mut()
+                    .push(counter.get_count((), MacroInfectionStatus::Infected));
+            },
+        );
+
+        let singleton_strata_clone = singleton_strata.clone();
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            [MacroAge],
+            1.0,
+            move |_context, counter| {
+                singleton_strata_clone
+                    .borrow_mut()
+                    .push(counter.get_count((MacroAge(10),), MacroInfectionStatus::Infected));
+            },
+        );
+
+        let multiple_strata_clone = multiple_strata.clone();
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            [MacroAge, MacroHighRisk],
+            1.0,
+            move |_context, counter| {
+                multiple_strata_clone.borrow_mut().push(counter.get_count(
+                    (MacroAge(10), MacroHighRisk(true)),
+                    MacroInfectionStatus::Infected,
+                ));
+            },
+        );
+
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            [],
+            1.0,
+            |_context, counter| {
+                let _ = counter.get_count((), MacroInfectionStatus::Infected);
+            },
+        );
+
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            [MacroAge],
+            1.0,
+            macro_named_value_change_handler,
+        );
+
+        let person = ctx
+            .add_entity(with!(
+                Person,
+                TestPropU32(1),
+                TestPropU32b(2),
+                MacroAge(10),
+                MacroHighRisk(true),
+                MacroInfectionStatus::Susceptible,
+            ))
+            .unwrap();
+
+        ctx.add_plan(0.5, move |context| {
+            context.set_property(person, MacroInfectionStatus::Infected);
+        });
+        ctx.add_plan(1.1, Context::shutdown);
+
+        ctx.execute();
+
+        assert_eq!(*omitted_strata.borrow(), vec![0, 1]);
+        assert_eq!(*empty_strata.borrow(), vec![0, 1]);
+        assert_eq!(*singleton_strata.borrow(), vec![0, 1]);
+        assert_eq!(*multiple_strata.borrow(), vec![0, 1]);
     }
 }
