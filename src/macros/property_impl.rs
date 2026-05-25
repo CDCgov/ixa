@@ -1573,27 +1573,18 @@ mod tests {
             .add_entity(with!(Person, POu32(Some(42)), Pu32(22)))
             .unwrap();
         assert_eq!(
-            format!(
-                "{:}",
-                POu32::get_display(&context.get_property::<_, POu32>(person))
-            ),
+            POu32::get_display(&context.get_property::<_, POu32>(person)).to_string(),
             "42"
         );
         assert_eq!(
-            format!(
-                "{:}",
-                Pu32::get_display(&context.get_property::<_, Pu32>(person))
-            ),
+            Pu32::get_display(&context.get_property::<_, Pu32>(person)).to_string(),
             "Pu32(22)"
         );
         let person2 = context
             .add_entity(with!(Person, POu32(None), Pu32(11)))
             .unwrap();
         assert_eq!(
-            format!(
-                "{:}",
-                POu32::get_display(&context.get_property::<_, POu32>(person2))
-            ),
+            POu32::get_display(&context.get_property::<_, POu32>(person2)).to_string(),
             "None"
         );
     }

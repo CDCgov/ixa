@@ -6,5 +6,6 @@ mod define_rng;
 mod edge_impl;
 mod entity_impl;
 mod property_impl;
+mod schedule_relative;
 mod value_change_counts;
 mod with;
