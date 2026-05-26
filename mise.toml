@@ -17,23 +17,36 @@ pnpm = "latest"
 # Note: If you have cargo-binstall installed, this will make tool installs much faster
 cargo.binstall = true
 
+[tasks.'rust:version']
+description = "Print the active Rust toolchain versions"
+run = [
+  "rustup show active-toolchain",
+  "rustc --version",
+  "cargo --version",
+]
+
 [tasks.'install-nightly']
 description = "Install rust nightly, which is needed for clippy"
 run = [
+  "mise run rust:version",
   "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt clippy",
 ]
 
 [tasks.build]
 description = "Build default targets. Run with --release for a release build."
-run = "cargo build --workspace"
+run = ["mise run rust:version", "cargo build --workspace"]
 
 [tasks.example]
 description = "Run an example"
-run = "cargo run --example {{arg(name='example', default='')}}"
+run = [
+  "mise run rust:version",
+  "cargo run --example {{arg(name='example', default='')}}",
+]
 
 [tasks.examples]
 description = "Run all examples"
 run = '''
+mise run rust:version
 for example in $(cargo build --example 2>&1 | tail -n +3); do \
   mise run example "$example"; \
 done
@@ -42,6 +55,7 @@ done
 [tasks.docs]
 description = "Build the Rust cli docs, API docs and Ixa website"
 run = '''
+  mise run rust:version
   cargo run --features write_cli_usage --example basic-infection -- --markdown-help
   cargo doc --all-features --no-deps
   rm -rf website/doc
@@ -59,16 +73,17 @@ depends = ["test:unit"]
 
 [tasks.'test:unit']
 description = "Run all unit tests"
-run = "cargo test --all-targets --workspace"
+run = ["mise run rust:version", "cargo test --all-targets --workspace"]
 
 [tasks.'test:core']
 description = "Run just the core Ixa tests (much faster)"
-run = "cargo test -p ixa"
+run = ["mise run rust:version", "cargo test -p ixa"]
 
 [tasks.'test:book']
 description = "Build and run the Ixa Book disease model example against local Ixa"
 dir = "docs/book/models/disease_model"
 run = '''
+  mise run rust:version
   cargo run \
     --config 'patch."https://github.com/CDCgov/ixa".ixa.path="../../../.."'
 '''
@@ -81,7 +96,7 @@ run = "pnpm exec playwright test"
 
 [tasks.'test:features']
 description = "Run just the core Ixa tests (much faster)"
-run = "cargo test --no-default-features"
+run = ["mise run rust:version", "cargo test --no-default-features"]
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
@@ -95,7 +110,7 @@ outputs = 'node_modules/.pnpm/lock.yaml'
 [tasks.'wasm:compile']
 env.RUSTFLAGS = '--cfg getrandom_backend="wasm_js"'
 dir = "integration-tests/ixa-wasm-tests"
-run = "wasm-pack build --target web"
+run = ["mise run rust:version", "wasm-pack build --target web"]
 sources = ["src/*.rs", "Cargo.toml"]
 outputs = "pkg"
 
@@ -105,22 +120,29 @@ run = ["mise run bench:hyperfine", "mise run bench:criterion"]
 
 [tasks.'bench:criterion']
 description = "Run all Criterion benchmarks (optionally pass a specific name)"
-run = "cargo bench -p ixa-bench {{arg(name='name', default='')}}"
+run = [
+  "mise run rust:version",
+  "cargo bench -p ixa-bench {{arg(name='name', default='')}}",
+]
 
 [tasks.'bench:create']
 description = "Compare benchmarks against a Criterion baseline"
-run = "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-baseline {{arg(name='baseline')}}"
+run = [
+  "mise run rust:version",
+  "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --save-baseline {{arg(name='baseline')}}",
+]
 
 [tasks.'bench:compare']
 description = "Compare benchmarks against a Criterion baseline"
 run = [
+  "mise run rust:version",
   "cargo bench -p ixa-bench {{arg(name='name', default='')}} -- --baseline-lenient {{arg(name='baseline')}}",
   "cargo run -q -p ixa-bench --bin check_criterion_regressions",
 ]
 
 [tasks.'build:hyperfine']
 description = "Build the benchmark utilities binaries"
-run = "cargo build -p ixa-bench --release"
+run = ["mise run rust:version", "cargo build -p ixa-bench --release"]
 sources = ["ixa-bench/src/**/*.rs", 'Cargo.toml', "ixa-bench/Cargo.toml"]
 outputs = "target/release/hyperfine"
 
@@ -139,9 +161,22 @@ run = ["mise run check:*"]
 description = "Run rust checks. Faster than check-all"
 depends = ["check:rust"]
 
+[tasks.'check:rust-toolchain']
+description = "Verify Cargo rust-version matches rust-toolchain.toml"
+run = '''
+toolchain_version="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
+cargo_version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+
+if [ "$toolchain_version" != "$cargo_version" ]; then
+  echo "rust-toolchain.toml channel ($toolchain_version) must match Cargo.toml rust-version ($cargo_version)."
+  exit 1
+fi
+'''
+
 [tasks.'check:rust']
-depends = "install-nightly"
+depends = ["install-nightly", "check:rust-toolchain"]
 run = [
+  "mise run rust:version",
   # cargo check compiles everything without the final step of code generation
   # --all-targets ensures we include --lib --bins --tests --benches --examples
   "cargo check --all-targets --workspace --all-features",
@@ -178,6 +213,7 @@ run = "rumdl check --fix ."
 
 [tasks.'fix:rust']
 run = [
+  "mise run rust:version",
   "cargo +nightly clippy --fix --workspace --all-targets --allow-dirty --all-features -- -D warnings",
   "cargo +nightly fmt",
 ]
@@ -185,6 +221,7 @@ run = [
 [tasks.clean]
 description = "Remove build artifacts"
 run = '''
+  mise run rust:version
   cargo clean
   rm -rf pkg integration-tests/ixa-wasm-tests/{pkg,node_modules}
   rm -rf website/{doc,debug,book}
