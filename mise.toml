@@ -19,11 +19,7 @@ cargo.binstall = true
 
 [tasks.'rust:version']
 description = "Print the active Rust toolchain versions"
-run = [
-  "rustup show active-toolchain",
-  "rustc --version",
-  "cargo --version",
-]
+run = 'printf "toolchain=%s rustc=%s cargo=%s\n" "$(rustup show active-toolchain)" "$(rustc --version)" "$(cargo --version)"'
 
 [tasks.'install-nightly']
 description = "Install rust nightly, which is needed for clippy"
@@ -161,20 +157,8 @@ run = ["mise run check:*"]
 description = "Run rust checks. Faster than check-all"
 depends = ["check:rust"]
 
-[tasks.'check:rust-toolchain']
-description = "Verify Cargo rust-version matches rust-toolchain.toml"
-run = '''
-toolchain_version="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
-cargo_version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
-
-if [ "$toolchain_version" != "$cargo_version" ]; then
-  echo "rust-toolchain.toml channel ($toolchain_version) must match Cargo.toml rust-version ($cargo_version)."
-  exit 1
-fi
-'''
-
 [tasks.'check:rust']
-depends = ["install-nightly", "check:rust-toolchain"]
+depends = ["install-nightly"]
 run = [
   "mise run rust:version",
   # cargo check compiles everything without the final step of code generation

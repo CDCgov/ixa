@@ -8,8 +8,7 @@ that toolchain version so the project has a single Rust version to maintain.
 
 Dependabot opens monthly PRs to update `rust-toolchain.toml`. Review those PRs
 like dependency updates, because a toolchain bump can introduce new compiler,
-rustfmt, or clippy behavior. CI checks that `Cargo.toml` stays in sync with the
-toolchain file.
+rustfmt, or clippy behavior.
 
 ## Commit messages
 

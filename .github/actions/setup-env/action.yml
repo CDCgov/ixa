@@ -20,8 +20,6 @@ runs:
       shell: bash
       run: |
         rustup toolchain install
-        active_toolchain="$(rustup show active-toolchain | awk '{print $1}')"
-        echo "RUSTUP_TOOLCHAIN=${active_toolchain}" >> "$GITHUB_ENV"
 
     - name: Install cargo-binstall
       uses: cargo-bins/cargo-binstall@v1.15.6
