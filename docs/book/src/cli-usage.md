@@ -4,7 +4,7 @@ This document contains the help content for the `ixa` command-line program.
 
 ## `ixa`
 
-Default cli arguments for ixa runner
+Default cli arguments for Ixa runner
 
 **Usage:** `ixa [OPTIONS]`
 

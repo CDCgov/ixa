@@ -19,7 +19,7 @@ Use [`thiserror`](https://docs.rs/thiserror/latest/thiserror/) to help you easil
 ## Creating your own error types
 
 You might want your own error type if you want to generate structured errors from your own code or want your own
-structured error handling code. For example, you might want to have functions that return `Result<U, V>` to indicate
+structured error handling code. For example, you might want to have functions that return <code>Result&lt;U, V&gt;</code> to indicate
 that they might fail:
 
 ```rust
@@ -84,12 +84,12 @@ pub enum ModelError {
 
 - `impl std::error::Error for ModelError`
 - `impl Display for ModelError`
-- `From<IxaError>`, `From<std::string::FromUtf8Error>`, `From<std::num::ParseIntError>`, and `From<ixa::csv::Error>`
+- <code>From&lt;IxaError&gt;</code>, <code>From&lt;std::string::FromUtf8Error&gt;</code>, <code>From&lt;std::num::ParseIntError&gt;</code>, and <code>From&lt;ixa::csv::Error&gt;</code>
   (because of `#[from]`)
 - `source()` wiring for error chaining
 
 That last item is what lets one error wrap another: The `std::error::Error`
-trait has a `source(&self) -> Option<&(dyn Error + 'static)>` method. When an
+trait has a <code>source(&self) -&gt; Option&lt;&amp;(dyn Error + 'static)&gt;</code> method. When an
 error returns another error from `source()`, it is saying "this error happened
 because of that other error." Error reporters can then walk the chain and show
 both the top-level message and the underlying cause.
@@ -98,7 +98,7 @@ You can implement all of this without the [`thiserror`](https://docs.rs/thiserro
 [`thiserror`](https://docs.rs/thiserror/latest/thiserror/) saves you a lot of boilerplate. With
 [`thiserror`](https://docs.rs/thiserror/latest/thiserror/), you usually do not write `source()` yourself. A field
 marked with `#[from]` or `#[source]` is treated as the underlying cause and returned from `source()` automatically.
-`#[from]` also generates the corresponding `From<...>` impl, while `#[source]` only marks the wrapped error as the
+`#[from]` also generates the corresponding <code>From&lt;...&gt;</code> impl, while `#[source]` only marks the wrapped error as the
 cause.
 
 This shows several useful patterns:

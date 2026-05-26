@@ -67,7 +67,7 @@ pub enum InfectionStatus {
     Recovered,
 }
 
-// Implements `Property\<Person>` for an existing type.
+// Implements `Property<Person>` for an existing type.
 impl_property!(
     InfectionStatus,
     Person,
@@ -80,7 +80,7 @@ traits and `pub` visibility to the type definition and then call
 `impl_property!` as above.)
 
 The crucial thing to understand is that the value type _is_ the property type.
-The `impl Property\<Person> for InfectionStatus`, which the macros give you, is
+The <code>impl Property&lt;Person&gt; for InfectionStatus</code>, which the macros give you, is
 the thing that ties the `InfectionStatus` type to the `Person` entity.
 
 For details about defining properties, see the `property_impl` module-level docs
@@ -93,16 +93,16 @@ and API docs for the macros `define_property!`, `impl_property!`,
 | Concept                     | Old System                                                                                                                     | New System                                                                                                           | Notes / Implications                                                                |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **Property Type Structure** | Two separate types: (1) value type, and (2) property-identifier ZST.                                                           | A single type represents both the value and identifies the property.                                                 | Simplified to a single type                                                         |
-| **Defining Properties**     | Define a normal Rust type (or use an existing primitive, e.g. `u8`), then use a macro to define the identifying property type. | Define a normal Rust type, then use `impl_property` to declare it a `Property\<E>` for a particular `Entity` `E`.     |                                                                                     |
+| **Defining Properties**     | Define a normal Rust type (or use an existing primitive, e.g. `u8`), then use a macro to define the identifying property type. | Define a normal Rust type, then use `impl_property` to declare it a <code>Property&lt;E&gt;</code> for a particular `Entity` `E`.     |                                                                                     |
 | **Entity Association**      | Implicit—only one entity ("person")                                                                                            | Every property must explicitly specify the `Entity` it belongs to (e.g., `Person`); Entities are defined separately. |                                                                                     |
-| **Default Values**          | Provided in the macro creating the property-identifier type.                                                                   | Same but with updated syntax; default values are per `Property\<E>` implementation.                                   |                                                                                     |
+| **Default Values**          | Provided in the macro creating the property-identifier type.                                                                   | Same but with updated syntax; default values are per <code>Property&lt;E&gt;</code> implementation.                                   |                                                                                     |
 | **Using Existing Types**    | A single _value_ type can be used in multiple properties—including primitive types like `u8`                                   | Only one property per type (per `Entity`); primitive types must be wrapped in a newtype.                             | Both systems require that the existing type implement the required property traits. |
 | **Macro Behavior**          | Macros define the property’s ZST and connect it to the value type via trait impls.                                             | Macros define "is a property of entity `E`" relationship via trait impl. No additional synthesized types.            | Both enforce correctness via macro                                                  |
 
 ## Global property validator errors
 
 Global-property validators are client code, so they should return
-`Result<(), Box<dyn std::error::Error + 'static>>` instead of constructing
+<code>Result&lt;(), Box&lt;dyn std::error::Error + 'static&gt;&gt;</code> instead of constructing
 `IxaError` values directly. Ixa wraps any returned validator error in
 `IxaError::IllegalGlobalPropertyValue` when a global property is set or loaded.
 
@@ -131,8 +131,8 @@ impl_entity!(Person);
 ```
 
 These macros automatically create a type alias of the form
-`MyEntityId = EntityId\<MyEntity>`. In our case, it defines the type alias
-`PersonId = EntityId\<Person>`.
+<code>MyEntityId = EntityId&lt;MyEntity&gt;</code>. In our case, it defines the type alias
+<code>PersonId = EntityId&lt;Person&gt;</code>.
 
 ### Adding a new entity (e.g. a new person)
 
@@ -214,8 +214,8 @@ calls after the first one will just be ignored.
 ### Subscribe to events
 
 The only difference is that now we use the
-`PropertyChangeEvent\<E: Entity, P: Property<E>>` and
-`EntityCreatedEvent\<E: Entity>` types.
+<code>PropertyChangeEvent&lt;E: Entity, P: Property&lt;E&gt;&gt;</code> and
+<code>EntityCreatedEvent&lt;E: Entity&gt;</code> types.
 
 ```rust
 pub fn init(context: &mut Context) {
