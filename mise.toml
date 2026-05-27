@@ -7,6 +7,7 @@ pnpm = "latest"
 "npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
+"cargo:cargo-llvm-cov" = "latest"
 "cargo:mdbook" = "0.4.52"
 "cargo:mdbook-callouts" = "0.2.2"
 "cargo:mdbook-inline-highlighting" = "1.0.0"
@@ -82,6 +83,18 @@ run = "pnpm exec playwright test"
 [tasks.'test:features']
 description = "Run just the core Ixa tests (much faster)"
 run = "cargo test --no-default-features"
+
+[tasks.coverage]
+description = "Generate local Rust test coverage reports"
+run = [
+  "rustup component add llvm-tools-preview",
+  "cargo llvm-cov clean --workspace",
+  "cargo llvm-cov --workspace --all-targets --no-report",
+  "cargo llvm-cov report --summary-only",
+  "cargo llvm-cov report --html",
+  "cargo clean -p ixa-integration-tests",
+  "find . -name '*.profraw' ! -path './target/*' -delete",
+]
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
