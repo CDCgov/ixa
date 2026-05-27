@@ -6,4 +6,5 @@ mod define_rng;
 mod edge_impl;
 mod entity_impl;
 mod property_impl;
+mod value_change_counts;
 mod with;

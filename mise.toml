@@ -8,9 +8,9 @@ pnpm = "latest"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
 "cargo:cargo-llvm-cov" = "latest"
-"cargo:mdbook" = "0.4.52"
-"cargo:mdbook-callouts" = "0.2.2"
-"cargo:mdbook-inline-highlighting" = "1.0.0"
+"cargo:mdbook" = "0.5.3"
+"cargo:mdbook-callouts" = "0.3.0"
+"cargo:mdbook-inline-highlighting" = "2.0.0"
 "cargo:rumdl" = "0.1.18"
 
 
