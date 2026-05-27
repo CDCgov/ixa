@@ -24,6 +24,12 @@ run = [
   "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt clippy",
 ]
 
+[tasks.'install-coverage']
+description = "Install Rust coverage tools"
+run = [
+  "rustup component add llvm-tools-preview",
+]
+
 [tasks.build]
 description = "Build default targets. Run with --release for a release build."
 run = "cargo build --workspace"
@@ -86,8 +92,8 @@ run = "cargo test --no-default-features"
 
 [tasks.coverage]
 description = "Generate local Rust test coverage reports"
+depends = ["install-coverage"]
 run = [
-  "rustup component add llvm-tools-preview",
   "cargo llvm-cov clean --workspace",
   "cargo llvm-cov --workspace --all-targets --no-report",
   "cargo llvm-cov report --summary-only",
