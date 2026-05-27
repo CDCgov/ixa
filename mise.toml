@@ -92,8 +92,6 @@ run = [
   "cargo llvm-cov --workspace --all-targets --no-report",
   "cargo llvm-cov report --summary-only",
   "cargo llvm-cov report --html",
-  "cargo clean -p ixa-integration-tests",
-  "find . -name '*.profraw' ! -path './target/*' -delete",
 ]
 
 [tasks.'wasm:pnpm']
