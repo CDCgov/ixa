@@ -29,7 +29,7 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let infection_duration = parameters.infection_duration;
     let recovery_time = context.get_current_time()
         + context.sample_distr(InfectionRng1, Exp::new(1.0 / infection_duration).unwrap());
-    let is_alive: Alive = context.get_property(person_id);
+    let is_alive: Alive = context.get_property::<Person, Alive>(person_id);
 
     if is_alive.0 {
         let plan_id = context.add_plan(recovery_time, move |context| {

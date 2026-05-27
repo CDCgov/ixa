@@ -40,8 +40,8 @@ use crate::{Context, IxaEvent};
 // `#[repr(transparent)]` over `PropertyChangeEvent<E, P>`. That event stores
 //
 // - `EntityId<E>`, one `usize`, so 8 bytes.
-// - `current`: a property value, typically <= 8 bytes
-// - `current`: a property value, typically <= 8 bytes
+// - `current`: `P::Value`, typically <= 8 bytes
+// - `previous`: `P::Value`, typically <= 8 bytes
 //
 // That puts the payload at 24 bytes, with 8-byte alignment. The `S4` size is 4 `usize`s of inline
 // storage, i.e. 32 bytes, and inline storage is used when the payload size and alignment fit. So
@@ -60,16 +60,18 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 {
     /// Updates the index with the current property value and emits a change event.
     fn emit_in_context(&mut self, context: &mut Context) {
-        self.0.current = context.get_property(self.0.entity_id);
+        self.0.current = context.get_property::<E, P>(self.0.entity_id);
 
         {
             // Update value change counters
             let property_value_store = context.get_property_value_store::<E, P>();
             if self.0.current != self.0.previous {
                 for counter in &property_value_store.value_change_counters {
-                    counter
-                        .borrow_mut()
-                        .update(self.0.entity_id, self.0.current, context);
+                    counter.borrow_mut().update(
+                        self.0.entity_id,
+                        P::from_value(self.0.current),
+                        context,
+                    );
                 }
             }
         }
@@ -77,13 +79,15 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
         // Now update the indexes
         let property_value_store = context.get_property_value_store_mut::<E, P>();
         // Out with the old
-        property_value_store
-            .index
-            .remove_entity(&self.0.previous.make_canonical(), self.0.entity_id);
+        property_value_store.index.remove_entity(
+            &P::from_value(self.0.previous).make_canonical(),
+            self.0.entity_id,
+        );
         // In with the new
-        property_value_store
-            .index
-            .add_entity(&self.0.current.make_canonical(), self.0.entity_id);
+        property_value_store.index.add_entity(
+            &P::from_value(self.0.current).make_canonical(),
+            self.0.entity_id,
+        );
 
         // We decided not to do the following check.
         // See `src/entity/context_extension::ContextEntitiesExt::set_property`.
@@ -115,7 +119,7 @@ impl<E: Entity, P: Property<E>> Clone for PartialPropertyChangeEventCore<E, P> {
 impl<E: Entity, P: Property<E>> Copy for PartialPropertyChangeEventCore<E, P> {}
 
 impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
-    pub fn new(entity_id: EntityId<E>, previous_value: P) -> Self {
+    pub fn new(entity_id: EntityId<E>, previous_value: <P as Property<E>>::Value) -> Self {
         Self(PropertyChangeEvent {
             entity_id,
             current: previous_value,
@@ -153,15 +157,18 @@ impl<E: Entity> EntityCreatedEvent<E> {
 
 /// Emitted when a property is updated.
 /// These should not be emitted outside this module.
+///
+/// `current` and `previous` are `P::Value`: for legacy newtype properties this is the wrapper
+/// (unchanged behavior); for primitive-form properties this is the inner primitive type.
 #[derive(IxaEvent)]
 #[allow(clippy::manual_non_exhaustive)]
 pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,
     /// The new value
-    pub current: P,
+    pub current: <P as Property<E>>::Value,
     /// The old value
-    pub previous: P,
+    pub previous: <P as Property<E>>::Value,
 }
 // We provide blanket impls for these because the compiler isn't smart enough to know
 // this type is always `Copy`/`Clone` if we derive them.

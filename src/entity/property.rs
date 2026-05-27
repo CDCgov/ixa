@@ -63,6 +63,22 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 /// Property values and canonical values must satisfy `AnyProperty` so they can participate in
 /// property indexes.
 pub trait Property<E: Entity>: AnyProperty {
+    /// The "user-facing" value type of a property. For complex newtype properties this is `Self`
+    /// (the wrapper itself); for primitive-form properties defined as `Name: Primitive` this is
+    /// the inner primitive type. `get_property` returns `Self::Value`.
+    type Value: AnyProperty;
+
+    /// Extracts the `Value` from a property. For complex properties this is the identity; for
+    /// primitive-form properties it unwraps the inner field.
+    #[must_use]
+    fn into_value(self) -> Self::Value;
+
+    /// Wraps a `Value` back into the property type. The inverse of [`into_value`]. For complex
+    /// properties this is the identity; for primitive-form properties it wraps the primitive in
+    /// the newtype.
+    #[must_use]
+    fn from_value(value: Self::Value) -> Self;
+
     /// Some properties might store a transformed version of the value in the index. This is the
     /// type of the transformed value. For simple properties this will be the same as `Self`.
     type CanonicalValue: AnyProperty;

@@ -227,6 +227,72 @@ macro_rules! define_property {
     // `impl_derived_property!(@with_option_display_default ...)` and
     // `impl_property!(@with_option_display_default ...)` subcommands.
 
+    // Primitive form: `define_property!(Age: u8, Person)`.
+    //
+    // Generates a newtype `pub struct Age(pub u8)` plus `From<u8> for Age` and
+    // `From<Age> for u8`, then dispatches to `impl_property!` with
+    // `value_type = u8` and `into_value_fn = |Age(v)| v`. The newtype is the
+    // identity of the property (used by `set_property`, `with!`, indexes, and
+    // events, exactly like the legacy newtype form), while `Property::Value`
+    // is the inner primitive — so `get_property::<_, Age>(pid)` returns `u8`.
+    (
+        $name:ident : $value_ty:ty,
+        $entity:ident,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            pub struct $name(pub $value_ty);,
+            $name
+        );
+        $crate::define_property!(@primitive_conversions $name, $value_ty);
+        $crate::impl_property!(
+            $name,
+            $entity
+            $(, $($extra)*)?,
+            value_type = $value_ty,
+            into_value_fn = |v: $name| v.0,
+            from_value_fn = |v: $value_ty| $name(v)
+        );
+    };
+    (
+        $name:ident : $value_ty:ty,
+        $entity:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            pub struct $name(pub $value_ty);,
+            $name
+        );
+        $crate::define_property!(@primitive_conversions $name, $value_ty);
+        $crate::impl_property!(
+            $name,
+            $entity
+            $(, $($extra)*)?,
+            value_type = $value_ty,
+            into_value_fn = |v: $name| v.0,
+            from_value_fn = |v: $value_ty| $name(v)
+        );
+    };
+
+    // Helper: generate `From<$value_ty>` for the wrapper and `From<$name>` for the inner type.
+    (@primitive_conversions $name:ident, $value_ty:ty) => {
+        impl ::core::convert::From<$value_ty> for $name {
+            #[inline]
+            fn from(value: $value_ty) -> Self {
+                $name(value)
+            }
+        }
+        impl ::core::convert::From<$name> for $value_ty {
+            #[inline]
+            fn from(value: $name) -> Self {
+                value.0
+            }
+        }
+    };
+
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
@@ -479,6 +545,9 @@ macro_rules! impl_property {
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
+        $(, value_type = $value_type:ty)?
+        $(, into_value_fn = $into_value_fn:expr)?
+        $(, from_value_fn = $from_value_fn:expr)?
     ) => {
         // Enforce mutual exclusivity at compile time.
         $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
@@ -487,6 +556,15 @@ macro_rules! impl_property {
             @__impl_property_common
             $property,
             $entity,
+
+            // value type (defaults to Self for the legacy newtype form)
+            $crate::impl_property!(@unwrap_or_ty $($value_type)?, $property),
+
+            // into_value_fn (defaults to identity; primitive form overrides to unwrap `.0`)
+            $crate::impl_property!(@unwrap_or $($into_value_fn)?, std::convert::identity),
+
+            // from_value_fn (defaults to identity; primitive form overrides to wrap with `Self(...)`)
+            $crate::impl_property!(@unwrap_or $($from_value_fn)?, std::convert::identity),
 
             // canonical value
             $crate::impl_property!(@unwrap_or_ty $($canonical_value)?, $property),
@@ -573,6 +651,9 @@ macro_rules! impl_property {
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
+        $(, value_type = $value_type:ty)?
+        $(, into_value_fn = $into_value_fn:expr)?
+        $(, from_value_fn = $from_value_fn:expr)?
     ) => {
         $crate::impl_property!(
             $property,
@@ -591,6 +672,9 @@ macro_rules! impl_property {
                 }
             })
             $(, ctor_registration = $ctor_registration)?
+            $(, value_type = $value_type)?
+            $(, into_value_fn = $into_value_fn)?
+            $(, from_value_fn = $from_value_fn)?
         );
     };
 
@@ -615,6 +699,11 @@ macro_rules! impl_property {
             @__impl_property_common
             $property,
             $entity,
+            // Multi-properties stay Value = Self; the tuple itself is both the value
+            // type and the property identity.
+            $property,
+            std::convert::identity,
+            std::convert::identity,
             $crate::impl_property!(@unwrap_or_ty $($canonical_value)?, $property),
             $crate::impl_property!(@select_initialization_kind $($compute_derived_fn)? ; $($default_const)?),
             $crate::impl_property!(
@@ -712,6 +801,9 @@ macro_rules! impl_property {
         @__impl_property_common
         $property:ident,           // The name of the type we are implementing `Property` for
         $entity:ident,             // The entity type this property is associated with
+        $value_type:ty,            // The `Property::Value` associated type. Defaults to `Self` for the legacy newtype form; primitive form sets this to the inner primitive type.
+        $into_value_fn:expr,       // A function `Self -> Self::Value`. Defaults to `identity` for the legacy form; primitive form sets this to `|s| s.0`.
+        $from_value_fn:expr,       // A function `Self::Value -> Self`. Defaults to `identity`; primitive form sets this to `|v| Self(v)`.
         $canonical_value:ty,       // If the type stored in the index is different from Self, the name of that type
         $initialization_kind:expr, // The kind of initialization this property has (implicit selection)
         $compute_derived_fn:expr,  // If the property is derived, the function that computes the value
@@ -727,10 +819,19 @@ macro_rules! impl_property {
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
         impl $crate::entity::property::Property<$entity> for $property {
+            type Value = $value_type;
             type CanonicalValue = $canonical_value;
             type QueryParts<'a> = $query_parts_type where Self: 'a;
 
             const NAME: &'static str = stringify!($property);
+
+            fn into_value(self) -> Self::Value {
+                ($into_value_fn)(self)
+            }
+
+            fn from_value(value: Self::Value) -> Self {
+                ($from_value_fn)(value)
+            }
 
             fn initialization_kind() -> $crate::entity::property::PropertyInitializationKind {
                 $initialization_kind
@@ -744,7 +845,11 @@ macro_rules! impl_property {
             }
 
             fn default_const() -> Self {
-                $default_const
+                // `$default_const` is the inner `Self::Value`; wrap it back into `Self`. For
+                // legacy newtype properties this is the identity. When no default was provided
+                // it expands to `panic!(...)`, so silence the unreachable-call lint.
+                #[allow(unreachable_code)]
+                <Self as $crate::entity::property::Property<$entity>>::from_value($default_const)
             }
 
             fn make_canonical(self) -> Self::CanonicalValue {
@@ -819,6 +924,20 @@ macro_rules! impl_property {
 /// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property],
 ///   plus `impl_eq_hash = Eq | Hash | both | neither` to control whether `Eq`/`Hash` are derived or generated
 ///   for the declared type, mirroring [`define_property!`][macro@crate::define_property].
+///
+/// The primitive form `define_derived_property!(IsAdult: bool, Person, [Age], |age| IsAdult(age >= 18))`
+/// does NOT accept trailing keyword extras like `display_impl = ...`. The compile error is
+/// guided:
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_derived_property};
+/// define_entity!(Person);
+/// define_property!(Age: u8, Person, default_const = 0);
+/// define_derived_property!(
+///     IsAdult: bool, Person, [Age], |age| IsAdult(age >= 18),
+///     display_impl = |v: &IsAdult| format!("{:?}", v.0)
+/// );
+/// ```
 #[macro_export]
 macro_rules! define_derived_property {
     // Implementation Notes
@@ -827,6 +946,108 @@ macro_rules! define_derived_property {
     // behavior to `impl_derived_property!`.
     //
     // See `derive_property!` implementation notes for why each type form is duplicated.
+
+    // Primitive form: `define_derived_property!(IsAdult: bool, Person, [Age], |age| IsAdult(...))`.
+    //
+    // Same generation strategy as the `define_property!` primitive arm: a newtype wrapper
+    // `pub struct IsAdult(pub bool)`, From impls in both directions, then `impl_property!`
+    // directly (bypassing `impl_derived_property!`) so we can thread `value_type = bool` past the
+    // ambiguous `$($extra:tt)+` pattern in `impl_derived_property!`. The derive closure still
+    // returns `Self` (the wrapper), matching the legacy form.
+    //
+    // The primitive arms do NOT accept trailing keyword extras (e.g. `display_impl = ...`) so the
+    // dispatch is unambiguous. Users who need those should use the legacy `struct` form.
+    (
+        $name:ident : $value_ty:ty,
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
+            pub struct $name(pub $value_ty);,
+            $name
+        );
+        $crate::define_property!(@primitive_conversions $name, $value_ty);
+        $crate::define_derived_property!(
+            @__primitive_impl
+            $name, $entity, $value_ty,
+            [$($dependency),*], [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+        );
+    };
+    (
+        $name:ident : $value_ty:ty,
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
+            pub struct $name(pub $value_ty);,
+            $name
+        );
+        $crate::define_property!(@primitive_conversions $name, $value_ty);
+        $crate::define_derived_property!(
+            @__primitive_impl
+            $name, $entity, $value_ty,
+            [$($dependency),*], [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+        );
+    };
+
+    // Diagnostic arm: catch primitive-form invocations that pass trailing keyword extras
+    // (e.g. `display_impl = ...`) and surface a clear error pointing users at the legacy
+    // `struct` form. Without this arm they'd get a generic "no rules matched" error.
+    (
+        $name:ident : $value_ty:ty,
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        $($extra:tt)+
+    ) => {
+        compile_error!(concat!(
+            "define_derived_property!(", stringify!($name), ": ", stringify!($value_ty),
+            ", ...) does not accept trailing keyword arguments other than `impl_eq_hash`. ",
+            "Use the legacy form `define_derived_property!(struct ", stringify!($name),
+            "(", stringify!($value_ty), "), ...)` if you need `display_impl`, ",
+            "`default_const`, `canonical_value`, etc."
+        ));
+    };
+
+    // Internal: build the `impl_property!` invocation for a primitive derived property.
+    // Goes directly to `impl_property!` (skipping `impl_derived_property!`) so the
+    // `value_type` / `into_value_fn` / `from_value_fn` keyword args are unambiguous.
+    (
+        @__primitive_impl
+        $name:ident, $entity:ident, $value_ty:ty,
+        [$($dependency:ident),*], [$($global_dependency:ident),*],
+        |$($param:ident),+| $derive_fn:expr
+    ) => {
+        $crate::impl_property!(
+            $name,
+            $entity,
+            compute_derived_fn = $crate::impl_derived_property!(
+                @construct_compute_fn
+                $entity,
+                [$($dependency),*],
+                [$($global_dependency),*],
+                |$($param),+| $derive_fn
+            ),
+            collect_deps_fn = $crate::impl_derived_property!(
+                @construct_collect_deps_fn $entity, [$($dependency),*]
+            ),
+            value_type = $value_ty,
+            into_value_fn = |v: $name| v.0,
+            from_value_fn = |v: $value_ty| $name(v)
+        );
+    };
 
     // Struct (tuple) with single Option<T> field
     (
@@ -1068,17 +1289,30 @@ macro_rules! impl_derived_property {
                 [$($($global_dependency),*)?],
                 |$($param),+| $derive_fn
             ),
-            collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                $(
-                    if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
-                        <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
-                    } else {
-                        deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
-                    }
-                )*
-            }
+            collect_deps_fn = $crate::impl_derived_property!(
+                @construct_collect_deps_fn $entity, [$($dependency),*]
+            )
             $(, $($extra)+)*
         );
+    };
+
+    // Internal branch: build the `collect_deps_fn` closure that inserts each non-derived
+    // dependency's id (or, if the dependency is itself derived, recursively collects its
+    // non-derived dependencies).
+    (
+        @construct_collect_deps_fn
+        $entity:ident,
+        [$($dependency:ident),*]
+    ) => {
+        |deps: &mut $crate::HashSet<usize>| {
+            $(
+                if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                    <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
+                } else {
+                    deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
+                }
+            )*
+        }
     };
 
     // Internal branch to construct the compute function.
@@ -1195,8 +1429,15 @@ macro_rules! define_multi_property {
                     $entity,
                     ( $($dependency),+ ),
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
+                        // Wrap each dep back into its property type via `from_value`. For legacy
+                        // newtype deps this is identity; for primitive-form deps it re-wraps the
+                        // inner value so the tuple matches `Self = (Dep1, Dep2, ...)`.
                         (
-                            $(context.get_property::<$entity, $dependency>(entity_id)),+
+                            $(
+                                <$dependency as $crate::entity::property::Property<$entity>>::from_value(
+                                    context.get_property::<$entity, $dependency>(entity_id)
+                                )
+                            ),+
                         )
                     },
                     canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
@@ -1537,9 +1778,9 @@ mod tests {
             .add_entity::<Person, _>(with!(Person, Age(44)))
             .unwrap();
 
-        let senior_group: AgeGroup = context.get_property(senior);
-        let child_group: AgeGroup = context.get_property(child);
-        let adult_group: AgeGroup = context.get_property(adult);
+        let senior_group: AgeGroup = context.get_property::<Person, AgeGroup>(senior);
+        let child_group: AgeGroup = context.get_property::<Person, AgeGroup>(child);
+        let adult_group: AgeGroup = context.get_property::<Person, AgeGroup>(adult);
 
         assert_eq!(senior_group, AgeGroup::Senior);
         assert_eq!(child_group, AgeGroup::Child);
@@ -1712,5 +1953,142 @@ mod tests {
         let mut values = crate::HashSet::default();
         values.insert(DerivedWeight(3.0));
         assert!(values.contains(&DerivedWeight(3.0)));
+    }
+
+    // ---- Primitive-form `define_property!(Name: Type, Entity)` tests ----
+    //
+    // The generated newtype keeps `set_property` / `with!` ergonomics working with the wrapper,
+    // while `get_property` returns the inner primitive (`P::Value`).
+
+    define_property!(MyAge: u8, Person, default_const = 0);
+    define_property!(Score: i32, Person, default_const = 0);
+    define_property!(StepCount: u32, Person, default_const = 100);
+
+    define_derived_property!(
+        IsAdult: bool,
+        Person,
+        [MyAge],
+        |age| IsAdult(age >= 18)
+    );
+
+    #[test]
+    fn test_primitive_property_get_returns_inner() {
+        let mut context = Context::new();
+        let person = context.add_entity(with!(Person, MyAge(33))).unwrap();
+
+        // `get_property` returns `u8`, not `MyAge`.
+        let age: u8 = context.get_property::<Person, MyAge>(person);
+        assert_eq!(age, 33);
+
+        // The wrapper still works for `set_property` and `with!`.
+        context.set_property(person, MyAge(50));
+        let age: u8 = context.get_property::<Person, MyAge>(person);
+        assert_eq!(age, 50);
+
+        // Generated From impls are bidirectional.
+        let wrapped: MyAge = 7u8.into();
+        assert_eq!(wrapped, MyAge(7));
+        let unwrapped: u8 = MyAge(9).into();
+        assert_eq!(unwrapped, 9);
+
+        // into_value and from_value round-trip.
+        assert_eq!(MyAge(11).into_value(), 11u8);
+        assert_eq!(MyAge::from_value(13u8), MyAge(13));
+    }
+
+    #[test]
+    fn test_primitive_derived_property() {
+        let mut context = Context::new();
+        let kid = context.add_entity(with!(Person, MyAge(12))).unwrap();
+        let grownup = context.add_entity(with!(Person, MyAge(30))).unwrap();
+
+        // The derived primitive returns `bool` from `get_property`.
+        let is_adult_kid: bool = context.get_property::<Person, IsAdult>(kid);
+        let is_adult_grownup: bool = context.get_property::<Person, IsAdult>(grownup);
+        assert!(!is_adult_kid);
+        assert!(is_adult_grownup);
+
+        // Mutating the dependency re-derives.
+        context.set_property(kid, MyAge(40));
+        assert!(context.get_property::<Person, IsAdult>(kid));
+    }
+
+    #[test]
+    fn test_primitive_default_const_accepts_inner_value() {
+        // `default_const = 100` (the bare `u32`) should produce a `StepCount(100)` default.
+        let mut context = Context::new();
+        let person = context.add_entity(Person).unwrap();
+        assert_eq!(context.get_property::<Person, StepCount>(person), 100);
+    }
+
+    #[test]
+    fn test_primitive_property_signed_int() {
+        let mut context = Context::new();
+        let person = context.add_entity(with!(Person, Score(-7))).unwrap();
+        let score: i32 = context.get_property::<Person, Score>(person);
+        assert_eq!(score, -7);
+    }
+
+    #[test]
+    fn test_primitive_property_indexed_query() {
+        // Exercises the `from_value` round-trip inside `query_impls.rs::match_entity` and the
+        // canonical-value index path for a primitive property.
+        let mut context = Context::new();
+        context.index_property::<Person, MyAge>();
+
+        for age in [10u8, 20, 20, 30] {
+            context.add_entity(with!(Person, MyAge(age))).unwrap();
+        }
+
+        assert_eq!(context.query_entity_count(with!(Person, MyAge(20))), 2);
+        assert_eq!(context.query_entity_count(with!(Person, MyAge(10))), 1);
+        assert_eq!(context.query_entity_count(with!(Person, MyAge(99))), 0);
+    }
+
+    #[test]
+    fn test_primitive_property_change_event() {
+        // Events expose `P::Value`: for primitive-form properties subscribers see the inner
+        // primitive directly, not the wrapper.
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let mut context = Context::new();
+        let person = context.add_entity(with!(Person, MyAge(10))).unwrap();
+
+        let observed: Rc<RefCell<Option<(u8, u8)>>> = Rc::new(RefCell::new(None));
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event(move |_ctx, event: PropertyChangeEvent<Person, MyAge>| {
+            *observed_clone.borrow_mut() = Some((event.previous, event.current));
+        });
+
+        context.set_property(person, MyAge(25));
+        context.execute();
+
+        let (prev, curr) = observed.borrow().expect("event should have fired");
+        assert_eq!(prev, 10u8);
+        assert_eq!(curr, 25u8);
+    }
+
+    define_multi_property!((Name, MyAge), Person);
+
+    #[test]
+    fn test_primitive_property_in_multi_property() {
+        // `MyAge: u8` is a primitive-form property; the multi-property compute closure must
+        // wrap it back into `MyAge` so the tuple matches `Self = (Name, MyAge)`.
+        let mut context = Context::new();
+        context
+            .add_entity(with!(Person, Name("alice"), MyAge(5)))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Name("alice"), MyAge(7)))
+            .unwrap();
+        assert_eq!(
+            context.query_entity_count(with!(Person, Name("alice"), MyAge(5))),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, Name("alice"), MyAge(7))),
+            1
+        );
     }
 }

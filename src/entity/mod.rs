@@ -14,7 +14,7 @@ Entity property getters and setters exists on `Context` like this:
 // (The `MyProperty` type knows which entity it belongs to.)
 let my_property_value = context.get_property::<MyProperty>(my_entity_id);
 // Turbofish-less version of the same call:
-let my_property_value: MyProperty = context.get_property(my_entity_id);
+let my_property_value: MyProperty = context.get_property::<Person, MyProperty>(my_entity_id);
 
 // For setters, the property is inferred from the type of the value we are passing in.
 context.set_property(my_entity_id, some_property_value);

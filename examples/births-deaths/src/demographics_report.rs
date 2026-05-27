@@ -21,7 +21,7 @@ define_report!(PersonReportItem);
 
 fn handle_person_created(context: &mut Context, event: EntityCreatedEvent<Person>) {
     let person = event.entity_id;
-    let age_group_person: AgeGroupRisk = context.get_property(person);
+    let age_group_person: AgeGroupRisk = context.get_property::<Person, AgeGroupRisk>(person);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
@@ -34,7 +34,7 @@ fn handle_person_created(context: &mut Context, event: EntityCreatedEvent<Person
 
 fn handle_person_aging(context: &mut Context, event: PropertyChangeEvent<Person, Age>) {
     let person = event.entity_id;
-    let age_group_person: AgeGroupRisk = context.get_property(person);
+    let age_group_person: AgeGroupRisk = context.get_property::<Person, AgeGroupRisk>(person);
     context.send_report(PersonReportItem {
         time: context.get_current_time(),
         person_id: format!("{person}"),
@@ -48,7 +48,7 @@ fn handle_person_aging(context: &mut Context, event: PropertyChangeEvent<Person,
 fn handle_death_events(context: &mut Context, event: PropertyChangeEvent<Person, Alive>) {
     if !event.current.0 {
         let person = event.entity_id;
-        let age_group_person: AgeGroupRisk = context.get_property(person);
+        let age_group_person: AgeGroupRisk = context.get_property::<Person, AgeGroupRisk>(person);
         context.send_report(PersonReportItem {
             time: context.get_current_time(),
             person_id: format!("{person}"),
