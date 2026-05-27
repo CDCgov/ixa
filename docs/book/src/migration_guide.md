@@ -67,7 +67,7 @@ pub enum InfectionStatus {
     Recovered,
 }
 
-// Implements `Property\<Person>` for an existing type.
+// Implements `Property<Person>` for an existing type.
 impl_property!(
     InfectionStatus,
     Person,
@@ -102,7 +102,7 @@ and API docs for the macros `define_property!`, `impl_property!`,
 ## Global property validator errors
 
 Global-property validators are client code, so they should return
-`Result<(), Box<dyn std::error::Error + 'static>>` instead of constructing
+`Result\<(), Box\<dyn std::error::Error + 'static>>` instead of constructing
 `IxaError` values directly. Ixa wraps any returned validator error in
 `IxaError::IllegalGlobalPropertyValue` when a global property is set or loaded.
 
@@ -214,7 +214,7 @@ calls after the first one will just be ignored.
 ### Subscribe to events
 
 The only difference is that now we use the
-`PropertyChangeEvent\<E: Entity, P: Property<E>>` and
+`PropertyChangeEvent\<E: Entity, P: Property\<E>>` and
 `EntityCreatedEvent\<E: Entity>` types.
 
 ```rust
