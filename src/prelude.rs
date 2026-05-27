@@ -11,5 +11,6 @@ pub use crate::report::ContextReportExt;
 pub use crate::{
     define_data_plugin, define_derived_property, define_edge_type, define_entity,
     define_global_property, define_multi_property, define_property, define_report, define_rng,
-    impl_edge_type, impl_entity, impl_property, with, PluginContext,
+    impl_edge_type, impl_entity, impl_property, track_periodic_value_change_counts, with,
+    PluginContext,
 };
