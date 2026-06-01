@@ -1,15 +1,5 @@
 # Contributing to Ixa
 
-## Rust toolchain
-
-The canonical Rust version for local development and CI is defined in
-`rust-toolchain.toml`. The crate's `rust-version` in `Cargo.toml` should match
-that toolchain version so the project has a single Rust version to maintain.
-
-Dependabot opens monthly PRs to update `rust-toolchain.toml`. Review those PRs
-like dependency updates, because a toolchain bump can introduce new compiler,
-rustfmt, or clippy behavior.
-
 ## Commit messages
 
 This project uses
