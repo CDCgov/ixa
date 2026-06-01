@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta2.5](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.4...ixa-v2.0.0-beta2.5) - 2026-06-01
+
+### Added
+
+- `track_periodic_value_change_counts!` macro ([#917](https://github.com/CDCgov/ixa/pull/917))
+- Compare `sample_entity_whole_population` relative to "sentinel" CPU-bound benchmark ([#883](https://github.com/CDCgov/ixa/pull/883))
+
+### Fixed
+
+- execution stats availability messaging ([#890](https://github.com/CDCgov/ixa/pull/890))
+
+### Other
+
+- network-hhmodel example: Separate contact from disease progression ([#847](https://github.com/CDCgov/ixa/pull/847))
+- update mdbook (0.5.3) versions ([#922](https://github.com/CDCgov/ixa/pull/922))
+- *(deps)* bump qs in /integration-tests/ixa-wasm-tests ([#918](https://github.com/CDCgov/ixa/pull/918))
+
 ## [2.0.0-beta2.4](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.3...ixa-v2.0.0-beta2.4) - 2026-05-19
 
 ### Added
