@@ -7,6 +7,7 @@ pnpm = "latest"
 "npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
+"cargo:cargo-msrv" = "0.19.3"
 "cargo:mdbook" = "0.5.3"
 "cargo:mdbook-callouts" = "0.3.0"
 "cargo:mdbook-inline-highlighting" = "2.0.0"
@@ -133,7 +134,7 @@ depends = "build:hyperfine"
 run = './target/release/hyperfine'
 
 [tasks.check-all]
-run = ["mise run check:*"]
+run = ["mise run check:rust", "mise run check:markdown"]
 
 [tasks.check]
 description = "Run rust checks. Faster than check-all"
@@ -148,6 +149,10 @@ run = [
   "cargo +nightly fmt --check",
   "cargo +nightly clippy --workspace --all-targets --all-features -- -D warnings",
 ]
+
+[tasks.'check:msrv']
+description = "Verify the declared minimum supported Rust version"
+run = 'XDG_CACHE_HOME="$PWD/target/msrv-cache" cargo msrv --no-log verify --all-features'
 
 [tasks.prettier]
 description = "Run prettier on all supported files"
@@ -198,7 +203,7 @@ depends = ['check-all']
 [tasks.prepush]
 description = "Check everything before pushing"
 env.RUSTFLAGS = "-D warnings"
-run = ["mise precommit", "mise examples", "mise docs", "mise test-all"]
+run = ["mise precommit", "mise run check:msrv", "mise examples", "mise docs", "mise test-all"]
 
 [tasks.'docker:build']
 run = "docker build -t ixa-bench ."
