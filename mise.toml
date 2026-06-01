@@ -7,6 +7,7 @@ pnpm = "latest"
 "npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
+"cargo:cargo-llvm-cov" = "latest"
 "cargo:mdbook" = "0.5.3"
 "cargo:mdbook-callouts" = "0.3.0"
 "cargo:mdbook-inline-highlighting" = "2.0.0"
@@ -21,6 +22,12 @@ cargo.binstall = true
 description = "Install rust nightly, which is needed for clippy"
 run = [
   "rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt clippy",
+]
+
+[tasks.'install-coverage']
+description = "Install Rust coverage tools"
+run = [
+  "rustup component add llvm-tools-preview",
 ]
 
 [tasks.build]
@@ -82,6 +89,16 @@ run = "pnpm exec playwright test"
 [tasks.'test:features']
 description = "Run just the core Ixa tests (much faster)"
 run = "cargo test --no-default-features"
+
+[tasks.coverage]
+description = "Generate local Rust test coverage reports"
+depends = ["install-coverage"]
+run = [
+  "cargo llvm-cov clean --workspace",
+  "cargo llvm-cov --workspace --all-targets --no-report",
+  "cargo llvm-cov report --summary-only",
+  "cargo llvm-cov report --html",
+]
 
 [tasks.'wasm:pnpm']
 dir = "integration-tests/ixa-wasm-tests"
