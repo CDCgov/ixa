@@ -158,9 +158,8 @@ pub trait ContextEntitiesExt {
     /// This method is called with the turbo-fish syntax:
     ///     `context.index_property::<Person, Age>()`
     ///
-    /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,
-    /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
-    /// share a single index.
+    /// This method only checks the concrete property storage for `P`, not any equivalent
+    /// multi-properties.
     #[cfg(test)]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
 
@@ -356,7 +355,7 @@ impl ContextEntitiesExt for Context {
     }
 
     fn index_property<E: Entity, P: Property<E>>(&mut self) {
-        let property_id = P::index_id();
+        let property_id = P::id();
         let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
         property_store.set_property_indexed::<P>(PropertyIndexType::FullIndex);
@@ -1141,26 +1140,31 @@ mod tests {
             },
         );
 
-        // Check that the order doesn't matter.
-        assert_eq!(
-            InfectionStatusVaccinated::index_id(),
-            VaccinatedInfectionStatus::index_id()
+        // Check that equivalent multi-properties keep distinct storage IDs while
+        // sharing query routing identity.
+        assert_ne!(
+            InfectionStatusVaccinated::id(),
+            VaccinatedInfectionStatus::id()
         );
         assert_eq!(
-            InfectionStatusVaccinated::index_id(),
+            InfectionStatusVaccinated::type_id(),
+            VaccinatedInfectionStatus::type_id()
+        );
+        assert_eq!(
+            InfectionStatusVaccinated::id(),
             (InfectionStatus::Susceptible, Vaccinated(true))
                 .multi_property_id()
                 .unwrap()
         );
 
         // Check if it matches the expected bucket.
-        let index_id = InfectionStatusVaccinated::index_id();
+        let property_id = InfectionStatusVaccinated::id();
 
         let property_store = context.entity_store.get_property_store::<Person>();
         let query = (InfectionStatus::Susceptible, Vaccinated(true));
         let query_parts = query.query_parts();
         let bucket =
-            match property_store.get_index_set_for_query_parts(index_id, query_parts.as_ref()) {
+            match property_store.get_index_set_for_query_parts(property_id, query_parts.as_ref()) {
                 IndexSetResult::Set(bucket) => bucket,
                 other => panic!("expected indexed query bucket, found {other:?}"),
             };

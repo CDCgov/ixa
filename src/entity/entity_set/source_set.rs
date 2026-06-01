@@ -51,6 +51,7 @@ use std::ops::Range;
 
 use super::source_iterator::{IndexSetIterator, PopulationRangeIterator, SourceIterator};
 use crate::entity::index::IndexSetResult;
+use crate::entity::multi_property::multi_property_id_for_property_type_id;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::hashing::{one_shot_128, HashValueType, IndexSet};
@@ -136,8 +137,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for DerivedPropertySource<'a, E, P>
 {
     fn id(&self) -> PropertySourceId {
+        let property_id = multi_property_id_for_property_type_id(E::id(), P::type_id())
+            .map_or_else(P::id, |(property_id, _)| property_id);
         PropertySourceId {
-            property_id: P::index_id(),
+            property_id,
             value_hash: one_shot_128(&self.value.make_canonical()),
         }
     }
@@ -231,8 +234,10 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for ConcretePropertySource<'a, E, P>
 {
     fn id(&self) -> PropertySourceId {
+        let property_id = multi_property_id_for_property_type_id(E::id(), P::type_id())
+            .map_or_else(P::id, |(property_id, _)| property_id);
         PropertySourceId {
-            property_id: P::index_id(),
+            property_id,
             value_hash: one_shot_128(&self.value.make_canonical()),
         }
     }
@@ -386,8 +391,10 @@ impl<'a, E: Entity> SourceSet<'a, E> {
         // Check for an index.
         {
             let query_parts = P::query_parts_for_value(&value);
+            let property_id = multi_property_id_for_property_type_id(E::id(), P::type_id())
+                .map_or_else(P::id, |(property_id, _)| property_id);
             let lookup_result =
-                property_store.get_index_set_for_query_parts(P::index_id(), query_parts.as_ref());
+                property_store.get_index_set_for_query_parts(property_id, query_parts.as_ref());
             match lookup_result {
                 IndexSetResult::Set(entity_set) => {
                     return Some(SourceSet::IndexSet(entity_set));

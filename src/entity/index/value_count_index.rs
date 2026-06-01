@@ -74,8 +74,8 @@ mod tests {
         let mut context = Context::new();
         let property_store = context.entity_store.get_property_store_mut::<Person>();
 
+        assert_eq!(AWH::type_id(), WHA::type_id());
         property_store.set_property_indexed::<AWH>(PropertyIndexType::ValueCountIndex);
-        property_store.set_property_indexed::<WHA>(PropertyIndexType::ValueCountIndex);
 
         context
             .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))

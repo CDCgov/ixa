@@ -135,12 +135,13 @@ pub trait Property<E: Entity>: AnyProperty {
     /// Expose the query parts for a concrete property value without allocating.
     ///
     /// Ordinary properties contribute a single value. Multi-properties override this so singleton
-    /// queries over a multi-property can still be matched against a shared equivalent index.
+    /// queries over a multi-property can still be matched against the representative
+    /// multi-property for the equivalent component set.
     #[must_use]
     fn query_parts_for_value(value: &Self) -> Self::QueryParts<'_>;
 
-    /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
-    /// with the same component types in a different order will have the same type ID.
+    /// Overridden by multi-properties, which use the `TypeId` of the name-sorted tuple so that
+    /// tuples with the same component types in a different order will have the same type ID.
     #[must_use]
     fn type_id() -> TypeId {
         TypeId::of::<Self>()
@@ -149,17 +150,8 @@ pub trait Property<E: Entity>: AnyProperty {
     /// For implementing the registry pattern
     fn id() -> usize;
 
-    /// For properties that use the index of some other property, e.g. multi-properties, this
-    /// method gives the ID of the property index to use.
-    ///
-    /// Note that this is independent of whether or not the property actually is being indexed,
-    /// which is a property of the `Context` instance, not of the `Property<E>` type itself.
-    fn index_id() -> usize {
-        Self::id()
-    }
-
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
-    /// Vec will be empty. The dependencies are represented by their `Property<E>::index()` value.
+    /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.
     ///
     /// This function is only used to construct the static dependency graph
     /// within property `ctor`s, after which time the dependents of a property
@@ -174,7 +166,7 @@ pub trait Property<E: Entity>: AnyProperty {
     fn collect_non_derived_dependencies(result: &mut HashSet<usize>);
 
     /// Get a list of derived properties that depend on this property. The properties are
-    /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
+    /// represented by their `Property::id()`. The list is pre-computed in `ctor`s.
     fn dependents() -> &'static [usize] {
         get_property_dependents_static::<E>(Self::id())
     }

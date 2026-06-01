@@ -70,7 +70,7 @@ mod tests {
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
 
-        context.index_property::<Person, WHA>();
+        assert_eq!(AWH::type_id(), WHA::type_id());
         context.index_property::<Person, AWH>();
 
         context
@@ -112,5 +112,12 @@ mod tests {
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot index multi-property")]
+    fn test_indexing_duplicate_multi_property_panics() {
+        let mut context = Context::new();
+        context.index_property::<Person, WHA>();
     }
 }
