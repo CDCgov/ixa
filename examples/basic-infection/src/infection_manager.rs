@@ -16,8 +16,11 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     trace!("Scheduling recovery");
     let infection_duration =
         context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
-    schedule_relative!(context, infection_duration, |context: &mut Context| context
-        .set_property(person_id, InfectionStatus::R));
+    schedule_relative!(context, infection_duration, recover, person_id);
+}
+
+fn recover(context: &mut Context, person_id: PersonId) {
+    context.set_property(person_id, InfectionStatus::R)
 }
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {

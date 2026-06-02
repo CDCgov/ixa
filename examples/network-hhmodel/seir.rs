@@ -50,9 +50,9 @@ fn schedule_waiting_event(
     mean_period: f64,
     new_status: DiseaseStatus,
 ) {
-    let t = context.get_current_time() + calculate_waiting_time(context, shape, mean_period);
+    let delay = calculate_waiting_time(context, shape, mean_period);
 
-    context.add_plan(t, move |context| {
+    schedule_relative!(context, delay, |context| {
         trace!("{person_id:?} changed to disease state {new_status:?} at t={t:?}");
         context.set_property(person_id, new_status);
     });
