@@ -1,6 +1,7 @@
 # Criterion.rs output file.
 profile.json
 profiling.json
+*.profraw
 
 .vscode/*
 .idea

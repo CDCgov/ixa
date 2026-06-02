@@ -21,8 +21,10 @@ jobs:
             ixa_branch: release
 
     steps:
-      - name: Ensure clippy is installed
-        run: rustup component add clippy
+      - uses: actions/checkout@v6
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
 
       - name: Create project with setup script
         shell: bash

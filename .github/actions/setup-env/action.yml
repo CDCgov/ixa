@@ -1,5 +1,5 @@
 name: Setup environment
-description: Install cargo binstall and mise environment
+description: Install Rust, cargo binstall, and mise environment
 runs:
   using: composite
   steps:
@@ -12,9 +12,14 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.rustup/toolchains/
-        key: cargo-${{ hashFiles('Cargo.toml') }}
+        key: cargo-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'mise.toml', 'rust-toolchain.toml') }}
         restore-keys: |
           cargo-
+
+    - name: Install Rust toolchain
+      shell: bash
+      run: |
+        rustup toolchain install
 
     - name: Install cargo-binstall
       uses: cargo-bins/cargo-binstall@v1.15.6
