@@ -60,10 +60,7 @@ fn schedule_aging(context: &mut Context, person_id: PersonId) {
     if is_alive.0 {
         let prev_age: Age = context.get_property(person_id);
         context.set_property(person_id, Age(prev_age.0 + 1));
-        let next_age_event = context.get_current_time() + 365.0;
-        context.add_plan(next_age_event, move |context| {
-            schedule_aging(context, person_id);
-        });
+        schedule_relative!(context, 365.0, schedule_aging, person_id);
     }
 }
 
@@ -73,15 +70,11 @@ fn schedule_birth(context: &mut Context) {
         .unwrap()
         .clone();
     let person = context.add_entity(with!(Person, Age(0))).unwrap();
-    context.add_plan(context.get_current_time() + 365.0, move |context| {
-        schedule_aging(context, person);
-    });
+    schedule_relative!(context, 365.0, schedule_aging, person);
 
-    let next_birth_event = context.get_current_time()
-        + context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
-    context.add_plan(next_birth_event, move |context| {
-        schedule_birth(context);
-    });
+    let next_birth_delay =
+        context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
+    schedule_relative!(context, next_birth_delay, schedule_birth);
 }
 
 fn schedule_death(context: &mut Context) {
@@ -93,12 +86,10 @@ fn schedule_death(context: &mut Context) {
     if let Some(person) = context.sample_entity(PeopleRng, with!(Person, Alive(true))) {
         context.set_property(person, Alive(false));
 
-        let next_death_event = context.get_current_time()
-            + context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
+        let next_death_delay =
+            context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
 
-        context.add_plan(next_death_event, |context| {
-            schedule_death(context);
-        });
+        schedule_relative!(context, next_death_delay, schedule_death);
     }
 }
 
