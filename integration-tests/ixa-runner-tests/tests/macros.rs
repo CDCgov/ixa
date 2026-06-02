@@ -161,6 +161,26 @@ mod tests {
 
     fn macro_named_value_change_handler<C>(_context: &mut Context, _counter: &mut C) {}
 
+    fn record_sum(
+        context: &mut Context,
+        records: Rc<RefCell<Vec<(f64, u32)>>>,
+        arg1: u32,
+        arg2: u32,
+        arg3: u32,
+    ) {
+        records
+            .borrow_mut()
+            .push((context.get_current_time(), arg1 + arg2 + arg3));
+    }
+
+    fn record_current_time(context: &mut Context, records: Rc<RefCell<Vec<f64>>>) {
+        records.borrow_mut().push(context.get_current_time());
+    }
+
+    fn passthrough_context(context: &mut Context) -> &mut Context {
+        context
+    }
+
     #[test]
     fn compile_and_run_macros() {
         let mut ctx = Context::new();
@@ -369,5 +389,57 @@ mod tests {
         assert_eq!(*empty_strata.borrow(), vec![0, 1]);
         assert_eq!(*singleton_strata.borrow(), vec![0, 1]);
         assert_eq!(*multiple_strata.borrow(), vec![0, 1]);
+    }
+
+    #[test]
+    fn schedule_relative_accepts_function_name_with_arguments() {
+        let mut context = Context::new();
+        let records = Rc::new(RefCell::new(Vec::new()));
+        let observed_records = records.clone();
+
+        schedule_relative!(&mut context, 2.5, record_sum, records, 1, 2, 3);
+
+        context.execute();
+        assert_eq!(*observed_records.borrow(), vec![(2.5, 6)]);
+    }
+
+    #[test]
+    fn schedule_relative_accepts_closure_action() {
+        let mut context = Context::new();
+        let records = Rc::new(RefCell::new(Vec::new()));
+        let observed_records = records.clone();
+
+        schedule_relative!(
+            &mut context,
+            1.25,
+            |context: &mut Context, records: Rc<RefCell<Vec<(f64, u32)>>>, value: u32| {
+                records
+                    .borrow_mut()
+                    .push((context.get_current_time(), value));
+            },
+            records,
+            42
+        );
+
+        context.execute();
+        assert_eq!(*observed_records.borrow(), vec![(1.25, 42)]);
+    }
+
+    #[test]
+    fn schedule_relative_accepts_context_expression_and_no_action_arguments() {
+        let mut context = Context::new();
+        let records = Rc::new(RefCell::new(Vec::new()));
+        let observed_records = records.clone();
+
+        schedule_relative!(
+            passthrough_context(&mut context),
+            0.75,
+            record_current_time,
+            records
+        );
+        schedule_relative!(passthrough_context(&mut context), 1.5, Context::shutdown);
+
+        context.execute();
+        assert_eq!(*observed_records.borrow(), vec![0.75]);
     }
 }
