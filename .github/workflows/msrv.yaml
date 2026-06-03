@@ -1,0 +1,30 @@
+name: MSRV
+
+on:
+  push:
+    branches: main
+    paths:
+      - Cargo.toml
+      - "**/Cargo.toml"
+  pull_request:
+    paths:
+      - Cargo.toml
+      - "**/Cargo.toml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  msrv:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Verify MSRV
+        env:
+          XDG_CACHE_HOME: ${{ github.workspace }}/target/msrv-cache
+        run: mise run msrv

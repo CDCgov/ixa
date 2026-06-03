@@ -89,61 +89,6 @@ jobs:
       - name: Build docs
         run: mise run docs
 
-  cargo-toml-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.changed.outputs.changed }}
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check for Cargo.toml changes
-        id: changed
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          case "${{ github.event_name }}" in
-            pull_request)
-              base="${{ github.event.pull_request.base.sha }}"
-              head="${{ github.sha }}"
-              ;;
-            push)
-              base="${{ github.event.before }}"
-              head="${{ github.sha }}"
-              ;;
-            *)
-              echo "changed=true" >> "${GITHUB_OUTPUT}"
-              exit 0
-              ;;
-          esac
-
-          if [[ "${base}" == "0000000000000000000000000000000000000000" ]]; then
-            echo "changed=true" >> "${GITHUB_OUTPUT}"
-          else
-            changed_files="$(git diff --name-only "${base}" "${head}" -- 'Cargo.toml' '**/Cargo.toml')"
-            if [[ -n "${changed_files}" ]]; then
-              echo "changed=true" >> "${GITHUB_OUTPUT}"
-            else
-              echo "changed=false" >> "${GITHUB_OUTPUT}"
-            fi
-          fi
-
-  msrv:
-    runs-on: ubuntu-latest
-    needs: cargo-toml-changes
-    if: ${{ needs.cargo-toml-changes.outputs.changed == 'true' }}
-
-    steps:
-      - uses: actions/checkout@v6
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-
-      - name: Verify MSRV
-        run: mise run check:msrv
-
   setup-new-project:
     uses: ./.github/workflows/test-setup-new-project.yaml
 
@@ -157,8 +102,6 @@ jobs:
       - examples
       - book-example
       - docs
-      - cargo-toml-changes
-      - msrv
       - setup-new-project
     if: ${{ always() }}
     steps:
@@ -174,8 +117,6 @@ jobs:
             examples:${{ needs.examples.result }}
             book-example:${{ needs.book-example.result }}
             docs:${{ needs.docs.result }}
-            cargo-toml-changes:${{ needs.cargo-toml-changes.result }}
-            msrv:${{ needs.msrv.result }}
             setup-new-project:${{ needs.setup-new-project.result }}
           )
 
@@ -184,9 +125,6 @@ jobs:
             job="${pair%%:*}"
             result="${pair#*:}"
             echo "${job}: ${result}"
-            if [ "${job}" = "msrv" ] && [ "${result}" = "skipped" ]; then
-              continue
-            fi
             if [ "${result}" != "success" ]; then
               failed=1
             fi

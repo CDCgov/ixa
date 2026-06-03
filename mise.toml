@@ -169,7 +169,7 @@ depends = "build:hyperfine"
 run = './target/release/hyperfine'
 
 [tasks.check-all]
-run = ["mise run check:rust", "mise run check:markdown"]
+run = ["mise run check:*"]
 
 [tasks.check]
 description = "Run rust checks. Faster than check-all"
@@ -186,9 +186,9 @@ run = [
   "cargo +nightly clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
-[tasks.'check:msrv']
+[tasks.msrv]
 description = "Verify the declared minimum supported Rust version"
-run = 'XDG_CACHE_HOME="$PWD/target/msrv-cache" cargo msrv --no-log verify --all-features'
+run = "cargo msrv --no-log verify --all-features"
 
 [tasks.prettier]
 description = "Run prettier on all supported files"
@@ -241,7 +241,7 @@ depends = ['check-all']
 [tasks.prepush]
 description = "Check everything before pushing"
 env.RUSTFLAGS = "-D warnings"
-run = ["mise precommit", "mise run check:msrv", "mise examples", "mise docs", "mise test-all"]
+run = ["mise precommit", "mise run msrv", "mise examples", "mise docs", "mise test-all"]
 
 [tasks.'docker:build']
 run = "docker build -t ixa-bench ."
