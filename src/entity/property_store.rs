@@ -36,9 +36,9 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEventBox;
-use crate::entity::index::{IndexCountResult, IndexSetResult};
+use crate::entity::index::{FullIndex, IndexCountResult, IndexSetResult, ValueCountIndex};
 use crate::entity::multi_property::multi_property_id_for_property_type_id;
-use crate::entity::property::Property;
+use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
@@ -351,7 +351,7 @@ impl<E: Entity> PropertyStore<E> {
     ///
     /// Equivalent multi-properties do not share index storage. Only the representative
     /// multi-property for an equivalent set can be indexed.
-    pub fn set_property_indexed<P: Property<E>>(&mut self, index_type: PropertyIndexType) {
+    pub fn set_property_indexed<P: IndexableProperty<E>>(&mut self, index_type: PropertyIndexType) {
         if index_type != PropertyIndexType::Unindexed {
             if let Some((representative_id, representative_name)) =
                 multi_property_id_for_property_type_id(E::id(), P::type_id())
@@ -369,7 +369,30 @@ impl<E: Entity> PropertyStore<E> {
         let property_value_store = self.items
             .get_mut(P::id())
             .unwrap_or_else(|| panic!("No registered property {} found with id = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::id()));
-        property_value_store.set_indexed(index_type);
+        let property_value_store = property_value_store
+            .as_any_mut()
+            .downcast_mut::<PropertyValueStoreCore<E, P>>()
+            .unwrap_or_else(|| {
+                panic!(
+                    "Property type at index {:?} does not match registered property type. You must use the `define_property!` macro to create a registered property.",
+                    P::id()
+                )
+            });
+        match index_type {
+            PropertyIndexType::Unindexed => {
+                property_value_store.index = None;
+            }
+            PropertyIndexType::FullIndex => {
+                if property_value_store.index_type() != PropertyIndexType::FullIndex {
+                    property_value_store.index = Some(Box::new(FullIndex::<E, P>::new()));
+                }
+            }
+            PropertyIndexType::ValueCountIndex => {
+                if property_value_store.index_type() != PropertyIndexType::ValueCountIndex {
+                    property_value_store.index = Some(Box::new(ValueCountIndex::<E, P>::new()));
+                }
+            }
+        }
     }
 
     /// Creates a stratified value change counter for tracked property `P` with strata `PL`.

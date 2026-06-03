@@ -2,9 +2,10 @@
 
 use log::trace;
 
-use crate::entity::{Entity, EntityId};
+use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
+use crate::entity::{Entity, EntityId, PropertyIndexType};
 use crate::hashing::{HashMap, IndexSet};
-use crate::prelude::Property;
+use crate::prelude::{IndexableProperty, Property};
 
 /// An index that maintains a full set of entity IDs for each distinct property value.
 /// The entity IDs are stored in an `IndexSet` for both fast containment checks and fast
@@ -18,7 +19,7 @@ pub struct FullIndex<E: Entity, P: Property<E>> {
     pub(in crate::entity) max_indexed: usize,
 }
 
-impl<E: Entity, P: Property<E>> FullIndex<E, P> {
+impl<E: Entity, P: IndexableProperty<E>> FullIndex<E, P> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -46,6 +47,44 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
 
     pub fn get(&self, key: &P) -> Option<&IndexSet<EntityId<E>>> {
         self.data.get(key)
+    }
+}
+
+impl<E, P> PropertyIndex<E, P> for FullIndex<E, P>
+where
+    E: Entity,
+    P: IndexableProperty<E>,
+{
+    fn index_type(&self) -> PropertyIndexType {
+        PropertyIndexType::FullIndex
+    }
+
+    fn get_index_set_result(&self, value: &P) -> IndexSetResult<'_, E> {
+        match self.get(value) {
+            Some(set) => IndexSetResult::Set(set),
+            None => IndexSetResult::Empty,
+        }
+    }
+
+    fn get_index_count_result(&self, value: &P) -> IndexCountResult {
+        let count = self.get(value).map_or(0, |set| set.len());
+        IndexCountResult::Count(count)
+    }
+
+    fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>) {
+        FullIndex::remove_entity(self, value, entity_id);
+    }
+
+    fn add_entity(&mut self, value: &P, entity_id: EntityId<E>) {
+        FullIndex::add_entity(self, value, entity_id);
+    }
+
+    fn max_indexed(&self) -> usize {
+        self.max_indexed
+    }
+
+    fn set_max_indexed(&mut self, max_indexed: usize) {
+        self.max_indexed = max_indexed;
     }
 }
 

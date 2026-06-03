@@ -14,7 +14,6 @@ use std::hash::Hash;
 
 use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
-use crate::hashing::{one_shot_128, HashValueType};
 use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
@@ -33,13 +32,6 @@ pub enum PropertyInitializationKind {
     /// trigger a change event.
     Constant,
 }
-
-/// Shared trait bounds for property values.
-///
-/// These values must be copyable and support equality and deterministic hashing so they can
-/// participate in indexing.
-pub trait AnyProperty: Copy + Debug + PartialEq + Eq + Hash + 'static {}
-impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Eq + Hash + 'static {}
 
 /// `const fn` string equality — `==` on `&str` isn't `const` on stable.
 #[must_use]
@@ -61,8 +53,10 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 
 /// All properties must implement this trait using one of the `define_property` macros.
 ///
-/// Property values must satisfy `AnyProperty` so they can participate in property indexes.
-pub trait Property<E: Entity>: AnyProperty {
+/// Property values must be copyable and comparable for equality so storage and unindexed
+/// query scans can operate on them. Indexed properties must additionally implement
+/// [`IndexableProperty`].
+pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// Allocation-free representation of the query parts contributed by a property value.
     type QueryParts<'a>: AsRef<[&'a dyn Any]>
     where
@@ -116,19 +110,6 @@ pub trait Property<E: Entity>: AnyProperty {
         part.downcast_ref::<Self>().copied()
     }
 
-    /// Hash the logical query value represented by `value`.
-    ///
-    /// This hash is used as part of the `PropertySourceId` for property-backed entity
-    /// sets. It lets the entity-set layer recognize when two sources represent the same
-    /// logical query, even if they are produced through different internal source types.
-    ///
-    /// Multi-properties override this so equivalent tuple orders hash the component values in the
-    /// same `TypeId` order and therefore share the same source identity.
-    #[must_use]
-    fn query_value_hash(value: &Self) -> HashValueType {
-        one_shot_128(value)
-    }
-
     /// Expose the query parts for a concrete property value without allocating.
     ///
     /// Ordinary properties contribute a single value. Multi-properties override this so singleton
@@ -168,11 +149,25 @@ pub trait Property<E: Entity>: AnyProperty {
     }
 }
 
+/// Marker trait for properties that can be keyed in property indexes.
+///
+/// Property indexes are hash maps keyed by the property value itself, so indexable
+/// properties must add `Eq` and `Hash` to the general [`Property`] requirements.
+pub trait IndexableProperty<E: Entity>: Property<E> + Eq + Hash {}
+
+impl<E, P> IndexableProperty<E> for P
+where
+    E: Entity,
+    P: Property<E> + Eq + Hash,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use std::any::Any;
 
     use super::*;
+    use crate::entity::QueryInternal;
     use crate::{define_entity, define_property};
 
     define_entity!(PropertyTestPerson);
@@ -191,20 +186,16 @@ mod tests {
         let parts = [&value as &dyn Any];
 
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
-                &parts
-            ),
+            <PropertyTestAge as Property<PropertyTestPerson>>::value_from_query_parts(&parts),
             Some(value)
         );
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
-                &[]
-            ),
+            <PropertyTestAge as Property<PropertyTestPerson>>::value_from_query_parts(&[]),
             None
         );
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::index_id(),
-            <PropertyTestAge as Property<PropertyTestPerson>>::id()
+            <(PropertyTestAge,) as QueryInternal<PropertyTestPerson>>::multi_property_id(&(value,)),
+            Some(<PropertyTestAge as Property<PropertyTestPerson>>::id())
         );
     }
 }

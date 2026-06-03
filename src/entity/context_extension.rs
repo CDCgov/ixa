@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
-use crate::entity::property::Property;
+use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
@@ -22,7 +22,7 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
 ) where
     E: Entity,
     PL: PropertyList<E> + Eq + Hash,
-    P: Property<E> + Eq + Hash,
+    P: IndexableProperty<E>,
     F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
 {
     let mut counter = {
@@ -121,13 +121,13 @@ pub trait ContextEntitiesExt {
     ///     `context.index_property::<Person, Age>()`
     ///
     /// This method both enables the index and catches it up to the current population.
-    fn index_property<E: Entity, P: Property<E>>(&mut self);
+    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Enables value-count indexing of property values for the property `P`.
     ///
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
-    fn index_property_counts<E: Entity, P: Property<E>>(&mut self);
+    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
@@ -354,7 +354,7 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn index_property<E: Entity, P: Property<E>>(&mut self) {
+    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self) {
         let property_id = P::id();
         let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
@@ -366,7 +366,7 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
+    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
         let current_index_type = property_store.get::<P>().index_type();
         if current_index_type != PropertyIndexType::FullIndex {
@@ -378,7 +378,7 @@ impl ContextEntitiesExt for Context {
     where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
-        P: Property<E> + Eq + Hash,
+        P: IndexableProperty<E>,
         F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
     {
         assert!(

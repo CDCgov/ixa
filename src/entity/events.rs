@@ -76,14 +76,12 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 
         // Now update the indexes
         let property_value_store = context.get_property_value_store_mut::<E, P>();
-        // Out with the old
-        property_value_store
-            .index
-            .remove_entity(&self.0.previous, self.0.entity_id);
-        // In with the new
-        property_value_store
-            .index
-            .add_entity(&self.0.current, self.0.entity_id);
+        if let Some(index) = property_value_store.index.as_mut() {
+            // Out with the old
+            index.remove_entity(&self.0.previous, self.0.entity_id);
+            // In with the new
+            index.add_entity(&self.0.current, self.0.entity_id);
+        }
 
         // We decided not to do the following check.
         // See `src/entity/context_extension::ContextEntitiesExt::set_property`.

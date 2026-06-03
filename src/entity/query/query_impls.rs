@@ -4,7 +4,6 @@ use seq_macro::seq;
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
-use crate::entity::multi_property::multi_property_id_for_property_type_id;
 use crate::entity::property::Property;
 use crate::entity::query::QueryInternal;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
@@ -108,9 +107,7 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     }
 
     fn multi_property_id(&self) -> Option<usize> {
-        multi_property_id_for_property_type_id(E::id(), P1::type_id())
-            .map(|(property_id, _)| property_id)
-            .or_else(|| Some(P1::id()))
+        Some(P1::id())
     }
 
     fn query_parts(&self) -> Self::QueryParts<'_> {

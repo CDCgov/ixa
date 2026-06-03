@@ -46,6 +46,7 @@
 //!
 //! (Note: The first two rows are implemented in terms of `SourceSet::PopulationRange`.)
 
+use std::any::Any;
 use std::marker::PhantomData;
 use std::ops::Range;
 
@@ -54,20 +55,11 @@ use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::multi_property_id_for_property_type_id;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
-use crate::hashing::{HashValueType, IndexSet};
+use crate::hashing::IndexSet;
 use crate::prelude::Property;
 use crate::Context;
 
 pub(super) type BxPropertySource<'a, E> = Box<dyn AbstractPropertySource<'a, E> + 'a>;
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-/// Identifies the logical property query represented by a property-backed source,
-/// i.e. "entities whose property `P` equals value `V`", regardless of how
-/// that set is produced internally.
-pub(crate) struct PropertySourceId {
-    pub property_id: usize,
-    pub value_hash: HashValueType,
-}
 
 /// Type erased property source representing the (abstract) set of `EntityId<E>`s
 /// for which a particular property has a particular value. This is used for
@@ -75,8 +67,14 @@ pub(crate) struct PropertySourceId {
 pub(crate) trait AbstractPropertySource<'a, E: Entity>:
     Iterator<Item = EntityId<E>>
 {
-    /// Identity of the logical property query represented by this source.
-    fn id(&self) -> PropertySourceId;
+    /// The representative property ID for the logical property query represented by this source.
+    fn logical_property_id(&self) -> usize;
+
+    /// Return whether this source represents `property_id == query_parts`.
+    fn matches_query_parts(&self, property_id: usize, query_parts: &[&dyn Any]) -> bool;
+
+    /// Return whether this source and `other` represent the same logical property query.
+    fn same_logical_query(&self, other: &dyn AbstractPropertySource<'a, E>) -> bool;
 
     /// Clone this type-erased source, preserving its current cursor state.
     fn clone_box(&self) -> BxPropertySource<'a, E>;
@@ -136,13 +134,19 @@ impl<'a, E: Entity, P: Property<E>> Clone for DerivedPropertySource<'a, E, P> {
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for DerivedPropertySource<'a, E, P>
 {
-    fn id(&self) -> PropertySourceId {
-        let property_id = multi_property_id_for_property_type_id(E::id(), P::type_id())
-            .map_or_else(P::id, |(property_id, _)| property_id);
-        PropertySourceId {
-            property_id,
-            value_hash: P::query_value_hash(&self.value),
-        }
+    fn logical_property_id(&self) -> usize {
+        multi_property_id_for_property_type_id(E::id(), P::type_id())
+            .map_or_else(P::id, |(property_id, _)| property_id)
+    }
+
+    fn matches_query_parts(&self, property_id: usize, query_parts: &[&dyn Any]) -> bool {
+        property_id == self.logical_property_id()
+            && P::value_from_query_parts(query_parts).is_some_and(|value| value == self.value)
+    }
+
+    fn same_logical_query(&self, other: &dyn AbstractPropertySource<'a, E>) -> bool {
+        let query_parts = P::query_parts_for_value(&self.value);
+        other.matches_query_parts(self.logical_property_id(), query_parts.as_ref())
     }
 
     fn contains(&self, entity_id: EntityId<E>) -> bool {
@@ -233,13 +237,19 @@ impl<'a, E: Entity, P: Property<E>> Clone for ConcretePropertySource<'a, E, P> {
 impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
     for ConcretePropertySource<'a, E, P>
 {
-    fn id(&self) -> PropertySourceId {
-        let property_id = multi_property_id_for_property_type_id(E::id(), P::type_id())
-            .map_or_else(P::id, |(property_id, _)| property_id);
-        PropertySourceId {
-            property_id,
-            value_hash: P::query_value_hash(&self.value),
-        }
+    fn logical_property_id(&self) -> usize {
+        multi_property_id_for_property_type_id(E::id(), P::type_id())
+            .map_or_else(P::id, |(property_id, _)| property_id)
+    }
+
+    fn matches_query_parts(&self, property_id: usize, query_parts: &[&dyn Any]) -> bool {
+        property_id == self.logical_property_id()
+            && P::value_from_query_parts(query_parts).is_some_and(|value| value == self.value)
+    }
+
+    fn same_logical_query(&self, other: &dyn AbstractPropertySource<'a, E>) -> bool {
+        let query_parts = P::query_parts_for_value(&self.value);
+        other.matches_query_parts(self.logical_property_id(), query_parts.as_ref())
     }
 
     fn contains(&self, person_id: EntityId<E>) -> bool {
@@ -322,7 +332,9 @@ impl<'a, E: Entity> PartialEq for SourceSet<'a, E> {
                 left == right || (left.is_empty() && right.is_empty())
             }
             (Self::IndexSet(left), Self::IndexSet(right)) => std::ptr::eq(&**left, &**right),
-            (Self::PropertySet(left), Self::PropertySet(right)) => left.id() == right.id(),
+            (Self::PropertySet(left), Self::PropertySet(right)) => {
+                left.same_logical_query(&**right)
+            }
             _ => false,
         }
     }

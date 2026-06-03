@@ -5,9 +5,10 @@ use std::ops::AddAssign;
 
 use log::{error, trace};
 
-use crate::entity::{Entity, EntityId};
+use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
+use crate::entity::{Entity, EntityId, PropertyIndexType};
 use crate::hashing::HashMap;
-use crate::prelude::Property;
+use crate::prelude::{IndexableProperty, Property};
 
 #[derive(Default)]
 pub struct ValueCountIndex<E: Entity, P: Property<E>> {
@@ -16,7 +17,7 @@ pub struct ValueCountIndex<E: Entity, P: Property<E>> {
     _phantom: PhantomData<E>,
 }
 
-impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
+impl<E: Entity, P: IndexableProperty<E>> ValueCountIndex<E, P> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -50,6 +51,40 @@ impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
 
     pub fn get(&self, key: &P) -> Option<usize> {
         self.data.get(key).copied()
+    }
+}
+
+impl<E, P> PropertyIndex<E, P> for ValueCountIndex<E, P>
+where
+    E: Entity,
+    P: IndexableProperty<E>,
+{
+    fn index_type(&self) -> PropertyIndexType {
+        PropertyIndexType::ValueCountIndex
+    }
+
+    fn get_index_set_result(&self, _value: &P) -> IndexSetResult<'_, E> {
+        IndexSetResult::Unsupported
+    }
+
+    fn get_index_count_result(&self, value: &P) -> IndexCountResult {
+        IndexCountResult::Count(self.get(value).unwrap_or(0))
+    }
+
+    fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>) {
+        ValueCountIndex::remove_entity(self, value, entity_id);
+    }
+
+    fn add_entity(&mut self, value: &P, entity_id: EntityId<E>) {
+        ValueCountIndex::add_entity(self, value, entity_id);
+    }
+
+    fn max_indexed(&self) -> usize {
+        self.max_indexed
+    }
+
+    fn set_max_indexed(&mut self, max_indexed: usize) {
+        self.max_indexed = max_indexed;
     }
 }
 

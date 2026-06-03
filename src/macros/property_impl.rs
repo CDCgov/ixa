@@ -44,8 +44,9 @@ You can implement [`Property`][crate::entity::property::Property] for existing t
 [`impl_property!`][macro@crate::impl_property] macro. This macro defines the
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care
 of the `#[derive(..)]` boilerplate, so you have to remember to derive or implement the traits
-required by [`AnyProperty`][crate::entity::property::AnyProperty] for your type: `Copy`, `Clone`,
-`Debug`, `PartialEq`, `Eq`, and `Hash`.
+required by [`Property`][crate::entity::property::Property] for your type: `Copy`, `Clone`,
+`Debug`, and `PartialEq`. If you want to index the property, it must also implement `Eq` and
+`Hash`.
 
 If the type cannot derive `PartialEq` / `Eq` or `Hash`, for example because it contains `f32` or
 `f64`, use [`impl_property_eq!`][macro@crate::impl_property_eq],
@@ -62,7 +63,7 @@ define_entity!(Person);
 // The `define_property!` automatically adds `pub` visibility to the struct and its tuple fields. If
 // we want to restrict the visibility of our `Property` type, we can use the `impl_property!` macro
 // instead. The only catch is, we have to remember to derive or implement the traits required by
-// `AnyProperty`.
+// `Property`. We also derive `Eq` and `Hash` here so the property can be indexed.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct Age(pub u8);
 impl_property!(Age, Person);
@@ -557,11 +558,6 @@ macro_rules! impl_property {
                 std::any::TypeId::of::<Self>()
             },
 
-            // query_value_hash_fn
-            {
-                |value: &$property| $crate::hashing::one_shot_128(value)
-            },
-
             // display_impl
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
 
@@ -688,25 +684,6 @@ macro_rules! impl_property {
             {
                 std::any::TypeId::of::<Self>()
             },
-            {
-                $crate::paste::paste! {
-                    |value: &$property| -> $crate::hashing::HashValueType {
-                        let keys = [
-                            $(
-                                <$dependency as $crate::entity::property::Property<$entity>>::type_id(),
-                            )+
-                        ];
-                        let ( $( [<_ $dependency:lower>] ),+ ) = value;
-                        let mut value_hashes = [
-                            $(
-                                $crate::hashing::one_shot_128([<_ $dependency:lower>]),
-                            )+
-                        ];
-                        $crate::entity::multi_property::static_reorder_by_keys(&keys, &mut value_hashes);
-                        $crate::hashing::one_shot_128(&value_hashes)
-                    }
-                }
-            },
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
@@ -766,7 +743,6 @@ macro_rules! impl_property {
         $value_from_query_parts_fn:expr,
         $query_parts_for_value_fn:expr,
         $type_id_fn:expr,          // Code that returns the logical type ID for this property
-        $query_value_hash_fn:expr,
         $display_impl:expr,        // A function that takes a value and returns a string representation of this property
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
@@ -803,10 +779,6 @@ macro_rules! impl_property {
 
             fn type_id() -> std::any::TypeId {
                 $type_id_fn
-            }
-
-            fn query_value_hash(value: &Self) -> $crate::hashing::HashValueType {
-                ($query_value_hash_fn)(value)
             }
 
             fn get_display(&self) -> String {
@@ -1372,6 +1344,14 @@ mod tests {
         impl_eq_hash = both
     );
 
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct NonIndexableFloat(f64);
+    impl_property!(
+        NonIndexableFloat,
+        Person,
+        default_const = NonIndexableFloat(0.0)
+    );
+
     // A property type for two distinct entities.
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     pub enum InfectionKind {
@@ -1429,13 +1409,47 @@ mod tests {
         assert_ne!(ProfileNAW::type_id(), ProfileAWN::type_id());
         assert_ne!(ProfileNAW::type_id(), ProfileWAN::type_id());
 
+        let query_parts = ProfileNAW::query_parts_for_value(&a);
         assert_eq!(
-            ProfileNAW::query_value_hash(&a),
-            ProfileAWN::query_value_hash(&b)
+            ProfileAWN::value_from_query_parts(query_parts.as_ref()),
+            Some(b)
         );
         assert_eq!(
-            ProfileNAW::query_value_hash(&a),
-            ProfileWAN::query_value_hash(&c)
+            ProfileWAN::value_from_query_parts(query_parts.as_ref()),
+            Some(c)
+        );
+    }
+
+    #[test]
+    fn test_non_indexable_property_unindexed_behavior() {
+        let mut context = Context::new();
+
+        let first = context
+            .add_entity(with!(Person, NonIndexableFloat(1.5)))
+            .unwrap();
+        let _second = context
+            .add_entity(with!(Person, NonIndexableFloat(2.5)))
+            .unwrap();
+
+        assert_eq!(
+            context.get_property::<Person, NonIndexableFloat>(first),
+            NonIndexableFloat(1.5)
+        );
+
+        context.set_property(first, NonIndexableFloat(3.5));
+        assert_eq!(
+            context.get_property::<Person, NonIndexableFloat>(first),
+            NonIndexableFloat(3.5)
+        );
+
+        let mut results = Vec::new();
+        context.with_query_results(with!(Person, NonIndexableFloat(3.5)), &mut |entity_ids| {
+            results = entity_ids.into_iter().collect::<Vec<_>>();
+        });
+        assert_eq!(results, vec![first]);
+        assert_eq!(
+            context.query_entity_count(with!(Person, NonIndexableFloat(3.5))),
+            1
         );
     }
 
