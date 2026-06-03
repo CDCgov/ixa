@@ -222,7 +222,7 @@ macro_rules! impl_query {
                 fn query_parts(&self) -> Self::QueryParts<'_> {
                     let keys = [
                         #(
-                            <T~N as $crate::entity::property::Property<E>>::name(),
+                            <T~N as $crate::entity::property::Property<E>>::type_id(),
                         )*
                     ];
                     let mut query_parts = [

@@ -54,7 +54,7 @@ use crate::entity::index::IndexSetResult;
 use crate::entity::multi_property::multi_property_id_for_property_type_id;
 use crate::entity::property_value_store_core::RawPropertyValueVec;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
-use crate::hashing::{one_shot_128, HashValueType, IndexSet};
+use crate::hashing::{HashValueType, IndexSet};
 use crate::prelude::Property;
 use crate::Context;
 
@@ -141,7 +141,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
             .map_or_else(P::id, |(property_id, _)| property_id);
         PropertySourceId {
             property_id,
-            value_hash: one_shot_128(&self.value.make_canonical()),
+            value_hash: P::query_value_hash(&self.value),
         }
     }
 
@@ -238,7 +238,7 @@ impl<'a, E: Entity, P: Property<E>> AbstractPropertySource<'a, E>
             .map_or_else(P::id, |(property_id, _)| property_id);
         PropertySourceId {
             property_id,
-            value_hash: one_shot_128(&self.value.make_canonical()),
+            value_hash: P::query_value_hash(&self.value),
         }
     }
 

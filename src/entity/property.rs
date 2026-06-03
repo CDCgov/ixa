@@ -14,6 +14,7 @@ use std::hash::Hash;
 
 use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
+use crate::hashing::{one_shot_128, HashValueType};
 use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
@@ -33,7 +34,7 @@ pub enum PropertyInitializationKind {
     Constant,
 }
 
-/// Shared trait bounds for property values and canonical values.
+/// Shared trait bounds for property values.
 ///
 /// These values must be copyable and support equality and deterministic hashing so they can
 /// participate in indexing.
@@ -60,20 +61,14 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 
 /// All properties must implement this trait using one of the `define_property` macros.
 ///
-/// Property values and canonical values must satisfy `AnyProperty` so they can participate in
-/// property indexes.
+/// Property values must satisfy `AnyProperty` so they can participate in property indexes.
 pub trait Property<E: Entity>: AnyProperty {
-    /// Some properties might store a transformed version of the value in the index. This is the
-    /// type of the transformed value. For simple properties this will be the same as `Self`.
-    type CanonicalValue: AnyProperty;
-
     /// Allocation-free representation of the query parts contributed by a property value.
     type QueryParts<'a>: AsRef<[&'a dyn Any]>
     where
         Self: 'a;
 
-    /// Source-level name, set by the macros to `stringify!($property)`. Used by
-    /// `define_multi_property!` to reject type aliases (see issue #843).
+    /// Source-level name, set by the macros to `stringify!($property)`.
     const NAME: &'static str;
 
     fn name() -> &'static str {
@@ -104,32 +99,34 @@ pub trait Property<E: Entity>: AnyProperty {
     #[must_use]
     fn default_const() -> Self;
 
-    /// This transforms a `Self` into a `Self::CanonicalValue`, e.g., for storage in an index.
-    /// For simple properties, this is the identity function.
-    #[must_use]
-    fn make_canonical(self) -> Self::CanonicalValue;
-
-    /// The inverse transform of `make_canonical`. For simple properties, this is the identity function.
-    #[must_use]
-    fn make_uncanonical(value: Self::CanonicalValue) -> Self;
-
     /// Returns a string representation of the property value, e.g. for writing to a CSV file.
     #[must_use]
     fn get_display(&self) -> String;
 
-    /// Reconstruct the canonical query value used for indexed lookup.
+    /// Reconstruct the property value used for indexed lookup.
     ///
-    /// Ordinary properties expect a single query part containing `Self` and canonicalize that
-    /// value. Multi-properties override this to rebuild their canonical tuple value directly from
-    /// the already-sorted type-erased query parts.
+    /// Ordinary properties expect a single query part containing `Self`. Multi-properties override
+    /// this to rebuild their declared tuple value directly from already-sorted type-erased query
+    /// parts.
     #[must_use]
-    fn canonical_from_sorted_query_parts(parts: &[&dyn Any]) -> Option<Self::CanonicalValue> {
+    fn value_from_query_parts(parts: &[&dyn Any]) -> Option<Self> {
         let [part] = parts else {
             return None;
         };
-        part.downcast_ref::<Self>()
-            .copied()
-            .map(Self::make_canonical)
+        part.downcast_ref::<Self>().copied()
+    }
+
+    /// Hash the logical query value represented by `value`.
+    ///
+    /// This hash is used as part of the `PropertySourceId` for property-backed entity
+    /// sets. It lets the entity-set layer recognize when two sources represent the same
+    /// logical query, even if they are produced through different internal source types.
+    ///
+    /// Multi-properties override this so equivalent tuple orders hash the component values in the
+    /// same `TypeId` order and therefore share the same source identity.
+    #[must_use]
+    fn query_value_hash(value: &Self) -> HashValueType {
+        one_shot_128(value)
     }
 
     /// Expose the query parts for a concrete property value without allocating.
@@ -140,8 +137,7 @@ pub trait Property<E: Entity>: AnyProperty {
     #[must_use]
     fn query_parts_for_value(value: &Self) -> Self::QueryParts<'_>;
 
-    /// Overridden by multi-properties, which use the `TypeId` of the name-sorted tuple so that
-    /// tuples with the same component types in a different order will have the same type ID.
+    /// The logical type identity for this property.
     #[must_use]
     fn type_id() -> TypeId {
         TypeId::of::<Self>()

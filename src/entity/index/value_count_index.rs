@@ -1,5 +1,6 @@
 //! Value-count index that maintains only counts per distinct property value.
 
+use std::marker::PhantomData;
 use std::ops::AddAssign;
 
 use log::{error, trace};
@@ -10,8 +11,9 @@ use crate::prelude::Property;
 
 #[derive(Default)]
 pub struct ValueCountIndex<E: Entity, P: Property<E>> {
-    data: HashMap<P::CanonicalValue, usize>,
+    data: HashMap<P, usize>,
     pub(in crate::entity) max_indexed: usize,
+    _phantom: PhantomData<E>,
 }
 
 impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
@@ -20,16 +22,17 @@ impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
         Self {
             data: HashMap::default(),
             max_indexed: 0,
+            _phantom: PhantomData,
         }
     }
 
     /// Increments the count for `key`.
-    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn add_entity(&mut self, key: &P, entity_id: EntityId<E>) {
         trace!("adding entity {:?} to index {}", entity_id, P::name());
         self.data.entry(*key).or_default().add_assign(1);
     }
 
-    pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn remove_entity(&mut self, key: &P, entity_id: EntityId<E>) {
         if let Some(count) = self.data.get_mut(key) {
             if *count == 0 {
                 error!(
@@ -45,7 +48,7 @@ impl<E: Entity, P: Property<E>> ValueCountIndex<E, P> {
         }
     }
 
-    pub fn get(&self, key: &P::CanonicalValue) -> Option<usize> {
+    pub fn get(&self, key: &P) -> Option<usize> {
         self.data.get(key).copied()
     }
 }
@@ -56,7 +59,6 @@ mod tests {
     use crate::entity::PropertyIndexType;
     use crate::hashing::one_shot_128;
     use crate::prelude::*;
-    use crate::with;
 
     define_entity!(Person);
     define_property!(struct Age(pub u8), Person, default_const = Age(0));
@@ -74,7 +76,7 @@ mod tests {
         let mut context = Context::new();
         let property_store = context.entity_store.get_property_store_mut::<Person>();
 
-        assert_eq!(AWH::type_id(), WHA::type_id());
+        assert_ne!(AWH::type_id(), WHA::type_id());
         property_store.set_property_indexed::<AWH>(PropertyIndexType::ValueCountIndex);
 
         context

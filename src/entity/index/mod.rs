@@ -50,7 +50,7 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn get_index_set_result(&self, value: &P::CanonicalValue) -> IndexSetResult<'_, E> {
+    pub fn get_index_set_result(&self, value: &P) -> IndexSetResult<'_, E> {
         match self {
             Self::Unindexed => IndexSetResult::<'_, E>::Unsupported,
             Self::FullIndex(index) => match index.get(value) {
@@ -61,7 +61,7 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn get_index_count_result(&self, value: &P::CanonicalValue) -> IndexCountResult {
+    pub fn get_index_count_result(&self, value: &P) -> IndexCountResult {
         match self {
             Self::Unindexed => IndexCountResult::Unsupported,
             Self::FullIndex(index) => {
@@ -72,7 +72,7 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn remove_entity(&mut self, value: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>) {
         match self {
             Self::Unindexed => {}
             Self::FullIndex(index) => index.remove_entity(value, entity_id),
@@ -80,7 +80,7 @@ impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
         }
     }
 
-    pub fn add_entity(&mut self, value: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn add_entity(&mut self, value: &P, entity_id: EntityId<E>) {
         match self {
             Self::Unindexed => {}
             Self::FullIndex(index) => {

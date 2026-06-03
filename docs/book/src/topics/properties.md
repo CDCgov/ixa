@@ -605,45 +605,6 @@ they can to alleviate friction, having to convert to and from primitive `f64` va
 really the only downside. The good news is, this conversion is usually only cosmetic: the compiler usually optimizes it
 away.
 
-## Canonical Values
-
-Sometimes the value you want model code to use is not the value you want Ixa to store in indexes. The `canonical_value`,
-`make_canonical`, and `make_uncanonical` options let you define a standard representation for internal indexing and
-querying that is different from the external value you want to expose to model code:
-
-```rust
-define_entity!(WeatherStation);
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct DegreesFahrenheit(pub i16);
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct DegreesCelsius(pub i16);
-
-impl_property!(
-    DegreesFahrenheit,
-    WeatherStation,
-    canonical_value = DegreesCelsius,
-    make_canonical = |value: DegreesFahrenheit| {
-        DegreesCelsius(((value.0 - 32) * 5) / 9)
-    },
-    make_uncanonical = |value: DegreesCelsius| {
-        DegreesFahrenheit((value.0 * 9) / 5 + 32)
-    },
-    display_impl = |value: &DegreesFahrenheit| format!("{} F", value.0)
-);
-```
-
-The canonical value must satisfy the same equality and hashing requirements as
-other property values because it is used directly by indexes.
-
-> [!INFO] Canonical Values and Multi-Properties
->
-> Multi-properties use the canonical value mechanism internally so that two tuples
-> with the same component properties but having a different component ordering can
-> share the same index. A multi-property's canonical value is the tuple of properties
-> in lexicographic order. This is all transparent to model code.
-
 ## Multi-Properties
 
 A multi-property is a derived tuple of several properties. Its main purpose is
@@ -666,9 +627,8 @@ define_multi_property!((Age, InfectionStatus), Person);
 context.index_property::<Person, AgeInfectionStatus>();
 ```
 
-Use the underlying property names in `define_multi_property!`, not type aliases. For a deeper discussion of when to
-create multi-property indexes, see [Indexing](indexing.md). Because the components of a multi-property are already
-required to be properties, multi-properties usually "just work".
+For a deeper discussion of when to create multi-property indexes, see [Indexing](indexing.md). Because the components
+of a multi-property are already required to be properties, multi-properties usually "just work".
 
 ## Troubleshooting
 

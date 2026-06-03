@@ -182,6 +182,18 @@ pub fn static_apply_reordering<T: Copy, const N: usize>(values: &mut [T; N], ind
     }
 }
 
+/// Returns the inverse of a reordering produced by [`static_sorted_indices`].
+///
+/// If `indices[sorted_position] == original_position`, the returned array maps
+/// `original_position` back to `sorted_position`.
+pub fn static_inverse_indices<const N: usize>(indices: &[usize; N]) -> [usize; N] {
+    let mut inverse = [0; N];
+    for (sorted_position, &original_position) in indices.iter().enumerate() {
+        inverse[original_position] = sorted_position;
+    }
+    inverse
+}
+
 /// Reorder `values` in place according to the sorted order of `keys`.
 ///
 /// Both slices must have the same length. "Static" in the name refers to the fact that it

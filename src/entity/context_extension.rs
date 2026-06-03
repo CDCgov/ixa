@@ -1140,13 +1140,13 @@ mod tests {
             },
         );
 
-        // Check that equivalent multi-properties keep distinct storage IDs while
-        // sharing query routing identity.
+        // Check that equivalent multi-properties keep distinct storage and type IDs while
+        // sharing query routing identity through the registry.
         assert_ne!(
             InfectionStatusVaccinated::id(),
             VaccinatedInfectionStatus::id()
         );
-        assert_eq!(
+        assert_ne!(
             InfectionStatusVaccinated::type_id(),
             VaccinatedInfectionStatus::type_id()
         );

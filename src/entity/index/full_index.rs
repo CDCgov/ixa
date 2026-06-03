@@ -11,7 +11,7 @@ use crate::prelude::Property;
 /// direct indexing (fast random sampling).
 #[derive(Default)]
 pub struct FullIndex<E: Entity, P: Property<E>> {
-    data: HashMap<P::CanonicalValue, IndexSet<EntityId<E>>>,
+    data: HashMap<P, IndexSet<EntityId<E>>>,
 
     // The largest person ID that has been indexed. Used so that we
     // can lazily index when a person is added.
@@ -29,12 +29,12 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
 
     /// Inserts an entity into the set associated with `key`, creating a new set if one does not yet
     /// exist.
-    pub fn add_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn add_entity(&mut self, key: &P, entity_id: EntityId<E>) {
         trace!("adding entity {:?} to index {}", entity_id, P::name());
         self.data.entry(*key).or_default().insert(entity_id);
     }
 
-    pub fn remove_entity(&mut self, key: &P::CanonicalValue, entity_id: EntityId<E>) {
+    pub fn remove_entity(&mut self, key: &P, entity_id: EntityId<E>) {
         if let Some(set) = self.data.get_mut(key) {
             set.swap_remove(&entity_id);
             // Clean up the entry if there are no entities
@@ -44,7 +44,7 @@ impl<E: Entity, P: Property<E>> FullIndex<E, P> {
         }
     }
 
-    pub fn get(&self, key: &P::CanonicalValue) -> Option<&IndexSet<EntityId<E>>> {
+    pub fn get(&self, key: &P) -> Option<&IndexSet<EntityId<E>>> {
         self.data.get(key)
     }
 }
@@ -70,7 +70,7 @@ mod tests {
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
 
-        assert_eq!(AWH::type_id(), WHA::type_id());
+        assert_ne!(AWH::type_id(), WHA::type_id());
         context.index_property::<Person, AWH>();
 
         context

@@ -100,14 +100,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
     }
 
     fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E> {
-        match P::canonical_from_sorted_query_parts(parts) {
+        match P::value_from_query_parts(parts) {
             Some(value) => self.index.get_index_set_result(&value),
             None => IndexSetResult::Empty,
         }
     }
 
     fn get_index_count_for_query_parts(&self, parts: &[&dyn Any]) -> IndexCountResult {
-        match P::canonical_from_sorted_query_parts(parts) {
+        match P::value_from_query_parts(parts) {
             Some(value) => self.index.get_index_count_result(&value),
             None => IndexCountResult::Count(0),
         }
@@ -156,7 +156,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
             } else {
                 self.get(entity_id)
             };
-            self.index.add_entity(&P::make_canonical(value), entity_id);
+            self.index.add_entity(&value, entity_id);
         }
         self.index.set_max_indexed(current_pop);
     }
