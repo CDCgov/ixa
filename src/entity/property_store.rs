@@ -435,6 +435,15 @@ mod tests {
     define_property!(struct Vaccinated(bool), Person, default_const = Vaccinated(false));
 
     #[test]
+    fn property_store_default_matches_new() {
+        let property_store = PropertyStore::<Person>::default();
+        assert_eq!(
+            property_store.items.len(),
+            get_registered_property_count::<Person>()
+        );
+    }
+
+    #[test]
     fn test_get_property_store() {
         let mut property_store = PropertyStore::new();
 

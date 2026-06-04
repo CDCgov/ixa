@@ -287,12 +287,55 @@ mod tests {
     }
 
     #[test]
+    fn capacity_reserve_and_shrink_to_fit() {
+        let v = ValueVec::with_capacity(4);
+        assert!(v.capacity() >= 4);
+
+        v.reserve(16);
+        assert!(v.capacity() >= 16);
+
+        v.extend([1, 2]);
+        v.shrink_to_fit();
+        assert!(v.capacity() >= v.len());
+    }
+
+    #[test]
     fn get_cloned_and_replace() {
         let v = ValueVec::new();
         v.extend([10, 20, 30]);
         assert_eq!(v.get(1), Some(20));
         assert_eq!(v.replace(1, 99), 20);
         assert_eq!(v.get(1), Some(99));
+    }
+
+    #[test]
+    fn set_swap_contains_clear_and_resize() {
+        let v = ValueVec::default();
+        assert!(v.is_empty());
+
+        v.resize(3, 7);
+        assert_eq!(v.to_vec(), vec![7, 7, 7]);
+
+        v.set(1, 9);
+        assert_eq!(v.at(1), 9);
+
+        let mut replacement = 42;
+        v.swap_value(1, &mut replacement);
+        assert_eq!(v.at(1), 42);
+        assert_eq!(replacement, 9);
+
+        assert!(v.contains(&42));
+        assert!(!v.contains(&9));
+
+        let mut next = 0;
+        v.resize_with(5, || {
+            next += 1;
+            next
+        });
+        assert_eq!(v.to_vec(), vec![7, 42, 7, 1, 2]);
+
+        v.clear();
+        assert!(v.is_empty());
     }
 
     #[test]

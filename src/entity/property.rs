@@ -179,3 +179,44 @@ pub trait Property<E: Entity>: AnyProperty {
         get_property_dependents_static::<E>(Self::id())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::any::Any;
+
+    use super::*;
+    use crate::{define_entity, define_property};
+
+    define_entity!(PropertyTestPerson);
+    define_property!(struct PropertyTestAge(u8), PropertyTestPerson);
+
+    #[test]
+    fn const_str_eq_compares_lengths_and_bytes() {
+        assert!(const_str_eq("Age", "Age"));
+        assert!(!const_str_eq("Age", "Ages"));
+        assert!(!const_str_eq("Age", "Axe"));
+    }
+
+    #[test]
+    fn default_property_query_helpers_use_single_value() {
+        let value = PropertyTestAge(42);
+        let parts = [&value as &dyn Any];
+
+        assert_eq!(
+            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
+                &parts
+            ),
+            Some(value)
+        );
+        assert_eq!(
+            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
+                &[]
+            ),
+            None
+        );
+        assert_eq!(
+            <PropertyTestAge as Property<PropertyTestPerson>>::index_id(),
+            <PropertyTestAge as Property<PropertyTestPerson>>::id()
+        );
+    }
+}
