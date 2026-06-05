@@ -126,13 +126,23 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
 
     {
         let entity_ids: Vec<EntityId<Person>> = context.get_entity_iterator().collect();
+        let mut matching_entities = entity_ids.clone();
+        context.filter_entities(
+            &mut matching_entities,
+            with!(Person, Age(5u8), SchoolId(1u32), WorkplaceId(0u32)),
+        );
+        assert!(
+            !matching_entities.is_empty(),
+            "bench_filter_indexed_entity query must have a nonempty result set"
+        );
+
         criterion.bench_function("bench_filter_indexed_entity", |bencher| {
             bencher.iter_batched(
                 || entity_ids.clone(),
                 |mut entities| {
                     context.filter_entities(
                         &mut entities,
-                        with!(Person, Age(30u8), SchoolId(1u32), WorkplaceId(1u32)),
+                        with!(Person, Age(5u8), SchoolId(1u32), WorkplaceId(0u32)),
                     );
                 },
                 BatchSize::SmallInput,
