@@ -7,6 +7,7 @@ pnpm = "latest"
 "npm:@commitlint/config-conventional" = "19.7.1"
 "cargo:wasm-pack" = "latest"
 "cargo:hyperfine" = "latest"
+"cargo:cargo-msrv" = "0.19.3"
 "cargo:cargo-llvm-cov" = "latest"
 "cargo:mdbook" = "0.5.3"
 "cargo:mdbook-callouts" = "0.3.0"
@@ -185,6 +186,10 @@ run = [
   "cargo +nightly clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
+[tasks.msrv]
+description = "Verify the declared minimum supported Rust version"
+run = "cargo msrv --no-log verify --all-features"
+
 [tasks.prettier]
 description = "Run prettier on all supported files"
 run = '''prettier --cache --{{arg(name='action', default='check')}} \
@@ -236,7 +241,7 @@ depends = ['check-all']
 [tasks.prepush]
 description = "Check everything before pushing"
 env.RUSTFLAGS = "-D warnings"
-run = ["mise precommit", "mise examples", "mise docs", "mise test-all"]
+run = ["mise precommit", "mise run msrv", "mise examples", "mise docs", "mise test-all"]
 
 [tasks.'docker:build']
 run = "docker build -t ixa-bench ."
