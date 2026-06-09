@@ -219,7 +219,7 @@ mod tests {
         Person
     );
 
-    define_multi_property!((Age, County), Person);
+    define_multi_property!(Person, Age, County);
 
     #[test]
     fn with_query_results() {
@@ -494,8 +494,8 @@ mod tests {
     }
 
     // create a multi-property index
-    define_multi_property!((Age, County, Height), Person);
-    define_multi_property!((County, Height), Person);
+    define_multi_property!(Person, Age, County, Height);
+    define_multi_property!(Person, County, Height);
 
     #[test]
     fn query_derived_prop_with_optimized_index() {
