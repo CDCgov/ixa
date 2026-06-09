@@ -142,7 +142,7 @@ mod tests {
         let _ = context.get_data(LegitDataPlugin);
 
         // Panics here:
-        // let container = context.get_data(MyOtherDataPlugin);
+        let container = context.get_data(MyOtherDataPlugin);
         // Some arbitrary code involving `container`
     }
 
