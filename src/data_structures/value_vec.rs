@@ -342,7 +342,7 @@ mod tests {
     fn debug_impl() {
         let v = ValueVec::from(vec![1, 2, 3]);
         let s = format!("{v:?}");
-        println!("{}", s);
+        // println!("{}", s);
         assert!(!s.contains("ValueVec"));
         assert!(s.contains("[1, 2, 3]"));
     }
