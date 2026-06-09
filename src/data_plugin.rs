@@ -110,6 +110,7 @@ mod tests {
         }
 
         let context = Context::new();
+        let container = context.get_data(MyDataPlugin);
     }
 
     // We attempt a collision with a plugin
