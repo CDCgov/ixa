@@ -92,7 +92,6 @@ mod tests {
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
-        // println!("Results: {:?}", results_a);
 
         context
             .add_entity(with!(Person, Weight(1u8), Height(2u8), Age(3u8)))
@@ -114,6 +113,5 @@ mod tests {
 
         assert_eq!(results_a, results_b);
 
-        // println!("Results: {:?}", results_a);
     }
 }
