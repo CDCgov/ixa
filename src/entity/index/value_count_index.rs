@@ -105,6 +105,23 @@ mod tests {
     }
 
     #[test]
+    fn index_property_counts_preserves_default_multi_property_full_index() {
+        let mut context = Context::new();
+
+        context.index_property_counts::<Person, WHA>();
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(
+            property_store.property_index_type::<AWH>(),
+            PropertyIndexType::FullIndex
+        );
+        assert_eq!(
+            property_store.property_index_type::<WHA>(),
+            PropertyIndexType::FullIndex
+        );
+    }
+
+    #[test]
     fn test_index_value_compute_same_values() {
         let value = one_shot_128(&"test value");
         let value2 = one_shot_128(&"test value");

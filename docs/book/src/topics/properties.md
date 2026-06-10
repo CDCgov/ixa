@@ -662,13 +662,12 @@ define_property!(
 );
 
 define_multi_property!((Age, InfectionStatus), Person);
-
-context.index_property::<Person, AgeInfectionStatus>();
 ```
 
 Use the underlying property names in `define_multi_property!`, not type aliases. For a deeper discussion of when to
-create multi-property indexes, see [Indexing](indexing.md). Because the components of a multi-property are already
-required to be properties, multi-properties usually "just work".
+create multi-property indexes, see [Indexing](indexing.md). Multi-properties are indexed automatically, but their
+component properties are not individually indexed unless you index them separately. Because the components of a
+multi-property are already required to be properties, multi-properties usually "just work".
 
 ## Troubleshooting
 

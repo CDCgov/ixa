@@ -610,6 +610,9 @@ macro_rules! impl_property {
                 <Self as $crate::entity::property::Property<$entity>>::id()
             }),
 
+            // index_by_default
+            false,
+
             // collect_deps_fn
             $crate::impl_property!(
                 @unwrap_or
@@ -722,6 +725,7 @@ macro_rules! impl_property {
             $crate::impl_property!(@unwrap_or $($index_id_fn)?, {
                 <Self as $crate::entity::property::Property<$entity>>::id()
             }),
+            true,
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
@@ -787,6 +791,7 @@ macro_rules! impl_property {
         $query_parts_for_value_fn:expr,
         $display_impl:expr,        // A function that takes a canonical value and returns a string representation of this property
         $index_id_fn:expr,         // Code that returns the unique index for this property
+        $index_by_default:expr,    // Whether this property is indexed by default
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
@@ -852,6 +857,10 @@ macro_rules! impl_property {
 
             fn index_id() -> usize {
                 $index_id_fn
+            }
+
+            fn index_by_default() -> bool {
+                $index_by_default
             }
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
@@ -1534,8 +1543,6 @@ mod tests {
         context
             .add_entity(with!(Person, Name("Alice"), Age(22), Weight(170.5)))
             .unwrap();
-
-        context.index_property::<_, ProfileNAW>();
 
         // Check that all equivalent multi-properties are indexed...
         assert!(context.is_property_indexed::<Person, ProfileNAW>());

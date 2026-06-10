@@ -70,8 +70,8 @@ mod tests {
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
 
-        context.index_property::<Person, WHA>();
-        context.index_property::<Person, AWH>();
+        assert!(context.is_property_indexed::<Person, WHA>());
+        assert!(context.is_property_indexed::<Person, AWH>());
 
         context
             .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
@@ -83,6 +83,10 @@ mod tests {
             &mut |results| results_a = results.into_iter().collect::<Vec<_>>(),
         );
         assert_eq!(results_a.len(), 1);
+        assert_eq!(
+            context.query_entity_count(with!(Person, Age(1u8), Weight(2u8), Height(3u8))),
+            1
+        );
 
         let mut results_b = Default::default();
         context.with_query_results(
