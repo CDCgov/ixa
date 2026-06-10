@@ -62,9 +62,9 @@ run = '''
   mise run rust:version
   cargo run --features write_cli_usage --example basic-infection -- --markdown-help
   cargo doc --all-features --no-deps
-  rm -rf website/doc
+  rm -rf website/{book,doc}
   cp -r target/doc website
-  mdbook build docs/book -d ../../website/book
+  mdbook build docs/book -d website/book
 '''
 
 [tasks.test-all]

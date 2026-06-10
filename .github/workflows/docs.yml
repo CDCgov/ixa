@@ -34,6 +34,11 @@ jobs:
       - name: Build docs
         run: mise run docs
 
+      - name: Validate docs output
+        run: |
+          test -f website/book/index.html
+          test -f website/doc/ixa/index.html
+
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v6
