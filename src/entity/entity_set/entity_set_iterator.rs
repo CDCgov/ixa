@@ -667,11 +667,11 @@ mod tests {
         }
 
         let results = context.query_result_iterator(Person).collect::<Vec<_>>();
-        for person in results {
-            let explicit_prop = context.get_property::<Person, ExplicitProp>(person);
-            let explicit_prop2 = context.get_property::<Person, ExplicitProp2>(person);
-            println!("({:?} {:?} {:?})", person, explicit_prop, explicit_prop2);
-        }
+        // for person in results {
+            // let explicit_prop = context.get_property::<Person, ExplicitProp>(person);
+            // let explicit_prop2 = context.get_property::<Person, ExplicitProp2>(person);
+            // println!("({:?} {:?} {:?})", person, explicit_prop, explicit_prop2);
+        // }
 
         // ExplicitProp2 has only 2 values, so it will be the smaller source
         let results = context

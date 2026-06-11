@@ -710,13 +710,13 @@ mod tests {
         // from the inverse chi-square CDF.
         let critical = 148.23;
 
-        println!(
-            "χ² = {}, expected = {}, min = {}, max = {}",
-            chi_square,
-            expected,
-            selection_counts.iter().min().unwrap(),
-            selection_counts.iter().max().unwrap()
-        );
+        // println!(
+        //     "χ² = {}, expected = {}, min = {}, max = {}",
+        //     chi_square,
+        //     expected,
+        //     selection_counts.iter().min().unwrap(),
+        //     selection_counts.iter().max().unwrap()
+        // );
 
         assert!(
             chi_square < critical,
