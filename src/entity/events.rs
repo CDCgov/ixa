@@ -136,14 +136,6 @@ pub struct EntityCreatedEvent<E: Entity> {
     /// The [`EntityId<E>`] of the new entity.
     pub entity_id: EntityId<E>,
 }
-// We provide blanket impls for these because the compiler isn't smart enough to know
-// this type is always `Copy`/`Clone` if we derive them.
-impl<E: Entity> Copy for EntityCreatedEvent<E> {}
-impl<E: Entity> Clone for EntityCreatedEvent<E> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
 
 impl<E: Entity> EntityCreatedEvent<E> {
     pub fn new(entity_id: EntityId<E>) -> Self {
@@ -163,14 +155,6 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The old value
     pub previous: P,
 }
-// We provide blanket impls for these because the compiler isn't smart enough to know
-// this type is always `Copy`/`Clone` if we derive them.
-impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
 
 #[cfg(test)]
 mod tests {

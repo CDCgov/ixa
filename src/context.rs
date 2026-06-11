@@ -27,7 +27,7 @@ type Callback = dyn FnOnce(&mut Context);
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
 
-pub trait IxaEvent {
+pub trait IxaEvent: Copy + 'static {
     /// Called every time `context.subscribe_to_event` is called with this event
     fn on_subscribe(_context: &mut Context) {}
 }
@@ -138,10 +138,7 @@ impl Context {
     /// Handlers will be called upon event emission in order of subscription as
     /// queued `Callback`s with the appropriate event.
     #[allow(clippy::missing_panics_doc)]
-    pub fn subscribe_to_event<E: IxaEvent + Copy + 'static>(
-        &mut self,
-        handler: impl Fn(&mut Context, E) + 'static,
-    ) {
+    pub fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static) {
         let handler_vec = self
             .event_handlers
             .entry(TypeId::of::<E>())
@@ -151,7 +148,7 @@ impl Context {
         E::on_subscribe(self);
     }
 
-    pub(crate) fn has_event_handlers<E: IxaEvent + 'static>(&self) -> bool {
+    pub(crate) fn has_event_handlers<E: IxaEvent>(&self) -> bool {
         self.event_handlers.contains_key(&TypeId::of::<E>())
     }
 
@@ -160,7 +157,7 @@ impl Context {
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks
     #[allow(clippy::missing_panics_doc)]
-    pub fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E) {
+    pub fn emit_event<E: IxaEvent>(&mut self, event: E) {
         // Destructure to obtain event handlers and plan queue
         let Context {
             event_handlers,
@@ -475,11 +472,8 @@ impl Context {
 }
 
 pub trait ContextBase: Sized {
-    fn subscribe_to_event<E: IxaEvent + Copy + 'static>(
-        &mut self,
-        handler: impl Fn(&mut Context, E) + 'static,
-    );
-    fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
+    fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
+    fn emit_event<E: IxaEvent>(&mut self, event: E);
     fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
     fn add_plan_with_phase(
         &mut self,
@@ -503,8 +497,8 @@ pub trait ContextBase: Sized {
 impl ContextBase for Context {
     delegate::delegate! {
         to self {
-            fn subscribe_to_event<E: IxaEvent + Copy + 'static>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
-            fn emit_event<E: IxaEvent + Copy + 'static>(&mut self, event: E);
+            fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
+            fn emit_event<E: IxaEvent>(&mut self, event: E);
             fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
@@ -529,6 +523,7 @@ mod tests {
     // We allow defining items that are never used to test macros.
     #![allow(dead_code)]
     use std::cell::RefCell;
+    use std::marker::PhantomData;
 
     use ixa_derive::IxaEvent;
 
@@ -741,14 +736,22 @@ mod tests {
         assert_eq!(*context.get_data_mut(ComponentA), vec![3, 4, 1, 2, 5, 6]);
     }
 
-    #[derive(Copy, Clone, IxaEvent)]
+    #[derive(IxaEvent)]
     struct Event1 {
         pub data: usize,
     }
 
-    #[derive(Copy, Clone, IxaEvent)]
+    #[derive(IxaEvent)]
     struct Event2 {
         pub data: usize,
+    }
+
+    struct NotCopy;
+
+    #[derive(IxaEvent)]
+    struct GenericEvent<T> {
+        pub data: usize,
+        _marker: PhantomData<T>,
     }
 
     #[test]
@@ -764,6 +767,33 @@ mod tests {
         context.emit_event(Event1 { data: 1 });
         context.execute();
         assert_eq!(*obs_data.borrow(), 1);
+    }
+
+    #[test]
+    fn derive_ixa_event_implements_copy_for_generic_events() {
+        fn assert_clone<T: Clone>() {}
+        fn assert_copy<T: Copy>() {}
+        assert_clone::<GenericEvent<NotCopy>>();
+        assert_copy::<GenericEvent<NotCopy>>();
+
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        context.subscribe_to_event::<GenericEvent<NotCopy>>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        let event = GenericEvent::<NotCopy> {
+            data: 5,
+            _marker: PhantomData,
+        };
+        let copied_event = event;
+
+        assert_eq!(copied_event.data, 5);
+        context.emit_event(copied_event);
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 5);
     }
 
     #[test]
