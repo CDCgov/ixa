@@ -112,6 +112,5 @@ mod tests {
         assert_eq!(results_b.len(), 1);
 
         assert_eq!(results_a, results_b);
-
     }
 }
