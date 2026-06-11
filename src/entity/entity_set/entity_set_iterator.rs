@@ -666,7 +666,7 @@ mod tests {
                 .unwrap();
         }
 
-        let results = context.query_result_iterator(Person).collect::<Vec<_>>();
+        // let results = context.query_result_iterator(Person).collect::<Vec<_>>();
         // for person in results {
             // let explicit_prop = context.get_property::<Person, ExplicitProp>(person);
             // let explicit_prop2 = context.get_property::<Person, ExplicitProp2>(person);
