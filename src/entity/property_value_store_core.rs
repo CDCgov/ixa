@@ -175,4 +175,70 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 }
 
-// See tests in `property_store.rs`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::EntityId;
+    use crate::{define_entity, define_property};
+
+    define_entity!(StoreCorePerson);
+    define_property!(struct RequiredScore(u8), StoreCorePerson);
+    define_property!(struct DefaultScore(u8), StoreCorePerson, default_const = DefaultScore(0));
+
+    #[test]
+    fn capacity_and_reserve_helpers() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::with_capacity(4);
+
+        assert!(store.data.capacity() >= 4);
+        assert_eq!(store.index_type(), PropertyIndexType::Unindexed);
+        assert!(store.value_change_counters.is_empty());
+
+        store.reserve(16);
+        assert!(store.data.capacity() >= 16);
+    }
+
+    #[test]
+    fn replace_existing_required_value() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+        let entity_id = EntityId::new(0);
+
+        store.set(entity_id, RequiredScore(10));
+
+        assert_eq!(
+            store.replace(entity_id, RequiredScore(20)),
+            RequiredScore(10)
+        );
+        assert_eq!(store.get(entity_id), RequiredScore(20));
+    }
+
+    #[test]
+    fn replace_constant_default_value_paths() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, DefaultScore>::new();
+        let entity_id = EntityId::new(2);
+
+        assert_eq!(store.replace(entity_id, DefaultScore(0)), DefaultScore(0));
+        assert!(store.data.is_empty());
+
+        assert_eq!(store.replace(entity_id, DefaultScore(7)), DefaultScore(0));
+        assert_eq!(store.data.len(), 3);
+        assert_eq!(store.get(EntityId::new(0)), DefaultScore(0));
+        assert_eq!(store.get(EntityId::new(1)), DefaultScore(0));
+        assert_eq!(store.get(entity_id), DefaultScore(7));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn set_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        store.set(EntityId::new(1), RequiredScore(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn replace_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        store.replace(EntityId::new(1), RequiredScore(10));
+    }
+}
