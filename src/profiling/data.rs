@@ -333,10 +333,7 @@ mod tests {
         assert_eq!(*count, 2);
         // Rate should be approximately 2/elapsed (2 events / ~0.1 second = ~20/sec)
         let expected_rate = 2.0 / elapsed;
-        println!(
-            "Rate: {}, Expected: {}, Elapsed: {}",
-            rate, expected_rate, elapsed
-        );
+
         // Allow 10% margin for timing variations
         assert!(*rate > expected_rate * 0.9 && *rate < expected_rate * 1.1);
 

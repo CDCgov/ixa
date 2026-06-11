@@ -430,7 +430,6 @@ mod test {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/global_properties_malformed.json");
         let error = context.load_global_properties(&path);
-        println!("Error {error:?}");
         match error {
             Err(IxaError::JsonError(_)) => {}
             _ => panic!("Unexpected error type"),
