@@ -110,7 +110,7 @@ mod tests {
         }
 
         let context = Context::new();
-        let container = context.get_data(MyDataPlugin);
+        let _container = context.get_data(MyDataPlugin);
     }
 
     // We attempt a collision with a plugin
@@ -143,7 +143,7 @@ mod tests {
         let _ = context.get_data(LegitDataPlugin);
 
         // Panics here:
-        let container = context.get_data(MyOtherDataPlugin);
+        let _container = context.get_data(MyOtherDataPlugin);
         // Some arbitrary code involving `container`
     }
 
