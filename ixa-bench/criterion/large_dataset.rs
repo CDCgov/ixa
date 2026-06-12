@@ -32,7 +32,7 @@ define_derived_property!(
         }
     }
 );
-define_multi_property!((Age, SchoolId, WorkplaceId), Person);
+define_multi_property!(Person, Age, SchoolId, WorkplaceId);
 
 fn initialize_entities(context: &mut Context) {
     for person in generate_population_with_seed(10_000, 0.2, 10.0, Some(SEED)) {

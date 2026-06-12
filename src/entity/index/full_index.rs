@@ -60,8 +60,8 @@ mod tests {
     define_property!(struct Weight(u8), Person, default_const = Weight(0));
     define_property!(struct Height(u8), Person, default_const = Height(0));
 
-    define_multi_property!((Age, Weight, Height), Person);
-    define_multi_property!((Weight, Height, Age), Person);
+    define_multi_property!(Person, Age, Weight, Height);
+    define_multi_property!(Person, Weight, Height, Age);
 
     type AWH = (Age, Weight, Height);
     type WHA = (Weight, Height, Age);

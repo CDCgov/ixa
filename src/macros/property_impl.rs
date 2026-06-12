@@ -1219,6 +1219,47 @@ macro_rules! impl_derived_property {
 /// component properties are equivalent to an indexed multi-property and use that index to perform the
 /// query.
 ///
+/// Multi-properties must have at least two component properties:
+///
+/// ```
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!(Person, Age, Height);
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_multi_property};
+/// define_entity!(Person);
+/// define_multi_property!(Person);
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_multi_property!(Person, Age);
+/// ```
+///
+/// Tuple-first and nested tuple syntax are not supported:
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!((Age, Height), Person);
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!(Person, (Age, Height));
+/// ```
+///
 /// Components must be the underlying property type, not a type alias (see issue #843):
 ///
 /// ```compile_fail
@@ -1227,45 +1268,46 @@ macro_rules! impl_derived_property {
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 /// define_property!(struct Height(u8), Person, default_const = Height(0));
 /// type Years = Age;
-/// define_multi_property!((Years, Height), Person);
+/// define_multi_property!(Person, Years, Height);
 /// ```
 #[macro_export]
 macro_rules! define_multi_property {
-        (
-            ( $($dependency:ident),+ ),
-            $entity:ident
+        (@impl
+            $entity:ident,
+            ( $first:ident, $second:ident $(, $dependency:ident)* )
         ) => {
             $crate::paste::paste! {
-                type [<$($dependency)*>] = ( $($dependency),+ );
+                type [<$first $second $($dependency)*>] = ( $first, $second $(, $dependency)* );
 
                 // Reject type aliases; see issue #843.
-                $(
-                    const _: () = assert!(
-                        $crate::entity::property::const_str_eq(
-                            stringify!($dependency),
-                            <$dependency as $crate::entity::property::Property<$entity>>::NAME,
-                        ),
-                        concat!(
-                            "define_multi_property!: `",
-                            stringify!($dependency),
-                            "` is a type alias; use the underlying property type (see issue #843)."
-                        ),
-                    );
-                )+
+                $crate::define_multi_property!(
+                    @assert_not_type_alias $entity, $first, $second $(, $dependency)*
+                );
 
                 $crate::impl_property!(
                     @multi_property
-                    [<$($dependency)*>],
+                    [<$first $second $($dependency)*>],
                     $entity,
-                    ( $($dependency),+ ),
+                    ( $first, $second $(, $dependency)* ),
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
                         (
-                            $(context.get_property::<$entity, $dependency>(entity_id)),+
+                            <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $first>(
+                                context,
+                                entity_id,
+                            ),
+                            <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $second>(
+                                context,
+                                entity_id,
+                            )
+                            $(, <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $dependency>(
+                                context,
+                                entity_id,
+                            ))*
                         )
                     },
-                    canonical_value = $crate::sorted_tag!(( $($dependency),+ )),
-                    make_canonical = $crate::reorder_closure!(( $($dependency),+ )),
-                    make_uncanonical = $crate::unreorder_closure!(( $($dependency),+ )),
+                    canonical_value = $crate::sorted_tag!(( $first, $second $(, $dependency)* )),
+                    make_canonical = $crate::reorder_closure!(( $first, $second $(, $dependency)* )),
+                    make_uncanonical = $crate::unreorder_closure!(( $first, $second $(, $dependency)* )),
 
                     index_id_fn = {
                         // This static must be initialized with a compile-time constant expression.
@@ -1283,7 +1325,11 @@ macro_rules! define_multi_property {
                         // Slow path: initialize it.
                         // Multi-properties report a single index ID for all equivalent multi-properties,
                         // because they share a single `Index<E, P>` instance.
-                        let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
+                        let mut type_ids = [
+                            <$first as $crate::entity::property::Property<$entity>>::type_id(),
+                            <$second as $crate::entity::property::Property<$entity>>::type_id()
+                            $(, <$dependency as $crate::entity::property::Property<$entity>>::type_id())*
+                        ];
                         type_ids.sort_unstable();
                         // Check if an index has already been assigned to this property set.
                         match $crate::entity::multi_property::type_ids_to_multi_property_index(&type_ids) {
@@ -1307,24 +1353,28 @@ macro_rules! define_multi_property {
                     },
 
                     collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                        $(
-                            if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
-                                <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
-                            } else {
-                                deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
-                            }
-                        )*
+                        $crate::define_multi_property!(
+                            @collect_deps $entity, deps, $first, $second $(, $dependency)*
+                        );
                     },
 
-                    display_impl = |val: &( $($dependency),+ )| {
-                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
+                    display_impl = |val: &( $first, $second $(, $dependency)* )| {
+                        let ( [<_ $first:lower>], [<_ $second:lower>] $(, [<_ $dependency:lower>] )* ) = val;
                         let mut displayed = String::from("(");
+                        displayed.push_str(
+                            &<$first as $crate::entity::property::Property<$entity>>::get_display([<_ $first:lower>])
+                        );
+                        displayed.push_str(", ");
+                        displayed.push_str(
+                            &<$second as $crate::entity::property::Property<$entity>>::get_display([<_ $second:lower>])
+                        );
+                        displayed.push_str(", ");
                         $(
                             displayed.push_str(
                                 &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
                             );
                             displayed.push_str(", ");
-                        )+
+                        )*
                         displayed.truncate(displayed.len() - 2);
                         displayed.push_str(")");
                         displayed
@@ -1332,15 +1382,88 @@ macro_rules! define_multi_property {
 
                     ctor_registration = {
                         // Ensure the property's `index_id()` is initialized at startup.
-                        let _ = < [<$($dependency)*>] as $crate::entity::property::Property::<$entity> >::index_id();
-                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
+                        let _ = < [<$first $second $($dependency)*>] as $crate::entity::property::Property::<$entity> >::index_id();
+                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$first $second $($dependency)*>]>();
                     }
                 );
 
             }
         };
-    }
 
+        (@assert_not_type_alias $entity:ident, $dependency:ident $(, $rest:ident)*) => {
+            const _: () = assert!(
+                $crate::entity::property::const_str_eq(
+                    stringify!($dependency),
+                    <$dependency as $crate::entity::property::Property<$entity>>::NAME,
+                ),
+                concat!(
+                    "define_multi_property!: `",
+                    stringify!($dependency),
+                    "` is a type alias; use the underlying property type (see issue #843)."
+                ),
+            );
+            $crate::define_multi_property!(@assert_not_type_alias $entity $(, $rest)*);
+        };
+
+        (@assert_not_type_alias $entity:ident) => {};
+
+        (@collect_deps $entity:ident, $deps:ident, $dependency:ident $(, $rest:ident)*) => {
+            if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies($deps);
+            } else {
+                $deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
+            }
+            $crate::define_multi_property!(@collect_deps $entity, $deps $(, $rest)*);
+        };
+
+        (@collect_deps $entity:ident, $deps:ident) => {};
+
+        (
+            $entity:ident,
+            $first:ident,
+            $second:ident
+            $(, $dependency:ident)*
+            $(,)?
+        ) => {
+            $crate::define_multi_property!(@impl $entity, ($first, $second $(, $dependency)*));
+        };
+
+        () => {
+            compile_error!(
+                "define_multi_property!: expected `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+            );
+        };
+
+        ($entity:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        (( $($dependency:ident),+ $(,)? ), $entity:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: tuple-first syntax is no longer supported; write `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+            );
+        };
+
+        ($entity:ident, ( $($dependency:ident),+ $(,)? ) $(,)?) => {
+            compile_error!(
+                "define_multi_property!: do not wrap component properties in a tuple; write `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+            );
+        };
+
+        ($entity:ident, $only:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        ($($tokens:tt)*) => {
+            compile_error!(
+                "define_multi_property!: expected `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+            );
+        };
+    }
 #[cfg(test)]
 mod tests {
     // We define unused properties to test macro implementation.
@@ -1472,14 +1595,16 @@ mod tests {
     );
     impl_property!(InfectionKind, Group, default_const = InfectionKind::Genetic);
 
-    define_multi_property!((Name, Age, Weight), Person);
-    define_multi_property!((Age, Weight, Name), Person);
-    define_multi_property!((Weight, Age, Name), Person);
+    define_multi_property!(Person, Name, Age, Weight);
+    define_multi_property!(Person, Age, Weight, Name);
+    define_multi_property!(Person, Weight, Age, Name);
+    define_multi_property!(Person, Name, Weight,);
 
     // For convenience
     type ProfileNAW = (Name, Age, Weight);
     type ProfileAWN = (Age, Weight, Name);
     type ProfileWAN = (Weight, Age, Name);
+    type ProfileNW = (Name, Weight);
 
     #[test]
     fn test_multi_property_ordering() {
@@ -1490,6 +1615,7 @@ mod tests {
         // Multi-properties share the same index
         assert_eq!(ProfileNAW::index_id(), ProfileAWN::index_id());
         assert_eq!(ProfileNAW::index_id(), ProfileWAN::index_id());
+        let _ = ProfileNW::index_id();
 
         let a_canonical: <ProfileNAW as Property<_>>::CanonicalValue =
             ProfileNAW::make_canonical(a);
