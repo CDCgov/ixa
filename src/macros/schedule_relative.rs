@@ -22,11 +22,12 @@
 /// ```
 #[macro_export]
 macro_rules! schedule_relative {
-    ($context:expr, $delay:expr, $action:expr $(, $arg:expr)* $(,)?) => {{
-        let context = ($context);
-        let time = context.get_current_time() + $delay;
-        context.add_plan(time, move |context| {
-            ($action)(context $(, $arg)*)
-        })
-    }};
+    ($context:expr, $delay:expr, $action:expr $(, $arg:expr)* $(,)?) => {
+        {
+            let time = ($context).get_current_time() + $delay;
+            ($context).add_plan(time, move |context| {
+                ($action)(context $(, $arg)*)
+            })
+        }
+    };
 }
