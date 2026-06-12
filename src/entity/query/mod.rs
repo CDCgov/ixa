@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::sync::{Mutex, OnceLock};
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
-use crate::entity::multi_property::type_ids_to_multi_property_index;
+use crate::entity::multi_property::type_ids_to_multi_property_id;
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::property_store::PropertyStore;
 use crate::entity::Entity;
@@ -145,19 +145,24 @@ pub trait QueryInternal<E: Entity>: 'static {
     /// Returns an unordered list of type IDs of the properties in this query.
     fn get_type_ids(&self) -> Vec<TypeId>;
 
-    /// Returns the `TypeId` of the multi-property having the properties of this query, if any.
+    /// Returns the property ID of the representative multi-property having the properties of
+    /// this query, if any.
     fn multi_property_id(&self) -> Option<usize> {
-        // This trick allows us to cache the multi-property ID so we don't have to allocate every
-        // time.
-        static REGISTRY: OnceLock<Mutex<HashMap<TypeId, &'static Option<usize>>>> = OnceLock::new();
+        // Silence type complexity warning for this one-off data structure.
+        #[allow(clippy::type_complexity)]
+        static REGISTRY: OnceLock<Mutex<HashMap<(usize, TypeId), &'static Option<usize>>>> =
+            OnceLock::new();
 
         let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
         let mut map = map.lock().unwrap();
-        let type_id = TypeId::of::<Self>();
-        let entry = *map.entry(type_id).or_insert_with(|| {
+        let key = (E::id(), TypeId::of::<Self>());
+        let entry = *map.entry(key).or_insert_with(|| {
             let mut types = self.get_type_ids();
             types.sort_unstable();
-            Box::leak(Box::new(type_ids_to_multi_property_index(types.as_slice())))
+            Box::leak(Box::new(type_ids_to_multi_property_id(
+                E::id(),
+                types.as_slice(),
+            )))
         });
 
         *entry

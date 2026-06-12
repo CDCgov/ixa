@@ -107,9 +107,7 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     }
 
     fn multi_property_id(&self) -> Option<usize> {
-        // While not a "true" multi-property, it is convenient to have this method return the
-        // `TypeId` of the singleton property.
-        Some(P1::index_id())
+        Some(P1::id())
     }
 
     fn query_parts(&self) -> Self::QueryParts<'_> {
@@ -221,7 +219,7 @@ macro_rules! impl_query {
                 fn query_parts(&self) -> Self::QueryParts<'_> {
                     let keys = [
                         #(
-                            <T~N as $crate::entity::property::Property<E>>::name(),
+                            <T~N as $crate::entity::property::Property<E>>::type_id(),
                         )*
                     ];
                     let mut query_parts = [

@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
+use crate::entity::multi_property::emit_pre_main_diagnostics;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::Entity;
@@ -97,6 +98,8 @@ impl Context {
     /// Create a new empty `Context`
     #[must_use]
     pub fn new() -> Context {
+        emit_pre_main_diagnostics();
+
         // Create a vector to accommodate all registered data plugins
         let data_plugins = std::iter::repeat_with(OnceCell::new)
             .take(get_data_plugin_count())
