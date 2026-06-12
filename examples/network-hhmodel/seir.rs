@@ -52,7 +52,7 @@ fn schedule_waiting_event(
 ) {
     let delay = calculate_waiting_time(context, shape, mean_period);
 
-    schedule_relative!(context, delay, |context| {
+    schedule_relative!(context, delay, |context: &mut Context| {
         trace!("{person_id:?} changed to disease state {new_status:?}");
         context.set_property(person_id, new_status);
     });
