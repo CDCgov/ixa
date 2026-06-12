@@ -12,15 +12,13 @@ context.index_property::<Person, Age>();
 // For multi-indexes
 // Where properties are defined:
 define_multi_property!((Name, Age, Weight), Person);
-// Somewhere during the initialization of `context`:
-context.index_property::<Person, (Name, Age, Weight)>();
 ```
 
 Best practices:
 
 - Index a property to improve performance of queries of that property.
-- Create a multi-property index to improve performance of queries involving
-  multiple properties.
+- Define a multi-property to improve performance of queries involving multiple
+  properties. Multi-properties are indexed automatically.
 - The cost of creating indexes is increased memory use, which can be significant
   for large populations. So it is best to only create indexes / multi-indexes
   that actually improve model performance.
@@ -32,6 +30,8 @@ Best practices:
   running simulation or to call it twice for the same property.
 - Calling `Context::index_property` enables indexing and catches the index up to
   the current population at the time of the call.
+- Multi-properties are full-indexed by default. Calling `Context::index_property`
+  for a multi-property is still valid, but is usually unnecessary.
 
 ## Property Value Storage in Ixa
 
@@ -191,15 +191,15 @@ might look like this:
 | `(30, recovered)`             | `\[4, 8, 35, 36]`                |
 
 Ixa hides the boilerplate required for creating a multi-index with the macro
-`define_multi_property!`:
+`define_multi_property!`. Multi-properties are indexed automatically:
 
 ```rust
 define_multi_property!((AgeGroup, InfectionStatus), Person);
 ```
 
-Creating a multi-index _does not_ automatically create indexes for each of the
-properties individually, but you can do so yourself if you wish, for example, if
-you had other single property queries you want to speed up.
+Defining a multi-property _does not_ automatically create indexes for each
+component property individually, but you can do so yourself if you wish, for
+example, if you had other single property queries you want to speed up.
 
 ## The Benefits of Indexing - A Case Study
 

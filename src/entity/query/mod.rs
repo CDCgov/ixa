@@ -878,8 +878,6 @@ mod tests {
         let mut context = Context::new();
         let mut people = Vec::new();
 
-        context.index_property::<Person, (Age, County)>();
-
         for idx in 0..10 {
             let person = context
                 .add_entity(with!(

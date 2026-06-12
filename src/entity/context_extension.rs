@@ -369,7 +369,7 @@ impl ContextEntitiesExt for Context {
 
     fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
-        let current_index_type = property_store.get::<P>().index_type();
+        let current_index_type = property_store.property_index_type::<P>();
         if current_index_type != PropertyIndexType::FullIndex {
             property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
         }
@@ -1124,13 +1124,7 @@ mod tests {
                 ))
                 .unwrap();
         }
-        context.index_property::<Person, InfectionStatusVaccinated>();
-        // Force an index build by running a query.
-        let _ = context.query_result_iterator(with!(
-            Person,
-            InfectionStatus::Susceptible,
-            Vaccinated(true)
-        ));
+        assert!(context.is_property_indexed::<Person, InfectionStatusVaccinated>());
 
         // Capture the set given by `with_query_results`.
         let mut result_entities: IndexSet<EntityId<Person>> = IndexSet::default();

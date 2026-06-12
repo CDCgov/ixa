@@ -360,6 +360,14 @@ impl<E: Entity> PropertyStore<E> {
         property_value_store.set_indexed(index_type);
     }
 
+    /// Returns the index type for `P`, following `P::index_id()` for shared indexes.
+    pub fn property_index_type<P: Property<E>>(&self) -> PropertyIndexType {
+        self.items
+            .get(P::index_id())
+            .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
+            .index_type()
+    }
+
     /// Creates a stratified value change counter for tracked property `P` with strata `PL`.
     ///
     /// Returns the counter ID.

@@ -96,6 +96,16 @@ pub trait Property<E: Entity>: AnyProperty {
         Self::initialization_kind() == PropertyInitializationKind::Explicit
     }
 
+    /// Whether new [`Context`] instances should index this property automatically.
+    ///
+    /// This is primarily used by multi-properties, whose main purpose is joint
+    /// indexing and query acceleration.
+    #[must_use]
+    #[inline]
+    fn index_by_default() -> bool {
+        false
+    }
+
     /// Compute the value of the property, possibly by accessing the context and using the entity's ID.
     #[must_use]
     fn compute_derived(context: &Context, entity_id: EntityId<E>) -> Self;

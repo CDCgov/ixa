@@ -7,8 +7,9 @@ dramatic speedups. It is not uncommon to see two or more orders of magnitude of
 improvement in some cases. It is also very simple to do.
 
 You can index a single property, or you can index multiple properties _jointly_.
-Just include the following method call(s) during the initialization of
-`context`, replacing the example property names with your own:
+For single-property indexes, call `context.index_property` during initialization.
+For multi-property indexes, define the multi-property where properties are
+defined:
 
 ```rust
 // For single property indexes
@@ -18,8 +19,6 @@ context.index_property::<Person, Age>();
 // For multi-indexes
 // Where properties are defined:
 define_multi_property!((Name, Age, Weight), Person);
-// Somewhere during the initialization of `context`:
-context.index_property::<Person, (Name, Age, Weight)>();
 ```
 
 The cost of creating indexes is increased memory use, which can be significant
