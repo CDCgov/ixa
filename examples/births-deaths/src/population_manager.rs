@@ -108,10 +108,10 @@ pub fn init(context: &mut Context) {
 
     // Plan for births and deaths
     if parameters.birth_rate > 0.0 {
-        context.add_plan(0.0, |context| do_birth(context));
+        context.add_plan(0.0, do_birth);
     }
     if parameters.death_rate > 0.0 {
-        context.add_plan(0.0, |context| do_death(context));
+        context.add_plan(0.0, do_death);
     }
 }
 
