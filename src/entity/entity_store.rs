@@ -188,6 +188,7 @@ impl EntityStore {
     /// This is one of the pitfalls of this pattern: there is no guarantee that types
     /// implementing `Entity` followed the rules. We can have at least some confidence,
     /// though, in their correctness by supplying a correct implementation via a macro.
+    #[must_use]
     pub fn new() -> Self {
         let num_items = get_registered_entity_count();
         Self {
@@ -260,11 +261,13 @@ impl EntityStore {
     }
 
     /// Returns an iterator over all valid `EntityId<E>`s
+    #[must_use]
     pub fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
         let count = self.get_entity_count::<E>();
         PopulationIterator::new(count)
     }
 
+    #[must_use]
     pub fn get_property_store<E: Entity>(&self) -> &PropertyStore<E> {
         let index = E::id();
         let record = self.items

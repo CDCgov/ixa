@@ -106,6 +106,7 @@ pub trait ContextEntitiesExt {
     /// ```rust, ignore
     /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
     /// ```
+    #[must_use]
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
@@ -161,6 +162,7 @@ pub trait ContextEntitiesExt {
     /// This method only checks the concrete property storage for `P`, not any equivalent
     /// multi-properties.
     #[cfg(test)]
+    #[must_use]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
 
     /// This method gives client code direct access to the query result as an `EntitySet`.
@@ -176,12 +178,14 @@ pub trait ContextEntitiesExt {
     /// efficient for indexed queries.
     ///
     /// Supplying a naked entity, e.g. `Person`, is equivalent to calling `get_entity_count::<Person>()`.
+    #[must_use]
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
     ///
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
@@ -193,6 +197,7 @@ pub trait ContextEntitiesExt {
     ///
     /// Returns `(count, sample)`, where `sample` is `None` iff `count == 0`.
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
@@ -205,6 +210,7 @@ pub trait ContextEntitiesExt {
     /// set is returned.
     ///
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
@@ -213,18 +219,23 @@ pub trait ContextEntitiesExt {
         R::RngType: Rng;
 
     /// Returns a total count of all created entities of type `E`.
+    #[must_use]
     fn get_entity_count<E: Entity>(&self) -> usize;
 
     /// Returns an iterator over all created entities of type `E`.
+    #[must_use]
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
     /// Generates an `EntitySet` representing the query results.
+    #[must_use]
     fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
 
     /// Generates an iterator over the results of the query.
+    #[must_use]
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
 
     /// Determines if the given person matches this query.
+    #[must_use]
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match the given query.

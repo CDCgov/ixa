@@ -47,6 +47,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Box::new(Self::new())
     }
 
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: RawPropertyValueVec::with_capacity(capacity),
@@ -55,6 +56,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         }
     }
 
+    #[must_use]
     pub(crate) fn index_type(&self) -> PropertyIndexType {
         self.index
             .as_deref()
@@ -62,6 +64,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Adds a value change counter and returns its ID.
+    #[must_use]
     pub(crate) fn add_value_change_counter(
         &mut self,
         counter: Box<dyn ValueChangeCounter<E, P>>,
@@ -77,6 +80,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Returns the property value for the given entity.
+    #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> P {
         debug_assert!(
             !P::is_derived(),
@@ -134,6 +138,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`, returning the previous value.
+    #[must_use]
     pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
         debug_assert!(
             !P::is_derived(),
@@ -241,6 +246,6 @@ mod tests {
     fn replace_required_property_skipping_entity_id_panics() {
         let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
 
-        store.replace(EntityId::new(1), RequiredScore(10));
+        let _ = store.replace(EntityId::new(1), RequiredScore(10));
     }
 }

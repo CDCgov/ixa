@@ -15,6 +15,7 @@ pub struct Row {
 }
 
 impl ModelStats {
+    #[must_use]
     pub fn new(
         initial_infections: usize,
         population_size: usize,
@@ -44,12 +45,15 @@ impl ModelStats {
             .and_modify(|e| *e += 1)
             .or_insert(self.cum_incidence);
     }
+    #[must_use]
     pub fn get_cum_incidence(&self) -> usize {
         self.cum_incidence
     }
+    #[must_use]
     pub fn get_current_infected(&self) -> usize {
         self.current_infected
     }
+    #[must_use]
     pub fn get_timeseries(&self) -> Vec<Row> {
         self.cum_incidence_timeseries
             .iter()

@@ -49,6 +49,7 @@ impl<E: Entity, P: IndexableProperty<E>> ValueCountIndex<E, P> {
         }
     }
 
+    #[must_use]
     pub fn get(&self, key: &P) -> Option<usize> {
         self.data.get(key).copied()
     }

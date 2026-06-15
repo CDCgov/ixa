@@ -69,6 +69,7 @@ static PRE_MAIN_DIAGNOSTICS: LazyLock<Mutex<Vec<PreMainDiagnostic>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Looks up the representative multi-property ID for a sorted list of component `TypeId`s.
+#[must_use]
 pub fn type_ids_to_multi_property_id(entity_id: usize, type_ids: &[TypeId]) -> Option<usize> {
     let hash = one_shot_128(&type_ids);
     MULTI_PROPERTY_ID_MAP
@@ -163,6 +164,7 @@ const fn make_indices<const N: usize>() -> [usize; N] {
 ///
 /// "Static" in the name refers to the fact that it takes and returns an array of statically
 /// known size, avoiding `Vec` allocations.
+#[must_use]
 pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N] {
     let mut indices = make_indices::<N>();
     indices.sort_unstable_by_key(|&i| &keys[i]);
@@ -186,6 +188,7 @@ pub fn static_apply_reordering<T: Copy, const N: usize>(values: &mut [T; N], ind
 ///
 /// If `indices[sorted_position] == original_position`, the returned array maps
 /// `original_position` back to `sorted_position`.
+#[must_use]
 pub fn static_inverse_indices<const N: usize>(indices: &[usize; N]) -> [usize; N] {
     let mut inverse = [0; N];
     for (sorted_position, &original_position) in indices.iter().enumerate() {

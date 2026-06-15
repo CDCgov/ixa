@@ -462,6 +462,7 @@ impl Context {
         }
     }
 
+    #[must_use]
     pub fn get_execution_statistics(&mut self) -> ExecutionStatistics {
         #[allow(unused_mut)]
         let mut stats = self.execution_profiler.compute_final_statistics();
@@ -492,9 +493,13 @@ pub trait ContextBase: Sized {
     );
     fn cancel_plan(&mut self, plan_id: &PlanId);
     fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
+    #[must_use]
     fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+    #[must_use]
     fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
+    #[must_use]
     fn get_current_time(&self) -> f64;
+    #[must_use]
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
 }
 impl ContextBase for Context {

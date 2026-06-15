@@ -185,12 +185,14 @@ pub fn increment_named_count(key: &'static str) {
 pub fn increment_named_count(_key: &'static str) {}
 
 #[cfg(feature = "profiling")]
+#[must_use]
 pub fn open_span(label: &'static str) -> Span {
     let mut container = profiling_data();
     container.open_span(label)
 }
 
 #[cfg(not(feature = "profiling"))]
+#[must_use]
 pub fn open_span(label: &'static str) -> Span {
     Span::new(label)
 }

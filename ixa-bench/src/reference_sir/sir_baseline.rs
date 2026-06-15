@@ -29,6 +29,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use]
     pub fn new(parameters: Parameters) -> Model {
         let stats = ModelStats::new(parameters.initial_infections, parameters.population, 0.2);
         Model {
@@ -128,6 +129,7 @@ impl Model {
         members[idx]
     }
 
+    #[must_use]
     pub fn get_stats(&self) -> &ModelStats {
         &self.stats
     }

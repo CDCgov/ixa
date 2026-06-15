@@ -18,6 +18,7 @@ use crate::rand::Rng;
 ///
 /// The iterator need only support iteration; random indexing is not required.
 /// This function is intended for use when the result set is indexed and its length is known.
+#[must_use]
 pub fn sample_single_from_known_length<I, R, T>(rng: &mut R, mut iter: I) -> Option<T>
 where
     R: Rng,
@@ -46,6 +47,7 @@ where
 /// of 10^4). The reservoir algorithm from [`rand`](crate::rand) reduces to the "known length"
 /// algorithm when `iterator.size_hint()` returns `(k, Some(k))` for some `k`. Otherwise,
 /// this algorithm is much faster than the [`rand`](crate::rand)  implementation (factor of 100).
+#[must_use]
 pub fn sample_single_l_reservoir<I, R, T>(rng: &mut R, iterable: I) -> Option<T>
 where
     R: Rng,
@@ -82,6 +84,7 @@ where
 /// and `sample` is `None` iff `count == 0`.
 ///
 /// This uses single-item reservoir sampling while tracking total count.
+#[must_use]
 pub fn count_and_sample_single_l_reservoir<I, R, T>(rng: &mut R, iterable: I) -> (usize, Option<T>)
 where
     R: Rng,
@@ -113,6 +116,7 @@ where
 ///
 /// This strategy is particularly effective for small `requested` (≤ 5), since it
 /// avoids iterating over the entire set and is typically faster than reservoir sampling.
+#[must_use]
 pub fn sample_multiple_from_known_length<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
@@ -154,6 +158,7 @@ where
 ///
 /// This algorithm is significantly faster than the reservoir algorithm in `rand` and is
 /// on par with the "known length" algorithm for large `requested` values.
+#[must_use]
 pub fn sample_multiple_l_reservoir<I, R, T>(rng: &mut R, iter: I, requested: usize) -> Vec<T>
 where
     R: Rng,
@@ -206,6 +211,7 @@ where
 /// `Borrow<T>` bound. Dispatches to `sample_single_excluding_iteration` for slices of
 /// length `< 4` and `sample_single_excluding_rejection` otherwise. Tuned via
 /// `ixa-bench/criterion/sample_single_excluding.rs`.
+#[must_use]
 pub fn sample_single_excluding<'a, R, T, E>(
     rng: &mut R,
     slice: &'a [T],
@@ -229,6 +235,7 @@ where
 /// entries, then picks the k-th. Wins for very small slices (`n <= 3`) where
 /// the per-trial overhead of rejection sampling exceeds the cost of a tiny
 /// filter. Exposed so benchmarks can compare strategies directly.
+#[must_use]
 pub fn sample_single_excluding_iteration<'a, R, T, E>(
     rng: &mut R,
     slice: &'a [T],
@@ -255,6 +262,7 @@ where
 /// matches (or `n`, whichever is smaller), which also returns `None` when
 /// every element matches. Exposed so benchmarks can compare strategies
 /// directly.
+#[must_use]
 pub fn sample_single_excluding_rejection<'a, R, T, E>(
     rng: &mut R,
     slice: &'a [T],
@@ -295,6 +303,7 @@ where
 /// in O(n) time and is correct even when the iterator does not report an
 /// exact length. Prefer [`sample_single_excluding`] for slices, which can
 /// dispatch to a faster rejection-sampling strategy backed by random access.
+#[must_use]
 pub fn sample_single_excluding_l_reservoir<I, R, T, E>(
     rng: &mut R,
     iterable: I,

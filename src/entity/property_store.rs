@@ -220,6 +220,7 @@ impl<E: Entity> Default for PropertyStore<E> {
 
 impl<E: Entity> PropertyStore<E> {
     /// Creates a new [`PropertyStore`].
+    #[must_use]
     pub fn new() -> Self {
         let num_items = get_registered_property_count::<E>();
         // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
@@ -310,6 +311,7 @@ impl<E: Entity> PropertyStore<E> {
 
     /// Creates a `PartialPropertyChangeEvent` instance for the `entity_id` and `property_index`. This method is only
     /// called for derived dependents of some property that has changed (one of `P`'s non-derived dependencies).
+    #[must_use]
     pub(crate) fn create_partial_property_change(
         &self,
         property_index: usize,
@@ -324,6 +326,7 @@ impl<E: Entity> PropertyStore<E> {
     }
 
     /// Returns whether the property with `property_index` needs partial change-event processing.
+    #[must_use]
     pub(crate) fn should_create_partial_property_change(
         &self,
         property_index: usize,
@@ -339,6 +342,7 @@ impl<E: Entity> PropertyStore<E> {
     /// Returns whether or not the property `P` is indexed.
     ///
     #[cfg(test)]
+    #[must_use]
     pub fn is_property_indexed<P: Property<E>>(&self) -> bool {
         self.items
             .get(P::id())
@@ -398,6 +402,7 @@ impl<E: Entity> PropertyStore<E> {
     /// Creates a stratified value change counter for tracked property `P` with strata `PL`.
     ///
     /// Returns the counter ID.
+    #[must_use]
     pub fn create_value_change_counter<PL, P>(&mut self) -> usize
     where
         PL: PropertyList<E> + Eq + std::hash::Hash,
@@ -428,6 +433,7 @@ impl<E: Entity> PropertyStore<E> {
         }
     }
 
+    #[must_use]
     pub fn get_index_set_for_query_parts(
         &self,
         property_id: usize,
@@ -436,6 +442,7 @@ impl<E: Entity> PropertyStore<E> {
         self.items[property_id].get_index_set_for_query_parts(query_parts)
     }
 
+    #[must_use]
     pub fn get_index_count_for_query_parts(
         &self,
         property_id: usize,

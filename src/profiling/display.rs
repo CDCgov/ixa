@@ -165,6 +165,7 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
 
 /// Formats an integer with thousands separator.
 #[cfg(feature = "profiling")]
+#[must_use]
 pub fn format_with_commas(value: usize) -> String {
     let s = value.to_string();
     let mut result = String::new();
@@ -184,6 +185,7 @@ pub fn format_with_commas(value: usize) -> String {
 
 /// Formats a float with thousands separator.
 #[cfg(feature = "profiling")]
+#[must_use]
 pub fn format_with_commas_f64(value: f64) -> String {
     // Format to two decimal places
     let formatted = format!("{:.2}", value.abs()); // format positive part only
