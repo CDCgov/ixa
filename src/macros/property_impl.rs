@@ -1212,129 +1212,95 @@ macro_rules! impl_derived_property {
 macro_rules! define_multi_property {
         (@impl
             $entity:ident,
-            ( $first:ident, $second:ident $(, $dependency:ident)* )
+            $($dependency:ident),+
         ) => {
             $crate::paste::paste! {
-                type [<$first $second $($dependency)*>] = ( $first, $second $(, $dependency)* );
+                type [<$($dependency)*>] = ( $($dependency),+ );
 
                 // Reject type aliases; see issue #843.
-                $crate::define_multi_property!(
-                    @assert_not_type_alias $entity, $first, $second $(, $dependency)*
-                );
+                $(
+                    const _: () = assert!(
+                        $crate::entity::property::const_str_eq(
+                            stringify!($dependency),
+                            <$dependency as $crate::entity::property::Property<$entity>>::NAME,
+                        ),
+                        concat!(
+                            "define_multi_property!: `",
+                            stringify!($dependency),
+                            "` is a type alias; use the underlying property type (see issue #843)."
+                        ),
+                    );
+                )+
 
                 $crate::impl_property!(
                     @multi_property
-                    [<$first $second $($dependency)*>],
+                    [<$($dependency)*>],
                     $entity,
-                    ( $first, $second $(, $dependency)* ),
+                    ( $($dependency),+ ),
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
                         (
-                            <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $first>(
+                            $(<$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $dependency>(
                                 context,
                                 entity_id,
-                            ),
-                            <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $second>(
-                                context,
-                                entity_id,
-                            )
-                            $(, <$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $dependency>(
-                                context,
-                                entity_id,
-                            ))*
+                            )),+
                         )
                     },
 
                     collect_deps_fn = | deps: &mut $crate::HashSet<usize> | {
-                        $crate::define_multi_property!(
-                            @collect_deps $entity, deps, $first, $second $(, $dependency)*
-                        );
+                        $(
+                            if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
+                                <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies(deps);
+                            } else {
+                                deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
+                            }
+                        )*
                     },
 
-                    display_impl = |val: &( $first, $second $(, $dependency)* )| {
-                        let ( [<_ $first:lower>], [<_ $second:lower>] $(, [<_ $dependency:lower>] )* ) = val;
+                    display_impl = |val: &( $($dependency),+ )| {
+                        let ( $( [<_ $dependency:lower>] ),+ ) = val;
                         let mut displayed = String::from("(");
-                        displayed.push_str(
-                            &<$first as $crate::entity::property::Property<$entity>>::get_display([<_ $first:lower>])
-                        );
-                        displayed.push_str(", ");
-                        displayed.push_str(
-                            &<$second as $crate::entity::property::Property<$entity>>::get_display([<_ $second:lower>])
-                        );
-                        displayed.push_str(", ");
                         $(
                             displayed.push_str(
                                 &<$dependency as $crate::entity::property::Property<$entity>>::get_display([<_ $dependency:lower>])
                             );
                             displayed.push_str(", ");
-                        )*
+                        )+
                         displayed.truncate(displayed.len() - 2);
                         displayed.push_str(")");
                         displayed
                     },
 
                     ctor_registration = {
-                        let mut type_ids = [
-                            <$first as $crate::entity::property::Property<$entity>>::type_id(),
-                            <$second as $crate::entity::property::Property<$entity>>::type_id()
-                            $(, <$dependency as $crate::entity::property::Property<$entity>>::type_id())*
-                        ];
+                        let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
                         type_ids.sort_unstable();
                         if let Some((_, existing_name)) =
                             $crate::entity::multi_property::register_type_ids_to_multi_property_id(
                                 <$entity as $crate::entity::Entity>::id(),
                                 &type_ids,
-                                <[<$first $second $($dependency)*>] as $crate::entity::property::Property<$entity>>::type_id(),
-                                <[<$first $second $($dependency)*>] as $crate::entity::property::Property<$entity>>::id(),
-                                <[<$first $second $($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
+                                <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::type_id(),
+                                <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::id(),
+                                <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
                             )
                         {
                             $crate::entity::multi_property::record_pre_main_warning(format!(
                                 "multi-property {} is equivalent to already registered multi-property {existing_name}; queries will resolve to {existing_name}, and attempting to index {} will panic",
-                                <[<$first $second $($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
-                                <[<$first $second $($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
+                                <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
+                                <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
                             ));
                         }
-                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$first $second $($dependency)*>]>();
+                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
                     }
                 );
 
             }
         };
 
-        (@assert_not_type_alias $entity:ident, $dependency:ident $(, $rest:ident)*) => {
-            const _: () = assert!(
-                $crate::entity::property::const_str_eq(
-                    stringify!($dependency),
-                    <$dependency as $crate::entity::property::Property<$entity>>::NAME,
-                ),
-                concat!(
-                    "define_multi_property!: `",
-                    stringify!($dependency),
-                    "` is a type alias; use the underlying property type (see issue #843)."
-                ),
-            );
-            $crate::define_multi_property!(@assert_not_type_alias $entity $(, $rest)*);
-        };
-
-        (@assert_not_type_alias $entity:ident) => {};
-
-        (@collect_deps $entity:ident, $deps:ident, $dependency:ident $(, $rest:ident)*) => {
-            if <$dependency as $crate::entity::property::Property<$entity>>::is_derived() {
-                <$dependency as $crate::entity::property::Property<$entity>>::collect_non_derived_dependencies($deps);
-            } else {
-                $deps.insert(<$dependency as $crate::entity::property::Property<$entity>>::id());
-            }
-            $crate::define_multi_property!(@collect_deps $entity, $deps $(, $rest)*);
-        };
-
-        (@collect_deps $entity:ident, $deps:ident) => {};
-
         (
             $entity:ident,
             ( $first:ident, $second:ident $(, $dependency:ident)* $(,)? )
             $(,)?
         ) => {
-            $crate::define_multi_property!(@impl $entity, ($first, $second $(, $dependency)*));
+            $crate::define_multi_property!(@impl $entity, $first, $second $(, $dependency)*);
         };
 
         () => {
