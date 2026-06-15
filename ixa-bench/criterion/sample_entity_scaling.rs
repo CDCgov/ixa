@@ -13,7 +13,7 @@ const SEED: u64 = 42;
 define_entity!(Mosquito);
 define_property!(struct Species(u8), Mosquito);
 define_property!(struct Region(u8), Mosquito);
-define_multi_property!((Species, Region), Mosquito);
+define_multi_property!(Mosquito, (Species, Region));
 define_property!(struct Unindexed10(u8), Mosquito);
 
 const POPULATION_SIZES: [usize; 3] = [1_000, 10_000, 100_000];

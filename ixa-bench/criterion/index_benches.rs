@@ -12,7 +12,7 @@ define_property!(struct Property10(u8), Person);
 define_property!(struct Property100(u8), Person);
 define_property!(struct MultiProperty10(u8), Person);
 define_property!(struct MultiProperty100(u8), Person);
-define_multi_property!((MultiProperty10, MultiProperty100), Person);
+define_multi_property!(Person, (MultiProperty10, MultiProperty100));
 
 pub fn criterion_benchmark(criterion: &mut Criterion) {
     let mut criterion = criterion.benchmark_group("indexing");

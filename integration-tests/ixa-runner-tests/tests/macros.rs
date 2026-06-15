@@ -188,7 +188,7 @@ mod tests {
     });
 
     type MultiProp = (TestPropU32, TestPropU32b);
-    define_multi_property!((TestPropU32, TestPropU32b), Person);
+    define_multi_property!(Person, (TestPropU32, TestPropU32b));
 
     // Test global property macro
     define_global_property!(TestGlobal, u32);

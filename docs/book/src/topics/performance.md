@@ -17,7 +17,7 @@ context.index_property::<Person, Age>();
 
 // For multi-indexes
 // Where properties are defined:
-define_multi_property!((Name, Age, Weight), Person);
+define_multi_property!(Person, (Name, Age, Weight));
 // Somewhere during the initialization of `context`:
 context.index_property::<Person, (Name, Age, Weight)>();
 ```

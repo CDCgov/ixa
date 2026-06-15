@@ -30,7 +30,7 @@ define_derived_property!(
     }
 );
 
-define_multi_property!((Age, SchoolId, WorkplaceId), Person);
+define_multi_property!(Person, (Age, SchoolId, WorkplaceId));
 
 fn populate_entities(context: &mut Context, n: usize) {
     // Ensure context RNGs are deterministic as well

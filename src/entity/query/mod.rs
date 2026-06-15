@@ -225,7 +225,7 @@ mod tests {
         Person
     );
 
-    define_multi_property!((Age, County), Person);
+    define_multi_property!(Person, (Age, County));
 
     #[test]
     fn empty_tuple_query_internal_matches_all_entities() {
@@ -700,8 +700,8 @@ mod tests {
     }
 
     // create a multi-property index
-    define_multi_property!((Age, County, Height), Person);
-    define_multi_property!((County, Height), Person);
+    define_multi_property!(Person, (Age, County, Height));
+    define_multi_property!(Person, (County, Height));
 
     #[test]
     fn query_derived_prop_with_optimized_index() {

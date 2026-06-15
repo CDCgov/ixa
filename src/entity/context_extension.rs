@@ -1092,8 +1092,8 @@ mod tests {
 
     // Tests related to queries and indexing
 
-    define_multi_property!((InfectionStatus, Vaccinated), Person);
-    define_multi_property!((Vaccinated, InfectionStatus), Person);
+    define_multi_property!(Person, (InfectionStatus, Vaccinated));
+    define_multi_property!(Person, (Vaccinated, InfectionStatus));
 
     #[test]
     fn with_query_results_finds_multi_index() {

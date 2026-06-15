@@ -1157,14 +1157,80 @@ macro_rules! impl_derived_property {
 /// The querying subsystem is able to detect when its multiple component properties are
 /// equivalent to an indexed multi-property and use that index to perform the query.
 ///
+/// Multi-properties must have at least two component properties:
+///
+/// ```
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!(Person, (Age, Height));
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_multi_property};
+/// define_entity!(Person);
+/// define_multi_property!(Person);
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_multi_property!(Person, (Age));
+/// ```
+///
+/// Tuple-first and flat component syntax are not supported:
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!((Age, Height), Person);
+/// ```
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// define_multi_property!(Person, Age, Height);
+/// ```
+///
+/// Components must be the underlying property type, not a type alias (see issue #843):
+///
+/// ```compile_fail
+/// use ixa::{define_entity, define_property, define_multi_property};
+/// define_entity!(Person);
+/// define_property!(struct Age(u8), Person, default_const = Age(0));
+/// define_property!(struct Height(u8), Person, default_const = Height(0));
+/// type Years = Age;
+/// define_multi_property!(Person, (Years, Height));
+/// ```
 #[macro_export]
 macro_rules! define_multi_property {
-        (
-            ( $($dependency:ident),+ ),
-            $entity:ident
+        (@impl
+            $entity:ident,
+            $($dependency:ident),+
         ) => {
             $crate::paste::paste! {
                 type [<$($dependency)*>] = ( $($dependency),+ );
+
+                // Reject type aliases; see issue #843.
+                $(
+                    const _: () = assert!(
+                        $crate::entity::property::const_str_eq(
+                            stringify!($dependency),
+                            <$dependency as $crate::entity::property::Property<$entity>>::NAME,
+                        ),
+                        concat!(
+                            "define_multi_property!: `",
+                            stringify!($dependency),
+                            "` is a type alias; use the underlying property type (see issue #843)."
+                        ),
+                    );
+                )+
 
                 $crate::impl_property!(
                     @multi_property
@@ -1173,7 +1239,10 @@ macro_rules! define_multi_property {
                     ( $($dependency),+ ),
                     compute_derived_fn = |context: &$crate::Context, entity_id: $crate::entity::EntityId<$entity>| {
                         (
-                            $(context.get_property::<$entity, $dependency>(entity_id)),+
+                            $(<$crate::Context as $crate::entity::ContextEntitiesExt>::get_property::<$entity, $dependency>(
+                                context,
+                                entity_id,
+                            )),+
                         )
                     },
 
@@ -1225,8 +1294,63 @@ macro_rules! define_multi_property {
 
             }
         };
-    }
 
+        (
+            $entity:ident,
+            ( $first:ident, $second:ident $(, $dependency:ident)* $(,)? )
+            $(,)?
+        ) => {
+            $crate::define_multi_property!(@impl $entity, $first, $second $(, $dependency)*);
+        };
+
+        () => {
+            compile_error!(
+                "define_multi_property!: expected `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
+            );
+        };
+
+        ($entity:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        (( $($dependency:ident),+ $(,)? ), $entity:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: tuple-first syntax is no longer supported; write `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
+            );
+        };
+
+        ($entity:ident, ( $only:ident $(,)? ) $(,)?) => {
+            compile_error!(
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        (
+            $entity:ident,
+            $first:ident,
+            $second:ident
+            $(, $dependency:ident)*
+            $(,)?
+        ) => {
+            compile_error!(
+                "define_multi_property!: flat component syntax is no longer supported; write `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
+            );
+        };
+
+        ($entity:ident, $only:ident $(,)?) => {
+            compile_error!(
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        ($($tokens:tt)*) => {
+            compile_error!(
+                "define_multi_property!: expected `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
+            );
+        };
+    }
 #[cfg(test)]
 mod tests {
     // We define unused properties to test macro implementation.
@@ -1366,16 +1490,16 @@ mod tests {
     );
     impl_property!(InfectionKind, Group, default_const = InfectionKind::Genetic);
 
-    define_multi_property!((Name, Age, Weight), Person);
-    define_multi_property!((Age, Weight, Name), Person);
-    define_multi_property!((Weight, Age, Name), Person);
+    define_multi_property!(Person, (Name, Age, Weight));
+    define_multi_property!(Person, (Age, Weight, Name));
+    define_multi_property!(Person, (Weight, Age, Name));
+    define_multi_property!(Person, (Name, Weight,),);
 
     // For convenience
     type ProfileNAW = (Name, Age, Weight);
     type ProfileAWN = (Age, Weight, Name);
     type ProfileWAN = (Weight, Age, Name);
-    type Years = Age;
-    define_multi_property!((Years, Weight), Person);
+    type ProfileNW = (Name, Weight);
 
     define_entity!(SingleProfilePerson);
     define_property!(
@@ -1393,7 +1517,7 @@ mod tests {
         SingleProfilePerson,
         default_const = SingleWeight(0)
     );
-    define_multi_property!((SingleName, SingleAge, SingleWeight), SingleProfilePerson);
+    define_multi_property!(SingleProfilePerson, (SingleName, SingleAge, SingleWeight));
     type SingleProfile = (SingleName, SingleAge, SingleWeight);
 
     #[test]
@@ -1408,6 +1532,7 @@ mod tests {
         assert_ne!(ProfileNAW::id(), ProfileWAN::id());
         assert_ne!(ProfileNAW::type_id(), ProfileAWN::type_id());
         assert_ne!(ProfileNAW::type_id(), ProfileWAN::type_id());
+        let _ = ProfileNW::id();
 
         let query_parts = ProfileNAW::query_parts_for_value(&a);
         assert_eq!(
@@ -1543,21 +1668,6 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_property_component_type_alias_query_routing() {
-        let mut context = Context::new();
-
-        context
-            .add_entity(with!(Person, Age(44), Weight(155.0)))
-            .unwrap();
-        context.index_property::<Person, YearsWeight>();
-
-        assert_eq!(
-            context.query_entity_count(with!(Person, Weight(155.0), Age(44))),
-            1
-        );
-    }
-
-    #[test]
     fn test_derived_property() {
         let mut context = Context::new();
 
@@ -1595,7 +1705,6 @@ mod tests {
             ProfileNAW::id(),
             ProfileAWN::id(),
             ProfileWAN::id(),
-            YearsWeight::id(),
         ];
         expected_dependents.sort_unstable();
         assert_eq!(Age::dependents(), expected_dependents);
