@@ -35,77 +35,18 @@ pub enum PropertyIndexType {
     ValueCountIndex,
 }
 
-pub enum PropertyIndex<E: Entity, P: Property<E>> {
-    Unindexed,
-    FullIndex(FullIndex<E, P>),
-    ValueCountIndex(ValueCountIndex<E, P>),
-}
+pub trait PropertyIndex<E: Entity, P: Property<E>> {
+    fn index_type(&self) -> PropertyIndexType;
 
-impl<E: Entity, P: Property<E>> PropertyIndex<E, P> {
-    pub fn index_type(&self) -> PropertyIndexType {
-        match self {
-            Self::Unindexed => PropertyIndexType::Unindexed,
-            Self::FullIndex(_) => PropertyIndexType::FullIndex,
-            Self::ValueCountIndex(_) => PropertyIndexType::ValueCountIndex,
-        }
-    }
+    fn get_index_set_result(&self, value: &P) -> IndexSetResult<'_, E>;
 
-    pub fn get_index_set_result(&self, value: &P::CanonicalValue) -> IndexSetResult<'_, E> {
-        match self {
-            Self::Unindexed => IndexSetResult::<'_, E>::Unsupported,
-            Self::FullIndex(index) => match index.get(value) {
-                Some(set) => IndexSetResult::Set(set),
-                None => IndexSetResult::Empty,
-            },
-            Self::ValueCountIndex(_) => IndexSetResult::<'_, E>::Unsupported,
-        }
-    }
+    fn get_index_count_result(&self, value: &P) -> IndexCountResult;
 
-    pub fn get_index_count_result(&self, value: &P::CanonicalValue) -> IndexCountResult {
-        match self {
-            Self::Unindexed => IndexCountResult::Unsupported,
-            Self::FullIndex(index) => {
-                let count = index.get(value).map_or(0, |set| set.len());
-                IndexCountResult::Count(count)
-            }
-            Self::ValueCountIndex(index) => IndexCountResult::Count(index.get(value).unwrap_or(0)),
-        }
-    }
+    fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>);
 
-    pub fn remove_entity(&mut self, value: &P::CanonicalValue, entity_id: EntityId<E>) {
-        match self {
-            Self::Unindexed => {}
-            Self::FullIndex(index) => index.remove_entity(value, entity_id),
-            Self::ValueCountIndex(index) => index.remove_entity(value, entity_id),
-        }
-    }
+    fn add_entity(&mut self, value: &P, entity_id: EntityId<E>);
 
-    pub fn add_entity(&mut self, value: &P::CanonicalValue, entity_id: EntityId<E>) {
-        match self {
-            Self::Unindexed => {}
-            Self::FullIndex(index) => {
-                index.add_entity(value, entity_id);
-            }
-            Self::ValueCountIndex(index) => {
-                index.add_entity(value, entity_id);
-            }
-        }
-    }
+    fn max_indexed(&self) -> usize;
 
-    /// Returns `None` if there is no index.
-    pub fn max_indexed(&self) -> Option<usize> {
-        match self {
-            Self::Unindexed => None,
-            Self::FullIndex(index) => Some(index.max_indexed),
-            Self::ValueCountIndex(index) => Some(index.max_indexed),
-        }
-    }
-
-    pub fn set_max_indexed(&mut self, max_indexed: usize) {
-        match self {
-            Self::Unindexed => {}
-            Self::FullIndex(index) => index.max_indexed = max_indexed,
-            Self::ValueCountIndex(index) => index.max_indexed = max_indexed,
-        }
-    }
+    fn set_max_indexed(&mut self, max_indexed: usize);
 }

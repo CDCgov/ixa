@@ -22,8 +22,8 @@ pub(crate) type RawPropertyValueVec<P> = Vec<P>;
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: RawPropertyValueVec<P>,
-    /// An index mapping `property_value` to `set_of_entities`.
-    pub(crate) index: PropertyIndex<E, P>,
+    /// An index mapping `property_value` to `set_of_entities`, when indexing is enabled.
+    pub(crate) index: Option<Box<dyn PropertyIndex<E, P>>>,
     /// Value change counters for this property.
     pub(crate) value_change_counters: Vec<RefCell<Box<dyn ValueChangeCounter<E, P>>>>,
 }
@@ -32,7 +32,7 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
             data: RawPropertyValueVec::default(),
-            index: PropertyIndex::Unindexed,
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
@@ -50,13 +50,15 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: RawPropertyValueVec::with_capacity(capacity),
-            index: PropertyIndex::Unindexed,
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
 
     pub(crate) fn index_type(&self) -> PropertyIndexType {
-        self.index.index_type()
+        self.index
+            .as_deref()
+            .map_or(PropertyIndexType::Unindexed, PropertyIndex::index_type)
     }
 
     /// Adds a value change counter and returns its ID.

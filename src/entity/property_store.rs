@@ -3,7 +3,7 @@
 A [`PropertyStore`] implements the registry pattern for property value stores: A [`PropertyStore`]
 wraps a vector of `PropertyValueStore`s, one for each concrete property type. The implementor
 of [`crate::entity::property::Property`] is the value type. Since there's a 1-1 correspondence between property types
-and their value stores, we implement the `index` method for each property type to make
+and their value stores, we assign an ID to each property type to make
 property lookup fast. The [`PropertyStore`] stores a list of all properties in the form of
 boxed `PropertyValueStore` instances, which provide a type-erased interface to the backing
 storage (including index) of the property. Storage is only allocated as-needed, so the
@@ -36,8 +36,9 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEventBox;
-use crate::entity::index::{IndexCountResult, IndexSetResult};
-use crate::entity::property::Property;
+use crate::entity::index::{FullIndex, IndexCountResult, IndexSetResult, ValueCountIndex};
+use crate::entity::multi_property::multi_property_id_for_property_type_id;
+use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
@@ -62,7 +63,7 @@ static NEXT_PROPERTY_ID: LazyLock<Mutex<HashMap<usize, usize>>> =
 #[derive(Default)]
 pub(super) struct PropertyMetadata<E: Entity> {
     /// The (derived) properties that depend on this property, as represented by their
-    /// `Property::index` value. This list is used to update the index (if applicable)
+    /// `Property::id` value. This list is used to update the index (if applicable)
     /// and emit change events for these properties when this property changes.
     pub dependents: Vec<usize>,
     /// A function that constructs a new `PropertyValueStoreCore<E, P>` instance in a type-erased
@@ -224,7 +225,7 @@ impl<E: Entity> PropertyStore<E> {
         // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
         let property_metadata = property_metadata();
 
-        // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each index (=`P::index()`).
+        // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each ID.
         let items = (0..num_items)
             .map(|idx| {
                 let metadata = property_metadata
@@ -337,27 +338,61 @@ impl<E: Entity> PropertyStore<E> {
 
     /// Returns whether or not the property `P` is indexed.
     ///
-    /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,
-    /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
-    /// share a single index.
     #[cfg(test)]
     pub fn is_property_indexed<P: Property<E>>(&self) -> bool {
         self.items
-            .get(P::index_id())
-            .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()))
+            .get(P::id())
+            .unwrap_or_else(|| panic!("No registered property {} found with id = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::id()))
             .index_type()
             != PropertyIndexType::Unindexed
     }
 
     /// Sets the index type for `P`. Passing `PropertyIndexType::Unindexed` removes any existing index for `P`.
     ///
-    /// Note that the index might not live in the `PropertyValueStore` associated with `P` itself, as in the case
-    /// of multi-properties which share a single index among all equivalent multi-properties.
-    pub fn set_property_indexed<P: Property<E>>(&mut self, index_type: PropertyIndexType) {
+    /// Equivalent multi-properties do not share index storage. Only the representative
+    /// multi-property for an equivalent set can be indexed.
+    pub fn set_property_indexed<P: IndexableProperty<E>>(&mut self, index_type: PropertyIndexType) {
+        if index_type != PropertyIndexType::Unindexed {
+            if let Some((representative_id, representative_name)) =
+                multi_property_id_for_property_type_id(E::id(), P::type_id())
+            {
+                if representative_id != P::id() {
+                    panic!(
+                        "Cannot index multi-property {} because it is equivalent to representative multi-property {}. Index the representative multi-property instead.",
+                        P::name(),
+                        representative_name
+                    );
+                }
+            }
+        }
+
         let property_value_store = self.items
-            .get_mut(P::index_id())
-            .unwrap_or_else(|| panic!("No registered property {} found with index = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::index_id()));
-        property_value_store.set_indexed(index_type);
+            .get_mut(P::id())
+            .unwrap_or_else(|| panic!("No registered property {} found with id = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::id()));
+        let property_value_store = property_value_store
+            .as_any_mut()
+            .downcast_mut::<PropertyValueStoreCore<E, P>>()
+            .unwrap_or_else(|| {
+                panic!(
+                    "Property type at index {:?} does not match registered property type. You must use the `define_property!` macro to create a registered property.",
+                    P::id()
+                )
+            });
+        match index_type {
+            PropertyIndexType::Unindexed => {
+                property_value_store.index = None;
+            }
+            PropertyIndexType::FullIndex => {
+                if property_value_store.index_type() != PropertyIndexType::FullIndex {
+                    property_value_store.index = Some(Box::new(FullIndex::<E, P>::new()));
+                }
+            }
+            PropertyIndexType::ValueCountIndex => {
+                if property_value_store.index_type() != PropertyIndexType::ValueCountIndex {
+                    property_value_store.index = Some(Box::new(ValueCountIndex::<E, P>::new()));
+                }
+            }
+        }
     }
 
     /// Creates a stratified value change counter for tracked property `P` with strata `PL`.
@@ -521,22 +556,22 @@ mod tests {
 
         // FullIndex + count
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &missing_query_parts,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &existing_query_parts,),
             IndexCountResult::Count(2)
         );
 
         // FullIndex + set
         assert!(matches!(
-            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_set_for_query_parts(Age::id(), &missing_query_parts,),
             IndexSetResult::Empty
         ));
         assert!(matches!(
             property_store.get_index_set_for_query_parts(
-                Age::index_id(),
+                Age::id(),
                 &existing_query_parts,
             ),
             IndexSetResult::Set(set) if set.len() == 2
@@ -560,21 +595,21 @@ mod tests {
 
         // ValueCountIndex + count
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &missing_query_parts,),
             IndexCountResult::Count(0)
         );
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &existing_query_parts,),
             IndexCountResult::Count(2)
         );
 
         // ValueCountIndex + set (unsupported)
         assert!(matches!(
-            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_set_for_query_parts(Age::id(), &missing_query_parts,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_for_query_parts(Age::index_id(), &existing_query_parts,),
+            property_store.get_index_set_for_query_parts(Age::id(), &existing_query_parts,),
             IndexSetResult::Unsupported
         ));
     }
@@ -594,21 +629,21 @@ mod tests {
 
         // Unindexed + count
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &missing_query_parts,),
             IndexCountResult::Unsupported
         );
         assert_eq!(
-            property_store.get_index_count_for_query_parts(Age::index_id(), &existing_query_parts,),
+            property_store.get_index_count_for_query_parts(Age::id(), &existing_query_parts,),
             IndexCountResult::Unsupported
         );
 
         // Unindexed + set
         assert!(matches!(
-            property_store.get_index_set_for_query_parts(Age::index_id(), &missing_query_parts,),
+            property_store.get_index_set_for_query_parts(Age::id(), &missing_query_parts,),
             IndexSetResult::Unsupported
         ));
         assert!(matches!(
-            property_store.get_index_set_for_query_parts(Age::index_id(), &existing_query_parts,),
+            property_store.get_index_set_for_query_parts(Age::id(), &existing_query_parts,),
             IndexSetResult::Unsupported
         ));
     }

@@ -422,11 +422,17 @@ mod tests {
     use super::*;
     use crate::entity::ContextEntitiesExt;
     use crate::hashing::IndexSet;
-    use crate::{define_derived_property, define_entity, define_property, with, Context};
+    use crate::{
+        define_derived_property, define_entity, define_multi_property, define_property, with,
+        Context,
+    };
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person);
+    define_property!(struct County(u32), Person, default_const = County(0));
     define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
+    define_multi_property!((Age, County), Person);
+    define_multi_property!((County, Age), Person);
 
     fn finite_set(ids: &[usize]) -> IndexSet<EntityId<Person>> {
         ids.iter()
@@ -752,6 +758,47 @@ mod tests {
         assert!(set.contains(p3));
         assert_eq!(set.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
         assert_eq!(cloned.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
+    }
+
+    #[test]
+    fn union_of_same_unindexed_property_query_deduplicates_to_one_source() {
+        let mut context = Context::new();
+        let p1 = context.add_entity(with!(Person, Age(10))).unwrap();
+        let p2 = context.add_entity(with!(Person, Age(10))).unwrap();
+        let _p3 = context.add_entity(with!(Person, Age(11))).unwrap();
+
+        let query = context.query::<Person, _>(with!(Person, Age(10)));
+        let union = query.clone().union(query);
+
+        assert!(matches!(
+            union,
+            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+        ));
+        assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![p1, p2]);
+    }
+
+    #[test]
+    fn union_of_equivalent_unindexed_multi_property_queries_deduplicates_to_one_source() {
+        let mut context = Context::new();
+        let matching = context
+            .add_entity(with!(Person, Age(28), County(7)))
+            .unwrap();
+        let _wrong_county = context
+            .add_entity(with!(Person, Age(28), County(8)))
+            .unwrap();
+        let _wrong_age = context
+            .add_entity(with!(Person, Age(29), County(7)))
+            .unwrap();
+
+        let age_county = context.query::<Person, _>(with!(Person, (Age(28), County(7))));
+        let county_age = context.query::<Person, _>(with!(Person, (County(7), Age(28))));
+        let union = age_county.union(county_age);
+
+        assert!(matches!(
+            union,
+            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+        ));
+        assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![matching]);
     }
 
     #[test]

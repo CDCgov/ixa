@@ -33,13 +33,6 @@ pub enum PropertyInitializationKind {
     Constant,
 }
 
-/// Shared trait bounds for property values and canonical values.
-///
-/// These values must be copyable and support equality and deterministic hashing so they can
-/// participate in indexing.
-pub trait AnyProperty: Copy + Debug + PartialEq + Eq + Hash + 'static {}
-impl<T> AnyProperty for T where T: Copy + Debug + PartialEq + Eq + Hash + 'static {}
-
 /// `const fn` string equality — `==` on `&str` isn't `const` on stable.
 #[must_use]
 pub const fn const_str_eq(a: &str, b: &str) -> bool {
@@ -60,20 +53,16 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 
 /// All properties must implement this trait using one of the `define_property` macros.
 ///
-/// Property values and canonical values must satisfy `AnyProperty` so they can participate in
-/// property indexes.
-pub trait Property<E: Entity>: AnyProperty {
-    /// Some properties might store a transformed version of the value in the index. This is the
-    /// type of the transformed value. For simple properties this will be the same as `Self`.
-    type CanonicalValue: AnyProperty;
-
+/// Property values must be copyable and comparable for equality so storage and unindexed
+/// query scans can operate on them. Indexed properties must additionally implement
+/// [`IndexableProperty`].
+pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// Allocation-free representation of the query parts contributed by a property value.
     type QueryParts<'a>: AsRef<[&'a dyn Any]>
     where
         Self: 'a;
 
-    /// Source-level name, set by the macros to `stringify!($property)`. Used by
-    /// `define_multi_property!` to reject type aliases (see issue #843).
+    /// Source-level name, set by the macros to `stringify!($property)`.
     const NAME: &'static str;
 
     fn name() -> &'static str {
@@ -104,43 +93,32 @@ pub trait Property<E: Entity>: AnyProperty {
     #[must_use]
     fn default_const() -> Self;
 
-    /// This transforms a `Self` into a `Self::CanonicalValue`, e.g., for storage in an index.
-    /// For simple properties, this is the identity function.
-    #[must_use]
-    fn make_canonical(self) -> Self::CanonicalValue;
-
-    /// The inverse transform of `make_canonical`. For simple properties, this is the identity function.
-    #[must_use]
-    fn make_uncanonical(value: Self::CanonicalValue) -> Self;
-
     /// Returns a string representation of the property value, e.g. for writing to a CSV file.
     #[must_use]
     fn get_display(&self) -> String;
 
-    /// Reconstruct the canonical query value used for indexed lookup.
+    /// Reconstruct the property value used for indexed lookup.
     ///
-    /// Ordinary properties expect a single query part containing `Self` and canonicalize that
-    /// value. Multi-properties override this to rebuild their canonical tuple value directly from
-    /// the already-sorted type-erased query parts.
+    /// Ordinary properties expect a single query part containing `Self`. Multi-properties override
+    /// this to rebuild their declared tuple value directly from already-sorted type-erased query
+    /// parts.
     #[must_use]
-    fn canonical_from_sorted_query_parts(parts: &[&dyn Any]) -> Option<Self::CanonicalValue> {
+    fn value_from_query_parts(parts: &[&dyn Any]) -> Option<Self> {
         let [part] = parts else {
             return None;
         };
-        part.downcast_ref::<Self>()
-            .copied()
-            .map(Self::make_canonical)
+        part.downcast_ref::<Self>().copied()
     }
 
     /// Expose the query parts for a concrete property value without allocating.
     ///
     /// Ordinary properties contribute a single value. Multi-properties override this so singleton
-    /// queries over a multi-property can still be matched against a shared equivalent index.
+    /// queries over a multi-property can still be matched against the representative
+    /// multi-property for the equivalent component set.
     #[must_use]
     fn query_parts_for_value(value: &Self) -> Self::QueryParts<'_>;
 
-    /// Overridden by multi-properties, which use the `TypeId` of the ordered tuple so that tuples
-    /// with the same component types in a different order will have the same type ID.
+    /// The logical type identity for this property.
     #[must_use]
     fn type_id() -> TypeId {
         TypeId::of::<Self>()
@@ -149,17 +127,8 @@ pub trait Property<E: Entity>: AnyProperty {
     /// For implementing the registry pattern
     fn id() -> usize;
 
-    /// For properties that use the index of some other property, e.g. multi-properties, this
-    /// method gives the ID of the property index to use.
-    ///
-    /// Note that this is independent of whether or not the property actually is being indexed,
-    /// which is a property of the `Context` instance, not of the `Property<E>` type itself.
-    fn index_id() -> usize {
-        Self::id()
-    }
-
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
-    /// Vec will be empty. The dependencies are represented by their `Property<E>::index()` value.
+    /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.
     ///
     /// This function is only used to construct the static dependency graph
     /// within property `ctor`s, after which time the dependents of a property
@@ -174,10 +143,23 @@ pub trait Property<E: Entity>: AnyProperty {
     fn collect_non_derived_dependencies(result: &mut HashSet<usize>);
 
     /// Get a list of derived properties that depend on this property. The properties are
-    /// represented by their `Property::index()`. The list is pre-computed in `ctor`s.
+    /// represented by their `Property::id()`. The list is pre-computed in `ctor`s.
     fn dependents() -> &'static [usize] {
         get_property_dependents_static::<E>(Self::id())
     }
+}
+
+/// Marker trait for properties that can be keyed in property indexes.
+///
+/// Property indexes are hash maps keyed by the property value itself, so indexable
+/// properties must add `Eq` and `Hash` to the general [`Property`] requirements.
+pub trait IndexableProperty<E: Entity>: Property<E> + Eq + Hash {}
+
+impl<E, P> IndexableProperty<E> for P
+where
+    E: Entity,
+    P: Property<E> + Eq + Hash,
+{
 }
 
 #[cfg(test)]
@@ -185,6 +167,7 @@ mod tests {
     use std::any::Any;
 
     use super::*;
+    use crate::entity::QueryInternal;
     use crate::{define_entity, define_property};
 
     define_entity!(PropertyTestPerson);
@@ -203,20 +186,16 @@ mod tests {
         let parts = [&value as &dyn Any];
 
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
-                &parts
-            ),
+            <PropertyTestAge as Property<PropertyTestPerson>>::value_from_query_parts(&parts),
             Some(value)
         );
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::canonical_from_sorted_query_parts(
-                &[]
-            ),
+            <PropertyTestAge as Property<PropertyTestPerson>>::value_from_query_parts(&[]),
             None
         );
         assert_eq!(
-            <PropertyTestAge as Property<PropertyTestPerson>>::index_id(),
-            <PropertyTestAge as Property<PropertyTestPerson>>::id()
+            <(PropertyTestAge,) as QueryInternal<PropertyTestPerson>>::multi_property_id(&(value,)),
+            Some(<PropertyTestAge as Property<PropertyTestPerson>>::id())
         );
     }
 }
