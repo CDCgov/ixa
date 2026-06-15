@@ -197,6 +197,14 @@ Ixa hides the boilerplate required for creating a multi-index with the macro
 define_multi_property!(Person, AgeGroup, InfectionStatus);
 ```
 
+Queries are order-insensitive for multi-property indexes: a query written with
+`AgeGroup` before `InfectionStatus` can use the same multi-property index as a
+query written in the opposite order. If you define multiple equivalent
+multi-properties with the same component properties in different orders, Ixa
+chooses the first registered one for query routing. Index that representative
+multi-property; attempting to index a later equivalent multi-property will
+panic because queries cannot use that duplicate index.
+
 Creating a multi-index _does not_ automatically create indexes for each of the
 properties individually, but you can do so yourself if you wish, for example, if
 you had other single property queries you want to speed up.

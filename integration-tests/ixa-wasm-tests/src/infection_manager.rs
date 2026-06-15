@@ -14,11 +14,11 @@ define_rng!(InfectionRng);
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     trace!("Scheduling recovery");
-    let recovery_time = context.get_current_time()
-        + context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
-    context.add_plan(recovery_time, move |context| {
-        context.set_property(person_id, InfectionStatus::R);
-    });
+    let infection_duration =
+        context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
+
+    schedule_relative!(context, infection_duration, |context: &mut Context| context
+        .set_property(person_id, InfectionStatus::R));
 }
 
 fn handle_infection_status_change(context: &mut Context, event: InfectionStatusEvent) {

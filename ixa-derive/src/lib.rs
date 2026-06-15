@@ -1,11 +1,8 @@
 extern crate proc_macro;
-mod reorder_fn;
-mod sorted_tag;
-mod utilities;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, parse_quote, DeriveInput};
 
 #[proc_macro_derive(IxaEvent)]
 pub fn derive_ixa_event(input: TokenStream) -> TokenStream {
@@ -13,45 +10,24 @@ pub fn derive_ixa_event(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let self_ty = quote! { #name #ty_generics };
+    let mut event_generics = generics.clone();
+    event_generics
+        .make_where_clause()
+        .predicates
+        .push(parse_quote!(#self_ty: 'static));
+    let (event_impl_generics, _, event_where_clause) = event_generics.split_for_impl();
 
     let expanded = quote! {
-        impl #impl_generics IxaEvent for #name #ty_generics #where_clause {}
+        impl #impl_generics ::std::clone::Clone for #self_ty #where_clause {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        impl #impl_generics ::std::marker::Copy for #self_ty #where_clause {}
+        impl #event_impl_generics IxaEvent for #self_ty #event_where_clause {}
     };
 
     TokenStream::from(expanded)
-}
-
-#[proc_macro]
-pub fn sorted_tag(input: TokenStream) -> TokenStream {
-    sorted_tag::sorted_tag(input)
-}
-
-#[proc_macro]
-pub fn sorted_value_type(input: TokenStream) -> TokenStream {
-    sorted_tag::sorted_value_type(input)
-}
-
-#[proc_macro]
-pub fn impl_make_canonical(input: TokenStream) -> TokenStream {
-    reorder_fn::impl_reorder_fns(input)
-}
-
-#[proc_macro]
-pub fn reorder_closure(input: TokenStream) -> TokenStream {
-    reorder_fn::reorder_closure(input)
-}
-
-#[proc_macro]
-pub fn unreorder_closure(input: TokenStream) -> TokenStream {
-    reorder_fn::unreorder_closure(input)
-}
-
-#[proc_macro]
-pub fn canonical_from_sorted_query_parts_closure(input: TokenStream) -> TokenStream {
-    reorder_fn::canonical_from_sorted_query_parts_closure(input)
-}
-
-#[proc_macro]
-pub fn impl_people_make_canonical(input: TokenStream) -> TokenStream {
-    reorder_fn::impl_people_reorder_fns(input)
 }

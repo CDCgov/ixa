@@ -57,7 +57,7 @@ fn hash_benchmarks(criterion: &mut Criterion) {
 
     let scalar = HashScalar(42);
     group.bench_function("scalar_property_hash", |bencher| {
-        bencher.iter(|| black_box(one_shot_128(&HashScalar::make_canonical(black_box(scalar)))));
+        bencher.iter(|| black_box(one_shot_128(black_box(&scalar))));
     });
 
     let structured = HashStruct {
@@ -65,27 +65,17 @@ fn hash_benchmarks(criterion: &mut Criterion) {
         code: 12_345,
     };
     group.bench_function("struct_property_hash", |bencher| {
-        bencher.iter(|| {
-            black_box(one_shot_128(&HashStruct::make_canonical(black_box(
-                structured,
-            ))))
-        });
+        bencher.iter(|| black_box(one_shot_128(black_box(&structured))));
     });
 
     let float_value = HashFloat(1234.5);
     group.bench_function("float_property_hash", |bencher| {
-        bencher.iter(|| {
-            black_box(one_shot_128(&HashFloat::make_canonical(black_box(
-                float_value,
-            ))))
-        });
+        bencher.iter(|| black_box(one_shot_128(black_box(&float_value))));
     });
 
     let multi_value = (MultiHashByte(7), MultiHashFloat(3.5));
-    let multi_canonical =
-        <(MultiHashByte, MultiHashFloat) as Property<Person>>::make_canonical(multi_value);
     group.bench_function("multi_property_hash", |bencher| {
-        bencher.iter(|| black_box(one_shot_128(black_box(&multi_canonical))));
+        bencher.iter(|| black_box(one_shot_128(black_box(&multi_value))));
     });
 
     group.bench_function("raw_one_shot_hash_scalar", |bencher| {

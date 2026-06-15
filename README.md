@@ -12,6 +12,8 @@ a genus of Indo-Pacific pebble crabs from the family Leucosiidae.
 API documentation can be found at
 [https://ixa.rs/doc/ixa](https://ixa.rs/doc/ixa).
 
+Ixa book can be found at [https://ixa.rs/book/](https://ixa.rs/book/).
+
 **This project is currently in the early stages of development and not ready for
 use in production.**
 

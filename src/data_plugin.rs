@@ -110,8 +110,7 @@ mod tests {
         }
 
         let context = Context::new();
-        let container = context.get_data(MyDataPlugin);
-        println!("{}", container.len());
+        let _container = context.get_data(MyDataPlugin);
     }
 
     // We attempt a collision with a plugin
@@ -144,9 +143,8 @@ mod tests {
         let _ = context.get_data(LegitDataPlugin);
 
         // Panics here:
-        let container = context.get_data(MyOtherDataPlugin);
+        let _container = context.get_data(MyOtherDataPlugin);
         // Some arbitrary code involving `container`
-        println!("{}", container.len());
     }
 
     // Test thread safety of `initialize_data_plugin_index`.

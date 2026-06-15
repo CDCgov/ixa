@@ -298,11 +298,8 @@ mod tests {
         derived_float_neither.insert(ctx.get_property::<_, DerivedFloatNeither>(pid));
         assert!(derived_float_neither.contains(&DerivedFloatNeither(10.0)));
 
-        // Multi-property - basic sanity (canonical value types)
-        let multi = <MultiProp as Property<Person>>::make_canonical((
-            TestPropU32(10u32),
-            TestPropU32b(20u32),
-        ));
+        // Multi-property - basic sanity.
+        let multi = (TestPropU32(10u32), TestPropU32b(20u32));
         let disp = <MultiProp as Property<Person>>::get_display(&multi);
         assert!(disp.contains("10"));
 

@@ -210,6 +210,15 @@ mod tests {
     }
 
     #[test]
+    fn define_entity_helpers_create_and_downcast() {
+        assert_eq!(DummyEntity::new(), DummyEntity);
+
+        let mut entity = DummyEntity::new();
+        assert!(entity.as_any().downcast_ref::<DummyEntity>().is_some());
+        assert!(entity.as_any_mut().downcast_mut::<DummyEntity>().is_some());
+    }
+
+    #[test]
     fn test_entity_iterator_basic() {
         let mut iter = PopulationIterator::<DummyEntity>::new(3);
 

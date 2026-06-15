@@ -22,8 +22,8 @@ pub(crate) type RawPropertyValueVec<P> = Vec<P>;
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: RawPropertyValueVec<P>,
-    /// An index mapping `property_value` to `set_of_entities`.
-    pub(crate) index: PropertyIndex<E, P>,
+    /// An index mapping `property_value` to `set_of_entities`, when indexing is enabled.
+    pub(crate) index: Option<Box<dyn PropertyIndex<E, P>>>,
     /// Value change counters for this property.
     pub(crate) value_change_counters: Vec<RefCell<Box<dyn ValueChangeCounter<E, P>>>>,
 }
@@ -32,7 +32,7 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
             data: RawPropertyValueVec::default(),
-            index: PropertyIndex::Unindexed,
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
@@ -50,13 +50,15 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: RawPropertyValueVec::with_capacity(capacity),
-            index: PropertyIndex::Unindexed,
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
 
     pub(crate) fn index_type(&self) -> PropertyIndexType {
-        self.index.index_type()
+        self.index
+            .as_deref()
+            .map_or(PropertyIndexType::Unindexed, PropertyIndex::index_type)
     }
 
     /// Adds a value change counter and returns its ID.
@@ -175,4 +177,70 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 }
 
-// See tests in `property_store.rs`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::EntityId;
+    use crate::{define_entity, define_property};
+
+    define_entity!(StoreCorePerson);
+    define_property!(struct RequiredScore(u8), StoreCorePerson);
+    define_property!(struct DefaultScore(u8), StoreCorePerson, default_const = DefaultScore(0));
+
+    #[test]
+    fn capacity_and_reserve_helpers() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::with_capacity(4);
+
+        assert!(store.data.capacity() >= 4);
+        assert_eq!(store.index_type(), PropertyIndexType::Unindexed);
+        assert!(store.value_change_counters.is_empty());
+
+        store.reserve(16);
+        assert!(store.data.capacity() >= 16);
+    }
+
+    #[test]
+    fn replace_existing_required_value() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+        let entity_id = EntityId::new(0);
+
+        store.set(entity_id, RequiredScore(10));
+
+        assert_eq!(
+            store.replace(entity_id, RequiredScore(20)),
+            RequiredScore(10)
+        );
+        assert_eq!(store.get(entity_id), RequiredScore(20));
+    }
+
+    #[test]
+    fn replace_constant_default_value_paths() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, DefaultScore>::new();
+        let entity_id = EntityId::new(2);
+
+        assert_eq!(store.replace(entity_id, DefaultScore(0)), DefaultScore(0));
+        assert!(store.data.is_empty());
+
+        assert_eq!(store.replace(entity_id, DefaultScore(7)), DefaultScore(0));
+        assert_eq!(store.data.len(), 3);
+        assert_eq!(store.get(EntityId::new(0)), DefaultScore(0));
+        assert_eq!(store.get(EntityId::new(1)), DefaultScore(0));
+        assert_eq!(store.get(entity_id), DefaultScore(7));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn set_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        store.set(EntityId::new(1), RequiredScore(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn replace_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        store.replace(EntityId::new(1), RequiredScore(10));
+    }
+}
