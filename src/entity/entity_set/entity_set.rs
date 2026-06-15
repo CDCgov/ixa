@@ -431,8 +431,8 @@ mod tests {
     define_property!(struct Age(u8), Person);
     define_property!(struct County(u32), Person, default_const = County(0));
     define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
-    define_multi_property!(Person, Age, County);
-    define_multi_property!(Person, County, Age);
+    define_multi_property!(Person, (Age, County));
+    define_multi_property!(Person, (County, Age));
 
     fn finite_set(ids: &[usize]) -> IndexSet<EntityId<Person>> {
         ids.iter()

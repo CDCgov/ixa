@@ -11,7 +11,7 @@ context.index_property::<Person, Age>();
 
 // For multi-indexes
 // Where properties are defined:
-define_multi_property!(Person, Name, Age, Weight);
+define_multi_property!(Person, (Name, Age, Weight));
 // Somewhere during the initialization of `context`:
 context.index_property::<Person, (Name, Age, Weight)>();
 ```
@@ -194,7 +194,7 @@ Ixa hides the boilerplate required for creating a multi-index with the macro
 `define_multi_property!`:
 
 ```rust
-define_multi_property!(Person, AgeGroup, InfectionStatus);
+define_multi_property!(Person, (AgeGroup, InfectionStatus));
 ```
 
 Queries are order-insensitive for multi-property indexes: a query written with

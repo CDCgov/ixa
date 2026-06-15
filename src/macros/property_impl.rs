@@ -1164,7 +1164,7 @@ macro_rules! impl_derived_property {
 /// define_entity!(Person);
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 /// define_property!(struct Height(u8), Person, default_const = Height(0));
-/// define_multi_property!(Person, Age, Height);
+/// define_multi_property!(Person, (Age, Height));
 /// ```
 ///
 /// ```compile_fail
@@ -1177,10 +1177,10 @@ macro_rules! impl_derived_property {
 /// use ixa::{define_entity, define_property, define_multi_property};
 /// define_entity!(Person);
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
-/// define_multi_property!(Person, Age);
+/// define_multi_property!(Person, (Age));
 /// ```
 ///
-/// Tuple-first and nested tuple syntax are not supported:
+/// Tuple-first and flat component syntax are not supported:
 ///
 /// ```compile_fail
 /// use ixa::{define_entity, define_property, define_multi_property};
@@ -1195,7 +1195,7 @@ macro_rules! impl_derived_property {
 /// define_entity!(Person);
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 /// define_property!(struct Height(u8), Person, default_const = Height(0));
-/// define_multi_property!(Person, (Age, Height));
+/// define_multi_property!(Person, Age, Height);
 /// ```
 ///
 /// Components must be the underlying property type, not a type alias (see issue #843):
@@ -1206,7 +1206,7 @@ macro_rules! impl_derived_property {
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
 /// define_property!(struct Height(u8), Person, default_const = Height(0));
 /// type Years = Age;
-/// define_multi_property!(Person, Years, Height);
+/// define_multi_property!(Person, (Years, Height));
 /// ```
 #[macro_export]
 macro_rules! define_multi_property {
@@ -1331,9 +1331,7 @@ macro_rules! define_multi_property {
 
         (
             $entity:ident,
-            $first:ident,
-            $second:ident
-            $(, $dependency:ident)*
+            ( $first:ident, $second:ident $(, $dependency:ident)* $(,)? )
             $(,)?
         ) => {
             $crate::define_multi_property!(@impl $entity, ($first, $second $(, $dependency)*));
@@ -1341,7 +1339,7 @@ macro_rules! define_multi_property {
 
         () => {
             compile_error!(
-                "define_multi_property!: expected `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+                "define_multi_property!: expected `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
             );
         };
 
@@ -1353,13 +1351,25 @@ macro_rules! define_multi_property {
 
         (( $($dependency:ident),+ $(,)? ), $entity:ident $(,)?) => {
             compile_error!(
-                "define_multi_property!: tuple-first syntax is no longer supported; write `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+                "define_multi_property!: tuple-first syntax is no longer supported; write `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
             );
         };
 
-        ($entity:ident, ( $($dependency:ident),+ $(,)? ) $(,)?) => {
+        ($entity:ident, ( $only:ident $(,)? ) $(,)?) => {
             compile_error!(
-                "define_multi_property!: do not wrap component properties in a tuple; write `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+                "define_multi_property!: multi-properties require at least two component properties"
+            );
+        };
+
+        (
+            $entity:ident,
+            $first:ident,
+            $second:ident
+            $(, $dependency:ident)*
+            $(,)?
+        ) => {
+            compile_error!(
+                "define_multi_property!: flat component syntax is no longer supported; write `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
             );
         };
 
@@ -1371,7 +1381,7 @@ macro_rules! define_multi_property {
 
         ($($tokens:tt)*) => {
             compile_error!(
-                "define_multi_property!: expected `define_multi_property!(Entity, PropertyA, PropertyB, ...)`"
+                "define_multi_property!: expected `define_multi_property!(Entity, (PropertyA, PropertyB, ...))`"
             );
         };
     }
@@ -1514,10 +1524,10 @@ mod tests {
     );
     impl_property!(InfectionKind, Group, default_const = InfectionKind::Genetic);
 
-    define_multi_property!(Person, Name, Age, Weight);
-    define_multi_property!(Person, Age, Weight, Name);
-    define_multi_property!(Person, Weight, Age, Name);
-    define_multi_property!(Person, Name, Weight,);
+    define_multi_property!(Person, (Name, Age, Weight));
+    define_multi_property!(Person, (Age, Weight, Name));
+    define_multi_property!(Person, (Weight, Age, Name));
+    define_multi_property!(Person, (Name, Weight,),);
 
     // For convenience
     type ProfileNAW = (Name, Age, Weight);
@@ -1541,7 +1551,7 @@ mod tests {
         SingleProfilePerson,
         default_const = SingleWeight(0)
     );
-    define_multi_property!(SingleProfilePerson, SingleName, SingleAge, SingleWeight);
+    define_multi_property!(SingleProfilePerson, (SingleName, SingleAge, SingleWeight));
     type SingleProfile = (SingleName, SingleAge, SingleWeight);
 
     #[test]

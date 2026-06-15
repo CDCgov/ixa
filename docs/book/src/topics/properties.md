@@ -678,7 +678,7 @@ define_property!(
     default_const = InfectionStatus::Susceptible
 );
 
-define_multi_property!(Person, Age, InfectionStatus);
+define_multi_property!(Person, (Age, InfectionStatus));
 
 context.index_property::<Person, AgeInfectionStatus>();
 ```
