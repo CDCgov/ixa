@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta.3](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0-beta.2...ixa-derive-v2.0.0-beta.3) - 2026-06-15
+
+### Other
+
+- Derive Copy and Clone for IxaEvent types ([#938](https://github.com/CDCgov/ixa/pull/938))
+
 ## [2.0.0-beta.2](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0-beta.1...ixa-derive-v2.0.0-beta.2) - 2026-05-04
 
 ### Added
