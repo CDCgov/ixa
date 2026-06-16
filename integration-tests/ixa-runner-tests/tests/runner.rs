@@ -28,7 +28,7 @@ Run runner_test_custom_args --help -v to see more options
         fs::write(
             &config_path,
             r#"{
-  "ixa-integration-tests.RunnerProperty": {
+  "ixa-runner-tests.RunnerProperty": {
     "field_int": 7
   }
 }
@@ -36,14 +36,14 @@ Run runner_test_custom_args --help -v to see more options
         )
         .unwrap();
 
-        assert_cmd::cargo::cargo_bin_cmd!("ixa-integration-tests")
+        assert_cmd::cargo::cargo_bin_cmd!("ixa-runner-tests")
             .arg("--config")
             .arg(config_path)
             .arg("--no-stats")
             .assert()
             .success()
             .stdout(format!(
-                "Loading global properties from: {:?}\nCurrent log levels enabled: ERROR\nRun ixa-integration-tests --help -v to see more options\n7\n",
+                "Loading global properties from: {:?}\nCurrent log levels enabled: ERROR\nRun ixa-runner-tests --help -v to see more options\n7\n",
                 temp_dir.path().join("config.json")
             ));
     }

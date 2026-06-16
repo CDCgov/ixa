@@ -288,6 +288,12 @@ mod test {
     use crate::define_global_property;
     use crate::error::IxaError;
 
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("integration-tests/fixtures/global-properties")
+            .join(name)
+    }
+
     #[derive(Debug)]
     struct InvalidProperty3Value {
         field_int: u32,
@@ -403,8 +409,7 @@ mod test {
     #[test]
     fn read_global_properties() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_test1.json");
+        let path = fixture_path("global_properties_test1.json");
         context.load_global_properties(&path).unwrap();
         let p1 = context.get_global_property_value(Property1).unwrap();
         assert_eq!(p1.field_int, 1);
@@ -416,8 +421,7 @@ mod test {
     #[test]
     fn read_unknown_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_missing.json");
+        let path = fixture_path("global_properties_missing.json");
         match context.load_global_properties(&path) {
             Err(IxaError::NoGlobalProperty { name }) => assert_eq!(name, "ixa.PropertyUnknown"),
             _ => panic!("Unexpected error type"),
@@ -427,8 +431,7 @@ mod test {
     #[test]
     fn read_malformed_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_malformed.json");
+        let path = fixture_path("global_properties_malformed.json");
         let error = context.load_global_properties(&path);
         match error {
             Err(IxaError::JsonError(_)) => {}
@@ -439,8 +442,7 @@ mod test {
     #[test]
     fn read_duplicate_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_test1.json");
+        let path = fixture_path("global_properties_test1.json");
         context.load_global_properties(&path).unwrap();
         let error = context.load_global_properties(&path);
         match error {
@@ -492,16 +494,14 @@ mod test {
     #[test]
     fn validate_property_load_success() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_valid.json");
+        let path = fixture_path("global_properties_valid.json");
         context.load_global_properties(&path).unwrap();
     }
 
     #[test]
     fn validate_property_load_failure() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_invalid.json");
+        let path = fixture_path("global_properties_invalid.json");
         let error = context.load_global_properties(&path).unwrap_err();
         assert_eq!(
             error.to_string(),
