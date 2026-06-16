@@ -17,6 +17,7 @@ pub fn add_data_plugin_to_registry<T: DataPlugin>() {
         .insert(TypeId::of::<T>());
 }
 
+#[must_use]
 pub fn get_data_plugin_ids() -> Vec<TypeId> {
     DATA_PLUGINS
         .lock()
@@ -27,6 +28,7 @@ pub fn get_data_plugin_ids() -> Vec<TypeId> {
         .collect()
 }
 
+#[must_use]
 pub fn get_data_plugin_count() -> usize {
     DATA_PLUGINS.lock().unwrap().borrow().len()
 }
@@ -42,6 +44,7 @@ static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
 
 /// Acquires a global lock on the next available plugin index, but only increments it if we
 /// successfully initialize the provided index. (Must be `pub`, as it's called from within a macro.)
+#[must_use]
 pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     // Acquire a global lock.
     let mut guard = NEXT_DATA_PLUGIN_INDEX.lock().unwrap();
@@ -76,6 +79,7 @@ pub trait DataPlugin: Any {
 
     /// Returns the index into `Context::data_plugins`, the vector of data plugins, where
     /// the instance of this data plugin can be found.
+    #[must_use]
     fn index_within_context() -> usize;
 }
 

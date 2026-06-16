@@ -45,6 +45,7 @@ impl<E: Entity, P: IndexableProperty<E>> FullIndex<E, P> {
         }
     }
 
+    #[must_use]
     pub fn get(&self, key: &P) -> Option<&IndexSet<EntityId<E>>> {
         self.data.get(key)
     }

@@ -262,12 +262,14 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use]
     pub fn new(params: Parameters, options: ModelOptions) -> Self {
         let mut ctx = Context::new();
         ctx.set_global_property_value(Params, params).unwrap();
         ctx.set_global_property_value(Options, options).unwrap();
         Self { ctx }
     }
+    #[must_use]
     pub fn get_stats(&self) -> &ModelStats {
         self.ctx.get_stats()
     }

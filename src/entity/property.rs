@@ -65,6 +65,7 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// Source-level name, set by the macros to `stringify!($property)`.
     const NAME: &'static str;
 
+    #[must_use]
     fn name() -> &'static str {
         Self::NAME
     }
@@ -125,6 +126,7 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     }
 
     /// For implementing the registry pattern
+    #[must_use]
     fn id() -> usize;
 
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
@@ -133,6 +135,7 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// This function is only used to construct the static dependency graph
     /// within property `ctor`s, after which time the dependents of a property
     /// are accessible through `Property<E>::dependents()` as a `&'static [usize]`.
+    #[must_use]
     fn non_derived_dependencies() -> Vec<usize> {
         let mut result = HashSet::default();
         Self::collect_non_derived_dependencies(&mut result);
@@ -144,6 +147,7 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
 
     /// Get a list of derived properties that depend on this property. The properties are
     /// represented by their `Property::id()`. The list is pre-computed in `ctor`s.
+    #[must_use]
     fn dependents() -> &'static [usize] {
         get_property_dependents_static::<E>(Self::id())
     }

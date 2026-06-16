@@ -18,6 +18,7 @@ pub struct StratifiedValueChangeCounter<E: Entity, PL: PropertyList<E>, P: Prope
 }
 
 impl<E: Entity, PL: PropertyList<E>, P: Property<E>> StratifiedValueChangeCounter<E, PL, P> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             counts: HashMap::default(),
@@ -25,6 +26,7 @@ impl<E: Entity, PL: PropertyList<E>, P: Property<E>> StratifiedValueChangeCounte
         }
     }
 
+    #[must_use]
     pub fn get_count(&self, stratum: PL, value: P) -> usize
     where
         PL: Eq + Hash,

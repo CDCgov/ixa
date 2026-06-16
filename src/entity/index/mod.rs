@@ -36,16 +36,20 @@ pub enum PropertyIndexType {
 }
 
 pub trait PropertyIndex<E: Entity, P: Property<E>> {
+    #[must_use]
     fn index_type(&self) -> PropertyIndexType;
 
+    #[must_use]
     fn get_index_set_result(&self, value: &P) -> IndexSetResult<'_, E>;
 
+    #[must_use]
     fn get_index_count_result(&self, value: &P) -> IndexCountResult;
 
     fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>);
 
     fn add_entity(&mut self, value: &P, entity_id: EntityId<E>);
 
+    #[must_use]
     fn max_indexed(&self) -> usize;
 
     fn set_max_indexed(&mut self, max_indexed: usize);

@@ -75,6 +75,7 @@ impl NetworkData {
 
     /// Remove the edge from the given entity to the given neighbor and return it, or
     /// `None` if the edge does not exist.
+    #[must_use]
     pub fn remove_edge<E: Entity, ET: EdgeType<E>>(
         &mut self,
         entity_id: EntityId<E>,
@@ -228,6 +229,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
 
     /// Remove the edge of type `ET` from `entity_id` to `neighbor` and return it, or `None` if
     /// the edge does not exist.
+    #[must_use]
     fn remove_edge<E: Entity, ET: EdgeType<E>>(
         &mut self,
         entity_id: EntityId<E>,

@@ -62,6 +62,7 @@ pub struct EntityVec<E: Entity, V> {
 
 impl<E: Entity, V> EntityVec<E, V> {
     /// Creates an empty `EntityVec`.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
@@ -70,6 +71,7 @@ impl<E: Entity, V> EntityVec<E, V> {
     }
 
     /// Creates an empty `EntityVec` with space for at least `capacity` items.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
@@ -79,18 +81,21 @@ impl<E: Entity, V> EntityVec<E, V> {
 
     /// Returns the number of values stored.
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
     /// Returns the capacity of the backing vector.
     #[inline]
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
 
     /// Returns `true` if no values are stored.
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -111,36 +116,43 @@ impl<E: Entity, V> EntityVec<E, V> {
     }
 
     /// Removes and returns the last value, or `None` if empty.
+    #[must_use]
     pub fn pop(&mut self) -> Option<V> {
         self.data.pop()
     }
 
     /// Returns the value for `entity_id`, or `None` if this vector is not long enough.
+    #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> Option<&V> {
         self.data.get(entity_id.0)
     }
 
     /// Returns the mutable value for `entity_id`, or `None` if this vector is not long enough.
+    #[must_use]
     pub fn get_mut(&mut self, entity_id: EntityId<E>) -> Option<&mut V> {
         self.data.get_mut(entity_id.0)
     }
 
     /// Returns the last value, or `None` if empty.
+    #[must_use]
     pub fn last(&self) -> Option<&V> {
         self.data.last()
     }
 
     /// Returns the last value mutably, or `None` if empty.
+    #[must_use]
     pub fn last_mut(&mut self) -> Option<&mut V> {
         self.data.last_mut()
     }
 
     /// Returns the backing slice.
+    #[must_use]
     pub fn as_slice(&self) -> &[V] {
         &self.data
     }
 
     /// Returns the backing slice mutably.
+    #[must_use]
     pub fn as_mut_slice(&mut self) -> &mut [V] {
         &mut self.data
     }
@@ -190,6 +202,7 @@ impl<E: Entity, V> EntityVec<E, V> {
     }
 
     /// Returns `true` if the vector contains `value`.
+    #[must_use]
     pub fn contains(&self, value: &V) -> bool
     where
         V: PartialEq,
@@ -198,6 +211,7 @@ impl<E: Entity, V> EntityVec<E, V> {
     }
 
     /// Consumes the `EntityVec` and returns the backing `Vec`.
+    #[must_use]
     pub fn into_vec(self) -> Vec<V> {
         self.data
     }
