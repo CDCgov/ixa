@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0-beta2.6](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0-beta2.6) - 2026-06-16
+## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0) - 2026-06-16
 
 ### Added
 
