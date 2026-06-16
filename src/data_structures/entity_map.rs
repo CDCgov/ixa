@@ -75,6 +75,7 @@ pub struct EntityMap<E: Entity, V> {
 
 impl<E: Entity, V> EntityMap<E, V> {
     /// Creates an empty `EntityMap`.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
@@ -84,6 +85,7 @@ impl<E: Entity, V> EntityMap<E, V> {
     }
 
     /// Creates an empty `EntityMap` with space for at least `capacity` values.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
@@ -93,24 +95,28 @@ impl<E: Entity, V> EntityMap<E, V> {
     }
 
     /// Cheap conversion to an `EntityVec<E, Option<V>>`
+    #[must_use]
     pub fn into_entity_vec(self) -> EntityVec<E, Option<V>> {
         self.data.into()
     }
 
     /// Returns the number of stored key-value pairs.
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
 
     /// Returns the capacity of the backing storage.
     #[inline]
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
 
     /// Returns `true` if the map contains no values.
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -129,16 +135,19 @@ impl<E: Entity, V> EntityMap<E, V> {
     }
 
     /// Returns `true` if `entity_id` is present in the map.
+    #[must_use]
     pub fn contains_key(&self, entity_id: EntityId<E>) -> bool {
         self.get(entity_id).is_some()
     }
 
     /// Returns the value for `entity_id`, or `None` if not present.
+    #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> Option<&V> {
         self.data.get(entity_id.0).and_then(Option::as_ref)
     }
 
     /// Returns the value for `entity_id` mutably, or `None` if not present.
+    #[must_use]
     pub fn get_mut(&mut self, entity_id: EntityId<E>) -> Option<&mut V> {
         self.data.get_mut(entity_id.0).and_then(Option::as_mut)
     }
@@ -181,6 +190,7 @@ impl<E: Entity, V> EntityMap<E, V> {
     }
 
     /// Removes and returns the value for `entity_id`, if present.
+    #[must_use]
     pub fn remove(&mut self, entity_id: EntityId<E>) -> Option<V> {
         let removed = self.data.get_mut(entity_id.0).and_then(Option::take);
         if removed.is_some() {
@@ -196,6 +206,7 @@ impl<E: Entity, V> EntityMap<E, V> {
     }
 
     /// Returns an iterator over `(EntityId<E>, &V)` pairs.
+    #[must_use]
     pub fn iter(&self) -> Iter<'_, E, V> {
         Iter {
             inner: self.data.iter().enumerate(),

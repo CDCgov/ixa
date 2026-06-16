@@ -39,6 +39,7 @@ pub struct PopulationIterator {
 }
 
 impl PopulationIterator {
+    #[must_use]
     pub fn new(
         n: usize,
         number_of_schools_as_percent_of_pop: f64,
@@ -117,6 +118,7 @@ impl ExactSizeIterator for PopulationIterator {
 
 impl FusedIterator for PopulationIterator {}
 
+#[must_use]
 pub fn generate_population(
     n: usize,
     number_of_schools_as_percent_of_pop: f64,
@@ -131,6 +133,7 @@ pub fn generate_population(
 }
 
 /// Generate a population using an optional seed for determinism
+#[must_use]
 pub fn generate_population_with_seed(
     n: usize,
     number_of_schools_as_percent_of_pop: f64,

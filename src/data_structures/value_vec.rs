@@ -40,6 +40,7 @@ pub struct ValueVec<V: Copy> {
 
 impl<V: Copy> ValueVec<V> {
     /// Creates an empty `ValueVec`.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: UnsafeCell::new(Vec::new()),
@@ -47,6 +48,7 @@ impl<V: Copy> ValueVec<V> {
     }
 
     /// Creates with capacity.
+    #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             data: UnsafeCell::new(Vec::with_capacity(cap)),
@@ -55,6 +57,7 @@ impl<V: Copy> ValueVec<V> {
 
     /// Current number of elements.
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         // Safety: This is already an immutable operation
         unsafe { (&*self.data.get()).len() }
@@ -62,6 +65,7 @@ impl<V: Copy> ValueVec<V> {
 
     /// Current capacity of the backing Vec.
     #[inline]
+    #[must_use]
     pub fn capacity(&self) -> usize {
         // Safety: This is already an immutable operation
         unsafe { (&*self.data.get()).capacity() }
@@ -69,6 +73,7 @@ impl<V: Copy> ValueVec<V> {
 
     /// Returns true if the vector has no elements.
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -89,12 +94,14 @@ impl<V: Copy> ValueVec<V> {
     }
 
     /// Pops and **returns** the last element (by move), or `None` if empty.
+    #[must_use]
     pub fn pop(&self) -> Option<V> {
         self.with_vec(|v| v.pop())
     }
 
     /// Returns the value of the element at `index`, if `index` is in range. Returns `None` if `index` is out of bounds.
     /// This is a bounds-checked variant of [`ValueVec::at`].
+    #[must_use]
     pub fn get(&self, index: usize) -> Option<V> {
         unsafe { (&*self.data.get()).get(index).copied() }
     }
@@ -102,11 +109,13 @@ impl<V: Copy> ValueVec<V> {
     /// Returns the value at `index`. Panics if `index` is out of bounds.
     ///
     /// Use [`ValueVec::get`] for a bounds-checked version of this method.
+    #[must_use]
     pub fn at(&self, index: usize) -> V {
         unsafe { (&*self.data.get())[index] }
     }
 
     /// Moves a value into the slot at `index`, returning the old value (via move). Panics if `index` is out of bounds.
+    #[must_use]
     pub fn replace(&self, index: usize, value: V) -> V {
         self.with_vec(|v| core::mem::replace(&mut v[index], value))
     }
@@ -133,6 +142,7 @@ impl<V: Copy> ValueVec<V> {
     }
 
     /// Removes and returns the element at `index`, shifting elements left. Panics if `index` is out of bounds.
+    #[must_use]
     pub fn remove(&self, index: usize) -> V {
         self.with_vec(|v| v.remove(index))
     }
@@ -140,11 +150,13 @@ impl<V: Copy> ValueVec<V> {
     /// Removes and returns the element at `index` by swapping in the last element.
     ///
     /// O(1) removal when order does not matter.
+    #[must_use]
     pub fn swap_remove(&self, index: usize) -> V {
         self.with_vec(|v| v.swap_remove(index))
     }
 
     /// Returns `true` if the `ValueVec` contains an element with the given value.
+    #[must_use]
     pub fn contains(&self, value: &V) -> bool
     where
         V: PartialEq,
@@ -179,6 +191,7 @@ impl<V: Copy> ValueVec<V> {
     /// Returns a **snapshot** `Vec<V>` by cloning all elements.
     ///
     /// Use `From<ValueVec<V>> for Vec<V>` for a zero-cost conversion if you don't want to clone.
+    #[must_use]
     pub fn to_vec(&self) -> Vec<V>
     where
         V: Clone,

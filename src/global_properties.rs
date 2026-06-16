@@ -50,6 +50,7 @@ pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<Propert
 static NEXT_GLOBAL_PROPERTY_ID: Mutex<usize> = Mutex::new(0);
 
 /// A convenience getter for `NEXT_GLOBAL_PROPERTY_ID`.
+#[must_use]
 pub fn get_global_property_count() -> usize {
     *NEXT_GLOBAL_PROPERTY_ID.lock().unwrap()
 }
@@ -59,6 +60,7 @@ pub fn get_global_property_count() -> usize {
 /// Acquires a global lock on the next available global property ID, but only
 /// increments it if we successfully initialize the provided ID. The ID of a
 /// global property is assigned at runtime but only once per type.
+#[must_use]
 pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
     let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
     let candidate = *guard;
@@ -132,10 +134,12 @@ pub trait GlobalProperty: Any {
     /// The actual type of the data stored in the global property
     type Value: Any;
 
+    #[must_use]
     fn id() -> usize;
 
     fn new() -> Self;
 
+    #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
         full.rsplit("::").next().unwrap()
@@ -159,6 +163,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ) -> Result<(), IxaError>;
 
     /// Return value of global property T
+    #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         _property: T,

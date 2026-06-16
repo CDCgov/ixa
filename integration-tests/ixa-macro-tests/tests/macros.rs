@@ -315,7 +315,7 @@ mod tests {
         let e = ctx.get_edge::<Person, TestEdge>(p1, p2).unwrap();
         assert_eq!(e.weight, 1.0);
         // Now remove the edge and ensure it's gone
-        ctx.remove_edge::<Person, TestEdge>(p1, p2);
+        assert!(ctx.remove_edge::<Person, TestEdge>(p1, p2).is_some());
         assert!(ctx.get_edge::<Person, TestEdge>(p1, p2).is_none());
 
         // Data plugin access

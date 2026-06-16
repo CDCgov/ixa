@@ -143,10 +143,12 @@ pub trait QueryInternal<E: Entity>: 'static {
         Self: 'a;
 
     /// Returns an unordered list of type IDs of the properties in this query.
+    #[must_use]
     fn get_type_ids(&self) -> Vec<TypeId>;
 
     /// Returns the property ID of the representative multi-property having the properties of
     /// this query, if any.
+    #[must_use]
     fn multi_property_id(&self) -> Option<usize> {
         // Silence type complexity warning for this one-off data structure.
         #[allow(clippy::type_complexity)]
@@ -169,22 +171,27 @@ pub trait QueryInternal<E: Entity>: 'static {
     }
 
     /// Indicates whether this query matches the entire population for `E`.
+    #[must_use]
     fn is_empty_query(&self) -> bool {
         false
     }
 
     /// Exposes the query parts without allocating.
+    #[must_use]
     fn query_parts(&self) -> Self::QueryParts<'_>;
 
     /// Creates a new query result as an `EntitySet`.
+    #[must_use]
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E>;
 
     /// Creates a new `EntitySetIterator`.
+    #[must_use]
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         self.new_query_result(context).into_iter()
     }
 
     /// Determines if the given person matches this query.
+    #[must_use]
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match this query.

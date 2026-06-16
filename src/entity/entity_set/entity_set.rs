@@ -74,6 +74,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Create an empty entity set.
+    #[must_use]
     pub fn empty() -> Self {
         EntitySet(EntitySetInner::Source(SourceSet::empty()))
     }
@@ -99,6 +100,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Intersection(sets))
     }
 
+    #[must_use]
     pub fn union(self, other: Self) -> Self {
         // Idempotence: A ∪ A = A  (same structure over same sources)
         if self.structurally_eq(&other) {
@@ -130,6 +132,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Union(Box::new(left), Box::new(right)))
     }
 
+    #[must_use]
     pub fn intersection(self, other: Self) -> Self {
         // Idempotence: A ∩ A = A
         if self.structurally_eq(&other) {
@@ -165,6 +168,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Intersection(sets))
     }
 
+    #[must_use]
     pub fn difference(self, other: Self) -> Self {
         // Self-subtraction: A \ A = ∅
         if self.structurally_eq(&other) {
@@ -201,6 +205,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Test whether `entity_id` is a member of this set.
+    #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
         match self {
             EntitySet(EntitySetInner::Source(source)) => source.contains(entity_id),
@@ -217,6 +222,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Collect this set's contents into an owned vector of `EntityId<E>`.
+    #[must_use]
     pub fn to_owned_vec(self) -> Vec<EntityId<E>> {
         self.into_iter().collect()
     }
@@ -229,6 +235,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// `IndexSet`), runs in O(1) with at most two index lookups and no
     /// iterator construction. Falls back to O(n) reservoir sampling for
     /// composite sets and `PropertySet` sources.
+    #[must_use]
     pub fn sample_entity_excluding<R, X>(&self, rng: &mut R, excluded: X) -> Option<EntityId<E>>
     where
         R: Rng,
@@ -259,6 +266,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Sample a single entity uniformly from this set. Returns `None` if the
     /// set is empty.
+    #[must_use]
     pub fn sample_entity<R>(&self, rng: &mut R) -> Option<EntityId<E>>
     where
         R: Rng,
@@ -278,6 +286,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Count the entities in this set and sample one uniformly from them.
     ///
     /// Returns `(count, sample)` where `sample` is `None` iff `count == 0`.
+    #[must_use]
     pub fn count_and_sample_entity<R>(&self, rng: &mut R) -> (usize, Option<EntityId<E>>)
     where
         R: Rng,
@@ -294,6 +303,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Sample up to `requested` entities uniformly from this set. If the set
     /// has fewer than `requested` entities, the entire set is returned.
+    #[must_use]
     pub fn sample_entities<R>(&self, rng: &mut R, requested: usize) -> Vec<EntityId<E>>
     where
         R: Rng,
@@ -312,6 +322,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     ///
     /// This is true only for direct `SourceSet` leaves except `PropertySet`.
     /// Composite expressions return `None`.
+    #[must_use]
     pub fn try_len(&self) -> Option<usize> {
         match self {
             EntitySet(EntitySetInner::Source(source)) => source.try_len(),

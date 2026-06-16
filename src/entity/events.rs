@@ -136,6 +136,7 @@ pub struct EntityCreatedEvent<E: Entity> {
 }
 
 impl<E: Entity> EntityCreatedEvent<E> {
+    #[must_use]
     pub fn new(entity_id: EntityId<E>) -> Self {
         Self { entity_id }
     }

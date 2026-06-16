@@ -58,7 +58,7 @@ macro_rules! define_global_property {
                     let mut name = module.split("::").next().unwrap().to_string();
                     name += ".";
                     name += stringify!($global_property);
-                    <$global_property as $crate::global_properties::GlobalProperty>::id();
+                    let _ = <$global_property as $crate::global_properties::GlobalProperty>::id();
                     $crate::global_properties::add_global_property::<$global_property>(&name);
                 }
             }
