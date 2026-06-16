@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0) - 2026-06-16
 
+Ixa 2.0 replaces the single, hard-coded `people` module with a generalized,
+type-safe **entity system**: models can now define any number of entity types
+(not just `Person`) and attach strongly-typed properties to them. This is a
+breaking change for every 1.x model. This release consolidates everything
+released across the 2.0.0 beta line (beta1 to beta2.5).
+
+### Breaking
+
+- Removed the entire `people` module; `Person` must now be a user-defined entity type
+- Multi-property definitions require entity-first declaration; type aliases are
+  rejected in `define_multi_property!` ([#948](https://github.com/CDCgov/ixa/pull/948), [#852](https://github.com/CDCgov/ixa/pull/852))
+- `IxaError` is now compatible with `anyhow` and no longer supports string-based variants
+- Removed the progress-bar feature ([#879](https://github.com/CDCgov/ixa/pull/879))
+
 ### Added
 
 - Replace universal `Property: Eq + Hash` constraint with `IndexableProperty` ([#937](https://github.com/CDCgov/ixa/pull/937))
