@@ -106,6 +106,16 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
         self.inner.filter_entities(entities, context)
     }
+
+    #[cfg(feature = "profiling")]
+    fn profiling_label(&self) -> &'static str {
+        self.inner.profiling_label()
+    }
+
+    #[cfg(feature = "profiling")]
+    fn push_profiling_property_names(&self, names: &mut Vec<&'static str>) {
+        self.inner.push_profiling_property_names(names);
+    }
 }
 
 impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T> {
@@ -196,6 +206,36 @@ pub trait QueryInternal<E: Entity>: 'static {
 
     /// Removes all `EntityId`s from the given vector that do not match this query.
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
+
+    /// Returns a stable profiling label for this query shape.
+    #[cfg(feature = "profiling")]
+    #[must_use]
+    fn profiling_label(&self) -> &'static str
+    where
+        Self: Sized,
+    {
+        static REGISTRY: OnceLock<Mutex<HashMap<(TypeId, TypeId), &'static str>>> = OnceLock::new();
+
+        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
+        let mut map = map.lock().unwrap();
+        let key = (TypeId::of::<E>(), TypeId::of::<Self>());
+        map.entry(key).or_insert_with(|| {
+            let mut property_names = Vec::new();
+            self.push_profiling_property_names(&mut property_names);
+            property_names.sort_unstable();
+
+            let label = if property_names.is_empty() {
+                format!("{}: All", E::name())
+            } else {
+                format!("{}: ({})", E::name(), property_names.join(", "))
+            };
+            Box::leak(label.into_boxed_str())
+        })
+    }
+
+    /// Appends property names that identify this query shape.
+    #[cfg(feature = "profiling")]
+    fn push_profiling_property_names(&self, names: &mut Vec<&'static str>);
 }
 
 /// Values accepted by user-facing query APIs such as
@@ -213,6 +253,8 @@ impl<E: Entity> Query<E> for E {}
 #[cfg(test)]
 mod tests {
 
+    #[cfg(feature = "profiling")]
+    use super::EntityPropertyTuple;
     use super::QueryInternal;
     use crate::prelude::*;
     use crate::{
@@ -297,6 +339,55 @@ mod tests {
         let mut ids = vec![person1, person2];
         <Person as QueryInternal<Person>>::filter_entities(&Person, &mut ids, &context);
         assert_eq!(ids, vec![person1, person2]);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn empty_query_profiling_label_is_entity_all() {
+        assert_eq!(
+            <() as QueryInternal<Person>>::profiling_label(&()),
+            "Person: All"
+        );
+        assert_eq!(
+            <Person as QueryInternal<Person>>::profiling_label(&Person),
+            "Person: All"
+        );
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn single_property_query_profiling_label_includes_property_name() {
+        let query = (Age(42),);
+
+        assert_eq!(
+            <(Age,) as QueryInternal<Person>>::profiling_label(&query),
+            "Person: (Age)"
+        );
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn multi_property_query_profiling_label_includes_property_names() {
+        let query = (Age(42), County(1));
+
+        assert_eq!(
+            <(Age, County) as QueryInternal<Person>>::profiling_label(&query),
+            "Person: (Age, County)"
+        );
+
+        let reversed_query = (County(1), Age(42));
+        assert_eq!(
+            <(County, Age) as QueryInternal<Person>>::profiling_label(&reversed_query),
+            "Person: (Age, County)"
+        );
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn entity_property_tuple_profiling_label_delegates_to_inner_query() {
+        let query = EntityPropertyTuple::<Person, _>::new((Age(42), County(1)));
+
+        assert_eq!(query.profiling_label(), "Person: (Age, County)");
     }
 
     #[test]

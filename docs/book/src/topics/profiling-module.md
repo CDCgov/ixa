@@ -131,6 +131,7 @@ prefix, overwrite). The JSON includes:
 - `execution_statistics`
 - `named_counts`
 - `named_spans`
+- `query_timings`
 - `computed_statistics`
 
 Example:
