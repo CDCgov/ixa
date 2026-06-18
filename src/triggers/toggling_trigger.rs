@@ -13,6 +13,13 @@
 //! toggling trigger only gates those criteria by its current active/inactive state.
 //!
 //! ## Semantics
+//! 
+//! - If the trigger is inactive and the activation criterion matches, a single activation event is
+//!   emitted and the trigger's internal state is changed to active.
+//! - If the trigger is inactive and the deactivation criterion matches, there is no effect.
+//! - If the trigger is active and the activation criterion matches, there is no effect.
+//! - If the trigger is active and the deactivation criterion matches, a single deactivation event
+//!   is emitted and the trigger's internal state is changed to inactive.
 //!
 //! ### Repeating or once
 //!
@@ -27,12 +34,13 @@
 //! deactivation event, the toggling trigger is permanently disabled and ignores all later criterion
 //! matches. If the trigger starts active with [`TogglingTrigger::initially_active`], the one active
 //! period is already in progress; the first accepted deactivation emits the deactivation event and
-//! then disables the trigger. (Matches of the underlying criterion ignored because they occur in
-//! the wrong active/inactive state do not by themselves disable a `once` toggling trigger.)
+//! then disables the trigger. (Matches of the underlying criterion that are ignored because they
+//! occur in the wrong active/inactive state do not by themselves disable a `once` toggling
+//! trigger.)
 //!
 //! The mode of the `TogglingTrigger` should not be confused with the mode of each component
 //! criterion, which controls how often that individual criterion reports matches to the toggling
-//! trigger. In fact, component criteria should almost always be repeating, even when the
+//! trigger. In fact, component criteria should almost always be repeating even when the
 //! `TogglingTrigger` itself is configured with [`TogglingTrigger::once`]. If an underlying
 //! criterion uses [`TriggerMode::Once`](super::TriggerMode::Once), that criterion can be consumed
 //! by a match that the toggling trigger ignores because it occurred in the wrong state. For
@@ -72,12 +80,12 @@
 //! let mut context = Context::new();
 //!
 //! context.register_trigger(TogglingTrigger::new(
-//!     PropertyValueCountTrigger::<Person, InfectionStatus>::changes_to(
+//!     PropertyValueCountTrigger::changes_to(
 //!         InfectionStatus::Infectious,
 //!         10,
 //!     ),
 //!     |event| InterventionActivated { count: event.count },
-//!     PropertyValueCountTrigger::<Person, InfectionStatus>::changes_to(
+//!     PropertyValueCountTrigger::changes_to(
 //!         InfectionStatus::Infectious,
 //!         25,
 //!     ),

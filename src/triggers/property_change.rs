@@ -46,30 +46,22 @@
 //!
 //! #[derive(IxaEvent)]
 //! struct FirstDeath {
-//!     person: EntityId<Person>,
-//!     previous: Alive,
-//!     current: Alive,
+//!     person: EntityId<Person>
 //! }
 //!
 //! let mut context = Context::new();
 //!
 //! context.register_trigger(
-//!     PropertyChangeTrigger::<Person, Alive>::from_to(Alive(true), Alive(false))
+//!     PropertyChangeTrigger::from_to(Alive(true), Alive(false))
 //!         .once()
 //!         .emit_with(|observation| FirstDeath {
-//!             person: observation.entity_id,
-//!             previous: observation.previous,
-//!             current: observation.current,
+//!             person: observation.entity_id
 //!         }),
 //! );
 //!
 //! context.subscribe_to_event(|_context, _event: FirstDeath| {
 //!     // respond when a person changes from alive to dead
 //! });
-//!
-//! let person = context.add_entity(Person).unwrap();
-//! context.set_property(person, Alive(false));
-//! context.execute();
 //! ```
 //!
 use std::cell::Cell;

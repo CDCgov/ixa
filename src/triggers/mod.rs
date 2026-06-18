@@ -20,6 +20,18 @@
 //! 3. Register the complete trigger with [`ContextTriggersExt::register_trigger`].
 //! 4. Subscribe to the emitted user event as usual.
 //!
+//! [`TogglingTrigger`] is a composite trigger for stateful on/off behavior. Instead of binding a
+//! single criterion to a single event, it combines an activation criterion and a deactivation
+//! criterion, each with its own emitted event (of possibly distinct types).
+//!
+//! The usual flow for a toggling trigger is:
+//!
+//! 1. Choose the criterion that should activate the trigger.
+//! 2. Choose the criterion that should deactivate the trigger.
+//! 3. Construct a [`TogglingTrigger`] with event constructors for both transitions.
+//! 4. Register it with [`ContextTriggersExt::register_trigger`].
+//! 5. Subscribe to the activation and deactivation events as usual.
+//!
 //! ## Construct an event from observation data
 //!
 //! Each trigger criterion has its own observation data type, available as the criterion's
@@ -55,7 +67,7 @@
 //! let mut context = Context::new();
 //!
 //! context.register_trigger(
-//!     PropertyChangeTrigger::<Person, Alive>::to(Alive(false))
+//!     PropertyChangeTrigger::to(Alive(false))
 //!         .once()
 //!         .emit_with(|event| FirstDeath {
 //!             person: event.entity_id,

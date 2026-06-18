@@ -13,8 +13,8 @@
 //!
 //! ## Semantics
 //!
-//! As entities can only be created, not destroyed, this criterion does not use
-//! [`Direction`](super::Direction) or [`TriggerMode`](super::TriggerMode).
+//! As entities can only be created, not destroyed, the count of entities is monotonic. Thus, this
+//! criterion does not use [`Direction`](super::Direction) or [`TriggerMode`](super::TriggerMode).
 //!
 //! - It fires when a creation makes the count equal to the threshold.
 //! - If the entity population already equals or exceeds the threshold _before_ the trigger is
@@ -31,6 +31,8 @@
 //!
 //! define_entity!(Case);
 //!
+//! // The event records which case caused us to reach the threshold and
+//! // the value of the threshold itself (as `count`).
 //! #[derive(IxaEvent)]
 //! struct SecondCase {
 //!     case_id: EntityId<Case>,
@@ -40,7 +42,7 @@
 //! let mut context = Context::new();
 //!
 //! context.register_trigger(
-//!     EntityCountTrigger::<Case>::increases_to(2)
+//!     EntityCountTrigger::increases_to(2)
 //!         .emit_with(|observation| SecondCase {
 //!             case_id: observation.entity_id,
 //!             count: observation.count,
@@ -50,10 +52,6 @@
 //! context.subscribe_to_event(|_context, _event: SecondCase| {
 //!     // respond when the second Case entity is created
 //! });
-//!
-//! context.add_entity(Case).unwrap();
-//! context.add_entity(Case).unwrap();
-//! context.execute();
 //! ```
 //!
 use std::marker::PhantomData;

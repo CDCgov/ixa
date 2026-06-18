@@ -60,39 +60,29 @@
 //!     default_const = InfectionStatus::Susceptible
 //! );
 //!
+//! // The event records which person caused us to reach the threshold and
+//! // the value of the threshold itself (as `count`).
 //! #[derive(IxaEvent)]
 //! struct InfectiousThresholdReached {
 //!     person: EntityId<Person>,
-//!     count: usize,
-//!     direction: Direction,
-//!     direction_filter: Option<Direction>,
-//!     mode: TriggerMode,
+//!     count: usize
 //! }
 //!
 //! let mut context = Context::new();
 //!
 //! context.register_trigger(
-//!     PropertyValueCountTrigger::<Person, InfectionStatus>::increases_to(
+//!     PropertyValueCountTrigger::increases_to(
 //!         InfectionStatus::Infectious,
 //!         2,
 //!     ).emit_with(|observation| InfectiousThresholdReached {
 //!         person: observation.entity_id,
-//!         count: observation.count,
-//!         direction: observation.direction,
-//!         direction_filter: observation.direction_filter,
-//!         mode: observation.mode,
+//!         count: observation.count
 //!     }),
 //! );
 //!
 //! context.subscribe_to_event(|_context, _event: InfectiousThresholdReached| {
 //!     // respond when the infectious count crosses from below 2 to at least 2
 //! });
-//!
-//! let first = context.add_entity(Person).unwrap();
-//! let second = context.add_entity(Person).unwrap();
-//! context.set_property(first, InfectionStatus::Infectious);
-//! context.set_property(second, InfectionStatus::Infectious);
-//! context.execute();
 //! ```
 
 use std::cell::Cell;

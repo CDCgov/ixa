@@ -13,11 +13,15 @@
 //! schedule it.
 //!
 //! ## Semantics
+//! 
+//! This trigger is equivalent to scheduling a plan that emits an event with
+//! [`context.add_plan`](crate::Context::add_plan) / 
+//! [`context.add_plan_with_phase`](crate::Context::add_plan_with_phase).
 //!
-//! This criterion does not use [`Direction`](super::Direction) or
+//! Since time is monotonic, this criterion does not use [`Direction`](super::Direction) or
 //! [`TriggerMode`](super::TriggerMode). It emits once, when its scheduled plan executes. If several
 //! plans are scheduled for the same time, the selected [`ExecutionPhase`](crate::ExecutionPhase)
-//! controls phase ordering: `First` runs before `Normal`, and `Last` runs after `Normal`.
+//! controls phase ordering.
 //!
 //! ## Example
 //!
@@ -45,8 +49,6 @@
 //! context.subscribe_to_event(|context, _event: StopTimeReached| {
 //!     context.shutdown();
 //! });
-//!
-//! context.execute();
 //! ```
 //!
 use super::TriggerCriterion;
