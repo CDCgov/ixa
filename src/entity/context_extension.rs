@@ -757,6 +757,10 @@ mod tests {
     #[cfg(feature = "profiling")]
     define_property!(struct ProfilingIdleAge(u8), ProfilingIdlePerson);
     #[cfg(feature = "profiling")]
+    define_entity!(ProfilingUnusedIteratorPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(struct ProfilingUnusedIteratorAge(u8), ProfilingUnusedIteratorPerson);
+    #[cfg(feature = "profiling")]
     define_entity!(ProfilingContainsPerson);
     #[cfg(feature = "profiling")]
     define_property!(struct ProfilingContainsAge(u8), ProfilingContainsPerson);
@@ -1771,6 +1775,28 @@ mod tests {
             total < Duration::from_millis(25),
             "query timing unexpectedly included idle iterator lifetime: {total:?}"
         );
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn unused_query_result_iterator_does_not_record_query_timing() {
+        let mut context = Context::new();
+        context
+            .add_entity(with!(
+                ProfilingUnusedIteratorPerson,
+                ProfilingUnusedIteratorAge(42)
+            ))
+            .unwrap();
+
+        let label = "ProfilingUnusedIteratorPerson: (ProfilingUnusedIteratorAge)";
+        let iter = context.query_result_iterator(with!(
+            ProfilingUnusedIteratorPerson,
+            ProfilingUnusedIteratorAge(42)
+        ));
+        drop(iter);
+
+        let data = crate::profiling::get_profiling_data();
+        assert!(!data.has_query_timing(label));
     }
 
     #[cfg(feature = "profiling")]

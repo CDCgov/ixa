@@ -277,6 +277,23 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         self
     }
 
+    #[inline]
+    fn record_query_timing<T>(
+        &mut self,
+        f: impl FnOnce(&mut EntitySetIteratorInner<'c, E>) -> T,
+    ) -> T {
+        #[cfg(feature = "profiling")]
+        {
+            if let Some(query_timing) = &mut self.query_timing {
+                let start = std::time::Instant::now();
+                let result = f(&mut self.inner);
+                query_timing.add_elapsed(start.elapsed());
+                return result;
+            }
+        }
+        f(&mut self.inner)
+    }
+
     pub(super) fn new(set: EntitySet<'c, E>) -> Self {
         #[cfg(feature = "profiling")]
         {
@@ -296,16 +313,7 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "profiling")]
-        {
-            if let Some(query_timing) = &mut self.query_timing {
-                let start = std::time::Instant::now();
-                let item = self.inner.next_inner();
-                query_timing.add_elapsed(start.elapsed());
-                return item;
-            }
-        }
-        self.inner.next_inner()
+        self.record_query_timing(EntitySetIteratorInner::next_inner)
     }
 
     #[inline]
@@ -348,42 +356,19 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        match &mut self.inner {
-            EntitySetIteratorInner::Source(source) => {
-                #[cfg(feature = "profiling")]
-                if let Some(query_timing) = &mut self.query_timing {
-                    let start = std::time::Instant::now();
-                    let item = source.nth(n);
-                    query_timing.add_elapsed(start.elapsed());
-                    return item;
-                }
-                source.nth(n)
-            }
-            EntitySetIteratorInner::IntersectionSources { driver, filters } => {
-                #[cfg(feature = "profiling")]
-                if let Some(query_timing) = &mut self.query_timing {
-                    let start = std::time::Instant::now();
-                    let item = driver
-                        .by_ref()
-                        .filter(|&entity_id| {
-                            filters.iter().all(|filter| filter.contains(entity_id))
-                        })
-                        .nth(n);
-                    query_timing.add_elapsed(start.elapsed());
-                    return item;
-                }
-                driver
-                    .by_ref()
-                    .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
-                    .nth(n)
-            }
+        self.record_query_timing(|inner| match inner {
+            EntitySetIteratorInner::Source(source) => source.nth(n),
+            EntitySetIteratorInner::IntersectionSources { driver, filters } => driver
+                .by_ref()
+                .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
+                .nth(n),
             _ => {
                 for _ in 0..n {
-                    self.next()?;
+                    inner.next_inner()?;
                 }
-                self.next()
+                inner.next_inner()
             }
-        }
+        })
     }
 
     fn for_each<F>(self, mut f: F)

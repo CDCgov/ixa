@@ -91,16 +91,17 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         (self.inner, self.query_timing_label)
     }
 
-    #[cfg(feature = "profiling")]
     fn record_query_timing<T>(&self, f: impl FnOnce() -> T) -> T {
-        if let Some(label) = self.query_timing_label {
-            let start = std::time::Instant::now();
-            let result = f();
-            crate::profiling::record_query_timing(label, start.elapsed());
-            result
-        } else {
-            f()
+        #[cfg(feature = "profiling")]
+        {
+            if let Some(label) = self.query_timing_label {
+                let start = std::time::Instant::now();
+                let result = f();
+                crate::profiling::record_query_timing(label, start.elapsed());
+                return result;
+            }
         }
+        f()
     }
 
     #[cfg(feature = "profiling")]
@@ -109,6 +110,11 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             inner: self.inner.clone(),
             query_timing_label: None,
         }
+    }
+
+    #[cfg(not(feature = "profiling"))]
+    fn clone_without_query_timing_label(&self) -> Self {
+        self.clone()
     }
 
     pub(super) fn is_source_leaf(&self) -> bool {
@@ -300,33 +306,28 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
         X: Borrow<EntityId<E>>,
     {
-        #[cfg(feature = "profiling")]
-        let start = self.query_timing_label.map(|_| std::time::Instant::now());
         let excluded = *excluded.borrow();
         if let Some(n) = self.try_len_unprofiled() {
-            let result = if n == 0 {
-                None
-            } else {
-                let p = rng.random_range(0..n as u32) as usize;
-                match self.try_nth_unprofiled(p) {
-                    Some(candidate) if candidate != excluded => Some(candidate),
-                    Some(_) if n == 1 => None,
-                    Some(_) => {
-                        // `excluded` is at position `p`. Resample from the n-1 remaining
-                        // positions: pick `k` uniform in `[0, n-1)`, then map it around
-                        // the hole at `p`.
-                        let k = rng.random_range(0..(n - 1) as u32) as usize;
-                        let target = if k < p { k } else { k + 1 };
-                        self.try_nth_unprofiled(target)
+            self.record_query_timing(|| {
+                if n == 0 {
+                    None
+                } else {
+                    let p = rng.random_range(0..n as u32) as usize;
+                    match self.try_nth_unprofiled(p) {
+                        Some(candidate) if candidate != excluded => Some(candidate),
+                        Some(_) if n == 1 => None,
+                        Some(_) => {
+                            // `excluded` is at position `p`. Resample from the n-1 remaining
+                            // positions: pick `k` uniform in `[0, n-1)`, then map it around
+                            // the hole at `p`.
+                            let k = rng.random_range(0..(n - 1) as u32) as usize;
+                            let target = if k < p { k } else { k + 1 };
+                            self.try_nth_unprofiled(target)
+                        }
+                        None => None,
                     }
-                    None => None,
                 }
-            };
-            #[cfg(feature = "profiling")]
-            if let (Some(label), Some(start)) = (self.query_timing_label, start) {
-                crate::profiling::record_query_timing(label, start.elapsed());
-            }
-            result
+            })
         } else {
             sample_single_excluding_l_reservoir(rng, self.clone(), excluded)
         }
@@ -340,7 +341,6 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         if let Some(n) = self.try_len_unprofiled() {
-            #[cfg(feature = "profiling")]
             return self.record_query_timing(|| {
                 if n == 0 {
                     warn!("Requested a sample entity from an empty population");
@@ -350,16 +350,6 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 let index = rng.random_range(0..n as u32) as usize;
                 self.try_nth_unprofiled(index)
             });
-            #[cfg(not(feature = "profiling"))]
-            {
-                if n == 0 {
-                    warn!("Requested a sample entity from an empty population");
-                    return None;
-                }
-                // The `u32` cast makes this function 30% faster than `usize`.
-                let index = rng.random_range(0..n as u32) as usize;
-                return self.try_nth_unprofiled(index);
-            }
         }
         sample_single_l_reservoir(rng, self.clone())
     }
@@ -373,7 +363,6 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         if let Some(n) = self.try_len_unprofiled() {
-            #[cfg(feature = "profiling")]
             return self.record_query_timing(|| {
                 if n == 0 {
                     return (0, None);
@@ -381,14 +370,6 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 let index = rng.random_range(0..n as u32) as usize;
                 (n, self.try_nth_unprofiled(index))
             });
-            #[cfg(not(feature = "profiling"))]
-            {
-                if n == 0 {
-                    return (0, None);
-                }
-                let index = rng.random_range(0..n as u32) as usize;
-                return (n, self.try_nth_unprofiled(index));
-            }
         }
         count_and_sample_single_l_reservoir(rng, self.clone())
     }
@@ -401,30 +382,17 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         match self.try_len_unprofiled() {
-            Some(0) => {
-                #[cfg(feature = "profiling")]
-                return self.record_query_timing(|| {
-                    warn!("Requested a sample of entities from an empty population");
-                    vec![]
-                });
-                #[cfg(not(feature = "profiling"))]
-                {
-                    warn!("Requested a sample of entities from an empty population");
-                    vec![]
-                }
-            }
-            Some(_) => {
-                #[cfg(feature = "profiling")]
-                return self.record_query_timing(|| {
-                    sample_multiple_from_known_length(
-                        rng,
-                        self.clone_without_query_timing_label(),
-                        requested,
-                    )
-                });
-                #[cfg(not(feature = "profiling"))]
-                sample_multiple_from_known_length(rng, self.clone(), requested)
-            }
+            Some(0) => self.record_query_timing(|| {
+                warn!("Requested a sample of entities from an empty population");
+                vec![]
+            }),
+            Some(_) => self.record_query_timing(|| {
+                sample_multiple_from_known_length(
+                    rng,
+                    self.clone_without_query_timing_label(),
+                    requested,
+                )
+            }),
             None => sample_multiple_l_reservoir(rng, self.clone(), requested),
         }
     }

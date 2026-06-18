@@ -258,6 +258,7 @@ impl Drop for QueryTimingSpan {
 pub(crate) struct QueryTimingAccumulator {
     label: &'static str,
     elapsed: std::time::Duration,
+    observations: usize,
 }
 
 #[cfg(feature = "profiling")]
@@ -266,17 +267,22 @@ impl QueryTimingAccumulator {
         Self {
             label,
             elapsed: std::time::Duration::ZERO,
+            observations: 0,
         }
     }
 
     pub(crate) fn add_elapsed(&mut self, elapsed: std::time::Duration) {
         self.elapsed += elapsed;
+        self.observations += 1;
     }
 }
 
 #[cfg(feature = "profiling")]
 impl Drop for QueryTimingAccumulator {
     fn drop(&mut self) {
+        if self.observations == 0 {
+            return;
+        }
         let mut container = profiling_data();
         container.record_query_timing(self.label, self.elapsed);
     }
