@@ -13,9 +13,9 @@
 //! schedule it.
 //!
 //! ## Semantics
-//! 
+//!
 //! This trigger is equivalent to scheduling a plan that emits an event with
-//! [`context.add_plan`](crate::Context::add_plan) / 
+//! [`context.add_plan`](crate::Context::add_plan) /
 //! [`context.add_plan_with_phase`](crate::Context::add_plan_with_phase).
 //!
 //! Since time is monotonic, this criterion does not use [`Direction`](super::Direction) or

@@ -9,14 +9,14 @@
 //! as [`PropertyChangeTrigger`] or [`TimeTrigger`], defines what should be
 //! monitored. A complete trigger is created only after binding that criterion
 //! to a concrete event with one of the `emit_*` methods. The value returned by
-//! `emit_with`, `emit_with_value`, or `emit_default` is the value passed to
+//! `emit_with`, `emit_value`, or `emit_default` is the value passed to
 //! [`ContextTriggersExt::register_trigger`].
 //!
 //! The usual flow is:
 //!
 //! 1. Choose one of the built-in trigger criteria.
 //! 2. Bind it to the event you want emitted with [`TriggerCriterion::emit_with`],
-//!    [`TriggerCriterion::emit_with_value`], or [`TriggerCriterion::emit_default`].
+//!    [`TriggerCriterion::emit_value`], or [`TriggerCriterion::emit_default`].
 //! 3. Register the complete trigger with [`ContextTriggersExt::register_trigger`].
 //! 4. Subscribe to the emitted user event as usual.
 //!
@@ -26,10 +26,11 @@
 //!
 //! The usual flow for a toggling trigger is:
 //!
-//! 1. Choose the criterion that should activate the trigger.
-//! 2. Choose the criterion that should deactivate the trigger.
-//! 3. Construct a [`TogglingTrigger`] with event constructors for both transitions.
-//! 4. Register it with [`ContextTriggersExt::register_trigger`].
+//! 1. Choose the activation and deactivation criteria.
+//! 2. Pair them with [`TogglingTriggerCriteria::new`].
+//! 3. Bind the pair to activation and deactivation events with one of the
+//!    `TogglingTriggerCriteria::emit_*` methods.
+//! 4. Register the complete trigger with [`ContextTriggersExt::register_trigger`].
 //! 5. Subscribe to the activation and deactivation events as usual.
 //!
 //! ## Construct an event from observation data
@@ -40,7 +41,7 @@
 //! current property values. [`EntityCountTrigger`], [`PropertyValueCountTrigger`], and
 //! [`TimeTrigger`] use their corresponding `*TriggerEvent` types.
 //!
-//! For events that do not need observation data, use [`TriggerCriterion::emit_with_value`] to emit
+//! For events that do not need observation data, use [`TriggerCriterion::emit_value`] to emit
 //! a constant event value, or [`TriggerCriterion::emit_default`] when the event type implements
 //! [`Default`].
 //!
@@ -92,7 +93,7 @@ pub use entity_count::{EntityCountTrigger, EntityCountTriggerEvent};
 pub use property_change::{PropertyChangeTrigger, PropertyChangeTriggerEvent};
 pub use property_value_count::{PropertyValueCountTrigger, PropertyValueCountTriggerEvent};
 pub use time::{TimeTrigger, TimeTriggerEvent};
-pub use toggling_trigger::TogglingTrigger;
+pub use toggling_trigger::{TogglingTrigger, TogglingTriggerCriteria};
 
 use crate::{Context, IxaEvent};
 
@@ -144,7 +145,7 @@ pub trait TriggerCriterion: Sized + 'static {
     }
 
     /// Bind this criterion to a constant concrete user event value.
-    fn emit_with_value<Ev>(self, event: Ev) -> Trigger<Self, Ev, impl Fn(Self::Observation) -> Ev>
+    fn emit_value<Ev>(self, event: Ev) -> Trigger<Self, Ev, impl Fn(Self::Observation) -> Ev>
     where
         Ev: IxaEvent,
     {
@@ -313,7 +314,7 @@ mod tests {
 
         context.register_trigger(
             TimeTrigger::at_phase(50.0, ExecutionPhase::Last)
-                .emit_with_value::<ShutdownRequested>(ShutdownRequested),
+                .emit_value::<ShutdownRequested>(ShutdownRequested),
         );
     }
 
@@ -509,7 +510,7 @@ mod tests {
                 1,
             )
             .repeating()
-            .emit_with_value::<InfectiousThresholdReached>(InfectiousThresholdReached),
+            .emit_value::<InfectiousThresholdReached>(InfectiousThresholdReached),
         );
         context.subscribe_to_event(move |_context, _event: InfectiousThresholdReached| {
             observed_count_clone.set(observed_count_clone.get() + 1);

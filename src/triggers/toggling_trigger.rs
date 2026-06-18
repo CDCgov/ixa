@@ -1,6 +1,6 @@
 //! Composite trigger that toggles between inactive and active states.
 //!
-//! [`TogglingTrigger`] composes two trigger criteria: one activation criterion and one
+//! [`TogglingTriggerCriteria`] composes two trigger criteria: one activation criterion and one
 //! deactivation criterion. The trigger starts inactive by default. When the activation criterion
 //! matches while inactive, the trigger becomes active and emits the activation event. Later
 //! activation matches are ignored while the trigger remains active. When the deactivation criterion
@@ -13,7 +13,7 @@
 //! toggling trigger only gates those criteria by its current active/inactive state.
 //!
 //! ## Semantics
-//! 
+//!
 //! - If the trigger is inactive and the activation criterion matches, a single activation event is
 //!   emitted and the trigger's internal state is changed to active.
 //! - If the trigger is inactive and the deactivation criterion matches, there is no effect.
@@ -23,37 +23,44 @@
 //!
 //! ### Repeating or once
 //!
-//! The "mode" of the [`TogglingTrigger`] itself controls how long the active/inactive state machine
-//! remains enabled. A toggling trigger defaults to
-//! [`TriggerMode::Repeating`](super::TriggerMode::Repeating). In repeating mode, it can activate,
-//! deactivate, and activate again for as long as its component criteria continue to match.
+//! The "mode" of the completed [`TogglingTrigger`] controls how long the active/inactive state
+//! machine remains enabled. A toggling trigger defaults to
+//! [`TriggerMode::Repeating`](super::TriggerMode::Repeating), whether it is constructed through
+//! [`TogglingTriggerCriteria::emit_with`] or directly with [`TogglingTrigger::new`]. In repeating
+//! mode, it can activate, deactivate, and activate again for as long as its component criteria
+//! continue to match.
 //!
-//! Calling [`TogglingTrigger::once`] sets the toggling trigger to [`TriggerMode::Once`]. For a
-//! toggling trigger, "once" means one active period, _not_ one raw criterion match. If the trigger
-//! starts inactive, it can emit one activation event and then one deactivation event. After that
-//! deactivation event, the toggling trigger is permanently disabled and ignores all later criterion
-//! matches. If the trigger starts active with [`TogglingTrigger::initially_active`], the one active
-//! period is already in progress; the first accepted deactivation emits the deactivation event and
-//! then disables the trigger. (Matches of the underlying criterion that are ignored because they
-//! occur in the wrong active/inactive state do not by themselves disable a `once` toggling
-//! trigger.)
+//! Calling [`TogglingTriggerCriteria::once`] or [`TogglingTrigger::once`] sets the completed
+//! toggling trigger to [`TriggerMode::Once`]. For a toggling trigger, "once" means one active
+//! period, _not_ one raw criterion match. If the trigger starts inactive, it can emit one activation
+//! event and then one deactivation event. After that deactivation event, the toggling trigger is
+//! permanently disabled and ignores all later criterion matches. If the trigger starts active with
+//! [`TogglingTriggerCriteria::initially_active`] or [`TogglingTrigger::initially_active`], the one
+//! active period is already in progress; the first accepted deactivation emits the deactivation
+//! event and then disables the trigger. (Matches of the underlying criterion that are ignored
+//! because they occur in the wrong active/inactive state do not by themselves disable a `once`
+//! toggling trigger.)
 //!
-//! The mode of the `TogglingTrigger` should not be confused with the mode of each component
+//! The mode of the completed `TogglingTrigger` should not be confused with the mode of each component
 //! criterion, which controls how often that individual criterion reports matches to the toggling
 //! trigger. In fact, component criteria should almost always be repeating even when the
-//! `TogglingTrigger` itself is configured with [`TogglingTrigger::once`]. If an underlying
-//! criterion uses [`TriggerMode::Once`](super::TriggerMode::Once), that criterion can be consumed
-//! by a match that the toggling trigger ignores because it occurred in the wrong state. For
-//! example, a once-only activation criterion can match while the toggling trigger is already
-//! active; the toggling trigger will correctly ignore that activation match, but the activation
-//! criterion may never report another match.
+//! `TogglingTrigger` itself is configured with [`TogglingTriggerCriteria::once`] or
+//! [`TogglingTrigger::once`]. If an underlying criterion uses
+//! [`TriggerMode::Once`](super::TriggerMode::Once), that criterion can be consumed by a match that
+//! the toggling trigger ignores because it occurred in the wrong state. For example, a once-only
+//! activation criterion can match while the toggling trigger is already active; the toggling trigger
+//! will correctly ignore that activation match, but the activation criterion may never report
+//! another match.
+//!
+//! [`TogglingTrigger::new`] is also available for all-at-once construction of a complete
+//! `TogglingTrigger`.
 //!
 //! ## Example
 //!
 //! ```rust
 //! use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
 //! use ixa::triggers::{
-//!     ContextTriggersExt, PropertyValueCountTrigger, TogglingTrigger,
+//!     ContextTriggersExt, PropertyValueCountTrigger, TogglingTriggerCriteria,
 //! };
 //! use ixa_derive::IxaEvent;
 //!
@@ -79,27 +86,165 @@
 //!
 //! let mut context = Context::new();
 //!
-//! context.register_trigger(TogglingTrigger::new(
+//! context.register_trigger(TogglingTriggerCriteria::new(
 //!     PropertyValueCountTrigger::changes_to(
 //!         InfectionStatus::Infectious,
 //!         10,
 //!     ),
-//!     |event| InterventionActivated { count: event.count },
 //!     PropertyValueCountTrigger::changes_to(
 //!         InfectionStatus::Infectious,
 //!         25,
 //!     ),
+//! ).emit_with(
+//!     |event| InterventionActivated { count: event.count },
 //!     |event| InterventionDeactivated { count: event.count },
 //! ));
+//!
+//! context.subscribe_to_event(|_context, _event: InterventionActivated| {
+//!     // respond when the intervention becomes active
+//! });
+//!
+//! context.subscribe_to_event(|_context, _event: InterventionDeactivated| {
+//!     // respond when the intervention becomes inactive
+//! });
 //! ```
 
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use super::{TriggerCriterion, TriggerMode, TriggerSpec};
 use crate::{Context, IxaEvent};
 
-use super::{TriggerCriterion, TriggerMode, TriggerSpec};
+/// A pair of activation and deactivation criteria that can be bound to emitted events.
+pub struct TogglingTriggerCriteria<AC, DC> {
+    activation_criterion: AC,
+    deactivation_criterion: DC,
+    initially_active: bool,
+    mode: TriggerMode,
+}
+
+impl<AC, DC> TogglingTriggerCriteria<AC, DC>
+where
+    AC: TriggerCriterion,
+    DC: TriggerCriterion,
+{
+    /// Create a toggling trigger criteria pair that starts inactive and uses repeating mode.
+    #[must_use]
+    pub fn new(activation_criterion: AC, deactivation_criterion: DC) -> Self {
+        Self {
+            activation_criterion,
+            deactivation_criterion,
+            initially_active: false,
+            mode: TriggerMode::Repeating,
+        }
+    }
+
+    /// Start the completed toggling trigger in the active state.
+    ///
+    /// See [`TogglingTrigger::initially_active`] for the runtime semantics.
+    #[must_use]
+    pub fn initially_active(mut self) -> Self {
+        self.initially_active = true;
+        self
+    }
+
+    /// Start the completed toggling trigger in the inactive state.
+    ///
+    /// This is the default state. See [`TogglingTrigger::initially_inactive`] for the runtime
+    /// semantics.
+    #[must_use]
+    pub fn initially_inactive(mut self) -> Self {
+        self.initially_active = false;
+        self
+    }
+
+    /// Run the completed toggling trigger through one active period and then disable it.
+    ///
+    /// This sets the mode of the completed [`TogglingTrigger`], not the mode of either component
+    /// criterion.
+    #[must_use]
+    pub fn once(mut self) -> Self {
+        self.mode = TriggerMode::Once;
+        self
+    }
+
+    /// Keep the completed toggling trigger enabled after deactivation so it can activate again.
+    ///
+    /// This is the default mode. This sets the mode of the completed [`TogglingTrigger`], not the
+    /// mode of either component criterion.
+    #[must_use]
+    pub fn repeating(mut self) -> Self {
+        self.mode = TriggerMode::Repeating;
+        self
+    }
+
+    /// Bind this pair of criteria to constructors for activation and deactivation events.
+    #[must_use]
+    pub fn emit_with<ActiveEv, InactiveEv, MakeActive, MakeInactive>(
+        self,
+        make_active_event: MakeActive,
+        make_inactive_event: MakeInactive,
+    ) -> TogglingTrigger<AC, DC, ActiveEv, InactiveEv, MakeActive, MakeInactive>
+    where
+        ActiveEv: IxaEvent,
+        InactiveEv: IxaEvent,
+        MakeActive: Fn(AC::Observation) -> ActiveEv + 'static,
+        MakeInactive: Fn(DC::Observation) -> InactiveEv + 'static,
+    {
+        TogglingTrigger {
+            activation_criterion: self.activation_criterion,
+            deactivation_criterion: self.deactivation_criterion,
+            make_active_event,
+            make_inactive_event,
+            initially_active: self.initially_active,
+            mode: self.mode,
+            _events: PhantomData,
+        }
+    }
+
+    /// Bind this pair of criteria to constant activation and deactivation event values.
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn emit_values<ActiveEv, InactiveEv>(
+        self,
+        active_event: ActiveEv,
+        inactive_event: InactiveEv,
+    ) -> TogglingTrigger<
+        AC,
+        DC,
+        ActiveEv,
+        InactiveEv,
+        impl Fn(AC::Observation) -> ActiveEv,
+        impl Fn(DC::Observation) -> InactiveEv,
+    >
+    where
+        ActiveEv: IxaEvent,
+        InactiveEv: IxaEvent,
+    {
+        self.emit_with(move |_| active_event, move |_| inactive_event)
+    }
+
+    /// Bind this pair of criteria to default-valued activation and deactivation events.
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn emit_defaults<ActiveEv, InactiveEv>(
+        self,
+    ) -> TogglingTrigger<
+        AC,
+        DC,
+        ActiveEv,
+        InactiveEv,
+        impl Fn(AC::Observation) -> ActiveEv,
+        impl Fn(DC::Observation) -> InactiveEv,
+    >
+    where
+        ActiveEv: IxaEvent + Default,
+        InactiveEv: IxaEvent + Default,
+    {
+        self.emit_with(|_| ActiveEv::default(), |_| InactiveEv::default())
+    }
+}
 
 /// A complete installable trigger specification that emits activation and deactivation events when
 /// its paired criteria cause state changes.
@@ -254,14 +399,13 @@ mod tests {
 
     use ixa_derive::IxaEvent;
 
-    use super::*;
-    use crate::entity::EntityId;
-    use crate::{define_entity, define_property, Context, ContextEntitiesExt, IxaEvent};
-
     use super::super::{
         ContextTriggersExt, Direction, EntityCountTrigger, PropertyChangeTrigger,
         PropertyValueCountTrigger, TimeTrigger,
     };
+    use super::*;
+    use crate::entity::EntityId;
+    use crate::{define_entity, define_property, Context, ContextEntitiesExt, IxaEvent};
 
     define_entity!(TogglePerson);
     define_entity!(ToggleCase);
@@ -339,6 +483,68 @@ mod tests {
                 ("inactive", false, true),
                 ("active", true, false)
             ]
+        );
+    }
+
+    #[test]
+    fn toggling_trigger_criteria_emit_with_builds_toggling_trigger() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        #[derive(IxaEvent)]
+        struct Activated {
+            previous: ToggleAlive,
+            current: ToggleAlive,
+        }
+
+        #[derive(IxaEvent)]
+        struct Deactivated {
+            previous: ToggleAlive,
+            current: ToggleAlive,
+        }
+
+        context.register_trigger(
+            TogglingTriggerCriteria::new(
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(false)),
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(true)),
+            )
+            .emit_with(
+                |event| Activated {
+                    previous: event.previous,
+                    current: event.current,
+                },
+                |event| Deactivated {
+                    previous: event.previous,
+                    current: event.current,
+                },
+            ),
+        );
+
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, event: Activated| {
+                observed
+                    .borrow_mut()
+                    .push(("active", event.previous.0, event.current.0));
+            }
+        });
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, event: Deactivated| {
+                observed
+                    .borrow_mut()
+                    .push(("inactive", event.previous.0, event.current.0));
+            }
+        });
+
+        let person = context.add_entity(TogglePerson).unwrap();
+        context.set_property(person, ToggleAlive(false));
+        context.set_property(person, ToggleAlive(true));
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![("active", true, false), ("inactive", false, true)]
         );
     }
 
@@ -451,6 +657,130 @@ mod tests {
             )
             .initially_active()
             .once(),
+        );
+
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Activated| {
+                observed.borrow_mut().push("active");
+            }
+        });
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Deactivated| {
+                observed.borrow_mut().push("inactive");
+            }
+        });
+
+        let person = context.add_entity(TogglePerson).unwrap();
+        context.set_property(person, ToggleAlive(false));
+        context.set_property(person, ToggleAlive(true));
+        context.set_property(person, ToggleAlive(false));
+        context.set_property(person, ToggleAlive(true));
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec!["inactive"]);
+    }
+
+    #[test]
+    fn toggling_trigger_criteria_emit_values_uses_constant_events() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        #[derive(IxaEvent)]
+        struct Activated;
+
+        #[derive(IxaEvent)]
+        struct Deactivated;
+
+        context.register_trigger(
+            TogglingTriggerCriteria::new(
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(false)),
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(true)),
+            )
+            .emit_values(Activated, Deactivated),
+        );
+
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Activated| {
+                observed.borrow_mut().push("active");
+            }
+        });
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Deactivated| {
+                observed.borrow_mut().push("inactive");
+            }
+        });
+
+        let person = context.add_entity(TogglePerson).unwrap();
+        context.set_property(person, ToggleAlive(false));
+        context.set_property(person, ToggleAlive(true));
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec!["active", "inactive"]);
+    }
+
+    #[test]
+    fn toggling_trigger_criteria_emit_defaults_uses_default_events() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        #[derive(Default, IxaEvent)]
+        struct Activated;
+
+        #[derive(Default, IxaEvent)]
+        struct Deactivated;
+
+        context.register_trigger(
+            TogglingTriggerCriteria::new(
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(false)),
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(true)),
+            )
+            .emit_defaults::<Activated, Deactivated>(),
+        );
+
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Activated| {
+                observed.borrow_mut().push("active");
+            }
+        });
+        context.subscribe_to_event({
+            let observed = Rc::clone(&observed);
+            move |_context, _event: Deactivated| {
+                observed.borrow_mut().push("inactive");
+            }
+        });
+
+        let person = context.add_entity(TogglePerson).unwrap();
+        context.set_property(person, ToggleAlive(false));
+        context.set_property(person, ToggleAlive(true));
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec!["active", "inactive"]);
+    }
+
+    #[test]
+    fn toggling_trigger_criteria_transfers_initial_state_and_mode() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        #[derive(IxaEvent)]
+        struct Activated;
+
+        #[derive(IxaEvent)]
+        struct Deactivated;
+
+        context.register_trigger(
+            TogglingTriggerCriteria::new(
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(false)),
+                PropertyChangeTrigger::<TogglePerson, ToggleAlive>::to(ToggleAlive(true)),
+            )
+            .initially_active()
+            .once()
+            .emit_values(Activated, Deactivated),
         );
 
         context.subscribe_to_event({
