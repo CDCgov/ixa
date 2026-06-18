@@ -72,6 +72,7 @@ mod entity_count;
 mod property_change;
 mod property_value_count;
 mod time;
+mod toggling_trigger;
 
 use std::marker::PhantomData;
 
@@ -79,6 +80,7 @@ pub use entity_count::{EntityCountTrigger, EntityCountTriggerEvent};
 pub use property_change::{PropertyChangeTrigger, PropertyChangeTriggerEvent};
 pub use property_value_count::{PropertyValueCountTrigger, PropertyValueCountTriggerEvent};
 pub use time::{TimeTrigger, TimeTriggerEvent};
+pub use toggling_trigger::TogglingTrigger;
 
 use crate::{Context, IxaEvent};
 

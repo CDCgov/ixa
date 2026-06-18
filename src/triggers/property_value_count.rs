@@ -94,7 +94,7 @@
 //! context.set_property(second, InfectionStatus::Infectious);
 //! context.execute();
 //! ```
-//!
+
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::rc::Rc;
