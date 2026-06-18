@@ -26,7 +26,6 @@ because a non-derived p
 
 */
 
-use ixa_derive::IxaEvent;
 use smallbox::space::S4;
 use smallbox::SmallBox;
 
