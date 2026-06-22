@@ -22,7 +22,7 @@ runs:
         rustup toolchain install
 
     - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@v1.15.6
+      uses: cargo-bins/cargo-binstall@v1.20.0
 
     - name: Setup mise
       uses: jdx/mise-action@v4
