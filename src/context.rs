@@ -533,10 +533,10 @@ mod tests {
     use std::cell::RefCell;
     use std::marker::PhantomData;
 
-    use ixa_derive::IxaEvent;
-
     use super::*;
-    use crate::{define_data_plugin, define_entity, define_property, with, ContextEntitiesExt};
+    use crate::{
+        define_data_plugin, define_entity, define_property, with, ContextEntitiesExt, IxaEvent,
+    };
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
 

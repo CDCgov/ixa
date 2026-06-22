@@ -11,7 +11,6 @@ publish = false
 
 [dependencies]
 ixa = { path = "../../" }
-ixa-derive = { path = "../../ixa-derive" }
 
 serde.workspace = true
 rand_distr.workspace = true
