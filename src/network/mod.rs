@@ -317,7 +317,6 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
 impl ContextNetworkExt for Context {}
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 // Tests for the inner core.
 mod test_inner {
     use super::NetworkData;
@@ -523,7 +522,6 @@ mod test_inner {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 // Tests for the API.
 mod test_api {
     use crate::context::Context;

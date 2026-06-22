@@ -86,7 +86,6 @@ static PROPERTY_METADATA_BUILDER: LazyLock<
 ///
 /// This is derived from `PROPERTY_METADATA_BUILDER` by moving the builder `HashMap` out. After this point,
 /// registration is no longer allowed.
-#[allow(clippy::type_complexity)]
 static PROPERTY_METADATA: OnceLock<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>> =
     OnceLock::new();
 

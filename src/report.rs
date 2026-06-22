@@ -70,7 +70,6 @@ pub trait Report: 'static {
 
 /// # Errors
 /// function will return Error if it fails to `serialize_str`
-#[allow(clippy::trivially_copy_pass_by_ref)]
 #[allow(dead_code)]
 pub fn serialize_f64<S, const N: usize>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -82,7 +81,6 @@ where
 
 /// # Errors
 /// function will return Error if it fails to `serialize_str`
-#[allow(clippy::trivially_copy_pass_by_ref)]
 #[allow(dead_code)]
 pub fn serialize_f32<S, const N: usize>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
 where

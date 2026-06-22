@@ -217,7 +217,6 @@ pub fn remove_module_filter(module_path: &str) {
 
 /// Sets the level filters for a set of modules according to the provided map. Use this instead of
 /// `set_module_filter()` to set filters in bulk.
-#[allow(clippy::implicit_hasher)]
 pub fn set_module_filters<S: ToString>(module_filters: &[(&S, LevelFilter)]) {
     let mut log_configuration = get_log_configuration();
     log_configuration.set_module_filters(module_filters);
