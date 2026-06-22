@@ -5,6 +5,7 @@
 //! - Event counting – track how often named events occur during a run.
 //! - Rate calculation – compute rates (events per second) since the first count.
 //! - Span timing – measure time intervals with automatic closing on drop.
+//! - Query timing – aggregate entity query runtime by query shape.
 //! - Coverage – report how much of total runtime is covered by any span via a special
 //!   "Total Measured" span.
 //! - Computed statistics – define custom, derived metrics over collected data.
@@ -25,6 +26,10 @@
 //! schedule_next_forecasted_infection    1286  22ms 329us 102ns      8.44%
 //! Total Measured                        1385  23ms 897us 146ns      9.03%
 //!
+//! Query                         Count       Total        Mean         Min         Max  % runtime
+//! ---------------------------------------------------------------------------------------------
+//! Person: (Age, County)           150    12ms 340us     82us 266ns    10us 120ns   250us 450ns      4.20%
+//!
 //! Event Label                     Count  Rate (per sec)
 //! -----------------------------------------------------
 //! property progression               36          136.05
@@ -42,6 +47,7 @@
 //! - `print_profiling_data`
 //! - `print_named_counts`
 //! - `print_named_spans`
+//! - `print_query_timings`
 //! - `print_computed_statistics`
 //! - `add_computed_statistic`
 //!
@@ -76,8 +82,8 @@
 //! print_profiling_data();
 //! ```
 //! Prints spans, counts, and any computed statistics via the functions
-//! `print_named_spans()`, `print_named_counts()`, `print_computed_statistics()`,
-//! which you can use individually if you prefer.
+//! `print_named_spans()`, `print_query_timings()`, `print_named_counts()`, and
+//! `print_computed_statistics()`, which you can use individually if you prefer.
 //!
 //! Writing results to JSON together with execution statistics:
 //! ```rust,ignore
@@ -87,7 +93,8 @@
 //! fn finalize(mut context: Context) {
 //!     // Ensure Params::profiling_data_path is set, and report options specify
 //!     // output_dir/file_prefix/overwrite. This writes a pretty JSON file with:
-//!     //   date_time, execution_statistics, named_counts, named_spans, computed_statistics
+//!     //   date_time, execution_statistics, named_counts, named_spans,
+//!     //   query_timings, computed_statistics
 //!     context.write_profiling_data();
 //! }
 //! ```
@@ -187,6 +194,9 @@ const TOTAL_MEASURED: &str = "Total Measured";
 const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% runtime"];
 #[cfg(feature = "profiling")]
 const NAMED_COUNTS_HEADERS: &[&str] = &["Event Label", "Count", "Rate (per sec)"];
+#[cfg(feature = "profiling")]
+const QUERY_TIMINGS_HEADERS: &[&str] =
+    &["Query", "Count", "Total", "Mean", "Min", "Max", "% runtime"];
 
 pub struct Span {
     #[cfg(feature = "profiling")]
@@ -211,5 +221,69 @@ impl Drop for Span {
     fn drop(&mut self) {
         let mut container = profiling_data();
         container.close_span(self);
+    }
+}
+
+pub(crate) struct QueryTimingSpan {
+    #[cfg(feature = "profiling")]
+    label: &'static str,
+    #[cfg(feature = "profiling")]
+    start_time: Instant,
+}
+
+impl QueryTimingSpan {
+    #[cfg(feature = "profiling")]
+    fn new(label: &'static str) -> Self {
+        Self {
+            label,
+            start_time: Instant::now(),
+        }
+    }
+
+    #[cfg(not(feature = "profiling"))]
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(feature = "profiling")]
+impl Drop for QueryTimingSpan {
+    fn drop(&mut self) {
+        let mut container = profiling_data();
+        container.record_query_timing(self.label, self.start_time.elapsed());
+    }
+}
+
+#[cfg(feature = "profiling")]
+pub(crate) struct QueryTimingAccumulator {
+    label: &'static str,
+    elapsed: std::time::Duration,
+    observations: usize,
+}
+
+#[cfg(feature = "profiling")]
+impl QueryTimingAccumulator {
+    pub(crate) fn new(label: &'static str) -> Self {
+        Self {
+            label,
+            elapsed: std::time::Duration::ZERO,
+            observations: 0,
+        }
+    }
+
+    pub(crate) fn add_elapsed(&mut self, elapsed: std::time::Duration) {
+        self.elapsed += elapsed;
+        self.observations += 1;
+    }
+}
+
+#[cfg(feature = "profiling")]
+impl Drop for QueryTimingAccumulator {
+    fn drop(&mut self) {
+        if self.observations == 0 {
+            return;
+        }
+        let mut container = profiling_data();
+        container.record_query_timing(self.label, self.elapsed);
     }
 }

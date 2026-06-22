@@ -2,12 +2,15 @@
 use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
-use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
+use super::{
+    profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS, QUERY_TIMINGS_HEADERS,
+};
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
 pub fn print_profiling_data() {
     print_named_spans();
+    print_query_timings();
     print_named_counts();
     print_computed_statistics();
 }
@@ -83,6 +86,42 @@ pub fn print_named_spans() {
 
 #[cfg(not(feature = "profiling"))]
 pub fn print_named_spans() {}
+
+/// Prints a table of query timings, if any.
+#[cfg(feature = "profiling")]
+pub fn print_query_timings() {
+    let rows = profiling_data().get_query_timings_table();
+    if rows.is_empty() {
+        // nothing to report
+        return;
+    }
+
+    let mut formatted_rows = vec![
+        // Header row
+        QUERY_TIMINGS_HEADERS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+    ];
+
+    formatted_rows.extend(rows.into_iter().map(|row| {
+        vec![
+            row.query,
+            format_with_commas(row.count),
+            format_duration(row.total).to_string(),
+            format_duration(row.mean).to_string(),
+            format_duration(row.min).to_string(),
+            format_duration(row.max).to_string(),
+            format!("{:.2}%", row.percent_runtime),
+        ]
+    }));
+
+    println!();
+    print_formatted_table(&formatted_rows);
+}
+
+#[cfg(not(feature = "profiling"))]
+pub fn print_query_timings() {}
 
 /// Prints the forecast efficiency.
 #[cfg(feature = "profiling")]
@@ -228,6 +267,7 @@ mod tests {
 
     use crate::profiling::display::{
         format_with_commas, format_with_commas_f64, print_named_counts, print_named_spans,
+        print_query_timings,
     };
     use crate::profiling::*;
 
@@ -381,6 +421,17 @@ mod tests {
                 .insert("rendering", (Duration::from_secs(2), 30));
         }
         print_named_spans();
+    }
+
+    #[test]
+    fn print_query_timings_outputs_expected_format() {
+        {
+            let mut container = profiling_data();
+            container.record_query_timing("DisplayQueryTimings: (Age)", Duration::from_micros(10));
+            container.record_query_timing("DisplayQueryTimings: (Age)", Duration::from_micros(30));
+        }
+
+        print_query_timings();
     }
 
     #[test]

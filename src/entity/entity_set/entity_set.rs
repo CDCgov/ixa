@@ -24,7 +24,11 @@ use crate::random::{
 };
 
 /// Opaque public wrapper around the internal set-expression tree.
-pub struct EntitySet<'a, E: Entity>(EntitySetInner<'a, E>);
+pub struct EntitySet<'a, E: Entity> {
+    inner: EntitySetInner<'a, E>,
+    #[cfg(feature = "profiling")]
+    query_timing_label: Option<&'static str>,
+}
 
 /// Internal set-expression tree used to represent composed query sources.
 pub(super) enum EntitySetInner<'a, E: Entity> {
@@ -36,7 +40,11 @@ pub(super) enum EntitySetInner<'a, E: Entity> {
 
 impl<'a, E: Entity> Clone for EntitySet<'a, E> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self {
+            inner: self.inner.clone(),
+            #[cfg(feature = "profiling")]
+            query_timing_label: self.query_timing_label,
+        }
     }
 }
 
@@ -58,16 +66,63 @@ impl<'a, E: Entity> Default for EntitySet<'a, E> {
 }
 
 impl<'a, E: Entity> EntitySet<'a, E> {
+    fn new(inner: EntitySetInner<'a, E>) -> Self {
+        Self {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_timing_label: None,
+        }
+    }
+
     pub(super) fn into_inner(self) -> EntitySetInner<'a, E> {
-        self.0
+        self.inner
+    }
+
+    #[cfg(feature = "profiling")]
+    pub(crate) fn with_query_timing_label(mut self, label: &'static str) -> Self {
+        self.query_timing_label = Some(label);
+        self
+    }
+
+    #[cfg(feature = "profiling")]
+    pub(super) fn into_inner_and_query_timing_label(
+        self,
+    ) -> (EntitySetInner<'a, E>, Option<&'static str>) {
+        (self.inner, self.query_timing_label)
+    }
+
+    fn record_query_timing<T>(&self, f: impl FnOnce() -> T) -> T {
+        #[cfg(feature = "profiling")]
+        {
+            if let Some(label) = self.query_timing_label {
+                let start = std::time::Instant::now();
+                let result = f();
+                crate::profiling::record_query_timing(label, start.elapsed());
+                return result;
+            }
+        }
+        f()
+    }
+
+    #[cfg(feature = "profiling")]
+    fn clone_without_query_timing_label(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            query_timing_label: None,
+        }
+    }
+
+    #[cfg(not(feature = "profiling"))]
+    fn clone_without_query_timing_label(&self) -> Self {
+        self.clone()
     }
 
     pub(super) fn is_source_leaf(&self) -> bool {
-        matches!(self.0, EntitySetInner::Source(_))
+        matches!(self.inner, EntitySetInner::Source(_))
     }
 
     pub(super) fn into_source_leaf(self) -> Option<SourceSet<'a, E>> {
-        match self.0 {
+        match self.inner {
             EntitySetInner::Source(source) => Some(source),
             _ => None,
         }
@@ -76,12 +131,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Create an empty entity set.
     #[must_use]
     pub fn empty() -> Self {
-        EntitySet(EntitySetInner::Source(SourceSet::empty()))
+        Self::new(EntitySetInner::Source(SourceSet::empty()))
     }
 
     /// Create an entity set from a single source set.
     pub(crate) fn from_source(source: SourceSet<'a, E>) -> Self {
-        EntitySet(EntitySetInner::Source(source))
+        Self::new(EntitySetInner::Source(source))
     }
 
     pub(crate) fn from_intersection_sources(mut sources: Vec<SourceSet<'a, E>>) -> Self {
@@ -97,7 +152,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
         let sets = sources.into_iter().map(Self::from_source).collect();
 
-        EntitySet(EntitySetInner::Intersection(sets))
+        Self::new(EntitySetInner::Intersection(sets))
     }
 
     #[must_use]
@@ -129,7 +184,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         } else {
             (other, self)
         };
-        EntitySet(EntitySetInner::Union(Box::new(left), Box::new(right)))
+        Self::new(EntitySetInner::Union(Box::new(left), Box::new(right)))
     }
 
     #[must_use]
@@ -157,7 +212,10 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         }
 
         let mut sets = match self {
-            EntitySet(EntitySetInner::Intersection(sets)) => sets,
+            EntitySet {
+                inner: EntitySetInner::Intersection(sets),
+                ..
+            } => sets,
             _ => vec![self],
         };
 
@@ -165,7 +223,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         // Keep intersections sorted smallest-to-largest so iterators can take the
         // first source as the driver and membership checks short-circuit quickly.
         sets.sort_unstable_by_key(EntitySet::sort_key);
-        EntitySet(EntitySetInner::Intersection(sets))
+        Self::new(EntitySetInner::Intersection(sets))
     }
 
     #[must_use]
@@ -201,22 +259,29 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             return self;
         }
 
-        EntitySet(EntitySetInner::Difference(Box::new(self), Box::new(other)))
+        Self::new(EntitySetInner::Difference(Box::new(self), Box::new(other)))
     }
 
     /// Test whether `entity_id` is a member of this set.
     #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.contains(entity_id),
-            EntitySet(EntitySetInner::Union(a, b)) => {
-                a.contains(entity_id) || b.contains(entity_id)
+        #[cfg(feature = "profiling")]
+        return self.record_query_timing(|| self.contains_unprofiled(entity_id));
+        #[cfg(not(feature = "profiling"))]
+        self.contains_unprofiled(entity_id)
+    }
+
+    fn contains_unprofiled(&self, entity_id: EntityId<E>) -> bool {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.contains(entity_id),
+            EntitySetInner::Union(a, b) => {
+                a.contains_unprofiled(entity_id) || b.contains_unprofiled(entity_id)
             }
-            EntitySet(EntitySetInner::Intersection(sets)) => {
-                sets.iter().all(|set| set.contains(entity_id))
+            EntitySetInner::Intersection(sets) => {
+                sets.iter().all(|set| set.contains_unprofiled(entity_id))
             }
-            EntitySet(EntitySetInner::Difference(a, b)) => {
-                a.contains(entity_id) && !b.contains(entity_id)
+            EntitySetInner::Difference(a, b) => {
+                a.contains_unprofiled(entity_id) && !b.contains_unprofiled(entity_id)
             }
         }
     }
@@ -242,26 +307,30 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         X: Borrow<EntityId<E>>,
     {
         let excluded = *excluded.borrow();
-        if let Some(n) = self.try_len() {
-            if n == 0 {
-                return None;
-            }
-            let p = rng.random_range(0..n as u32) as usize;
-            let candidate = self.try_nth(p)?;
-            if candidate != excluded {
-                return Some(candidate);
-            }
-            // `excluded` is at position `p`. Resample from the n-1 remaining
-            // positions: pick `k` uniform in `[0, n-1)`, then map it around
-            // the hole at `p`.
-            if n == 1 {
-                return None;
-            }
-            let k = rng.random_range(0..(n - 1) as u32) as usize;
-            let target = if k < p { k } else { k + 1 };
-            return self.try_nth(target);
+        if let Some(n) = self.try_len_unprofiled() {
+            self.record_query_timing(|| {
+                if n == 0 {
+                    None
+                } else {
+                    let p = rng.random_range(0..n as u32) as usize;
+                    match self.try_nth_unprofiled(p) {
+                        Some(candidate) if candidate != excluded => Some(candidate),
+                        Some(_) if n == 1 => None,
+                        Some(_) => {
+                            // `excluded` is at position `p`. Resample from the n-1 remaining
+                            // positions: pick `k` uniform in `[0, n-1)`, then map it around
+                            // the hole at `p`.
+                            let k = rng.random_range(0..(n - 1) as u32) as usize;
+                            let target = if k < p { k } else { k + 1 };
+                            self.try_nth_unprofiled(target)
+                        }
+                        None => None,
+                    }
+                }
+            })
+        } else {
+            sample_single_excluding_l_reservoir(rng, self.clone(), excluded)
         }
-        sample_single_excluding_l_reservoir(rng, self.clone(), excluded)
     }
 
     /// Sample a single entity uniformly from this set. Returns `None` if the
@@ -271,14 +340,16 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        if let Some(n) = self.try_len() {
-            if n == 0 {
-                warn!("Requested a sample entity from an empty population");
-                return None;
-            }
-            // The `u32` cast makes this function 30% faster than `usize`.
-            let index = rng.random_range(0..n as u32) as usize;
-            return self.try_nth(index);
+        if let Some(n) = self.try_len_unprofiled() {
+            return self.record_query_timing(|| {
+                if n == 0 {
+                    warn!("Requested a sample entity from an empty population");
+                    return None;
+                }
+                // The `u32` cast makes this function 30% faster than `usize`.
+                let index = rng.random_range(0..n as u32) as usize;
+                self.try_nth_unprofiled(index)
+            });
         }
         sample_single_l_reservoir(rng, self.clone())
     }
@@ -291,12 +362,14 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        if let Some(n) = self.try_len() {
-            if n == 0 {
-                return (0, None);
-            }
-            let index = rng.random_range(0..n as u32) as usize;
-            return (n, self.try_nth(index));
+        if let Some(n) = self.try_len_unprofiled() {
+            return self.record_query_timing(|| {
+                if n == 0 {
+                    return (0, None);
+                }
+                let index = rng.random_range(0..n as u32) as usize;
+                (n, self.try_nth_unprofiled(index))
+            });
         }
         count_and_sample_single_l_reservoir(rng, self.clone())
     }
@@ -308,12 +381,18 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        match self.try_len() {
-            Some(0) => {
+        match self.try_len_unprofiled() {
+            Some(0) => self.record_query_timing(|| {
                 warn!("Requested a sample of entities from an empty population");
                 vec![]
-            }
-            Some(_) => sample_multiple_from_known_length(rng, self.clone(), requested),
+            }),
+            Some(_) => self.record_query_timing(|| {
+                sample_multiple_from_known_length(
+                    rng,
+                    self.clone_without_query_timing_label(),
+                    requested,
+                )
+            }),
             None => sample_multiple_l_reservoir(rng, self.clone(), requested),
         }
     }
@@ -324,42 +403,44 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Composite expressions return `None`.
     #[must_use]
     pub fn try_len(&self) -> Option<usize> {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.try_len(),
+        #[cfg(feature = "profiling")]
+        return self.record_query_timing(|| self.try_len_unprofiled());
+        #[cfg(not(feature = "profiling"))]
+        self.try_len_unprofiled()
+    }
+
+    fn try_len_unprofiled(&self) -> Option<usize> {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.try_len(),
             _ => None,
         }
     }
 
-    /// Random-access lookup. Defined for the same variants as `try_len`.
-    fn try_nth(&self, idx: usize) -> Option<EntityId<E>> {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.try_nth(idx),
+    fn try_nth_unprofiled(&self, idx: usize) -> Option<EntityId<E>> {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.try_nth(idx),
             _ => None,
         }
     }
 
     fn as_range(&self) -> Option<Range<usize>> {
-        match self {
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) => {
-                Some(range.clone())
-            }
+        match &self.inner {
+            EntitySetInner::Source(SourceSet::PopulationRange(range)) => Some(range.clone()),
             _ => None,
         }
     }
 
     fn is_empty(&self) -> bool {
-        match self {
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) => {
-                range.is_empty()
-            }
+        match &self.inner {
+            EntitySetInner::Source(SourceSet::PopulationRange(range)) => range.is_empty(),
             _ => false,
         }
     }
 
     fn sort_key(&self) -> (usize, u8) {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.sort_key(),
-            EntitySet(EntitySetInner::Union(left, right)) => {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.sort_key(),
+            EntitySetInner::Union(left, right) => {
                 // Union upper bound is additive; cost hint tracks the cheaper side.
                 let (left_upper, left_hint) = left.sort_key();
                 let (right_upper, right_hint) = right.sort_key();
@@ -368,7 +449,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                     left_hint.min(right_hint),
                 )
             }
-            EntitySet(EntitySetInner::Intersection(sets)) => {
+            EntitySetInner::Intersection(sets) => {
                 let mut upper = usize::MAX;
                 let mut hint = 0u8;
                 for set in sets {
@@ -381,7 +462,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 }
                 (upper, hint)
             }
-            EntitySet(EntitySetInner::Difference(left, right)) => {
+            EntitySetInner::Difference(left, right) => {
                 let (left_upper, left_hint) = left.sort_key();
                 let (_, right_hint) = right.sort_key();
                 (left_upper, left_hint.saturating_add(right_hint))
@@ -391,20 +472,13 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Structural equality check: same tree shape with same sources at leaves.
     fn structurally_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (EntitySet(EntitySetInner::Source(a)), EntitySet(EntitySetInner::Source(b))) => a == b,
-            (
-                EntitySet(EntitySetInner::Union(a1, a2)),
-                EntitySet(EntitySetInner::Union(b1, b2)),
-            )
-            | (
-                EntitySet(EntitySetInner::Difference(a1, a2)),
-                EntitySet(EntitySetInner::Difference(b1, b2)),
-            ) => a1.structurally_eq(b1) && a2.structurally_eq(b2),
-            (
-                EntitySet(EntitySetInner::Intersection(a_sets)),
-                EntitySet(EntitySetInner::Intersection(b_sets)),
-            ) => {
+        match (&self.inner, &other.inner) {
+            (EntitySetInner::Source(a), EntitySetInner::Source(b)) => a == b,
+            (EntitySetInner::Union(a1, a2), EntitySetInner::Union(b1, b2))
+            | (EntitySetInner::Difference(a1, a2), EntitySetInner::Difference(b1, b2)) => {
+                a1.structurally_eq(b1) && a2.structurally_eq(b2)
+            }
+            (EntitySetInner::Intersection(a_sets), EntitySetInner::Intersection(b_sets)) => {
                 a_sets.len() == b_sets.len()
                     && a_sets
                         .iter()
@@ -509,7 +583,7 @@ mod tests {
         );
         assert!(matches!(
             adjacent,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..6)
         ));
 
         let overlapping = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -518,14 +592,20 @@ mod tests {
             ));
         assert!(matches!(
             overlapping,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..8)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..8)
         ));
 
         let disjoint = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(1)))
             .union(EntitySet::from_source(SourceSet::<Person>::singleton(
                 EntityId::new(4),
             )));
-        assert!(matches!(disjoint, EntitySet(EntitySetInner::Union(_, _))));
+        assert!(matches!(
+            disjoint,
+            EntitySet {
+                inner: EntitySetInner::Union(_, _),
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -536,7 +616,7 @@ mod tests {
             ));
         assert!(matches!(
             overlap,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(4..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(4..6)
         ));
 
         let empty = EntitySet::from_source(SourceSet::<Person>::population_range(1..3))
@@ -545,7 +625,7 @@ mod tests {
             ));
         assert!(matches!(
             empty,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..0)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..0)
         ));
 
         let indexed_ids = finite_set(&[1, 2, 3]);
@@ -563,7 +643,7 @@ mod tests {
             ));
         assert!(matches!(
             unchanged,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..6)
         ));
 
         let empty = EntitySet::from_source(SourceSet::<Person>::population_range(2..6)).difference(
@@ -571,7 +651,7 @@ mod tests {
         );
         assert!(matches!(
             empty,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..0)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..0)
         ));
 
         let trim_left = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -580,7 +660,7 @@ mod tests {
             ));
         assert!(matches!(
             trim_left,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(4..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(4..6)
         ));
 
         let trim_right = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -589,13 +669,19 @@ mod tests {
             ));
         assert!(matches!(
             trim_right,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..4)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..4)
         ));
 
         let split = EntitySet::from_source(SourceSet::<Person>::population_range(2..8)).difference(
             EntitySet::from_source(SourceSet::<Person>::population_range(4..6)),
         );
-        assert!(matches!(split, EntitySet(EntitySetInner::Difference(_, _))));
+        assert!(matches!(
+            split,
+            EntitySet {
+                inner: EntitySetInner::Difference(_, _),
+                ..
+            }
+        ));
         assert!(split.contains(EntityId::<Person>::new(2)));
         assert!(split.contains(EntityId::<Person>::new(7)));
         assert!(!split.contains(EntityId::<Person>::new(4)));
@@ -783,7 +869,10 @@ mod tests {
 
         assert!(matches!(
             union,
-            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+            EntitySet {
+                inner: EntitySetInner::Source(SourceSet::PropertySet(_)),
+                ..
+            }
         ));
         assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![p1, p2]);
     }
@@ -807,7 +896,10 @@ mod tests {
 
         assert!(matches!(
             union,
-            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+            EntitySet {
+                inner: EntitySetInner::Source(SourceSet::PropertySet(_)),
+                ..
+            }
         ));
         assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![matching]);
     }

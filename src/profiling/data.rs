@@ -3,12 +3,12 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use super::computed_statistic::ComputableType;
-use super::Span;
 #[cfg(feature = "profiling")]
 use super::{
     ComputedStatistic, ComputedValue, CustomStatisticComputer, CustomStatisticPrinter,
     TOTAL_MEASURED,
 };
+use super::{QueryTimingSpan, Span};
 use crate::HashMap;
 
 #[cfg(feature = "profiling")]
@@ -30,6 +30,8 @@ pub struct ProfilingData {
     // We store span counts with the span duration, because they are updated when
     // the spans are and displayed with the spans rather than with the other counts.
     pub spans: HashMap<&'static str, (Duration, usize)>,
+    #[cfg(feature = "profiling")]
+    pub(super) query_timings: HashMap<String, QueryTiming>,
     // The number of spans that are currently open. We use this and the `total_measured` span to
     // compute the amount of time accounted for by all the spans. This together with total
     // runtime can tell you if there is significant runtime not accounted for by the existing
@@ -44,6 +46,53 @@ pub struct ProfilingData {
     // removing them to avoid a double borrow.
     #[cfg(feature = "profiling")]
     pub(super) computed_statistics: Vec<Option<ComputedStatistic>>,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Clone, Debug)]
+pub(super) struct QueryTiming {
+    pub(super) count: usize,
+    pub(super) total: Duration,
+    pub(super) min: Duration,
+    pub(super) max: Duration,
+}
+
+#[cfg(feature = "profiling")]
+impl QueryTiming {
+    fn new(elapsed: Duration) -> Self {
+        Self {
+            count: 1,
+            total: elapsed,
+            min: elapsed,
+            max: elapsed,
+        }
+    }
+
+    fn record(&mut self, elapsed: Duration) {
+        self.count += 1;
+        self.total += elapsed;
+        self.min = self.min.min(elapsed);
+        self.max = self.max.max(elapsed);
+    }
+
+    fn mean(&self) -> Duration {
+        let mean_nanos = self.total.as_nanos() / self.count as u128;
+        let secs = mean_nanos / 1_000_000_000;
+        let nanos = (mean_nanos % 1_000_000_000) as u32;
+        Duration::new(u64::try_from(secs).unwrap_or(u64::MAX), nanos)
+    }
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Clone, Debug)]
+pub(super) struct QueryTimingRow {
+    pub(super) query: String,
+    pub(super) count: usize,
+    pub(super) total: Duration,
+    pub(super) mean: Duration,
+    pub(super) min: Duration,
+    pub(super) max: Duration,
+    pub(super) percent_runtime: f64,
 }
 
 #[cfg(feature = "profiling")]
@@ -104,6 +153,21 @@ impl ProfilingData {
             .or_insert((elapsed, 1));
     }
 
+    pub(super) fn open_query_timing(&mut self, label: &'static str) -> QueryTimingSpan {
+        self.init_start_time();
+        QueryTimingSpan::new(label)
+    }
+
+    pub(super) fn record_query_timing(&mut self, label: &'static str, elapsed: Duration) {
+        self.init_start_time();
+        if let Some(timing) = self.query_timings.get_mut(label) {
+            timing.record(elapsed);
+        } else {
+            self.query_timings
+                .insert(label.to_string(), QueryTiming::new(elapsed));
+        }
+    }
+
     /// Constructs a table of ("Event Label", "Count", "Rate (per sec)"). Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_counts_table(&self) -> Vec<(String, usize, f64)> {
@@ -158,6 +222,38 @@ impl ProfilingData {
         rows
     }
 
+    /// Constructs a table of query timing rows. Used to print stats to the console and write
+    /// the stats to a file.
+    pub(super) fn get_query_timings_table(&self) -> Vec<QueryTimingRow> {
+        let elapsed = match self.start_time {
+            Some(start_time) => start_time.elapsed().as_secs_f64(),
+            None => 0.0,
+        };
+
+        let mut rows = self
+            .query_timings
+            .iter()
+            .map(|(query, timing)| QueryTimingRow {
+                query: query.clone(),
+                count: timing.count,
+                total: timing.total,
+                mean: timing.mean(),
+                min: timing.min,
+                max: timing.max,
+                percent_runtime: timing.total.as_secs_f64() / elapsed * 100.0,
+            })
+            .collect::<Vec<_>>();
+
+        rows.sort_by(|left, right| {
+            right
+                .total
+                .cmp(&left.total)
+                .then_with(|| left.query.cmp(&right.query))
+        });
+
+        rows
+    }
+
     pub(super) fn add_computed_statistic<T: ComputableType>(
         &mut self,
         label: &'static str,
@@ -172,6 +268,16 @@ impl ProfilingData {
             functions: T::new_functions(computer, printer),
         };
         self.computed_statistics.push(Some(computed_stat));
+    }
+
+    #[cfg(test)]
+    pub fn has_query_timing(&self, query: &str) -> bool {
+        self.query_timings.contains_key(query)
+    }
+
+    #[cfg(test)]
+    pub fn query_timing_total(&self, query: &str) -> Option<Duration> {
+        self.query_timings.get(query).map(|timing| timing.total)
     }
 }
 
@@ -202,6 +308,25 @@ pub fn open_span(label: &'static str) -> Span {
 pub fn close_span(_span: Span) {
     // The `span` is dropped here, and `ProfilingData::close_span` is called
     // from `Span::drop`. Incidentally, this is the same implementation as `span.drop()`!
+}
+
+#[cfg(feature = "profiling")]
+#[must_use]
+pub(crate) fn open_query_timing(label: &'static str) -> QueryTimingSpan {
+    let mut container = profiling_data();
+    container.open_query_timing(label)
+}
+
+#[cfg(not(feature = "profiling"))]
+#[must_use]
+pub(crate) fn open_query_timing(_label: &'static str) -> QueryTimingSpan {
+    QueryTimingSpan::new()
+}
+
+#[cfg(feature = "profiling")]
+pub(crate) fn record_query_timing(label: &'static str, elapsed: Duration) {
+    let mut container = profiling_data();
+    container.record_query_timing(label, elapsed);
 }
 
 #[cfg(all(test, feature = "profiling"))]
@@ -387,5 +512,87 @@ mod tests {
         let expected_percent = duration.as_secs_f64() / elapsed * 100.0;
         // Allow reasonable tolerance for timing variations
         assert!((*percent - expected_percent).abs() < 5.0);
+    }
+
+    #[test]
+    fn query_timing_first_observation_initializes_record() {
+        let mut data = ProfilingData::new();
+        data.record_query_timing("QueryTimingInit: (Age)", Duration::from_micros(10));
+
+        let timing = data.query_timings.get("QueryTimingInit: (Age)").unwrap();
+        assert_eq!(timing.count, 1);
+        assert_eq!(timing.total, Duration::from_micros(10));
+        assert_eq!(timing.min, Duration::from_micros(10));
+        assert_eq!(timing.max, Duration::from_micros(10));
+    }
+
+    #[test]
+    fn query_timing_later_observations_update_aggregate() {
+        let mut data = ProfilingData::new();
+        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(10));
+        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(30));
+        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(5));
+
+        let timing = data.query_timings.get("QueryTimingUpdate: (Age)").unwrap();
+        assert_eq!(timing.count, 3);
+        assert_eq!(timing.total, Duration::from_micros(45));
+        assert_eq!(timing.min, Duration::from_micros(5));
+        assert_eq!(timing.max, Duration::from_micros(30));
+    }
+
+    #[test]
+    fn query_timing_mean_uses_full_count() {
+        let timing = QueryTiming {
+            count: u32::MAX as usize + 1,
+            total: Duration::from_nanos((u32::MAX as u64 + 1) * 2),
+            min: Duration::from_nanos(2),
+            max: Duration::from_nanos(2),
+        };
+
+        assert_eq!(timing.mean(), Duration::from_nanos(2));
+    }
+
+    #[test]
+    fn query_timing_table_rows_include_mean_and_percent_runtime() {
+        let mut data = ProfilingData::new();
+        data.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(10));
+        data.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(30));
+        std::thread::sleep(Duration::from_millis(1));
+
+        let rows = data.get_query_timings_table();
+        let row = rows
+            .iter()
+            .find(|row| row.query == "QueryTimingTable: (Age)")
+            .unwrap();
+
+        assert_eq!(row.count, 2);
+        assert_eq!(row.total, Duration::from_millis(40));
+        assert_eq!(row.mean, Duration::from_millis(20));
+        assert_eq!(row.min, Duration::from_millis(10));
+        assert_eq!(row.max, Duration::from_millis(30));
+        assert!(row.percent_runtime.is_finite());
+    }
+
+    #[test]
+    fn query_timing_table_sorts_by_total_then_label() {
+        let mut data = ProfilingData::new();
+        data.record_query_timing("QueryTimingSort: B", Duration::from_micros(20));
+        data.record_query_timing("QueryTimingSort: C", Duration::from_micros(10));
+        data.record_query_timing("QueryTimingSort: A", Duration::from_micros(20));
+
+        let rows = data.get_query_timings_table();
+        let labels = rows
+            .iter()
+            .map(|row| row.query.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            labels,
+            vec![
+                "QueryTimingSort: A",
+                "QueryTimingSort: B",
+                "QueryTimingSort: C"
+            ]
+        );
     }
 }
