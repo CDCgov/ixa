@@ -324,6 +324,12 @@ mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
 
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("integration-tests/fixtures/global-properties")
+            .join(name)
+    }
+
     #[derive(Args, Debug)]
     struct CustomArgs {
         #[arg(short, long, default_value = "0")]
@@ -372,7 +378,7 @@ mod tests {
     #[test]
     fn test_run_with_config_path() {
         let test_args = BaseArgs {
-            config: Some(PathBuf::from("tests/data/global_properties_runner.json")),
+            config: Some(fixture_path("global_properties_runner.json")),
             ..Default::default()
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
