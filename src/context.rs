@@ -217,7 +217,7 @@ impl Context {
         self.plan_queue.add_plan(time, Box::new(callback), phase)
     }
 
-    fn evaluate_periodic_and_schedule_next(
+    pub(crate) fn evaluate_periodic_and_schedule_next(
         &mut self,
         period: f64,
         callback: impl Fn(&mut Context) + 'static,

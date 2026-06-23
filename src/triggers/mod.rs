@@ -38,8 +38,8 @@
 //! Each trigger criterion has its own observation data type, available as the criterion's
 //! [`TriggerCriterion::Observation`] associated type. For example, [`PropertyChangeTrigger`]
 //! observations use [`PropertyChangeTriggerEvent`] containing the entity ID and the previous and
-//! current property values. [`EntityCountTrigger`], [`PropertyValueCountTrigger`], and
-//! [`TimeTrigger`] use their corresponding `*TriggerEvent` types.
+//! current property values. [`EntityCountTrigger`], [`PropertyValueCountTrigger`], [`TimeTrigger`],
+//! and [`PeriodicTimeTrigger`] use their corresponding `*TriggerEvent` types.
 //!
 //! For events that do not need observation data, use [`TriggerCriterion::emit_value`] to emit
 //! a constant event value, or [`TriggerCriterion::emit_default`] when the event type implements
@@ -82,6 +82,7 @@
 //!
 
 mod entity_count;
+mod periodic_time;
 mod property_change;
 mod property_value_count;
 mod time;
@@ -90,6 +91,7 @@ mod toggling_trigger;
 use std::marker::PhantomData;
 
 pub use entity_count::{EntityCountTrigger, EntityCountTriggerEvent};
+pub use periodic_time::{PeriodicTimeTrigger, PeriodicTimeTriggerEvent};
 pub use property_change::{PropertyChangeTrigger, PropertyChangeTriggerEvent};
 pub use property_value_count::{PropertyValueCountTrigger, PropertyValueCountTriggerEvent};
 pub use time::{TimeTrigger, TimeTriggerEvent};
@@ -253,6 +255,13 @@ mod tests {
         phase: ExecutionPhase,
     }
 
+    #[derive(IxaEvent)]
+    struct PeriodicTimeReached {
+        time: f64,
+        period: f64,
+        phase: ExecutionPhase,
+    }
+
     #[test]
     fn register_property_value_count_trigger() {
         let mut context = Context::new();
@@ -306,6 +315,19 @@ mod tests {
     }
 
     #[test]
+    fn register_periodic_time_trigger_default_phase() {
+        let mut context = Context::new();
+
+        context.register_trigger(PeriodicTimeTrigger::every(1.0).emit_with(|event| {
+            PeriodicTimeReached {
+                time: event.time,
+                period: event.period,
+                phase: event.phase,
+            }
+        }));
+    }
+
+    #[test]
     fn register_constant_event_value() {
         #[derive(IxaEvent)]
         struct ShutdownRequested;
@@ -342,6 +364,127 @@ mod tests {
         context.execute();
 
         assert_eq!(observed_count.get(), 2);
+    }
+
+    #[test]
+    fn periodic_time_trigger_emits_on_current_time_then_periodically() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        context.register_trigger(PeriodicTimeTrigger::every(1.0).emit_with(|event| {
+            PeriodicTimeReached {
+                time: event.time,
+                period: event.period,
+                phase: event.phase,
+            }
+        }));
+        context.subscribe_to_event(move |_context, event: PeriodicTimeReached| {
+            assert_eq!(event.period, 1.0);
+            assert_eq!(event.phase, ExecutionPhase::Normal);
+            observed_clone.borrow_mut().push(event.time);
+        });
+
+        context.add_plan(2.0, |_| {});
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn periodic_time_trigger_start_with_delay() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        context.register_trigger(
+            PeriodicTimeTrigger::every(1.0)
+                .start_with_delay(0.5)
+                .emit_with(|event| PeriodicTimeReached {
+                    time: event.time,
+                    period: event.period,
+                    phase: event.phase,
+                }),
+        );
+        context.subscribe_to_event(move |_context, event: PeriodicTimeReached| {
+            observed_clone.borrow_mut().push(event.time);
+        });
+
+        context.add_plan(2.5, |_| {});
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![0.5, 1.5, 2.5]);
+    }
+
+    #[test]
+    fn periodic_time_trigger_start_at() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        context.register_trigger(PeriodicTimeTrigger::every(1.0).start_at(2.0).emit_with(
+            |event| PeriodicTimeReached {
+                time: event.time,
+                period: event.period,
+                phase: event.phase,
+            },
+        ));
+        context.subscribe_to_event(move |_context, event: PeriodicTimeReached| {
+            observed_clone.borrow_mut().push(event.time);
+        });
+
+        context.add_plan(4.0, |_| {});
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn periodic_time_trigger_uses_requested_phase() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        context.add_plan_with_phase(
+            1.0,
+            {
+                let observed = Rc::clone(&observed);
+                move |_| observed.borrow_mut().push("first")
+            },
+            ExecutionPhase::First,
+        );
+        context.add_plan_with_phase(
+            1.0,
+            {
+                let observed = Rc::clone(&observed);
+                move |_| observed.borrow_mut().push("normal")
+            },
+            ExecutionPhase::Normal,
+        );
+        context.add_plan_with_phase(
+            1.0,
+            {
+                let observed = Rc::clone(&observed);
+                move |_| observed.borrow_mut().push("last")
+            },
+            ExecutionPhase::Last,
+        );
+
+        PeriodicTimeTrigger::every_with_phase(1.0, ExecutionPhase::Last)
+            .start_at(1.0)
+            .install(&mut context, {
+                let observed = Rc::clone(&observed);
+                move |_context, event| {
+                    assert_eq!(event.phase, ExecutionPhase::Last);
+                    observed.borrow_mut().push("trigger");
+                }
+            });
+
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec!["first", "normal", "last", "trigger"]
+        );
     }
 
     #[test]
@@ -569,5 +712,79 @@ mod tests {
         context.execute();
 
         assert_eq!(*observed.borrow(), vec![(1, Direction::Decreasing)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "period must be greater than 0")]
+    fn periodic_time_trigger_zero_period_panics() {
+        let _ = PeriodicTimeTrigger::every(0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "period must be greater than 0")]
+    fn periodic_time_trigger_negative_period_panics() {
+        let _ = PeriodicTimeTrigger::every(-1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "period must be greater than 0")]
+    fn periodic_time_trigger_nan_period_panics() {
+        let _ = PeriodicTimeTrigger::every(f64::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "period must be greater than 0")]
+    fn periodic_time_trigger_infinite_period_panics() {
+        let _ = PeriodicTimeTrigger::every(f64::INFINITY);
+    }
+
+    #[test]
+    #[should_panic(expected = "period must be greater than 0")]
+    fn periodic_time_trigger_every_with_phase_validates_period() {
+        let _ = PeriodicTimeTrigger::every_with_phase(0.0, ExecutionPhase::Last);
+    }
+
+    #[test]
+    #[should_panic(expected = "delay must be greater than or equal to 0")]
+    fn periodic_time_trigger_negative_delay_panics() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_with_delay(-1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "delay must be greater than or equal to 0")]
+    fn periodic_time_trigger_nan_delay_panics() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_with_delay(f64::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "delay must be greater than or equal to 0")]
+    fn periodic_time_trigger_infinite_delay_panics() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_with_delay(f64::INFINITY);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot be NaN")]
+    fn periodic_time_trigger_nan_start_time_panics() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_at(f64::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot be infinite")]
+    fn periodic_time_trigger_infinite_start_time_panics() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_at(f64::INFINITY);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot be less than the current time")]
+    fn periodic_time_trigger_start_at_past_panics() {
+        let mut context = Context::new();
+        context.add_plan(1.0, |_| {});
+        context.execute();
+
+        context.register_trigger(
+            PeriodicTimeTrigger::every(1.0)
+                .start_at(0.5)
+                .emit_value::<CaseThresholdReached>(CaseThresholdReached),
+        );
     }
 }
