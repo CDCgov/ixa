@@ -3,14 +3,27 @@
 //! [`TimeTrigger`] observes the simulation clock and emits when the simulation reaches a configured
 //! time and execution phase.
 //!
-//! Construct one with [`TimeTrigger::at`] to emit in
-//! [`ExecutionPhase::Normal`](crate::ExecutionPhase::Normal), or [`TimeTrigger::at_phase`] to
-//! choose an explicit phase.
+//! ## Construction
+//!
+//! ```rust,ignore
+//! TimeTrigger::at(at)
+//! TimeTrigger::at_phase(at, phase)
+//! TimeTrigger::at(at).with_phase(phase)
+//! ```
+//!
+//! ## Observation
 //!
 //! The observation data passed to
 //! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is [`TimeTriggerEvent`]. It
-//! contains the simulation time observed when the scheduled plan runs and the phase used to
-//! schedule it.
+//! contains the simulation time observed when the scheduled plan runs and the phase used to schedule
+//! it:
+//!
+//! ```rust,ignore
+//! pub struct TimeTriggerEvent {
+//!     pub time: f64,
+//!     pub phase: ExecutionPhase,
+//! }
+//! ```
 //!
 //! ## Semantics
 //!
@@ -18,6 +31,7 @@
 //! [`context.add_plan`](crate::Context::add_plan) /
 //! [`context.add_plan_with_phase`](crate::Context::add_plan_with_phase).
 //!
+//! [`TimeTrigger::at`] uses [`ExecutionPhase::Normal`](crate::ExecutionPhase::Normal).
 //! Since time is monotonic, this criterion does not use [`Direction`](super::Direction) or
 //! [`TriggerMode`](super::TriggerMode). It emits once, when its scheduled plan executes. If several
 //! plans are scheduled for the same time, the selected [`ExecutionPhase`](crate::ExecutionPhase)
@@ -77,6 +91,12 @@ impl TimeTrigger {
     #[must_use]
     pub fn at_phase(at: f64, phase: ExecutionPhase) -> Self {
         Self { at, phase }
+    }
+
+    #[must_use]
+    pub fn with_phase(mut self, phase: ExecutionPhase) -> Self {
+        self.phase = phase;
+        self
     }
 }
 

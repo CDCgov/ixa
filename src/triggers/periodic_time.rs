@@ -3,17 +3,30 @@
 //! [`PeriodicTimeTrigger`] observes the simulation clock and emits repeatedly at a configured
 //! period and execution phase.
 //!
-//! Construct one with [`PeriodicTimeTrigger::every`] to emit in
-//! [`ExecutionPhase::Normal`](crate::ExecutionPhase::Normal), or
-//! [`PeriodicTimeTrigger::every_with_phase`] to choose an explicit phase. Call
-//! [`PeriodicTimeTrigger::with_phase`] to update the phase, [`PeriodicTimeTrigger::start_with_delay`]
-//! to begin the periodic cycle at `current_time + delay`, or
-//! [`PeriodicTimeTrigger::start_at`] to begin at an absolute simulation time.
+//! ## Construction
+//!
+//! ```rust,ignore
+//! PeriodicTimeTrigger::every(period)
+//! PeriodicTimeTrigger::every_with_phase(period, phase)
+//! PeriodicTimeTrigger::every(period).with_phase(phase) // Equivalent to `every_with_phase`
+//! PeriodicTimeTrigger::every(period).start_with_delay(delay)
+//! PeriodicTimeTrigger::every(period).start_at(start_time)
+//! ```
+//!
+//! ## Observation
 //!
 //! The observation data passed to
 //! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
 //! [`PeriodicTimeTriggerEvent`]. It contains the simulation time observed when the scheduled
-//! periodic plan runs, the configured period, and the phase used to schedule it.
+//! periodic plan runs, the configured period, and the phase used to schedule it:
+//!
+//! ```rust,ignore
+//! pub struct PeriodicTimeTriggerEvent {
+//!     pub time: f64,
+//!     pub period: f64,
+//!     pub phase: ExecutionPhase,
+//! }
+//! ```
 //!
 //! ## Semantics
 //!
@@ -22,6 +35,10 @@
 //! queue. Unlike [`Context::add_periodic_plan_with_phase`](crate::Context::add_periodic_plan_with_phase),
 //! the first occurrence is seeded explicitly so it can start at the current time, after a delay, or
 //! at an absolute simulation time.
+//!
+//! By default, the first occurrence is scheduled at `context.get_current_time()` when the trigger is
+//! installed, and the execution phase is
+//! [`ExecutionPhase::Normal`](crate::ExecutionPhase::Normal).
 //!
 //! The period must be positive, finite, and not NaN. A delay must be non-negative, finite, and not
 //! NaN. An absolute start time must be finite and not NaN; the context validates at trigger

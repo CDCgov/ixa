@@ -3,13 +3,25 @@
 //! [`EntityCountTrigger`] observes
 //! [`EntityCreatedEvent`](crate::entity::events::EntityCreatedEvent) for a single entity type and
 //! emits when the total number of entities of that type increases to the configured threshold.
-//! Construct one with [`EntityCountTrigger::increases_to`].
+//!
+//! ## Construction
+//!
+//! ```rust,ignore
+//! EntityCountTrigger::<E>::increases_to(threshold)
+//! ```
+//!
+//! ## Observation
 //!
 //! The observation data passed to
 //! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
-//! [`EntityCountTriggerEvent`]. It contains the newly-created entity's ID and the entity count
-//! observed immediately after that entity was added, which always equals the threshold the trigger
-//! was created with.
+//! [`EntityCountTriggerEvent`]:
+//!
+//! ```rust,ignore
+//! pub struct EntityCountTriggerEvent<E: Entity> {
+//!     pub entity_id: EntityId<E>,
+//!     pub count: usize,
+//! }
+//! ```
 //!
 //! ## Semantics
 //!
@@ -17,6 +29,7 @@
 //! criterion does not use [`Direction`](super::Direction) or [`TriggerMode`](super::TriggerMode).
 //!
 //! - It fires when a creation makes the count equal to the threshold.
+//! - The observed count always equals the threshold the trigger was created with.
 //! - If the entity population already equals or exceeds the threshold _before_ the trigger is
 //!   registered, it will never emit.
 //! - A threshold of `0` will not be reached by an entity creation and is therefore not allowed.

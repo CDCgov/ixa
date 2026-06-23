@@ -6,19 +6,39 @@
 //! entity/property pair and emits when the count of entities with a configured property value
 //! crosses a configured threshold.
 //!
-//! Construct one with [`PropertyValueCountTrigger::increases_to`] to emit when the count increases
-//! to a threshold, [`PropertyValueCountTrigger::decreases_to`] to emit when the count decreases to a
-//! threshold, or [`PropertyValueCountTrigger::changes_to`] to emit when the count reaches the
-//! threshold in either direction. Call [`PropertyValueCountTrigger::once`] to emit only on the first
-//! observed crossing, or [`PropertyValueCountTrigger::repeating`] to restore the default behavior
-//! of emitting on every observed crossing that matches the configured direction filter, if any.
+//! ## Construction
+//!
+//! ```rust,ignore
+//! PropertyValueCountTrigger::<E, P>::increases_to(value, threshold)
+//! PropertyValueCountTrigger::<E, P>::decreases_to(value, threshold)
+//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold)
+//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).once()
+//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).repeating()
+//! ```
+//!
+//! ## Observation
 //!
 //! The observation data passed to
 //! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
 //! [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose creation or property write
 //! caused the crossing, the tracked property value, the new count, the observed
 //! [`Direction`](super::Direction), the configured direction filter as `Option<Direction>`, and the
-//! selected [`TriggerMode`](super::TriggerMode).
+//! selected [`TriggerMode`](super::TriggerMode):
+//!
+//! ```rust,ignore
+//! pub struct PropertyValueCountTriggerEvent<E, P>
+//! where
+//!     E: Entity,
+//!     P: Property<E>,
+//! {
+//!     pub entity_id: EntityId<E>,
+//!     pub value: P,
+//!     pub count: usize,
+//!     pub direction_filter: Option<Direction>,
+//!     pub direction: Direction,
+//!     pub mode: TriggerMode,
+//! }
+//! ```
 //!
 //! ## Semantics
 //!

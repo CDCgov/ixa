@@ -6,19 +6,36 @@
 //! entity/property pair and emits when a property write matches its configured previous value,
 //! current value, or both.
 //!
-//! Construct one with [`PropertyChangeTrigger::from`] to match a previous value,
-//! [`PropertyChangeTrigger::to`] to match a current value, or
-//! [`PropertyChangeTrigger::from_to`] to require both. Since there is no constructor with both
-//! sides omitted, every [`PropertyChangeTrigger`] has at least one value constraint. Call
-//! [`PropertyChangeTrigger::once`] to emit only on the first observed matching property change, or
-//! [`PropertyChangeTrigger::repeating`] to restore the default behavior of emitting on every
-//! observed matching property change.
+//! ## Construction
+//!
+//! ```rust,ignore
+//! PropertyChangeTrigger::<E, P>::from(from)
+//! PropertyChangeTrigger::<E, P>::to(to)
+//! PropertyChangeTrigger::<E, P>::from_to(from, to)
+//! PropertyChangeTrigger::<E, P>::from(from).once()
+//! PropertyChangeTrigger::<E, P>::from(from).repeating()
+//! ```
+//!
+//! ## Observation
 //!
 //! The observation data passed to
 //! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
 //! [`PropertyChangeTriggerEvent`]. It contains the entity ID, the previous property value, the
 //! current property value, and the selected [`TriggerMode`](super::TriggerMode) with which the
-//! trigger was created.
+//! trigger was created:
+//!
+//! ```rust,ignore
+//! pub struct PropertyChangeTriggerEvent<E, P>
+//! where
+//!     E: Entity,
+//!     P: Property<E>,
+//! {
+//!     pub entity_id: EntityId<E>,
+//!     pub previous: P,
+//!     pub current: P,
+//!     pub mode: TriggerMode,
+//! }
+//! ```
 //!
 //! ## Semantics
 //!

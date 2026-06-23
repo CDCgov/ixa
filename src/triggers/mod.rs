@@ -204,8 +204,6 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
-    use ixa_derive::IxaEvent;
-
     use super::*;
     use crate::entity::EntityId;
     use crate::{
@@ -338,6 +336,26 @@ mod tests {
             TimeTrigger::at_phase(50.0, ExecutionPhase::Last)
                 .emit_value::<ShutdownRequested>(ShutdownRequested),
         );
+    }
+
+    #[test]
+    fn time_trigger_with_phase_sets_phase() {
+        let mut context = Context::new();
+        let observed_phase = Rc::new(Cell::new(None));
+        let observed_phase_clone = Rc::clone(&observed_phase);
+
+        context.register_trigger(
+            TimeTrigger::at(1.0)
+                .with_phase(ExecutionPhase::Last)
+                .emit_with(|event| StopTimeReached { phase: event.phase }),
+        );
+        context.subscribe_to_event(move |_context, event: StopTimeReached| {
+            observed_phase_clone.set(Some(event.phase));
+        });
+
+        context.execute();
+
+        assert_eq!(observed_phase.get(), Some(ExecutionPhase::Last));
     }
 
     #[test]

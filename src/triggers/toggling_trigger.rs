@@ -12,6 +12,66 @@
 //! same count reaches an upper threshold. The thresholds themselves are ordinary criteria; the
 //! toggling trigger only gates those criteria by its current active/inactive state.
 //!
+//! ## Construction
+//!
+//! ```rust,ignore
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_active()
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_inactive()
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).once()
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).repeating()
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+//!     .emit_with(make_active_event, make_inactive_event)
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+//!     .emit_values(active_event, inactive_event)
+//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+//!     .emit_defaults::<ActiveEv, InactiveEv>()
+//! ```
+//!
+//! ```rust,ignore
+//! TogglingTrigger::new(
+//!     activation_criterion,
+//!     make_active_event,
+//!     deactivation_criterion,
+//!     make_inactive_event,
+//! )
+//! TogglingTrigger::new(
+//!     activation_criterion,
+//!     make_active_event,
+//!     deactivation_criterion,
+//!     make_inactive_event,
+//! ).initially_active()
+//! TogglingTrigger::new(
+//!     activation_criterion,
+//!     make_active_event,
+//!     deactivation_criterion,
+//!     make_inactive_event,
+//! ).initially_inactive()
+//! TogglingTrigger::new(
+//!     activation_criterion,
+//!     make_active_event,
+//!     deactivation_criterion,
+//!     make_inactive_event,
+//! ).once()
+//! TogglingTrigger::new(
+//!     activation_criterion,
+//!     make_active_event,
+//!     deactivation_criterion,
+//!     make_inactive_event,
+//! ).repeating()
+//! ```
+//!
+//! ## Observation
+//!
+//! `TogglingTrigger` does not define its own observation struct. The activation event constructor
+//! receives the activation criterion's observation, and the deactivation event constructor receives
+//! the deactivation criterion's observation:
+//!
+//! ```rust,ignore
+//! make_active_event: impl Fn(AC::Observation) -> ActiveEv
+//! make_inactive_event: impl Fn(DC::Observation) -> InactiveEv
+//! ```
+//!
 //! ## Semantics
 //!
 //! - If the trigger is inactive and the activation criterion matches, a single activation event is
@@ -396,8 +456,6 @@ where
 mod tests {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
-
-    use ixa_derive::IxaEvent;
 
     use super::super::{
         ContextTriggersExt, Direction, EntityCountTrigger, PropertyChangeTrigger,
