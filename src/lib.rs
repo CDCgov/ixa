@@ -69,7 +69,14 @@ pub use network::{ContextNetworkExt, Edge, EdgeType};
 
 pub mod macros;
 
-pub mod plan;
+pub mod plan_queue;
+/// Compatibility re-exports for plan-related public API.
+///
+/// The plan queue implementation lives in [`crate::plan_queue`]. This module is
+/// retained so existing `ixa::plan::PlanId` imports continue to work.
+pub mod plan {
+    pub use crate::plan_queue::PlanId;
+}
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
 
