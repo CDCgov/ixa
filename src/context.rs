@@ -167,7 +167,6 @@ impl Context {
     ///
     /// Handlers will be called upon event emission in order of subscription as
     /// queued `Callback`s with the appropriate event.
-    #[allow(clippy::missing_panics_doc)]
     pub fn subscribe_to_event<E: IxaEvent>(
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
@@ -231,7 +230,6 @@ impl Context {
     ///
     /// Receivers will handle events in the order that they have subscribed and
     /// are queued as callbacks
-    #[allow(clippy::missing_panics_doc)]
     pub fn emit_event<E: IxaEvent>(&mut self, event: E) {
         // Destructure to obtain event handlers and plan queue
         let Context {
@@ -377,7 +375,6 @@ impl Context {
     ///
     /// Returns a mutable reference to the data container
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let index = T::index_within_context();
 
@@ -408,7 +405,6 @@ impl Context {
     ///
     /// Returns a reference to the data container if it exists or else `None`
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
     pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
         let index = T::index_within_context();
         self.data_plugins
@@ -1112,8 +1108,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
     fn periodic_plan_self_schedules() {
         // checks whether the person properties report schedules itself
         // based on whether there are plans in the queue

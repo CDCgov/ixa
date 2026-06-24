@@ -26,7 +26,6 @@ fn attempt_infection(context: &mut Context) {
     // An alternative implementation calculates each person's time to infection
     // at the beginning of the simulation and schedules their infection at that time.
 
-    #[allow(clippy::cast_precision_loss)]
     let next_attempt_time = context.get_current_time()
         + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap()) / population_size as f64;
 
