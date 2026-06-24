@@ -19,7 +19,7 @@ use crate::execution_stats::{
     ExecutionStatistics,
 };
 use crate::global_properties::get_global_property_count;
-use crate::plan::{PlanId, Queue};
+use crate::plan_queue::{PlanId, PlanQueue};
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
 /// The common callback used by multiple [`Context`] methods for future events
@@ -53,6 +53,14 @@ impl Display for ExecutionPhase {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ShutdownStatus {
+    None,
+    Normal,
+    ShutdownTimePlans,
+    Stopped,
+}
+
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
@@ -81,7 +89,7 @@ impl Display for ExecutionPhase {
 /// occurred and have other modules take turns reacting to these occurrences.
 ///
 pub struct Context {
-    plan_queue: Queue<Box<Callback>, ExecutionPhase>,
+    plan_queue: PlanQueue,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
     pub(crate) entity_store: EntityStore,
@@ -89,7 +97,7 @@ pub struct Context {
     pub(crate) global_properties: Vec<OnceCell<Box<dyn Any>>>,
     current_time: Option<f64>,
     start_time: Option<f64>,
-    shutdown_requested: bool,
+    shutdown_status: ShutdownStatus,
     execution_profiler: ExecutionProfilingCollector,
     pub(crate) print_execution_statistics: bool,
 }
@@ -109,7 +117,7 @@ impl Context {
             .collect();
 
         Context {
-            plan_queue: Queue::new(),
+            plan_queue: PlanQueue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
             entity_store: EntityStore::new(),
@@ -117,7 +125,7 @@ impl Context {
             global_properties,
             current_time: None,
             start_time: None,
-            shutdown_requested: false,
+            shutdown_status: ShutdownStatus::None,
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
         }
@@ -215,6 +223,33 @@ impl Context {
             current
         );
         self.plan_queue.add_plan(time, Box::new(callback), phase)
+    }
+
+    /// Add a plan to execute during shutdown-time in the normal phase.
+    ///
+    /// Shutdown-time plans execute after regular plans at the current simulation
+    /// time are exhausted during normal shutdown, and after natural exhaustion of
+    /// the regular plan queue.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    pub fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
+        self.add_shutdown_plan_with_phase(callback, ExecutionPhase::Normal)
+    }
+
+    /// Add a plan to execute during shutdown-time with the specified phase.
+    ///
+    /// Shutdown-time plans have no simulation time. They are ordered by phase and
+    /// insertion order.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    pub fn add_shutdown_plan_with_phase(
+        &mut self,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        self.plan_queue.add_shutdown_plan(Box::new(callback), phase)
     }
 
     fn evaluate_periodic_and_schedule_next(
@@ -346,11 +381,26 @@ impl Context {
             .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }
 
-    /// Shutdown the simulation cleanly, abandoning all events after whatever
-    /// is currently executing.
+    /// Request normal shutdown.
+    ///
+    /// Normal shutdown stops simulation time from advancing. Execution continues
+    /// through queued callbacks, regular plans at the current time, and then
+    /// shutdown-time plans. Calling `shutdown` during shutdown-time execution
+    /// does not return execution to regular current-time plans.
     pub fn shutdown(&mut self) {
         trace!("shutdown context");
-        self.shutdown_requested = true;
+        if self.shutdown_status == ShutdownStatus::None {
+            self.shutdown_status = ShutdownStatus::Normal;
+        }
+    }
+
+    /// Stop the current event loop immediately.
+    ///
+    /// Abort only stops the current `execute` loop. The stopped status is cleared
+    /// when `execute` is called again.
+    pub fn abort(&mut self) {
+        trace!("abort context");
+        self.shutdown_status = ShutdownStatus::Stopped;
     }
 
     /// Get the current simulation time
@@ -414,19 +464,22 @@ impl Context {
     pub fn execute(&mut self) {
         trace!("entering event loop");
 
+        if self.shutdown_status == ShutdownStatus::Stopped {
+            self.shutdown_status = ShutdownStatus::None;
+        }
+
         if self.current_time.is_none() {
             self.current_time = Some(self.start_time.unwrap_or(0.0));
         }
 
         // Start plan loop
         loop {
-            if self.shutdown_requested {
-                self.shutdown_requested = false;
+            if self.shutdown_status == ShutdownStatus::Stopped {
+                self.shutdown_status = ShutdownStatus::None;
                 break;
-            } else {
-                self.execute_single_step();
             }
 
+            self.execute_single_step();
             self.execution_profiler.refresh();
         }
 
@@ -440,25 +493,43 @@ impl Context {
         }
     }
 
-    /// Executes a single step of the simulation, prioritizing tasks as follows:
-    ///   1. Callbacks
-    ///   2. Plans
-    ///   3. Shutdown
+    /// Executes a single callback, plan, or shutdown status transition.
     pub fn execute_single_step(&mut self) {
-        // If there is a callback, run it.
         if let Some(callback) = self.callback_queue.pop_front() {
             trace!("calling callback");
             callback(self);
+            return;
         }
-        // There aren't any callbacks, so look at the first plan.
-        else if let Some(plan) = self.plan_queue.get_next_plan() {
-            trace!("calling plan at {:.6}", plan.time);
-            self.current_time = Some(plan.time);
-            (plan.data)(self);
-        } else {
-            trace!("No callbacks or plans; exiting event loop");
-            // OK, there aren't any plans, so we're done.
-            self.shutdown_requested = true;
+
+        match self.shutdown_status {
+            ShutdownStatus::None => {
+                if let Some(plan) = self.plan_queue.pop_next() {
+                    trace!("calling plan at {:.6}", plan.time);
+                    self.current_time = Some(plan.time);
+                    (plan.data)(self);
+                } else {
+                    self.shutdown_status = ShutdownStatus::ShutdownTimePlans;
+                }
+            }
+            ShutdownStatus::Normal => {
+                if let Some(plan) = self.plan_queue.pop_next_at(self.get_current_time()) {
+                    trace!("calling plan at {:.6}", plan.time);
+                    (plan.data)(self);
+                } else {
+                    self.shutdown_status = ShutdownStatus::ShutdownTimePlans;
+                }
+            }
+            ShutdownStatus::ShutdownTimePlans => {
+                if let Some(plan) = self.plan_queue.pop_next_shutdown() {
+                    trace!("calling shutdown-time plan");
+                    (plan.data)(self);
+                } else {
+                    self.shutdown_status = ShutdownStatus::Stopped;
+                }
+            }
+            ShutdownStatus::Stopped => {
+                self.shutdown_status = ShutdownStatus::None;
+            }
         }
     }
 
@@ -485,6 +556,12 @@ pub trait ContextBase: Sized {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId;
+    fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+    fn add_shutdown_plan_with_phase(
+        &mut self,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId;
     fn add_periodic_plan_with_phase(
         &mut self,
         period: f64,
@@ -501,6 +578,7 @@ pub trait ContextBase: Sized {
     fn get_current_time(&self) -> f64;
     #[must_use]
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+    fn abort(&mut self);
 }
 impl ContextBase for Context {
     delegate::delegate! {
@@ -509,6 +587,8 @@ impl ContextBase for Context {
             fn emit_event<E: IxaEvent>(&mut self, event: E);
             fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
+            fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+            fn add_shutdown_plan_with_phase(&mut self, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
             fn cancel_plan(&mut self, plan_id: &PlanId);
             fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
@@ -516,6 +596,7 @@ impl ContextBase for Context {
             fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
             fn get_current_time(&self) -> f64;
             fn get_execution_statistics(&mut self) -> ExecutionStatistics;
+            fn abort(&mut self);
         }
     }
 }
@@ -879,23 +960,29 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_cancels_plans() {
-        let mut context = Context::new();
-        add_plan(&mut context, 1.0, 1);
-        context.add_plan(1.5, Context::shutdown);
-        add_plan(&mut context, 2.0, 2);
-        context.execute();
-        assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
-    }
-
-    #[test]
-    fn shutdown_cancels_callbacks() {
+    fn shutdown_runs_current_time_plans_and_preserves_future_plan() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
         context.add_plan(1.5, |context| {
-            // Note that we add the callback *before* we call shutdown
-            // but shutdown cancels everything.
+            context.get_data_mut(ComponentA).push(2);
+            context.shutdown();
+        });
+        add_plan(&mut context, 1.5, 3);
+        add_plan(&mut context, 2.0, 2);
+        context.execute();
+        assert_eq!(context.get_current_time(), 1.5);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+
+        context.execute();
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 2]);
+    }
+
+    #[test]
+    fn shutdown_runs_queued_callbacks() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        context.add_plan(1.5, |context| {
             context.queue_callback(|context| {
                 context.get_data_mut(ComponentA).push(3);
             });
@@ -903,11 +990,11 @@ mod tests {
         });
         context.execute();
         assert_eq!(context.get_current_time(), 1.5);
-        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 3]);
     }
 
     #[test]
-    fn shutdown_cancels_events() {
+    fn shutdown_runs_queued_events() {
         let mut context = Context::new();
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
@@ -917,7 +1004,219 @@ mod tests {
         context.emit_event(Event1 { data: 1 });
         context.shutdown();
         context.execute();
-        assert_eq!(*obs_data.borrow(), 0);
+        assert_eq!(*obs_data.borrow(), 1);
+    }
+
+    #[test]
+    fn shutdown_runs_regular_plans_at_current_time_all_phases() {
+        let mut context = Context::new();
+        context.add_plan_with_phase(
+            1.0,
+            |context| {
+                context.get_data_mut(ComponentA).push(1);
+            },
+            ExecutionPhase::First,
+        );
+        context.add_plan(1.0, |context| {
+            context.get_data_mut(ComponentA).push(2);
+            context.shutdown();
+        });
+        add_plan(&mut context, 1.0, 3);
+        add_plan_with_phase(&mut context, 1.0, 4, ExecutionPhase::Last);
+        add_plan(&mut context, 2.0, 5);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn shutdown_time_plans_run_after_current_time_plans() {
+        let mut context = Context::new();
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(3);
+        });
+        context.add_plan(1.0, |context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.shutdown();
+        });
+        add_plan(&mut context, 1.0, 2);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn shutdown_plan_phase_order_is_respected() {
+        let mut context = Context::new();
+        context.add_shutdown_plan_with_phase(
+            |context| {
+                context.get_data_mut(ComponentA).push(3);
+            },
+            ExecutionPhase::Last,
+        );
+        context.add_shutdown_plan_with_phase(
+            |context| {
+                context.get_data_mut(ComponentA).push(1);
+            },
+            ExecutionPhase::First,
+        );
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(2);
+        });
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn shutdown_plan_callbacks_are_drained() {
+        let mut context = Context::new();
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.queue_callback(|context| {
+                context.get_data_mut(ComponentA).push(2);
+            });
+        });
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(3);
+        });
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn shutdown_time_does_not_return_to_regular_queue() {
+        let mut context = Context::new();
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.add_plan(context.get_current_time(), |context| {
+                context.get_data_mut(ComponentA).push(3);
+            });
+        });
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(2);
+        });
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn cancel_plan_can_cancel_shutdown_plan() {
+        let mut context = Context::new();
+        let to_cancel = context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+        });
+        context.cancel_plan(&to_cancel);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn abort_inside_plan_stops_execute_loop() {
+        let mut context = Context::new();
+        context.add_plan(1.0, |context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.queue_callback(|context| {
+                context.get_data_mut(ComponentA).push(2);
+            });
+            context.abort();
+        });
+        add_plan(&mut context, 2.0, 3);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn abort_before_execute_does_not_poison_later_execute() {
+        let mut context = Context::new();
+        context.abort();
+        add_plan(&mut context, 1.0, 1);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn abort_during_normal_shutdown_exits_immediately() {
+        let mut context = Context::new();
+        context.add_plan(1.0, |context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.shutdown();
+        });
+        context.add_plan(1.0, |context| {
+            context.get_data_mut(ComponentA).push(2);
+            context.abort();
+        });
+        add_plan(&mut context, 1.0, 3);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn shutdown_does_not_restart_stopped_status() {
+        let mut context = Context::new();
+        context.abort();
+        context.shutdown();
+        add_plan(&mut context, 1.0, 1);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn execute_single_step_runs_one_status_transition() {
+        let mut context = Context::new();
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+        });
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn execute_single_step_stopped_runs_callback_then_resets() {
+        let mut context = Context::new();
+        context.abort();
+        context.queue_callback(|context| {
+            context.get_data_mut(ComponentA).push(1);
+        });
+        add_plan(&mut context, 0.0, 2);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
     }
 
     #[test]
@@ -1221,8 +1520,8 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_requested_reset() {
-        // This test verifies that shutdown_requested is properly reset after
+    fn shutdown_status_reset() {
+        // This test verifies that shutdown_status is properly reset after
         // being acted upon. This allows the context to be reused after shutdown.
         let mut context = Context::new();
         let _: PersonId = context.add_entity(with!(Person, Age(50))).unwrap();
@@ -1243,14 +1542,14 @@ mod tests {
         });
 
         // Second execute - should execute the new plan
-        // If shutdown_requested wasn't reset, this would immediately break
+        // If shutdown_status wasn't reset, this would immediately break
         // without executing the plan, leaving population at 1.
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(
             context.get_entity_count::<Person>(),
             2,
-            "If this fails, shutdown_requested was not properly reset"
+            "If this fails, shutdown_status was not properly reset"
         );
     }
 }
