@@ -108,12 +108,21 @@ impl PlanQueue {
         self.next_time().is_none()
     }
 
+    /// Return the time the next plan is scheduled for, if there is one.
     #[must_use]
     pub(crate) fn next_time(&mut self) -> Option<f64> {
-        Self::discard_canceled_roots(&mut self.queue, &self.data_map);
+        // First trim any cancelled plans. We want the time of the next legitimate plan.
+        while self
+            .queue
+            .peek()
+            .is_some_and(|entry| !self.data_map.contains_key(&entry.plan_id))
+        {
+            self.queue.pop();
+        }
         self.queue.peek().map(|e| e.time)
     }
 
+    /// Completely empties the queue, including the plans scheduled at shutdown time.
     #[allow(dead_code)]
     pub(crate) fn clear(&mut self) {
         self.data_map.clear();
@@ -128,7 +137,17 @@ impl PlanQueue {
     /// empty.
     pub(crate) fn pop_next(&mut self) -> Option<Plan> {
         trace!("getting next plan");
-        Self::pop_next_from_heap(&mut self.queue, &mut self.data_map)
+        loop {
+            // Return `None` if `pop` fails.
+            let entry = self.queue.pop()?;
+            // Discard any cancelled plans we encounter.
+            if let Some(data) = self.data_map.remove(&entry.plan_id) {
+                return Some(Plan {
+                    time: entry.time,
+                    data,
+                });
+            }
+        }
     }
 
     /// Retrieve the earliest regular plan only if it is scheduled at `time`.
@@ -136,12 +155,29 @@ impl PlanQueue {
     /// Returns `None` without removing a future plan if the next regular plan is
     /// later than `time`.
     pub(crate) fn pop_next_at(&mut self, time: f64) -> Option<Plan> {
-        Self::discard_canceled_roots(&mut self.queue, &self.data_map);
-        match self.queue.peek() {
-            Some(entry) if entry.time == time => {
-                Self::pop_next_from_heap(&mut self.queue, &mut self.data_map)
+        loop {
+            match self.queue.peek() {
+                // Trim any cancelled plans
+                Some(entry) if !self.data_map.contains_key(&entry.plan_id) => {
+                    self.queue.pop();
+                }
+
+                // Return only if the plan is scheduled for the given time
+                Some(entry) if entry.time == time => {
+                    let entry = self.queue.pop().expect("peeked entry must exist");
+                    let data = self
+                        .data_map
+                        .remove(&entry.plan_id)
+                        .expect("live plan must have callback");
+                    return Some(Plan {
+                        time: entry.time,
+                        data,
+                    });
+                }
+
+                // There are no plans scheduled at the given time
+                _ => return None,
             }
-            _ => None,
         }
     }
 
@@ -151,41 +187,22 @@ impl PlanQueue {
     /// shutdown-time queue is empty.
     pub(crate) fn pop_next_shutdown(&mut self) -> Option<Plan> {
         trace!("getting next shutdown-time plan");
-        Self::pop_next_from_heap(&mut self.shutdown_queue, &mut self.data_map)
+        loop {
+            // Return `None` if `pop` fails.
+            let entry = self.shutdown_queue.pop()?;
+            // Discard any cancelled plans we encounter.
+            if let Some(data) = self.data_map.remove(&entry.plan_id) {
+                return Some(Plan {
+                    time: entry.time,
+                    data,
+                });
+            }
+        }
     }
 
     #[doc(hidden)]
     pub(crate) fn remaining_plan_count(&self) -> usize {
         self.queue.len()
-    }
-
-    fn discard_canceled_roots(
-        heap: &mut BinaryHeap<PlanSchedule>,
-        data_map: &HashMap<u64, BoxedCallback>,
-    ) {
-        while heap
-            .peek()
-            .is_some_and(|entry| !data_map.contains_key(&entry.plan_id))
-        {
-            heap.pop();
-        }
-    }
-
-    fn pop_next_from_heap(
-        heap: &mut BinaryHeap<PlanSchedule>,
-        data_map: &mut HashMap<u64, BoxedCallback>,
-    ) -> Option<Plan> {
-        loop {
-            {
-                let entry = heap.pop()?;
-                if let Some(data) = data_map.remove(&entry.plan_id) {
-                    return Some(Plan {
-                        time: entry.time,
-                        data,
-                    });
-                }
-            }
-        }
     }
 
     fn update_profiling_high_water_marks(&mut self) {
