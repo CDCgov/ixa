@@ -34,7 +34,6 @@ use crate::{trace, ContextBase, HashMap, HashMapExt};
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
-#[allow(clippy::type_complexity)]
 // This is a global list of all the global properties that
 // are compiled in. Fundamentally it's a HashMap of property
 // names to the setter function, but it's wrapped in the
@@ -42,6 +41,7 @@ type PropertySetterFn =
 // shared and initialized at startup time while still being
 // safe.
 #[doc(hidden)]
+#[allow(clippy::type_complexity)]
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
@@ -79,7 +79,6 @@ pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize 
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,

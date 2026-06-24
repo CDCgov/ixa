@@ -27,7 +27,6 @@ fn attempt_infection(context: &mut Context, age_group: AgeGroupRisk) {
         if person_status == InfectionStatus::S {
             context.set_property(person_to_infect, InfectionStatus::I);
         }
-        #[allow(clippy::cast_precision_loss)]
         let next_attempt_time = context.get_current_time()
             + context.sample_distr(TransmissionRng1, Exp::new(foi).unwrap())
                 / population_size as f64;

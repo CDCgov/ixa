@@ -196,7 +196,6 @@ pub struct PlanSchedule<P: Eq + PartialEq + Ord> {
     pub priority: P,
 }
 
-#[allow(clippy::expl_impl_clone_on_copy)] // Clippy false positive
 impl<P: Eq + PartialEq + Ord + Clone> Clone for PlanSchedule<P> {
     fn clone(&self) -> Self {
         PlanSchedule {
@@ -250,7 +249,6 @@ pub struct Plan<T> {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod tests {
     use super::Queue;
 

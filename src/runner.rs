@@ -142,7 +142,6 @@ fn create_ixa_cli() -> Command {
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
-#[allow(clippy::missing_errors_doc)]
 pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args,
@@ -166,7 +165,6 @@ where
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
-#[allow(clippy::missing_errors_doc)]
 pub fn run_with_args<F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
