@@ -8,7 +8,6 @@ use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
@@ -30,29 +29,19 @@ type Callback = dyn FnOnce(&mut Context);
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
 
-static NEXT_CONTEXT_ID: AtomicUsize = AtomicUsize::new(0);
-
-fn next_context_id() -> usize {
-    NEXT_CONTEXT_ID
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
-        .unwrap_or_else(|_| panic!("context id overflow"))
-}
-
 /// An opaque token for a registered event listener.
 ///
 /// Pass this token to [`Context::unsubscribe_from_event`] to stop the listener
 /// from receiving future emissions of the same event type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct EventListenerId<E: IxaEvent> {
-    context_id: usize,
     id: usize,
     event_type: PhantomData<fn() -> E>,
 }
 
 impl<E: IxaEvent> EventListenerId<E> {
-    fn new(context_id: usize, id: usize) -> Self {
+    fn new(id: usize) -> Self {
         Self {
-            context_id,
             id,
             event_type: PhantomData,
         }
@@ -120,7 +109,6 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
-    context_id: usize,
     next_event_listener_id: usize,
     pub(crate) entity_store: EntityStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
@@ -150,7 +138,6 @@ impl Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
-            context_id: next_context_id(),
             next_event_listener_id: 0,
             entity_store: EntityStore::new(),
             data_plugins,
@@ -185,7 +172,7 @@ impl Context {
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
     ) -> EventListenerId<E> {
-        let listener_id = EventListenerId::new(self.context_id, self.next_event_listener_id);
+        let listener_id = EventListenerId::new(self.next_event_listener_id);
         self.next_event_listener_id = self
             .next_event_listener_id
             .checked_add(1)
@@ -214,24 +201,19 @@ impl Context {
         &mut self,
         listener_id: &EventListenerId<E>,
     ) -> bool {
-        let event_type = TypeId::of::<E>();
-        let Some(handler_vec) = self.event_handlers.get_mut(&event_type) else {
+        let Some(handler_vec) = self.event_handlers.get_mut(&TypeId::of::<E>()) else {
             return false;
         };
         let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
             handler_vec.downcast_mut().unwrap();
-        let Some(index) = handler_vec.iter().position(|entry| {
-            entry.listener_id.context_id == listener_id.context_id
-                && entry.listener_id.id == listener_id.id
-        }) else {
+        let Some(index) = handler_vec
+            .iter()
+            .position(|entry| entry.listener_id.id == listener_id.id)
+        else {
             return false;
         };
 
-        handler_vec.remove(index);
-        let empty = handler_vec.is_empty();
-        if empty {
-            self.event_handlers.remove(&event_type);
-        }
+        handler_vec.swap_remove(index);
         true
     }
 
@@ -1053,18 +1035,19 @@ mod tests {
     }
 
     #[test]
-    fn unsubscribe_from_event_returns_false_for_listener_from_another_context() {
+    fn unsubscribe_from_event_returns_false_for_unknown_listener_id() {
         let mut context1 = Context::new();
         let mut context2 = Context::new();
         let obs_data = Rc::new(RefCell::new(0));
         let obs_data_clone = Rc::clone(&obs_data);
 
-        let context1_listener_id = context1.subscribe_to_event::<Event1>(move |_, _| {});
+        context1.subscribe_to_event::<Event1>(move |_, _| {});
+        let unknown_listener_id = context1.subscribe_to_event::<Event1>(move |_, _| {});
         context2.subscribe_to_event::<Event1>(move |_, event| {
             *obs_data_clone.borrow_mut() = event.data;
         });
 
-        assert!(!context2.unsubscribe_from_event(&context1_listener_id));
+        assert!(!context2.unsubscribe_from_event(&unknown_listener_id));
 
         context2.emit_event(Event1 { data: 1 });
         context2.execute();
