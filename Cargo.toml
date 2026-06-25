@@ -4,6 +4,7 @@ members = [
     "ixa-*",
     "examples/basic-infection",
     "examples/births-deaths",
+    "examples/network-random",
     "examples/profiling",
     "integration-tests/ixa-*",
 ]
@@ -32,7 +33,10 @@ ixa-derive = { version = "2.0.0", path = "ixa-derive" }
 seq-macro = "^0.3.5"
 paste = "^1.0.15"
 # We avoid the `priority` feature of `ctor`. See https://github.com/mmastrac/linktime/issues/454.
-ctor = { version = "^1.0.1", default-features = false, features = ["std", "proc_macro"] }
+ctor = { version = "^1.0.1", default-features = false, features = [
+    "std",
+    "proc_macro",
+] }
 clap = { version = "^4.5.26", features = ["derive"] }
 clap-markdown = "0.1.5"
 log = "^0.4.22"
@@ -123,7 +127,11 @@ log4rs = { workspace = true, optional = true }
 fern = { workspace = true, optional = true }
 # Required here only to enable the js backend:
 wasm-bindgen = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = ["console", "Performance", "Window"] }
+web-sys = { workspace = true, optional = true, features = [
+    "console",
+    "Performance",
+    "Window",
+] }
 
 [dev-dependencies]
 anyhow.workspace = true
