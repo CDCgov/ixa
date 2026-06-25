@@ -71,7 +71,6 @@ mod tests {
             population_size: 100,
             n_connections: 10,
             n_initial_infected: 1,
-            output_dir: "examples/network-random/tests".to_owned(),
         };
         context
             .set_global_property_value(Parameters, parameters.clone())

@@ -1,9 +1,6 @@
 {
-  "network_hhmodel.Parameters": {
-    "generation_interval": 1.0,
-    "population_size": 100,
-    "n_connections": 100,
-    "n_initial_infected": 1,
-    "output_dir": "examples/network-random/output"
-  }
+  "generation_interval": 1.0,
+  "population_size": 100,
+  "n_connections": 100,
+  "n_initial_infected": 1
 }

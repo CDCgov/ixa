@@ -144,6 +144,7 @@ tempfile.workspace = true
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }
 ixa_example_births_deaths = { path = "examples/births-deaths" }
+ixa_example_network_random = { path = "examples/network-random" }
 
 [workspace.lints.rust]
 mismatched_lifetime_syntaxes = "allow"
