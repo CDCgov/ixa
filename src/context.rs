@@ -233,6 +233,55 @@ impl Context {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId {
+        self.add_plan_with_phase_and_activity(time, callback, phase, true)
+    }
+
+    /// Add a passive plan to the future event list at the specified time in the
+    /// normal phase.
+    ///
+    /// Passive plans execute like regular plans but do not keep the simulation
+    /// timeline alive.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_passive_plan(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+    ) -> PlanId {
+        self.add_passive_plan_with_phase(time, callback, ExecutionPhase::Normal)
+    }
+
+    /// Add a passive plan to the future event list at the specified time and
+    /// with the specified phase.
+    ///
+    /// Passive plans execute like regular plans but do not keep the simulation
+    /// timeline alive.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    /// # Panics
+    ///
+    /// Panics if time is in the past, infinite, or NaN.
+    pub fn add_passive_plan_with_phase(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        self.add_plan_with_phase_and_activity(time, callback, phase, false)
+    }
+
+    fn add_plan_with_phase_and_activity(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+        is_active: bool,
+    ) -> PlanId {
         let current = self.get_current_time();
         assert!(!time.is_nan(), "Time {time} is invalid: cannot be NaN");
         assert!(
@@ -244,7 +293,8 @@ impl Context {
             "Time {time} is invalid: cannot be less than the current time ({}). Consider calling set_start_time() before scheduling plans.",
             current
         );
-        self.plan_queue.add_plan(time, Box::new(callback), phase)
+        self.plan_queue
+            .add_plan(time, Box::new(callback), phase, is_active)
     }
 
     /// Add a plan to execute during shutdown-time in the normal phase.
@@ -286,19 +336,22 @@ impl Context {
             period
         );
         callback(self);
-        if !self.plan_queue.is_empty() {
-            let next_time = self.get_current_time() + period;
-            self.add_plan_with_phase(
-                next_time,
-                move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
-                phase,
-            );
-        }
+        let next_time = self.get_current_time() + period;
+        self.add_passive_plan_with_phase(
+            next_time,
+            move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
+            phase,
+        );
     }
 
-    /// Add a plan with specified priority to the future event list, and
-    /// continuously repeat the plan at the specified period, stopping
-    /// only once there are no other plans scheduled.
+    /// Add a passive periodic plan with specified priority to the future event
+    /// list.
+    ///
+    /// Periodic plans reschedule themselves after every run. They do not keep
+    /// the simulation timeline alive: when no active plans remain, normal
+    /// shutdown begins, and only passive plans at the final current time can
+    /// still run during that execution pass. Future passive periodic plans
+    /// remain queued and may run if later active work is scheduled.
     ///
     /// Notes:
     /// * The first periodic plan is scheduled at time `0.0`. If `set_start_time` was
@@ -319,7 +372,7 @@ impl Context {
             "Period must be greater than 0"
         );
 
-        self.add_plan_with_phase(
+        self.add_passive_plan_with_phase(
             0.0,
             move |context| context.evaluate_periodic_and_schedule_next(period, callback, phase),
             phase,
@@ -338,12 +391,6 @@ impl Context {
         if result.is_none() {
             warn!("Tried to cancel nonexistent plan with ID = {plan_id:?}");
         }
-    }
-
-    #[doc(hidden)]
-    #[allow(dead_code)]
-    pub(crate) fn remaining_plan_count(&self) -> usize {
-        self.plan_queue.remaining_plan_count()
     }
 
     /// Add a `Callback` to the queue to be executed before the next plan
@@ -482,7 +529,8 @@ impl Context {
         self.start_time
     }
 
-    /// Execute the simulation until the plan and callback queues are empty
+    /// Execute the simulation until active plans are exhausted and shutdown
+    /// work is complete.
     pub fn execute(&mut self) {
         trace!("entering event loop");
 
@@ -531,14 +579,15 @@ impl Context {
         match self.shutdown_status {
             ShutdownStatus::None => {
                 // Normal execution may advance simulation time to the next
-                // regular plan. If no regular plans remain, natural completion
-                // transitions into shutdown-time plan execution.
-                if let Some(plan) = self.plan_queue.pop_next() {
+                // regular plan only while active regular work remains. Once no
+                // active regular plans remain, enter normal shutdown to drain
+                // current-time regular work without advancing time.
+                if let Some(plan) = self.plan_queue.pop_next_if_active() {
                     trace!("calling plan at {:.6}", plan.time);
                     self.current_time = Some(plan.time);
                     (plan.data)(self);
                 } else {
-                    self.shutdown_status = ShutdownStatus::ShutdownTimePlans;
+                    self.shutdown_status = ShutdownStatus::Normal;
                 }
             }
             ShutdownStatus::Normal => {
@@ -594,6 +643,17 @@ pub trait ContextBase: Sized {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId;
+    fn add_passive_plan(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+    ) -> PlanId;
+    fn add_passive_plan_with_phase(
+        &mut self,
+        time: f64,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId;
     fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
     fn add_shutdown_plan_with_phase(
         &mut self,
@@ -625,6 +685,8 @@ impl ContextBase for Context {
             fn emit_event<E: IxaEvent>(&mut self, event: E);
             fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
+            fn add_passive_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+            fn add_passive_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_shutdown_plan_with_phase(&mut self, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
@@ -706,6 +768,27 @@ mod tests {
         phase: ExecutionPhase,
     ) -> PlanId {
         context.add_plan_with_phase(
+            time,
+            move |context| {
+                context.get_data_mut(ComponentA).push(value);
+            },
+            phase,
+        )
+    }
+
+    fn add_passive_plan(context: &mut Context, time: f64, value: u32) -> PlanId {
+        context.add_passive_plan(time, move |context| {
+            context.get_data_mut(ComponentA).push(value);
+        })
+    }
+
+    fn add_passive_plan_with_phase(
+        context: &mut Context,
+        time: f64,
+        value: u32,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        context.add_passive_plan_with_phase(
             time,
             move |context| {
                 context.get_data_mut(ComponentA).push(value);
@@ -1148,6 +1231,49 @@ mod tests {
     }
 
     #[test]
+    fn passive_only_initial_time_runs_during_normal_shutdown() {
+        let mut context = Context::new();
+        add_passive_plan(&mut context, 0.0, 1);
+        add_passive_plan(&mut context, 1.0, 2);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 0.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn passive_plans_at_final_active_time_run_across_phases() {
+        let mut context = Context::new();
+        add_passive_plan_with_phase(&mut context, 1.0, 1, ExecutionPhase::First);
+        add_plan(&mut context, 1.0, 2);
+        add_passive_plan_with_phase(&mut context, 1.0, 3, ExecutionPhase::Last);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn passive_future_plan_survives_until_later_active_work() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        add_passive_plan(&mut context, 2.0, 2);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 1.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        add_plan(&mut context, 2.0, 3);
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
     fn cancel_plan_can_cancel_shutdown_plan() {
         let mut context = Context::new();
         let to_cancel = context.add_shutdown_plan(|context| {
@@ -1235,6 +1361,9 @@ mod tests {
         assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
 
         context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+
+        context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
@@ -1261,8 +1390,8 @@ mod tests {
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     fn periodic_plan_self_schedules() {
-        // checks whether the person properties report schedules itself
-        // based on whether there are plans in the queue
+        // checks whether the periodic plan schedules itself passively without
+        // keeping execution alive after active plans are exhausted.
         let mut context = Context::new();
         context.add_periodic_plan_with_phase(
             1.0,
@@ -1275,9 +1404,9 @@ mod tests {
         context.add_plan(1.0, move |_context| {});
         context.add_plan(1.5, move |_context| {});
         context.execute();
-        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(context.get_current_time(), 1.5);
 
-        assert_eq!(*context.get_data(ComponentA), vec![0, 1, 2]); // time 0.0, 1.0, and 2.0
+        assert_eq!(*context.get_data(ComponentA), vec![0, 1]); // time 0.0 and 1.0
     }
 
     // Tests for negative time handling
