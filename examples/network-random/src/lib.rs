@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use ixa::prelude::*;
 
 pub mod infection;
@@ -14,7 +12,7 @@ pub fn init(context: &mut Context) {
     context.init_random(1);
 
     // Load parameters from json
-    parameters::load(context);
+    parameters::init(context);
 
     let parameters = context
         .get_global_property_value(Parameters)
