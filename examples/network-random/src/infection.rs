@@ -16,7 +16,7 @@ impl_property!(DiseaseStatus, Person, default_const = DiseaseStatus::S);
 
 define_rng!(InfectionRng);
 
-fn infect(context: &mut Context, infector: Option<&PersonId>, infectee: PersonId) {
+fn infect(context: &mut Context, infector: Option<PersonId>, infectee: PersonId) {
     let generation_interval = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -38,7 +38,7 @@ fn infect(context: &mut Context, infector: Option<&PersonId>, infectee: PersonId
                 context,
                 generation_interval,
                 infect,
-                Some(&next_infector),
+                Some(next_infector),
                 next_infectee
             );
         }
