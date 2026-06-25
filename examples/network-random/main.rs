@@ -1,10 +1,9 @@
 use ixa::prelude::*;
 use ixa::runner::run_with_args;
-mod incidence_report;
-mod loader;
+
+mod infection;
 mod network;
 mod parameters;
-mod seir;
 use std::path::PathBuf;
 
 use parameters::Parameters;
@@ -14,25 +13,20 @@ define_rng!(MainRng);
 
 fn main() {
     run_with_args(|context, _, _| {
-        initialize(context);
+        init(context);
         Ok(())
     })
     .unwrap();
 }
 
-fn example_dir() -> PathBuf {
-    let parameters_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    parameters_path.join("examples").join("network-hhmodel")
-}
-
-fn initialize(context: &mut Context) {
+fn init(context: &mut Context) {
     context.init_random(1);
 
-    // Load people from csv and set up some base properties
-    loader::init(context);
-
     // Load parameters from json
-    let file_path = example_dir().join("config.json");
+    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("network-random")
+        .join("config.json");
     context.load_global_properties(&file_path).unwrap();
 
     let parameters = context
@@ -41,13 +35,12 @@ fn initialize(context: &mut Context) {
         .clone();
 
     // Load network
-    network::init(context, parameters.relative_rate);
+    network::init(
+        context,
+        parameters.population_size,
+        parameters.n_connections,
+        38421,
+    );
 
-    // Initialize incidence report
-    incidence_report::init(context).unwrap();
-
-    // Initialize infected person with InfectedBy value equal to their own PersonId
-    let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
-
-    seir::init(context, &to_infect, 1.0);
+    infection::init(context, parameters.n_initial_infected);
 }

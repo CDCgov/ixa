@@ -1,4 +1,4 @@
-# Example: Agent-based SEIR model with contact networks
+# Example: Random connection network
 
 This example demonstrates a network model in `ixa`.
 
