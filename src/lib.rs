@@ -31,11 +31,26 @@
 //!
 //! - **`logging`**: enables structured logging for native and wasm targets.
 //! - **`profiling`**: enables collection and reporting of execution profiling statistics. Disabled by default.
+//!
+//! ## Events
+//!
+//! Event types can derive [`IxaEvent`] with the same import used for the trait:
+//!
+//! ```
+//! use ixa::IxaEvent;
+//!
+//! #[derive(IxaEvent)]
+//! struct MyEvent;
+//!
+//! fn assert_event<E: IxaEvent>() {}
+//! assert_event::<MyEvent>();
+//! ```
 
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
 pub mod context;
 pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
+pub use ixa_derive::IxaEvent;
 
 mod plugin_context;
 pub use plugin_context::PluginContext;
@@ -76,10 +91,6 @@ pub mod numeric;
 // Re-export for macros
 pub use csv;
 pub use ctor;
-pub use ixa_derive::{
-    canonical_from_sorted_query_parts_closure, impl_make_canonical, impl_people_make_canonical,
-    reorder_closure, sorted_tag, sorted_value_type, unreorder_closure,
-};
 pub use paste;
 pub use rand;
 pub use rkyv;
@@ -91,12 +102,9 @@ pub use crate::hashing::{HashMap, HashMapExt, HashSet, HashSetExt};
 pub mod prelude;
 
 pub mod prelude_for_plugins {
-    pub use ixa_derive::IxaEvent;
-
-    pub use crate::context::{ContextBase, IxaEvent};
-    pub use crate::define_data_plugin;
     pub use crate::error::IxaError;
     pub use crate::prelude::*;
+    pub use crate::{define_data_plugin, ContextBase, IxaEvent};
 }
 
 pub mod entity;

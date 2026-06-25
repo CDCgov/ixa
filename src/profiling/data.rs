@@ -115,7 +115,6 @@ impl ProfilingData {
 
         // Collect data rows
         for (key, count) in &self.counts {
-            #[allow(clippy::cast_precision_loss)]
             let rate = (*count as f64) / elapsed; // Just allow this to be `inf`/`nan` if `elapsed == 0.0`.
 
             rows.push(((*key).to_string(), *count, rate));
@@ -185,12 +184,14 @@ pub fn increment_named_count(key: &'static str) {
 pub fn increment_named_count(_key: &'static str) {}
 
 #[cfg(feature = "profiling")]
+#[must_use]
 pub fn open_span(label: &'static str) -> Span {
     let mut container = profiling_data();
     container.open_span(label)
 }
 
 #[cfg(not(feature = "profiling"))]
+#[must_use]
 pub fn open_span(label: &'static str) -> Span {
     Span::new(label)
 }
@@ -333,10 +334,7 @@ mod tests {
         assert_eq!(*count, 2);
         // Rate should be approximately 2/elapsed (2 events / ~0.1 second = ~20/sec)
         let expected_rate = 2.0 / elapsed;
-        println!(
-            "Rate: {}, Expected: {}, Elapsed: {}",
-            rate, expected_rate, elapsed
-        );
+
         // Allow 10% margin for timing variations
         assert!(*rate > expected_rate * 0.9 && *rate < expected_rate * 1.1);
 

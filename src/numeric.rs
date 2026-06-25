@@ -1,4 +1,3 @@
-#![allow(clippy::approx_constant)]
 //! Vendored from [statrs@0.18.0 (prec.rs)](http://github.com/statrs-dev/statrs/blob/v0.18.0/src/prec.rs), convenience
 //! wrappers around methods from the approx crate. Provides utility functions for working with floating point precision.
 
@@ -75,6 +74,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn assert_almost_eq_macro_passes() {
         // should not panic
         assert_almost_eq!(3.14159265, 3.14159264, 1e-7);

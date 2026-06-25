@@ -84,22 +84,26 @@ impl<E: Entity> EntityId<E> {
 
 /// All entities must implement this trait using the `define_entity!` macro.
 pub trait Entity: Any + Default {
+    #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
         full.rsplit("::").next().unwrap()
     }
 
+    #[must_use]
     fn type_id() -> TypeId {
         TypeId::of::<Self>()
     }
 
     /// Get a list of all properties this `Entity` has. This list is static, computed in with `ctor` magic.
+    #[must_use]
     fn property_ids() -> &'static [TypeId] {
         let (property_ids, _) = get_entity_metadata_static(<Self as Entity>::type_id());
         property_ids
     }
 
     /// Get a list of all properties of this `Entity` that _must_ be supplied when a new entity is created.
+    #[must_use]
     fn required_property_ids() -> &'static [TypeId] {
         let (_, required_property_ids) = get_entity_metadata_static(<Self as Entity>::type_id());
         required_property_ids
@@ -108,9 +112,11 @@ pub trait Entity: Any + Default {
     /// The index of this item in the owner, which is initialized globally per type
     /// upon first access. We explicitly initialize this in a `ctor` in order to know
     /// how many [`Entity`] types exist globally when we construct any `EntityStore`.
+    #[must_use]
     fn id() -> usize;
 
     /// Creates a new boxed instance of the item.
+    #[must_use]
     fn new_boxed() -> Box<Self> {
         Box::default()
     }
@@ -207,6 +213,15 @@ mod tests {
         let entity_id = DummyEntityId::new(137);
         assert_eq!(format!("{:?}", entity_id), "DummyEntityId(137)");
         assert_eq!(format!("{}", entity_id), "137");
+    }
+
+    #[test]
+    fn define_entity_helpers_create_and_downcast() {
+        assert_eq!(DummyEntity::new(), DummyEntity);
+
+        let mut entity = DummyEntity::new();
+        assert!(entity.as_any().downcast_ref::<DummyEntity>().is_some());
+        assert!(entity.as_any_mut().downcast_mut::<DummyEntity>().is_some());
     }
 
     #[test]

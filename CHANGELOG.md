@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0) - 2026-06-16
+
+Ixa 2.0 replaces the single, hard-coded `people` module with a generalized,
+type-safe **entity system**: models can now define any number of entity types
+(not just `Person`) and attach strongly-typed properties to them. This is a
+breaking change for every 1.x model. This release consolidates everything
+released across the 2.0.0 beta line (beta1 to beta2.5).
+
+### Breaking
+
+- Removed the entire `people` module; `Person` must now be a user-defined entity type
+- Multi-property definitions require entity-first declaration; type aliases are
+  rejected in `define_multi_property!` ([#948](https://github.com/CDCgov/ixa/pull/948), [#852](https://github.com/CDCgov/ixa/pull/852))
+- `IxaError` is now compatible with `anyhow` and no longer supports string-based variants
+- Removed the progress-bar feature ([#879](https://github.com/CDCgov/ixa/pull/879))
+
+### Added
+
+- Replace universal `Property: Eq + Hash` constraint with `IndexableProperty` ([#937](https://github.com/CDCgov/ixa/pull/937))
+
+### Fixed
+
+- Use schedule_relative! ([#934](https://github.com/CDCgov/ixa/pull/934))
+- bench_filter_indexed_entity not empty ([#943](https://github.com/CDCgov/ixa/pull/943))
+- publish mdBook output to Pages artifact ([#950](https://github.com/CDCgov/ixa/pull/950))
+
+### Other
+
+- require entity-first multi-property definitions ([#948](https://github.com/CDCgov/ixa/pull/948))
+- bump release-plz/action from 0.5.129 to 0.5.130 ([#955](https://github.com/CDCgov/ixa/pull/955))
+- deploy docs from release tags ([#946](https://github.com/CDCgov/ixa/pull/946))
+- Update README.md with ixa book ([#953](https://github.com/CDCgov/ixa/pull/953))
+- Derive Copy and Clone for IxaEvent types ([#938](https://github.com/CDCgov/ixa/pull/938))
+- Ks 935 fix println ([#947](https://github.com/CDCgov/ixa/pull/947))
+- expand coverage for entity property and query helpers ([#940](https://github.com/CDCgov/ixa/pull/940))
+- add gated MSRV verification ([#932](https://github.com/CDCgov/ixa/pull/932))
+- Factored out `impl_property_eq_hash!` as user-facing macro ([#927](https://github.com/CDCgov/ixa/pull/927))
+
 ## [2.0.0-beta2.5](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.4...ixa-v2.0.0-beta2.5) - 2026-06-01
 
 ### Added

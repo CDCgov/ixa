@@ -38,14 +38,17 @@ impl<E: Entity, ET: EdgeType<E>> Default for Network<E, ET> {
 
 #[allow(unused)]
 impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
+    #[must_use]
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub(crate) fn new_boxed() -> Box<dyn Any> {
         Box::new(Self::new())
     }
 
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             adjacency_lists: AdjacencyListVec::with_capacity(capacity),
@@ -59,6 +62,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
     /// Returns a clone of the adjacency list for the given entity. Returns an empty list
     /// if the list is empty.
+    #[must_use]
     pub fn get_list_cloned(&self, entity_id: EntityId<E>) -> AdjacencyList<E, ET> {
         self.adjacency_lists
             .get(entity_id.0)
@@ -68,12 +72,14 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
     /// Returns an immutable reference to the adjacency list for the given entity,
     /// or `None` if the list is empty.
+    #[must_use]
     pub fn get_list(&self, entity_id: EntityId<E>) -> Option<&AdjacencyList<E, ET>> {
         self.adjacency_lists.get(entity_id.0)
     }
 
     /// Returns a mutable reference to the adjacency list for the given entity,
     /// or `None` if the list is empty.
+    #[must_use]
     pub fn get_list_mut(&mut self, entity_id: EntityId<E>) -> Option<&mut AdjacencyList<E, ET>> {
         self.adjacency_lists.get_mut(entity_id.0)
     }
@@ -102,6 +108,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
     /// Remove the edge from the given entity to the given neighbor and return it, or
     /// `None` if the edge does not exist.
+    #[must_use]
     pub fn remove_edge(
         &mut self,
         entity_id: EntityId<E>,
@@ -117,6 +124,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
     /// Returns an immutable reference to the edge from the given entity
     /// to the given neighbor, or `None` if the edge does not exist.
+    #[must_use]
     pub fn get_edge(&self, entity_id: EntityId<E>, neighbor: EntityId<E>) -> Option<&Edge<E, ET>> {
         let index = entity_id.0;
         self.adjacency_lists
@@ -126,6 +134,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
 
     /// Returns a mutable reference to the edge from the given entity
     /// to the given neighbor, or `None` if the edge does not exist.
+    #[must_use]
     pub fn get_edge_mut(
         &mut self,
         entity_id: EntityId<E>,
@@ -138,6 +147,7 @@ impl<E: Entity, ET: EdgeType<E> + 'static> Network<E, ET> {
     }
 
     /// Returns a list of `EntityId<E>`s having exactly the given number of neighbors.
+    #[must_use]
     pub fn find_entities_by_degree(&self, degree: usize) -> Vec<EntityId<E>> {
         self.adjacency_lists
             .iter()

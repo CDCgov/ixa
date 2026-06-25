@@ -11,7 +11,7 @@ context.index_property::<Person, Age>();
 
 // For multi-indexes
 // Where properties are defined:
-define_multi_property!((Name, Age, Weight), Person);
+define_multi_property!(Person, (Name, Age, Weight));
 ```
 
 Best practices:
@@ -194,12 +194,20 @@ Ixa hides the boilerplate required for creating a multi-index with the macro
 `define_multi_property!`. Multi-properties are indexed automatically:
 
 ```rust
-define_multi_property!((AgeGroup, InfectionStatus), Person);
+define_multi_property!(Person, (AgeGroup, InfectionStatus));
 ```
 
 Defining a multi-property _does not_ automatically create indexes for each
 component property individually, but you can do so yourself if you wish, for
 example, if you had other single property queries you want to speed up.
+
+Queries are order-insensitive for multi-property indexes: a query written with
+`AgeGroup` before `InfectionStatus` can use the same multi-property index as a
+query written in the opposite order. If you define multiple equivalent
+multi-properties with the same component properties in different orders, Ixa
+chooses the first registered one for query routing and index storage. Attempting
+to explicitly index a later equivalent multi-property will panic because queries
+cannot use that duplicate index.
 
 ## The Benefits of Indexing - A Case Study
 

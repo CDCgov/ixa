@@ -5,7 +5,6 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-#[allow(clippy::module_name_repetitions)]
 /// Provides [`IxaError`] and maps to other errors to
 /// convert to an [`IxaError`]
 pub enum IxaError {

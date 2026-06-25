@@ -188,7 +188,7 @@ mod tests {
     });
 
     type MultiProp = (TestPropU32, TestPropU32b);
-    define_multi_property!((TestPropU32, TestPropU32b), Person);
+    define_multi_property!(Person, (TestPropU32, TestPropU32b));
 
     // Test global property macro
     define_global_property!(TestGlobal, u32);
@@ -298,11 +298,8 @@ mod tests {
         derived_float_neither.insert(ctx.get_property::<_, DerivedFloatNeither>(pid));
         assert!(derived_float_neither.contains(&DerivedFloatNeither(10.0)));
 
-        // Multi-property - basic sanity (canonical value types)
-        let multi = <MultiProp as Property<Person>>::make_canonical((
-            TestPropU32(10u32),
-            TestPropU32b(20u32),
-        ));
+        // Multi-property - basic sanity.
+        let multi = (TestPropU32(10u32), TestPropU32b(20u32));
         let disp = <MultiProp as Property<Person>>::get_display(&multi);
         assert!(disp.contains("10"));
 
@@ -318,7 +315,7 @@ mod tests {
         let e = ctx.get_edge::<Person, TestEdge>(p1, p2).unwrap();
         assert_eq!(e.weight, 1.0);
         // Now remove the edge and ensure it's gone
-        ctx.remove_edge::<Person, TestEdge>(p1, p2);
+        assert!(ctx.remove_edge::<Person, TestEdge>(p1, p2).is_some());
         assert!(ctx.get_edge::<Person, TestEdge>(p1, p2).is_none());
 
         // Data plugin access

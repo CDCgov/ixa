@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 fn get_example_dirs() -> BTreeSet<String> {
-    let examples_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let examples_dir = repo_root().join("examples");
     std::fs::read_dir(&examples_dir)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", examples_dir.display()))
         .filter_map(|entry| {
@@ -17,7 +17,7 @@ fn get_example_dirs() -> BTreeSet<String> {
 }
 
 fn get_documented_examples() -> BTreeSet<String> {
-    let doc_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/book/src/examples.md");
+    let doc_path = repo_root().join("docs/book/src/examples.md");
     let content = std::fs::read_to_string(&doc_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", doc_path.display()));
 
@@ -31,6 +31,10 @@ fn get_documented_examples() -> BTreeSet<String> {
             Some(name.to_string())
         })
         .collect()
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 #[test]

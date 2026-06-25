@@ -106,6 +106,7 @@ impl<const N: usize, E: rkyv::rancor::Source> rkyv::ser::Writer<E> for EqualityB
 
 /// Provides API parity with `std::collections::HashMap`.
 pub trait HashMapExt {
+    #[must_use]
     fn new() -> Self;
 }
 
@@ -121,9 +122,11 @@ impl<K, V> HashMapExt for HashMap<K, V> {
 pub trait HashSetExt {
     type Item;
 
+    #[must_use]
     fn new() -> Self;
 
     /// Equivalent to `self.iter().cloned().collect::<Vec<_>>()`.
+    #[must_use]
     fn to_owned_vec(&self) -> Vec<Self::Item>;
 }
 
@@ -152,6 +155,7 @@ impl<T: Clone> HashSetExt for IndexSet<T> {
 }
 
 /// A convenience method to compute the hash of a `&str`.
+#[must_use]
 pub fn hash_str(data: &str) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();
     hasher.write(data.as_bytes());
@@ -166,6 +170,7 @@ pub(crate) fn finish_deterministic_hash_128(hasher: DeterministicHasher) -> Hash
 }
 
 /// Helper for any `T: Hash` using the crate's deterministic hasher.
+#[must_use]
 pub fn one_shot_128<T: Hash>(value: &T) -> u128 {
     let mut hasher = DeterministicHasher::default();
     value.hash(&mut hasher);

@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::vec::Vec;
 
 use super::entity::{Entity, EntityId};
-use super::property::{Property, PropertyInitializationKind};
+use super::property::{IndexableProperty, Property, PropertyInitializationKind};
 use crate::entity::index::{FullIndex, PropertyIndex, PropertyIndexType};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::value_change_counter::ValueChangeCounter;
@@ -22,8 +22,8 @@ pub(crate) type RawPropertyValueVec<P> = Vec<P>;
 pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: RawPropertyValueVec<P>,
-    /// An index mapping `property_value` to `set_of_entities`.
-    pub(crate) index: PropertyIndex<E, P>,
+    /// An index mapping `property_value` to `set_of_entities`, when indexing is enabled.
+    pub(crate) index: Option<Box<dyn PropertyIndex<E, P>>>,
     /// Value change counters for this property.
     pub(crate) value_change_counters: Vec<RefCell<Box<dyn ValueChangeCounter<E, P>>>>,
 }
@@ -32,21 +32,13 @@ impl<E: Entity, P: Property<E>> Default for PropertyValueStoreCore<E, P> {
     fn default() -> Self {
         Self {
             data: RawPropertyValueVec::default(),
-            index: Self::default_index(),
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
-    fn default_index() -> PropertyIndex<E, P> {
-        if P::index_by_default() && P::index_id() == P::id() {
-            PropertyIndex::FullIndex(FullIndex::new())
-        } else {
-            PropertyIndex::Unindexed
-        }
-    }
-
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -55,19 +47,24 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Box::new(Self::new())
     }
 
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: RawPropertyValueVec::with_capacity(capacity),
-            index: Self::default_index(),
+            index: None,
             value_change_counters: Vec::new(),
         }
     }
 
+    #[must_use]
     pub(crate) fn index_type(&self) -> PropertyIndexType {
-        self.index.index_type()
+        self.index
+            .as_deref()
+            .map_or(PropertyIndexType::Unindexed, PropertyIndex::index_type)
     }
 
     /// Adds a value change counter and returns its ID.
+    #[must_use]
     pub(crate) fn add_value_change_counter(
         &mut self,
         counter: Box<dyn ValueChangeCounter<E, P>>,
@@ -83,6 +80,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Returns the property value for the given entity.
+    #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> P {
         debug_assert!(
             !P::is_derived(),
@@ -140,6 +138,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`, returning the previous value.
+    #[must_use]
     pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
         debug_assert!(
             !P::is_derived(),
@@ -183,4 +182,88 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 }
 
-// See tests in `property_store.rs`.
+impl<E: Entity, P: IndexableProperty<E>> PropertyValueStoreCore<E, P> {
+    fn default_index() -> Option<Box<dyn PropertyIndex<E, P>>> {
+        if P::index_by_default() && P::index_id() == P::id() {
+            Some(Box::new(FullIndex::<E, P>::new()))
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn new_boxed_with_default_index() -> Box<dyn PropertyValueStore<E>> {
+        Box::new(Self {
+            data: RawPropertyValueVec::default(),
+            index: Self::default_index(),
+            value_change_counters: Vec::new(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::EntityId;
+    use crate::{define_entity, define_property};
+
+    define_entity!(StoreCorePerson);
+    define_property!(struct RequiredScore(u8), StoreCorePerson);
+    define_property!(struct DefaultScore(u8), StoreCorePerson, default_const = DefaultScore(0));
+
+    #[test]
+    fn capacity_and_reserve_helpers() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::with_capacity(4);
+
+        assert!(store.data.capacity() >= 4);
+        assert_eq!(store.index_type(), PropertyIndexType::Unindexed);
+        assert!(store.value_change_counters.is_empty());
+
+        store.reserve(16);
+        assert!(store.data.capacity() >= 16);
+    }
+
+    #[test]
+    fn replace_existing_required_value() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+        let entity_id = EntityId::new(0);
+
+        store.set(entity_id, RequiredScore(10));
+
+        assert_eq!(
+            store.replace(entity_id, RequiredScore(20)),
+            RequiredScore(10)
+        );
+        assert_eq!(store.get(entity_id), RequiredScore(20));
+    }
+
+    #[test]
+    fn replace_constant_default_value_paths() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, DefaultScore>::new();
+        let entity_id = EntityId::new(2);
+
+        assert_eq!(store.replace(entity_id, DefaultScore(0)), DefaultScore(0));
+        assert!(store.data.is_empty());
+
+        assert_eq!(store.replace(entity_id, DefaultScore(7)), DefaultScore(0));
+        assert_eq!(store.data.len(), 3);
+        assert_eq!(store.get(EntityId::new(0)), DefaultScore(0));
+        assert_eq!(store.get(EntityId::new(1)), DefaultScore(0));
+        assert_eq!(store.get(entity_id), DefaultScore(7));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn set_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        store.set(EntityId::new(1), RequiredScore(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "Property storage state is inconsistent")]
+    fn replace_required_property_skipping_entity_id_panics() {
+        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
+
+        let _ = store.replace(EntityId::new(1), RequiredScore(10));
+    }
+}

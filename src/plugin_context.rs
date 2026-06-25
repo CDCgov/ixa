@@ -38,7 +38,7 @@ impl PluginContext for Context {}
 #[cfg(test)]
 mod test_plugin_context {
     use crate::prelude_for_plugins::*;
-    #[derive(Copy, Clone, IxaEvent)]
+    #[derive(IxaEvent)]
     struct MyEvent {
         pub data: usize,
     }

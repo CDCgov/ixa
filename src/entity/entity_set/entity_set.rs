@@ -74,6 +74,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Create an empty entity set.
+    #[must_use]
     pub fn empty() -> Self {
         EntitySet(EntitySetInner::Source(SourceSet::empty()))
     }
@@ -99,6 +100,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Intersection(sets))
     }
 
+    #[must_use]
     pub fn union(self, other: Self) -> Self {
         // Idempotence: A ∪ A = A  (same structure over same sources)
         if self.structurally_eq(&other) {
@@ -130,6 +132,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Union(Box::new(left), Box::new(right)))
     }
 
+    #[must_use]
     pub fn intersection(self, other: Self) -> Self {
         // Idempotence: A ∩ A = A
         if self.structurally_eq(&other) {
@@ -165,6 +168,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         EntitySet(EntitySetInner::Intersection(sets))
     }
 
+    #[must_use]
     pub fn difference(self, other: Self) -> Self {
         // Self-subtraction: A \ A = ∅
         if self.structurally_eq(&other) {
@@ -201,6 +205,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Test whether `entity_id` is a member of this set.
+    #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
         match self {
             EntitySet(EntitySetInner::Source(source)) => source.contains(entity_id),
@@ -217,6 +222,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     /// Collect this set's contents into an owned vector of `EntityId<E>`.
+    #[must_use]
     pub fn to_owned_vec(self) -> Vec<EntityId<E>> {
         self.into_iter().collect()
     }
@@ -229,6 +235,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// `IndexSet`), runs in O(1) with at most two index lookups and no
     /// iterator construction. Falls back to O(n) reservoir sampling for
     /// composite sets and `PropertySet` sources.
+    #[must_use]
     pub fn sample_entity_excluding<R, X>(&self, rng: &mut R, excluded: X) -> Option<EntityId<E>>
     where
         R: Rng,
@@ -259,6 +266,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Sample a single entity uniformly from this set. Returns `None` if the
     /// set is empty.
+    #[must_use]
     pub fn sample_entity<R>(&self, rng: &mut R) -> Option<EntityId<E>>
     where
         R: Rng,
@@ -278,6 +286,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Count the entities in this set and sample one uniformly from them.
     ///
     /// Returns `(count, sample)` where `sample` is `None` iff `count == 0`.
+    #[must_use]
     pub fn count_and_sample_entity<R>(&self, rng: &mut R) -> (usize, Option<EntityId<E>>)
     where
         R: Rng,
@@ -294,6 +303,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Sample up to `requested` entities uniformly from this set. If the set
     /// has fewer than `requested` entities, the entire set is returned.
+    #[must_use]
     pub fn sample_entities<R>(&self, rng: &mut R, requested: usize) -> Vec<EntityId<E>>
     where
         R: Rng,
@@ -312,6 +322,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     ///
     /// This is true only for direct `SourceSet` leaves except `PropertySet`.
     /// Composite expressions return `None`.
+    #[must_use]
     pub fn try_len(&self) -> Option<usize> {
         match self {
             EntitySet(EntitySetInner::Source(source)) => source.try_len(),
@@ -422,11 +433,17 @@ mod tests {
     use super::*;
     use crate::entity::ContextEntitiesExt;
     use crate::hashing::IndexSet;
-    use crate::{define_derived_property, define_entity, define_property, with, Context};
+    use crate::{
+        define_derived_property, define_entity, define_multi_property, define_property, with,
+        Context,
+    };
 
     define_entity!(Person);
     define_property!(struct Age(u8), Person);
+    define_property!(struct County(u32), Person, default_const = County(0));
     define_derived_property!(struct Senior(bool), Person, [Age], |age| Senior(age.0 >= 65));
+    define_multi_property!(Person, (Age, County));
+    define_multi_property!(Person, (County, Age));
 
     fn finite_set(ids: &[usize]) -> IndexSet<EntityId<Person>> {
         ids.iter()
@@ -752,6 +769,47 @@ mod tests {
         assert!(set.contains(p3));
         assert_eq!(set.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
         assert_eq!(cloned.into_iter().collect::<Vec<_>>(), vec![p2, p3]);
+    }
+
+    #[test]
+    fn union_of_same_unindexed_property_query_deduplicates_to_one_source() {
+        let mut context = Context::new();
+        let p1 = context.add_entity(with!(Person, Age(10))).unwrap();
+        let p2 = context.add_entity(with!(Person, Age(10))).unwrap();
+        let _p3 = context.add_entity(with!(Person, Age(11))).unwrap();
+
+        let query = context.query::<Person, _>(with!(Person, Age(10)));
+        let union = query.clone().union(query);
+
+        assert!(matches!(
+            union,
+            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+        ));
+        assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![p1, p2]);
+    }
+
+    #[test]
+    fn union_of_equivalent_unindexed_multi_property_queries_deduplicates_to_one_source() {
+        let mut context = Context::new();
+        let matching = context
+            .add_entity(with!(Person, Age(28), County(7)))
+            .unwrap();
+        let _wrong_county = context
+            .add_entity(with!(Person, Age(28), County(8)))
+            .unwrap();
+        let _wrong_age = context
+            .add_entity(with!(Person, Age(29), County(7)))
+            .unwrap();
+
+        let age_county = context.query::<Person, _>(with!(Person, (Age(28), County(7))));
+        let county_age = context.query::<Person, _>(with!(Person, (County(7), Age(28))));
+        let union = age_county.union(county_age);
+
+        assert!(matches!(
+            union,
+            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+        ));
+        assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![matching]);
     }
 
     #[test]

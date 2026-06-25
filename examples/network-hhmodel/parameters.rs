@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use ixa::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
     pub incubation_period: f64,

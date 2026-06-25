@@ -1,6 +1,3 @@
-// Loss of precision is allowable in this module's use cases.
-#![allow(clippy::cast_precision_loss)]
-
 use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -17,6 +14,7 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
+#[must_use]
 /// The `wasm` target does not support `std::time::Instant::now()`.
 /// Works in both Window and Web Worker contexts.
 pub fn get_high_res_time() -> f64 {
@@ -75,6 +73,7 @@ pub(crate) struct ExecutionProfilingCollector {
 
 #[cfg(feature = "profiling")]
 impl ExecutionProfilingCollector {
+    #[must_use]
     pub fn new() -> ExecutionProfilingCollector {
         let process_id = sysinfo::get_current_pid().ok();
         #[cfg(target_arch = "wasm32")]
@@ -131,6 +130,7 @@ impl ExecutionProfilingCollector {
 
     /// Gives accumulated CPU time of the process in CPU-milliseconds since simulation start.
     #[allow(unused)]
+    #[must_use]
     pub fn cpu_time(&mut self) -> u64 {
         if let Some(process_id) = self.process_id {
             // Only refresh cpu statistics
@@ -160,6 +160,7 @@ impl ExecutionProfilingCollector {
     }
 
     /// Computes the final summary statistics
+    #[must_use]
     pub fn compute_final_statistics(&mut self) -> ExecutionStatistics {
         let mut cpu_time_millis = 0;
 
@@ -202,6 +203,7 @@ pub(crate) struct ExecutionProfilingCollector {
 
 #[cfg(not(feature = "profiling"))]
 impl ExecutionProfilingCollector {
+    #[must_use]
     pub fn new() -> ExecutionProfilingCollector {
         #[cfg(target_arch = "wasm32")]
         let now = get_high_res_time();
@@ -214,6 +216,7 @@ impl ExecutionProfilingCollector {
     #[inline]
     pub fn refresh(&mut self) {}
 
+    #[must_use]
     pub fn compute_final_statistics(&mut self) -> ExecutionStatistics {
         #[cfg(target_arch = "wasm32")]
         let wall_time = get_high_res_time() - self.start_time;

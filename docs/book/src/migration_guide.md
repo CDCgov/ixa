@@ -93,6 +93,18 @@ and API docs for the macros `define_property!`, `impl_property!`,
 `define_derived_property!`, `impl_derived_property!`, and `define_multi_property!`.
 The API docs give multiple examples.
 
+Multi-property definitions now take the entity first and the component
+properties as a tuple:
+
+```rust
+define_multi_property!(Person, (Age, InfectionStatus));
+```
+
+Replace the old tuple-first form
+`define_multi_property!((Age, InfectionStatus), Person)` and the old flat form
+`define_multi_property!(Person, Age, InfectionStatus)` with the new form above.
+Multi-properties still require at least two component properties.
+
 ### Summary
 
 | Concept                     | Old System                                                                                                                     | New System                                                                                                           | Notes / Implications                                                                |

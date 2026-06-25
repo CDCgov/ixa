@@ -34,7 +34,6 @@ use crate::{trace, ContextBase, HashMap, HashMapExt};
 type PropertySetterFn =
     dyn Fn(&mut Context, &str, serde_json::Value) -> Result<(), IxaError> + Send + Sync;
 
-#[allow(clippy::type_complexity)]
 // This is a global list of all the global properties that
 // are compiled in. Fundamentally it's a HashMap of property
 // names to the setter function, but it's wrapped in the
@@ -42,6 +41,7 @@ type PropertySetterFn =
 // shared and initialized at startup time while still being
 // safe.
 #[doc(hidden)]
+#[allow(clippy::type_complexity)]
 pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<PropertySetterFn>>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::new())));
 
@@ -50,6 +50,7 @@ pub static GLOBAL_PROPERTIES: LazyLock<Mutex<RefCell<HashMap<String, Arc<Propert
 static NEXT_GLOBAL_PROPERTY_ID: Mutex<usize> = Mutex::new(0);
 
 /// A convenience getter for `NEXT_GLOBAL_PROPERTY_ID`.
+#[must_use]
 pub fn get_global_property_count() -> usize {
     *NEXT_GLOBAL_PROPERTY_ID.lock().unwrap()
 }
@@ -59,6 +60,7 @@ pub fn get_global_property_count() -> usize {
 /// Acquires a global lock on the next available global property ID, but only
 /// increments it if we successfully initialize the provided ID. The ID of a
 /// global property is assigned at runtime but only once per type.
+#[must_use]
 pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
     let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
     let candidate = *guard;
@@ -77,7 +79,6 @@ pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize 
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
@@ -132,10 +133,12 @@ pub trait GlobalProperty: Any {
     /// The actual type of the data stored in the global property
     type Value: Any;
 
+    #[must_use]
     fn id() -> usize;
 
     fn new() -> Self;
 
+    #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
         full.rsplit("::").next().unwrap()
@@ -159,6 +162,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ) -> Result<(), IxaError>;
 
     /// Return value of global property T
+    #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         _property: T,
@@ -288,6 +292,12 @@ mod test {
     use crate::define_global_property;
     use crate::error::IxaError;
 
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("integration-tests/fixtures/global-properties")
+            .join(name)
+    }
+
     #[derive(Debug)]
     struct InvalidProperty3Value {
         field_int: u32,
@@ -403,8 +413,7 @@ mod test {
     #[test]
     fn read_global_properties() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_test1.json");
+        let path = fixture_path("global_properties_test1.json");
         context.load_global_properties(&path).unwrap();
         let p1 = context.get_global_property_value(Property1).unwrap();
         assert_eq!(p1.field_int, 1);
@@ -416,8 +425,7 @@ mod test {
     #[test]
     fn read_unknown_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_missing.json");
+        let path = fixture_path("global_properties_missing.json");
         match context.load_global_properties(&path) {
             Err(IxaError::NoGlobalProperty { name }) => assert_eq!(name, "ixa.PropertyUnknown"),
             _ => panic!("Unexpected error type"),
@@ -427,10 +435,8 @@ mod test {
     #[test]
     fn read_malformed_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_malformed.json");
+        let path = fixture_path("global_properties_malformed.json");
         let error = context.load_global_properties(&path);
-        println!("Error {error:?}");
         match error {
             Err(IxaError::JsonError(_)) => {}
             _ => panic!("Unexpected error type"),
@@ -440,8 +446,7 @@ mod test {
     #[test]
     fn read_duplicate_property() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_test1.json");
+        let path = fixture_path("global_properties_test1.json");
         context.load_global_properties(&path).unwrap();
         let error = context.load_global_properties(&path);
         match error {
@@ -493,16 +498,14 @@ mod test {
     #[test]
     fn validate_property_load_success() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_valid.json");
+        let path = fixture_path("global_properties_valid.json");
         context.load_global_properties(&path).unwrap();
     }
 
     #[test]
     fn validate_property_load_failure() {
         let mut context = Context::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/global_properties_invalid.json");
+        let path = fixture_path("global_properties_invalid.json");
         let error = context.load_global_properties(&path).unwrap_err();
         assert_eq!(
             error.to_string(),

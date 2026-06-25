@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::sync::{Mutex, OnceLock};
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
-use crate::entity::multi_property::type_ids_to_multi_property_index;
+use crate::entity::multi_property::type_ids_to_multi_property_id;
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::property_store::PropertyStore;
 use crate::entity::Entity;
@@ -143,43 +143,54 @@ pub trait QueryInternal<E: Entity>: 'static {
         Self: 'a;
 
     /// Returns an unordered list of type IDs of the properties in this query.
+    #[must_use]
     fn get_type_ids(&self) -> Vec<TypeId>;
 
-    /// Returns the `TypeId` of the multi-property having the properties of this query, if any.
+    /// Returns the property ID of the representative multi-property having the properties of
+    /// this query, if any.
+    #[must_use]
     fn multi_property_id(&self) -> Option<usize> {
-        // This trick allows us to cache the multi-property ID so we don't have to allocate every
-        // time.
-        static REGISTRY: OnceLock<Mutex<HashMap<TypeId, &'static Option<usize>>>> = OnceLock::new();
+        #[allow(clippy::type_complexity)]
+        static REGISTRY: OnceLock<Mutex<HashMap<(usize, TypeId), &'static Option<usize>>>> =
+            OnceLock::new();
 
         let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
         let mut map = map.lock().unwrap();
-        let type_id = TypeId::of::<Self>();
-        let entry = *map.entry(type_id).or_insert_with(|| {
+        let key = (E::id(), TypeId::of::<Self>());
+        let entry = *map.entry(key).or_insert_with(|| {
             let mut types = self.get_type_ids();
             types.sort_unstable();
-            Box::leak(Box::new(type_ids_to_multi_property_index(types.as_slice())))
+            Box::leak(Box::new(type_ids_to_multi_property_id(
+                E::id(),
+                types.as_slice(),
+            )))
         });
 
         *entry
     }
 
     /// Indicates whether this query matches the entire population for `E`.
+    #[must_use]
     fn is_empty_query(&self) -> bool {
         false
     }
 
     /// Exposes the query parts without allocating.
+    #[must_use]
     fn query_parts(&self) -> Self::QueryParts<'_>;
 
     /// Creates a new query result as an `EntitySet`.
+    #[must_use]
     fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, E>;
 
     /// Creates a new `EntitySetIterator`.
+    #[must_use]
     fn new_query_result_iterator<'c>(&self, context: &'c Context) -> EntitySetIterator<'c, E> {
         self.new_query_result(context).into_iter()
     }
 
     /// Determines if the given person matches this query.
+    #[must_use]
     fn match_entity(&self, entity_id: EntityId<E>, context: &Context) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match this query.
@@ -201,6 +212,7 @@ impl<E: Entity> Query<E> for E {}
 #[cfg(test)]
 mod tests {
 
+    use super::QueryInternal;
     use crate::prelude::*;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, Context,
@@ -219,7 +231,207 @@ mod tests {
         Person
     );
 
-    define_multi_property!((Age, County), Person);
+    define_multi_property!(Person, (Age, County));
+
+    #[test]
+    fn empty_tuple_query_internal_matches_all_entities() {
+        let mut context = Context::new();
+        let person1 = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let person2 = context
+            .add_entity(with!(Person, Age(30), RiskCategory::Low))
+            .unwrap();
+
+        assert_eq!(<() as QueryInternal<Person>>::get_type_ids(&()), Vec::new());
+        assert!(<() as QueryInternal<Person>>::is_empty_query(&()));
+        assert!(<() as QueryInternal<Person>>::query_parts(&())
+            .as_ref()
+            .is_empty());
+
+        let people = <() as QueryInternal<Person>>::new_query_result_iterator(&(), &context)
+            .collect::<Vec<_>>();
+        assert_eq!(people, vec![person1, person2]);
+        assert!(<() as QueryInternal<Person>>::match_entity(
+            &(),
+            person1,
+            &context
+        ));
+
+        let mut ids = vec![person1, person2];
+        <() as QueryInternal<Person>>::filter_entities(&(), &mut ids, &context);
+        assert_eq!(ids, vec![person1, person2]);
+    }
+
+    #[test]
+    fn entity_query_internal_has_no_type_ids() {
+        let mut context = Context::new();
+        let person1 = context
+            .add_entity(with!(Person, Age(42), RiskCategory::High))
+            .unwrap();
+        let person2 = context
+            .add_entity(with!(Person, Age(30), RiskCategory::Low))
+            .unwrap();
+
+        assert_eq!(
+            <Person as QueryInternal<Person>>::get_type_ids(&Person),
+            Vec::new()
+        );
+        assert_eq!(
+            <Person as QueryInternal<Person>>::multi_property_id(&Person),
+            None
+        );
+        assert!(<Person as QueryInternal<Person>>::query_parts(&Person)
+            .as_ref()
+            .is_empty());
+
+        let people = <Person as QueryInternal<Person>>::new_query_result(&Person, &context)
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(people, vec![person1, person2]);
+        assert!(<Person as QueryInternal<Person>>::match_entity(
+            &Person, person1, &context
+        ));
+
+        let mut ids = vec![person1, person2];
+        <Person as QueryInternal<Person>>::filter_entities(&Person, &mut ids, &context);
+        assert_eq!(ids, vec![person1, person2]);
+    }
+
+    #[test]
+    fn singleton_query_result_iterator_uses_indexed_and_unindexed_paths() {
+        let mut context = Context::new();
+        let high = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
+        let _low = context
+            .add_entity(with!(Person, RiskCategory::Low))
+            .unwrap();
+
+        let people = <(RiskCategory,) as QueryInternal<Person>>::new_query_result_iterator(
+            &(RiskCategory::High,),
+            &context,
+        )
+        .collect::<Vec<_>>();
+        assert_eq!(people, vec![high]);
+
+        let mut indexed_context = Context::new();
+        indexed_context.index_property::<Person, RiskCategory>();
+        let indexed_high = indexed_context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
+        let _indexed_low = indexed_context
+            .add_entity(with!(Person, RiskCategory::Low))
+            .unwrap();
+
+        let people = <(RiskCategory,) as QueryInternal<Person>>::new_query_result_iterator(
+            &(RiskCategory::High,),
+            &indexed_context,
+        )
+        .collect::<Vec<_>>();
+        assert_eq!(people, vec![indexed_high]);
+
+        let mut empty_index_context = Context::new();
+        empty_index_context.index_property::<Person, Age>();
+        let _ = empty_index_context
+            .add_entity(with!(Person, Age(42), RiskCategory::Low))
+            .unwrap();
+
+        let people = <(Age,) as QueryInternal<Person>>::new_query_result_iterator(
+            &(Age(99),),
+            &empty_index_context,
+        )
+        .collect::<Vec<_>>();
+        assert!(people.is_empty());
+    }
+
+    #[test]
+    fn tuple_query_result_iterator_uses_indexed_and_unindexed_paths() {
+        let mut context = Context::new();
+        let matching1 = context
+            .add_entity(with!(Person, Age(28), County(0), RiskCategory::High))
+            .unwrap();
+        let _wrong_county = context
+            .add_entity(with!(Person, Age(28), County(1), RiskCategory::Low))
+            .unwrap();
+        let _wrong_age = context
+            .add_entity(with!(Person, Age(30), County(0), RiskCategory::Low))
+            .unwrap();
+        let matching2 = context
+            .add_entity(with!(Person, Age(28), County(0), RiskCategory::Low))
+            .unwrap();
+
+        let people = <(Age, County) as QueryInternal<Person>>::new_query_result_iterator(
+            &(Age(28), County(0)),
+            &context,
+        )
+        .collect::<Vec<_>>();
+        assert_eq!(people, vec![matching1, matching2]);
+
+        let mut indexed_context = Context::new();
+        indexed_context.index_property::<Person, (Age, County)>();
+        let indexed_matching = indexed_context
+            .add_entity(with!(Person, Age(28), County(0), RiskCategory::High))
+            .unwrap();
+        let _indexed_nonmatching = indexed_context
+            .add_entity(with!(Person, Age(28), County(1), RiskCategory::Low))
+            .unwrap();
+
+        let people = <(Age, County) as QueryInternal<Person>>::new_query_result_iterator(
+            &(Age(28), County(0)),
+            &indexed_context,
+        )
+        .collect::<Vec<_>>();
+        assert_eq!(people, vec![indexed_matching]);
+
+        let people = <(Age, County) as QueryInternal<Person>>::new_query_result_iterator(
+            &(Age(99), County(99)),
+            &indexed_context,
+        )
+        .collect::<Vec<_>>();
+        assert!(people.is_empty());
+    }
+
+    #[test]
+    fn singleton_filter_entities_keeps_matching_entities() {
+        let mut context = Context::new();
+        let high1 = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
+        let low = context
+            .add_entity(with!(Person, RiskCategory::Low))
+            .unwrap();
+        let high2 = context
+            .add_entity(with!(Person, RiskCategory::High))
+            .unwrap();
+
+        let mut people = vec![high1, low, high2];
+        context.filter_entities(&mut people, with!(Person, RiskCategory::High));
+
+        assert_eq!(people, vec![high1, high2]);
+    }
+
+    #[test]
+    fn tuple_filter_entities_falls_through_after_unsupported_multi_index_lookup() {
+        let mut context = Context::new();
+        let matching1 = context
+            .add_entity(with!(Person, Age(28), County(0), RiskCategory::High))
+            .unwrap();
+        let wrong_county = context
+            .add_entity(with!(Person, Age(28), County(1), RiskCategory::Low))
+            .unwrap();
+        let wrong_age = context
+            .add_entity(with!(Person, Age(30), County(0), RiskCategory::Low))
+            .unwrap();
+        let matching2 = context
+            .add_entity(with!(Person, Age(28), County(0), RiskCategory::Low))
+            .unwrap();
+
+        let mut people = vec![matching1, wrong_county, wrong_age, matching2];
+        context.filter_entities(&mut people, with!(Person, County(0), Age(28)));
+
+        assert_eq!(people, vec![matching1, matching2]);
+    }
 
     #[test]
     fn with_query_results() {
@@ -494,8 +706,8 @@ mod tests {
     }
 
     // create a multi-property index
-    define_multi_property!((Age, County, Height), Person);
-    define_multi_property!((County, Height), Person);
+    define_multi_property!(Person, (Age, County, Height));
+    define_multi_property!(Person, (County, Height));
 
     #[test]
     fn query_derived_prop_with_optimized_index() {

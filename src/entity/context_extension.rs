@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
-use crate::entity::property::Property;
+use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
@@ -22,7 +22,7 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
 ) where
     E: Entity,
     PL: PropertyList<E> + Eq + Hash,
-    P: Property<E> + Eq + Hash,
+    P: IndexableProperty<E>,
     F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
 {
     let mut counter = {
@@ -106,6 +106,7 @@ pub trait ContextEntitiesExt {
     /// ```rust, ignore
     /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
     /// ```
+    #[must_use]
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
@@ -121,13 +122,13 @@ pub trait ContextEntitiesExt {
     ///     `context.index_property::<Person, Age>()`
     ///
     /// This method both enables the index and catches it up to the current population.
-    fn index_property<E: Entity, P: Property<E>>(&mut self);
+    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Enables value-count indexing of property values for the property `P`.
     ///
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
-    fn index_property_counts<E: Entity, P: Property<E>>(&mut self);
+    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
@@ -158,10 +159,10 @@ pub trait ContextEntitiesExt {
     /// This method is called with the turbo-fish syntax:
     ///     `context.index_property::<Person, Age>()`
     ///
-    /// This method can return `true` even if `context.index_property::<P>()` has never been called. For example,
-    /// if a multi-property is indexed, all equivalent multi-properties are automatically also indexed, as they
-    /// share a single index.
+    /// This method only checks the concrete property storage for `P`, not any equivalent
+    /// multi-properties.
     #[cfg(test)]
+    #[must_use]
     fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
 
     /// This method gives client code direct access to the query result as an `EntitySet`.
@@ -177,12 +178,14 @@ pub trait ContextEntitiesExt {
     /// efficient for indexed queries.
     ///
     /// Supplying a naked entity, e.g. `Person`, is equivalent to calling `get_entity_count::<Person>()`.
+    #[must_use]
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
     ///
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,
@@ -194,6 +197,7 @@ pub trait ContextEntitiesExt {
     ///
     /// Returns `(count, sample)`, where `sample` is `None` iff `count == 0`.
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
         E: Entity,
@@ -206,6 +210,7 @@ pub trait ContextEntitiesExt {
     /// set is returned.
     ///
     /// To sample from the entire population, pass the entity type directly, for example `Person`.
+    #[must_use]
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
         E: Entity,
@@ -214,18 +219,23 @@ pub trait ContextEntitiesExt {
         R::RngType: Rng;
 
     /// Returns a total count of all created entities of type `E`.
+    #[must_use]
     fn get_entity_count<E: Entity>(&self) -> usize;
 
     /// Returns an iterator over all created entities of type `E`.
+    #[must_use]
     fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
 
     /// Generates an `EntitySet` representing the query results.
+    #[must_use]
     fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
 
     /// Generates an iterator over the results of the query.
+    #[must_use]
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
 
     /// Determines if the given person matches this query.
+    #[must_use]
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
 
     /// Removes all `EntityId`s from the given vector that do not match the given query.
@@ -355,7 +365,7 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn index_property<E: Entity, P: Property<E>>(&mut self) {
+    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self) {
         let property_id = P::index_id();
         let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
@@ -367,7 +377,7 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn index_property_counts<E: Entity, P: Property<E>>(&mut self) {
+    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self) {
         let property_store = self.entity_store.get_property_store_mut::<E>();
         let current_index_type = property_store.property_index_type::<P>();
         if current_index_type != PropertyIndexType::FullIndex {
@@ -379,7 +389,7 @@ impl ContextEntitiesExt for Context {
     where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
-        P: Property<E> + Eq + Hash,
+        P: IndexableProperty<E>,
         F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
     {
         assert!(
@@ -1093,8 +1103,8 @@ mod tests {
 
     // Tests related to queries and indexing
 
-    define_multi_property!((InfectionStatus, Vaccinated), Person);
-    define_multi_property!((Vaccinated, InfectionStatus), Person);
+    define_multi_property!(Person, (InfectionStatus, Vaccinated));
+    define_multi_property!(Person, (Vaccinated, InfectionStatus));
 
     #[test]
     fn with_query_results_finds_multi_index() {
@@ -1135,26 +1145,31 @@ mod tests {
             },
         );
 
-        // Check that the order doesn't matter.
-        assert_eq!(
-            InfectionStatusVaccinated::index_id(),
-            VaccinatedInfectionStatus::index_id()
+        // Check that equivalent multi-properties keep distinct storage and type IDs while
+        // sharing query routing identity through the registry.
+        assert_ne!(
+            InfectionStatusVaccinated::id(),
+            VaccinatedInfectionStatus::id()
+        );
+        assert_ne!(
+            InfectionStatusVaccinated::type_id(),
+            VaccinatedInfectionStatus::type_id()
         );
         assert_eq!(
-            InfectionStatusVaccinated::index_id(),
+            InfectionStatusVaccinated::id(),
             (InfectionStatus::Susceptible, Vaccinated(true))
                 .multi_property_id()
                 .unwrap()
         );
 
         // Check if it matches the expected bucket.
-        let index_id = InfectionStatusVaccinated::index_id();
+        let property_id = InfectionStatusVaccinated::id();
 
         let property_store = context.entity_store.get_property_store::<Person>();
         let query = (InfectionStatus::Susceptible, Vaccinated(true));
         let query_parts = query.query_parts();
         let bucket =
-            match property_store.get_index_set_for_query_parts(index_id, query_parts.as_ref()) {
+            match property_store.get_index_set_for_query_parts(property_id, query_parts.as_ref()) {
                 IndexSetResult::Set(bucket) => bucket,
                 other => panic!("expected indexed query bucket, found {other:?}"),
             };

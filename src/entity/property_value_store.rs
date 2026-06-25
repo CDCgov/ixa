@@ -18,9 +18,7 @@ use crate::entity::events::{
     PartialPropertyChangeEvent, PartialPropertyChangeEventBox, PartialPropertyChangeEventCore,
     PropertyChangeEvent,
 };
-use crate::entity::index::{
-    FullIndex, IndexCountResult, IndexSetResult, PropertyIndex, PropertyIndexType, ValueCountIndex,
-};
+use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{Entity, EntityId};
@@ -55,9 +53,6 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 
     /// Returns the index type used by this `PropertyValueStore` instance.
     fn index_type(&self) -> PropertyIndexType;
-
-    /// Sets the index type for this property value store.
-    fn set_indexed(&mut self, index_type: PropertyIndexType);
 
     /// Updates the index for any entities that have been added to the context since the last time the index was
     /// updated.
@@ -96,20 +91,30 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
     fn should_create_partial_change(&self, context: &Context) -> bool {
         context.has_event_handlers::<PropertyChangeEvent<E, P>>()
             || !self.value_change_counters.is_empty()
-            || self.index.index_type() != PropertyIndexType::Unindexed
+            || self.index.is_some()
     }
 
     fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E> {
-        match P::canonical_from_sorted_query_parts(parts) {
-            Some(value) => self.index.get_index_set_result(&value),
-            None => IndexSetResult::Empty,
+        match P::value_from_query_parts(parts) {
+            Some(value) => self
+                .index
+                .as_deref()
+                .map_or(IndexSetResult::Unsupported, |index| {
+                    index.get_index_set_result(&value)
+                }),
+            None => IndexSetResult::Unsupported,
         }
     }
 
     fn get_index_count_for_query_parts(&self, parts: &[&dyn Any]) -> IndexCountResult {
-        match P::canonical_from_sorted_query_parts(parts) {
-            Some(value) => self.index.get_index_count_result(&value),
-            None => IndexCountResult::Count(0),
+        match P::value_from_query_parts(parts) {
+            Some(value) => self
+                .index
+                .as_deref()
+                .map_or(IndexCountResult::Unsupported, |index| {
+                    index.get_index_count_result(&value)
+                }),
+            None => IndexCountResult::Unsupported,
         }
     }
 
@@ -117,30 +122,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         self.index_type()
     }
 
-    fn set_indexed(&mut self, index_type: PropertyIndexType) {
-        match index_type {
-            PropertyIndexType::Unindexed => {
-                self.index = PropertyIndex::Unindexed;
-            }
-            PropertyIndexType::FullIndex => {
-                if self.index.index_type() != PropertyIndexType::FullIndex {
-                    self.index = PropertyIndex::FullIndex(FullIndex::new());
-                }
-            }
-            PropertyIndexType::ValueCountIndex => {
-                if self.index.index_type() != PropertyIndexType::ValueCountIndex {
-                    self.index = PropertyIndex::ValueCountIndex(ValueCountIndex::<E, P>::new());
-                }
-            }
-        }
-    }
-
     fn index_unindexed_entities(&mut self, context: &Context) {
         let current_pop = context.get_entity_count::<E>();
-        let max_indexed = match self.index.max_indexed() {
-            None => return,
-            Some(max_indexed) if max_indexed >= current_pop => return,
-            Some(max_indexed) => max_indexed,
+        let Some(index) = self.index.as_ref() else {
+            return;
+        };
+        let max_indexed = match index.max_indexed() {
+            max_indexed if max_indexed >= current_pop => return,
+            max_indexed => max_indexed,
         };
         trace!(
             "{}: indexing unindexed entity {}..<{}",
@@ -156,8 +145,12 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
             } else {
                 self.get(entity_id)
             };
-            self.index.add_entity(&P::make_canonical(value), entity_id);
+            if let Some(index) = self.index.as_mut() {
+                index.add_entity(&value, entity_id);
+            }
         }
-        self.index.set_max_indexed(current_pop);
+        if let Some(index) = self.index.as_mut() {
+            index.set_max_indexed(current_pop);
+        }
     }
 }

@@ -26,15 +26,15 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    let infection_duration = parameters.infection_duration;
-    let recovery_time = context.get_current_time()
-        + context.sample_distr(InfectionRng1, Exp::new(1.0 / infection_duration).unwrap());
+    let mean_infection_duration = parameters.infection_duration;
+    let infection_duration = context.sample_distr(
+        InfectionRng1,
+        Exp::new(1.0 / mean_infection_duration).unwrap(),
+    );
     let is_alive: Alive = context.get_property(person_id);
 
     if is_alive.0 {
-        let plan_id = context.add_plan(recovery_time, move |context| {
-            context.set_property(person_id, InfectionStatus::R);
-        });
+        let plan_id = schedule_relative!(context, infection_duration, recover, person_id);
         let plans_data_container = context.get_data_mut(InfectionPlansPlugin);
         plans_data_container
             .plans_map
@@ -42,6 +42,10 @@ fn schedule_recovery(context: &mut Context, person_id: PersonId) {
             .or_default()
             .insert(plan_id);
     }
+}
+
+fn recover(context: &mut Context, person_id: PersonId) {
+    context.set_property(person_id, InfectionStatus::R);
 }
 
 fn remove_recovery_plan_data(context: &mut Context, person_id: PersonId) {

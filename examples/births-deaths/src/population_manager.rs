@@ -55,36 +55,29 @@ impl fmt::Display for AgeGroupRisk {
     }
 }
 
-fn schedule_aging(context: &mut Context, person_id: PersonId) {
+fn do_age(context: &mut Context, person_id: PersonId) {
     let is_alive: Alive = context.get_property(person_id);
     if is_alive.0 {
         let prev_age: Age = context.get_property(person_id);
         context.set_property(person_id, Age(prev_age.0 + 1));
-        let next_age_event = context.get_current_time() + 365.0;
-        context.add_plan(next_age_event, move |context| {
-            schedule_aging(context, person_id);
-        });
+        schedule_relative!(context, 365.0, do_age, person_id);
     }
 }
 
-fn schedule_birth(context: &mut Context) {
+fn do_birth(context: &mut Context) {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
     let person = context.add_entity(with!(Person, Age(0))).unwrap();
-    context.add_plan(context.get_current_time() + 365.0, move |context| {
-        schedule_aging(context, person);
-    });
+    schedule_relative!(context, 365.0, do_age, person);
 
-    let next_birth_event = context.get_current_time()
-        + context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
-    context.add_plan(next_birth_event, move |context| {
-        schedule_birth(context);
-    });
+    let next_birth_delay =
+        context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
+    schedule_relative!(context, next_birth_delay, do_birth);
 }
 
-fn schedule_death(context: &mut Context) {
+fn do_death(context: &mut Context) {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -93,12 +86,10 @@ fn schedule_death(context: &mut Context) {
     if let Some(person) = context.sample_entity(PeopleRng, with!(Person, Alive(true))) {
         context.set_property(person, Alive(false));
 
-        let next_death_event = context.get_current_time()
-            + context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
+        let next_death_delay =
+            context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
 
-        context.add_plan(next_death_event, |context| {
-            schedule_death(context);
-        });
+        schedule_relative!(context, next_death_delay, do_death);
     }
 }
 
@@ -112,21 +103,15 @@ pub fn init(context: &mut Context) {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
         let person = context.add_entity(with!(Person, Age(age))).unwrap();
         let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0).unwrap());
-        context.add_plan(365.0 + birthday, move |context| {
-            schedule_aging(context, person);
-        });
+        context.add_plan(365.0 + birthday, move |context| do_age(context, person));
     }
 
     // Plan for births and deaths
     if parameters.birth_rate > 0.0 {
-        context.add_plan(0.0, |context| {
-            schedule_birth(context);
-        });
+        context.add_plan(0.0, do_birth);
     }
     if parameters.death_rate > 0.0 {
-        context.add_plan(0.0, |context| {
-            schedule_death(context);
-        });
+        context.add_plan(0.0, do_death);
     }
 }
 
@@ -198,7 +183,7 @@ mod test {
             .unwrap();
         context.init_random(p_values.seed);
 
-        schedule_birth(&mut context);
+        do_birth(&mut context);
     }
 
     #[test]
@@ -222,7 +207,7 @@ mod test {
             .unwrap();
         context.init_random(p_values.seed);
         let _person = context.add_entity(with!(Person, Age(0))).unwrap();
-        schedule_death(&mut context);
+        do_death(&mut context);
     }
 
     #[test]
@@ -244,7 +229,7 @@ mod test {
         for i in 0..people.len() {
             let person = people[i];
             context.add_plan(365.0, move |context| {
-                schedule_aging(context, person);
+                do_age(context, person);
             });
             let age_group = age_groups[i];
             assert_eq!(

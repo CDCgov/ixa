@@ -1,0 +1,26 @@
+[package]
+name = "ixa-profiling-tests"
+version = "0.0.1"
+description = "Profiling integration tests for Ixa"
+publish = false
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+ixa = { path = "../../", features = ["profiling"] }
+
+[dev-dependencies]
+assert_cmd.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "runner_test_profiling"
+path = "bin/runner_test_profiling.rs"
+bench = false

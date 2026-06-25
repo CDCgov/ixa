@@ -34,9 +34,11 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     fn validate() -> Result<(), IxaError>;
 
     /// Checks that this property list includes all properties in the given list.
+    #[must_use]
     fn contains_properties(property_type_ids: &[TypeId]) -> bool;
 
     /// Checks that this property list contains all required properties of the entity.
+    #[must_use]
     fn contains_required_properties() -> bool {
         Self::contains_properties(E::required_property_ids())
     }
@@ -50,6 +52,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     );
 
     /// Gets the tuple of property values for the given entity.
+    #[must_use]
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 }
 

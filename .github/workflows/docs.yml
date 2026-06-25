@@ -3,12 +3,18 @@
 name: Deploy doc to Pages
 
 on:
-  # Runs on pushes targeting the default branch
+  # Runs on pushes of release tags.
   push:
-    branches: main
+    tags:
+      - "ixa-v*"
 
-  # Allows you to run this workflow manually from the Actions tab
+  # Allows you to publish docs for a specific release tag from the Actions tab.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, for example ixa-v2.0.0-beta2.5"
+        required: true
+        type: string
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -27,7 +33,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Validate release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          DOCS_TAG: ${{ inputs.tag }}
+        run: |
+          case "$DOCS_TAG" in
+            ixa-v*) ;;
+            *)
+              echo "::error::Docs can only be published from ixa-v* release tags."
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - name: Setup environment
         uses: ./.github/actions/setup-env
 

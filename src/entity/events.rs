@@ -26,7 +26,6 @@ because a non-derived p
 
 */
 
-use ixa_derive::IxaEvent;
 use smallbox::space::S4;
 use smallbox::SmallBox;
 
@@ -76,14 +75,12 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEvent
 
         // Now update the indexes
         let property_value_store = context.get_property_value_store_mut::<E, P>();
-        // Out with the old
-        property_value_store
-            .index
-            .remove_entity(&self.0.previous.make_canonical(), self.0.entity_id);
-        // In with the new
-        property_value_store
-            .index
-            .add_entity(&self.0.current.make_canonical(), self.0.entity_id);
+        if let Some(index) = property_value_store.index.as_mut() {
+            // Out with the old
+            index.remove_entity(&self.0.previous, self.0.entity_id);
+            // In with the new
+            index.add_entity(&self.0.current, self.0.entity_id);
+        }
 
         // We decided not to do the following check.
         // See `src/entity/context_extension::ContextEntitiesExt::set_property`.
@@ -131,21 +128,13 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
 /// Emitted when a new entity is created.
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
-#[allow(clippy::manual_non_exhaustive)]
 pub struct EntityCreatedEvent<E: Entity> {
     /// The [`EntityId<E>`] of the new entity.
     pub entity_id: EntityId<E>,
 }
-// We provide blanket impls for these because the compiler isn't smart enough to know
-// this type is always `Copy`/`Clone` if we derive them.
-impl<E: Entity> Copy for EntityCreatedEvent<E> {}
-impl<E: Entity> Clone for EntityCreatedEvent<E> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
 
 impl<E: Entity> EntityCreatedEvent<E> {
+    #[must_use]
     pub fn new(entity_id: EntityId<E>) -> Self {
         Self { entity_id }
     }
@@ -154,7 +143,6 @@ impl<E: Entity> EntityCreatedEvent<E> {
 /// Emitted when a property is updated.
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
-#[allow(clippy::manual_non_exhaustive)]
 pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,
@@ -163,14 +151,6 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The old value
     pub previous: P,
 }
-// We provide blanket impls for these because the compiler isn't smart enough to know
-// this type is always `Copy`/`Clone` if we derive them.
-impl<E: Entity, P: Property<E>> Clone for PropertyChangeEvent<E, P> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<E: Entity, P: Property<E>> Copy for PropertyChangeEvent<E, P> {}
 
 #[cfg(test)]
 mod tests {
