@@ -68,7 +68,6 @@
 //! use ixa::triggers::{
 //!     ContextTriggersExt, Direction, PropertyValueCountTrigger, TriggerCriterion, TriggerMode,
 //! };
-//! use ixa_derive::IxaEvent;
 //!
 //! define_entity!(Person);
 //! define_property!(

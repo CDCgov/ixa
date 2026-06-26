@@ -122,7 +122,6 @@
 //! use ixa::triggers::{
 //!     ContextTriggersExt, PropertyValueCountTrigger, TogglingTriggerCriteria,
 //! };
-//! use ixa_derive::IxaEvent;
 //!
 //! define_entity!(Person);
 //! define_property!(
