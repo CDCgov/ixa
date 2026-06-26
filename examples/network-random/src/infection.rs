@@ -66,22 +66,23 @@ mod tests {
         let mut context = Context::new();
         context.init_random(42);
 
+        // note that size * p == 1 is the critical value
         let parameters = ParametersValues {
             generation_interval: 1.0,
             population_size: 100,
-            n_connections: 10,
+            connection_p: 0.02,
+            network_seed: 128381,
             n_initial_infected: 1,
         };
         context
             .set_global_property_value(Parameters, parameters.clone())
             .unwrap();
 
-        let seed = 128381;
         network::init(
             &mut context,
             parameters.population_size,
-            parameters.n_connections,
-            seed,
+            parameters.connection_p,
+            parameters.network_seed,
         );
         init(&mut context, parameters.n_initial_infected);
 
@@ -91,6 +92,7 @@ mod tests {
         let n_s = context.query_entity_count(with!(Person, DiseaseStatus::S));
 
         assert_eq!(n_i + n_s, parameters.population_size);
-        assert_eq!(n_i, 1);
+        // in this particular example, 77 people are infected
+        assert_eq!(n_i, 77);
     }
 }

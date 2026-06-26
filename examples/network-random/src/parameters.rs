@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct ParametersValues {
     pub generation_interval: f64,
     pub population_size: usize,
-    pub n_connections: usize,
+    pub connection_p: f64,
+    pub network_seed: u64,
     pub n_initial_infected: usize,
 }
 define_global_property!(Parameters, ParametersValues);

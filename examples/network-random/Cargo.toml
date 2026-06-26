@@ -16,6 +16,7 @@ serde.workspace = true
 rand_distr.workspace = true
 itertools = "0.15.0"
 rand.workspace = true
+rust-igraph = "0.7.0"
 
 [lints]
 workspace = true

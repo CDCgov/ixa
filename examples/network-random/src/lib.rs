@@ -9,8 +9,6 @@ use crate::parameters::Parameters;
 define_entity!(Person);
 
 pub fn init(context: &mut Context) {
-    context.init_random(1);
-
     // Load parameters from json
     parameters::init(context);
 
@@ -23,8 +21,8 @@ pub fn init(context: &mut Context) {
     network::init(
         context,
         parameters.population_size,
-        parameters.n_connections,
-        38421,
+        parameters.connection_p,
+        parameters.network_seed,
     );
 
     infection::init(context, parameters.n_initial_infected);

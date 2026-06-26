@@ -52,8 +52,6 @@ assert_approx_eq = "^1.1.0"
 strum = { version = "^0.28.0", features = ["derive"] }
 quote = "^1.0.38"
 syn = { version = "^2.0.95" }
-proc-macro2 = "1.0.93"
-proc-macro-crate = "3.3.0"
 delegate = "^0.13.3"
 web-sys = "^0.3.77"
 fern = "^0.7.1"
