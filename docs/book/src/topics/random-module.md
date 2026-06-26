@@ -187,6 +187,6 @@ let choices = ['a', 'b', 'c'];
 let weights = [2,   1,   1];
 let choice = context.sample(MyRng, |rng|{
     let dist = WeightedIndex::new(&weights).unwrap();
-    choices[dist.sample(rng)]
+    choices[dist.sample(&mut rng)]
 });
 ```
