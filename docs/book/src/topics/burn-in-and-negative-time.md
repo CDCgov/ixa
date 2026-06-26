@@ -19,6 +19,8 @@ A common but fragile solution is to run a separate “initialization” simulati
 Ixa provides a simpler mechanism: treat burn-in as part of the same execution. Instead of resetting time or stitching simulations together, you allow the timeline to extend into negative values. You then designate `0.0` as the beginning of your analysis window.
 
 Negative time is not a special execution mode in Ixa. It is simply earlier simulation time. The event queue, scheduling rules, and execution semantics are identical before and after `0.0`. What may differ is your model logic. You may choose to disable transmission, suppress reporting, use alternate parameters, or run simplified dynamics during burn-in. These differences arise from your code, not from special treatment by the framework.
+For details about the execution lifecycle itself, see
+[Execution and Shutdown](execution-and-shutdown.md).
 
 ## The Core Pattern
 

@@ -14,7 +14,9 @@ in its entirety.
 1. Currently the simulation runs until `MAX_TIME` even if every single person
    has been infected and has recovered. Add a check somewhere that calls
    `context.shutdown()` if there is no more work for the simulation to do. Where
-   should this check live? _Hint: Use `context.query_entity_count`._
+   should this check live? _Hint: Use `context.query_entity_count`._ See
+   [Common Shutdown Patterns](../topics/execution-and-shutdown.md#common-shutdown-patterns)
+   for context on explicit stop conditions.
 2. Analyze the data output by the incident reporter. Plot the number of people
    with each `InfectionStatus` on the same axis to see how they change over the
    course of the simulation. Are the curves what we expect to see given our

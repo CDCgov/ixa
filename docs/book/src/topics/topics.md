@@ -3,6 +3,7 @@
 - [Properties](properties.md)
 - [Indexing](indexing.md)
 - [Burn-in Periods and Negative Time](burn-in-and-negative-time.md)
+- [Execution and Shutdown](execution-and-shutdown.md)
 - [Handling Errors](handling-errors.md)
 - [Performance and Profiling](performance.md)
 - [Profiling Module](profiling-module.md)
