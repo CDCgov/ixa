@@ -40,7 +40,6 @@
 //! use ixa::{Context, ContextEntitiesExt, define_entity, IxaEvent};
 //! use ixa::entity::EntityId;
 //! use ixa::triggers::{ContextTriggersExt, EntityCountTrigger, TriggerCriterion};
-//! use ixa_derive::IxaEvent;
 //!
 //! define_entity!(Case);
 //!

@@ -56,7 +56,6 @@
 //! use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
 //! use ixa::entity::EntityId;
 //! use ixa::triggers::{ContextTriggersExt, PropertyChangeTrigger, TriggerCriterion};
-//! use ixa_derive::IxaEvent;
 //!
 //! define_entity!(Person);
 //! define_property!(struct Alive(bool), Person, default_const = Alive(true));
