@@ -22,25 +22,24 @@ fn infect(context: &mut Context, infector: Option<PersonId>, infectee: PersonId)
         .unwrap()
         .generation_interval;
 
-    let status: DiseaseStatus = context.get_property(infectee);
-    if status == DiseaseStatus::S {
-        info!(
-            "{infector:?} infected {infectee:?} at time {}.",
-            context.get_current_time()
-        );
+    if DiseaseStatus::S == context.get_property(infectee) {
+        info!("{infector:?} infected {infectee:?}");
 
         context.set_property(infectee, DiseaseStatus::I);
 
         // schedule onward infections: this infectee becomes the next infector
         let next_infector = infectee;
         for next_infectee in network::get_connections(context, infectee) {
-            schedule_relative!(
-                context,
-                generation_interval,
-                infect,
-                Some(next_infector),
-                next_infectee
-            );
+            // only schedule infections if the potential infectee is currently susceptible
+            if DiseaseStatus::S == context.get_property(next_infectee) {
+                schedule_relative!(
+                    context,
+                    generation_interval,
+                    infect,
+                    Some(next_infector),
+                    next_infectee
+                );
+            }
         }
     } else {
         info!("{infector:?} could not infect {infectee:?}, who was already infected");
