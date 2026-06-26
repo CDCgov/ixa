@@ -52,6 +52,9 @@ pub enum IxaError {
     #[error("invalid log level format: {log_level}")]
     InvalidLogLevelFormat { log_level: String },
 
+    #[error("invalid runner config section `{section}`: {message}")]
+    InvalidRunnerConfig { section: String, message: String },
+
     #[error("cannot make edge to self")]
     CannotMakeEdgeToSelf,
     #[error("invalid weight")]
