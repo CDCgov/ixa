@@ -86,6 +86,16 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
         Self::initialization_kind() == PropertyInitializationKind::Explicit
     }
 
+    /// Whether new [`Context`] instances should index this property automatically.
+    ///
+    /// This is primarily used by multi-properties, whose main purpose is joint
+    /// indexing and query acceleration.
+    #[must_use]
+    #[inline]
+    fn index_by_default() -> bool {
+        false
+    }
+
     /// Compute the value of the property, possibly by accessing the context and using the entity's ID.
     #[must_use]
     fn compute_derived(context: &Context, entity_id: EntityId<E>) -> Self;
@@ -128,6 +138,15 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// For implementing the registry pattern
     #[must_use]
     fn id() -> usize;
+
+    /// Returns the property ID where this property's index is stored.
+    ///
+    /// Equivalent multi-properties share the representative multi-property's
+    /// index. Ordinary properties store their index on their own property ID.
+    #[must_use]
+    fn index_id() -> usize {
+        Self::id()
+    }
 
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
     /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.

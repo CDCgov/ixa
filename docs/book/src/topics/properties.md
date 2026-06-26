@@ -679,14 +679,13 @@ define_property!(
 );
 
 define_multi_property!(Person, (Age, InfectionStatus));
-
-context.index_property::<Person, AgeInfectionStatus>();
 ```
 
-For a deeper discussion of when to create multi-property indexes, see [Indexing](indexing.md). Because the components
-of a multi-property are already required to be properties, multi-properties usually "just work". If a multi-property
-will be indexed, each component value must also support `Eq` and `Hash`; this mainly matters for components containing
-plain `f32` or `f64`.
+Use the underlying property names in `define_multi_property!`, not type aliases. For a deeper discussion of when to
+create multi-property indexes, see [Indexing](indexing.md). Multi-properties are indexed automatically, but their
+component properties are not individually indexed unless you index them separately. Because the components of a
+multi-property are already required to be properties, multi-properties usually "just work". Each component value must
+also support `Eq` and `Hash`; this mainly matters for components containing plain `f32` or `f64`.
 
 ## Troubleshooting
 

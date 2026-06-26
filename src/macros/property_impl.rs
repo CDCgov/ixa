@@ -561,6 +561,14 @@ macro_rules! impl_property {
             // display_impl
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
 
+            // index_id_fn
+            {
+                <Self as $crate::entity::property::Property<$entity>>::id()
+            },
+
+            // index_by_default
+            false,
+
             // collect_deps_fn
             $crate::impl_property!(
                 @unwrap_or
@@ -685,9 +693,19 @@ macro_rules! impl_property {
                 std::any::TypeId::of::<Self>()
             },
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
+            {
+                let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
+                type_ids.sort_unstable();
+                $crate::entity::multi_property::type_ids_to_multi_property_id(
+                    <$entity as $crate::entity::Entity>::id(),
+                    &type_ids,
+                )
+                .unwrap_or_else(|| <Self as $crate::entity::property::Property<$entity>>::id())
+            },
+            true,
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
-                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+                $crate::entity::property_store::add_indexed_to_property_registry::<$entity, $property>();
             }),
         );
     };
@@ -744,6 +762,8 @@ macro_rules! impl_property {
         $query_parts_for_value_fn:expr,
         $type_id_fn:expr,          // Code that returns the logical type ID for this property
         $display_impl:expr,        // A function that takes a value and returns a string representation of this property
+        $index_id_fn:expr,         // Code that returns the index ID for this property
+        $index_by_default:expr,    // Whether this property is indexed by default
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
     ) => {
@@ -800,6 +820,14 @@ macro_rules! impl_property {
 
                 // Slow path: initialize it.
                 $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
+            }
+
+            fn index_id() -> usize {
+                $index_id_fn
+            }
+
+            fn index_by_default() -> bool {
+                $index_by_default
             }
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
@@ -1288,7 +1316,7 @@ macro_rules! define_multi_property {
                                 <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
                             ));
                         }
-                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
+                        $crate::entity::property_store::add_indexed_to_property_registry::<$entity, [<$($dependency)*>]>();
                     }
                 );
 
@@ -1615,7 +1643,7 @@ mod tests {
             ))
             .unwrap();
 
-        context.index_property::<SingleProfilePerson, SingleProfile>();
+        assert!(context.is_property_indexed::<SingleProfilePerson, SingleProfile>());
 
         let example_query = (SingleName("Alice"), SingleAge(22), SingleWeight(170));
         assert_eq!(
@@ -1628,6 +1656,45 @@ mod tests {
         assert_eq!(
             SingleProfile::value_from_query_parts(query_parts.as_ref()),
             Some((SingleName("Alice"), SingleAge(22), SingleWeight(170)))
+        );
+
+        // Check that all equivalent multi-properties are indexed through the representative...
+        assert!(context.is_property_indexed::<Person, ProfileNAW>());
+        assert!(context.is_property_indexed::<Person, ProfileAWN>());
+        assert!(context.is_property_indexed::<Person, ProfileWAN>());
+        // ...but only one `Index<E, P>` instance was created.
+        let mut indexed_count = 0;
+        if context
+            .get_property_value_store::<Person, ProfileNAW>()
+            .index_type()
+            != crate::entity::PropertyIndexType::Unindexed
+        {
+            indexed_count += 1;
+        }
+        if context
+            .get_property_value_store::<Person, ProfileAWN>()
+            .index_type()
+            != crate::entity::PropertyIndexType::Unindexed
+        {
+            indexed_count += 1;
+        }
+        if context
+            .get_property_value_store::<Person, ProfileWAN>()
+            .index_type()
+            != crate::entity::PropertyIndexType::Unindexed
+        {
+            indexed_count += 1;
+        }
+        assert_eq!(indexed_count, 1);
+
+        let example_query = (Name("Alice"), Age(22), Weight(170.5));
+        let query_multi_property_id =
+            <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query);
+        assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
+        let query_parts = QueryInternal::query_parts(&example_query);
+        assert_eq!(
+            ProfileNAW::value_from_query_parts(query_parts.as_ref()),
+            Some((Name("Alice"), Age(22), Weight(170.5)))
         );
 
         context.with_query_results(
