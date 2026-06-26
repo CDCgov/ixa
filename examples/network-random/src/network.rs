@@ -10,11 +10,11 @@ define_property!(struct Node1(PersonId), Edge);
 define_property!(struct Node2(PersonId), Edge);
 
 pub fn get_connections(context: &Context, person_id: PersonId) -> Vec<PersonId> {
-    return context
+    context
         .query(with!(Edge, Node1(person_id)))
         .into_iter()
         .map(|edge| context.get_property::<Edge, Node2>(edge).0)
-        .collect();
+        .collect()
 }
 
 pub fn instantiate_person_network(context: &mut Context, g: Graph) {
