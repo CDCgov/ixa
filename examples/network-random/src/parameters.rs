@@ -14,9 +14,14 @@ pub struct ParametersValues {
 }
 define_global_property!(Parameters, ParametersValues);
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> ParametersValues {
     let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.json");
     context
         .load_global_properties(&file_path)
-        .expect("could not load parameters");
+        .expect(format!("could not load parameters from {:?}", file_path).as_str());
+
+    context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone()
 }

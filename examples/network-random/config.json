@@ -1,8 +1,9 @@
 {
-  "network-random.Parameters": {
+  "ixa_example_network_random.Parameters": {
     "generation_interval": 1.0,
     "population_size": 100,
-    "n_connections": 100,
+    "connection_p": 0.1,
+    "network_seed": 100,
     "n_initial_infected": 1
   }
 }
