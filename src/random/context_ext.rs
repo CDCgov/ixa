@@ -1,13 +1,14 @@
 use std::any::TypeId;
 use std::cell::RefMut;
+use std::hash::Hasher;
 
 use log::trace;
 
-use crate::hashing::hash_str;
+use crate::hashing::{hash_str, DeterministicHasher};
 use crate::rand::distr::uniform::{SampleRange, SampleUniform};
 use crate::rand::distr::weighted::{Weight, WeightedIndex};
 use crate::rand::distr::Distribution;
-use crate::rand::{Rng, SeedableRng};
+use crate::rand::{Rng, RngCore, SeedableRng};
 use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
@@ -69,6 +70,30 @@ pub trait ContextRandomExt: ContextBase {
     ) -> T {
         let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
+    }
+
+    /// Returns a deterministic debug fingerprint for the current position of the random number
+    /// generator associated with the given [`RngId`].
+    ///
+    /// This clones the current generator and hashes a small number of draws from the clone, so it
+    /// does not advance the generator used by sampling. The returned value is intended only for
+    /// comparing checkpoints across runs of the same code and dependency versions. It is not a
+    /// serialization format, and it does not guarantee reproducibility across RNG algorithm or
+    /// version changes.
+    #[must_use]
+    fn debug_rng_state<R: RngId + 'static>(&self, _rng_id: R) -> u64
+    where
+        R::RngType: Clone + RngCore,
+    {
+        let rng = get_rng::<R>(self);
+        let mut rng_snapshot = (*rng).clone();
+        let mut hasher = DeterministicHasher::default();
+
+        for _ in 0..4 {
+            hasher.write(&rng_snapshot.next_u64().to_le_bytes());
+        }
+
+        hasher.finish()
     }
 
     /// Gets a random sample from the specified distribution using a random number generator
@@ -186,6 +211,94 @@ mod test {
         context.init_random(88);
         assert_ne!(run_0, context.sample(FooRng, RngCore::next_u64));
         assert_ne!(run_1, context.sample(FooRng, RngCore::next_u64));
+    }
+
+    #[test]
+    fn debug_rng_state_matches_for_same_seed_and_progress() {
+        let mut context_0 = Context::new();
+        context_0.init_random(42);
+        let mut context_1 = Context::new();
+        context_1.init_random(42);
+
+        for _ in 0..3 {
+            let _ = context_0.sample(FooRng, RngCore::next_u64);
+            let _ = context_1.sample(FooRng, RngCore::next_u64);
+        }
+
+        assert_eq!(
+            context_0.debug_rng_state(FooRng),
+            context_1.debug_rng_state(FooRng)
+        );
+    }
+
+    #[test]
+    fn debug_rng_state_changes_with_rng_progress() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        let initial = context.debug_rng_state(FooRng);
+        let _ = context.sample(FooRng, RngCore::next_u64);
+
+        assert_ne!(initial, context.debug_rng_state(FooRng));
+    }
+
+    #[test]
+    fn debug_rng_state_is_stable_without_sampling() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        assert_eq!(
+            context.debug_rng_state(FooRng),
+            context.debug_rng_state(FooRng)
+        );
+    }
+
+    #[test]
+    fn debug_rng_state_does_not_affect_next_sample() {
+        let mut with_debug = Context::new();
+        with_debug.init_random(42);
+        let mut without_debug = Context::new();
+        without_debug.init_random(42);
+
+        let _ = with_debug.debug_rng_state(FooRng);
+
+        assert_eq!(
+            with_debug.sample(FooRng, RngCore::next_u64),
+            without_debug.sample(FooRng, RngCore::next_u64)
+        );
+    }
+
+    #[test]
+    fn debug_rng_state_resets_with_seed() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        let initial = context.debug_rng_state(FooRng);
+        let _ = context.sample(FooRng, RngCore::next_u64);
+        assert_ne!(initial, context.debug_rng_state(FooRng));
+
+        context.init_random(42);
+        assert_eq!(initial, context.debug_rng_state(FooRng));
+    }
+
+    #[test]
+    fn debug_rng_state_is_independent_by_rng_id() {
+        let mut context_0 = Context::new();
+        context_0.init_random(42);
+        let mut context_1 = Context::new();
+        context_1.init_random(42);
+
+        let foo_initial = context_0.debug_rng_state(FooRng);
+        let bar_initial = context_0.debug_rng_state(BarRng);
+        assert_ne!(foo_initial, bar_initial);
+
+        let _ = context_0.sample(FooRng, RngCore::next_u64);
+        let _ = context_1.sample(BarRng, RngCore::next_u64);
+
+        assert_ne!(context_0.debug_rng_state(FooRng), foo_initial);
+        assert_eq!(context_0.debug_rng_state(BarRng), bar_initial);
+        assert_eq!(context_1.debug_rng_state(FooRng), foo_initial);
+        assert_ne!(context_1.debug_rng_state(BarRng), bar_initial);
     }
 
     define_data_plugin!(
