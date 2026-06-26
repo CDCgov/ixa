@@ -54,7 +54,6 @@
 //! ```rust
 //! use ixa::{Context, ExecutionPhase, IxaEvent};
 //! use ixa::triggers::{ContextTriggersExt, PeriodicTimeTrigger, TriggerCriterion};
-//! use ixa_derive::IxaEvent;
 //!
 //! #[derive(IxaEvent)]
 //! struct ReportTimeReached {
