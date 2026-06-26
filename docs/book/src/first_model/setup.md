@@ -130,7 +130,8 @@ The `run_with_args()` function does the following:
 3. Finally, it kicks off the simulation by executing `context.execute()`. Of
    course, our model doesn't actually do anything or even contain any data, so
    `context.execute()` checks that there is no work to do and immediately
-   returns.
+   returns. (See
+   [Execution and Shutdown](../topics/execution-and-shutdown.md).)
 
 If there is an error at any stage, `run_with_args()` will return an error
 result. The Rust compiler will complain if we do not handle the returned result,

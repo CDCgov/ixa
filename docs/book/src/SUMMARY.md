@@ -14,6 +14,7 @@
   - [Properties](topics/properties.md)
   - [Indexing](topics/indexing.md)
   - [Burn-in Periods and Negative Time](topics/burn-in-and-negative-time.md)
+  - [Execution and Shutdown](topics/execution-and-shutdown.md)
   - [Handling Errors](topics/handling-errors.md)
   - [Performance and Profiling](topics/performance.md)
   - [Profiling Module](topics/profiling-module.md)
