@@ -1,0 +1,22 @@
+[book]
+authors = ["The Ixa Developers"]
+language = "en"
+src = "src"
+title = "Notes On Ixa Internals"
+
+[build]
+create-missing = false
+
+[output.html]
+site-url = "/book/"
+
+[preprocessor.callouts]
+# Callouts are the same as GitHub's admonitions.
+
+[output.html.playground]
+# None of our code examples are runnable, and the playground interferes with inline highlighting.
+runnable = false
+
+[preprocessor.inline-highlighting]
+after = ["links"]
+default-language = "rust"
