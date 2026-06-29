@@ -1,7 +1,7 @@
 //! Trigger criteria that emit user-defined events.
 //!
 //! A trigger is a way to say: when some simulation criterion is met, emit a
-//! concrete user-defined [`IxaEvent`](crate::IxaEvent). Trigger-emitted events
+//! concrete user-defined [`IxaEvent`]. Trigger-emitted events
 //! are ordinary Ixa events, so any number of subscribers can listen for them
 //! with [`Context::subscribe_to_event`](crate::Context::subscribe_to_event).
 //!
@@ -48,7 +48,7 @@
 //! Use [`TriggerCriterion::emit_with`] when the emitted event should contain data from the trigger
 //! observation. When the criterion is met, this observation value is passed to the event
 //! constructor (typically a closure or static constructor method) supplied to `emit_with`, and that
-//! constructor returns the concrete user-defined [`IxaEvent`](crate::IxaEvent) that subscribers
+//! constructor returns the concrete user-defined [`IxaEvent`] that subscribers
 //! will receive.
 //!
 //! ```rust
@@ -768,6 +768,48 @@ mod tests {
         let person = context
             .add_entity(with!(Person, InfectionStatus::Infectious))
             .unwrap();
+        context.set_property(person, InfectionStatus::Susceptible);
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![(0, Direction::Decreasing)]);
+    }
+
+    // Regression coverage for create-with-untracked-value followed by change-to-tracked before
+    // callbacks drain. A deferred creation callback that reads the later tracked value must not
+    // count the entity again when the property-change callback drains.
+    #[test]
+    fn property_value_count_does_not_double_count_same_tick_change_to_tracked() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        #[derive(IxaEvent)]
+        struct InfectiousThresholdReached {
+            count: usize,
+            direction: Direction,
+        }
+
+        context.register_trigger(
+            PropertyValueCountTrigger::<Person, InfectionStatus>::changes_to(
+                InfectionStatus::Infectious,
+                0,
+            )
+            .repeating()
+            .emit_with(|event| InfectiousThresholdReached {
+                count: event.count,
+                direction: event.direction,
+            }),
+        );
+        context.subscribe_to_event(move |_context, event: InfectiousThresholdReached| {
+            observed_clone
+                .borrow_mut()
+                .push((event.count, event.direction));
+        });
+
+        let person = context.add_entity(Person).unwrap();
+        context.set_property(person, InfectionStatus::Infectious);
+        context.execute();
+
         context.set_property(person, InfectionStatus::Susceptible);
         context.execute();
 
