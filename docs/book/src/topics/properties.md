@@ -679,14 +679,25 @@ define_property!(
 );
 
 define_multi_property!(Person, (Age, InfectionStatus));
-
-context.index_property::<Person, AgeInfectionStatus>();
 ```
 
-For a deeper discussion of when to create multi-property indexes, see [Indexing](indexing.md). Because the components
-of a multi-property are already required to be properties, multi-properties usually "just work". If a multi-property
-will be indexed, each component value must also support `Eq` and `Hash`; this mainly matters for components containing
-plain `f32` or `f64`.
+By default, this creates a full multi-property index. You can pass an explicit
+`ixa::entity::PropertyIndexType` as a third argument to request a count-only
+index or to opt out of automatic indexing:
+
+```rust
+define_multi_property!(
+    Person,
+    (Age, InfectionStatus),
+    ixa::entity::PropertyIndexType::Unindexed
+);
+```
+
+Use the underlying property names in `define_multi_property!`, not type aliases. For a deeper discussion of when to
+create multi-property indexes, see [Indexing](indexing.md). Multi-property component properties are not individually
+indexed unless you index them separately. Because the components of a multi-property are already required to be
+properties, multi-properties usually "just work". Each component value must also support `Eq` and `Hash`; this mainly
+matters for components containing plain `f32` or `f64`.
 
 ## Troubleshooting
 

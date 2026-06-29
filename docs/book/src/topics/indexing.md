@@ -12,15 +12,13 @@ context.index_property::<Person, Age>();
 // For multi-indexes
 // Where properties are defined:
 define_multi_property!(Person, (Name, Age, Weight));
-// Somewhere during the initialization of `context`:
-context.index_property::<Person, (Name, Age, Weight)>();
 ```
 
 Best practices:
 
 - Index a property to improve performance of queries of that property.
-- Create a multi-property index to improve performance of queries involving
-  multiple properties.
+- Define a multi-property to improve performance of queries involving multiple
+  properties. Multi-properties are indexed automatically.
 - The cost of creating indexes is increased memory use, which can be significant
   for large populations. So it is best to only create indexes / multi-indexes
   that actually improve model performance.
@@ -32,6 +30,8 @@ Best practices:
   running simulation or to call it twice for the same property.
 - Calling `Context::index_property` enables indexing and catches the index up to
   the current population at the time of the call.
+- Multi-properties are full-indexed by default. Calling `Context::index_property`
+  for a multi-property is still valid, but is usually unnecessary.
 
 ## Property Value Storage in Ixa
 
@@ -191,23 +191,42 @@ might look like this:
 | `(30, recovered)`             | `\[4, 8, 35, 36]`                |
 
 Ixa hides the boilerplate required for creating a multi-index with the macro
-`define_multi_property!`:
+`define_multi_property!`. Multi-properties create a full index automatically:
 
 ```rust
 define_multi_property!(Person, (AgeGroup, InfectionStatus));
 ```
 
+You can choose a different default index type with the optional third argument.
+A `ValueCountIndex` stores only counts for each value tuple, so
+`query_entity_count` can use it without storing the full set of matching
+entities. Set-producing query paths still return correct results by falling back
+to ordinary query evaluation when they need entity IDs:
+
+```rust
+define_multi_property!(
+    Person,
+    (AgeGroup, InfectionStatus),
+    ixa::entity::PropertyIndexType::ValueCountIndex
+);
+```
+
+Use `PropertyIndexType::Unindexed` to define the multi-property without creating
+an index automatically. You can later call `context.index_property` for that
+multi-property to create a full index.
+
+Defining a multi-property _does not_ automatically create indexes for each
+component property individually, but you can do so yourself if you wish, for
+example, if you had other single property queries you want to speed up.
+
 Queries are order-insensitive for multi-property indexes: a query written with
 `AgeGroup` before `InfectionStatus` can use the same multi-property index as a
 query written in the opposite order. If you define multiple equivalent
 multi-properties with the same component properties in different orders, Ixa
-chooses the first registered one for query routing. Index that representative
-multi-property; attempting to index a later equivalent multi-property will
-panic because queries cannot use that duplicate index.
-
-Creating a multi-index _does not_ automatically create indexes for each of the
-properties individually, but you can do so yourself if you wish, for example, if
-you had other single property queries you want to speed up.
+chooses the first registered one for query routing and index storage. Attempting
+to explicitly index a later equivalent multi-property will panic because queries
+cannot use that duplicate index. The representative multi-property's default
+index type is the effective default for all equivalent definitions.
 
 ## The Benefits of Indexing - A Case Study
 

@@ -12,8 +12,8 @@ use std::cell::RefCell;
 use std::vec::Vec;
 
 use super::entity::{Entity, EntityId};
-use super::property::{Property, PropertyInitializationKind};
-use crate::entity::index::{PropertyIndex, PropertyIndexType};
+use super::property::{IndexableProperty, Property, PropertyInitializationKind};
+use crate::entity::index::{FullIndex, PropertyIndex, PropertyIndexType, ValueCountIndex};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::value_change_counter::ValueChangeCounter;
 /// The underlying storage type for property values.
@@ -179,6 +179,28 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             // This is an internal error, as we enforce the invariant that every property must have a value.
             unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
         }
+    }
+}
+
+impl<E: Entity, P: IndexableProperty<E>> PropertyValueStoreCore<E, P> {
+    fn default_index() -> Option<Box<dyn PropertyIndex<E, P>>> {
+        if P::index_id() != P::id() {
+            return None;
+        }
+
+        match P::default_index_type() {
+            PropertyIndexType::Unindexed => None,
+            PropertyIndexType::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
+            PropertyIndexType::ValueCountIndex => Some(Box::new(ValueCountIndex::<E, P>::new())),
+        }
+    }
+
+    pub(crate) fn new_boxed_with_default_index() -> Box<dyn PropertyValueStore<E>> {
+        Box::new(Self {
+            data: RawPropertyValueVec::default(),
+            index: Self::default_index(),
+            value_change_counters: Vec::new(),
+        })
     }
 }
 
