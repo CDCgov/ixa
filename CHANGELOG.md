@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0...ixa-v2.1.0) - 2026-06-29
+
+### Added
+
+- Triggers ([#962](https://github.com/CDCgov/ixa/pull/962))
+
+### Other
+
+- Audit obsolete Clippy allow attributes ([#973](https://github.com/CDCgov/ixa/pull/973))
+- remove getrandom ([#970](https://github.com/CDCgov/ixa/pull/970))
+- refactor integration test crates by feature scope ([#963](https://github.com/CDCgov/ixa/pull/963))
+- bump actions/checkout from 6 to 7 ([#968](https://github.com/CDCgov/ixa/pull/968))
+- re-export IxaEvent derive from ixa ([#967](https://github.com/CDCgov/ixa/pull/967))
+- update actions versions ([#961](https://github.com/CDCgov/ixa/pull/961))
+- add must use ([#959](https://github.com/CDCgov/ixa/pull/959))
+
 ## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0) - 2026-06-16
 
 Ixa 2.0 replaces the single, hard-coded `people` module with a generalized,

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.5...ixa-fips-v0.1.6) - 2026-06-29
+
+### Other
+
+- Audit obsolete Clippy allow attributes ([#973](https://github.com/CDCgov/ixa/pull/973))
+
 ## [0.1.5](https://github.com/CDCgov/ixa/compare/ixa-fips-v0.1.4...ixa-fips-v0.1.5) - 2026-05-19
 
 ### Other
