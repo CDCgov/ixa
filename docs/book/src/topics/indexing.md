@@ -191,11 +191,29 @@ might look like this:
 | `(30, recovered)`             | `\[4, 8, 35, 36]`                |
 
 Ixa hides the boilerplate required for creating a multi-index with the macro
-`define_multi_property!`. Multi-properties are indexed automatically:
+`define_multi_property!`. Multi-properties create a full index automatically:
 
 ```rust
 define_multi_property!(Person, (AgeGroup, InfectionStatus));
 ```
+
+You can choose a different default index type with the optional third argument.
+A `ValueCountIndex` stores only counts for each value tuple, so
+`query_entity_count` can use it without storing the full set of matching
+entities. Set-producing query paths still return correct results by falling back
+to ordinary query evaluation when they need entity IDs:
+
+```rust
+define_multi_property!(
+    Person,
+    (AgeGroup, InfectionStatus),
+    ixa::entity::PropertyIndexType::ValueCountIndex
+);
+```
+
+Use `PropertyIndexType::Unindexed` to define the multi-property without creating
+an index automatically. You can later call `context.index_property` for that
+multi-property to create a full index.
 
 Defining a multi-property _does not_ automatically create indexes for each
 component property individually, but you can do so yourself if you wish, for
@@ -207,7 +225,8 @@ query written in the opposite order. If you define multiple equivalent
 multi-properties with the same component properties in different orders, Ixa
 chooses the first registered one for query routing and index storage. Attempting
 to explicitly index a later equivalent multi-property will panic because queries
-cannot use that duplicate index.
+cannot use that duplicate index. The representative multi-property's default
+index type is the effective default for all equivalent definitions.
 
 ## The Benefits of Indexing - A Case Study
 

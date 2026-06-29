@@ -13,7 +13,7 @@ use std::vec::Vec;
 
 use super::entity::{Entity, EntityId};
 use super::property::{IndexableProperty, Property, PropertyInitializationKind};
-use crate::entity::index::{FullIndex, PropertyIndex, PropertyIndexType};
+use crate::entity::index::{FullIndex, PropertyIndex, PropertyIndexType, ValueCountIndex};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::value_change_counter::ValueChangeCounter;
 /// The underlying storage type for property values.
@@ -184,10 +184,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
 impl<E: Entity, P: IndexableProperty<E>> PropertyValueStoreCore<E, P> {
     fn default_index() -> Option<Box<dyn PropertyIndex<E, P>>> {
-        if P::index_by_default() && P::index_id() == P::id() {
-            Some(Box::new(FullIndex::<E, P>::new()))
-        } else {
-            None
+        if P::index_id() != P::id() {
+            return None;
+        }
+
+        match P::default_index_type() {
+            PropertyIndexType::Unindexed => None,
+            PropertyIndexType::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
+            PropertyIndexType::ValueCountIndex => Some(Box::new(ValueCountIndex::<E, P>::new())),
         }
     }
 
