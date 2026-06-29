@@ -262,7 +262,6 @@ pub fn format_with_commas_f64(value: f64) -> String {
 
 #[cfg(all(test, feature = "profiling"))]
 mod tests {
-    #![allow(clippy::unreadable_literal)]
     use std::time::Duration;
 
     use crate::profiling::display::{

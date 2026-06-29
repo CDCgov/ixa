@@ -12,10 +12,6 @@
 //! for ASPR synthetic population data files, including files that are within a zip archive.
 
 #![allow(dead_code)]
-// Positive instances of the following lints have been audited.
-#![allow(clippy::inline_always)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_lossless)]
 
 mod errors;
 pub mod fips_code;

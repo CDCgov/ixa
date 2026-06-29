@@ -179,7 +179,6 @@ impl ProfilingData {
 
         // Collect data rows
         for (key, count) in &self.counts {
-            #[allow(clippy::cast_precision_loss)]
             let rate = (*count as f64) / elapsed; // Just allow this to be `inf`/`nan` if `elapsed == 0.0`.
 
             rows.push(((*key).to_string(), *count, rate));

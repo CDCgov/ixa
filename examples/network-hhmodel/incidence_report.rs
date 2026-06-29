@@ -157,7 +157,6 @@ mod test {
 
             let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
 
-            #[allow(clippy::vec_init_then_push)]
             seir::init(&mut context, &to_infect, 1.0);
 
             context.execute();

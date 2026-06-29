@@ -26,7 +26,6 @@ because a non-derived p
 
 */
 
-use ixa_derive::IxaEvent;
 use smallbox::space::S4;
 use smallbox::SmallBox;
 
@@ -129,7 +128,6 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
 /// Emitted when a new entity is created.
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
-#[allow(clippy::manual_non_exhaustive)]
 pub struct EntityCreatedEvent<E: Entity> {
     /// The [`EntityId<E>`] of the new entity.
     pub entity_id: EntityId<E>,
@@ -145,7 +143,6 @@ impl<E: Entity> EntityCreatedEvent<E> {
 /// Emitted when a property is updated.
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
-#[allow(clippy::manual_non_exhaustive)]
 pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
     /// The [`EntityId<E>`] that changed
     pub entity_id: EntityId<E>,

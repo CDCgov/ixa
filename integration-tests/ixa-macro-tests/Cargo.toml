@@ -1,0 +1,18 @@
+[package]
+name = "ixa-macro-tests"
+version = "0.0.1"
+description = "Macro integration tests for Ixa"
+publish = false
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dev-dependencies]
+ixa = { path = "../../" }
+serde.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

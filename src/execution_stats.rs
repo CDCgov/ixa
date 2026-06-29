@@ -1,6 +1,3 @@
-// Loss of precision is allowable in this module's use cases.
-#![allow(clippy::cast_precision_loss)]
-
 use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;

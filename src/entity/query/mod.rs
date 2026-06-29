@@ -160,7 +160,6 @@ pub trait QueryInternal<E: Entity>: 'static {
     /// this query, if any.
     #[must_use]
     fn multi_property_id(&self) -> Option<usize> {
-        // Silence type complexity warning for this one-off data structure.
         #[allow(clippy::type_complexity)]
         static REGISTRY: OnceLock<Mutex<HashMap<(usize, TypeId), &'static Option<usize>>>> =
             OnceLock::new();

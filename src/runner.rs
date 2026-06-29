@@ -142,7 +142,6 @@ fn create_ixa_cli() -> Command {
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
-#[allow(clippy::missing_errors_doc)]
 pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args,
@@ -166,7 +165,6 @@ where
 ///
 /// # Errors
 /// Returns an error if argument parsing or the setup function fails
-#[allow(clippy::missing_errors_doc)]
 pub fn run_with_args<F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
@@ -324,6 +322,12 @@ mod tests {
     use super::*;
     use crate::{define_global_property, define_rng};
 
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("integration-tests/fixtures/global-properties")
+            .join(name)
+    }
+
     #[derive(Args, Debug)]
     struct CustomArgs {
         #[arg(short, long, default_value = "0")]
@@ -372,7 +376,7 @@ mod tests {
     #[test]
     fn test_run_with_config_path() {
         let test_args = BaseArgs {
-            config: Some(PathBuf::from("tests/data/global_properties_runner.json")),
+            config: Some(fixture_path("global_properties_runner.json")),
             ..Default::default()
         };
         let result = run_with_args_internal(test_args, None, |ctx, _, _: Option<()>| {
