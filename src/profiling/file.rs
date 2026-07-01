@@ -70,11 +70,25 @@ struct CountRecord {
 
 #[cfg(feature = "profiling")]
 #[derive(Serialize)]
+struct QueryTimingRecord {
+    query: String,
+    indexed: bool,
+    count: usize,
+    total: SerializableDuration,
+    mean: SerializableDuration,
+    min: SerializableDuration,
+    max: SerializableDuration,
+    percent_runtime: f64,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Serialize)]
 struct ProfilingDataRecord {
     date_time: SystemTime,
     execution_statistics: SerializableExecutionStatistics,
     named_counts: Vec<CountRecord>,
     named_spans: Vec<SpanRecord>,
+    query_timings: Vec<QueryTimingRecord>,
     computed_statistics: HashMap<&'static str, ComputedStatisticRecord>,
 }
 
@@ -110,6 +124,20 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
             rate_per_second,
         })
         .collect();
+    let query_timings_data = container
+        .get_query_timings_table()
+        .into_iter()
+        .map(|row| QueryTimingRecord {
+            query: row.query,
+            indexed: row.indexed,
+            count: row.count,
+            total: SerializableDuration(row.total),
+            mean: SerializableDuration(row.mean),
+            min: SerializableDuration(row.min),
+            max: SerializableDuration(row.max),
+            percent_runtime: row.percent_runtime,
+        })
+        .collect();
 
     // Compute first to avoid double borrow
     let stat_count = container.computed_statistics.len();
@@ -140,6 +168,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         execution_statistics: execution_statistics.into(),
         named_counts: named_counts_data,
         named_spans: named_spans_data,
+        query_timings: query_timings_data,
         computed_statistics,
     };
 
@@ -212,6 +241,7 @@ mod tests {
         assert!(json["execution_statistics"].is_object());
         assert!(json["named_counts"].is_array());
         assert!(json["named_spans"].is_array());
+        assert!(json["query_timings"].is_array());
         assert!(json["computed_statistics"].is_object());
         assert_eq!(
             json["execution_statistics"]["max_memory_usage"],
@@ -238,6 +268,45 @@ mod tests {
             "Total test events"
         );
         assert_eq!(computed["file_event_count_write"]["value"], 2);
+    }
+
+    #[test]
+    fn test_write_profiling_data_includes_query_timings() {
+        {
+            let mut data = get_profiling_data();
+            data.record_query_timing("FileQueryTiming: (Age)", true, Duration::from_micros(10));
+            data.record_query_timing("FileQueryTiming: (Age)", true, Duration::from_micros(30));
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("query_timing_test.json");
+
+        let exec_stats = ExecutionStatistics {
+            max_memory_usage: 0,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
+            cpu_time: Duration::from_secs(0),
+            wall_time: Duration::from_secs(0),
+        };
+
+        write_profiling_data_to_file(&file_path, exec_stats).expect("Failed to write file");
+
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
+        let query_timings = json["query_timings"].as_array().unwrap();
+        let timing = query_timings
+            .iter()
+            .find(|row| row["query"] == "FileQueryTiming: (Age)")
+            .expect("FileQueryTiming: (Age) not found");
+
+        assert_eq!(timing["count"], 2);
+        assert!(timing["indexed"].is_boolean());
+        assert_eq!(timing["indexed"], true);
+        assert!((timing["total"].as_f64().unwrap() - 0.00004).abs() < 0.000001);
+        assert!((timing["mean"].as_f64().unwrap() - 0.00002).abs() < 0.000001);
+        assert!((timing["min"].as_f64().unwrap() - 0.00001).abs() < 0.000001);
+        assert!((timing["max"].as_f64().unwrap() - 0.00003).abs() < 0.000001);
+        assert!(timing["percent_runtime"].is_number());
     }
 
     #[test]

@@ -31,6 +31,7 @@ mod tests {
         assert!(json["execution_statistics"].is_object());
         assert!(json["named_counts"].is_array());
         assert!(json["named_spans"].is_array());
+        assert!(json["query_timings"].is_array());
         assert!(json["computed_statistics"].is_object());
 
         let counts = json["named_counts"].as_array().unwrap();
