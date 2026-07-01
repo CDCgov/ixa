@@ -20,8 +20,58 @@ fn query_timing_label<E: Entity, Q: Query<E>>(query: &Q) -> &'static str {
 }
 
 #[cfg(feature = "profiling")]
-fn open_query_timing_span<E: Entity, Q: Query<E>>(query: &Q) -> crate::profiling::QueryTimingSpan {
-    crate::profiling::open_query_timing(query_timing_label::<E, Q>(query))
+fn query_uses_index_set_fast_path<E: Entity, Q: Query<E>>(context: &Context, query: &Q) -> bool {
+    if query.is_empty_query() {
+        return false;
+    }
+
+    let Some(multi_property_id) = query.multi_property_id() else {
+        return false;
+    };
+
+    let property_store = context.entity_store.get_property_store::<E>();
+    let query_parts = query.query_parts();
+    matches!(
+        property_store.get_index_set_for_query_parts(multi_property_id, query_parts.as_ref()),
+        IndexSetResult::Set(_) | IndexSetResult::Empty
+    )
+}
+
+#[cfg(feature = "profiling")]
+fn query_entity_count_uses_index_count<E: Entity, Q: Query<E>>(
+    context: &Context,
+    query: &Q,
+) -> bool {
+    let Some(multi_property_id) = query.multi_property_id() else {
+        return false;
+    };
+
+    let property_store = context.entity_store.get_property_store::<E>();
+    let query_parts = query.query_parts();
+    matches!(
+        property_store.get_index_count_for_query_parts(multi_property_id, query_parts.as_ref()),
+        IndexCountResult::Count(_)
+    )
+}
+
+#[cfg(feature = "profiling")]
+fn filter_entities_uses_index_set_fast_path<E: Entity, Q: Query<E>>(
+    context: &Context,
+    query: &Q,
+) -> bool {
+    if query.get_type_ids().len() <= 1 {
+        return false;
+    }
+
+    query_uses_index_set_fast_path::<E, Q>(context, query)
+}
+
+#[cfg(feature = "profiling")]
+fn open_query_timing_span<E: Entity, Q: Query<E>>(
+    query: &Q,
+    indexed: bool,
+) -> crate::profiling::QueryTimingSpan {
+    crate::profiling::open_query_timing(query_timing_label::<E, Q>(query), indexed)
 }
 
 fn handle_periodic_value_change_count_event<E, PL, P, F>(
@@ -124,14 +174,14 @@ impl Context {
                 IndexSetResult::Set(people_set) => {
                     let result = EntitySet::from_source(SourceSet::IndexSet(people_set));
                     #[cfg(feature = "profiling")]
-                    let result = result.with_query_timing_label(query_timing_label);
+                    let result = result.with_query_timing_label(query_timing_label, true);
                     callback(result);
                     return;
                 }
                 IndexSetResult::Empty => {
                     let result = EntitySet::empty();
                     #[cfg(feature = "profiling")]
-                    let result = result.with_query_timing_label(query_timing_label);
+                    let result = result.with_query_timing_label(query_timing_label, true);
                     callback(result);
                     return;
                 }
@@ -146,7 +196,7 @@ impl Context {
             let result =
                 EntitySet::from_source(SourceSet::PopulationRange(0..self.get_entity_count::<E>()));
             #[cfg(feature = "profiling")]
-            let result = result.with_query_timing_label(query_timing_label);
+            let result = result.with_query_timing_label(query_timing_label, false);
             callback(result);
             return;
         }
@@ -156,7 +206,7 @@ impl Context {
 
         let result = self.query_unprofiled(query);
         #[cfg(feature = "profiling")]
-        let result = result.with_query_timing_label(query_timing_label);
+        let result = result.with_query_timing_label(query_timing_label, false);
         callback(result);
     }
 
@@ -636,7 +686,10 @@ impl ContextEntitiesExt for Context {
 
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span = open_query_timing_span::<E, Q>(
+            &query,
+            query_entity_count_uses_index_count(self, &query),
+        );
         self.query_entity_count_unprofiled(query)
     }
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
@@ -647,7 +700,8 @@ impl ContextEntitiesExt for Context {
         R::RngType: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span =
+            open_query_timing_span::<E, Q>(&query, query_uses_index_set_fast_path(self, &query));
         self.sample_entity_unprofiled(rng_id, query)
     }
 
@@ -659,7 +713,8 @@ impl ContextEntitiesExt for Context {
         R::RngType: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span =
+            open_query_timing_span::<E, Q>(&query, query_uses_index_set_fast_path(self, &query));
         self.count_and_sample_entity_unprofiled(rng_id, query)
     }
 
@@ -671,7 +726,8 @@ impl ContextEntitiesExt for Context {
         R::RngType: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span =
+            open_query_timing_span::<E, Q>(&query, query_uses_index_set_fast_path(self, &query));
         self.sample_entities_unprofiled(rng_id, query, n)
     }
 
@@ -686,30 +742,37 @@ impl ContextEntitiesExt for Context {
     fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
         #[cfg(feature = "profiling")]
         let query_timing_label = query_timing_label::<E, Q>(&query);
+        #[cfg(feature = "profiling")]
+        let indexed = query_uses_index_set_fast_path(self, &query);
         let result = self.query_unprofiled(query);
         #[cfg(feature = "profiling")]
-        let result = result.with_query_timing_label(query_timing_label);
+        let result = result.with_query_timing_label(query_timing_label, indexed);
         result
     }
 
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
         #[cfg(feature = "profiling")]
         let query_timing_label = query_timing_label::<E, Q>(&query);
+        #[cfg(feature = "profiling")]
+        let indexed = query_uses_index_set_fast_path(self, &query);
         let result = self.query_result_iterator_unprofiled(query);
         #[cfg(feature = "profiling")]
-        let result = result.with_query_timing_label(query_timing_label);
+        let result = result.with_query_timing_label(query_timing_label, indexed);
         result
     }
 
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span = open_query_timing_span::<E, Q>(&query, false);
         self.match_entity_unprofiled(entity_id, query)
     }
 
     fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
         #[cfg(feature = "profiling")]
-        let _query_timing_span = open_query_timing_span::<E, Q>(&query);
+        let _query_timing_span = open_query_timing_span::<E, Q>(
+            &query,
+            filter_entities_uses_index_set_fast_path(self, &query),
+        );
         self.filter_entities_unprofiled(entities, query);
     }
 }
@@ -764,6 +827,69 @@ mod tests {
     define_entity!(ProfilingContainsPerson);
     #[cfg(feature = "profiling")]
     define_property!(struct ProfilingContainsAge(u8), ProfilingContainsPerson);
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingIndexedCountPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(struct ProfilingIndexedCountAge(u8), ProfilingIndexedCountPerson);
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingUnindexedCountPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingUnindexedCountAge(u8),
+        ProfilingUnindexedCountPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingIndexedIteratorPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingIndexedIteratorAge(u8),
+        ProfilingIndexedIteratorPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingUnindexedIteratorPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingUnindexedIteratorAge(u8),
+        ProfilingUnindexedIteratorPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingIndexedWithResultsPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingIndexedWithResultsAge(u8),
+        ProfilingIndexedWithResultsPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingIndexedMatchPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingIndexedMatchAge(u8),
+        ProfilingIndexedMatchPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingIndexedFilterPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingIndexedFilterAge(u8),
+        ProfilingIndexedFilterPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingIndexedFilterCounty(u8),
+        ProfilingIndexedFilterPerson
+    );
+    #[cfg(feature = "profiling")]
+    define_multi_property!(
+        ProfilingIndexedFilterPerson,
+        (ProfilingIndexedFilterAge, ProfilingIndexedFilterCounty)
+    );
+    #[cfg(feature = "profiling")]
+    define_entity!(ProfilingSingleFilterPerson);
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingSingleFilterAge(u8),
+        ProfilingSingleFilterPerson
+    );
 
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     struct CounterValue(u8);
@@ -1721,10 +1847,14 @@ mod tests {
         );
         assert_eq!(people, vec![person1]);
 
-        let data = crate::profiling::get_profiling_data();
-        assert!(data.has_query_timing("ProfilingPerson: (ProfilingAge)"));
-        assert!(data.has_query_timing("ProfilingPerson: (ProfilingAge, ProfilingCounty)"));
-        assert!(data.has_query_timing("ProfilingPerson: All"));
+        {
+            let data = crate::profiling::get_profiling_data();
+            assert!(data.has_query_timing("ProfilingPerson: (ProfilingAge)"));
+            assert!(data.has_query_timing("ProfilingPerson: (ProfilingAge, ProfilingCounty)"));
+            assert!(data.has_query_timing("ProfilingPerson: All"));
+        }
+
+        crate::profiling::print_profiling_data();
     }
 
     #[cfg(feature = "profiling")]
@@ -1848,5 +1978,197 @@ mod tests {
 
         let data = crate::profiling::get_profiling_data();
         assert!(data.has_query_timing("ProfilingContainsPerson: (ProfilingContainsAge)"));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn query_profiling_records_indexed_status() {
+        fn assert_indexed(query: &str, indexed: bool) {
+            let data = crate::profiling::get_profiling_data();
+            assert_eq!(data.query_timing_indexed(query), Some(indexed));
+        }
+
+        let mut count_indexed = Context::new();
+        count_indexed
+            .index_property_counts::<ProfilingIndexedCountPerson, ProfilingIndexedCountAge>();
+        count_indexed
+            .add_entity(with!(
+                ProfilingIndexedCountPerson,
+                ProfilingIndexedCountAge(42)
+            ))
+            .unwrap();
+        assert_eq!(
+            count_indexed.query_entity_count(with!(
+                ProfilingIndexedCountPerson,
+                ProfilingIndexedCountAge(42)
+            )),
+            1
+        );
+        assert_indexed(
+            "ProfilingIndexedCountPerson: (ProfilingIndexedCountAge)",
+            true,
+        );
+
+        let mut count_unindexed = Context::new();
+        count_unindexed
+            .add_entity(with!(
+                ProfilingUnindexedCountPerson,
+                ProfilingUnindexedCountAge(42)
+            ))
+            .unwrap();
+        assert_eq!(
+            count_unindexed.query_entity_count(with!(
+                ProfilingUnindexedCountPerson,
+                ProfilingUnindexedCountAge(42)
+            )),
+            1
+        );
+        assert_indexed(
+            "ProfilingUnindexedCountPerson: (ProfilingUnindexedCountAge)",
+            false,
+        );
+
+        let mut iterator_indexed = Context::new();
+        iterator_indexed
+            .index_property::<ProfilingIndexedIteratorPerson, ProfilingIndexedIteratorAge>();
+        iterator_indexed
+            .add_entity(with!(
+                ProfilingIndexedIteratorPerson,
+                ProfilingIndexedIteratorAge(42)
+            ))
+            .unwrap();
+        assert_eq!(
+            iterator_indexed
+                .query_result_iterator(with!(
+                    ProfilingIndexedIteratorPerson,
+                    ProfilingIndexedIteratorAge(42)
+                ))
+                .count(),
+            1
+        );
+        assert_indexed(
+            "ProfilingIndexedIteratorPerson: (ProfilingIndexedIteratorAge)",
+            true,
+        );
+
+        let mut iterator_unindexed = Context::new();
+        iterator_unindexed
+            .add_entity(with!(
+                ProfilingUnindexedIteratorPerson,
+                ProfilingUnindexedIteratorAge(42)
+            ))
+            .unwrap();
+        assert_eq!(
+            iterator_unindexed
+                .query_result_iterator(with!(
+                    ProfilingUnindexedIteratorPerson,
+                    ProfilingUnindexedIteratorAge(42)
+                ))
+                .count(),
+            1
+        );
+        assert_indexed(
+            "ProfilingUnindexedIteratorPerson: (ProfilingUnindexedIteratorAge)",
+            false,
+        );
+
+        let mut with_results_indexed = Context::new();
+        with_results_indexed
+            .index_property::<ProfilingIndexedWithResultsPerson, ProfilingIndexedWithResultsAge>();
+        with_results_indexed
+            .add_entity(with!(
+                ProfilingIndexedWithResultsPerson,
+                ProfilingIndexedWithResultsAge(42)
+            ))
+            .unwrap();
+        with_results_indexed.with_query_results(
+            with!(
+                ProfilingIndexedWithResultsPerson,
+                ProfilingIndexedWithResultsAge(42)
+            ),
+            &mut |people| assert_eq!(people.into_iter().count(), 1),
+        );
+        assert_indexed(
+            "ProfilingIndexedWithResultsPerson: (ProfilingIndexedWithResultsAge)",
+            true,
+        );
+
+        let mut match_indexed = Context::new();
+        match_indexed.index_property::<ProfilingIndexedMatchPerson, ProfilingIndexedMatchAge>();
+        let matching_person = match_indexed
+            .add_entity(with!(
+                ProfilingIndexedMatchPerson,
+                ProfilingIndexedMatchAge(42)
+            ))
+            .unwrap();
+        assert!(match_indexed.match_entity(
+            matching_person,
+            with!(ProfilingIndexedMatchPerson, ProfilingIndexedMatchAge(42))
+        ));
+        assert_indexed(
+            "ProfilingIndexedMatchPerson: (ProfilingIndexedMatchAge)",
+            false,
+        );
+
+        let mut filter_indexed = Context::new();
+        filter_indexed.index_property::<
+            ProfilingIndexedFilterPerson,
+            (ProfilingIndexedFilterAge, ProfilingIndexedFilterCounty),
+        >();
+        let matching_person = filter_indexed
+            .add_entity(with!(
+                ProfilingIndexedFilterPerson,
+                ProfilingIndexedFilterAge(42),
+                ProfilingIndexedFilterCounty(1)
+            ))
+            .unwrap();
+        let other_person = filter_indexed
+            .add_entity(with!(
+                ProfilingIndexedFilterPerson,
+                ProfilingIndexedFilterAge(42),
+                ProfilingIndexedFilterCounty(2)
+            ))
+            .unwrap();
+        let mut people = vec![matching_person, other_person];
+        filter_indexed.filter_entities(
+            &mut people,
+            with!(
+                ProfilingIndexedFilterPerson,
+                ProfilingIndexedFilterCounty(1),
+                ProfilingIndexedFilterAge(42)
+            ),
+        );
+        assert_eq!(people, vec![matching_person]);
+        assert_indexed(
+            "ProfilingIndexedFilterPerson: (ProfilingIndexedFilterAge, ProfilingIndexedFilterCounty)",
+            true,
+        );
+
+        let mut filter_single = Context::new();
+        filter_single.index_property::<ProfilingSingleFilterPerson, ProfilingSingleFilterAge>();
+        let matching_person = filter_single
+            .add_entity(with!(
+                ProfilingSingleFilterPerson,
+                ProfilingSingleFilterAge(42)
+            ))
+            .unwrap();
+        let other_person = filter_single
+            .add_entity(with!(
+                ProfilingSingleFilterPerson,
+                ProfilingSingleFilterAge(7)
+            ))
+            .unwrap();
+        let mut people = vec![matching_person, other_person];
+        filter_single.filter_entities(
+            &mut people,
+            with!(ProfilingSingleFilterPerson, ProfilingSingleFilterAge(42)),
+        );
+        assert_eq!(people, vec![matching_person]);
+        assert_indexed(
+            "ProfilingSingleFilterPerson: (ProfilingSingleFilterAge)",
+            false,
+        );
+
+        crate::profiling::print_profiling_data();
     }
 }

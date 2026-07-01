@@ -31,7 +31,7 @@ pub struct ProfilingData {
     // the spans are and displayed with the spans rather than with the other counts.
     pub spans: HashMap<&'static str, (Duration, usize)>,
     #[cfg(feature = "profiling")]
-    pub(super) query_timings: HashMap<String, QueryTiming>,
+    pub(super) query_timings: HashMap<QueryTimingKey, QueryTiming>,
     // The number of spans that are currently open. We use this and the `total_measured` span to
     // compute the amount of time accounted for by all the spans. This together with total
     // runtime can tell you if there is significant runtime not accounted for by the existing
@@ -49,6 +49,22 @@ pub struct ProfilingData {
 }
 
 #[cfg(feature = "profiling")]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(super) struct QueryTimingKey {
+    query: String,
+    indexed: bool,
+}
+
+#[cfg(feature = "profiling")]
+impl QueryTimingKey {
+    fn new(query: &'static str, indexed: bool) -> Self {
+        Self {
+            query: query.to_string(),
+            indexed,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct QueryTiming {
     pub(super) count: usize,
@@ -87,6 +103,7 @@ impl QueryTiming {
 #[derive(Clone, Debug)]
 pub(super) struct QueryTimingRow {
     pub(super) query: String,
+    pub(super) indexed: bool,
     pub(super) count: usize,
     pub(super) total: Duration,
     pub(super) mean: Duration,
@@ -153,18 +170,27 @@ impl ProfilingData {
             .or_insert((elapsed, 1));
     }
 
-    pub(super) fn open_query_timing(&mut self, label: &'static str) -> QueryTimingSpan {
+    pub(super) fn open_query_timing(
+        &mut self,
+        label: &'static str,
+        indexed: bool,
+    ) -> QueryTimingSpan {
         self.init_start_time();
-        QueryTimingSpan::new(label)
+        QueryTimingSpan::new(label, indexed)
     }
 
-    pub(super) fn record_query_timing(&mut self, label: &'static str, elapsed: Duration) {
+    pub(super) fn record_query_timing(
+        &mut self,
+        label: &'static str,
+        indexed: bool,
+        elapsed: Duration,
+    ) {
         self.init_start_time();
-        if let Some(timing) = self.query_timings.get_mut(label) {
+        let key = QueryTimingKey::new(label, indexed);
+        if let Some(timing) = self.query_timings.get_mut(&key) {
             timing.record(elapsed);
         } else {
-            self.query_timings
-                .insert(label.to_string(), QueryTiming::new(elapsed));
+            self.query_timings.insert(key, QueryTiming::new(elapsed));
         }
     }
 
@@ -232,8 +258,9 @@ impl ProfilingData {
         let mut rows = self
             .query_timings
             .iter()
-            .map(|(query, timing)| QueryTimingRow {
-                query: query.clone(),
+            .map(|(key, timing)| QueryTimingRow {
+                query: key.query.clone(),
+                indexed: key.indexed,
                 count: timing.count,
                 total: timing.total,
                 mean: timing.mean(),
@@ -248,6 +275,7 @@ impl ProfilingData {
                 .total
                 .cmp(&left.total)
                 .then_with(|| left.query.cmp(&right.query))
+                .then_with(|| left.indexed.cmp(&right.indexed))
         });
 
         rows
@@ -271,12 +299,29 @@ impl ProfilingData {
 
     #[cfg(test)]
     pub fn has_query_timing(&self, query: &str) -> bool {
-        self.query_timings.contains_key(query)
+        self.query_timings.keys().any(|key| key.query == query)
     }
 
     #[cfg(test)]
     pub fn query_timing_total(&self, query: &str) -> Option<Duration> {
-        self.query_timings.get(query).map(|timing| timing.total)
+        self.query_timings
+            .iter()
+            .filter(|(key, _)| key.query == query)
+            .map(|(_, timing)| timing.total)
+            .reduce(|left, right| left + right)
+    }
+
+    #[cfg(test)]
+    pub fn query_timing_indexed(&self, query: &str) -> Option<bool> {
+        let mut indexed_values = self
+            .query_timings
+            .keys()
+            .filter(|key| key.query == query)
+            .map(|key| key.indexed);
+        let first = indexed_values.next()?;
+        indexed_values
+            .all(|indexed| indexed == first)
+            .then_some(first)
     }
 }
 
@@ -311,21 +356,21 @@ pub fn close_span(_span: Span) {
 
 #[cfg(feature = "profiling")]
 #[must_use]
-pub(crate) fn open_query_timing(label: &'static str) -> QueryTimingSpan {
+pub(crate) fn open_query_timing(label: &'static str, indexed: bool) -> QueryTimingSpan {
     let mut container = profiling_data();
-    container.open_query_timing(label)
+    container.open_query_timing(label, indexed)
 }
 
 #[cfg(not(feature = "profiling"))]
 #[must_use]
-pub(crate) fn open_query_timing(_label: &'static str) -> QueryTimingSpan {
+pub(crate) fn open_query_timing(_label: &'static str, _indexed: bool) -> QueryTimingSpan {
     QueryTimingSpan::new()
 }
 
 #[cfg(feature = "profiling")]
-pub(crate) fn record_query_timing(label: &'static str, elapsed: Duration) {
+pub(crate) fn record_query_timing(label: &'static str, indexed: bool, elapsed: Duration) {
     let mut container = profiling_data();
-    container.record_query_timing(label, elapsed);
+    container.record_query_timing(label, indexed, elapsed);
 }
 
 #[cfg(all(test, feature = "profiling"))]
@@ -334,6 +379,16 @@ mod tests {
 
     use super::*;
     use crate::profiling::{get_profiling_data, increment_named_count};
+
+    fn query_timing<'a>(
+        data: &'a ProfilingData,
+        query: &'static str,
+        indexed: bool,
+    ) -> &'a QueryTiming {
+        data.query_timings
+            .get(&QueryTimingKey::new(query, indexed))
+            .unwrap()
+    }
 
     #[test]
     fn test_span_basic() {
@@ -516,9 +571,9 @@ mod tests {
     #[test]
     fn query_timing_first_observation_initializes_record() {
         let mut data = ProfilingData::new();
-        data.record_query_timing("QueryTimingInit: (Age)", Duration::from_micros(10));
+        data.record_query_timing("QueryTimingInit: (Age)", true, Duration::from_micros(10));
 
-        let timing = data.query_timings.get("QueryTimingInit: (Age)").unwrap();
+        let timing = query_timing(&data, "QueryTimingInit: (Age)", true);
         assert_eq!(timing.count, 1);
         assert_eq!(timing.total, Duration::from_micros(10));
         assert_eq!(timing.min, Duration::from_micros(10));
@@ -528,11 +583,11 @@ mod tests {
     #[test]
     fn query_timing_later_observations_update_aggregate() {
         let mut data = ProfilingData::new();
-        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(10));
-        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(30));
-        data.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(5));
+        data.record_query_timing("QueryTimingUpdate: (Age)", false, Duration::from_micros(10));
+        data.record_query_timing("QueryTimingUpdate: (Age)", false, Duration::from_micros(30));
+        data.record_query_timing("QueryTimingUpdate: (Age)", false, Duration::from_micros(5));
 
-        let timing = data.query_timings.get("QueryTimingUpdate: (Age)").unwrap();
+        let timing = query_timing(&data, "QueryTimingUpdate: (Age)", false);
         assert_eq!(timing.count, 3);
         assert_eq!(timing.total, Duration::from_micros(45));
         assert_eq!(timing.min, Duration::from_micros(5));
@@ -554,8 +609,8 @@ mod tests {
     #[test]
     fn query_timing_table_rows_include_mean_and_percent_runtime() {
         let mut data = ProfilingData::new();
-        data.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(10));
-        data.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(30));
+        data.record_query_timing("QueryTimingTable: (Age)", true, Duration::from_millis(10));
+        data.record_query_timing("QueryTimingTable: (Age)", true, Duration::from_millis(30));
         std::thread::sleep(Duration::from_millis(1));
 
         let rows = data.get_query_timings_table();
@@ -565,6 +620,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(row.count, 2);
+        assert!(row.indexed);
         assert_eq!(row.total, Duration::from_millis(40));
         assert_eq!(row.mean, Duration::from_millis(20));
         assert_eq!(row.min, Duration::from_millis(10));
@@ -573,11 +629,38 @@ mod tests {
     }
 
     #[test]
+    fn query_timing_mixed_indexed_status_splits_rows() {
+        let mut data = ProfilingData::new();
+        data.record_query_timing("QueryTimingMixed: (Age)", false, Duration::from_micros(10));
+        data.record_query_timing("QueryTimingMixed: (Age)", true, Duration::from_micros(30));
+        data.record_query_timing("QueryTimingMixed: (Age)", false, Duration::from_micros(5));
+
+        let unindexed = query_timing(&data, "QueryTimingMixed: (Age)", false);
+        assert_eq!(unindexed.count, 2);
+        assert_eq!(unindexed.total, Duration::from_micros(15));
+        assert_eq!(unindexed.min, Duration::from_micros(5));
+        assert_eq!(unindexed.max, Duration::from_micros(10));
+
+        let indexed = query_timing(&data, "QueryTimingMixed: (Age)", true);
+        assert_eq!(indexed.count, 1);
+        assert_eq!(indexed.total, Duration::from_micros(30));
+
+        let rows = data.get_query_timings_table();
+        assert!(rows
+            .iter()
+            .any(|row| row.query == "QueryTimingMixed: (Age)" && !row.indexed));
+        assert!(rows
+            .iter()
+            .any(|row| row.query == "QueryTimingMixed: (Age)" && row.indexed));
+        assert_eq!(data.query_timing_indexed("QueryTimingMixed: (Age)"), None);
+    }
+
+    #[test]
     fn query_timing_table_sorts_by_total_then_label() {
         let mut data = ProfilingData::new();
-        data.record_query_timing("QueryTimingSort: B", Duration::from_micros(20));
-        data.record_query_timing("QueryTimingSort: C", Duration::from_micros(10));
-        data.record_query_timing("QueryTimingSort: A", Duration::from_micros(20));
+        data.record_query_timing("QueryTimingSort: B", false, Duration::from_micros(20));
+        data.record_query_timing("QueryTimingSort: C", true, Duration::from_micros(10));
+        data.record_query_timing("QueryTimingSort: A", false, Duration::from_micros(20));
 
         let rows = data.get_query_timings_table();
         let labels = rows

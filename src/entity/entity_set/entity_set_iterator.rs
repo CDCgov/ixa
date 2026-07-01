@@ -272,8 +272,10 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn with_query_timing_label(mut self, label: &'static str) -> Self {
-        self.query_timing = Some(crate::profiling::QueryTimingAccumulator::new(label));
+    pub(crate) fn with_query_timing_label(mut self, label: &'static str, indexed: bool) -> Self {
+        self.query_timing = Some(crate::profiling::QueryTimingAccumulator::new(
+            label, indexed,
+        ));
         self
     }
 
@@ -300,7 +302,9 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
             let (inner, query_timing_label) = set.into_inner_and_query_timing_label();
             EntitySetIterator {
                 inner: EntitySetIteratorInner::from_entity_set_inner(inner),
-                query_timing: query_timing_label.map(crate::profiling::QueryTimingAccumulator::new),
+                query_timing: query_timing_label.map(|(label, indexed)| {
+                    crate::profiling::QueryTimingAccumulator::new(label, indexed)
+                }),
             }
         }
         #[cfg(not(feature = "profiling"))]

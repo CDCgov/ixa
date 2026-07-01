@@ -107,6 +107,7 @@ pub fn print_query_timings() {
     formatted_rows.extend(rows.into_iter().map(|row| {
         vec![
             row.query,
+            row.indexed.to_string(),
             format_with_commas(row.count),
             format_duration(row.total).to_string(),
             format_duration(row.mean).to_string(),
@@ -185,7 +186,7 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
     println!();
 
     // Print separator
-    let total_width: usize = col_widths.iter().map(|w| *w + 1).sum::<usize>() + 2;
+    let total_width: usize = col_widths.iter().map(|w| *w + 2).sum();
     println!("{}", "-".repeat(total_width));
 
     // Print data rows
@@ -426,8 +427,21 @@ mod tests {
     fn print_query_timings_outputs_expected_format() {
         {
             let mut container = profiling_data();
-            container.record_query_timing("DisplayQueryTimings: (Age)", Duration::from_micros(10));
-            container.record_query_timing("DisplayQueryTimings: (Age)", Duration::from_micros(30));
+            container.record_query_timing(
+                "DisplayQueryTimings: (Age)",
+                true,
+                Duration::from_micros(10),
+            );
+            container.record_query_timing(
+                "DisplayQueryTimings: (Age)",
+                true,
+                Duration::from_micros(30),
+            );
+            container.record_query_timing(
+                "DisplayQueryTimings: (County)",
+                false,
+                Duration::from_micros(20),
+            );
         }
 
         print_query_timings();

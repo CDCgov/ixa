@@ -26,9 +26,9 @@
 //! schedule_next_forecasted_infection    1286  22ms 329us 102ns      8.44%
 //! Total Measured                        1385  23ms 897us 146ns      9.03%
 //!
-//! Query                         Count       Total        Mean         Min         Max  % runtime
-//! ---------------------------------------------------------------------------------------------
-//! Person: (Age, County)           150    12ms 340us     82us 266ns    10us 120ns   250us 450ns      4.20%
+//! Query                    Indexed  Count        Total         Mean          Min          Max  % runtime
+//! ------------------------------------------------------------------------------------------------------
+//! Person: (Age, County)       true    150   12ms 340us   82us 266ns   10us 120ns  250us 450ns      4.20%
 //!
 //! Event Label                     Count  Rate (per sec)
 //! -----------------------------------------------------
@@ -195,8 +195,16 @@ const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% run
 #[cfg(feature = "profiling")]
 const NAMED_COUNTS_HEADERS: &[&str] = &["Event Label", "Count", "Rate (per sec)"];
 #[cfg(feature = "profiling")]
-const QUERY_TIMINGS_HEADERS: &[&str] =
-    &["Query", "Count", "Total", "Mean", "Min", "Max", "% runtime"];
+const QUERY_TIMINGS_HEADERS: &[&str] = &[
+    "Query",
+    "Indexed",
+    "Count",
+    "Total",
+    "Mean",
+    "Min",
+    "Max",
+    "% runtime",
+];
 
 pub struct Span {
     #[cfg(feature = "profiling")]
@@ -228,14 +236,17 @@ pub(crate) struct QueryTimingSpan {
     #[cfg(feature = "profiling")]
     label: &'static str,
     #[cfg(feature = "profiling")]
+    indexed: bool,
+    #[cfg(feature = "profiling")]
     start_time: Instant,
 }
 
 impl QueryTimingSpan {
     #[cfg(feature = "profiling")]
-    fn new(label: &'static str) -> Self {
+    fn new(label: &'static str, indexed: bool) -> Self {
         Self {
             label,
+            indexed,
             start_time: Instant::now(),
         }
     }
@@ -250,22 +261,24 @@ impl QueryTimingSpan {
 impl Drop for QueryTimingSpan {
     fn drop(&mut self) {
         let mut container = profiling_data();
-        container.record_query_timing(self.label, self.start_time.elapsed());
+        container.record_query_timing(self.label, self.indexed, self.start_time.elapsed());
     }
 }
 
 #[cfg(feature = "profiling")]
 pub(crate) struct QueryTimingAccumulator {
     label: &'static str,
+    indexed: bool,
     elapsed: std::time::Duration,
     observations: usize,
 }
 
 #[cfg(feature = "profiling")]
 impl QueryTimingAccumulator {
-    pub(crate) fn new(label: &'static str) -> Self {
+    pub(crate) fn new(label: &'static str, indexed: bool) -> Self {
         Self {
             label,
+            indexed,
             elapsed: std::time::Duration::ZERO,
             observations: 0,
         }
@@ -284,6 +297,6 @@ impl Drop for QueryTimingAccumulator {
             return;
         }
         let mut container = profiling_data();
-        container.record_query_timing(self.label, self.elapsed);
+        container.record_query_timing(self.label, self.indexed, self.elapsed);
     }
 }

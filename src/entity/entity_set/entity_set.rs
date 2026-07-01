@@ -27,7 +27,7 @@ use crate::random::{
 pub struct EntitySet<'a, E: Entity> {
     inner: EntitySetInner<'a, E>,
     #[cfg(feature = "profiling")]
-    query_timing_label: Option<&'static str>,
+    query_timing_label: Option<(&'static str, bool)>,
 }
 
 /// Internal set-expression tree used to represent composed query sources.
@@ -79,25 +79,25 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn with_query_timing_label(mut self, label: &'static str) -> Self {
-        self.query_timing_label = Some(label);
+    pub(crate) fn with_query_timing_label(mut self, label: &'static str, indexed: bool) -> Self {
+        self.query_timing_label = Some((label, indexed));
         self
     }
 
     #[cfg(feature = "profiling")]
     pub(super) fn into_inner_and_query_timing_label(
         self,
-    ) -> (EntitySetInner<'a, E>, Option<&'static str>) {
+    ) -> (EntitySetInner<'a, E>, Option<(&'static str, bool)>) {
         (self.inner, self.query_timing_label)
     }
 
     fn record_query_timing<T>(&self, f: impl FnOnce() -> T) -> T {
         #[cfg(feature = "profiling")]
         {
-            if let Some(label) = self.query_timing_label {
+            if let Some((label, indexed)) = self.query_timing_label {
                 let start = std::time::Instant::now();
                 let result = f();
-                crate::profiling::record_query_timing(label, start.elapsed());
+                crate::profiling::record_query_timing(label, indexed, start.elapsed());
                 return result;
             }
         }

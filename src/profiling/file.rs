@@ -72,6 +72,7 @@ struct CountRecord {
 #[derive(Serialize)]
 struct QueryTimingRecord {
     query: String,
+    indexed: bool,
     count: usize,
     total: SerializableDuration,
     mean: SerializableDuration,
@@ -128,6 +129,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         .into_iter()
         .map(|row| QueryTimingRecord {
             query: row.query,
+            indexed: row.indexed,
             count: row.count,
             total: SerializableDuration(row.total),
             mean: SerializableDuration(row.mean),
@@ -272,8 +274,8 @@ mod tests {
     fn test_write_profiling_data_includes_query_timings() {
         {
             let mut data = get_profiling_data();
-            data.record_query_timing("FileQueryTiming: (Age)", Duration::from_micros(10));
-            data.record_query_timing("FileQueryTiming: (Age)", Duration::from_micros(30));
+            data.record_query_timing("FileQueryTiming: (Age)", true, Duration::from_micros(10));
+            data.record_query_timing("FileQueryTiming: (Age)", true, Duration::from_micros(30));
         }
 
         let temp_dir = TempDir::new().unwrap();
@@ -298,6 +300,8 @@ mod tests {
             .expect("FileQueryTiming: (Age) not found");
 
         assert_eq!(timing["count"], 2);
+        assert!(timing["indexed"].is_boolean());
+        assert_eq!(timing["indexed"], true);
         assert!((timing["total"].as_f64().unwrap() - 0.00004).abs() < 0.000001);
         assert!((timing["mean"].as_f64().unwrap() - 0.00002).abs() < 0.000001);
         assert!((timing["min"].as_f64().unwrap() - 0.00001).abs() < 0.000001);
