@@ -103652,7 +103652,995 @@
           ]
         }
       ]
+    },
+    {
+      "run_at": "2026-07-01T12:38:41.016Z",
+      "branch": "dependabot/rust_toolchain/rust-toolchain-1.96.1",
+      "pr_number": 994,
+      "base": {
+        "ref": "main",
+        "sha": "72cf456fef74ea629d711e67f37b920bbe76841f"
+      },
+      "head": {
+        "ref": "dependabot/rust_toolchain/rust-toolchain-1.96.1",
+        "sha": "38264b0f2e91cdbf10aa78c0edbe182f3e814de5",
+        "url": "https://github.com/CDCgov/ixa/commit/38264b0f2e91cdbf10aa78c0edbe182f3e814de5"
+      },
+      "hyperfine": [
+        {
+          "name": "large_sir::baseline",
+          "times_sec": [
+            0.00351913,
+            0.0034380500000000002,
+            0.003399103,
+            0.0033501810000000003,
+            0.00335649,
+            0.003385042,
+            0.00337644,
+            0.0033826090000000004,
+            0.003544718,
+            0.0034726210000000004,
+            0.0034238190000000003,
+            0.0034080760000000003,
+            0.0034089970000000004,
+            0.00343092,
+            0.003381367,
+            0.003420114,
+            0.0034263730000000004,
+            0.0034108800000000002,
+            0.0034026580000000002,
+            0.003418702,
+            0.0034400240000000003,
+            0.0034011560000000002,
+            0.003460023,
+            0.0034232290000000003,
+            0.0034224470000000003,
+            0.003447645,
+            0.003386324,
+            0.003372434,
+            0.0033575220000000004,
+            0.003408767,
+            0.00346529,
+            0.003422717,
+            0.003415257,
+            0.003398442,
+            0.003452061,
+            0.0034320210000000004,
+            0.003400054,
+            0.0034302890000000004,
+            0.003442315,
+            0.0033431900000000002,
+            0.003425762,
+            0.003379303,
+            0.003418752,
+            0.0034362470000000003,
+            0.0034266830000000002,
+            0.0033715530000000002,
+            0.0034330130000000004,
+            0.0034229380000000004,
+            0.0034342950000000004,
+            0.0033970000000000003
+          ],
+          "mean_sec": 0.0034164608600000014,
+          "min_sec": 0.0033431900000000002,
+          "max_sec": 0.003544718,
+          "stddev_sec": 0.0000379233201261198
+        },
+        {
+          "name": "large_sir::baseline_households",
+          "times_sec": [
+            0.0034608850000000003,
+            0.00341041,
+            0.003443619,
+            0.0034776190000000004,
+            0.0034451610000000004,
+            0.0034015160000000003,
+            0.003409067,
+            0.0034682550000000004,
+            0.003514763,
+            0.0034212960000000003,
+            0.003368869,
+            0.0033860530000000004,
+            0.003504769,
+            0.0033734050000000003,
+            0.0034717800000000003,
+            0.003423039,
+            0.0034026280000000004,
+            0.003514894,
+            0.0034024880000000004,
+            0.003496537,
+            0.003405242,
+            0.0034068450000000004,
+            0.0034603240000000003,
+            0.0034224570000000003,
+            0.003509176,
+            0.003380825,
+            0.003412052,
+            0.0035149730000000002,
+            0.003410891,
+            0.003483738,
+            0.003415818,
+            0.003435716,
+            0.0034828660000000003,
+            0.003403469,
+            0.0034875030000000003,
+            0.00341727,
+            0.0034184320000000003,
+            0.003501904,
+            0.003383661,
+            0.003495685,
+            0.00339694,
+            0.0033750580000000002,
+            0.003483968,
+            0.0034901880000000004,
+            0.0035741210000000004,
+            0.0034849100000000004,
+            0.003425862,
+            0.0034205050000000003,
+            0.0035090850000000003,
+            0.003506691
+          ],
+          "mean_sec": 0.0034462645600000013,
+          "min_sec": 0.003368869,
+          "max_sec": 0.0035741210000000004,
+          "stddev_sec": 0.00004895109290775513
+        },
+        {
+          "name": "large_sir::entities",
+          "times_sec": [
+            0.007846632000000001,
+            0.0077551270000000005,
+            0.008057994,
+            0.007895665,
+            0.007721287,
+            0.007755758000000001,
+            0.007700457000000001,
+            0.007715649000000001,
+            0.007832732,
+            0.0076287510000000005,
+            0.007953149,
+            0.007771361,
+            0.00767591,
+            0.007899941,
+            0.007795146,
+            0.007638505,
+            0.007718172000000001,
+            0.007654048,
+            0.007734356,
+            0.007856757,
+            0.007928543,
+            0.007643442,
+            0.007721267,
+            0.00773053,
+            0.007690842000000001,
+            0.007849105,
+            0.007721267,
+            0.007718964000000001,
+            0.007710191000000001,
+            0.007919008,
+            0.007662090000000001,
+            0.007837939,
+            0.0076661360000000005,
+            0.007639096000000001,
+            0.007695529,
+            0.0075879400000000005,
+            0.007745242,
+            0.007905309000000001,
+            0.0076666270000000005,
+            0.007623162,
+            0.007726525000000001,
+            0.007742177,
+            0.007776098,
+            0.00767561,
+            0.007667988000000001,
+            0.007664924000000001,
+            0.007656182,
+            0.007681568000000001,
+            0.007714668000000001,
+            0.0076769920000000005
+          ],
+          "mean_sec": 0.0077450471600000025,
+          "min_sec": 0.0075879400000000005,
+          "max_sec": 0.008057994,
+          "stddev_sec": 0.00010081704666989193
+        },
+        {
+          "name": "large_sir::households",
+          "times_sec": [
+            0.007424209,
+            0.007567771,
+            0.007634089,
+            0.007401245000000001,
+            0.007697312,
+            0.0074581890000000005,
+            0.007489385,
+            0.0076208790000000005,
+            0.007380104,
+            0.007476035000000001,
+            0.007497157000000001,
+            0.008241444,
+            0.0074813430000000005,
+            0.007518549,
+            0.007428265000000001,
+            0.007472981,
+            0.007570434000000001,
+            0.007548592000000001,
+            0.007420974,
+            0.007400124,
+            0.007544937000000001,
+            0.007497677,
+            0.0074310900000000004,
+            0.007434464000000001,
+            0.007259977000000001,
+            0.007425521,
+            0.007475405,
+            0.007459011000000001,
+            0.0074426660000000006,
+            0.007407694,
+            0.007440222000000001,
+            0.007428776000000001,
+            0.007522474,
+            0.007421675000000001,
+            0.007427473,
+            0.007450067,
+            0.007649210000000001,
+            0.007586829000000001,
+            0.007509995,
+            0.007547461,
+            0.007883566,
+            0.007665786000000001,
+            0.0076643430000000005,
+            0.0075043670000000005,
+            0.007626237,
+            0.007341276000000001,
+            0.007504267,
+            0.007771271000000001,
+            0.007586929,
+            0.007519129
+          ],
+          "mean_sec": 0.007523177520000003,
+          "min_sec": 0.007259977000000001,
+          "max_sec": 0.008241444,
+          "stddev_sec": 0.0001518074048891999
+        }
+      ],
+      "criterion": [
+        {
+          "name": "indexing/with_query_results_single_indexed_property_entities",
+          "time_text": [
+            "18.811 µs",
+            "18.859 µs",
+            "18.922 µs"
+          ],
+          "time_sec": [
+            0.000018811,
+            0.000018859,
+            0.000018922
+          ]
+        },
+        {
+          "name": "indexing/with_query_results_multiple_individually_indexed_properties_entities",
+          "time_text": [
+            "118.38 µs",
+            "118.69 µs",
+            "119.02 µs"
+          ],
+          "time_sec": [
+            0.00011837999999999999,
+            0.00011868999999999999,
+            0.00011902
+          ]
+        },
+        {
+          "name": "indexing/with_query_results_indexed_multi-property_entities",
+          "time_text": [
+            "50.515 µs",
+            "50.747 µs",
+            "51.086 µs"
+          ],
+          "time_sec": [
+            0.000050515,
+            0.000050747,
+            0.000051086
+          ]
+        },
+        {
+          "name": "indexing/query_people_count_single_indexed_property_entities",
+          "time_text": [
+            "11.429 µs",
+            "11.496 µs",
+            "11.558 µs"
+          ],
+          "time_sec": [
+            0.000011429,
+            0.000011496,
+            0.000011558
+          ]
+        },
+        {
+          "name": "indexing/query_people_count_multiple_individually_indexed_properties_entities",
+          "time_text": [
+            "6.8419 ms",
+            "6.8480 ms",
+            "6.8548 ms"
+          ],
+          "time_sec": [
+            0.0068419,
+            0.006848,
+            0.0068548
+          ]
+        },
+        {
+          "name": "indexing/query_people_count_indexed_multi-property_entities",
+          "time_text": [
+            "45.339 µs",
+            "45.390 µs",
+            "45.452 µs"
+          ],
+          "time_sec": [
+            0.000045338999999999994,
+            0.00004539,
+            0.000045452
+          ]
+        },
+        {
+          "name": "indexing/query_people_single_indexed_property_entities",
+          "time_text": [
+            "35.910 ms",
+            "36.024 ms",
+            "36.207 ms"
+          ],
+          "time_sec": [
+            0.03591,
+            0.036024,
+            0.036207
+          ]
+        },
+        {
+          "name": "indexing/query_people_multiple_individually_indexed_properties_entities",
+          "time_text": [
+            "8.5639 ms",
+            "8.5702 ms",
+            "8.5767 ms"
+          ],
+          "time_sec": [
+            0.008563900000000001,
+            0.0085702,
+            0.008576700000000001
+          ]
+        },
+        {
+          "name": "indexing/query_people_indexed_multi-property_entities",
+          "time_text": [
+            "465.13 µs",
+            "466.89 µs",
+            "469.34 µs"
+          ],
+          "time_sec": [
+            0.00046512999999999996,
+            0.00046688999999999997,
+            0.00046933999999999995
+          ]
+        },
+        {
+          "name": "large_dataset/bench_query_population_property_entities",
+          "time_text": [
+            "6.3625 µs",
+            "6.4012 µs",
+            "6.4753 µs"
+          ],
+          "time_sec": [
+            0.0000063625,
+            0.0000064012,
+            0.0000064753
+          ]
+        },
+        {
+          "name": "large_dataset/bench_query_population_indexed_property_entities",
+          "time_text": [
+            "10.903 ns",
+            "10.906 ns",
+            "10.910 ns"
+          ],
+          "time_sec": [
+            1.0903000000000002e-8,
+            1.0906000000000002e-8,
+            1.0910000000000001e-8
+          ]
+        },
+        {
+          "name": "large_dataset/bench_query_population_derived_property_entities",
+          "time_text": [
+            "120.71 µs",
+            "120.88 µs",
+            "121.09 µs"
+          ],
+          "time_sec": [
+            0.00012070999999999999,
+            0.00012088,
+            0.00012109
+          ]
+        },
+        {
+          "name": "large_dataset/bench_query_population_multi_unindexed_entities",
+          "time_text": [
+            "7.9278 µs",
+            "7.9514 µs",
+            "7.9921 µs"
+          ],
+          "time_sec": [
+            0.0000079278,
+            0.0000079514,
+            0.0000079921
+          ]
+        },
+        {
+          "name": "large_dataset/bench_query_population_multi_indexed_entities",
+          "time_text": [
+            "61.765 ns",
+            "63.137 ns",
+            "64.617 ns"
+          ],
+          "time_sec": [
+            6.176500000000001e-8,
+            6.3137e-8,
+            6.4617e-8
+          ]
+        },
+        {
+          "name": "large_dataset/bench_match_entity",
+          "time_text": [
+            "9.2370 ns",
+            "9.2393 ns",
+            "9.2418 ns"
+          ],
+          "time_sec": [
+            9.237e-9,
+            9.2393e-9,
+            9.2418e-9
+          ]
+        },
+        {
+          "name": "large_dataset/bench_filter_indexed_entity",
+          "time_text": [
+            "24.023 µs",
+            "24.090 µs",
+            "24.149 µs"
+          ],
+          "time_sec": [
+            0.000024023,
+            0.000024089999999999998,
+            0.000024149
+          ]
+        },
+        {
+          "name": "large_dataset/bench_filter_unindexed_entity",
+          "time_text": [
+            "12.136 µs",
+            "12.178 µs",
+            "12.216 µs"
+          ],
+          "time_sec": [
+            0.000012135999999999999,
+            0.000012178000000000001,
+            0.000012216
+          ]
+        },
+        {
+          "name": "sampling/sampling_single_known_length_entities",
+          "time_text": [
+            "37.700 µs",
+            "37.734 µs",
+            "37.775 µs"
+          ],
+          "time_sec": [
+            0.0000377,
+            0.000037734,
+            0.000037775
+          ]
+        },
+        {
+          "name": "sampling/count_and_sampling_single_known_length_entities",
+          "time_text": [
+            "41.222 µs",
+            "41.425 µs",
+            "41.661 µs"
+          ],
+          "time_sec": [
+            0.000041222,
+            0.000041425,
+            0.000041661
+          ]
+        },
+        {
+          "name": "sampling/sampling_single_l_reservoir_entities",
+          "time_text": [
+            "8.9266 ms",
+            "8.9370 ms",
+            "8.9495 ms"
+          ],
+          "time_sec": [
+            0.008926600000000002,
+            0.008936999999999999,
+            0.0089495
+          ]
+        },
+        {
+          "name": "sampling/sampling_multiple_known_length_entities",
+          "time_text": [
+            "1.0391 ms",
+            "1.0400 ms",
+            "1.0412 ms"
+          ],
+          "time_sec": [
+            0.0010390999999999998,
+            0.0010400000000000001,
+            0.0010412
+          ]
+        },
+        {
+          "name": "sampling/sampling_multiple_l_reservoir_entities",
+          "time_text": [
+            "10.889 ms",
+            "10.897 ms",
+            "10.905 ms"
+          ],
+          "time_sec": [
+            0.010889,
+            0.010897,
+            0.010905
+          ]
+        },
+        {
+          "name": "sampling/sampling_single_unindexed_entities",
+          "time_text": [
+            "146.82 ms",
+            "147.09 ms",
+            "147.33 ms"
+          ],
+          "time_sec": [
+            0.14682,
+            0.14709,
+            0.14733000000000002
+          ]
+        },
+        {
+          "name": "sampling/sampling_multiple_unindexed_entities",
+          "time_text": [
+            "161.01 ms",
+            "161.42 ms",
+            "161.80 ms"
+          ],
+          "time_sec": [
+            0.16101,
+            0.16141999999999998,
+            0.16180000000000003
+          ]
+        },
+        {
+          "name": "sampling/sampling_single_unindexed_concrete_plus_derived_entities",
+          "time_text": [
+            "294.59 ms",
+            "295.00 ms",
+            "295.47 ms"
+          ],
+          "time_sec": [
+            0.29458999999999996,
+            0.295,
+            0.29547
+          ]
+        },
+        {
+          "name": "sampling/count_and_sampling_single_unindexed_concrete_plus_derived_entities",
+          "time_text": [
+            "305.47 ms",
+            "305.69 ms",
+            "305.92 ms"
+          ],
+          "time_sec": [
+            0.30547,
+            0.30569,
+            0.30592
+          ]
+        },
+        {
+          "name": "counts/single_property_unindexed_entities",
+          "time_text": [
+            "6.3725 µs",
+            "6.3926 µs",
+            "6.4199 µs"
+          ],
+          "time_sec": [
+            0.0000063724999999999996,
+            0.0000063926,
+            0.0000064199
+          ]
+        },
+        {
+          "name": "counts/concrete_plus_derived_unindexed_entities",
+          "time_text": [
+            "6.5093 µs",
+            "6.5353 µs",
+            "6.5723 µs"
+          ],
+          "time_sec": [
+            0.0000065093,
+            0.0000065353,
+            0.0000065723
+          ]
+        },
+        {
+          "name": "counts/single_property_indexed_entities",
+          "time_text": [
+            "10.313 ns",
+            "10.327 ns",
+            "10.345 ns"
+          ],
+          "time_sec": [
+            1.0313000000000001e-8,
+            1.0327e-8,
+            1.0345000000000001e-8
+          ]
+        },
+        {
+          "name": "counts/multi_property_unindexed_entities",
+          "time_text": [
+            "6.4927 µs",
+            "6.5287 µs",
+            "6.5734 µs"
+          ],
+          "time_sec": [
+            0.0000064927,
+            0.0000065287,
+            0.0000065734000000000005
+          ]
+        },
+        {
+          "name": "counts/multi_property_indexed_entities",
+          "time_text": [
+            "53.604 ns",
+            "53.671 ns",
+            "53.750 ns"
+          ],
+          "time_sec": [
+            5.3604e-8,
+            5.3671000000000005e-8,
+            5.375e-8
+          ]
+        },
+        {
+          "name": "counts/index_after_adding_entities",
+          "time_text": [
+            "413.39 µs",
+            "413.88 µs",
+            "414.33 µs"
+          ],
+          "time_sec": [
+            0.00041338999999999997,
+            0.00041388,
+            0.00041432999999999997
+          ]
+        },
+        {
+          "name": "counts/reindex_after_adding_more_entities",
+          "time_text": [
+            "430.28 µs",
+            "430.61 µs",
+            "430.98 µs"
+          ],
+          "time_sec": [
+            0.00043027999999999995,
+            0.00043061,
+            0.00043098
+          ]
+        },
+        {
+          "name": "algorithm_benches/algorithm_sampling_single_known_length",
+          "time_text": [
+            "4.5694 ns",
+            "4.5704 ns",
+            "4.5715 ns"
+          ],
+          "time_sec": [
+            4.5694e-9,
+            4.570400000000001e-9,
+            4.571500000000001e-9
+          ]
+        },
+        {
+          "name": "algorithm_benches/algorithm_sampling_single_l_reservoir",
+          "time_text": [
+            "296.70 ns",
+            "298.18 ns",
+            "300.30 ns"
+          ],
+          "time_sec": [
+            2.967e-7,
+            2.9818000000000004e-7,
+            3.003e-7
+          ]
+        },
+        {
+          "name": "algorithm_benches/algorithm_sampling_single_rand_reservoir",
+          "time_text": [
+            "203.33 µs",
+            "203.39 µs",
+            "203.46 µs"
+          ],
+          "time_sec": [
+            0.00020333,
+            0.00020339,
+            0.00020346
+          ]
+        },
+        {
+          "name": "algorithm_benches/algorithm_sampling_multiple_known_length",
+          "time_text": [
+            "1.3824 µs",
+            "1.3841 µs",
+            "1.3859 µs"
+          ],
+          "time_sec": [
+            0.0000013824,
+            0.0000013841,
+            0.0000013859
+          ]
+        },
+        {
+          "name": "algorithm_benches/algorithm_sampling_multiple_l_reservoir",
+          "time_text": [
+            "21.864 µs",
+            "21.873 µs",
+            "21.882 µs"
+          ],
+          "time_sec": [
+            0.000021864,
+            0.000021873,
+            0.000021882
+          ]
+        },
+        {
+          "name": "sample_entity_whole_population/1000",
+          "time_text": [
+            "10.063 ns",
+            "10.094 ns",
+            "10.139 ns"
+          ],
+          "time_sec": [
+            1.0063e-8,
+            1.0094e-8,
+            1.0139e-8
+          ],
+          "relative_to_sentinel": {
+            "kind": "sentinel_ratio",
+            "sentinel": "sample_entity_whole_population/sentinel",
+            "ratio": [
+              1.0733866666666665,
+              1.0773483611369044,
+              1.0828100303302148
+            ],
+            "ratio_text": [
+              "1.073x",
+              "1.077x",
+              "1.083x"
+            ],
+            "method": "sample_time / sentinel_time; lower=sample_lower/sentinel_upper; estimate=sample_estimate/sentinel_estimate; upper=sample_upper/sentinel_lower"
+          }
+        },
+        {
+          "name": "sample_entity_whole_population/10000",
+          "time_text": [
+            "10.064 ns",
+            "10.074 ns",
+            "10.085 ns"
+          ],
+          "time_sec": [
+            1.0064e-8,
+            1.0074e-8,
+            1.0085000000000002e-8
+          ],
+          "relative_to_sentinel": {
+            "kind": "sentinel_ratio",
+            "sentinel": "sample_entity_whole_population/sentinel",
+            "ratio": [
+              1.0734933333333332,
+              1.0752137299478082,
+              1.0770430176427872
+            ],
+            "ratio_text": [
+              "1.073x",
+              "1.075x",
+              "1.077x"
+            ],
+            "method": "sample_time / sentinel_time; lower=sample_lower/sentinel_upper; estimate=sample_estimate/sentinel_estimate; upper=sample_upper/sentinel_lower"
+          }
+        },
+        {
+          "name": "sample_entity_whole_population/100000",
+          "time_text": [
+            "10.170 ns",
+            "10.179 ns",
+            "10.190 ns"
+          ],
+          "time_sec": [
+            1.0170000000000001e-8,
+            1.0179000000000001e-8,
+            1.019e-8
+          ],
+          "relative_to_sentinel": {
+            "kind": "sentinel_ratio",
+            "sentinel": "sample_entity_whole_population/sentinel",
+            "ratio": [
+              1.0848,
+              1.0864205436905638,
+              1.0882566534238969
+            ],
+            "ratio_text": [
+              "1.085x",
+              "1.086x",
+              "1.088x"
+            ],
+            "method": "sample_time / sentinel_time; lower=sample_lower/sentinel_upper; estimate=sample_estimate/sentinel_estimate; upper=sample_upper/sentinel_lower"
+          }
+        },
+        {
+          "name": "sample_entity_whole_population/sentinel",
+          "time_text": [
+            "9.3636 ns",
+            "9.3693 ns",
+            "9.3750 ns"
+          ],
+          "time_sec": [
+            9.3636e-9,
+            9.3693e-9,
+            9.375000000000001e-9
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_indexed/1000",
+          "time_text": [
+            "25.420 ns",
+            "25.455 ns",
+            "25.492 ns"
+          ],
+          "time_sec": [
+            2.5420000000000002e-8,
+            2.5455e-8,
+            2.5492e-8
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_indexed/10000",
+          "time_text": [
+            "25.755 ns",
+            "25.829 ns",
+            "25.903 ns"
+          ],
+          "time_sec": [
+            2.5755e-8,
+            2.5829000000000003e-8,
+            2.5903e-8
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_indexed/100000",
+          "time_text": [
+            "25.677 ns",
+            "25.771 ns",
+            "25.867 ns"
+          ],
+          "time_sec": [
+            2.5677000000000002e-8,
+            2.5771000000000003e-8,
+            2.5867000000000003e-8
+          ]
+        },
+        {
+          "name": "sample_entity_multi_property_indexed/1000",
+          "time_text": [
+            "50.143 ns",
+            "50.174 ns",
+            "50.207 ns"
+          ],
+          "time_sec": [
+            5.0143e-8,
+            5.0174e-8,
+            5.0207e-8
+          ]
+        },
+        {
+          "name": "sample_entity_multi_property_indexed/10000",
+          "time_text": [
+            "50.159 ns",
+            "50.198 ns",
+            "50.239 ns"
+          ],
+          "time_sec": [
+            5.0159e-8,
+            5.0198000000000004e-8,
+            5.0239e-8
+          ]
+        },
+        {
+          "name": "sample_entity_multi_property_indexed/100000",
+          "time_text": [
+            "50.146 ns",
+            "50.182 ns",
+            "50.218 ns"
+          ],
+          "time_sec": [
+            5.0146000000000004e-8,
+            5.0182000000000006e-8,
+            5.021800000000001e-8
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_unindexed/1000",
+          "time_text": [
+            "1.0828 µs",
+            "1.0843 µs",
+            "1.0862 µs"
+          ],
+          "time_sec": [
+            0.0000010828,
+            0.0000010843,
+            0.0000010862
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_unindexed/10000",
+          "time_text": [
+            "6.2648 µs",
+            "6.2806 µs",
+            "6.3001 µs"
+          ],
+          "time_sec": [
+            0.0000062648,
+            0.0000062806,
+            0.000006300099999999999
+          ]
+        },
+        {
+          "name": "sample_entity_single_property_unindexed/100000",
+          "time_text": [
+            "132.23 µs",
+            "132.33 µs",
+            "132.44 µs"
+          ],
+          "time_sec": [
+            0.00013222999999999997,
+            0.00013233,
+            0.00013244
+          ]
+        },
+        {
+          "name": "examples/example-basic-infection",
+          "time_text": [
+            "3.7211 ms",
+            "3.7298 ms",
+            "3.7395 ms"
+          ],
+          "time_sec": [
+            0.0037210999999999998,
+            0.0037298,
+            0.0037395
+          ]
+        },
+        {
+          "name": "examples/example-births-deaths",
+          "time_text": [
+            "21.158 ms",
+            "21.187 ms",
+            "21.221 ms"
+          ],
+          "time_sec": [
+            0.021158000000000003,
+            0.021187,
+            0.021221
+          ]
+        }
+      ]
     }
   ],
-  "updated_at": "2026-06-29T20:09:42.377Z"
+  "updated_at": "2026-07-01T12:38:41.016Z"
 }
