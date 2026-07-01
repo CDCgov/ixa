@@ -731,6 +731,90 @@ mod tests {
         assert_eq!(*observed.borrow(), vec![(1, Direction::Decreasing)]);
     }
 
+    // Regression coverage for create-with-tracked-value followed by change-away before callbacks
+    // drain. Property value count triggers must account for the creation-time value, not the value
+    // read by the deferred creation callback, or the subsequent property-change callback decrements
+    // from zero.
+    #[test]
+    fn property_value_count_tracks_created_value_before_same_tick_change() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        #[derive(IxaEvent)]
+        struct InfectiousThresholdReached {
+            count: usize,
+            direction: Direction,
+        }
+
+        context.register_trigger(
+            PropertyValueCountTrigger::<Person, InfectionStatus>::decreases_to(
+                InfectionStatus::Infectious,
+                0,
+            )
+            .repeating()
+            .emit_with(|event| InfectiousThresholdReached {
+                count: event.count,
+                direction: event.direction,
+            }),
+        );
+        context.subscribe_to_event(move |_context, event: InfectiousThresholdReached| {
+            observed_clone
+                .borrow_mut()
+                .push((event.count, event.direction));
+        });
+
+        let person = context
+            .add_entity(with!(Person, InfectionStatus::Infectious))
+            .unwrap();
+        context.set_property(person, InfectionStatus::Susceptible);
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![(0, Direction::Decreasing)]);
+    }
+
+    // Regression coverage for create-with-untracked-value followed by change-to-tracked before
+    // callbacks drain. A deferred creation callback that reads the later tracked value must not
+    // count the entity again when the property-change callback drains.
+    #[test]
+    fn property_value_count_does_not_double_count_same_tick_change_to_tracked() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+
+        #[derive(IxaEvent)]
+        struct InfectiousThresholdReached {
+            count: usize,
+            direction: Direction,
+        }
+
+        context.register_trigger(
+            PropertyValueCountTrigger::<Person, InfectionStatus>::changes_to(
+                InfectionStatus::Infectious,
+                0,
+            )
+            .repeating()
+            .emit_with(|event| InfectiousThresholdReached {
+                count: event.count,
+                direction: event.direction,
+            }),
+        );
+        context.subscribe_to_event(move |_context, event: InfectiousThresholdReached| {
+            observed_clone
+                .borrow_mut()
+                .push((event.count, event.direction));
+        });
+
+        let person = context.add_entity(Person).unwrap();
+        context.set_property(person, InfectionStatus::Infectious);
+        context.execute();
+
+        context.set_property(person, InfectionStatus::Susceptible);
+        context.execute();
+
+        assert_eq!(*observed.borrow(), vec![(0, Direction::Decreasing)]);
+    }
+
     #[test]
     #[should_panic(expected = "period must be greater than 0")]
     fn periodic_time_trigger_zero_period_panics() {
