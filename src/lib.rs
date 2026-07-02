@@ -49,7 +49,7 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
 pub mod context;
-pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
+pub use context::{Context, ContextBase, EventListenerId, ExecutionPhase, IxaEvent};
 pub use ixa_derive::IxaEvent;
 
 mod plugin_context;

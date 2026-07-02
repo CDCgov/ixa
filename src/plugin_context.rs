@@ -68,10 +68,12 @@ mod test_plugin_context {
             Self: Sized,
         {
             self.setup();
-            self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
+            let listener_id = self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
                 assert_eq!(event.data, 42);
             });
             self.emit_event(MyEvent { data: 42 });
+            assert!(self.unsubscribe_from_event(&listener_id));
+            assert!(!self.unsubscribe_from_event(&listener_id));
             self.add_plan_with_phase(
                 1.0,
                 |context| {

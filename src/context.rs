@@ -6,6 +6,7 @@ use std::any::{Any, TypeId};
 use std::cell::OnceCell;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
@@ -27,6 +28,30 @@ type Callback = dyn FnOnce(&mut Context);
 
 /// A handler for an event type `E`
 type EventHandler<E> = dyn Fn(&mut Context, E);
+
+/// An opaque token for a registered event listener.
+///
+/// Pass this token to [`Context::unsubscribe_from_event`] to stop the listener
+/// from receiving future emissions of the same event type.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct EventListenerId<E: IxaEvent> {
+    id: usize,
+    event_type: PhantomData<fn() -> E>,
+}
+
+impl<E: IxaEvent> EventListenerId<E> {
+    fn new(id: usize) -> Self {
+        Self {
+            id,
+            event_type: PhantomData,
+        }
+    }
+}
+
+struct EventHandlerRegistration<E: IxaEvent> {
+    listener_id: EventListenerId<E>,
+    handler: Rc<EventHandler<E>>,
+}
 
 pub trait IxaEvent: Copy + 'static {
     /// Called every time `context.subscribe_to_event` is called with this event
@@ -84,6 +109,7 @@ pub struct Context {
     plan_queue: Queue<Box<Callback>, ExecutionPhase>,
     callback_queue: VecDeque<Box<Callback>>,
     event_handlers: HashMap<TypeId, Box<dyn Any>>,
+    next_event_listener_id: usize,
     pub(crate) entity_store: EntityStore,
     data_plugins: Vec<OnceCell<Box<dyn Any>>>,
     pub(crate) global_properties: Vec<OnceCell<Box<dyn Any>>>,
@@ -112,6 +138,7 @@ impl Context {
             plan_queue: Queue::new(),
             callback_queue: VecDeque::new(),
             event_handlers: HashMap::new(),
+            next_event_listener_id: 0,
             entity_store: EntityStore::new(),
             data_plugins,
             global_properties,
@@ -140,18 +167,63 @@ impl Context {
     ///
     /// Handlers will be called upon event emission in order of subscription as
     /// queued `Callback`s with the appropriate event.
-    pub fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static) {
+    pub fn subscribe_to_event<E: IxaEvent>(
+        &mut self,
+        handler: impl Fn(&mut Context, E) + 'static,
+    ) -> EventListenerId<E> {
+        let listener_id = EventListenerId::new(self.next_event_listener_id);
+        self.next_event_listener_id = self
+            .next_event_listener_id
+            .checked_add(1)
+            .unwrap_or_else(|| panic!("event listener id overflow"));
+
         let handler_vec = self
             .event_handlers
             .entry(TypeId::of::<E>())
-            .or_insert_with(|| Box::<Vec<Rc<EventHandler<E>>>>::default());
-        let handler_vec: &mut Vec<Rc<EventHandler<E>>> = handler_vec.downcast_mut().unwrap();
-        handler_vec.push(Rc::new(handler));
+            .or_insert_with(|| Box::<Vec<EventHandlerRegistration<E>>>::default());
+        let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
+            handler_vec.downcast_mut().unwrap();
+        handler_vec.push(EventHandlerRegistration {
+            listener_id,
+            handler: Rc::new(handler),
+        });
         E::on_subscribe(self);
+        listener_id
+    }
+
+    /// Unsubscribe a previously registered event listener.
+    ///
+    /// Returns `true` if a listener was unsubscribed and `false` if the token is
+    /// unknown, already unsubscribed, or otherwise absent.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn unsubscribe_from_event<E: IxaEvent>(
+        &mut self,
+        listener_id: &EventListenerId<E>,
+    ) -> bool {
+        let Some(handler_vec) = self.event_handlers.get_mut(&TypeId::of::<E>()) else {
+            return false;
+        };
+        let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
+            handler_vec.downcast_mut().unwrap();
+        let Some(index) = handler_vec
+            .iter()
+            .position(|entry| entry.listener_id.id == listener_id.id)
+        else {
+            return false;
+        };
+
+        handler_vec.swap_remove(index);
+        true
     }
 
     pub(crate) fn has_event_handlers<E: IxaEvent>(&self) -> bool {
-        self.event_handlers.contains_key(&TypeId::of::<E>())
+        self.event_handlers
+            .get(&TypeId::of::<E>())
+            .is_some_and(|handler_vec| {
+                let handler_vec: &Vec<EventHandlerRegistration<E>> =
+                    handler_vec.downcast_ref().unwrap();
+                !handler_vec.is_empty()
+            })
     }
 
     /// Emit an event of type E to be handled by registered receivers
@@ -166,9 +238,10 @@ impl Context {
             ..
         } = self;
         if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
-            let handler_vec: &Vec<Rc<EventHandler<E>>> = handler_vec.downcast_ref().unwrap();
-            for handler in handler_vec {
-                let handler_clone = Rc::clone(handler);
+            let handler_vec: &Vec<EventHandlerRegistration<E>> =
+                handler_vec.downcast_ref().unwrap();
+            for registration in handler_vec {
+                let handler_clone = Rc::clone(&registration.handler);
                 callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
             }
         }
@@ -472,7 +545,13 @@ impl Context {
 }
 
 pub trait ContextBase {
-    fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static)
+    fn subscribe_to_event<E: IxaEvent>(
+        &mut self,
+        handler: impl Fn(&mut Context, E) + 'static,
+    ) -> EventListenerId<E>
+    where
+        Self: Sized;
+    fn unsubscribe_from_event<E: IxaEvent>(&mut self, listener_id: &EventListenerId<E>) -> bool
     where
         Self: Sized;
     fn emit_event<E: IxaEvent>(&mut self, event: E)
@@ -516,7 +595,8 @@ pub trait ContextBase {
 impl ContextBase for Context {
     delegate::delegate! {
         to self {
-            fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
+            fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static) -> EventListenerId<E>;
+            fn unsubscribe_from_event<E: IxaEvent>(&mut self, listener_id: &EventListenerId<E>) -> bool;
             fn emit_event<E: IxaEvent>(&mut self, event: E);
             fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
@@ -872,6 +952,119 @@ mod tests {
         context.execute();
         assert_eq!(*obs_data1.borrow(), 1);
         assert_eq!(*obs_data2.borrow(), 2);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_before_emit() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        let listener_id = context.subscribe_to_event::<Event1>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        assert!(context.has_event_handlers::<Event1>());
+        assert!(context.unsubscribe_from_event(&listener_id));
+        assert!(!context.has_event_handlers::<Event1>());
+
+        context.emit_event(Event1 { data: 1 });
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 0);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_preserves_other_listeners_in_order() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event::<Event1>(move |_, event| {
+            observed_clone.borrow_mut().push(event.data);
+        });
+        let observed_clone = Rc::clone(&observed);
+        let listener_to_unsubscribe = context.subscribe_to_event::<Event1>(move |_, event| {
+            observed_clone.borrow_mut().push(event.data + 10);
+        });
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event::<Event1>(move |_, event| {
+            observed_clone.borrow_mut().push(event.data + 20);
+        });
+
+        assert!(context.unsubscribe_from_event(&listener_to_unsubscribe));
+
+        context.emit_event(Event1 { data: 1 });
+        context.execute();
+        assert_eq!(*observed.borrow(), vec![1, 21]);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_does_not_affect_other_event_types() {
+        let mut context = Context::new();
+        let obs_data1 = Rc::new(RefCell::new(0));
+        let obs_data1_clone = Rc::clone(&obs_data1);
+        let obs_data2 = Rc::new(RefCell::new(0));
+        let obs_data2_clone = Rc::clone(&obs_data2);
+
+        let listener_id = context.subscribe_to_event::<Event1>(move |_, event| {
+            *obs_data1_clone.borrow_mut() = event.data;
+        });
+        context.subscribe_to_event::<Event2>(move |_, event| {
+            *obs_data2_clone.borrow_mut() = event.data;
+        });
+
+        assert!(context.unsubscribe_from_event(&listener_id));
+
+        context.emit_event(Event1 { data: 1 });
+        context.emit_event(Event2 { data: 2 });
+        context.execute();
+        assert_eq!(*obs_data1.borrow(), 0);
+        assert_eq!(*obs_data2.borrow(), 2);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_does_not_cancel_already_queued_callback() {
+        let mut context = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        let listener_id = context.subscribe_to_event::<Event1>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        context.emit_event(Event1 { data: 1 });
+        assert!(context.unsubscribe_from_event(&listener_id));
+        context.execute();
+        assert_eq!(*obs_data.borrow(), 1);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_returns_false_when_already_unsubscribed() {
+        let mut context = Context::new();
+        let listener_id = context.subscribe_to_event::<Event1>(move |_, _| {});
+
+        assert!(context.unsubscribe_from_event(&listener_id));
+        assert!(!context.unsubscribe_from_event(&listener_id));
+    }
+
+    #[test]
+    fn unsubscribe_from_event_returns_false_for_unknown_listener_id() {
+        let mut context1 = Context::new();
+        let mut context2 = Context::new();
+        let obs_data = Rc::new(RefCell::new(0));
+        let obs_data_clone = Rc::clone(&obs_data);
+
+        context1.subscribe_to_event::<Event1>(move |_, _| {});
+        let unknown_listener_id = context1.subscribe_to_event::<Event1>(move |_, _| {});
+        context2.subscribe_to_event::<Event1>(move |_, event| {
+            *obs_data_clone.borrow_mut() = event.data;
+        });
+
+        assert!(!context2.unsubscribe_from_event(&unknown_listener_id));
+
+        context2.emit_event(Event1 { data: 1 });
+        context2.execute();
+        assert_eq!(*obs_data.borrow(), 1);
     }
 
     #[test]
