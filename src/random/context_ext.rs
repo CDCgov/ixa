@@ -47,7 +47,10 @@ fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType>
 pub trait ContextRandomExt: ContextBase {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
-    fn init_random(&mut self, base_seed: u64) {
+    fn init_random(&mut self, base_seed: u64)
+    where
+        Self: Sized,
+    {
         trace!("initializing random module");
         let data_container = self.get_data_mut(RngPlugin);
         data_container.base_seed = base_seed;
@@ -66,7 +69,10 @@ pub trait ContextRandomExt: ContextBase {
         &self,
         _rng_type: R,
         sampler: impl FnOnce(&mut R::RngType) -> T,
-    ) -> T {
+    ) -> T
+    where
+        Self: Sized,
+    {
         let mut rng = get_rng::<R>(self);
         sampler(&mut rng)
     }
@@ -82,6 +88,7 @@ pub trait ContextRandomExt: ContextBase {
         distribution: impl Distribution<T>,
     ) -> T
     where
+        Self: Sized,
         R::RngType: Rng,
     {
         let mut rng = get_rng::<R>(self);
@@ -94,6 +101,7 @@ pub trait ContextRandomExt: ContextBase {
     #[must_use]
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
+        Self: Sized,
         R::RngType: Rng,
         S: SampleRange<T>,
         T: SampleUniform,
@@ -107,6 +115,7 @@ pub trait ContextRandomExt: ContextBase {
     #[must_use]
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
     where
+        Self: Sized,
         R::RngType: Rng,
     {
         self.sample(rng_id, |rng| rng.random_bool(p))
@@ -119,6 +128,7 @@ pub trait ContextRandomExt: ContextBase {
     #[must_use]
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
+        Self: Sized,
         R::RngType: Rng,
         T: Clone
             + Default

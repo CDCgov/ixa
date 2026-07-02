@@ -98,7 +98,9 @@ pub trait ContextEntitiesExt {
     fn add_entity<E: Entity, PL: PropertyInitializationList<E>>(
         &mut self,
         property_list: PL,
-    ) -> Result<EntityId<E>, IxaError>;
+    ) -> Result<EntityId<E>, IxaError>
+    where
+        Self: Sized;
 
     /// Fetches the property value set for the given `entity_id`.
     ///
@@ -107,14 +109,17 @@ pub trait ContextEntitiesExt {
     /// let vaccine_status: VaccineStatus = context.get_property(entity_id);
     /// ```
     #[must_use]
-    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
+    fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P
+    where
+        Self: Sized;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
     fn set_property<E: Entity, P: Property<E>>(
         &mut self,
         entity_id: EntityId<E>,
         property_value: P,
-    );
+    ) where
+        Self: Sized;
 
     /// Enables full indexing of property values for the property `P`.
     ///
@@ -122,13 +127,17 @@ pub trait ContextEntitiesExt {
     ///     `context.index_property::<Person, Age>()`
     ///
     /// This method both enables the index and catches it up to the current population.
-    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self);
+    fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self)
+    where
+        Self: Sized;
 
     /// Enables value-count indexing of property values for the property `P`.
     ///
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
-    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self);
+    fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self)
+    where
+        Self: Sized;
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
@@ -149,6 +158,7 @@ pub trait ContextEntitiesExt {
     /// ```
     fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
     where
+        Self: Sized,
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: Property<E> + Eq + Hash,
@@ -163,7 +173,9 @@ pub trait ContextEntitiesExt {
     /// multi-properties.
     #[cfg(test)]
     #[must_use]
-    fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool;
+    fn is_property_indexed<E: Entity, P: Property<E>>(&self) -> bool
+    where
+        Self: Sized;
 
     /// This method gives client code direct access to the query result as an `EntitySet`.
     /// This is especially efficient for indexed queries, as this method can reduce to wrapping
@@ -172,14 +184,17 @@ pub trait ContextEntitiesExt {
         &'a self,
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
-    );
+    ) where
+        Self: Sized;
 
     /// Gives the count of distinct entity IDs satisfying the query. This is especially
     /// efficient for indexed queries.
     ///
     /// Supplying a naked entity, e.g. `Person`, is equivalent to calling `get_entity_count::<Person>()`.
     #[must_use]
-    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize;
+    fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize
+    where
+        Self: Sized;
 
     /// Sample a single entity uniformly from the query results. Returns `None` if the
     /// query's result set is empty.
@@ -188,6 +203,7 @@ pub trait ContextEntitiesExt {
     #[must_use]
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
+        Self: Sized,
         E: Entity,
         Q: Query<E>,
         R: RngId + 'static,
@@ -200,6 +216,7 @@ pub trait ContextEntitiesExt {
     #[must_use]
     fn count_and_sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> (usize, Option<EntityId<E>>)
     where
+        Self: Sized,
         E: Entity,
         Q: Query<E>,
         R: RngId + 'static,
@@ -213,6 +230,7 @@ pub trait ContextEntitiesExt {
     #[must_use]
     fn sample_entities<E, Q, R>(&self, rng_id: R, query: Q, n: usize) -> Vec<EntityId<E>>
     where
+        Self: Sized,
         E: Entity,
         Q: Query<E>,
         R: RngId + 'static,
@@ -220,26 +238,38 @@ pub trait ContextEntitiesExt {
 
     /// Returns a total count of all created entities of type `E`.
     #[must_use]
-    fn get_entity_count<E: Entity>(&self) -> usize;
+    fn get_entity_count<E: Entity>(&self) -> usize
+    where
+        Self: Sized;
 
     /// Returns an iterator over all created entities of type `E`.
     #[must_use]
-    fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>;
+    fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E>
+    where
+        Self: Sized;
 
     /// Generates an `EntitySet` representing the query results.
     #[must_use]
-    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>;
+    fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E>
+    where
+        Self: Sized;
 
     /// Generates an iterator over the results of the query.
     #[must_use]
-    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>;
+    fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E>
+    where
+        Self: Sized;
 
     /// Determines if the given person matches this query.
     #[must_use]
-    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool;
+    fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool
+    where
+        Self: Sized;
 
     /// Removes all `EntityId`s from the given vector that do not match the given query.
-    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q);
+    fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q)
+    where
+        Self: Sized;
 }
 
 impl ContextEntitiesExt for Context {

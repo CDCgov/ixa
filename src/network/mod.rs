@@ -199,7 +199,10 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         neighbor: EntityId<E>,
         weight: f32,
         inner: ET,
-    ) -> Result<(), IxaError> {
+    ) -> Result<(), IxaError>
+    where
+        Self: Sized,
+    {
         let data_container = self.get_data_mut(NetworkPlugin);
         data_container.add_edge::<E, ET>(entity_id, neighbor, weight, inner)
     }
@@ -221,7 +224,10 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         entity2: EntityId<E>,
         weight: f32,
         inner: ET,
-    ) -> Result<(), IxaError> {
+    ) -> Result<(), IxaError>
+    where
+        Self: Sized,
+    {
         let data_container = self.get_data_mut(NetworkPlugin);
         data_container.add_edge::<E, ET>(entity1, entity2, weight, inner.clone())?;
         data_container.add_edge::<E, ET>(entity2, entity1, weight, inner)
@@ -234,7 +240,10 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         &mut self,
         entity_id: EntityId<E>,
         neighbor: EntityId<E>,
-    ) -> Option<Edge<E, ET>> {
+    ) -> Option<Edge<E, ET>>
+    where
+        Self: Sized,
+    {
         let data_container = self.get_data_mut(NetworkPlugin);
         data_container.remove_edge::<E, ET>(entity_id, neighbor)
     }
@@ -245,17 +254,20 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         &self,
         entity_id: EntityId<E>,
         neighbor: EntityId<E>,
-    ) -> Option<&Edge<E, ET>> {
+    ) -> Option<&Edge<E, ET>>
+    where
+        Self: Sized,
+    {
         self.get_data(NetworkPlugin)
             .get_edge::<E, ET>(entity_id, neighbor)
     }
 
     /// Get all outgoing edges of type `ET` from `entity_id`.
     #[must_use]
-    fn get_edges<E: Entity, ET: EdgeType<E>>(
-        &self,
-        entity_id: EntityId<E>,
-    ) -> AdjacencyList<E, ET> {
+    fn get_edges<E: Entity, ET: EdgeType<E>>(&self, entity_id: EntityId<E>) -> AdjacencyList<E, ET>
+    where
+        Self: Sized,
+    {
         self.get_data(NetworkPlugin).get_edges::<E, ET>(entity_id)
     }
 
@@ -268,7 +280,10 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         &self,
         entity_id: EntityId<E>,
         filter: impl Fn(&Self, &Edge<E, ET>) -> bool,
-    ) -> AdjacencyList<E, ET> {
+    ) -> AdjacencyList<E, ET>
+    where
+        Self: Sized,
+    {
         let network_data = self.get_data(NetworkPlugin);
         let empty = vec![];
         let edges = network_data
@@ -283,10 +298,10 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
 
     /// Find all entities who have an edge of type `ET` and degree `degree`.
     #[must_use]
-    fn find_entities_by_degree<E: Entity, ET: EdgeType<E>>(
-        &self,
-        degree: usize,
-    ) -> Vec<EntityId<E>> {
+    fn find_entities_by_degree<E: Entity, ET: EdgeType<E>>(&self, degree: usize) -> Vec<EntityId<E>>
+    where
+        Self: Sized,
+    {
         self.get_data(NetworkPlugin)
             .find_entities_by_degree::<E, ET>(degree)
     }
@@ -301,6 +316,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         entity_id: EntityId<E>,
     ) -> Result<Edge<E, ET>, IxaError>
     where
+        Self: Sized,
         R::RngType: Rng,
     {
         let edges = self.get_edges::<E, ET>(entity_id);

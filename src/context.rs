@@ -471,28 +471,43 @@ impl Context {
     }
 }
 
-pub trait ContextBase: Sized {
-    fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static);
-    fn emit_event<E: IxaEvent>(&mut self, event: E);
-    fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+pub trait ContextBase {
+    fn subscribe_to_event<E: IxaEvent>(&mut self, handler: impl Fn(&mut Context, E) + 'static)
+    where
+        Self: Sized;
+    fn emit_event<E: IxaEvent>(&mut self, event: E)
+    where
+        Self: Sized;
+    fn add_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId
+    where
+        Self: Sized;
     fn add_plan_with_phase(
         &mut self,
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
-    ) -> PlanId;
+    ) -> PlanId
+    where
+        Self: Sized;
     fn add_periodic_plan_with_phase(
         &mut self,
         period: f64,
         callback: impl Fn(&mut Context) + 'static,
         phase: ExecutionPhase,
-    );
+    ) where
+        Self: Sized;
     fn cancel_plan(&mut self, plan_id: &PlanId);
-    fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static);
+    fn queue_callback(&mut self, callback: impl FnOnce(&mut Context) + 'static)
+    where
+        Self: Sized;
     #[must_use]
-    fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer;
+    fn get_data_mut<T: DataPlugin>(&mut self, plugin: T) -> &mut T::DataContainer
+    where
+        Self: Sized;
     #[must_use]
-    fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer;
+    fn get_data<T: DataPlugin>(&self, plugin: T) -> &T::DataContainer
+    where
+        Self: Sized;
     #[must_use]
     fn get_current_time(&self) -> f64;
     #[must_use]

@@ -7,6 +7,13 @@ use crate::{
 /// A supertrait that exposes useful methods from [`Context`]
 /// for plugins implementing [`Context`] extensions.
 ///
+/// `PluginContext` is dyn-compatible, so client code may accept
+/// `&dyn PluginContext` or `&mut dyn PluginContext` when it only needs
+/// object-safe behavior. Most typed helper methods, such as data plugin,
+/// entity, random, report, and network helpers, remain available on concrete
+/// [`Context`] values or generic `C: PluginContext` parameters because their
+/// signatures depend on type parameters.
+///
 /// Usage:
 // This example uses ctor-based registration, which is not supported
 // on every rustdoc target, so we ignore it.
@@ -56,7 +63,10 @@ mod test_plugin_context {
         fn all_methods(&mut self) {
             assert_eq!(self.get_current_time(), 0.0);
         }
-        fn all_methods_mut(&mut self) {
+        fn all_methods_mut(&mut self)
+        where
+            Self: Sized,
+        {
             self.setup();
             self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
                 assert_eq!(event.data, 42);
@@ -90,19 +100,31 @@ mod test_plugin_context {
                 assert_eq!(*data, 42);
             });
         }
-        fn setup(&mut self) {
+        fn setup(&mut self)
+        where
+            Self: Sized,
+        {
             let data = self.get_data_mut(MyData);
             *data = 42;
             do_stuff_with_context(self);
         }
-        fn get_my_data(&self) -> i32 {
+        fn get_my_data(&self) -> i32
+        where
+            Self: Sized,
+        {
             *self.get_data(MyData)
         }
-        fn set_my_data(&mut self, value: i32) {
+        fn set_my_data(&mut self, value: i32)
+        where
+            Self: Sized,
+        {
             let data = self.get_data_mut(MyData);
             *data = value;
         }
-        fn test_external_function(&mut self) {
+        fn test_external_function(&mut self)
+        where
+            Self: Sized,
+        {
             self.setup();
             do_stuff_with_context(self);
         }
@@ -129,5 +151,25 @@ mod test_plugin_context {
         let mut context = Context::new();
         context.test_external_function();
         assert_eq!(context.get_my_data(), 42);
+    }
+
+    #[test]
+    fn test_plugin_context_is_dyn_compatible() {
+        fn accepts_dyn(context: &mut dyn PluginContext) {
+            assert_eq!(context.get_current_time(), 0.0);
+        }
+
+        let mut context = Context::new();
+        accepts_dyn(&mut context);
+    }
+
+    #[test]
+    fn test_plugin_extension_trait_is_dyn_compatible() {
+        fn accepts_dyn(context: &mut dyn MyDataExt) {
+            context.all_methods();
+        }
+
+        let mut context = Context::new();
+        accepts_dyn(&mut context);
     }
 }

@@ -159,14 +159,18 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
         &mut self,
         property: T,
         value: T::Value,
-    ) -> Result<(), IxaError>;
+    ) -> Result<(), IxaError>
+    where
+        Self: Sized;
 
     /// Return value of global property T
     #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
         _property: T,
-    ) -> Option<&T::Value>;
+    ) -> Option<&T::Value>
+    where
+        Self: Sized;
 
     /// Given a file path for a valid json file, deserialize parameter values
     /// for a given struct T
@@ -178,7 +182,10 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     fn load_parameters_from_json<T: 'static + Debug + DeserializeOwned>(
         &mut self,
         file_name: &Path,
-    ) -> Result<T, IxaError> {
+    ) -> Result<T, IxaError>
+    where
+        Self: Sized,
+    {
         trace!("Loading parameters from JSON: {file_name:?}");
         let config_file = fs::File::open(file_name)?;
         let reader = BufReader::new(config_file);

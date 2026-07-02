@@ -20,7 +20,10 @@ pub trait ProfilingContextExt: ContextReportExt {
 
     /// Writes the execution statistics for the context and all profiling data
     /// to a JSON file.
-    fn write_profiling_data(&mut self) {
+    fn write_profiling_data(&mut self)
+    where
+        Self: Sized,
+    {
         let (mut prefix, directory, overwrite) = {
             let report_options = self.report_options();
             (

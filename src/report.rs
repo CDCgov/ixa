@@ -111,7 +111,10 @@ pub trait ContextReportExt: ContextBase {
     // Builds the filename. Called by `add_report`, `short_name` refers to the
     // report type. The three main components are `prefix`, `directory`, and
     // `short_name`.
-    fn generate_filename(&mut self, short_name: &str) -> PathBuf {
+    fn generate_filename(&mut self, short_name: &str) -> PathBuf
+    where
+        Self: Sized,
+    {
         let data_container = self.get_data_mut(ReportPlugin);
         let prefix = &data_container.config.file_prefix;
         let directory = &data_container.config.output_dir;
@@ -126,7 +129,10 @@ pub trait ContextReportExt: ContextBase {
     /// # Errors
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
     /// If the file cannot be created, raises an error.
-    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError> {
+    fn add_report_by_type_id(&mut self, type_id: TypeId, short_name: &str) -> Result<(), IxaError>
+    where
+        Self: Sized,
+    {
         trace!("adding report {short_name} by type_id {type_id:?}");
         let path = self.generate_filename(short_name);
 
@@ -161,12 +167,18 @@ pub trait ContextReportExt: ContextBase {
     /// # Errors
     /// If the file already exists and `overwrite` is set to false, raises an error and info message.
     /// If the file cannot be created, raises an error.
-    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError> {
+    fn add_report<T: Report + 'static>(&mut self, short_name: &str) -> Result<(), IxaError>
+    where
+        Self: Sized,
+    {
         trace!("Adding report {short_name}");
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
 
-    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
+    fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>>
+    where
+        Self: Sized,
+    {
         // No data container will exist if no reports have been added
         let data_container = self.get_data(ReportPlugin);
         let writers = data_container.file_writers.try_borrow_mut().unwrap();
@@ -178,13 +190,19 @@ pub trait ContextReportExt: ContextBase {
     }
 
     /// Write a new row to the appropriate report file
-    fn send_report<T: Report>(&self, report: T) {
+    fn send_report<T: Report>(&self, report: T)
+    where
+        Self: Sized,
+    {
         let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
     }
 
     /// Returns a `ConfigReportOptions` object which has setter methods for report configuration
-    fn report_options(&mut self) -> &mut ConfigReportOptions {
+    fn report_options(&mut self) -> &mut ConfigReportOptions
+    where
+        Self: Sized,
+    {
         let data_container = self.get_data_mut(ReportPlugin);
         &mut data_container.config
     }

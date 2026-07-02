@@ -17,12 +17,18 @@ pub struct Parameters {
 define_global_property!(ParametersKey, Parameters);
 
 pub trait ParametersExt: PluginContext {
-    fn init_parameters(&mut self, file_path: &Path) -> Result<(), IxaError> {
+    fn init_parameters(&mut self, file_path: &Path) -> Result<(), IxaError>
+    where
+        Self: Sized,
+    {
         let parameters_json = self.load_parameters_from_json::<Parameters>(file_path)?;
         self.set_global_property_value(ParametersKey, parameters_json)?;
         Ok(())
     }
-    fn get_parameters(&self) -> &Parameters {
+    fn get_parameters(&self) -> &Parameters
+    where
+        Self: Sized,
+    {
         self.get_global_property_value(ParametersKey)
             .as_ref()
             .unwrap()
