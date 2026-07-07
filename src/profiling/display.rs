@@ -3,14 +3,14 @@ use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
 use super::{
-    profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS, QUERY_TIMINGS_HEADERS,
+    profiling_data, ProfilingData, QueryTimingRow, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
+    QUERY_TIMINGS_HEADERS,
 };
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
 pub fn print_profiling_data() {
     print_named_spans();
-    print_query_timings();
     print_named_counts();
     print_computed_statistics();
 }
@@ -87,12 +87,9 @@ pub fn print_named_spans() {
 #[cfg(not(feature = "profiling"))]
 pub fn print_named_spans() {}
 
-/// Prints a table of query timings, if any.
 #[cfg(feature = "profiling")]
-pub fn print_query_timings() {
-    let rows = profiling_data().get_query_timings_table();
+pub(crate) fn print_query_timings(rows: &[QueryTimingRow]) {
     if rows.is_empty() {
-        // nothing to report
         return;
     }
 
@@ -104,25 +101,19 @@ pub fn print_query_timings() {
             .collect(),
     ];
 
-    formatted_rows.extend(rows.into_iter().map(|row| {
+    formatted_rows.extend(rows.iter().map(|row| {
         vec![
-            row.query,
-            row.indexed.to_string(),
+            row.query.clone(),
             format_with_commas(row.count),
             format_duration(row.total).to_string(),
-            format_duration(row.mean).to_string(),
             format_duration(row.min).to_string(),
             format_duration(row.max).to_string(),
-            format!("{:.2}%", row.percent_runtime),
         ]
     }));
 
     println!();
     print_formatted_table(&formatted_rows);
 }
-
-#[cfg(not(feature = "profiling"))]
-pub fn print_query_timings() {}
 
 /// Prints the forecast efficiency.
 #[cfg(feature = "profiling")]
@@ -425,26 +416,24 @@ mod tests {
 
     #[test]
     fn print_query_timings_outputs_expected_format() {
-        {
-            let mut container = profiling_data();
-            container.record_query_timing(
-                "DisplayQueryTimings: (Age)",
-                true,
-                Duration::from_micros(10),
-            );
-            container.record_query_timing(
-                "DisplayQueryTimings: (Age)",
-                true,
-                Duration::from_micros(30),
-            );
-            container.record_query_timing(
-                "DisplayQueryTimings: (County)",
-                false,
-                Duration::from_micros(20),
-            );
-        }
+        let rows = vec![
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (Age)".to_string(),
+                count: 2,
+                total: Duration::from_micros(40),
+                min: Duration::from_micros(10),
+                max: Duration::from_micros(30),
+            },
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (County)".to_string(),
+                count: 1,
+                total: Duration::from_micros(20),
+                min: Duration::from_micros(20),
+                max: Duration::from_micros(20),
+            },
+        ];
 
-        print_query_timings();
+        print_query_timings(&rows);
     }
 
     #[test]

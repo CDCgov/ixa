@@ -52,11 +52,7 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
     }
 
     fn from_entity_set(set: EntitySet<'a, E>) -> Self {
-        Self::from_entity_set_inner(set.into_inner())
-    }
-
-    fn from_entity_set_inner(inner: EntitySetInner<'a, E>) -> Self {
-        match inner {
+        match set.inner {
             EntitySetInner::Source(source) => {
                 if source.try_len() == Some(0) {
                     Self::empty_source()
@@ -220,7 +216,7 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
 pub struct EntitySetIterator<'c, E: Entity> {
     inner: EntitySetIteratorInner<'c, E>,
     #[cfg(feature = "profiling")]
-    query_timing: Option<crate::profiling::QueryTimingAccumulator>,
+    query_profile: Option<crate::profiling::QueryProfileHandle<'c>>,
 }
 
 impl<'c, E: Entity> EntitySetIterator<'c, E> {
@@ -228,7 +224,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         Self {
             inner,
             #[cfg(feature = "profiling")]
-            query_timing: None,
+            query_profile: None,
         }
     }
 
@@ -272,10 +268,11 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn with_query_timing_label(mut self, label: &'static str, indexed: bool) -> Self {
-        self.query_timing = Some(crate::profiling::QueryTimingAccumulator::new(
-            label, indexed,
-        ));
+    pub(crate) fn with_query_profile(
+        mut self,
+        profile: crate::profiling::QueryProfileHandle<'c>,
+    ) -> Self {
+        self.query_profile = Some(profile);
         self
     }
 
@@ -286,10 +283,9 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     ) -> T {
         #[cfg(feature = "profiling")]
         {
-            if let Some(query_timing) = &mut self.query_timing {
-                let start = std::time::Instant::now();
+            if let Some(profile) = self.query_profile {
+                let _query_profile_scope = profile.scope();
                 let result = f(&mut self.inner);
-                query_timing.add_elapsed(start.elapsed());
                 return result;
             }
         }
@@ -299,12 +295,10 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     pub(super) fn new(set: EntitySet<'c, E>) -> Self {
         #[cfg(feature = "profiling")]
         {
-            let (inner, query_timing_label) = set.into_inner_and_query_timing_label();
+            let (set, query_profile) = set.split_query_profile();
             EntitySetIterator {
-                inner: EntitySetIteratorInner::from_entity_set_inner(inner),
-                query_timing: query_timing_label.map(|(label, indexed)| {
-                    crate::profiling::QueryTimingAccumulator::new(label, indexed)
-                }),
+                inner: EntitySetIteratorInner::from_entity_set(set),
+                query_profile,
             }
         }
         #[cfg(not(feature = "profiling"))]
@@ -329,10 +323,10 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
         let EntitySetIterator {
             inner,
             #[cfg(feature = "profiling")]
-            mut query_timing,
+            query_profile,
         } = self;
         #[cfg(feature = "profiling")]
-        let start = query_timing.as_ref().map(|_| std::time::Instant::now());
+        let _query_profile_scope = query_profile.map(crate::profiling::QueryProfileHandle::scope);
         let count = match inner {
             EntitySetIteratorInner::Source(source) => source.count(),
             EntitySetIteratorInner::IntersectionSources {
@@ -351,10 +345,6 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
                 n
             }
         };
-        #[cfg(feature = "profiling")]
-        if let (Some(query_timing), Some(start)) = (&mut query_timing, start) {
-            query_timing.add_elapsed(start.elapsed());
-        }
         count
     }
 
@@ -379,23 +369,46 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
     where
         F: FnMut(Self::Item),
     {
+        let EntitySetIterator {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile,
+        } = self;
         #[cfg(feature = "profiling")]
-        {
-            let mut it = self;
-            for item in &mut it {
-                f(item);
-            }
-        }
-        #[cfg(not(feature = "profiling"))]
-        {
-            let EntitySetIterator { inner } = self;
+        if let Some(query_profile) = query_profile {
+            let mut elapsed = std::time::Duration::ZERO;
             match inner {
-                EntitySetIteratorInner::Source(source) => source.for_each(f),
-                other => {
-                    let it = EntitySetIterator::from_inner(other);
-                    for item in it {
-                        f(item);
-                    }
+                EntitySetIteratorInner::Source(mut source) => loop {
+                    let start = std::time::Instant::now();
+                    let item = source.next();
+                    elapsed += start.elapsed();
+
+                    let Some(item) = item else {
+                        break;
+                    };
+                    f(item);
+                },
+                mut other => loop {
+                    let start = std::time::Instant::now();
+                    let item = other.next_inner();
+                    elapsed += start.elapsed();
+
+                    let Some(item) = item else {
+                        break;
+                    };
+                    f(item);
+                },
+            }
+            query_profile.record_elapsed(elapsed);
+            return;
+        }
+
+        match inner {
+            EntitySetIteratorInner::Source(source) => source.for_each(f),
+            other => {
+                let it = EntitySetIterator::from_inner(other);
+                for item in it {
+                    f(item);
                 }
             }
         }
@@ -405,28 +418,50 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
+        let EntitySetIterator {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile,
+        } = self;
         #[cfg(feature = "profiling")]
-        {
-            let mut it = self;
+        if let Some(query_profile) = query_profile {
+            let mut elapsed = std::time::Duration::ZERO;
             let mut acc = init;
-            for item in &mut it {
-                acc = f(acc, item);
-            }
-            acc
-        }
-        #[cfg(not(feature = "profiling"))]
-        {
-            let EntitySetIterator { inner } = self;
             match inner {
-                EntitySetIteratorInner::Source(source) => source.fold(init, f),
-                other => {
-                    let it = EntitySetIterator::from_inner(other);
-                    let mut acc = init;
-                    for item in it {
-                        acc = f(acc, item);
-                    }
-                    acc
+                EntitySetIteratorInner::Source(mut source) => loop {
+                    let start = std::time::Instant::now();
+                    let item = source.next();
+                    elapsed += start.elapsed();
+
+                    let Some(item) = item else {
+                        break;
+                    };
+                    acc = f(acc, item);
+                },
+                mut other => loop {
+                    let start = std::time::Instant::now();
+                    let item = other.next_inner();
+                    elapsed += start.elapsed();
+
+                    let Some(item) = item else {
+                        break;
+                    };
+                    acc = f(acc, item);
+                },
+            }
+            query_profile.record_elapsed(elapsed);
+            return acc;
+        }
+
+        match inner {
+            EntitySetIteratorInner::Source(source) => source.fold(init, f),
+            other => {
+                let it = EntitySetIterator::from_inner(other);
+                let mut acc = init;
+                for item in it {
+                    acc = f(acc, item);
                 }
+                acc
             }
         }
     }

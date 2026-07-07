@@ -26,9 +26,9 @@
 //! schedule_next_forecasted_infection    1286  22ms 329us 102ns      8.44%
 //! Total Measured                        1385  23ms 897us 146ns      9.03%
 //!
-//! Query                    Indexed  Count        Total         Mean          Min          Max  % runtime
-//! ------------------------------------------------------------------------------------------------------
-//! Person: (Age, County)       true    150   12ms 340us   82us 266ns   10us 120ns  250us 450ns      4.20%
+//! Query                    Count        Total          Min          Max
+//! --------------------------------------------------------------------
+//! Person: (Age, County)      150   12ms 340us   10us 120ns  250us 450ns
 //!
 //! Event Label                     Count  Rate (per sec)
 //! -----------------------------------------------------
@@ -47,7 +47,6 @@
 //! - `print_profiling_data`
 //! - `print_named_counts`
 //! - `print_named_spans`
-//! - `print_query_timings`
 //! - `print_computed_statistics`
 //! - `add_computed_statistic`
 //!
@@ -82,8 +81,8 @@
 //! print_profiling_data();
 //! ```
 //! Prints spans, counts, and any computed statistics via the functions
-//! `print_named_spans()`, `print_query_timings()`, `print_named_counts()`, and
-//! `print_computed_statistics()`, which you can use individually if you prefer.
+//! `print_named_spans()`, `print_named_counts()`, and `print_computed_statistics()`, which
+//! you can use individually if you prefer. Context-level reporting also includes query timings.
 //!
 //! Writing results to JSON together with execution statistics:
 //! ```rust,ignore
@@ -195,16 +194,7 @@ const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% run
 #[cfg(feature = "profiling")]
 const NAMED_COUNTS_HEADERS: &[&str] = &["Event Label", "Count", "Rate (per sec)"];
 #[cfg(feature = "profiling")]
-const QUERY_TIMINGS_HEADERS: &[&str] = &[
-    "Query",
-    "Indexed",
-    "Count",
-    "Total",
-    "Mean",
-    "Min",
-    "Max",
-    "% runtime",
-];
+const QUERY_TIMINGS_HEADERS: &[&str] = &["Query", "Count", "Total", "Min", "Max"];
 
 pub struct Span {
     #[cfg(feature = "profiling")]
@@ -229,74 +219,5 @@ impl Drop for Span {
     fn drop(&mut self) {
         let mut container = profiling_data();
         container.close_span(self);
-    }
-}
-
-pub(crate) struct QueryTimingSpan {
-    #[cfg(feature = "profiling")]
-    label: &'static str,
-    #[cfg(feature = "profiling")]
-    indexed: bool,
-    #[cfg(feature = "profiling")]
-    start_time: Instant,
-}
-
-impl QueryTimingSpan {
-    #[cfg(feature = "profiling")]
-    fn new(label: &'static str, indexed: bool) -> Self {
-        Self {
-            label,
-            indexed,
-            start_time: Instant::now(),
-        }
-    }
-
-    #[cfg(not(feature = "profiling"))]
-    fn new() -> Self {
-        Self {}
-    }
-}
-
-#[cfg(feature = "profiling")]
-impl Drop for QueryTimingSpan {
-    fn drop(&mut self) {
-        let mut container = profiling_data();
-        container.record_query_timing(self.label, self.indexed, self.start_time.elapsed());
-    }
-}
-
-#[cfg(feature = "profiling")]
-pub(crate) struct QueryTimingAccumulator {
-    label: &'static str,
-    indexed: bool,
-    elapsed: std::time::Duration,
-    observations: usize,
-}
-
-#[cfg(feature = "profiling")]
-impl QueryTimingAccumulator {
-    pub(crate) fn new(label: &'static str, indexed: bool) -> Self {
-        Self {
-            label,
-            indexed,
-            elapsed: std::time::Duration::ZERO,
-            observations: 0,
-        }
-    }
-
-    pub(crate) fn add_elapsed(&mut self, elapsed: std::time::Duration) {
-        self.elapsed += elapsed;
-        self.observations += 1;
-    }
-}
-
-#[cfg(feature = "profiling")]
-impl Drop for QueryTimingAccumulator {
-    fn drop(&mut self) {
-        if self.observations == 0 {
-            return;
-        }
-        let mut container = profiling_data();
-        container.record_query_timing(self.label, self.indexed, self.elapsed);
     }
 }

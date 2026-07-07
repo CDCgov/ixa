@@ -108,13 +108,13 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
     }
 
     #[cfg(feature = "profiling")]
-    fn profiling_label(&self) -> &'static str {
-        self.inner.profiling_label()
+    fn query_profile_label(&self) -> &'static str {
+        self.inner.query_profile_label()
     }
 
     #[cfg(feature = "profiling")]
-    fn push_profiling_property_names(&self, names: &mut Vec<&'static str>) {
-        self.inner.push_profiling_property_names(names);
+    fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
+        self.inner.push_query_property_names(names);
     }
 }
 
@@ -206,10 +206,10 @@ pub trait QueryInternal<E: Entity>: 'static {
     /// Removes all `EntityId`s from the given vector that do not match this query.
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
 
-    /// Returns a stable profiling label for this query shape.
+    /// Returns a stable profiling identity for this query shape.
     #[cfg(feature = "profiling")]
     #[must_use]
-    fn profiling_label(&self) -> &'static str
+    fn query_profile_label(&self) -> &'static str
     where
         Self: Sized,
     {
@@ -220,7 +220,7 @@ pub trait QueryInternal<E: Entity>: 'static {
         let key = (TypeId::of::<E>(), TypeId::of::<Self>());
         map.entry(key).or_insert_with(|| {
             let mut property_names = Vec::new();
-            self.push_profiling_property_names(&mut property_names);
+            self.push_query_property_names(&mut property_names);
             property_names.sort_unstable();
 
             let label = if property_names.is_empty() {
@@ -234,7 +234,7 @@ pub trait QueryInternal<E: Entity>: 'static {
 
     /// Appends property names that identify this query shape.
     #[cfg(feature = "profiling")]
-    fn push_profiling_property_names(&self, names: &mut Vec<&'static str>);
+    fn push_query_property_names(&self, names: &mut Vec<&'static str>);
 }
 
 /// Values accepted by user-facing query APIs such as
@@ -342,51 +342,51 @@ mod tests {
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn empty_query_profiling_label_is_entity_all() {
+    fn empty_query_query_profile_label_is_entity_all() {
         assert_eq!(
-            <() as QueryInternal<Person>>::profiling_label(&()),
+            <() as QueryInternal<Person>>::query_profile_label(&()),
             "Person: All"
         );
         assert_eq!(
-            <Person as QueryInternal<Person>>::profiling_label(&Person),
+            <Person as QueryInternal<Person>>::query_profile_label(&Person),
             "Person: All"
         );
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn single_property_query_profiling_label_includes_property_name() {
+    fn single_property_query_query_profile_label_includes_property_name() {
         let query = (Age(42),);
 
         assert_eq!(
-            <(Age,) as QueryInternal<Person>>::profiling_label(&query),
+            <(Age,) as QueryInternal<Person>>::query_profile_label(&query),
             "Person: (Age)"
         );
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn multi_property_query_profiling_label_includes_property_names() {
+    fn multi_property_query_query_profile_label_includes_property_names() {
         let query = (Age(42), County(1));
 
         assert_eq!(
-            <(Age, County) as QueryInternal<Person>>::profiling_label(&query),
+            <(Age, County) as QueryInternal<Person>>::query_profile_label(&query),
             "Person: (Age, County)"
         );
 
         let reversed_query = (County(1), Age(42));
         assert_eq!(
-            <(County, Age) as QueryInternal<Person>>::profiling_label(&reversed_query),
+            <(County, Age) as QueryInternal<Person>>::query_profile_label(&reversed_query),
             "Person: (Age, County)"
         );
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn entity_property_tuple_profiling_label_delegates_to_inner_query() {
+    fn entity_property_tuple_query_profile_label_delegates_to_inner_query() {
         let query = EntityPropertyTuple::<Person, _>::new((Age(42), County(1)));
 
-        assert_eq!(query.profiling_label(), "Person: (Age, County)");
+        assert_eq!(query.query_profile_label(), "Person: (Age, County)");
     }
 
     #[test]
