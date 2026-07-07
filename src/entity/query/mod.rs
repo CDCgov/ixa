@@ -234,7 +234,7 @@ pub trait QueryInternal<E: Entity>: 'static {
 
     /// Appends property names that identify this query shape.
     #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, names: &mut Vec<&'static str>);
+    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 /// Values accepted by user-facing query APIs such as
@@ -387,6 +387,45 @@ mod tests {
         let query = EntityPropertyTuple::<Person, _>::new((Age(42), County(1)));
 
         assert_eq!(query.query_profile_label(), "Person: (Age, County)");
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn custom_query_internal_impl_can_use_default_profile_names() {
+        struct CustomQuery;
+
+        impl QueryInternal<Person> for CustomQuery {
+            type QueryParts<'a>
+                = [&'a dyn std::any::Any; 0]
+            where
+                Self: 'a;
+
+            fn get_type_ids(&self) -> Vec<std::any::TypeId> {
+                Vec::new()
+            }
+
+            fn query_parts(&self) -> Self::QueryParts<'_> {
+                []
+            }
+
+            fn new_query_result<'c>(&self, context: &'c Context) -> super::EntitySet<'c, Person> {
+                <() as QueryInternal<Person>>::new_query_result(&(), context)
+            }
+
+            fn match_entity(&self, entity_id: super::EntityId<Person>, context: &Context) -> bool {
+                <() as QueryInternal<Person>>::match_entity(&(), entity_id, context)
+            }
+
+            fn filter_entities(
+                &self,
+                entities: &mut Vec<super::EntityId<Person>>,
+                context: &Context,
+            ) {
+                <() as QueryInternal<Person>>::filter_entities(&(), entities, context);
+            }
+        }
+
+        assert_eq!(CustomQuery.query_profile_label(), "Person: All");
     }
 
     #[test]

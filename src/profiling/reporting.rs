@@ -9,58 +9,77 @@ pub trait ProfilingContextExt: ContextReportExt {
     ///
     /// If `include_profiling_data` is true, also prints the global profiling data
     /// (spans, counts, and computed statistics).
-    fn print_execution_statistics(&mut self, include_profiling_data: bool);
+    fn print_execution_statistics(&mut self, include_profiling_data: bool) {
+        print_execution_statistics(self, include_profiling_data);
+    }
 
     /// Writes the execution statistics for the context and all profiling data
     /// to a JSON file.
-    fn write_profiling_data(&mut self);
+    fn write_profiling_data(&mut self) {
+        write_profiling_data(self, &[]);
+    }
 }
 
 impl ProfilingContextExt for Context {
     fn print_execution_statistics(&mut self, include_profiling_data: bool) {
-        let stats = self.get_execution_statistics();
-        crate::execution_stats::print_execution_statistics(&stats);
-
-        if include_profiling_data {
-            super::print_profiling_data();
-            #[cfg(feature = "profiling")]
-            super::print_query_timings(&self.query_timings_table());
+        print_execution_statistics(self, include_profiling_data);
+        #[cfg(feature = "profiling")]
+        {
+            if include_profiling_data {
+                super::print_query_timings(&self.query_timings_table());
+            }
         }
     }
 
     fn write_profiling_data(&mut self) {
-        let (mut prefix, directory, overwrite) = {
-            let report_options = self.report_options();
-            (
-                report_options.file_prefix.clone(),
-                report_options.output_dir.clone(),
-                report_options.overwrite,
-            )
-        };
-
-        let execution_statistics = self.get_execution_statistics();
-        // Default filename when not provided via parameters: write under report options
-        // using the current file prefix.
-        prefix.push_str("profiling.json");
-        let profiling_data_path = directory.join(prefix);
-        let profiling_data_path = Path::new(&profiling_data_path);
-
-        if !overwrite && profiling_data_path.exists() {
-            error!(
-                "profiling output file already exists: {}",
-                profiling_data_path.display()
-            );
-            return;
-        }
-
         #[cfg(feature = "profiling")]
         let query_timings = self.query_timings_table();
         #[cfg(not(feature = "profiling"))]
         let query_timings = [];
 
-        write_profiling_data_to_file(profiling_data_path, execution_statistics, &query_timings)
-            .expect("could not write profiling data to file");
+        write_profiling_data(self, &query_timings);
     }
+}
+
+fn print_execution_statistics<C: ContextReportExt>(context: &mut C, include_profiling_data: bool) {
+    let stats = context.get_execution_statistics();
+    crate::execution_stats::print_execution_statistics(&stats);
+
+    if include_profiling_data {
+        super::print_profiling_data();
+    }
+}
+
+fn write_profiling_data<C: ContextReportExt>(
+    context: &mut C,
+    query_timings: &[super::QueryTimingRow],
+) {
+    let (mut prefix, directory, overwrite) = {
+        let report_options = context.report_options();
+        (
+            report_options.file_prefix.clone(),
+            report_options.output_dir.clone(),
+            report_options.overwrite,
+        )
+    };
+
+    let execution_statistics = context.get_execution_statistics();
+    // Default filename when not provided via parameters: write under report options
+    // using the current file prefix.
+    prefix.push_str("profiling.json");
+    let profiling_data_path = directory.join(prefix);
+    let profiling_data_path = Path::new(&profiling_data_path);
+
+    if !overwrite && profiling_data_path.exists() {
+        error!(
+            "profiling output file already exists: {}",
+            profiling_data_path.display()
+        );
+        return;
+    }
+
+    write_profiling_data_to_file(profiling_data_path, execution_statistics, query_timings)
+        .expect("could not write profiling data to file");
 }
 
 #[cfg(all(test, feature = "profiling"))]
