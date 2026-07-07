@@ -304,7 +304,7 @@ impl Context {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId {
-        self.add_plan_with_phase_and_activity(time, callback, phase, true)
+        self.add_plan_with_phase_and_passivity(time, callback, phase, false)
     }
 
     /// Add a passive plan to the future event list at the specified time in the
@@ -343,15 +343,15 @@ impl Context {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId {
-        self.add_plan_with_phase_and_activity(time, callback, phase, false)
+        self.add_plan_with_phase_and_passivity(time, callback, phase, true)
     }
 
-    fn add_plan_with_phase_and_activity(
+    fn add_plan_with_phase_and_passivity(
         &mut self,
         time: f64,
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
-        is_active: bool,
+        is_passive: bool,
     ) -> PlanId {
         let current = self.get_current_time();
         assert!(!time.is_nan(), "Time {time} is invalid: cannot be NaN");
@@ -365,7 +365,7 @@ impl Context {
             current
         );
         self.plan_queue
-            .add_plan(time, Box::new(callback), phase, is_active)
+            .add_plan(time, Box::new(callback), phase, is_passive)
     }
 
     /// Add a plan to execute during shutdown-time in the normal phase.
@@ -419,10 +419,10 @@ impl Context {
     /// list.
     ///
     /// Periodic plans reschedule themselves after every run. They do not keep
-    /// the simulation timeline alive: when no active plans remain, normal
+    /// the simulation timeline alive: when no non-passive plans remain, normal
     /// shutdown begins, and only passive plans at the final current time can
     /// still run during that execution pass. Future passive periodic plans
-    /// remain queued and may run if later active work is scheduled.
+    /// remain queued and may run if later non-passive work is scheduled.
     ///
     /// Notes:
     /// * The first periodic plan is scheduled at time `0.0`. If `set_start_time` was
@@ -598,7 +598,7 @@ impl Context {
         self.start_time
     }
 
-    /// Execute the simulation until active plans are exhausted and shutdown
+    /// Execute the simulation until callbacks and plans are exhausted and shutdown
     /// work is complete.
     pub fn execute(&mut self) {
         trace!("entering event loop");
@@ -648,8 +648,8 @@ impl Context {
         match self.shutdown_status {
             ShutdownStatus::None => {
                 // Normal execution may advance simulation time to the next
-                // regular plan only while active regular work remains. Once no
-                // active regular plans remain, enter normal shutdown to drain
+                // regular plan only while non-passive regular work remains. Once no
+                // non-passive regular plans remain, enter normal shutdown to drain
                 // current-time regular work without advancing time.
                 if let Some(plan) = self.plan_queue.pop_next_if_active() {
                     trace!("calling plan at {:.6}", plan.time);
@@ -1430,7 +1430,7 @@ mod tests {
     }
 
     #[test]
-    fn passive_plans_at_final_active_time_run_across_phases() {
+    fn passive_plans_at_final_non_passive_time_run_across_phases() {
         let mut context = Context::new();
         add_passive_plan_with_phase(&mut context, 1.0, 1, ExecutionPhase::First);
         add_plan(&mut context, 1.0, 2);
@@ -1443,7 +1443,7 @@ mod tests {
     }
 
     #[test]
-    fn passive_future_plan_survives_until_later_active_work() {
+    fn passive_future_plan_survives_until_later_non_passive_work() {
         let mut context = Context::new();
         add_plan(&mut context, 1.0, 1);
         add_passive_plan(&mut context, 2.0, 2);
@@ -1576,7 +1576,7 @@ mod tests {
     #[test]
     fn periodic_plan_self_schedules() {
         // checks whether the periodic plan schedules itself passively without
-        // keeping execution alive after active plans are exhausted.
+        // keeping execution alive after non-passive plans are exhausted.
         let mut context = Context::new();
         context.add_periodic_plan_with_phase(
             1.0,

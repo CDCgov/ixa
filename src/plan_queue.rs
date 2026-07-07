@@ -15,7 +15,7 @@ type BoxedCallback = Box<Callback>;
 
 struct QueuedPlan {
     callback: BoxedCallback,
-    is_active: bool,
+    is_passive: bool,
 }
 
 /// A priority queue that stores scheduled plans.
@@ -27,7 +27,8 @@ pub(crate) struct PlanQueue {
     queue: BinaryHeap<PlanSchedule>,
     shutdown_queue: BinaryHeap<PlanSchedule>,
     data_map: HashMap<u64, QueuedPlan>,
-    active_plan_count: usize,
+    /// Count of scheduled plans excluding passive and shutdown-time plans.
+    regular_plan_count: usize,
     /// The next plan ID that will be issued.
     next_plan_id: u64,
     /// Tracks the high water mark of plans in flight (scheduled but not yet executed).
@@ -46,7 +47,7 @@ impl PlanQueue {
             queue: BinaryHeap::new(),
             shutdown_queue: BinaryHeap::new(),
             data_map: HashMap::new(),
-            active_plan_count: 0,
+            regular_plan_count: 0,
             next_plan_id: 0,
             #[cfg(feature = "profiling")]
             max_plans_in_flight: 0,
@@ -64,7 +65,7 @@ impl PlanQueue {
         time: f64,
         callback: BoxedCallback,
         phase: ExecutionPhase,
-        is_active: bool,
+        is_passive: bool,
     ) -> PlanId {
         trace!("adding plan at {time}");
         let plan_id = self.next_plan_id;
@@ -77,11 +78,11 @@ impl PlanQueue {
             plan_id,
             QueuedPlan {
                 callback,
-                is_active,
+                is_passive,
             },
         );
-        if is_active {
-            self.active_plan_count += 1;
+        if !is_passive {
+            self.regular_plan_count += 1;
         }
         self.next_plan_id += 1;
         self.update_profiling_high_water_marks();
@@ -109,7 +110,7 @@ impl PlanQueue {
             plan_id,
             QueuedPlan {
                 callback,
-                is_active: false,
+                is_passive: true,
             },
         );
         self.next_plan_id += 1;
@@ -124,8 +125,8 @@ impl PlanQueue {
         // Delete the plan from the map, but leave in the heap. It will be skipped
         // when its heap entry reaches the root.
         self.data_map.remove(&plan_id.0).map(|queued_plan| {
-            if queued_plan.is_active {
-                self.active_plan_count -= 1;
+            if !queued_plan.is_passive {
+                self.regular_plan_count -= 1;
             }
             queued_plan.callback
         })
@@ -151,36 +152,35 @@ impl PlanQueue {
         self.data_map.clear();
         self.queue.clear();
         self.shutdown_queue.clear();
-        self.active_plan_count = 0;
+        self.regular_plan_count = 0;
         self.next_plan_id = 0;
     }
 
-    /// Retrieve the earliest regular plan only if at least one active regular
-    /// plan is scheduled.
+    /// Retrieve the earliest regular plan only if the regular queue is active.
     ///
-    /// The active-plan check controls whether normal execution may continue.
-    /// The returned plan is simply the next regular plan by time, phase, and
-    /// plan ID; it may be active or passive. If no live active regular plan is
-    /// scheduled, this returns `None` without removing passive plans from the
-    /// regular queue.
+    /// The queue is active while at least one non-passive regular plan is
+    /// scheduled. The returned plan is simply the next regular plan by time,
+    /// phase, and plan ID; it may be passive. If no live non-passive regular
+    /// plan is scheduled, this returns `None` without removing passive plans
+    /// from the regular queue.
     pub(crate) fn pop_next_if_active(&mut self) -> Option<Plan> {
-        if self.active_plan_count == 0 {
+        if self.regular_plan_count == 0 {
             return None;
         }
 
         trace!("getting next plan");
         loop {
-            // The `pop` should be infallible when the active plan count is positive unless the
+            // The `pop` should be infallible when the plan count is positive unless the
             // queue invariants have been violated.
             let entry = self
                 .queue
                 .pop()
-                .expect("active plan count was positive but no regular plan was available");
+                .expect("plan count was positive but no plan was available");
 
             // Discard any cancelled plans we encounter.
             if let Some(queued_plan) = self.data_map.remove(&entry.plan_id) {
-                if queued_plan.is_active {
-                    self.active_plan_count -= 1;
+                if !queued_plan.is_passive {
+                    self.regular_plan_count -= 1;
                 }
                 return Some(Plan {
                     time: entry.time,
@@ -210,8 +210,8 @@ impl PlanQueue {
                         .data_map
                         .remove(&entry.plan_id)
                         .expect("live plan must have callback");
-                    if queued_plan.is_active {
-                        self.active_plan_count -= 1;
+                    if !queued_plan.is_passive {
+                        self.regular_plan_count -= 1;
                     }
                     return Some(Plan {
                         time,
@@ -235,8 +235,8 @@ impl PlanQueue {
             // If there's no `data_map` entry, the plan has been canceled, so discard
             // and pop another plan.
             let queued_plan = self.data_map.remove(&entry.plan_id)?;
-            if queued_plan.is_active {
-                self.active_plan_count -= 1;
+            if !queued_plan.is_passive {
+                self.regular_plan_count -= 1;
             }
             Some(Plan {
                 time: entry.time,
@@ -352,19 +352,19 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             3.0,
             callback(3, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         assert_eq!(plan_queue.next_time(), Some(1.0));
 
@@ -395,13 +395,13 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             1.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
 
         let next_plan = plan_queue.pop_next_if_active().unwrap();
@@ -424,13 +424,13 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             1.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::First,
-            true,
+            false,
         );
 
         let next_plan = plan_queue.pop_next_if_active().unwrap();
@@ -453,19 +453,19 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         let plan_to_cancel = plan_queue.add_plan(
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             3.0,
             callback(3, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.cancel_plan(&plan_to_cancel);
 
@@ -489,17 +489,17 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            false,
+            true,
         );
 
-        assert_eq!(plan_queue.active_plan_count, 0);
+        assert_eq!(plan_queue.regular_plan_count, 0);
         assert!(plan_queue.pop_next_if_active().is_none());
         assert_eq!(plan_queue.next_time(), Some(1.0));
         assert!(observed.borrow().is_empty());
     }
 
     #[test]
-    fn passive_plan_can_pop_before_later_active_plan() {
+    fn passive_plan_can_pop_before_later_non_passive_plan() {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let mut context = Context::new();
         let mut plan_queue = PlanQueue::new();
@@ -507,64 +507,64 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            false,
+            true,
         );
         plan_queue.add_plan(
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
 
-        assert_eq!(plan_queue.active_plan_count, 1);
+        assert_eq!(plan_queue.regular_plan_count, 1);
         let next_plan = plan_queue.pop_next_if_active().unwrap();
         assert_eq!(next_plan.time, 1.0);
         run_plan(next_plan, &mut context);
-        assert_eq!(plan_queue.active_plan_count, 1);
+        assert_eq!(plan_queue.regular_plan_count, 1);
 
         let next_plan = plan_queue.pop_next_if_active().unwrap();
         assert_eq!(next_plan.time, 2.0);
         run_plan(next_plan, &mut context);
-        assert_eq!(plan_queue.active_plan_count, 0);
+        assert_eq!(plan_queue.regular_plan_count, 0);
 
         assert_eq!(*observed.borrow(), vec![1, 2]);
     }
 
     #[test]
-    fn canceling_active_plan_decrements_active_count() {
+    fn canceling_non_passive_plan_decrements_regular_count() {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let mut plan_queue = PlanQueue::new();
-        let active = plan_queue.add_plan(
+        let non_passive = plan_queue.add_plan(
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         let passive = plan_queue.add_plan(
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            false,
+            true,
         );
 
-        assert_eq!(plan_queue.active_plan_count, 1);
+        assert_eq!(plan_queue.regular_plan_count, 1);
         plan_queue.cancel_plan(&passive);
-        assert_eq!(plan_queue.active_plan_count, 1);
-        plan_queue.cancel_plan(&active);
-        assert_eq!(plan_queue.active_plan_count, 0);
+        assert_eq!(plan_queue.regular_plan_count, 1);
+        plan_queue.cancel_plan(&non_passive);
+        assert_eq!(plan_queue.regular_plan_count, 0);
     }
 
     #[test]
-    fn shutdown_plans_do_not_affect_active_count() {
+    fn shutdown_plans_do_not_affect_regular_count() {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let mut context = Context::new();
         let mut plan_queue = PlanQueue::new();
         plan_queue.add_shutdown_plan(callback(1, Rc::clone(&observed)), ExecutionPhase::Normal);
 
-        assert_eq!(plan_queue.active_plan_count, 0);
+        assert_eq!(plan_queue.regular_plan_count, 0);
         let next_plan = plan_queue.pop_next_shutdown().unwrap();
         run_plan(next_plan, &mut context);
-        assert_eq!(plan_queue.active_plan_count, 0);
+        assert_eq!(plan_queue.regular_plan_count, 0);
         assert_eq!(*observed.borrow(), vec![1]);
     }
 
@@ -576,13 +576,13 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         plan_queue.add_plan(
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
 
         plan_queue.cancel_plan(&plan_to_cancel);
@@ -599,7 +599,7 @@ mod tests {
             2.0,
             callback(2, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
 
         assert!(plan_queue.pop_next_at(1.0).is_none());
@@ -635,7 +635,7 @@ mod tests {
             1.0,
             callback(1, Rc::clone(&observed)),
             ExecutionPhase::Normal,
-            true,
+            false,
         );
         let shutdown_id =
             plan_queue.add_shutdown_plan(callback(2, Rc::clone(&observed)), ExecutionPhase::Normal);

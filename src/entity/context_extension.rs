@@ -134,7 +134,7 @@ pub trait ContextEntitiesExt {
     /// report callbacks are passive plans: they do not keep the simulation
     /// timeline alive. Reports run at simulation start time in
     /// `ExecutionPhase::Last`, then at each subsequent `start_time + k * period`
-    /// that is reached while active work remains or during final-time shutdown.
+    /// that is reached while (non-passive) work remains or during final-time shutdown.
     /// After the handler returns, the matched counter is cleared.
     ///
     /// ```rust,ignore

@@ -33,7 +33,7 @@ scheduled for each individual. Once the person recovers, these plans are removed
 from the data structure. However, if the person dies before recovering, these
 plans are canceled at the time of death. The infection status of recovered
 individuals remains as recovered for the rest of the simulation, which will stop
-when no active plans remain and shutdown work is complete.
+when no plans remain and shutdown work is complete.
 
 ## Population manager
 
