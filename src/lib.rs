@@ -70,10 +70,13 @@ pub use network::{ContextNetworkExt, Edge, EdgeType};
 pub mod macros;
 
 pub mod plan_queue;
+pub use plan_queue::PlanId;
+
 /// Compatibility re-exports for plan-related public API.
 ///
-/// The plan queue implementation lives in [`crate::plan_queue`]. This module is
-/// retained so existing `ixa::plan::PlanId` imports continue to work.
+/// This module is retained so existing `ixa::plan::PlanId` imports continue to
+/// work. Use [`crate::PlanId`] instead.
+#[deprecated(note = "use `ixa::PlanId` instead")]
 pub mod plan {
     pub use crate::plan_queue::PlanId;
 }

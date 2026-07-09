@@ -1,8 +1,8 @@
-//! A priority queue that stores scheduled simulation plans.
+//! Implementation details for Ixa's plan queues.
 //!
-//! Defines [`PlanQueue`], which stores regular time-ordered plans and
-//! shutdown-time plans. Both queues share a single [`PlanId`] allocator and
-//! cancellation map.
+//! [`PlanId`] is the only public item in this module. The queues store regular
+//! time-ordered plans and shutdown-time plans, sharing a single `PlanId`
+//! allocator and cancellation map.
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -271,7 +271,20 @@ impl Ord for PlanSchedule {
     }
 }
 
-/// A unique identifier for a plan added to a [`PlanQueue`].
+/// A unique identifier for a plan scheduled on a [`Context`].
+///
+/// `PlanId` values are returned by [`Context::add_plan`] and related scheduling
+/// methods, and can be passed to [`Context::cancel_plan`].
+///
+/// # Examples
+///
+/// ```
+/// use ixa::{Context, PlanId};
+///
+/// let mut context = Context::new();
+/// let plan_id: PlanId = context.add_plan(1.0, |_| {});
+/// context.cancel_plan(&plan_id);
+/// ```
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct PlanId(pub(crate) u64);
 
