@@ -51,6 +51,25 @@ mod tests {
             "expected it_prof_span to be recorded at least once"
         );
 
+        let query_timings = json["query_timings"].as_array().unwrap();
+        let profiling_age_query = query_timings
+            .iter()
+            .find(|q| q["query"] == "ProfilingPerson: (ProfilingAge)")
+            .expect("ProfilingPerson age query not found in query_timings");
+        assert_eq!(profiling_age_query["count"], 1);
+        assert!(profiling_age_query["total"].as_f64().is_some());
+        assert!(profiling_age_query["min"].as_f64().is_some());
+        assert!(profiling_age_query["max"].as_f64().is_some());
+
+        let profiling_age_county_query = query_timings
+            .iter()
+            .find(|q| q["query"] == "ProfilingPerson: (ProfilingAge, ProfilingCounty)")
+            .expect("ProfilingPerson age/county query not found in query_timings");
+        assert_eq!(profiling_age_county_query["count"], 3);
+        assert!(profiling_age_county_query["total"].as_f64().is_some());
+        assert!(profiling_age_county_query["min"].as_f64().is_some());
+        assert!(profiling_age_county_query["max"].as_f64().is_some());
+
         let computed = &json["computed_statistics"];
         assert_eq!(computed["it_prof_stat"]["description"], "Total test events");
         assert_eq!(computed["it_prof_stat"]["value"], 3);
