@@ -1,4 +1,4 @@
-pub use crate::context::Context;
+pub use crate::context::{Context, EventListenerId};
 pub use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 pub use crate::entity::property::{IndexableProperty, Property};
 pub use crate::entity::{ContextEntitiesExt, Entity, EntityId};
@@ -12,5 +12,6 @@ pub use crate::{
     define_data_plugin, define_derived_property, define_edge_type, define_entity,
     define_global_property, define_multi_property, define_property, define_report, define_rng,
     impl_edge_type, impl_entity, impl_property, impl_property_eq, impl_property_eq_hash,
-    impl_property_hash, schedule_relative, track_periodic_value_change_counts, with, PluginContext,
+    impl_property_hash, schedule_relative, track_periodic_value_change_counts, with, PlanId,
+    PluginContext,
 };
