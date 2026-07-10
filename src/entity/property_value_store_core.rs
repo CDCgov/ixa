@@ -183,22 +183,16 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 }
 
 impl<E: Entity, P: IndexableProperty<E>> PropertyValueStoreCore<E, P> {
-    fn default_index() -> Option<Box<dyn PropertyIndex<E, P>>> {
-        if P::index_id() != P::id() {
-            return None;
-        }
-
-        match P::default_index_type() {
-            PropertyIndexType::Unindexed => None,
-            PropertyIndexType::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
-            PropertyIndexType::ValueCountIndex => Some(Box::new(ValueCountIndex::<E, P>::new())),
-        }
-    }
-
     pub(crate) fn new_boxed_with_default_index() -> Box<dyn PropertyValueStore<E>> {
         Box::new(Self {
             data: RawPropertyValueVec::default(),
-            index: Self::default_index(),
+            index: match P::default_index_type() {
+                PropertyIndexType::Unindexed => None,
+                PropertyIndexType::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
+                PropertyIndexType::ValueCountIndex => {
+                    Some(Box::new(ValueCountIndex::<E, P>::new()))
+                }
+            },
             value_change_counters: Vec::new(),
         })
     }

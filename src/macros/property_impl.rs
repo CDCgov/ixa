@@ -561,11 +561,6 @@ macro_rules! impl_property {
             // display_impl
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
 
-            // index_id_fn
-            {
-                <Self as $crate::entity::property::Property<$entity>>::id()
-            },
-
             // default_index_type
             $crate::entity::PropertyIndexType::Unindexed,
 
@@ -697,17 +692,23 @@ macro_rules! impl_property {
             {
                 let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
                 type_ids.sort_unstable();
-                $crate::entity::multi_property::type_ids_to_multi_property_id(
+                match $crate::entity::multi_property::type_ids_to_multi_property_id(
                     <$entity as $crate::entity::Entity>::id(),
                     &type_ids,
-                )
-                .unwrap_or_else(|| <Self as $crate::entity::property::Property<$entity>>::id())
+                ) {
+                    Some(representative_id)
+                        if representative_id
+                            != <Self as $crate::entity::property::Property<$entity>>::id() =>
+                    {
+                        $crate::entity::PropertyIndexType::Unindexed
+                    }
+                    _ => $crate::impl_property!(
+                        @unwrap_or
+                        $($default_index_type)?,
+                        $crate::entity::PropertyIndexType::FullIndex
+                    ),
+                }
             },
-            $crate::impl_property!(
-                @unwrap_or
-                $($default_index_type)?,
-                $crate::entity::PropertyIndexType::FullIndex
-            ),
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::property_store::add_indexed_to_property_registry::<$entity, $property>();
@@ -767,7 +768,6 @@ macro_rules! impl_property {
         $query_parts_for_value_fn:expr,
         $type_id_fn:expr,          // Code that returns the logical type ID for this property
         $display_impl:expr,        // A function that takes a value and returns a string representation of this property
-        $index_id_fn:expr,         // Code that returns the index ID for this property
         $default_index_type:expr,  // Which index type this property uses by default
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
@@ -825,10 +825,6 @@ macro_rules! impl_property {
 
                 // Slow path: initialize it.
                 $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
-            }
-
-            fn index_id() -> usize {
-                $index_id_fn
             }
 
             fn default_index_type() -> $crate::entity::PropertyIndexType {
@@ -1247,9 +1243,9 @@ macro_rules! impl_derived_property {
 /// define_multi_property!(Person, Age, Height);
 /// ```
 ///
-/// Components must be the underlying property type, not a type alias (see issue #843):
+/// Components may be referred to using type aliases:
 ///
-/// ```compile_fail
+/// ```
 /// use ixa::{define_entity, define_property, define_multi_property};
 /// define_entity!(Person);
 /// define_property!(struct Age(u8), Person, default_const = Age(0));
@@ -1257,6 +1253,9 @@ macro_rules! impl_derived_property {
 /// type Years = Age;
 /// define_multi_property!(Person, (Years, Height));
 /// ```
+///
+/// Do not define both an alias-based multi-property and an equivalent
+/// underlying-property multi-property: they have the same tuple type.
 #[macro_export]
 macro_rules! define_multi_property {
         (@impl
@@ -1266,21 +1265,6 @@ macro_rules! define_multi_property {
         ) => {
             $crate::paste::paste! {
                 type [<$($dependency)*>] = ( $($dependency),+ );
-
-                // Reject type aliases; see issue #843.
-                $(
-                    const _: () = assert!(
-                        $crate::entity::property::const_str_eq(
-                            stringify!($dependency),
-                            <$dependency as $crate::entity::property::Property<$entity>>::NAME,
-                        ),
-                        concat!(
-                            "define_multi_property!: `",
-                            stringify!($dependency),
-                            "` is a type alias; use the underlying property type (see issue #843)."
-                        ),
-                    );
-                )+
 
                 $crate::impl_property!(
                     @multi_property
@@ -1591,6 +1575,21 @@ mod tests {
     define_multi_property!(SingleProfilePerson, (SingleName, SingleAge, SingleWeight));
     type SingleProfile = (SingleName, SingleAge, SingleWeight);
 
+    define_entity!(AliasMultiPropertyPerson);
+    define_property!(
+        struct AliasMultiAge(u8),
+        AliasMultiPropertyPerson,
+        default_const = AliasMultiAge(0)
+    );
+    define_property!(
+        struct AliasMultiHeight(u8),
+        AliasMultiPropertyPerson,
+        default_const = AliasMultiHeight(0)
+    );
+    type AliasYears = AliasMultiAge;
+    define_multi_property!(AliasMultiPropertyPerson, (AliasYears, AliasMultiHeight));
+    type AliasMultiProfile = (AliasMultiAge, AliasMultiHeight);
+
     define_entity!(DefaultMultiIndexPerson);
     define_property!(
         struct DefaultMultiAge(u8),
@@ -1680,9 +1679,91 @@ mod tests {
             crate::entity::PropertyIndexType::FullIndex
         );
         assert_eq!(
-            property_store.property_index_type::<DefaultMultiProfile>(),
+            property_store.get::<DefaultMultiProfile>().index_type(),
             crate::entity::PropertyIndexType::FullIndex
         );
+    }
+
+    #[test]
+    fn test_multi_property_type_alias_components_support_indexed_queries() {
+        let mut context = Context::new();
+        let matching = context
+            .add_entity(with!(
+                AliasMultiPropertyPerson,
+                AliasMultiAge(30),
+                AliasMultiHeight(170)
+            ))
+            .unwrap();
+        context
+            .add_entity(with!(
+                AliasMultiPropertyPerson,
+                AliasMultiAge(31),
+                AliasMultiHeight(170)
+            ))
+            .unwrap();
+
+        assert!(context.is_property_indexed::<AliasMultiPropertyPerson, AliasMultiProfile>());
+
+        let query = (AliasMultiAge(30), AliasMultiHeight(170));
+        assert_eq!(
+            <AliasMultiProfile as QueryInternal<AliasMultiPropertyPerson>>::multi_property_id(
+                &query
+            ),
+            Some(AliasMultiProfile::id())
+        );
+
+        let mut results = Vec::new();
+        context.with_query_results(
+            with!(
+                AliasMultiPropertyPerson,
+                AliasMultiAge(30),
+                AliasMultiHeight(170)
+            ),
+            &mut |entity_ids| results = entity_ids.into_iter().collect::<Vec<_>>(),
+        );
+        assert_eq!(results, vec![matching]);
+    }
+
+    #[test]
+    fn test_explicit_indexing_default_multi_property_preserves_index() {
+        let mut context = Context::new();
+        let first = context
+            .add_entity(with!(
+                DefaultMultiIndexPerson,
+                DefaultMultiAge(10),
+                DefaultMultiStatus(1)
+            ))
+            .unwrap();
+        let second = context
+            .add_entity(with!(
+                DefaultMultiIndexPerson,
+                DefaultMultiAge(10),
+                DefaultMultiStatus(1)
+            ))
+            .unwrap();
+
+        context.index_property::<DefaultMultiIndexPerson, DefaultMultiProfile>();
+
+        let property_store = context
+            .entity_store
+            .get_property_store::<DefaultMultiIndexPerson>();
+        assert_eq!(
+            property_store.get::<DefaultMultiProfile>().index_type(),
+            crate::entity::PropertyIndexType::FullIndex
+        );
+
+        let mut results = Vec::new();
+        context.with_query_results(
+            with!(
+                DefaultMultiIndexPerson,
+                DefaultMultiAge(10),
+                DefaultMultiStatus(1)
+            ),
+            &mut |entity_ids| results = entity_ids.into_iter().collect::<Vec<_>>(),
+        );
+        assert_eq!(results.len(), 2);
+        assert!(results.contains(&first));
+        assert!(results.contains(&second));
     }
 
     #[test]
@@ -1696,7 +1777,7 @@ mod tests {
             crate::entity::PropertyIndexType::ValueCountIndex
         );
         assert_eq!(
-            property_store.property_index_type::<CountMultiProfile>(),
+            property_store.get::<CountMultiProfile>().index_type(),
             crate::entity::PropertyIndexType::ValueCountIndex
         );
 
@@ -1754,7 +1835,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_property_unindexed_default_can_upgrade_to_full_index() {
+    fn test_multi_property_unindexed_default_catches_up_when_upgraded_to_full_index() {
         let mut context = Context::new();
         let property_store = context
             .entity_store
@@ -1764,14 +1845,28 @@ mod tests {
             crate::entity::PropertyIndexType::Unindexed
         );
         assert_eq!(
-            property_store.property_index_type::<UnindexedMultiProfile>(),
+            property_store.get::<UnindexedMultiProfile>().index_type(),
             crate::entity::PropertyIndexType::Unindexed
         );
 
-        context
+        let first = context
             .add_entity(with!(
                 UnindexedMultiIndexPerson,
                 UnindexedMultiAge(30),
+                UnindexedMultiStatus(2)
+            ))
+            .unwrap();
+        let second = context
+            .add_entity(with!(
+                UnindexedMultiIndexPerson,
+                UnindexedMultiAge(30),
+                UnindexedMultiStatus(2)
+            ))
+            .unwrap();
+        let non_matching = context
+            .add_entity(with!(
+                UnindexedMultiIndexPerson,
+                UnindexedMultiAge(31),
                 UnindexedMultiStatus(2)
             ))
             .unwrap();
@@ -1781,7 +1876,7 @@ mod tests {
                 UnindexedMultiAge(30),
                 UnindexedMultiStatus(2)
             )),
-            1
+            2
         );
 
         context.index_property::<UnindexedMultiIndexPerson, UnindexedMultiProfile>();
@@ -1789,33 +1884,64 @@ mod tests {
             .entity_store
             .get_property_store::<UnindexedMultiIndexPerson>();
         assert_eq!(
-            property_store.property_index_type::<UnindexedMultiProfile>(),
+            property_store.get::<UnindexedMultiProfile>().index_type(),
             crate::entity::PropertyIndexType::FullIndex
         );
+
+        let mut results = Vec::new();
+        context.with_query_results(
+            with!(
+                UnindexedMultiIndexPerson,
+                UnindexedMultiAge(30),
+                UnindexedMultiStatus(2)
+            ),
+            &mut |entity_ids| results = entity_ids.into_iter().collect::<Vec<_>>(),
+        );
+        assert_eq!(results.len(), 2);
+        assert!(results.contains(&first));
+        assert!(results.contains(&second));
+        assert!(!results.contains(&non_matching));
     }
 
     #[test]
-    fn test_equivalent_multi_property_uses_representative_default_index_type() {
+    fn test_equivalent_multi_property_only_indexes_representative_by_default() {
         let context = Context::new();
         let property_store = context
             .entity_store
             .get_property_store::<EquivalentDefaultIndexPerson>();
+        let query = (EquivalentDefaultAge(0), EquivalentDefaultStatus(0));
+        let representative_id = <EquivalentDefaultProfile as QueryInternal<
+            EquivalentDefaultIndexPerson,
+        >>::multi_property_id(&query)
+        .unwrap();
 
         assert_eq!(
-            EquivalentDefaultProfile::index_id(),
-            EquivalentDefaultProfile::id()
+            EquivalentDefaultProfile::default_index_type(),
+            if representative_id == EquivalentDefaultProfile::id() {
+                crate::entity::PropertyIndexType::ValueCountIndex
+            } else {
+                crate::entity::PropertyIndexType::Unindexed
+            }
         );
         assert_eq!(
-            EquivalentDefaultProfileReversed::index_id(),
-            EquivalentDefaultProfile::id()
+            EquivalentDefaultProfileReversed::default_index_type(),
+            if representative_id == EquivalentDefaultProfileReversed::id() {
+                crate::entity::PropertyIndexType::FullIndex
+            } else {
+                crate::entity::PropertyIndexType::Unindexed
+            }
         );
         assert_eq!(
-            property_store.property_index_type::<EquivalentDefaultProfile>(),
-            crate::entity::PropertyIndexType::ValueCountIndex
+            property_store
+                .get::<EquivalentDefaultProfile>()
+                .index_type(),
+            EquivalentDefaultProfile::default_index_type()
         );
         assert_eq!(
-            property_store.property_index_type::<EquivalentDefaultProfileReversed>(),
-            crate::entity::PropertyIndexType::ValueCountIndex
+            property_store
+                .get::<EquivalentDefaultProfileReversed>()
+                .index_type(),
+            EquivalentDefaultProfileReversed::default_index_type()
         );
     }
 
@@ -1929,11 +2055,25 @@ mod tests {
             Some((SingleName("Alice"), SingleAge(22), SingleWeight(170)))
         );
 
-        // Check that all equivalent multi-properties are indexed through the representative...
-        assert!(context.is_property_indexed::<Person, ProfileNAW>());
-        assert!(context.is_property_indexed::<Person, ProfileAWN>());
-        assert!(context.is_property_indexed::<Person, ProfileWAN>());
-        // ...but only one `Index<E, P>` instance was created.
+        let example_query = (Name("Alice"), Age(22), Weight(170.5));
+        let representative_id =
+            <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query)
+                .unwrap();
+
+        // Only the representative multi-property is indexed by default.
+        assert_eq!(
+            context.is_property_indexed::<Person, ProfileNAW>(),
+            representative_id == ProfileNAW::id()
+        );
+        assert_eq!(
+            context.is_property_indexed::<Person, ProfileAWN>(),
+            representative_id == ProfileAWN::id()
+        );
+        assert_eq!(
+            context.is_property_indexed::<Person, ProfileWAN>(),
+            representative_id == ProfileWAN::id()
+        );
+        // Exactly one `Index<E, P>` instance was created.
         let mut indexed_count = 0;
         if context
             .get_property_value_store::<Person, ProfileNAW>()
@@ -1958,10 +2098,6 @@ mod tests {
         }
         assert_eq!(indexed_count, 1);
 
-        let example_query = (Name("Alice"), Age(22), Weight(170.5));
-        let query_multi_property_id =
-            <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query);
-        assert_eq!(ProfileNAW::index_id(), query_multi_property_id.unwrap());
         let query_parts = QueryInternal::query_parts(&example_query);
         assert_eq!(
             ProfileNAW::value_from_query_parts(query_parts.as_ref()),

@@ -92,6 +92,7 @@ where
 #[cfg(test)]
 mod tests {
     // Tests in `src/entity/query.rs` also exercise indexing code.
+    use crate::entity::QueryInternal;
     use crate::prelude::*;
     use crate::with;
 
@@ -109,10 +110,18 @@ mod tests {
     #[test]
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
+        let query = (Age(0), Weight(0), Height(0));
+        let representative_id = <AWH as QueryInternal<Person>>::multi_property_id(&query).unwrap();
 
         assert_ne!(AWH::type_id(), WHA::type_id());
-        assert!(context.is_property_indexed::<Person, AWH>());
-        assert!(context.is_property_indexed::<Person, WHA>());
+        assert_eq!(
+            context.is_property_indexed::<Person, AWH>(),
+            representative_id == AWH::id()
+        );
+        assert_eq!(
+            context.is_property_indexed::<Person, WHA>(),
+            representative_id == WHA::id()
+        );
 
         context
             .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))

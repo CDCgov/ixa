@@ -683,7 +683,7 @@ define_multi_property!(Person, (Age, InfectionStatus));
 
 By default, this creates a full multi-property index. You can pass an explicit
 `ixa::entity::PropertyIndexType` as a third argument to request a count-only
-index or to opt out of automatic indexing:
+index or to opt out of default indexing:
 
 ```rust
 define_multi_property!(

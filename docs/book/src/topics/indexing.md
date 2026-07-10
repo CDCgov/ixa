@@ -18,7 +18,7 @@ Best practices:
 
 - Index a property to improve performance of queries of that property.
 - Define a multi-property to improve performance of queries involving multiple
-  properties. Multi-properties are indexed automatically.
+  properties. Multi-properties are full-indexed by default.
 - The cost of creating indexes is increased memory use, which can be significant
   for large populations. So it is best to only create indexes / multi-indexes
   that actually improve model performance.
@@ -191,7 +191,7 @@ might look like this:
 | `(30, recovered)`             | `\[4, 8, 35, 36]`                |
 
 Ixa hides the boilerplate required for creating a multi-index with the macro
-`define_multi_property!`. Multi-properties create a full index automatically:
+`define_multi_property!`. Multi-properties create a full index by default:
 
 ```rust
 define_multi_property!(Person, (AgeGroup, InfectionStatus));
@@ -212,7 +212,7 @@ define_multi_property!(
 ```
 
 Use `PropertyIndexType::Unindexed` to define the multi-property without creating
-an index automatically. You can later call `context.index_property` for that
+a default index. You can later call `context.index_property` for that
 multi-property to create a full index.
 
 Defining a multi-property _does not_ automatically create indexes for each
@@ -223,10 +223,11 @@ Queries are order-insensitive for multi-property indexes: a query written with
 `AgeGroup` before `InfectionStatus` can use the same multi-property index as a
 query written in the opposite order. If you define multiple equivalent
 multi-properties with the same component properties in different orders, Ixa
-chooses the first registered one for query routing and index storage. Attempting
-to explicitly index a later equivalent multi-property will panic because queries
-cannot use that duplicate index. The representative multi-property's default
-index type is the effective default for all equivalent definitions.
+chooses the first registered one as the representative for query routing. Only
+that representative receives the default index; later equivalent
+multi-properties remain unindexed. Attempting to explicitly index a later
+equivalent multi-property will panic because queries cannot use that duplicate
+index.
 
 ## The Benefits of Indexing - A Case Study
 

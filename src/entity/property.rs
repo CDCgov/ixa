@@ -139,15 +139,6 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     #[must_use]
     fn id() -> usize;
 
-    /// Returns the property ID where this property's index is stored.
-    ///
-    /// Equivalent multi-properties share the representative multi-property's
-    /// index. Ordinary properties store their index on their own property ID.
-    #[must_use]
-    fn index_id() -> usize {
-        Self::id()
-    }
-
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
     /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.
     ///
