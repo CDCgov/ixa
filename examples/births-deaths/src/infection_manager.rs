@@ -1,7 +1,6 @@
 use ixa::entity::events::PropertyChangeEvent;
-use ixa::plan::PlanId;
 use ixa::prelude::*;
-use ixa::{HashMap, HashMapExt, HashSet, HashSetExt};
+use ixa::{HashMap, HashMapExt, HashSet, HashSetExt, PlanId};
 use rand_distr::Exp;
 
 use crate::population_manager::{Alive, InfectionStatus, Person, PersonId};

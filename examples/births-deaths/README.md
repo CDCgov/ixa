@@ -198,7 +198,7 @@ fn cancel_recovery_plans(context: &mut Context, person_id: PersonId) {
     let plans_set = plans_data_container
         .plans_map
         .get(&person_id)
-        .unwrap_or(&HashSet::<plan::PlanId>::new())
+        .unwrap_or(&HashSet::<PlanId>::new())
         .clone();
 
     for plan_id in plans_set {
