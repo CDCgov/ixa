@@ -76,6 +76,15 @@ mod test_plugin_context {
             self.add_plan(1.0, |context| {
                 assert_eq!(context.get_my_data(), 42);
             });
+            self.add_startup_plan(|context| {
+                assert_eq!(context.get_my_data(), 42);
+            });
+            self.add_startup_plan_with_phase(
+                |context| {
+                    assert_eq!(context.get_my_data(), 42);
+                },
+                crate::ExecutionPhase::First,
+            );
             self.add_passive_plan(1.0, |context| {
                 assert_eq!(context.get_my_data(), 42);
             });
