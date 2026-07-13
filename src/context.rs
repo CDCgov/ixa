@@ -54,8 +54,13 @@ struct EventHandlerRegistration<E: IxaEvent> {
 }
 
 pub trait IxaEvent: Copy + 'static {
-    /// Called every time `context.subscribe_to_event` is called with this event
+    /// Called after [`Context::subscribe_to_event`] registers a listener for
+    /// this event type.
     fn on_subscribe(_context: &mut Context) {}
+
+    /// Called after [`Context::unsubscribe_from_event`] successfully removes a
+    /// listener for this event type.
+    fn on_unsubscribe(_context: &mut Context) {}
 }
 
 /// An enum to indicate the phase for plans at a given time.
@@ -230,19 +235,23 @@ impl Context {
         &mut self,
         listener_id: &EventListenerId<E>,
     ) -> bool {
-        let Some(handler_vec) = self.event_handlers.get_mut(&TypeId::of::<E>()) else {
-            return false;
-        };
-        let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
-            handler_vec.downcast_mut().unwrap();
-        let Some(index) = handler_vec
-            .iter()
-            .position(|entry| entry.listener_id.id == listener_id.id)
-        else {
-            return false;
-        };
+        {
+            let Some(handler_vec) = self.event_handlers.get_mut(&TypeId::of::<E>()) else {
+                return false;
+            };
+            let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
+                handler_vec.downcast_mut().unwrap();
+            let Some(index) = handler_vec
+                .iter()
+                .position(|entry| entry.listener_id.id == listener_id.id)
+            else {
+                return false;
+            };
 
-        handler_vec.swap_remove(index);
+            handler_vec.swap_remove(index);
+        }
+
+        E::on_unsubscribe(self);
         true
     }
 
@@ -794,6 +803,7 @@ mod tests {
     };
 
     define_data_plugin!(ComponentA, Vec<u32>, vec![]);
+    define_data_plugin!(UnsubscribeHookObservations, Vec<bool>, vec![]);
 
     define_entity!(Person);
 
@@ -1030,6 +1040,18 @@ mod tests {
         pub data: usize,
     }
 
+    #[derive(Clone, Copy)]
+    struct EventWithOnUnsubscribe;
+
+    impl IxaEvent for EventWithOnUnsubscribe {
+        fn on_unsubscribe(context: &mut Context) {
+            let has_event_handlers = context.has_event_handlers::<Self>();
+            context
+                .get_data_mut(UnsubscribeHookObservations)
+                .push(has_event_handlers);
+        }
+    }
+
     struct NotCopy;
 
     #[derive(IxaEvent)]
@@ -1156,6 +1178,34 @@ mod tests {
         context.emit_event(Event1 { data: 1 });
         context.execute();
         assert_eq!(*obs_data.borrow(), 0);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_calls_hook_after_removal() {
+        let mut context = Context::new();
+        let listener_id = context.subscribe_to_event::<EventWithOnUnsubscribe>(|_, _| {});
+
+        assert!(context.unsubscribe_from_event(&listener_id));
+
+        assert_eq!(context.get_data(UnsubscribeHookObservations), &vec![false]);
+    }
+
+    #[test]
+    fn unsubscribe_from_event_calls_hook_only_for_successful_removals() {
+        let mut context = Context::new();
+        let first_listener = context.subscribe_to_event::<EventWithOnUnsubscribe>(|_, _| {});
+        let second_listener = context.subscribe_to_event::<EventWithOnUnsubscribe>(|_, _| {});
+        let unknown_listener = EventListenerId::<EventWithOnUnsubscribe>::new(usize::MAX);
+
+        assert!(context.unsubscribe_from_event(&first_listener));
+        assert!(!context.unsubscribe_from_event(&first_listener));
+        assert!(!context.unsubscribe_from_event(&unknown_listener));
+        assert!(context.unsubscribe_from_event(&second_listener));
+
+        assert_eq!(
+            context.get_data(UnsubscribeHookObservations),
+            &vec![true, false]
+        );
     }
 
     #[test]
