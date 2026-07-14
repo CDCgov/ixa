@@ -1,4 +1,3 @@
-#![allow(unused)]
 /*!
 
 The `PropertyValueStore` trait is the type-erased interface to property value storage.
@@ -12,18 +11,14 @@ Responsibilities:
 
 use std::any::Any;
 
-use log::{error, trace};
-
 use crate::entity::events::{
-    PartialPropertyChangeEvent, PartialPropertyChangeEventBox, PartialPropertyChangeEventCore,
-    PropertyChangeEvent,
+    PartialPropertyChangeEventBox, PartialPropertyChangeEventCore, PropertyChangeEvent,
 };
-use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
+use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{Entity, EntityId};
-use crate::hashing::IndexSet;
-use crate::{Context, ContextEntitiesExt};
+use crate::Context;
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub(crate) trait PropertyValueStore<E: Entity>: Any {
@@ -50,13 +45,6 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E>;
 
     fn get_index_count_for_query_parts(&self, parts: &[&dyn Any]) -> IndexCountResult;
-
-    /// Returns the index type used by this `PropertyValueStore` instance.
-    fn index_type(&self) -> PropertyIndexType;
-
-    /// Updates the index for any entities that have been added to the context since the last time the index was
-    /// updated.
-    fn index_unindexed_entities(&mut self, context: &Context);
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
@@ -115,42 +103,6 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
                     index.get_index_count_result(&value)
                 }),
             None => IndexCountResult::Unsupported,
-        }
-    }
-
-    fn index_type(&self) -> PropertyIndexType {
-        self.index_type()
-    }
-
-    fn index_unindexed_entities(&mut self, context: &Context) {
-        let current_pop = context.get_entity_count::<E>();
-        let Some(index) = self.index.as_ref() else {
-            return;
-        };
-        let max_indexed = match index.max_indexed() {
-            max_indexed if max_indexed >= current_pop => return,
-            max_indexed => max_indexed,
-        };
-        trace!(
-            "{}: indexing unindexed entity {}..<{}",
-            P::name(),
-            max_indexed,
-            current_pop
-        );
-
-        for id in max_indexed..current_pop {
-            let entity_id = EntityId::new(id);
-            let value = if P::is_derived() {
-                P::compute_derived(context, entity_id)
-            } else {
-                self.get(entity_id)
-            };
-            if let Some(index) = self.index.as_mut() {
-                index.add_entity(&value, entity_id);
-            }
-        }
-        if let Some(index) = self.index.as_mut() {
-            index.set_max_indexed(current_pop);
         }
     }
 }
