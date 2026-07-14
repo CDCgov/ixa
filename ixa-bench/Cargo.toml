@@ -105,6 +105,11 @@ path = "criterion/set_property.rs"
 harness = false
 
 [[bench]]
+name = "add_entity"
+path = "criterion/add_entity.rs"
+harness = false
+
+[[bench]]
 name = "property_semantics"
 path = "criterion/property_semantics.rs"
 harness = false
