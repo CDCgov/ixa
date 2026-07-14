@@ -18,12 +18,6 @@ struct QueuedPlan {
     is_passive: bool,
 }
 
-#[derive(Clone, Copy)]
-enum DistinguishedQueue {
-    Startup,
-    Shutdown,
-}
-
 /// A priority queue that stores scheduled plans.
 ///
 /// Regular plans are ordered by simulation time, execution phase, and plan ID.
@@ -110,7 +104,23 @@ impl PlanQueue {
         phase: ExecutionPhase,
     ) -> PlanId {
         trace!("adding startup-time plan");
-        self.add_distinguished_plan(callback, phase, DistinguishedQueue::Startup)
+        let plan_id = self.next_plan_id;
+        self.startup_queue.push(PlanSchedule {
+            plan_id,
+            time: 0.0,
+            phase,
+        });
+        self.data_map.insert(
+            plan_id,
+            QueuedPlan {
+                callback,
+                is_passive: true,
+            },
+        );
+        self.next_plan_id += 1;
+        self.update_profiling_high_water_marks();
+
+        PlanId(plan_id)
     }
 
     /// Add a shutdown-time plan.
@@ -123,25 +133,12 @@ impl PlanQueue {
         phase: ExecutionPhase,
     ) -> PlanId {
         trace!("adding shutdown-time plan");
-        self.add_distinguished_plan(callback, phase, DistinguishedQueue::Shutdown)
-    }
-
-    fn add_distinguished_plan(
-        &mut self,
-        callback: BoxedCallback,
-        phase: ExecutionPhase,
-        queue: DistinguishedQueue,
-    ) -> PlanId {
         let plan_id = self.next_plan_id;
-        let schedule = PlanSchedule {
+        self.shutdown_queue.push(PlanSchedule {
             plan_id,
             time: 0.0,
             phase,
-        };
-        match queue {
-            DistinguishedQueue::Startup => self.startup_queue.push(schedule),
-            DistinguishedQueue::Shutdown => self.shutdown_queue.push(schedule),
-        }
+        });
         self.data_map.insert(
             plan_id,
             QueuedPlan {
@@ -268,7 +265,19 @@ impl PlanQueue {
     /// startup-time queue is empty.
     pub(crate) fn pop_next_startup(&mut self) -> Option<Plan> {
         trace!("getting next startup-time plan");
-        self.pop_next_distinguished(DistinguishedQueue::Startup)
+        loop {
+            let entry = self.startup_queue.pop()?;
+
+            // If there's no `data_map` entry, the plan has been canceled, so discard
+            // and pop another plan.
+            let Some(queued_plan) = self.data_map.remove(&entry.plan_id) else {
+                continue;
+            };
+            return Some(Plan {
+                time: entry.time,
+                data: queued_plan.callback,
+            });
+        }
     }
 
     /// Retrieve the next shutdown-time plan.
@@ -277,24 +286,14 @@ impl PlanQueue {
     /// shutdown-time queue is empty.
     pub(crate) fn pop_next_shutdown(&mut self) -> Option<Plan> {
         trace!("getting next shutdown-time plan");
-        self.pop_next_distinguished(DistinguishedQueue::Shutdown)
-    }
-
-    fn pop_next_distinguished(&mut self, queue: DistinguishedQueue) -> Option<Plan> {
         loop {
-            let entry = match queue {
-                DistinguishedQueue::Startup => self.startup_queue.pop(),
-                DistinguishedQueue::Shutdown => self.shutdown_queue.pop(),
-            }?;
+            let entry = self.shutdown_queue.pop()?;
 
             // If there's no `data_map` entry, the plan has been canceled, so discard
             // and pop another plan.
             let Some(queued_plan) = self.data_map.remove(&entry.plan_id) else {
                 continue;
             };
-            if !queued_plan.is_passive {
-                self.regular_plan_count -= 1;
-            }
             return Some(Plan {
                 time: entry.time,
                 data: queued_plan.callback,
