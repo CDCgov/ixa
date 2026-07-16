@@ -128,6 +128,10 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
             .set_values_for_new_entity(entity_id, property_store)
     }
 
+    fn emit_initialized_events(&self, context: &mut Context, entity_id: EntityId<E>) {
+        self.inner.emit_initialized_events(context, entity_id);
+    }
+
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
         EntityPropertyTuple::new(T::get_values_for_entity(context, entity_id))
     }

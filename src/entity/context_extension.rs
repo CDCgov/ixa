@@ -340,6 +340,8 @@ impl ContextEntitiesExt for Context {
             dispatch(self, new_entity_id);
         }
 
+        property_list.emit_initialized_events(self, new_entity_id);
+
         // Emit an `EntityCreatedEvent<Entity>`.
         self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
 
