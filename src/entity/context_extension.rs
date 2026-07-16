@@ -376,10 +376,17 @@ impl ContextEntitiesExt for Context {
     }
 
     fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self) {
+        let property_id = P::id();
+        let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
         let current_index_type = property_store.get::<P>().index_type();
         if current_index_type != PropertyIndexType::FullIndex {
             property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
+            // SAFETY: This only creates a shared reference to `Context` while mutably borrowing
+            // the property store to update index internals.
+            unsafe {
+                property_store.index_unindexed_entities_for_property_id(&*context_ptr, property_id);
+            }
         }
     }
 
