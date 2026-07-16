@@ -7,6 +7,7 @@
 //! The output `=== Strategy comparison ===` summary shows the crossover point
 //! that the implementation's small-slice threshold should target.
 
+use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -18,17 +19,36 @@ use ixa::random::{
     sample_single_excluding, sample_single_excluding_iteration, sample_single_excluding_rejection,
 };
 
-mod sample_single_excluding_summary;
-
-use sample_single_excluding_summary::{complete_rows, Measurements, SummaryRow};
-
 const SEED: u64 = 42;
 
 /// Slice sizes to test. Focused on the small-n regime where the strategy
 /// crossover happens — at larger n rejection wins by orders of magnitude.
 const SLICE_SIZES: [usize; 3] = [2, 3, 4];
 
+type Measurements = BTreeMap<(&'static str, usize), f64>;
 type Results = Arc<Mutex<Measurements>>;
+
+#[derive(Debug, PartialEq)]
+struct SummaryRow {
+    size: usize,
+    rejection: f64,
+    iteration: f64,
+    automatic: f64,
+}
+
+fn complete_rows(results: &Measurements, slice_sizes: &[usize]) -> Vec<SummaryRow> {
+    slice_sizes
+        .iter()
+        .filter_map(|&size| {
+            Some(SummaryRow {
+                size,
+                rejection: *results.get(&("rejection", size))?,
+                iteration: *results.get(&("iteration", size))?,
+                automatic: *results.get(&("auto", size))?,
+            })
+        })
+        .collect()
+}
 
 /// Builds a Vec<u32> with values 0..n, and returns it together with one
 /// "excluded" value that is present exactly once in the slice (mid-range).
@@ -145,3 +165,43 @@ fn benches(c: &mut Criterion) {
 
 criterion_group!(group, benches);
 criterion_main!(group);
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn no_rows_are_returned_without_measurements() {
+        assert!(super::complete_rows(&super::Measurements::new(), &super::SLICE_SIZES).is_empty());
+    }
+
+    #[test]
+    fn no_rows_are_returned_for_a_single_strategy() {
+        let results = super::Measurements::from([
+            (("rejection", 2), 2.1),
+            (("rejection", 3), 3.1),
+            (("rejection", 4), 4.1),
+        ]);
+
+        assert!(super::complete_rows(&results, &super::SLICE_SIZES).is_empty());
+    }
+
+    #[test]
+    fn only_complete_rows_are_returned() {
+        let results = super::Measurements::from([
+            (("rejection", 2), 2.1),
+            (("iteration", 2), 2.2),
+            (("rejection", 3), 3.1),
+            (("iteration", 3), 3.2),
+            (("auto", 3), 3.3),
+        ]);
+
+        assert_eq!(
+            super::complete_rows(&results, &super::SLICE_SIZES),
+            vec![super::SummaryRow {
+                size: 3,
+                rejection: 3.1,
+                iteration: 3.2,
+                automatic: 3.3,
+            }]
+        );
+    }
+}
