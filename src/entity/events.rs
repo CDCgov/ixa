@@ -1,7 +1,11 @@
 /*!
 
-`EntityCreatedEvent` and `EntityPropertyChangeEvent` types are emitted when an entity is created or an entity's
-property value is changed.
+Entity events report creation, explicitly supplied initial values, and later property changes:
+
+- [`EntityCreatedEvent`] is emitted when an entity has been created.
+- [`PropertyInitializedEvent`] is emitted for each non-default, non-derived property value
+  explicitly supplied during creation.
+- [`PropertyChangeEvent`] is emitted when a property is subsequently updated.
 
 Client code can subscribe to these events with the `Context::subscribe_to_event<IxaEvent>(handler)` method:
 
@@ -15,6 +19,13 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 }
 // We do so by subscribing to this event.
 context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
+
+// Observe a non-default value explicitly supplied when a person is created.
+context.subscribe_to_event(
+    |_context, event: PropertyInitializedEvent<Person, InfectionStatus>| {
+        // ... use event.entity_id and event.value ...
+    },
+);
 ```
 
 
@@ -140,6 +151,22 @@ impl<E: Entity> EntityCreatedEvent<E> {
     }
 }
 
+/// Emitted for a non-default, non-derived property value supplied when an entity is created.
+#[derive(IxaEvent)]
+pub struct PropertyInitializedEvent<E: Entity, P: Property<E>> {
+    /// The newly created entity.
+    pub entity_id: EntityId<E>,
+    /// The initial property value supplied by the caller.
+    pub value: P,
+}
+
+impl<E: Entity, P: Property<E>> PropertyInitializedEvent<E, P> {
+    #[must_use]
+    pub fn new(entity_id: EntityId<E>, value: P) -> Self {
+        Self { entity_id, value }
+    }
+}
+
 /// Emitted when a property is updated.
 /// These should not be emitted outside this module.
 #[derive(IxaEvent)]
@@ -154,7 +181,7 @@ pub struct PropertyChangeEvent<E: Entity, P: Property<E>> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     use super::*;
@@ -196,6 +223,254 @@ mod tests {
     define_property!(struct IsRunner(bool), Person, default_const = IsRunner(false));
 
     define_property!(struct RunningShoes(u8), Person );
+
+    define_entity!(InitializationPerson);
+
+    define_property!(
+        struct InitConstant(u8),
+        InitializationPerson,
+        default_const = InitConstant(0)
+    );
+
+    define_property!(
+        struct InitSecond(u8),
+        InitializationPerson,
+        default_const = InitSecond(0)
+    );
+
+    define_property!(struct InitRequired(u8), InitializationPerson);
+
+    define_derived_property!(
+        struct InitDerived(u8),
+        InitializationPerson,
+        [InitConstant],
+        [],
+        |value| {
+            let value: InitConstant = value;
+            InitDerived(value.0 + 1)
+        }
+    );
+
+    #[test]
+    fn initialization_event_contains_nondefault_constant_value() {
+        let mut context = Context::new();
+        let received = Rc::new(RefCell::new(None));
+        let received_clone = received.clone();
+        context.subscribe_to_event(
+            move |context, event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                assert_eq!(
+                    context.get_property::<InitializationPerson, InitConstant>(event.entity_id),
+                    event.value
+                );
+                *received_clone.borrow_mut() = Some((event.entity_id, event.value));
+            },
+        );
+
+        let entity_id = context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(7),
+                InitRequired(11)
+            ))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(*received.borrow(), Some((entity_id, InitConstant(7))));
+    }
+
+    #[test]
+    fn required_property_initialization_emits_without_default() {
+        let mut context = Context::new();
+        let received = Rc::new(RefCell::new(None));
+        let received_clone = received.clone();
+        context.subscribe_to_event(
+            move |_context, event: PropertyInitializedEvent<InitializationPerson, InitRequired>| {
+                *received_clone.borrow_mut() = Some(event.value);
+            },
+        );
+
+        context
+            .add_entity(with!(InitializationPerson, InitRequired(23)))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(*received.borrow(), Some(InitRequired(23)));
+    }
+
+    #[test]
+    fn explicit_constant_default_does_not_emit_initialization_event() {
+        let mut context = Context::new();
+        context.subscribe_to_event(
+            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                panic!("the explicit default must not emit");
+            },
+        );
+
+        context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(0),
+                InitRequired(1)
+            ))
+            .unwrap();
+        context.execute();
+    }
+
+    #[test]
+    fn omitted_constant_default_does_not_emit_initialization_event() {
+        let mut context = Context::new();
+        context.subscribe_to_event(
+            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                panic!("an omitted property must not emit");
+            },
+        );
+
+        context
+            .add_entity(with!(InitializationPerson, InitRequired(1)))
+            .unwrap();
+        context.execute();
+    }
+
+    #[test]
+    fn derived_property_does_not_emit_initialization_event() {
+        let mut context = Context::new();
+        context.subscribe_to_event(
+            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitDerived>| {
+                panic!("a dependent derived property must not emit");
+            },
+        );
+
+        context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(9),
+                InitRequired(1)
+            ))
+            .unwrap();
+        context.execute();
+    }
+
+    #[test]
+    fn initialization_events_are_queued_in_property_order_before_creation() {
+        let mut context = Context::new();
+        context.index_property::<InitializationPerson, InitConstant>();
+        context.index_property_counts::<InitializationPerson, InitSecond>();
+
+        let order = Rc::new(RefCell::new(Vec::new()));
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |context, event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                assert_eq!(
+                    context.query_entity_count(with!(InitializationPerson, event.value)),
+                    1
+                );
+                assert_eq!(
+                    context.query_entity_count(with!(InitializationPerson, InitSecond(4))),
+                    1
+                );
+                order_clone.borrow_mut().push("constant");
+            },
+        );
+
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |_context, _event: PropertyInitializedEvent<InitializationPerson, InitSecond>| {
+                order_clone.borrow_mut().push("second");
+            },
+        );
+
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |_context,
+                  _event: PropertyInitializedEvent<InitializationPerson, InitRequired>| {
+                order_clone.borrow_mut().push("required");
+            },
+        );
+
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |_context, _event: EntityCreatedEvent<InitializationPerson>| {
+                order_clone.borrow_mut().push("created");
+            },
+        );
+
+        context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(3),
+                InitSecond(4),
+                InitRequired(5)
+            ))
+            .unwrap();
+        assert!(order.borrow().is_empty());
+
+        context.execute();
+        assert_eq!(
+            *order.borrow(),
+            vec!["constant", "second", "required", "created"]
+        );
+    }
+
+    #[test]
+    fn initialization_event_runs_once_per_subscriber() {
+        let mut context = Context::new();
+        let count = Rc::new(Cell::new(0));
+        for _ in 0..2 {
+            let count_clone = count.clone();
+            context.subscribe_to_event(
+                move |_context,
+                      _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                    count_clone.set(count_clone.get() + 1);
+                },
+            );
+        }
+
+        context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(2),
+                InitRequired(1)
+            ))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(count.get(), 2);
+    }
+
+    #[test]
+    fn repeated_creation_emits_matching_entity_ids_and_values() {
+        let mut context = Context::new();
+        let received = Rc::new(RefCell::new(Vec::new()));
+        let received_clone = received.clone();
+        context.subscribe_to_event(
+            move |_context, event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                received_clone
+                    .borrow_mut()
+                    .push((event.entity_id, event.value));
+            },
+        );
+
+        let first = context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(5),
+                InitRequired(1)
+            ))
+            .unwrap();
+        let second = context
+            .add_entity(with!(
+                InitializationPerson,
+                InitConstant(8),
+                InitRequired(2)
+            ))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(
+            *received.borrow(),
+            vec![(first, InitConstant(5)), (second, InitConstant(8))]
+        );
+    }
 
     #[test]
     fn observe_entity_addition() {
