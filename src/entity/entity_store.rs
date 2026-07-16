@@ -104,6 +104,7 @@ pub fn get_entity_metadata_static(
 /// `OnceCell`s handle the interior mutability required for initialization.)
 pub fn add_to_entity_registry<R: Entity>() {
     let _ = R::id();
+    crate::population::register_entity::<R>();
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
@@ -243,6 +244,13 @@ impl EntityStore {
         let id = record.entity_count;
         record.entity_count += 1;
         EntityId::new(id)
+    }
+
+    /// Sets an entity count after a population import has validated that the target is empty.
+    pub(crate) fn set_entity_count_for_population_import<E: Entity>(&mut self, count: usize) {
+        let record = &mut self.items[E::id()];
+        debug_assert_eq!(record.entity_count, 0);
+        record.entity_count = count;
     }
 
     /// Returns a total count of all created entities of type `E`.

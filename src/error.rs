@@ -1,6 +1,7 @@
 //! Provides [`IxaError`] and wraps other errors.
 use std::error::Error;
 use std::io;
+use std::path::PathBuf;
 
 use thiserror::Error;
 
@@ -63,6 +64,37 @@ pub enum IxaError {
 
     #[error("initialization list is missing required properties")]
     MissingRequiredInitializationProperties,
+
+    #[error("population export destination already exists: {path:?}")]
+    PopulationDestinationExists { path: PathBuf },
+
+    #[error(
+        "cannot import population because entity type `{entity_type}` already has {count} entities"
+    )]
+    PopulationNotEmpty { entity_type: String, count: usize },
+
+    #[error("population property `{property_type}` for entity `{entity_type}` is not persistable: {reason}")]
+    PopulationUnsupportedProperty {
+        entity_type: String,
+        property_type: String,
+        reason: String,
+    },
+
+    #[error("invalid population data at {path:?}: {reason}")]
+    InvalidPopulationData { path: PathBuf, reason: String },
+
+    #[error("population schema mismatch: {reason}")]
+    PopulationSchemaMismatch { reason: String },
+
+    #[error(
+        "invalid value for population property `{property_type}` on entity `{entity_type}` with ID {entity_id}: {reason}"
+    )]
+    InvalidPopulationPropertyValue {
+        entity_type: String,
+        property_type: String,
+        entity_id: usize,
+        reason: String,
+    },
 }
 
 #[cfg(test)]

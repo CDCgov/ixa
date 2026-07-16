@@ -232,7 +232,7 @@ macro_rules! define_property {
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
-        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?, persist = auto);
     };
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
@@ -244,7 +244,7 @@ macro_rules! define_property {
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
-        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?, persist = auto);
     };
 
     (
@@ -258,7 +258,7 @@ macro_rules! define_property {
             pub struct $name($(pub $field_ty),*);,
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
@@ -270,7 +270,7 @@ macro_rules! define_property {
             pub struct $name($(pub $field_ty),*);,
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
 
     (
@@ -284,7 +284,7 @@ macro_rules! define_property {
             pub struct $name { $(pub $field_name : $field_ty),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
@@ -296,7 +296,7 @@ macro_rules! define_property {
             pub struct $name { $(pub $field_name : $field_ty),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
 
     (
@@ -312,7 +312,7 @@ macro_rules! define_property {
             pub enum $name { $($variant),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
     (
         enum $name:ident {
@@ -326,7 +326,7 @@ macro_rules! define_property {
             pub enum $name { $($variant),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::impl_property!($name, $entity $(, $($extra)*)?, persist = auto);
     };
 
     // Both `define_property!` and `define_derived_property!` need to attach derives to a
@@ -481,6 +481,10 @@ macro_rules! impl_property_eq_hash {
 ///     `impl_derived_property!` instead of using this option directly.
 ///   * `default_const = <expr>` — Constant default value if the property has one; implies a non-derived property.
 ///   * `display_impl = <expr>` — Function converting the property value to a string; defaults to `|v| format!("{v:?}")`.
+///   * `persist = true` — Opts a manually declared property into population persistence. The property type must
+///     implement `serde::Serialize` and `serde::de::DeserializeOwned`. Properties declared with `define_property!`
+///     opt in automatically when they support owned deserialization; generated properties containing borrowed data
+///     remain usable but are not persistable.
 /// * Optional parameters that should generally be left alone, used internally to implement derived properties and
 ///   multi-properties:
 ///   * `collect_deps_fn = <expr>` — Function used to collect property dependencies; defaults to an empty implementation.
@@ -505,6 +509,7 @@ macro_rules! impl_property {
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
+        $(, persist = $persist:tt)?
     ) => {
         // Enforce mutual exclusivity at compile time.
         $crate::impl_property!(@assert_not_both $($compute_derived_fn)? ; $($default_const)?);
@@ -570,7 +575,7 @@ macro_rules! impl_property {
 
             // ctor_registration
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
-                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+                $crate::impl_property!(@register_property $entity, $property $(, $persist)?);
             }),
         );
     };
@@ -584,6 +589,7 @@ macro_rules! impl_property {
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
+        $(, persist = $persist:tt)?
     ) => {
         $crate::impl_property!(
             $property,
@@ -598,6 +604,7 @@ macro_rules! impl_property {
                 }
             })
             $(, ctor_registration = $ctor_registration)?
+            $(, persist = $persist)?
         );
     };
 
@@ -725,6 +732,26 @@ macro_rules! impl_property {
     // Helpers for defaults, a pair per macro parameter type (`expr`, `ty`).
     (@unwrap_or $value:expr, $_default:expr) => { $value };
     (@unwrap_or, $default:expr) => { $default };
+
+    (@register_property $entity:ident, $property:ident, true) => {
+        $crate::entity::property_store::add_to_persistable_property_registry::<$entity, $property>();
+    };
+    (@register_property $entity:ident, $property:ident, auto) => {
+        {
+            use $crate::entity::property_store::RegisterPropertyPersistence as _;
+            let registration = $crate::entity::property_store::PropertyPersistenceRegistration::<
+                $entity,
+                $property,
+            >::new();
+            (&&registration).register();
+        }
+    };
+    (@register_property $entity:ident, $property:ident, false) => {
+        $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+    };
+    (@register_property $entity:ident, $property:ident) => {
+        $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+    };
 
     (@replace_with_unit $_tt:tt) => { () };
     (@count_tts $($tt:tt),* $(,)?) => {

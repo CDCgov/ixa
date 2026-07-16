@@ -72,6 +72,9 @@ pub mod macros;
 pub mod plan_queue;
 pub use plan_queue::PlanId;
 
+pub mod population;
+pub use population::ContextPopulationExt;
+
 /// Compatibility re-exports for plan-related public API.
 ///
 /// This module is retained so existing `ixa::plan::PlanId` imports continue to
