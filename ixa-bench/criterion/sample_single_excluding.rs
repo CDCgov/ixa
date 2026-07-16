@@ -7,7 +7,6 @@
 //! The output `=== Strategy comparison ===` summary shows the crossover point
 //! that the implementation's small-slice threshold should target.
 
-use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -19,13 +18,17 @@ use ixa::random::{
     sample_single_excluding, sample_single_excluding_iteration, sample_single_excluding_rejection,
 };
 
+mod sample_single_excluding_summary;
+
+use sample_single_excluding_summary::{complete_rows, Measurements, SummaryRow};
+
 const SEED: u64 = 42;
 
 /// Slice sizes to test. Focused on the small-n regime where the strategy
 /// crossover happens — at larger n rejection wins by orders of magnitude.
 const SLICE_SIZES: [usize; 3] = [2, 3, 4];
 
-type Results = Arc<Mutex<BTreeMap<(String, usize), f64>>>;
+type Results = Arc<Mutex<Measurements>>;
 
 /// Builds a Vec<u32> with values 0..n, and returns it together with one
 /// "excluded" value that is present exactly once in the slice (mid-range).
@@ -50,8 +53,8 @@ fn bench_ns_per_sample<F: FnMut()>(b: &mut criterion::Bencher, mut f: F) -> f64 
     ns_per_sample
 }
 
-fn record(results: &Results, name: &str, n: usize, ns: f64) {
-    results.lock().unwrap().insert((name.to_string(), n), ns);
+fn record(results: &Results, name: &'static str, n: usize, ns: f64) {
+    results.lock().unwrap().insert((name, n), ns);
 }
 
 fn bench_strategies(c: &mut Criterion, results: &Results) {
@@ -104,24 +107,38 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
     group.finish();
 }
 
-fn print_summary(results: &BTreeMap<(String, usize), f64>) {
+fn print_summary(results: &Measurements) {
+    let rows = complete_rows(results, &SLICE_SIZES);
+    if rows.is_empty() {
+        return;
+    }
+
     eprintln!("\n=== Strategy comparison: sample_single_excluding (ns/sample) ===");
     eprintln!(
         "{:>10}  {:>12}  {:>12}  {:>12}  {:>10}",
         "n", "rejection", "iteration", "auto", "winner"
     );
 
-    for &n in &SLICE_SIZES {
-        let r = results[&("rejection".to_string(), n)];
-        let i = results[&("iteration".to_string(), n)];
-        let a = results[&("auto".to_string(), n)];
-        let winner = if r < i { "rejection" } else { "iteration" };
-        eprintln!("{n:>10}  {r:>12.1}  {i:>12.1}  {a:>12.1}  {winner:>10}");
+    for SummaryRow {
+        size,
+        rejection,
+        iteration,
+        automatic,
+    } in rows
+    {
+        let winner = if rejection < iteration {
+            "rejection"
+        } else {
+            "iteration"
+        };
+        eprintln!(
+            "{size:>10}  {rejection:>12.1}  {iteration:>12.1}  {automatic:>12.1}  {winner:>10}"
+        );
     }
 }
 
 fn benches(c: &mut Criterion) {
-    let results: Results = Arc::new(Mutex::new(BTreeMap::new()));
+    let results: Results = Arc::new(Mutex::new(Measurements::new()));
     bench_strategies(c, &results);
     print_summary(&results.lock().unwrap());
 }
