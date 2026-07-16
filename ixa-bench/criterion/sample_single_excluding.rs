@@ -25,30 +25,7 @@ const SEED: u64 = 42;
 /// crossover happens — at larger n rejection wins by orders of magnitude.
 const SLICE_SIZES: [usize; 3] = [2, 3, 4];
 
-type Measurements = BTreeMap<(&'static str, usize), f64>;
-type Results = Arc<Mutex<Measurements>>;
-
-#[derive(Debug, PartialEq)]
-struct SummaryRow {
-    size: usize,
-    rejection: f64,
-    iteration: f64,
-    automatic: f64,
-}
-
-fn complete_rows(results: &Measurements, slice_sizes: &[usize]) -> Vec<SummaryRow> {
-    slice_sizes
-        .iter()
-        .filter_map(|&size| {
-            Some(SummaryRow {
-                size,
-                rejection: *results.get(&("rejection", size))?,
-                iteration: *results.get(&("iteration", size))?,
-                automatic: *results.get(&("auto", size))?,
-            })
-        })
-        .collect()
-}
+type Results = Arc<Mutex<BTreeMap<(String, usize), f64>>>;
 
 /// Builds a Vec<u32> with values 0..n, and returns it together with one
 /// "excluded" value that is present exactly once in the slice (mid-range).
@@ -73,8 +50,8 @@ fn bench_ns_per_sample<F: FnMut()>(b: &mut criterion::Bencher, mut f: F) -> f64 
     ns_per_sample
 }
 
-fn record(results: &Results, name: &'static str, n: usize, ns: f64) {
-    results.lock().unwrap().insert((name, n), ns);
+fn record(results: &Results, name: &str, n: usize, ns: f64) {
+    results.lock().unwrap().insert((name.to_string(), n), ns);
 }
 
 fn bench_strategies(c: &mut Criterion, results: &Results) {
@@ -127,81 +104,27 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
     group.finish();
 }
 
-fn print_summary(results: &Measurements) {
-    let rows = complete_rows(results, &SLICE_SIZES);
-    if rows.is_empty() {
-        return;
-    }
-
+fn print_summary(results: &BTreeMap<(String, usize), f64>) {
     eprintln!("\n=== Strategy comparison: sample_single_excluding (ns/sample) ===");
     eprintln!(
         "{:>10}  {:>12}  {:>12}  {:>12}  {:>10}",
         "n", "rejection", "iteration", "auto", "winner"
     );
 
-    for SummaryRow {
-        size,
-        rejection,
-        iteration,
-        automatic,
-    } in rows
-    {
-        let winner = if rejection < iteration {
-            "rejection"
-        } else {
-            "iteration"
-        };
-        eprintln!(
-            "{size:>10}  {rejection:>12.1}  {iteration:>12.1}  {automatic:>12.1}  {winner:>10}"
-        );
+    for &n in &SLICE_SIZES {
+        let r = results[&("rejection".to_string(), n)];
+        let i = results[&("iteration".to_string(), n)];
+        let a = results[&("auto".to_string(), n)];
+        let winner = if r < i { "rejection" } else { "iteration" };
+        eprintln!("{n:>10}  {r:>12.1}  {i:>12.1}  {a:>12.1}  {winner:>10}");
     }
 }
 
 fn benches(c: &mut Criterion) {
-    let results: Results = Arc::new(Mutex::new(Measurements::new()));
+    let results: Results = Arc::new(Mutex::new(BTreeMap::new()));
     bench_strategies(c, &results);
     print_summary(&results.lock().unwrap());
 }
 
 criterion_group!(group, benches);
 criterion_main!(group);
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn no_rows_are_returned_without_measurements() {
-        assert!(super::complete_rows(&super::Measurements::new(), &super::SLICE_SIZES).is_empty());
-    }
-
-    #[test]
-    fn no_rows_are_returned_for_a_single_strategy() {
-        let results = super::Measurements::from([
-            (("rejection", 2), 2.1),
-            (("rejection", 3), 3.1),
-            (("rejection", 4), 4.1),
-        ]);
-
-        assert!(super::complete_rows(&results, &super::SLICE_SIZES).is_empty());
-    }
-
-    #[test]
-    fn only_complete_rows_are_returned() {
-        let results = super::Measurements::from([
-            (("rejection", 2), 2.1),
-            (("iteration", 2), 2.2),
-            (("rejection", 3), 3.1),
-            (("iteration", 3), 3.2),
-            (("auto", 3), 3.3),
-        ]);
-
-        assert_eq!(
-            super::complete_rows(&results, &super::SLICE_SIZES),
-            vec![super::SummaryRow {
-                size: 3,
-                rejection: 3.1,
-                iteration: 3.2,
-                automatic: 3.3,
-            }]
-        );
-    }
-}
