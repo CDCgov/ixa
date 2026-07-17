@@ -2,7 +2,10 @@
 use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
-use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
+use super::{
+    profiling_data, ProfilingData, QueryTimingRow, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
+    QUERY_TIMINGS_HEADERS,
+};
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
@@ -84,6 +87,34 @@ pub fn print_named_spans() {
 #[cfg(not(feature = "profiling"))]
 pub fn print_named_spans() {}
 
+#[cfg(feature = "profiling")]
+pub(crate) fn print_query_timings(rows: &[QueryTimingRow]) {
+    if rows.is_empty() {
+        return;
+    }
+
+    let mut formatted_rows = vec![
+        // Header row
+        QUERY_TIMINGS_HEADERS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+    ];
+
+    formatted_rows.extend(rows.iter().map(|row| {
+        vec![
+            row.query.clone(),
+            format_with_commas(row.count),
+            format_duration(row.total).to_string(),
+            format_duration(row.min).to_string(),
+            format_duration(row.max).to_string(),
+        ]
+    }));
+
+    println!();
+    print_formatted_table(&formatted_rows);
+}
+
 /// Prints the forecast efficiency.
 #[cfg(feature = "profiling")]
 pub fn print_computed_statistics() {
@@ -146,7 +177,7 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
     println!();
 
     // Print separator
-    let total_width: usize = col_widths.iter().map(|w| *w + 1).sum::<usize>() + 2;
+    let total_width: usize = col_widths.iter().map(|w| *w + 2).sum();
     println!("{}", "-".repeat(total_width));
 
     // Print data rows
@@ -227,6 +258,7 @@ mod tests {
 
     use crate::profiling::display::{
         format_with_commas, format_with_commas_f64, print_named_counts, print_named_spans,
+        print_query_timings,
     };
     use crate::profiling::*;
 
@@ -380,6 +412,28 @@ mod tests {
                 .insert("rendering", (Duration::from_secs(2), 30));
         }
         print_named_spans();
+    }
+
+    #[test]
+    fn print_query_timings_outputs_expected_format() {
+        let rows = vec![
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (Age)".to_string(),
+                count: 2,
+                total: Duration::from_micros(40),
+                min: Duration::from_micros(10),
+                max: Duration::from_micros(30),
+            },
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (County)".to_string(),
+                count: 1,
+                total: Duration::from_micros(20),
+                min: Duration::from_micros(20),
+                max: Duration::from_micros(20),
+            },
+        ];
+
+        print_query_timings(&rows);
     }
 
     #[test]

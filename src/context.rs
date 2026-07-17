@@ -4,6 +4,8 @@
 //! for storing and manipulating the state of a given simulation.
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
+#[cfg(feature = "profiling")]
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
@@ -152,6 +154,8 @@ pub struct Context {
     start_time: Option<f64>,
     shutdown_status: ShutdownStatus,
     execution_profiler: ExecutionProfilingCollector,
+    #[cfg(feature = "profiling")]
+    query_profiler: RefCell<crate::profiling::QueryProfiler>,
     pub(crate) print_execution_statistics: bool,
 }
 
@@ -181,8 +185,28 @@ impl Context {
             start_time: None,
             shutdown_status: ShutdownStatus::None,
             execution_profiler: ExecutionProfilingCollector::new(),
+            #[cfg(feature = "profiling")]
+            query_profiler: RefCell::new(crate::profiling::QueryProfiler::default()),
             print_execution_statistics: false,
         }
+    }
+
+    #[cfg(feature = "profiling")]
+    pub(crate) fn query_profile_handle(
+        &self,
+        query: &'static str,
+    ) -> crate::profiling::QueryProfileHandle<'_> {
+        crate::profiling::QueryProfileHandle::new(&self.query_profiler, query)
+    }
+
+    #[cfg(feature = "profiling")]
+    pub(crate) fn query_timings_table(&self) -> Vec<crate::profiling::QueryTimingRow> {
+        self.query_profiler.borrow().query_timings_table()
+    }
+
+    #[cfg(all(test, feature = "profiling"))]
+    pub(crate) fn query_timing(&self, query: &str) -> Option<crate::profiling::QueryTiming> {
+        self.query_profiler.borrow().query_timing(query).cloned()
     }
 
     pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
@@ -635,7 +659,10 @@ impl Context {
         if self.print_execution_statistics {
             print_execution_statistics(&stats);
             #[cfg(feature = "profiling")]
-            crate::profiling::print_profiling_data();
+            {
+                crate::profiling::print_profiling_data();
+                crate::profiling::print_query_timings(&self.query_timings_table());
+            }
         } else {
             log_execution_statistics(&stats);
         }

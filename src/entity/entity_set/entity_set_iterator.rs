@@ -52,7 +52,7 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
     }
 
     fn from_entity_set(set: EntitySet<'a, E>) -> Self {
-        match set.into_inner() {
+        match set.inner {
             EntitySetInner::Source(source) => {
                 if source.try_len() == Some(0) {
                     Self::empty_source()
@@ -210,26 +210,70 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
             }
         }
     }
+
+    fn count_inner(self) -> usize {
+        match self {
+            Self::Source(source) => source.count(),
+            Self::IntersectionSources {
+                mut driver,
+                filters,
+            } => driver
+                .by_ref()
+                .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
+                .count(),
+            mut other => {
+                let mut count = 0usize;
+                while other.next_inner().is_some() {
+                    count += 1;
+                }
+                count
+            }
+        }
+    }
+
+    fn nth_inner(&mut self, n: usize) -> Option<EntityId<E>> {
+        match self {
+            Self::Source(source) => source.nth(n),
+            Self::IntersectionSources { driver, filters } => driver
+                .by_ref()
+                .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
+                .nth(n),
+            _ => {
+                for _ in 0..n {
+                    self.next_inner()?;
+                }
+                self.next_inner()
+            }
+        }
+    }
 }
 
 /// An iterator over the IDs in an entity set, producing `EntityId<E>`s until exhausted.
 pub struct EntitySetIterator<'c, E: Entity> {
     inner: EntitySetIteratorInner<'c, E>,
+    #[cfg(feature = "profiling")]
+    pub(in crate::entity) query_profile: Option<crate::profiling::QueryExecutionProfile<'c>>,
 }
 
 impl<'c, E: Entity> EntitySetIterator<'c, E> {
-    pub(crate) fn empty() -> EntitySetIterator<'c, E> {
-        EntitySetIterator {
-            inner: EntitySetIteratorInner::empty_source(),
+    fn from_inner(inner: EntitySetIteratorInner<'c, E>) -> Self {
+        Self {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile: None,
         }
     }
 
+    pub(crate) fn empty() -> EntitySetIterator<'c, E> {
+        Self::from_inner(EntitySetIteratorInner::empty_source())
+    }
+
     pub(crate) fn from_population_iterator(iter: PopulationIterator<E>) -> Self {
-        EntitySetIterator {
-            inner: EntitySetIteratorInner::Source(SourceIterator::PopulationRange(
-                PopulationRangeIterator::from_population_iterator(iter),
+        Self::from_inner(EntitySetIteratorInner::Source(
+            SourceIterator::PopulationRange(PopulationRangeIterator::from_population_iterator(
+                iter,
             )),
-        }
+        ))
     }
 
     pub(crate) fn from_sources(mut sources: Vec<SourceSet<'c, E>>) -> Self {
@@ -237,9 +281,9 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
             return Self::empty();
         }
         if sources.len() == 1 {
-            return EntitySetIterator {
-                inner: EntitySetIteratorInner::Source(sources.pop().unwrap().into_iter()),
-            };
+            return Self::from_inner(EntitySetIteratorInner::Source(
+                sources.pop().unwrap().into_iter(),
+            ));
         }
 
         // This path constructs intersections from raw source vectors, so we sort here.
@@ -247,23 +291,42 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         sources.sort_unstable_by_key(SourceSet::sort_key);
         let mut source_iter = sources.into_iter();
         let driver = source_iter.next().unwrap().into_iter();
-        EntitySetIterator {
-            inner: EntitySetIteratorInner::IntersectionSources {
-                driver,
-                filters: source_iter.collect(),
-            },
-        }
+        Self::from_inner(EntitySetIteratorInner::IntersectionSources {
+            driver,
+            filters: source_iter.collect(),
+        })
     }
 
     pub(crate) fn from_index_set(set: &'c IndexSet<EntityId<E>>) -> EntitySetIterator<'c, E> {
-        EntitySetIterator {
-            inner: EntitySetIteratorInner::Source(SourceSet::IndexSet(set).into_iter()),
-        }
+        Self::from_inner(EntitySetIteratorInner::Source(
+            SourceSet::IndexSet(set).into_iter(),
+        ))
+    }
+
+    #[cfg(feature = "profiling")]
+    #[inline]
+    pub(in crate::entity) fn with_query_profile(
+        mut self,
+        profile: crate::profiling::QueryProfileHandle<'c>,
+    ) -> Self {
+        self.query_profile = Some(crate::profiling::QueryExecutionProfile::new(profile));
+        self
     }
 
     pub(super) fn new(set: EntitySet<'c, E>) -> Self {
-        EntitySetIterator {
+        #[cfg(feature = "profiling")]
+        let (set, query_profile) = {
+            let mut set = set;
+            let query_profile = set
+                .query_profile
+                .take()
+                .map(crate::profiling::QueryExecutionProfile::new);
+            (set, query_profile)
+        };
+        Self {
             inner: EntitySetIteratorInner::from_entity_set(set),
+            #[cfg(feature = "profiling")]
+            query_profile,
         }
     }
 }
@@ -273,6 +336,17 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
+        #[cfg(feature = "profiling")]
+        {
+            let inner = &mut self.inner;
+            if let Some(profile) = &mut self.query_profile {
+                let item = profile.measure(|| inner.next_inner());
+                if item.is_none() {
+                    profile.finish();
+                }
+                return item;
+            }
+        }
         self.inner.next_inner()
     }
 
@@ -282,54 +356,67 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
     }
 
     fn count(self) -> usize {
-        let EntitySetIterator { inner } = self;
-        match inner {
-            EntitySetIteratorInner::Source(source) => source.count(),
-            EntitySetIteratorInner::IntersectionSources {
-                mut driver,
-                filters,
-            } => driver
-                .by_ref()
-                .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
-                .count(),
-            other => {
-                let mut it = EntitySetIterator { inner: other };
-                let mut n = 0usize;
-                while it.next().is_some() {
-                    n += 1;
-                }
-                n
+        #[cfg(feature = "profiling")]
+        {
+            let Self {
+                inner,
+                mut query_profile,
+            } = self;
+            match &mut query_profile {
+                Some(profile) => profile.measure(|| inner.count_inner()),
+                None => inner.count_inner(),
             }
+        }
+        #[cfg(not(feature = "profiling"))]
+        {
+            self.inner.count_inner()
         }
     }
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        match &mut self.inner {
-            EntitySetIteratorInner::Source(source) => source.nth(n),
-            EntitySetIteratorInner::IntersectionSources { driver, filters } => driver
-                .by_ref()
-                .filter(|&entity_id| filters.iter().all(|filter| filter.contains(entity_id)))
-                .nth(n),
-            _ => {
-                for _ in 0..n {
-                    self.next()?;
+        #[cfg(feature = "profiling")]
+        {
+            let inner = &mut self.inner;
+            if let Some(profile) = &mut self.query_profile {
+                let item = profile.measure(|| inner.nth_inner(n));
+                if item.is_none() {
+                    profile.finish();
                 }
-                self.next()
+                return item;
             }
         }
+        self.inner.nth_inner(n)
     }
 
     fn for_each<F>(self, mut f: F)
     where
         F: FnMut(Self::Item),
     {
-        let EntitySetIterator { inner } = self;
+        let EntitySetIterator {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile,
+        } = self;
+        #[cfg(feature = "profiling")]
+        let mut inner = inner;
+        #[cfg(feature = "profiling")]
+        if let Some(mut query_profile) = query_profile {
+            loop {
+                let item = query_profile.measure(|| inner.next_inner());
+                let Some(item) = item else {
+                    query_profile.finish();
+                    break;
+                };
+                f(item);
+            }
+            return;
+        }
+
         match inner {
             EntitySetIteratorInner::Source(source) => source.for_each(f),
-            other => {
-                let it = EntitySetIterator { inner: other };
-                for item in it {
+            mut other => {
+                while let Some(item) = other.next_inner() {
                     f(item);
                 }
             }
@@ -340,13 +427,32 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
-        let EntitySetIterator { inner } = self;
+        let EntitySetIterator {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile,
+        } = self;
+        #[cfg(feature = "profiling")]
+        let mut inner = inner;
+        #[cfg(feature = "profiling")]
+        if let Some(mut query_profile) = query_profile {
+            let mut acc = init;
+            loop {
+                let item = query_profile.measure(|| inner.next_inner());
+                let Some(item) = item else {
+                    query_profile.finish();
+                    break;
+                };
+                acc = f(acc, item);
+            }
+            return acc;
+        }
+
         match inner {
             EntitySetIteratorInner::Source(source) => source.fold(init, f),
-            other => {
-                let it = EntitySetIterator { inner: other };
+            mut other => {
                 let mut acc = init;
-                for item in it {
+                while let Some(item) = other.next_inner() {
                     acc = f(acc, item);
                 }
                 acc

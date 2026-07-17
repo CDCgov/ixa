@@ -1,4 +1,6 @@
 #[cfg(feature = "profiling")]
+use std::cell::RefCell;
+#[cfg(feature = "profiling")]
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -44,6 +46,183 @@ pub struct ProfilingData {
     // removing them to avoid a double borrow.
     #[cfg(feature = "profiling")]
     pub(super) computed_statistics: Vec<Option<ComputedStatistic>>,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Default)]
+pub(crate) struct QueryProfiler {
+    timings: HashMap<&'static str, QueryTiming>,
+}
+
+#[cfg(feature = "profiling")]
+impl QueryProfiler {
+    pub(crate) fn record_query_timing(&mut self, query: &'static str, elapsed: Duration) {
+        if let Some(timing) = self.timings.get_mut(query) {
+            timing.record(elapsed);
+        } else {
+            self.timings.insert(query, QueryTiming::new(elapsed));
+        }
+    }
+
+    pub(crate) fn query_timings_table(&self) -> Vec<QueryTimingRow> {
+        let mut rows = self
+            .timings
+            .iter()
+            .map(|(&query, timing)| QueryTimingRow {
+                query: query.to_string(),
+                count: timing.count,
+                total: timing.total,
+                min: timing.min,
+                max: timing.max,
+            })
+            .collect::<Vec<_>>();
+
+        rows.sort_by(|left, right| {
+            right
+                .total
+                .cmp(&left.total)
+                .then_with(|| left.query.cmp(&right.query))
+        });
+
+        rows
+    }
+
+    #[cfg(test)]
+    pub(crate) fn query_timing(&self, query: &str) -> Option<&QueryTiming> {
+        self.timings.get(query)
+    }
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Clone, Copy)]
+pub(crate) struct QueryProfileHandle<'a> {
+    profiler: &'a RefCell<QueryProfiler>,
+    query: &'static str,
+}
+
+#[cfg(feature = "profiling")]
+impl<'a> QueryProfileHandle<'a> {
+    pub(crate) fn new(profiler: &'a RefCell<QueryProfiler>, query: &'static str) -> Self {
+        Self { profiler, query }
+    }
+
+    pub(crate) fn same_query_as(self, other: Self) -> bool {
+        std::ptr::eq(self.profiler, other.profiler) && self.query == other.query
+    }
+
+    pub(crate) fn record_execution(self, elapsed: Duration) {
+        self.profiler
+            .borrow_mut()
+            .record_query_timing(self.query, elapsed);
+    }
+
+    #[must_use]
+    pub(crate) fn scope(self) -> QueryProfileScope<'a> {
+        QueryProfileScope {
+            profiler: self.profiler,
+            query: self.query,
+            start_time: Instant::now(),
+        }
+    }
+}
+
+#[cfg(feature = "profiling")]
+pub(crate) struct QueryExecutionProfile<'a> {
+    handle: QueryProfileHandle<'a>,
+    elapsed: Duration,
+    started: bool,
+    finished: bool,
+}
+
+#[cfg(feature = "profiling")]
+impl<'a> QueryExecutionProfile<'a> {
+    pub(crate) fn new(handle: QueryProfileHandle<'a>) -> Self {
+        Self {
+            handle,
+            elapsed: Duration::ZERO,
+            started: false,
+            finished: false,
+        }
+    }
+
+    pub(crate) fn measure<T>(&mut self, f: impl FnOnce() -> T) -> T {
+        if self.finished {
+            return f();
+        }
+
+        self.started = true;
+        let start = Instant::now();
+        let result = f();
+        self.elapsed += start.elapsed();
+        result
+    }
+
+    pub(crate) fn finish(&mut self) {
+        if self.started && !self.finished {
+            self.handle.record_execution(self.elapsed);
+            self.finished = true;
+        }
+    }
+}
+
+#[cfg(feature = "profiling")]
+impl Drop for QueryExecutionProfile<'_> {
+    fn drop(&mut self) {
+        self.finish();
+    }
+}
+
+#[cfg(feature = "profiling")]
+pub(crate) struct QueryProfileScope<'a> {
+    profiler: &'a RefCell<QueryProfiler>,
+    query: &'static str,
+    start_time: Instant,
+}
+
+#[cfg(feature = "profiling")]
+impl Drop for QueryProfileScope<'_> {
+    fn drop(&mut self) {
+        QueryProfileHandle::new(self.profiler, self.query)
+            .record_execution(self.start_time.elapsed());
+    }
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Clone, Debug)]
+pub(crate) struct QueryTiming {
+    pub(crate) count: usize,
+    pub(crate) total: Duration,
+    pub(crate) min: Duration,
+    pub(crate) max: Duration,
+}
+
+#[cfg(feature = "profiling")]
+impl QueryTiming {
+    fn new(elapsed: Duration) -> Self {
+        Self {
+            count: 1,
+            total: elapsed,
+            min: elapsed,
+            max: elapsed,
+        }
+    }
+
+    fn record(&mut self, elapsed: Duration) {
+        self.count += 1;
+        self.total += elapsed;
+        self.min = self.min.min(elapsed);
+        self.max = self.max.max(elapsed);
+    }
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Clone, Debug)]
+pub(crate) struct QueryTimingRow {
+    pub(crate) query: String,
+    pub(crate) count: usize,
+    pub(crate) total: Duration,
+    pub(crate) min: Duration,
+    pub(crate) max: Duration,
 }
 
 #[cfg(feature = "profiling")]
@@ -386,5 +565,84 @@ mod tests {
         let expected_percent = duration.as_secs_f64() / elapsed * 100.0;
         // Allow reasonable tolerance for timing variations
         assert!((*percent - expected_percent).abs() < 5.0);
+    }
+
+    #[test]
+    fn query_profiler_first_observation_initializes_record() {
+        let mut profiler = QueryProfiler::default();
+        profiler.record_query_timing("QueryTimingInit: (Age)", Duration::from_micros(10));
+
+        let timing = profiler.query_timing("QueryTimingInit: (Age)").unwrap();
+        assert_eq!(timing.count, 1);
+        assert_eq!(timing.total, Duration::from_micros(10));
+        assert_eq!(timing.min, Duration::from_micros(10));
+        assert_eq!(timing.max, Duration::from_micros(10));
+    }
+
+    #[test]
+    fn query_profiler_later_observations_update_aggregate() {
+        let mut profiler = QueryProfiler::default();
+        profiler.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(10));
+        profiler.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(30));
+        profiler.record_query_timing("QueryTimingUpdate: (Age)", Duration::from_micros(5));
+
+        let timing = profiler.query_timing("QueryTimingUpdate: (Age)").unwrap();
+        assert_eq!(timing.count, 3);
+        assert_eq!(timing.total, Duration::from_micros(45));
+        assert_eq!(timing.min, Duration::from_micros(5));
+        assert_eq!(timing.max, Duration::from_micros(30));
+    }
+
+    #[test]
+    fn query_profiler_table_rows_include_count_total_min_and_max() {
+        let mut profiler = QueryProfiler::default();
+        profiler.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(10));
+        profiler.record_query_timing("QueryTimingTable: (Age)", Duration::from_millis(30));
+
+        let rows = profiler.query_timings_table();
+        let row = rows
+            .iter()
+            .find(|row| row.query == "QueryTimingTable: (Age)")
+            .unwrap();
+
+        assert_eq!(row.count, 2);
+        assert_eq!(row.total, Duration::from_millis(40));
+        assert_eq!(row.min, Duration::from_millis(10));
+        assert_eq!(row.max, Duration::from_millis(30));
+    }
+
+    #[test]
+    fn query_profiler_same_label_aggregates_into_one_row() {
+        let mut profiler = QueryProfiler::default();
+        profiler.record_query_timing("QueryTimingSame: (Age)", Duration::from_micros(10));
+        profiler.record_query_timing("QueryTimingSame: (Age)", Duration::from_micros(30));
+        profiler.record_query_timing("QueryTimingSame: (Age)", Duration::from_micros(5));
+
+        let timing = profiler.query_timing("QueryTimingSame: (Age)").unwrap();
+        assert_eq!(timing.count, 3);
+        assert_eq!(timing.total, Duration::from_micros(45));
+    }
+
+    #[test]
+    fn query_profiler_table_sorts_by_total_then_label() {
+        let mut profiler = QueryProfiler::default();
+        profiler.record_query_timing("QueryTimingSort: B", Duration::from_micros(20));
+        profiler.record_query_timing("QueryTimingSort: C", Duration::from_micros(10));
+        profiler.record_query_timing("QueryTimingSort: A", Duration::from_micros(20));
+
+        let rows = profiler.query_timings_table();
+        let labels = rows
+            .iter()
+            .map(|row| row.query.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            labels,
+            vec![
+                "QueryTimingSort: A",
+                "QueryTimingSort: B",
+                "QueryTimingSort: C"
+            ]
+        );
     }
 }

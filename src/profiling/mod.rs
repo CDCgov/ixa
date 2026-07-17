@@ -5,6 +5,7 @@
 //! - Event counting – track how often named events occur during a run.
 //! - Rate calculation – compute rates (events per second) since the first count.
 //! - Span timing – measure time intervals with automatic closing on drop.
+//! - Query timing – aggregate entity query runtime by query shape.
 //! - Coverage – report how much of total runtime is covered by any span via a special
 //!   "Total Measured" span.
 //! - Computed statistics – define custom, derived metrics over collected data.
@@ -24,6 +25,10 @@
 //! get_contact                           1035   1ms 135us 202ns      0.43%
 //! schedule_next_forecasted_infection    1286  22ms 329us 102ns      8.44%
 //! Total Measured                        1385  23ms 897us 146ns      9.03%
+//!
+//! Query                    Count        Total          Min          Max
+//! --------------------------------------------------------------------
+//! Person: (Age, County)      150   12ms 340us   10us 120ns  250us 450ns
 //!
 //! Event Label                     Count  Rate (per sec)
 //! -----------------------------------------------------
@@ -76,8 +81,8 @@
 //! print_profiling_data();
 //! ```
 //! Prints spans, counts, and any computed statistics via the functions
-//! `print_named_spans()`, `print_named_counts()`, `print_computed_statistics()`,
-//! which you can use individually if you prefer.
+//! `print_named_spans()`, `print_named_counts()`, and `print_computed_statistics()`, which
+//! you can use individually if you prefer. Context-level reporting also includes query timings.
 //!
 //! Writing results to JSON together with execution statistics:
 //! ```rust,ignore
@@ -87,7 +92,8 @@
 //! fn finalize(mut context: Context) {
 //!     // Ensure Params::profiling_data_path is set, and report options specify
 //!     // output_dir/file_prefix/overwrite. This writes a pretty JSON file with:
-//!     //   date_time, execution_statistics, named_counts, named_spans, computed_statistics
+//!     //   date_time, execution_statistics, named_counts, named_spans,
+//!     //   query_timings, computed_statistics
 //!     context.write_profiling_data();
 //! }
 //! ```
@@ -187,6 +193,8 @@ const TOTAL_MEASURED: &str = "Total Measured";
 const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% runtime"];
 #[cfg(feature = "profiling")]
 const NAMED_COUNTS_HEADERS: &[&str] = &["Event Label", "Count", "Rate (per sec)"];
+#[cfg(feature = "profiling")]
+const QUERY_TIMINGS_HEADERS: &[&str] = &["Query", "Count", "Total", "Min", "Max"];
 
 pub struct Span {
     #[cfg(feature = "profiling")]
