@@ -18,7 +18,7 @@ authors = ["The Ixa Developers <cfa@cdc.gov>"]
 
 [workspace.dependencies]
 approx = "^0.5.1"
-rand = { version = "^0.9.2", default-features = false, features = [
+rand = { version = "^0.10.2", default-features = false, features = [
     "std",
     "small_rng",
     "std_rng",
