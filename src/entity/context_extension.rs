@@ -771,6 +771,11 @@ mod tests {
         struct ProfilingComposedAge(u8),
         ProfilingComposedPerson
     );
+    #[cfg(feature = "profiling")]
+    define_property!(
+        struct ProfilingComposedCounty(u8),
+        ProfilingComposedPerson
+    );
 
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     struct CounterValue(u8);
@@ -1719,7 +1724,37 @@ mod tests {
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn iterator_next_records_each_call_including_terminal_call() {
+    fn iterator_consumption_styles_each_record_one_execution() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
+            .unwrap();
+
+        let label = "ProfilingBoundaryPerson: (ProfilingBoundaryAge)";
+        assert_eq!(
+            context
+                .query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
+                .count(),
+            1
+        );
+        assert_eq!(query_count(&context, label), Some(1));
+        let timing = context.query_timing(label).unwrap();
+        assert_eq!(timing.min, timing.total);
+        assert_eq!(timing.max, timing.total);
+
+        let mut iter =
+            context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
+        assert_eq!(iter.next(), Some(person));
+        assert_eq!(query_count(&context, label), Some(1));
+        assert_eq!(iter.next(), None);
+        assert_eq!(query_count(&context, label), Some(2));
+        assert_eq!(iter.next(), None);
+        assert_eq!(query_count(&context, label), Some(2));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn partially_consumed_iterator_records_one_execution_when_dropped() {
         let mut context = Context::new();
         let person = context
             .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
@@ -1729,9 +1764,9 @@ mod tests {
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
         assert_eq!(iter.next(), Some(person));
+        assert_eq!(query_count(&context, label), None);
+        drop(iter);
         assert_eq!(query_count(&context, label), Some(1));
-        assert_eq!(iter.next(), None);
-        assert_eq!(query_count(&context, label), Some(2));
     }
 
     #[cfg(feature = "profiling")]
@@ -1889,13 +1924,25 @@ mod tests {
     fn composed_entity_set_operation_preserves_single_query_profile() {
         let mut context = Context::new();
         let included = context
-            .add_entity(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(42),
+                ProfilingComposedCounty(1)
+            ))
             .unwrap();
         let excluded = context
-            .add_entity(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(42),
+                ProfilingComposedCounty(2)
+            ))
             .unwrap();
         context
-            .add_entity(with!(ProfilingComposedPerson, ProfilingComposedAge(7)))
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(7),
+                ProfilingComposedCounty(3)
+            ))
             .unwrap();
 
         let exclusions = EntitySet::from_source(SourceSet::singleton(excluded));
@@ -1914,5 +1961,69 @@ mod tests {
             .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
             .difference(EntitySet::from_source(SourceSet::singleton(excluded)))
             .contains(included));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn set_algebra_preserves_a_shared_query_profile() {
+        let mut context = Context::new();
+        context
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(42),
+                ProfilingComposedCounty(1)
+            ))
+            .unwrap();
+        context
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(7),
+                ProfilingComposedCounty(2)
+            ))
+            .unwrap();
+
+        let count = context
+            .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
+            .union(context.query(with!(ProfilingComposedPerson, ProfilingComposedAge(7))))
+            .into_iter()
+            .count();
+
+        assert_eq!(count, 2);
+        assert_eq!(
+            query_count(&context, "ProfilingComposedPerson: (ProfilingComposedAge)"),
+            Some(1)
+        );
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn set_algebra_clears_distinct_query_profiles() {
+        let mut context = Context::new();
+        context
+            .add_entity(with!(
+                ProfilingComposedPerson,
+                ProfilingComposedAge(42),
+                ProfilingComposedCounty(1)
+            ))
+            .unwrap();
+
+        let count = context
+            .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
+            .intersection(context.query(with!(ProfilingComposedPerson, ProfilingComposedCounty(1))))
+            .into_iter()
+            .count();
+
+        assert_eq!(count, 1);
+        assert_eq!(
+            query_count(&context, "ProfilingComposedPerson: (ProfilingComposedAge)"),
+            None
+        );
+        assert_eq!(
+            query_count(
+                &context,
+                "ProfilingComposedPerson: (ProfilingComposedCounty)"
+            ),
+            None
+        );
     }
 }

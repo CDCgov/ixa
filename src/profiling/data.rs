@@ -110,7 +110,7 @@ impl<'a> QueryProfileHandle<'a> {
         std::ptr::eq(self.profiler, other.profiler) && self.query == other.query
     }
 
-    pub(crate) fn record_elapsed(self, elapsed: Duration) {
+    pub(crate) fn record_execution(self, elapsed: Duration) {
         self.profiler
             .borrow_mut()
             .record_query_timing(self.query, elapsed);
@@ -127,6 +127,52 @@ impl<'a> QueryProfileHandle<'a> {
 }
 
 #[cfg(feature = "profiling")]
+pub(crate) struct QueryExecutionProfile<'a> {
+    handle: QueryProfileHandle<'a>,
+    elapsed: Duration,
+    started: bool,
+    finished: bool,
+}
+
+#[cfg(feature = "profiling")]
+impl<'a> QueryExecutionProfile<'a> {
+    pub(crate) fn new(handle: QueryProfileHandle<'a>) -> Self {
+        Self {
+            handle,
+            elapsed: Duration::ZERO,
+            started: false,
+            finished: false,
+        }
+    }
+
+    pub(crate) fn measure<T>(&mut self, f: impl FnOnce() -> T) -> T {
+        if self.finished {
+            return f();
+        }
+
+        self.started = true;
+        let start = Instant::now();
+        let result = f();
+        self.elapsed += start.elapsed();
+        result
+    }
+
+    pub(crate) fn finish(&mut self) {
+        if self.started && !self.finished {
+            self.handle.record_execution(self.elapsed);
+            self.finished = true;
+        }
+    }
+}
+
+#[cfg(feature = "profiling")]
+impl Drop for QueryExecutionProfile<'_> {
+    fn drop(&mut self) {
+        self.finish();
+    }
+}
+
+#[cfg(feature = "profiling")]
 pub(crate) struct QueryProfileScope<'a> {
     profiler: &'a RefCell<QueryProfiler>,
     query: &'static str,
@@ -136,22 +182,12 @@ pub(crate) struct QueryProfileScope<'a> {
 #[cfg(feature = "profiling")]
 impl Drop for QueryProfileScope<'_> {
     fn drop(&mut self) {
-        self.profiler
-            .borrow_mut()
-            .record_query_timing(self.query, self.start_time.elapsed());
+        QueryProfileHandle::new(self.profiler, self.query)
+            .record_execution(self.start_time.elapsed());
     }
 }
 
-#[cfg(not(feature = "profiling"))]
-pub(crate) struct QueryProfiler;
-
-#[cfg(not(feature = "profiling"))]
-impl Default for QueryProfiler {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
+#[cfg(feature = "profiling")]
 #[derive(Clone, Debug)]
 pub(crate) struct QueryTiming {
     pub(crate) count: usize,
@@ -188,9 +224,6 @@ pub(crate) struct QueryTimingRow {
     pub(crate) min: Duration,
     pub(crate) max: Duration,
 }
-
-#[cfg(not(feature = "profiling"))]
-pub(crate) struct QueryTimingRow;
 
 #[cfg(feature = "profiling")]
 impl ProfilingData {

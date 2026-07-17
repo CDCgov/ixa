@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use super::file::write_profiling_data_to_file;
+use crate::execution_stats::ExecutionStatistics;
 use crate::{error, Context, ContextReportExt};
 
 /// Trait extension for [`Context`] providing profiling capabilities.
@@ -16,7 +17,14 @@ pub trait ProfilingContextExt: ContextReportExt {
     /// Writes the execution statistics for the context and all profiling data
     /// to a JSON file.
     fn write_profiling_data(&mut self) {
-        write_profiling_data(self, &[]);
+        #[cfg(feature = "profiling")]
+        write_profiling_output(self, |path, statistics| {
+            write_profiling_data_to_file(path, statistics, &[])
+        });
+        #[cfg(not(feature = "profiling"))]
+        write_profiling_output(self, |path, statistics| {
+            write_profiling_data_to_file(path, statistics)
+        });
     }
 }
 
@@ -33,11 +41,16 @@ impl ProfilingContextExt for Context {
 
     fn write_profiling_data(&mut self) {
         #[cfg(feature = "profiling")]
-        let query_timings = self.query_timings_table();
+        {
+            let query_timings = self.query_timings_table();
+            write_profiling_output(self, |path, statistics| {
+                write_profiling_data_to_file(path, statistics, &query_timings)
+            });
+        }
         #[cfg(not(feature = "profiling"))]
-        let query_timings = [];
-
-        write_profiling_data(self, &query_timings);
+        write_profiling_output(self, |path, statistics| {
+            write_profiling_data_to_file(path, statistics)
+        });
     }
 }
 
@@ -50,10 +63,11 @@ fn print_execution_statistics<C: ContextReportExt>(context: &mut C, include_prof
     }
 }
 
-fn write_profiling_data<C: ContextReportExt>(
-    context: &mut C,
-    query_timings: &[super::QueryTimingRow],
-) {
+fn write_profiling_output<C, F>(context: &mut C, write: F)
+where
+    C: ContextReportExt,
+    F: FnOnce(&Path, ExecutionStatistics) -> std::io::Result<()>,
+{
     let (mut prefix, directory, overwrite) = {
         let report_options = context.report_options();
         (
@@ -78,7 +92,7 @@ fn write_profiling_data<C: ContextReportExt>(
         return;
     }
 
-    write_profiling_data_to_file(profiling_data_path, execution_statistics, query_timings)
+    write(profiling_data_path, execution_statistics)
         .expect("could not write profiling data to file");
 }
 

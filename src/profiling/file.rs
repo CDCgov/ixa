@@ -12,6 +12,7 @@ use serde::{Serialize, Serializer};
 use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
 use super::profiling_data;
+#[cfg(feature = "profiling")]
 use super::QueryTimingRow;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
@@ -179,7 +180,6 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     _file_path: P,
     _execution_statistics: ExecutionStatistics,
-    _query_timings: &[QueryTimingRow],
 ) -> std::io::Result<()> {
     Ok(())
 }

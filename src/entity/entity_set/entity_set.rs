@@ -27,7 +27,7 @@ use crate::random::{
 pub struct EntitySet<'a, E: Entity> {
     pub(super) inner: EntitySetInner<'a, E>,
     #[cfg(feature = "profiling")]
-    query_profile: Option<crate::profiling::QueryProfileHandle<'a>>,
+    pub(in crate::entity) query_profile: Option<crate::profiling::QueryProfileHandle<'a>>,
 }
 
 /// Internal set-expression tree used to represent composed query sources.
@@ -37,11 +37,6 @@ pub(super) enum EntitySetInner<'a, E: Entity> {
     Intersection(Vec<EntitySet<'a, E>>),
     Difference(Box<EntitySet<'a, E>>, Box<EntitySet<'a, E>>),
 }
-
-#[cfg(feature = "profiling")]
-type AlgebraQueryProfile<'a> = Option<crate::profiling::QueryProfileHandle<'a>>;
-#[cfg(not(feature = "profiling"))]
-type AlgebraQueryProfile<'a> = ();
 
 impl<'a, E: Entity> Clone for EntitySet<'a, E> {
     fn clone(&self) -> Self {
@@ -79,79 +74,24 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         }
     }
 
+    /// Set algebra retains profiling only when all profiled operands have the
+    /// same query identity. This avoids charging a composed operation to an
+    /// arbitrary query while preserving a single identifiable query origin.
     #[cfg(feature = "profiling")]
-    fn with_optional_query_profile(self, profile: AlgebraQueryProfile<'a>) -> Self {
-        let mut set = self;
-        set.query_profile = profile;
-        set
-    }
-
-    #[cfg(not(feature = "profiling"))]
-    fn with_optional_query_profile(self, profile: AlgebraQueryProfile<'a>) -> Self {
-        let _ = profile;
-        self
-    }
-
-    fn take_algebra_query_profile(left: &mut Self, right: &mut Self) -> AlgebraQueryProfile<'a> {
-        #[cfg(feature = "profiling")]
-        {
-            match (left.query_profile.take(), right.query_profile.take()) {
-                (Some(left_profile), Some(right_profile))
-                    if left_profile.same_query_as(right_profile) =>
-                {
-                    Some(left_profile)
-                }
-                (Some(_), Some(_)) => None,
-                (profile @ Some(_), None) | (None, profile @ Some(_)) => profile,
-                (None, None) => None,
+    fn unique_query_profile(
+        left: &Self,
+        right: &Self,
+    ) -> Option<crate::profiling::QueryProfileHandle<'a>> {
+        match (left.query_profile, right.query_profile) {
+            (Some(left_profile), Some(right_profile))
+                if left_profile.same_query_as(right_profile) =>
+            {
+                Some(left_profile)
             }
+            (Some(_), Some(_)) => None,
+            (profile @ Some(_), None) | (None, profile @ Some(_)) => profile,
+            (None, None) => None,
         }
-        #[cfg(not(feature = "profiling"))]
-        {
-            let _ = (left, right);
-        }
-    }
-
-    #[cfg(feature = "profiling")]
-    pub(crate) fn with_query_profile(
-        mut self,
-        profile: crate::profiling::QueryProfileHandle<'a>,
-    ) -> Self {
-        self.query_profile = Some(profile);
-        self
-    }
-
-    #[cfg(feature = "profiling")]
-    pub(super) fn split_query_profile(
-        mut self,
-    ) -> (Self, Option<crate::profiling::QueryProfileHandle<'a>>) {
-        let query_profile = self.query_profile.take();
-        (self, query_profile)
-    }
-
-    fn record_query_timing<T>(&self, f: impl FnOnce() -> T) -> T {
-        #[cfg(feature = "profiling")]
-        {
-            if let Some(profile) = self.query_profile {
-                let _query_profile_scope = profile.scope();
-                let result = f();
-                return result;
-            }
-        }
-        f()
-    }
-
-    #[cfg(feature = "profiling")]
-    fn clone_without_query_profile(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            query_profile: None,
-        }
-    }
-
-    #[cfg(not(feature = "profiling"))]
-    fn clone_without_query_profile(&self) -> Self {
-        self.clone()
     }
 
     pub(super) fn is_source_leaf(&self) -> bool {
@@ -192,132 +132,197 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         Self::new(EntitySetInner::Intersection(sets))
     }
 
-    #[must_use]
-    pub fn union(mut self, mut other: Self) -> Self {
-        let query_profile = Self::take_algebra_query_profile(&mut self, &mut other);
-
-        // Idempotence: A ∪ A = A  (same structure over same sources)
-        if self.structurally_eq(&other) {
-            return self.with_optional_query_profile(query_profile);
-        }
-
-        // Adjacent or overlapping intervals
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            if a.start <= b.end && b.start <= a.end {
-                return Self::from_source(SourceSet::population_range(
-                    a.start.min(b.start)..a.end.max(b.end),
-                ))
-                .with_optional_query_profile(query_profile);
-            }
-        }
-
-        // Union with empty set is identity: A ∪ ∅ = ∅ ∪ A = A
-        match (self.is_empty(), other.is_empty()) {
-            (true, _) => return other.with_optional_query_profile(query_profile),
-            (_, true) => return self.with_optional_query_profile(query_profile),
-            _ => { /* pass */ }
-        }
-
-        // Larger set on LHS: more likely to short-circuit `||`.
-        let (left, right) = if self.sort_key() >= other.sort_key() {
-            (self, other)
-        } else {
-            (other, self)
-        };
-        Self::new(EntitySetInner::Union(Box::new(left), Box::new(right)))
-            .with_optional_query_profile(query_profile)
+    #[cfg(feature = "profiling")]
+    #[inline]
+    pub(in crate::entity) fn with_query_profile(
+        mut self,
+        profile: crate::profiling::QueryProfileHandle<'a>,
+    ) -> Self {
+        self.query_profile = Some(profile);
+        self
     }
 
     #[must_use]
-    pub fn intersection(mut self, mut other: Self) -> Self {
-        let query_profile = Self::take_algebra_query_profile(&mut self, &mut other);
+    pub fn union(self, other: Self) -> Self {
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
+        };
 
-        // Idempotence: A ∩ A = A
-        if self.structurally_eq(&other) {
-            return self.with_optional_query_profile(query_profile);
-        }
+        let result = 'result: {
+            // Idempotence: A ∪ A = A  (same structure over same sources)
+            if left.structurally_eq(&right) {
+                break 'result left;
+            }
 
-        // Intersection of overlapping intervals
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            let overlap = a.start.max(b.start)..a.end.min(b.end);
-            return if overlap.is_empty() {
-                Self::empty()
+            // Adjacent or overlapping intervals
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                if a.start <= b.end && b.start <= a.end {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        a.start.min(b.start)..a.end.max(b.end),
+                    ));
+                }
+            }
+
+            // Union with empty set is identity: A ∪ ∅ = ∅ ∪ A = A
+            match (left.is_empty(), right.is_empty()) {
+                (true, _) => break 'result right,
+                (_, true) => break 'result left,
+                _ => { /* pass */ }
+            }
+
+            // Larger set on LHS: more likely to short-circuit `||`.
+            let (left, right) = if left.sort_key() >= right.sort_key() {
+                (left, right)
             } else {
-                Self::from_source(SourceSet::population_range(overlap))
-            }
-            .with_optional_query_profile(query_profile);
-        }
-
-        // Intersection an empty set is empty: A ∩ ∅ = ∅ ∩ A = ∅
-        match (self.is_empty(), other.is_empty()) {
-            (true, _) => return self.with_optional_query_profile(query_profile),
-            (_, true) => return other.with_optional_query_profile(query_profile),
-            _ => { /* pass */ }
-        }
-
-        let mut sets = match self {
-            EntitySet {
-                inner: EntitySetInner::Intersection(sets),
-                ..
-            } => sets,
-            _ => vec![self],
+                (right, left)
+            };
+            break 'result Self::new(EntitySetInner::Union(Box::new(left), Box::new(right)));
         };
-
-        sets.push(other);
-        // Keep intersections sorted smallest-to-largest so iterators can take the
-        // first source as the driver and membership checks short-circuit quickly.
-        sets.sort_unstable_by_key(EntitySet::sort_key);
-        Self::new(EntitySetInner::Intersection(sets)).with_optional_query_profile(query_profile)
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
     }
 
     #[must_use]
-    pub fn difference(mut self, mut other: Self) -> Self {
-        let query_profile = Self::take_algebra_query_profile(&mut self, &mut other);
+    pub fn intersection(self, other: Self) -> Self {
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
+        };
 
-        // Self-subtraction: A \ A = ∅
-        if self.structurally_eq(&other) {
-            return Self::empty().with_optional_query_profile(query_profile);
-        }
+        let result = 'result: {
+            // Idempotence: A ∩ A = A
+            if left.structurally_eq(&right) {
+                break 'result left;
+            }
 
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            let overlap = a.start.max(b.start)..a.end.min(b.end);
-            // Disjoint ranges leave the left operand unchanged.
-            if overlap.is_empty() {
-                return Self::from_source(SourceSet::population_range(a))
-                    .with_optional_query_profile(query_profile);
+            // Intersection of overlapping intervals
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                let overlap = a.start.max(b.start)..a.end.min(b.end);
+                break 'result if overlap.is_empty() {
+                    Self::empty()
+                } else {
+                    Self::from_source(SourceSet::population_range(overlap))
+                };
             }
-            // A covering subtraction removes the entire left range.
-            if overlap.start == a.start && overlap.end == a.end {
-                return Self::empty().with_optional_query_profile(query_profile);
-            }
-            // Trimming the left edge still leaves one contiguous suffix.
-            if overlap.start == a.start {
-                return Self::from_source(SourceSet::population_range(overlap.end..a.end))
-                    .with_optional_query_profile(query_profile);
-            }
-            // Trimming the right edge still leaves one contiguous prefix.
-            if overlap.end == a.end {
-                return Self::from_source(SourceSet::population_range(a.start..overlap.start))
-                    .with_optional_query_profile(query_profile);
-            }
-            // An interior subtraction would split the range, so keep the generic difference node.
-        }
 
-        // Subtraction involving an empty set is identity: A \ ∅ = A, ∅ \ A = ∅
-        if self.is_empty() || other.is_empty() {
-            return self.with_optional_query_profile(query_profile);
-        }
+            // Intersection an empty set is empty: A ∩ ∅ = ∅ ∩ A = ∅
+            match (left.is_empty(), right.is_empty()) {
+                (true, _) => break 'result left,
+                (_, true) => break 'result right,
+                _ => { /* pass */ }
+            }
 
-        Self::new(EntitySetInner::Difference(Box::new(self), Box::new(other)))
-            .with_optional_query_profile(query_profile)
+            let mut sets = match left {
+                EntitySet {
+                    inner: EntitySetInner::Intersection(sets),
+                    ..
+                } => sets,
+                _ => vec![left],
+            };
+
+            sets.push(right);
+            // Keep intersections sorted smallest-to-largest so iterators can take the
+            // first source as the driver and membership checks short-circuit quickly.
+            sets.sort_unstable_by_key(EntitySet::sort_key);
+            break 'result Self::new(EntitySetInner::Intersection(sets));
+        };
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
+    }
+
+    #[must_use]
+    pub fn difference(self, other: Self) -> Self {
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
+        };
+
+        let result = 'result: {
+            // Self-subtraction: A \ A = ∅
+            if left.structurally_eq(&right) {
+                break 'result Self::empty();
+            }
+
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                let overlap = a.start.max(b.start)..a.end.min(b.end);
+                // Disjoint ranges leave the left operand unchanged.
+                if overlap.is_empty() {
+                    break 'result Self::from_source(SourceSet::population_range(a));
+                }
+                // A covering subtraction removes the entire left range.
+                if overlap.start == a.start && overlap.end == a.end {
+                    break 'result Self::empty();
+                }
+                // Trimming the left edge still leaves one contiguous suffix.
+                if overlap.start == a.start {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        overlap.end..a.end,
+                    ));
+                }
+                // Trimming the right edge still leaves one contiguous prefix.
+                if overlap.end == a.end {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        a.start..overlap.start,
+                    ));
+                }
+                // An interior subtraction would split the range, so keep the generic difference node.
+            }
+
+            // Subtraction involving an empty set is identity: A \ ∅ = A, ∅ \ A = ∅
+            if left.is_empty() || right.is_empty() {
+                break 'result left;
+            }
+
+            break 'result Self::new(EntitySetInner::Difference(Box::new(left), Box::new(right)));
+        };
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
     }
 
     /// Test whether `entity_id` is a member of this set.
     #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
         #[cfg(feature = "profiling")]
-        return self.record_query_timing(|| self.contains_impl(entity_id));
-        #[cfg(not(feature = "profiling"))]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
         self.contains_impl(entity_id)
     }
 
@@ -354,36 +359,40 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
         X: Borrow<EntityId<E>>,
     {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         let excluded = *excluded.borrow();
         if let Some(n) = self.try_len_impl() {
-            self.record_query_timing(|| {
-                if n == 0 {
-                    None
-                } else {
-                    let p = rng.random_range(0..n as u32) as usize;
-                    match self.try_nth(p) {
-                        Some(candidate) if candidate != excluded => Some(candidate),
-                        Some(_) if n == 1 => None,
-                        Some(_) => {
-                            // `excluded` is at position `p`. Resample from the n-1 remaining
-                            // positions: pick `k` uniform in `[0, n-1)`, then map it around
-                            // the hole at `p`.
-                            let k = rng.random_range(0..(n - 1) as u32) as usize;
-                            let target = if k < p { k } else { k + 1 };
-                            self.try_nth(target)
-                        }
-                        None => None,
+            if n == 0 {
+                None
+            } else {
+                let p = rng.random_range(0..n as u32) as usize;
+                match self.try_nth(p) {
+                    Some(candidate) if candidate != excluded => Some(candidate),
+                    Some(_) if n == 1 => None,
+                    Some(_) => {
+                        // `excluded` is at position `p`. Resample from the n-1 remaining
+                        // positions: pick `k` uniform in `[0, n-1)`, then map it around
+                        // the hole at `p`.
+                        let k = rng.random_range(0..(n - 1) as u32) as usize;
+                        let target = if k < p { k } else { k + 1 };
+                        self.try_nth(target)
                     }
+                    None => None,
                 }
-            })
+            }
         } else {
-            self.record_query_timing(|| {
-                sample_single_excluding_l_reservoir(
-                    rng,
-                    self.clone_without_query_profile(),
-                    excluded,
-                )
-            })
+            let set = self.clone();
+            #[cfg(feature = "profiling")]
+            let set = {
+                let mut set = set;
+                set.query_profile = None;
+                set
+            };
+            sample_single_excluding_l_reservoir(rng, set, excluded)
         }
     }
 
@@ -394,20 +403,28 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         if let Some(n) = self.try_len_impl() {
-            return self.record_query_timing(|| {
-                if n == 0 {
-                    warn!("Requested a sample entity from an empty population");
-                    return None;
-                }
-                // The `u32` cast makes this function 30% faster than `usize`.
-                let index = rng.random_range(0..n as u32) as usize;
-                self.try_nth(index)
-            });
+            if n == 0 {
+                warn!("Requested a sample entity from an empty population");
+                return None;
+            }
+            // The `u32` cast makes this function 30% faster than `usize`.
+            let index = rng.random_range(0..n as u32) as usize;
+            return self.try_nth(index);
         }
-        self.record_query_timing(|| {
-            sample_single_l_reservoir(rng, self.clone_without_query_profile())
-        })
+        let set = self.clone();
+        #[cfg(feature = "profiling")]
+        let set = {
+            let mut set = set;
+            set.query_profile = None;
+            set
+        };
+        sample_single_l_reservoir(rng, set)
     }
 
     /// Count the entities in this set and sample one uniformly from them.
@@ -418,18 +435,26 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         if let Some(n) = self.try_len_impl() {
-            return self.record_query_timing(|| {
-                if n == 0 {
-                    return (0, None);
-                }
-                let index = rng.random_range(0..n as u32) as usize;
-                (n, self.try_nth(index))
-            });
+            if n == 0 {
+                return (0, None);
+            }
+            let index = rng.random_range(0..n as u32) as usize;
+            return (n, self.try_nth(index));
         }
-        self.record_query_timing(|| {
-            count_and_sample_single_l_reservoir(rng, self.clone_without_query_profile())
-        })
+        let set = self.clone();
+        #[cfg(feature = "profiling")]
+        let set = {
+            let mut set = set;
+            set.query_profile = None;
+            set
+        };
+        count_and_sample_single_l_reservoir(rng, set)
     }
 
     /// Sample up to `requested` entities uniformly from this set. If the set
@@ -439,21 +464,36 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         match self.try_len_impl() {
-            Some(0) => self.record_query_timing(|| {
+            Some(0) => {
                 warn!("Requested a sample of entities from an empty population");
                 vec![]
-            }),
-            Some(_) => self.record_query_timing(|| {
-                sample_multiple_from_known_length(
-                    rng,
-                    self.clone_without_query_profile(),
-                    requested,
-                )
-            }),
-            None => self.record_query_timing(|| {
-                sample_multiple_l_reservoir(rng, self.clone_without_query_profile(), requested)
-            }),
+            }
+            Some(_) => {
+                let set = self.clone();
+                #[cfg(feature = "profiling")]
+                let set = {
+                    let mut set = set;
+                    set.query_profile = None;
+                    set
+                };
+                sample_multiple_from_known_length(rng, set, requested)
+            }
+            None => {
+                let set = self.clone();
+                #[cfg(feature = "profiling")]
+                let set = {
+                    let mut set = set;
+                    set.query_profile = None;
+                    set
+                };
+                sample_multiple_l_reservoir(rng, set, requested)
+            }
         }
     }
 
@@ -464,8 +504,9 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     #[must_use]
     pub fn try_len(&self) -> Option<usize> {
         #[cfg(feature = "profiling")]
-        return self.record_query_timing(|| self.try_len_impl());
-        #[cfg(not(feature = "profiling"))]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
         self.try_len_impl()
     }
 

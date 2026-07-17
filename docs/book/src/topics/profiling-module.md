@@ -118,6 +118,27 @@ See `examples/profiling` in the repository for a more complete example,
 including configuring `report_options()` to control the output directory, file
 prefix, and overwrite behavior.
 
+## Query timings
+
+When the `profiling` feature is enabled, context query APIs automatically
+aggregate query execution times by query shape. A query shape consists of the
+entity type and its unordered property names; property values do not affect the
+identity. For example, queries for `Age(10), Alive(true)` and
+`Alive(false), Age(20)` share one timing row.
+
+The `Count` column reports consumed query executions. Each eager query method or
+`EntitySet` terminal operation counts once. An iterator counts once when it
+performs query work, whether it is consumed through `next`, `count`, `for_each`,
+or `fold`. Creating and dropping an unused iterator does not increment the
+count. For partially consumed iterators, only work completed before the iterator
+is dropped contributes to the recorded execution time. User callback time in
+`for_each` and `fold` is excluded.
+
+Set algebra retains a query profile when all profiled operands have the same
+query identity, including when a profiled set is combined with an unprofiled
+set. Combining sets with different query identities clears the profile from the
+result so the composed work is not attributed to an arbitrary query.
+
 ## Writing JSON output
 
 `ProfilingContextExt::write_profiling_data()` writes a pretty JSON file to:
