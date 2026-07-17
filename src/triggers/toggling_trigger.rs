@@ -1,173 +1,3 @@
-//! Composite trigger that toggles between inactive and active states.
-//!
-//! [`TogglingTriggerCriteria`] composes two trigger criteria: one activation criterion and one
-//! deactivation criterion. The trigger starts inactive by default. When the activation criterion
-//! matches while inactive, the trigger becomes active and emits the activation event. Later
-//! activation matches are ignored while the trigger remains active. When the deactivation criterion
-//! matches while active, the trigger becomes inactive and emits the deactivation event. Later
-//! deactivation matches are ignored while the trigger remains inactive.
-//!
-//! This is useful for thermostat-style hysteresis. For example, a model can activate an
-//! intervention when a property-value count reaches a lower threshold and deactivate it when the
-//! same count reaches an upper threshold. The thresholds themselves are ordinary criteria; the
-//! toggling trigger only gates those criteria by its current active/inactive state.
-//!
-//! ## Construction
-//!
-//! ```rust,ignore
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_active()
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_inactive()
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).once()
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).repeating()
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
-//!     .emit_with(make_active_event, make_inactive_event)
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
-//!     .emit_values(active_event, inactive_event)
-//! TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
-//!     .emit_defaults::<ActiveEv, InactiveEv>()
-//! ```
-//!
-//! ```rust,ignore
-//! TogglingTrigger::new(
-//!     activation_criterion,
-//!     make_active_event,
-//!     deactivation_criterion,
-//!     make_inactive_event,
-//! )
-//! TogglingTrigger::new(
-//!     activation_criterion,
-//!     make_active_event,
-//!     deactivation_criterion,
-//!     make_inactive_event,
-//! ).initially_active()
-//! TogglingTrigger::new(
-//!     activation_criterion,
-//!     make_active_event,
-//!     deactivation_criterion,
-//!     make_inactive_event,
-//! ).initially_inactive()
-//! TogglingTrigger::new(
-//!     activation_criterion,
-//!     make_active_event,
-//!     deactivation_criterion,
-//!     make_inactive_event,
-//! ).once()
-//! TogglingTrigger::new(
-//!     activation_criterion,
-//!     make_active_event,
-//!     deactivation_criterion,
-//!     make_inactive_event,
-//! ).repeating()
-//! ```
-//!
-//! ## Observation
-//!
-//! `TogglingTrigger` does not define its own observation struct. The activation event constructor
-//! receives the activation criterion's observation, and the deactivation event constructor receives
-//! the deactivation criterion's observation:
-//!
-//! ```rust,ignore
-//! make_active_event: impl Fn(AC::Observation) -> ActiveEv
-//! make_inactive_event: impl Fn(DC::Observation) -> InactiveEv
-//! ```
-//!
-//! ## Semantics
-//!
-//! - If the trigger is inactive and the activation criterion matches, a single activation event is
-//!   emitted and the trigger's internal state is changed to active.
-//! - If the trigger is inactive and the deactivation criterion matches, there is no effect.
-//! - If the trigger is active and the activation criterion matches, there is no effect.
-//! - If the trigger is active and the deactivation criterion matches, a single deactivation event
-//!   is emitted and the trigger's internal state is changed to inactive.
-//!
-//! ### Repeating or once
-//!
-//! The "mode" of the completed [`TogglingTrigger`] controls how long the active/inactive state
-//! machine remains enabled. A toggling trigger defaults to
-//! [`TriggerMode::Repeating`](super::TriggerMode::Repeating), whether it is constructed through
-//! [`TogglingTriggerCriteria::emit_with`] or directly with [`TogglingTrigger::new`]. In repeating
-//! mode, it can activate, deactivate, and activate again for as long as its component criteria
-//! continue to match.
-//!
-//! Calling [`TogglingTriggerCriteria::once`] or [`TogglingTrigger::once`] sets the completed
-//! toggling trigger to [`TriggerMode::Once`]. For a toggling trigger, "once" means one active
-//! period, _not_ one raw criterion match. If the trigger starts inactive, it can emit one activation
-//! event and then one deactivation event. After that deactivation event, the toggling trigger is
-//! permanently disabled and ignores all later criterion matches. If the trigger starts active with
-//! [`TogglingTriggerCriteria::initially_active`] or [`TogglingTrigger::initially_active`], the one
-//! active period is already in progress; the first accepted deactivation emits the deactivation
-//! event and then disables the trigger. (Matches of the underlying criterion that are ignored
-//! because they occur in the wrong active/inactive state do not by themselves disable a `once`
-//! toggling trigger.)
-//!
-//! The mode of the completed `TogglingTrigger` should not be confused with the mode of each component
-//! criterion, which controls how often that individual criterion reports matches to the toggling
-//! trigger. In fact, component criteria should almost always be repeating even when the
-//! `TogglingTrigger` itself is configured with [`TogglingTriggerCriteria::once`] or
-//! [`TogglingTrigger::once`]. If an underlying criterion uses
-//! [`TriggerMode::Once`](super::TriggerMode::Once), that criterion can be consumed by a match that
-//! the toggling trigger ignores because it occurred in the wrong state. For example, a once-only
-//! activation criterion can match while the toggling trigger is already active; the toggling trigger
-//! will correctly ignore that activation match, but the activation criterion may never report
-//! another match.
-//!
-//! [`TogglingTrigger::new`] is also available for all-at-once construction of a complete
-//! `TogglingTrigger`.
-//!
-//! ## Example
-//!
-//! ```rust
-//! use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
-//! use ixa::triggers::{
-//!     ContextTriggersExt, PropertyValueCountTrigger, TogglingTriggerCriteria,
-//! };
-//!
-//! define_entity!(Person);
-//! define_property!(
-//!     enum InfectionStatus {
-//!         Susceptible,
-//!         Infectious,
-//!     },
-//!     Person,
-//!     default_const = InfectionStatus::Susceptible
-//! );
-//!
-//! #[derive(IxaEvent)]
-//! struct InterventionActivated {
-//!     count: usize,
-//! }
-//!
-//! #[derive(IxaEvent)]
-//! struct InterventionDeactivated {
-//!     count: usize,
-//! }
-//!
-//! let mut context = Context::new();
-//!
-//! context.register_trigger(TogglingTriggerCriteria::new(
-//!     PropertyValueCountTrigger::changes_to(
-//!         InfectionStatus::Infectious,
-//!         10,
-//!     ),
-//!     PropertyValueCountTrigger::changes_to(
-//!         InfectionStatus::Infectious,
-//!         25,
-//!     ),
-//! ).emit_with(
-//!     |event| InterventionActivated { count: event.count },
-//!     |event| InterventionDeactivated { count: event.count },
-//! ));
-//!
-//! context.subscribe_to_event(|_context, _event: InterventionActivated| {
-//!     // respond when the intervention becomes active
-//! });
-//!
-//! context.subscribe_to_event(|_context, _event: InterventionDeactivated| {
-//!     // respond when the intervention becomes inactive
-//! });
-//! ```
-
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -176,6 +6,174 @@ use super::{TriggerCriterion, TriggerMode, TriggerSpec};
 use crate::{Context, IxaEvent};
 
 /// A pair of activation and deactivation criteria that can be bound to emitted events.
+///
+/// [`TogglingTriggerCriteria`] composes two trigger criteria: one activation criterion and one
+/// deactivation criterion. The trigger starts inactive by default. When the activation criterion
+/// matches while inactive, the trigger becomes active and emits the activation event. Later
+/// activation matches are ignored while the trigger remains active. When the deactivation criterion
+/// matches while active, the trigger becomes inactive and emits the deactivation event. Later
+/// deactivation matches are ignored while the trigger remains inactive.
+///
+/// This is useful for thermostat-style hysteresis. For example, a model can activate an
+/// intervention when a property-value count reaches a lower threshold and deactivate it when the
+/// same count reaches an upper threshold. The thresholds themselves are ordinary criteria; the
+/// toggling trigger only gates those criteria by its current active/inactive state.
+///
+/// ## Construction
+///
+/// ```rust,ignore
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_active()
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).initially_inactive()
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).once()
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion).repeating()
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+///     .emit_with(make_active_event, make_inactive_event)
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+///     .emit_values(active_event, inactive_event)
+/// TogglingTriggerCriteria::new(activation_criterion, deactivation_criterion)
+///     .emit_defaults::<ActiveEv, InactiveEv>()
+/// ```
+///
+/// ```rust,ignore
+/// TogglingTrigger::new(
+///     activation_criterion,
+///     make_active_event,
+///     deactivation_criterion,
+///     make_inactive_event,
+/// )
+/// TogglingTrigger::new(
+///     activation_criterion,
+///     make_active_event,
+///     deactivation_criterion,
+///     make_inactive_event,
+/// ).initially_active()
+/// TogglingTrigger::new(
+///     activation_criterion,
+///     make_active_event,
+///     deactivation_criterion,
+///     make_inactive_event,
+/// ).initially_inactive()
+/// TogglingTrigger::new(
+///     activation_criterion,
+///     make_active_event,
+///     deactivation_criterion,
+///     make_inactive_event,
+/// ).once()
+/// TogglingTrigger::new(
+///     activation_criterion,
+///     make_active_event,
+///     deactivation_criterion,
+///     make_inactive_event,
+/// ).repeating()
+/// ```
+///
+/// ## Observation
+///
+/// `TogglingTrigger` does not define its own observation struct. The activation event constructor
+/// receives the activation criterion's observation, and the deactivation event constructor receives
+/// the deactivation criterion's observation:
+///
+/// ```rust,ignore
+/// make_active_event: impl Fn(AC::Observation) -> ActiveEv
+/// make_inactive_event: impl Fn(DC::Observation) -> InactiveEv
+/// ```
+///
+/// ## Semantics
+///
+/// - If the trigger is inactive and the activation criterion matches, a single activation event is
+///   emitted and the trigger's internal state is changed to active.
+/// - If the trigger is inactive and the deactivation criterion matches, there is no effect.
+/// - If the trigger is active and the activation criterion matches, there is no effect.
+/// - If the trigger is active and the deactivation criterion matches, a single deactivation event
+///   is emitted and the trigger's internal state is changed to inactive.
+///
+/// ### Repeating or once
+///
+/// The "mode" of the completed [`TogglingTrigger`] controls how long the active/inactive state
+/// machine remains enabled. A toggling trigger defaults to
+/// [`TriggerMode::Repeating`](super::TriggerMode::Repeating), whether it is constructed through
+/// [`TogglingTriggerCriteria::emit_with`] or directly with [`TogglingTrigger::new`]. In repeating
+/// mode, it can activate, deactivate, and activate again for as long as its component criteria
+/// continue to match.
+///
+/// Calling [`TogglingTriggerCriteria::once`] or [`TogglingTrigger::once`] sets the completed
+/// toggling trigger to [`TriggerMode::Once`]. For a toggling trigger, "once" means one active
+/// period, _not_ one raw criterion match. If the trigger starts inactive, it can emit one activation
+/// event and then one deactivation event. After that deactivation event, the toggling trigger is
+/// permanently disabled and ignores all later criterion matches. If the trigger starts active with
+/// [`TogglingTriggerCriteria::initially_active`] or [`TogglingTrigger::initially_active`], the one
+/// active period is already in progress; the first accepted deactivation emits the deactivation
+/// event and then disables the trigger. (Matches of the underlying criterion that are ignored
+/// because they occur in the wrong active/inactive state do not by themselves disable a `once`
+/// toggling trigger.)
+///
+/// The mode of the completed `TogglingTrigger` should not be confused with the mode of each component
+/// criterion, which controls how often that individual criterion reports matches to the toggling
+/// trigger. In fact, component criteria should almost always be repeating even when the
+/// `TogglingTrigger` itself is configured with [`TogglingTriggerCriteria::once`] or
+/// [`TogglingTrigger::once`]. If an underlying criterion uses
+/// [`TriggerMode::Once`](super::TriggerMode::Once), that criterion can be consumed by a match that
+/// the toggling trigger ignores because it occurred in the wrong state. For example, a once-only
+/// activation criterion can match while the toggling trigger is already active; the toggling trigger
+/// will correctly ignore that activation match, but the activation criterion may never report
+/// another match.
+///
+/// [`TogglingTrigger::new`] is also available for all-at-once construction of a complete
+/// `TogglingTrigger`.
+///
+/// ## Example
+///
+/// ```rust
+/// use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
+/// use ixa::triggers::{
+///     ContextTriggersExt, PropertyValueCountTrigger, TogglingTriggerCriteria,
+/// };
+///
+/// define_entity!(Person);
+/// define_property!(
+///     enum InfectionStatus {
+///         Susceptible,
+///         Infectious,
+///     },
+///     Person,
+///     default_const = InfectionStatus::Susceptible
+/// );
+///
+/// #[derive(IxaEvent)]
+/// struct InterventionActivated {
+///     count: usize,
+/// }
+///
+/// #[derive(IxaEvent)]
+/// struct InterventionDeactivated {
+///     count: usize,
+/// }
+///
+/// let mut context = Context::new();
+///
+/// context.register_trigger(TogglingTriggerCriteria::new(
+///     PropertyValueCountTrigger::changes_to(
+///         InfectionStatus::Infectious,
+///         10,
+///     ),
+///     PropertyValueCountTrigger::changes_to(
+///         InfectionStatus::Infectious,
+///         25,
+///     ),
+/// ).emit_with(
+///     |event| InterventionActivated { count: event.count },
+///     |event| InterventionDeactivated { count: event.count },
+/// ));
+///
+/// context.subscribe_to_event(|_context, _event: InterventionActivated| {
+///     // respond when the intervention becomes active
+/// });
+///
+/// context.subscribe_to_event(|_context, _event: InterventionDeactivated| {
+///     // respond when the intervention becomes inactive
+/// });
+/// ```
 pub struct TogglingTriggerCriteria<AC, DC> {
     activation_criterion: AC,
     deactivation_criterion: DC,
@@ -305,8 +303,12 @@ where
     }
 }
 
+/// Composite trigger that toggles between inactive and active states.
+///
 /// A complete installable trigger specification that emits activation and deactivation events when
 /// its paired criteria cause state changes.
+///
+/// See [TogglingTriggerCriteria] for complete documentation.
 pub struct TogglingTrigger<AC, DC, ActiveEv, InactiveEv, MakeActive, MakeInactive> {
     activation_criterion: AC,
     deactivation_criterion: DC,

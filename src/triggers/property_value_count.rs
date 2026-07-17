@@ -1,109 +1,3 @@
-//! Trigger criterion for the count of entities with a particular property value.
-//!
-//! [`PropertyValueCountTrigger`] observes
-//! [`EntityCreatedEvent`](crate::entity::events::EntityCreatedEvent) and
-//! [`PropertyChangeEvent`](crate::entity::events::PropertyChangeEvent) for a specific
-//! entity/property pair and emits when the count of entities with a configured property value
-//! crosses a configured threshold.
-//!
-//! ## Construction
-//!
-//! ```rust,ignore
-//! PropertyValueCountTrigger::<E, P>::increases_to(value, threshold)
-//! PropertyValueCountTrigger::<E, P>::decreases_to(value, threshold)
-//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold)
-//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).once()
-//! PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).repeating()
-//! ```
-//!
-//! ## Observation
-//!
-//! The observation data passed to
-//! [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
-//! [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose creation or property write
-//! caused the crossing, the tracked property value, the new count, the observed
-//! [`Direction`](super::Direction), the configured direction filter as `Option<Direction>`, and the
-//! selected [`TriggerMode`](super::TriggerMode):
-//!
-//! ```rust,ignore
-//! pub struct PropertyValueCountTriggerEvent<E, P>
-//! where
-//!     E: Entity,
-//!     P: Property<E>,
-//! {
-//!     pub entity_id: EntityId<E>,
-//!     pub value: P,
-//!     pub count: usize,
-//!     pub direction_filter: Option<Direction>,
-//!     pub direction: Direction,
-//!     pub mode: TriggerMode,
-//! }
-//! ```
-//!
-//! ## Semantics
-//!
-//! The initial count is measured when the trigger is registered. The criterion emits only on a
-//! later threshold crossing. Since counts change one entity at a time, a crossing occurs when the
-//! new count equals the threshold and differs from the previous count. [`Direction::Increasing`]
-//! means the count increased to the threshold, while [`Direction::Decreasing`] means the count
-//! decreased to the threshold. `changes_to` leaves the direction filter unset and emits for either
-//! observed direction. `increases_to` and `decreases_to` set the direction filter to the
-//! corresponding observed direction.
-//!
-//! By default, the criterion uses [`TriggerMode::Repeating`](super::TriggerMode::Repeating) and
-//! emits every time the count crosses the threshold and passes the configured direction filter. Call
-//! [`PropertyValueCountTrigger::once`] to emit only for the first crossing, or
-//! [`PropertyValueCountTrigger::repeating`] to return to the default repeating behavior.
-//!
-//! Entity creation can cause a crossing if the new entity has the tracked value. Property writes
-//! can cause a crossing when they move an entity into or out of the tracked value. A no-op write
-//! where `previous == current` still emits a property-change event at the entity layer, but it does
-//! not change this trigger's tracked count and therefore cannot by itself cross the threshold.
-//!
-//! ## Example
-//!
-//! ```rust
-//! use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
-//! use ixa::entity::EntityId;
-//! use ixa::triggers::{
-//!     ContextTriggersExt, Direction, PropertyValueCountTrigger, TriggerCriterion, TriggerMode,
-//! };
-//!
-//! define_entity!(Person);
-//! define_property!(
-//!     enum InfectionStatus {
-//!         Susceptible,
-//!         Infectious,
-//!     },
-//!     Person,
-//!     default_const = InfectionStatus::Susceptible
-//! );
-//!
-//! // The event records which person caused us to reach the threshold and
-//! // the value of the threshold itself (as `count`).
-//! #[derive(IxaEvent)]
-//! struct InfectiousThresholdReached {
-//!     person: EntityId<Person>,
-//!     count: usize
-//! }
-//!
-//! let mut context = Context::new();
-//!
-//! context.register_trigger(
-//!     PropertyValueCountTrigger::increases_to(
-//!         InfectionStatus::Infectious,
-//!         2,
-//!     ).emit_with(|observation| InfectiousThresholdReached {
-//!         person: observation.entity_id,
-//!         count: observation.count
-//!     }),
-//! );
-//!
-//! context.subscribe_to_event(|_context, _event: InfectiousThresholdReached| {
-//!     // respond when the infectious count crosses from below 2 to at least 2
-//! });
-//! ```
-
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -114,6 +8,111 @@ use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, EntityPropertyTuple};
 
+/// Trigger criterion for the count of entities with a particular property value.
+///
+/// [`PropertyValueCountTrigger`] observes
+/// [`EntityCreatedEvent`](crate::entity::events::EntityCreatedEvent) and
+/// [`PropertyChangeEvent`](crate::entity::events::PropertyChangeEvent) for a specific
+/// entity/property pair and emits when the count of entities with a configured property value
+/// crosses a configured threshold.
+///
+/// ## Construction
+///
+/// ```rust,ignore
+/// PropertyValueCountTrigger::<E, P>::increases_to(value, threshold)
+/// PropertyValueCountTrigger::<E, P>::decreases_to(value, threshold)
+/// PropertyValueCountTrigger::<E, P>::changes_to(value, threshold)
+/// PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).once()
+/// PropertyValueCountTrigger::<E, P>::changes_to(value, threshold).repeating()
+/// ```
+///
+/// ## Observation
+///
+/// The observation data passed to
+/// [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
+/// [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose creation or property write
+/// caused the crossing, the tracked property value, the new count, the observed
+/// [`Direction`](super::Direction), the configured direction filter as `Option<Direction>`, and the
+/// selected [`TriggerMode`](super::TriggerMode):
+///
+/// ```rust,ignore
+/// pub struct PropertyValueCountTriggerEvent<E, P>
+/// where
+///     E: Entity,
+///     P: Property<E>,
+/// {
+///     pub entity_id: EntityId<E>,
+///     pub value: P,
+///     pub count: usize,
+///     pub direction_filter: Option<Direction>,
+///     pub direction: Direction,
+///     pub mode: TriggerMode,
+/// }
+/// ```
+///
+/// ## Semantics
+///
+/// The initial count is measured when the trigger is registered. The criterion emits only on a
+/// later threshold crossing. Since counts change one entity at a time, a crossing occurs when the
+/// new count equals the threshold and differs from the previous count. [`Direction::Increasing`]
+/// means the count increased to the threshold, while [`Direction::Decreasing`] means the count
+/// decreased to the threshold. `changes_to` leaves the direction filter unset and emits for either
+/// observed direction. `increases_to` and `decreases_to` set the direction filter to the
+/// corresponding observed direction.
+///
+/// By default, the criterion uses [`TriggerMode::Repeating`](super::TriggerMode::Repeating) and
+/// emits every time the count crosses the threshold and passes the configured direction filter. Call
+/// [`PropertyValueCountTrigger::once`] to emit only for the first crossing, or
+/// [`PropertyValueCountTrigger::repeating`] to return to the default repeating behavior.
+///
+/// Entity creation can cause a crossing if the new entity has the tracked value. Property writes
+/// can cause a crossing when they move an entity into or out of the tracked value. A no-op write
+/// where `previous == current` still emits a property-change event at the entity layer, but it does
+/// not change this trigger's tracked count and therefore cannot by itself cross the threshold.
+///
+/// ## Example
+///
+/// ```rust
+/// use ixa::{Context, ContextEntitiesExt, define_entity, define_property, IxaEvent};
+/// use ixa::entity::EntityId;
+/// use ixa::triggers::{
+///     ContextTriggersExt, Direction, PropertyValueCountTrigger, TriggerCriterion, TriggerMode,
+/// };
+///
+/// define_entity!(Person);
+/// define_property!(
+///     enum InfectionStatus {
+///         Susceptible,
+///         Infectious,
+///     },
+///     Person,
+///     default_const = InfectionStatus::Susceptible
+/// );
+///
+/// // The event records which person caused us to reach the threshold and
+/// // the value of the threshold itself (as `count`).
+/// #[derive(IxaEvent)]
+/// struct InfectiousThresholdReached {
+///     person: EntityId<Person>,
+///     count: usize
+/// }
+///
+/// let mut context = Context::new();
+///
+/// context.register_trigger(
+///     PropertyValueCountTrigger::increases_to(
+///         InfectionStatus::Infectious,
+///         2,
+///     ).emit_with(|observation| InfectiousThresholdReached {
+///         person: observation.entity_id,
+///         count: observation.count
+///     }),
+/// );
+///
+/// context.subscribe_to_event(|_context, _event: InfectiousThresholdReached| {
+///     // respond when the infectious count crosses from below 2 to at least 2
+/// });
+/// ```
 pub struct PropertyValueCountTrigger<E, P>
 where
     E: Entity,
