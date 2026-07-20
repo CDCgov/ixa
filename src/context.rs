@@ -335,6 +335,40 @@ impl Context {
         self.add_passive_plan_with_phase(time, callback, ExecutionPhase::Normal)
     }
 
+    /// Schedule [`Context::shutdown`] at the specified maximum simulation time.
+    ///
+    /// The shutdown request is scheduled through [`Context::add_passive_plan`],
+    /// so it does not keep the simulation timeline alive when non-passive work is
+    /// exhausted before `time`. If execution reaches `time`, normal shutdown
+    /// finishes queued callbacks and regular plans at that time before running
+    /// shutdown-time plans. If execution ends earlier, the future passive
+    /// shutdown plan remains queued like any other future passive plan.
+    ///
+    /// This schedules the shutdown request itself. Use [`Context::add_shutdown_plan`]
+    /// to schedule work that should run during normal shutdown.
+    ///
+    /// Returns a [`PlanId`] that can be passed to [`Context::cancel_plan`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ixa::Context;
+    ///
+    /// let mut context = Context::new();
+    /// context.schedule_shutdown(10.0);
+    /// context.add_plan(20.0, |_| {});
+    ///
+    /// context.execute();
+    /// assert_eq!(context.get_current_time(), 10.0);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `time` is in the past, infinite, or NaN.
+    pub fn schedule_shutdown(&mut self, time: f64) -> PlanId {
+        self.add_passive_plan(time, Context::shutdown)
+    }
+
     /// Add a passive plan to the future event list at the specified time and
     /// with the specified phase.
     ///
@@ -736,6 +770,12 @@ pub trait ContextBase: Sized {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId;
+    /// Schedule normal shutdown as a passive plan at the specified maximum time.
+    ///
+    /// See [`Context::schedule_shutdown`] for full behavior and panic semantics.
+    fn schedule_shutdown(&mut self, time: f64) -> PlanId {
+        self.add_passive_plan(time, Context::shutdown)
+    }
     fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
     fn add_shutdown_plan_with_phase(
         &mut self,
@@ -1508,6 +1548,54 @@ mod tests {
 
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn scheduled_shutdown_stops_at_requested_time_and_drains_current_time_work() {
+        let mut context = Context::new();
+        add_plan(&mut context, 1.0, 1);
+        context.schedule_shutdown(2.0);
+        add_plan(&mut context, 2.0, 2);
+        add_plan(&mut context, 3.0, 3);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 3.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn scheduled_shutdown_does_not_keep_the_timeline_alive() {
+        let mut context = Context::new();
+        context.schedule_shutdown(5.0);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 0.0);
+
+        add_plan(&mut context, 10.0, 1);
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 5.0);
+        assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn scheduled_shutdown_can_be_cancelled() {
+        let mut context = Context::new();
+        let shutdown_plan = context.schedule_shutdown(2.0);
+        add_plan(&mut context, 3.0, 1);
+        context.cancel_plan(&shutdown_plan);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), 3.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
     }
 
     #[test]
