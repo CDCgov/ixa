@@ -86,6 +86,8 @@ mod test_plugin_context {
                 },
                 crate::ExecutionPhase::Last,
             );
+            let shutdown_plan = self.schedule_shutdown(2.0);
+            self.cancel_plan(&shutdown_plan);
             self.add_periodic_plan_with_phase(
                 1.0,
                 |context| {
