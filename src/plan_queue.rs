@@ -1,8 +1,8 @@
 //! Implementation details for Ixa's plan queues.
 //!
 //! [`PlanId`] is the only public item in this module. The queues store regular
-//! time-ordered plans and shutdown-time plans, sharing a single `PlanId`
-//! allocator and cancellation map.
+//! time-ordered plans, startup-time plans, and shutdown-time plans, sharing a
+//! single `PlanId` allocator and cancellation map.
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -21,18 +21,21 @@ struct QueuedPlan {
 /// A priority queue that stores scheduled plans.
 ///
 /// Regular plans are ordered by simulation time, execution phase, and plan ID.
-/// Shutdown-time plans are ordered by execution phase and plan ID; their stored
-/// time is only an internal constant and has no simulation-time meaning.
+/// Startup-time and shutdown-time plans are ordered by execution phase and plan
+/// ID; their stored time is only an internal constant and has no simulation-time
+/// meaning.
 pub(crate) struct PlanQueue {
     queue: BinaryHeap<PlanSchedule>,
+    startup_queue: BinaryHeap<PlanSchedule>,
     shutdown_queue: BinaryHeap<PlanSchedule>,
     data_map: HashMap<u64, QueuedPlan>,
-    /// Count of scheduled plans excluding passive and shutdown-time plans.
+    /// Count of scheduled plans excluding passive, startup-time, and shutdown-time plans.
     regular_plan_count: usize,
     /// The next plan ID that will be issued.
     next_plan_id: u64,
     /// Tracks the high water mark of plans in flight (scheduled but not yet executed).
-    /// This is the max of the two heap lengths, not of `self.data_map.len()`.
+    /// This is calculated from the combined lengths of the three heaps, not
+    /// from `self.data_map.len()`.
     #[cfg(feature = "profiling")]
     pub(crate) max_plans_in_flight: u64,
     #[cfg(feature = "profiling")]
@@ -45,6 +48,7 @@ impl PlanQueue {
     pub(crate) fn new() -> PlanQueue {
         PlanQueue {
             queue: BinaryHeap::new(),
+            startup_queue: BinaryHeap::new(),
             shutdown_queue: BinaryHeap::new(),
             data_map: HashMap::new(),
             regular_plan_count: 0,
@@ -90,6 +94,35 @@ impl PlanQueue {
         PlanId(plan_id)
     }
 
+    /// Add a startup-time plan.
+    ///
+    /// Startup-time plans have no simulation time. They are ordered by phase and
+    /// plan ID.
+    pub(crate) fn add_startup_plan(
+        &mut self,
+        callback: BoxedCallback,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        trace!("adding startup-time plan");
+        let plan_id = self.next_plan_id;
+        self.startup_queue.push(PlanSchedule {
+            plan_id,
+            time: 0.0,
+            phase,
+        });
+        self.data_map.insert(
+            plan_id,
+            QueuedPlan {
+                callback,
+                is_passive: true,
+            },
+        );
+        self.next_plan_id += 1;
+        self.update_profiling_high_water_marks();
+
+        PlanId(plan_id)
+    }
+
     /// Add a shutdown-time plan.
     ///
     /// Shutdown-time plans have no simulation time. They are ordered by phase and
@@ -119,7 +152,7 @@ impl PlanQueue {
         PlanId(plan_id)
     }
 
-    /// Cancel a plan that has been added to either queue.
+    /// Cancel a plan that has been added to any queue.
     pub(crate) fn cancel_plan(&mut self, plan_id: &PlanId) -> Option<BoxedCallback> {
         trace!("cancel plan {plan_id:?}");
         // Delete the plan from the map, but leave in the heap. It will be skipped
@@ -146,11 +179,12 @@ impl PlanQueue {
         None
     }
 
-    /// Completely empties the queue, including the plans scheduled at shutdown time.
+    /// Completely empties every queue, including startup-time and shutdown-time plans.
     #[allow(dead_code)]
     pub(crate) fn clear(&mut self) {
         self.data_map.clear();
         self.queue.clear();
+        self.startup_queue.clear();
         self.shutdown_queue.clear();
         self.regular_plan_count = 0;
         self.next_plan_id = 0;
@@ -225,30 +259,53 @@ impl PlanQueue {
         }
     }
 
+    /// Retrieve the next startup-time plan.
+    ///
+    /// Returns the next startup-time plan if it exists or else `None` if the
+    /// startup-time queue is empty.
+    pub(crate) fn pop_next_startup(&mut self) -> Option<Plan> {
+        trace!("getting next startup-time plan");
+        loop {
+            let entry = self.startup_queue.pop()?;
+
+            // If there's no `data_map` entry, the plan has been canceled, so discard
+            // and pop another plan.
+            let Some(queued_plan) = self.data_map.remove(&entry.plan_id) else {
+                continue;
+            };
+            return Some(Plan {
+                time: entry.time,
+                data: queued_plan.callback,
+            });
+        }
+    }
+
     /// Retrieve the next shutdown-time plan.
     ///
     /// Returns the next shutdown-time plan if it exists or else `None` if the
     /// shutdown-time queue is empty.
     pub(crate) fn pop_next_shutdown(&mut self) -> Option<Plan> {
         trace!("getting next shutdown-time plan");
-        std::iter::from_fn(|| self.shutdown_queue.pop()).find_map(|entry| {
+        loop {
+            let entry = self.shutdown_queue.pop()?;
+
             // If there's no `data_map` entry, the plan has been canceled, so discard
             // and pop another plan.
-            let queued_plan = self.data_map.remove(&entry.plan_id)?;
-            if !queued_plan.is_passive {
-                self.regular_plan_count -= 1;
-            }
-            Some(Plan {
+            let Some(queued_plan) = self.data_map.remove(&entry.plan_id) else {
+                continue;
+            };
+            return Some(Plan {
                 time: entry.time,
                 data: queued_plan.callback,
-            })
-        })
+            });
+        }
     }
 
     fn update_profiling_high_water_marks(&mut self) {
         #[cfg(feature = "profiling")]
         {
-            let plans_in_flight = self.queue.len() + self.shutdown_queue.len();
+            let plans_in_flight =
+                self.queue.len() + self.startup_queue.len() + self.shutdown_queue.len();
             self.max_plans_in_flight = self.max_plans_in_flight.max(plans_in_flight as u64);
             self.max_memory_in_use = self
                 .max_memory_in_use
@@ -258,8 +315,10 @@ impl PlanQueue {
 
     #[cfg(feature = "profiling")]
     fn estimated_memory_in_use(&self) -> usize {
-        let queue_bytes =
-            (self.queue.capacity() + self.shutdown_queue.capacity()) * size_of::<PlanSchedule>();
+        let queue_bytes = (self.queue.capacity()
+            + self.startup_queue.capacity()
+            + self.shutdown_queue.capacity())
+            * size_of::<PlanSchedule>();
 
         let map_entry_bytes = self.data_map.capacity() * size_of::<(u64, QueuedPlan)>();
 
@@ -276,8 +335,8 @@ impl Default for PlanQueue {
 /// A time, id, and phase object used to order plans in a [`PlanQueue`].
 ///
 /// Regular [`PlanSchedule`] objects are sorted in increasing order of time,
-/// phase, and then plan id. Shutdown-time schedules all have the same internal
-/// time and are therefore sorted by phase and then plan id.
+/// phase, and then plan id. Startup-time and shutdown-time schedules all have
+/// the same internal time and are therefore sorted by phase and then plan id.
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub(crate) struct PlanSchedule {
     pub plan_id: u64,
@@ -582,6 +641,20 @@ mod tests {
     }
 
     #[test]
+    fn startup_plans_do_not_affect_regular_count() {
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let mut context = Context::new();
+        let mut plan_queue = PlanQueue::new();
+        plan_queue.add_startup_plan(callback(1, Rc::clone(&observed)), ExecutionPhase::Normal);
+
+        assert_eq!(plan_queue.regular_plan_count, 0);
+        let next_plan = plan_queue.pop_next_startup().unwrap();
+        run_plan(next_plan, &mut context);
+        assert_eq!(plan_queue.regular_plan_count, 0);
+        assert_eq!(*observed.borrow(), vec![1]);
+    }
+
+    #[test]
     fn next_time_ignores_canceled_root() {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let mut plan_queue = PlanQueue::new();
@@ -641,7 +714,26 @@ mod tests {
     }
 
     #[test]
-    fn plan_ids_are_shared_between_regular_and_shutdown_queues() {
+    fn startup_plans_use_phase_and_fifo_order() {
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let mut context = Context::new();
+        let mut plan_queue = PlanQueue::new();
+        plan_queue.add_startup_plan(callback(3, Rc::clone(&observed)), ExecutionPhase::Last);
+        plan_queue.add_startup_plan(callback(1, Rc::clone(&observed)), ExecutionPhase::First);
+        let canceled =
+            plan_queue.add_startup_plan(callback(2, Rc::clone(&observed)), ExecutionPhase::Normal);
+        plan_queue.add_startup_plan(callback(4, Rc::clone(&observed)), ExecutionPhase::Last);
+        plan_queue.cancel_plan(&canceled);
+
+        while let Some(plan) = plan_queue.pop_next_startup() {
+            run_plan(plan, &mut context);
+        }
+
+        assert_eq!(*observed.borrow(), vec![1, 3, 4]);
+    }
+
+    #[test]
+    fn plan_ids_are_shared_between_all_queues() {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let mut plan_queue = PlanQueue::new();
         let regular_id = plan_queue.add_plan(
@@ -652,9 +744,13 @@ mod tests {
         );
         let shutdown_id =
             plan_queue.add_shutdown_plan(callback(2, Rc::clone(&observed)), ExecutionPhase::Normal);
+        let startup_id =
+            plan_queue.add_startup_plan(callback(3, Rc::clone(&observed)), ExecutionPhase::Normal);
 
         assert_ne!(regular_id, shutdown_id);
+        assert_ne!(shutdown_id, startup_id);
         assert_eq!(regular_id.0, 0);
         assert_eq!(shutdown_id.0, 1);
+        assert_eq!(startup_id.0, 2);
     }
 }

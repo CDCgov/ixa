@@ -83,42 +83,51 @@ impl Display for ExecutionPhase {
     }
 }
 
-/// Tracks event-loop shutdown state and the current shutdown lifecycle phase.
+/// Tracks the current event-loop lifecycle state.
 ///
-/// This is private implementation state, not public API. `Context::shutdown`
-/// requests normal shutdown and `Context::abort` requests an immediate stop of
-/// the current `execute` loop. The stopped status is deliberately cleared when a
-/// later `execute` call begins.
+/// This is private implementation state, not public API. Startup, regular, and
+/// shutdown work are separate states so their plan phases cannot interleave.
+/// The startup-specific stopped states preserve where execution must resume
+/// after an abort without requiring a separate startup-progress flag.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ShutdownStatus {
-    /// Normal execution; no shutdown has been requested.
-    None,
+enum EventLoopStatus {
+    /// Drain startup-time plans, then begin regular plan execution.
+    StartupTimePlans,
+    /// Drain startup-time plans, then begin normal shutdown.
+    StartupTimePlansThenShutdown,
+    /// Execute regular plans and advance simulation time.
+    RegularPlans,
     /// Normal shutdown requested or in progress.
     ///
     /// In this state, callbacks still run first, but regular plans are executed
     /// only if they are scheduled at `Context::current_time`. Simulation time is
     /// not advanced.
-    Normal,
-    /// Drain the distinguished shutdown-time plan queue.
+    NormalShutdown,
+    /// Drain the shutdown-time plan queue.
     ///
     /// Once this state is reached, regular plans are not inspected again during
     /// the same execution pass, even if shutdown-time work schedules a regular
     /// plan at the current simulation time. Callbacks are still executed.
     ShutdownTimePlans,
-    /// Stop the current `execute` event loop.
+    /// Stop the current `execute` event loop, then resume regular execution.
     ///
     /// This is set by `Context::abort` and when the shutdown-time queue is
     /// exhausted. Manual `execute_single_step` calls clear this state when there
     /// is no callback to run.
     Stopped,
+    /// Stop the current `execute` event loop, then resume startup.
+    StoppedDuringStartup,
+    /// Stop the current `execute` event loop, then resume startup followed by
+    /// normal shutdown.
+    StoppedDuringStartupThenShutdown,
 }
 
 /// A manager for the state of a discrete-event simulation
 ///
 /// Provides core simulation services including
 /// * Maintaining a notion of time
-/// * Scheduling events to occur at some point in the future and executing them
-///   at that time
+/// * Scheduling regular work on the simulation timeline
+/// * Scheduling work for the startup and shutdown lifecycle stages
 /// * Holding data that can be accessed by simulation modules
 ///
 /// Simulations are constructed out of a series of interacting modules that
@@ -126,14 +135,16 @@ enum ShutdownStatus {
 /// store data in the simulation using the [`DataPlugin`] trait that allows them
 /// to retrieve data by type.
 ///
-/// The future event list of the simulation is a queue of `Callback` objects -
-/// called `plans` - that will assume control of the [`Context`] at a future point
-/// in time and execute the logic in the associated `FnOnce(&mut Context)`
-/// closure. Modules can add plans to this queue through the [`Context`].
+/// The future event list of the simulation is a queue of regular plans that
+/// assume control of the [`Context`] at a specified simulation time and execute
+/// the logic in an associated `FnOnce(&mut Context)` closure. Modules can also
+/// schedule startup-time plans, which run once at the effective simulation start
+/// time before regular plans, and shutdown-time plans, which run after regular
+/// work for an execution pass is exhausted.
 ///
-/// The simulation also has a separate callback mechanism. Callbacks
-/// fire before the next timed event (even if it is scheduled for the
-/// current time). This allows modules to schedule actions for immediate
+/// The simulation also has a separate callback mechanism. Callbacks fire before
+/// the next plan selected for execution, including startup-time, regular, and
+/// shutdown-time plans. This allows modules to schedule actions for immediate
 /// execution but outside of the current iteration of the event loop.
 ///
 /// Modules can also emit 'events' that other modules can subscribe to handle by
@@ -150,7 +161,7 @@ pub struct Context {
     pub(crate) global_properties: Vec<OnceCell<Box<dyn Any>>>,
     current_time: Option<f64>,
     start_time: Option<f64>,
-    shutdown_status: ShutdownStatus,
+    event_loop_status: EventLoopStatus,
     execution_profiler: ExecutionProfilingCollector,
     pub(crate) print_execution_statistics: bool,
 }
@@ -179,7 +190,7 @@ impl Context {
             global_properties,
             current_time: None,
             start_time: None,
-            shutdown_status: ShutdownStatus::None,
+            event_loop_status: EventLoopStatus::StartupTimePlans,
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
         }
@@ -377,6 +388,50 @@ impl Context {
             .add_plan(time, Box::new(callback), phase, is_passive)
     }
 
+    /// Add a plan to execute during startup-time in the normal phase.
+    ///
+    /// Startup-time plans execute at the effective simulation start time before
+    /// any regular plan. They are ordered by phase and insertion order.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if startup-time plans have already been exhausted.
+    pub fn add_startup_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId {
+        self.add_startup_plan_with_phase(callback, ExecutionPhase::Normal)
+    }
+
+    /// Add a plan to execute during startup-time with the specified phase.
+    ///
+    /// Startup-time plans execute at the effective simulation start time before
+    /// any regular plan. They are ordered by phase and insertion order.
+    ///
+    /// Returns a [`PlanId`] for the newly-added plan that can be used to cancel it
+    /// if needed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if startup-time plans have already been exhausted.
+    pub fn add_startup_plan_with_phase(
+        &mut self,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        assert!(
+            matches!(
+                self.event_loop_status,
+                EventLoopStatus::StartupTimePlans
+                    | EventLoopStatus::StartupTimePlansThenShutdown
+                    | EventLoopStatus::StoppedDuringStartup
+                    | EventLoopStatus::StoppedDuringStartupThenShutdown
+            ),
+            "Startup-time plans cannot be added after startup has completed."
+        );
+        self.plan_queue.add_startup_plan(Box::new(callback), phase)
+    }
+
     /// Add a plan to execute during shutdown-time in the normal phase.
     ///
     /// Shutdown-time plans execute after regular plans at the current simulation
@@ -531,23 +586,68 @@ impl Context {
     /// Request normal shutdown.
     ///
     /// Normal shutdown stops simulation time from advancing. Execution continues
-    /// through queued callbacks, regular plans at the current time, and then
-    /// shutdown-time plans. Calling `shutdown` during shutdown-time execution
-    /// does not return execution to regular current-time plans.
+    /// through queued callbacks and startup-time plans, followed by regular plans
+    /// at the current time and then shutdown-time plans. Calling `shutdown` during
+    /// shutdown-time execution does not return execution to regular current-time
+    /// plans.
     pub fn shutdown(&mut self) {
         trace!("shutdown context");
-        if self.shutdown_status == ShutdownStatus::None {
-            self.shutdown_status = ShutdownStatus::Normal;
+        match self.event_loop_status {
+            EventLoopStatus::StartupTimePlans => {
+                self.event_loop_status = EventLoopStatus::StartupTimePlansThenShutdown;
+            }
+            EventLoopStatus::RegularPlans => {
+                self.event_loop_status = EventLoopStatus::NormalShutdown;
+            }
+            EventLoopStatus::StartupTimePlansThenShutdown
+            | EventLoopStatus::NormalShutdown
+            | EventLoopStatus::ShutdownTimePlans
+            | EventLoopStatus::Stopped
+            | EventLoopStatus::StoppedDuringStartup
+            | EventLoopStatus::StoppedDuringStartupThenShutdown => {}
         }
     }
 
     /// Stop the current event loop immediately.
     ///
-    /// Abort only stops the current `execute` loop. The stopped status is cleared
-    /// when `execute` is called again.
+    /// Abort only stops the current `execute` loop. A later `execute` call
+    /// resumes startup if it was interrupted; otherwise it resumes regular plan
+    /// execution.
     pub fn abort(&mut self) {
         trace!("abort context");
-        self.shutdown_status = ShutdownStatus::Stopped;
+        self.event_loop_status = match self.event_loop_status {
+            EventLoopStatus::StartupTimePlans => EventLoopStatus::StoppedDuringStartup,
+            EventLoopStatus::StartupTimePlansThenShutdown => {
+                EventLoopStatus::StoppedDuringStartupThenShutdown
+            }
+            EventLoopStatus::Stopped
+            | EventLoopStatus::StoppedDuringStartup
+            | EventLoopStatus::StoppedDuringStartupThenShutdown => self.event_loop_status,
+            EventLoopStatus::RegularPlans
+            | EventLoopStatus::NormalShutdown
+            | EventLoopStatus::ShutdownTimePlans => EventLoopStatus::Stopped,
+        };
+    }
+
+    /// Resume the lifecycle state that was interrupted by an abort.
+    ///
+    /// Returns `true` when a stopped state was consumed.
+    fn resume_from_stop(&mut self) -> bool {
+        let resumed_status = match self.event_loop_status {
+            EventLoopStatus::Stopped => EventLoopStatus::RegularPlans,
+            EventLoopStatus::StoppedDuringStartup => EventLoopStatus::StartupTimePlans,
+            EventLoopStatus::StoppedDuringStartupThenShutdown => {
+                EventLoopStatus::StartupTimePlansThenShutdown
+            }
+            EventLoopStatus::StartupTimePlans
+            | EventLoopStatus::StartupTimePlansThenShutdown
+            | EventLoopStatus::RegularPlans
+            | EventLoopStatus::NormalShutdown
+            | EventLoopStatus::ShutdownTimePlans => return false,
+        };
+
+        self.event_loop_status = resumed_status;
+        true
     }
 
     /// Get the current simulation time
@@ -607,14 +707,12 @@ impl Context {
         self.start_time
     }
 
-    /// Execute the simulation until callbacks and plans are exhausted and shutdown
-    /// work is complete.
+    /// Execute the simulation until startup work, callbacks, and plans are
+    /// exhausted and shutdown work is complete.
     pub fn execute(&mut self) {
         trace!("entering event loop");
 
-        if self.shutdown_status == ShutdownStatus::Stopped {
-            self.shutdown_status = ShutdownStatus::None;
-        }
+        self.resume_from_stop();
 
         if self.current_time.is_none() {
             self.current_time = Some(self.start_time.unwrap_or(0.0));
@@ -622,8 +720,7 @@ impl Context {
 
         // Start plan loop
         loop {
-            if self.shutdown_status == ShutdownStatus::Stopped {
-                self.shutdown_status = ShutdownStatus::None;
+            if self.resume_from_stop() {
                 break;
             }
 
@@ -641,7 +738,7 @@ impl Context {
         }
     }
 
-    /// Executes a single callback, plan, or shutdown status transition.
+    /// Executes a single callback, plan, or event-loop status transition.
     pub fn execute_single_step(&mut self) {
         // Callbacks always have priority over plan selection. This remains true
         // even in `Stopped` during manual stepping; `Stopped` only stops the
@@ -652,10 +749,22 @@ impl Context {
             return;
         }
 
-        // No callback is available, so the shutdown status determines which
-        // plan queue, if any, can provide the next unit of work.
-        match self.shutdown_status {
-            ShutdownStatus::None => {
+        // No callback is available, so the lifecycle state determines which plan
+        // queue, if any, can provide the next unit of work.
+        match self.event_loop_status {
+            EventLoopStatus::StartupTimePlans | EventLoopStatus::StartupTimePlansThenShutdown => {
+                self.current_time
+                    .get_or_insert(self.start_time.unwrap_or(0.0));
+                if let Some(plan) = self.plan_queue.pop_next_startup() {
+                    trace!("calling startup-time plan");
+                    (plan.data)(self);
+                } else if self.event_loop_status == EventLoopStatus::StartupTimePlansThenShutdown {
+                    self.event_loop_status = EventLoopStatus::NormalShutdown;
+                } else {
+                    self.event_loop_status = EventLoopStatus::RegularPlans;
+                }
+            }
+            EventLoopStatus::RegularPlans => {
                 // Normal execution may advance simulation time to the next
                 // regular plan only while non-passive regular work remains. Once no
                 // non-passive regular plans remain, enter normal shutdown to drain
@@ -665,10 +774,10 @@ impl Context {
                     self.current_time = Some(plan.time);
                     (plan.data)(self);
                 } else {
-                    self.shutdown_status = ShutdownStatus::Normal;
+                    self.event_loop_status = EventLoopStatus::NormalShutdown;
                 }
             }
-            ShutdownStatus::Normal => {
+            EventLoopStatus::NormalShutdown => {
                 // Normal shutdown drains only regular plans scheduled at the
                 // current simulation time. Future regular plans must remain in
                 // the queue so a later `execute` call can run them.
@@ -676,24 +785,26 @@ impl Context {
                     trace!("calling plan at {:.6}", plan.time);
                     (plan.data)(self);
                 } else {
-                    self.shutdown_status = ShutdownStatus::ShutdownTimePlans;
+                    self.event_loop_status = EventLoopStatus::ShutdownTimePlans;
                 }
             }
-            ShutdownStatus::ShutdownTimePlans => {
+            EventLoopStatus::ShutdownTimePlans => {
                 // Once shutdown-time draining begins, do not return to the
                 // regular plan queue during this execution pass.
                 if let Some(plan) = self.plan_queue.pop_next_shutdown() {
                     trace!("calling shutdown-time plan");
                     (plan.data)(self);
                 } else {
-                    self.shutdown_status = ShutdownStatus::Stopped;
+                    self.event_loop_status = EventLoopStatus::Stopped;
                 }
             }
-            ShutdownStatus::Stopped => {
+            EventLoopStatus::Stopped
+            | EventLoopStatus::StoppedDuringStartup
+            | EventLoopStatus::StoppedDuringStartupThenShutdown => {
                 // `execute` exits before calling `execute_single_step` in this
-                // state. This arm supports manual single-step use after a prior
-                // stop by consuming the stopped status when no callback exists.
-                self.shutdown_status = ShutdownStatus::None;
+                // state. This arm supports manual single-step use after an abort
+                // by consuming the stopped status when no callback exists.
+                self.resume_from_stop();
             }
         }
     }
@@ -736,6 +847,12 @@ pub trait ContextBase: Sized {
         callback: impl FnOnce(&mut Context) + 'static,
         phase: ExecutionPhase,
     ) -> PlanId;
+    fn add_startup_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+    fn add_startup_plan_with_phase(
+        &mut self,
+        callback: impl FnOnce(&mut Context) + 'static,
+        phase: ExecutionPhase,
+    ) -> PlanId;
     fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
     fn add_shutdown_plan_with_phase(
         &mut self,
@@ -770,6 +887,8 @@ impl ContextBase for Context {
             fn add_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_passive_plan(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_passive_plan_with_phase(&mut self, time: f64, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
+            fn add_startup_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
+            fn add_startup_plan_with_phase(&mut self, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_shutdown_plan(&mut self, callback: impl FnOnce(&mut Context) + 'static) -> PlanId;
             fn add_shutdown_plan_with_phase(&mut self, callback: impl FnOnce(&mut Context) + 'static, phase: ExecutionPhase) -> PlanId;
             fn add_periodic_plan_with_phase(&mut self, period: f64, callback: impl Fn(&mut Context) + 'static, phase: ExecutionPhase);
@@ -874,6 +993,25 @@ mod tests {
     ) -> PlanId {
         context.add_passive_plan_with_phase(
             time,
+            move |context| {
+                context.get_data_mut(ComponentA).push(value);
+            },
+            phase,
+        )
+    }
+
+    fn add_startup_plan(context: &mut Context, value: u32) -> PlanId {
+        context.add_startup_plan(move |context| {
+            context.get_data_mut(ComponentA).push(value);
+        })
+    }
+
+    fn add_startup_plan_with_phase(
+        context: &mut Context,
+        value: u32,
+        phase: ExecutionPhase,
+    ) -> PlanId {
+        context.add_startup_plan_with_phase(
             move |context| {
                 context.get_data_mut(ComponentA).push(value);
             },
@@ -1366,6 +1504,252 @@ mod tests {
     }
 
     #[test]
+    fn startup_time_plans_run_before_regular_plans_across_phases() {
+        let mut context = Context::new();
+        context.set_start_time(-2.0);
+        add_plan_with_phase(&mut context, -2.0, 4, ExecutionPhase::First);
+        add_plan(&mut context, -2.0, 5);
+        add_plan_with_phase(&mut context, -2.0, 6, ExecutionPhase::Last);
+        add_startup_plan_with_phase(&mut context, 3, ExecutionPhase::Last);
+        add_startup_plan_with_phase(&mut context, 1, ExecutionPhase::First);
+        add_startup_plan(&mut context, 2);
+
+        context.execute();
+
+        assert_eq!(context.get_current_time(), -2.0);
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn startup_plan_observes_effective_start_time() {
+        let mut context = Context::new();
+        context.set_start_time(-2.0);
+        let observed_time = Rc::new(RefCell::new(f64::NAN));
+        let observed_time_clone = Rc::clone(&observed_time);
+        context.add_startup_plan(move |context| {
+            *observed_time_clone.borrow_mut() = context.get_current_time();
+        });
+
+        context.execute();
+
+        assert_eq!(*observed_time.borrow(), -2.0);
+    }
+
+    #[test]
+    fn startup_plans_drain_before_dynamically_scheduled_regular_plans() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.queue_callback(|context| {
+                context.get_data_mut(ComponentA).push(2);
+            });
+            let time = context.get_current_time();
+            add_plan(context, time, 4);
+        });
+        add_startup_plan(&mut context, 3);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn startup_plan_can_schedule_another_startup_plan() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.add_startup_plan(|context| {
+                context.get_data_mut(ComponentA).push(3);
+            });
+        });
+        add_startup_plan(&mut context, 2);
+        add_plan(&mut context, 0.0, 4);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn startup_plan_can_be_canceled() {
+        let mut context = Context::new();
+        let canceled = add_startup_plan(&mut context, 1);
+        context.cancel_plan(&canceled);
+        add_startup_plan(&mut context, 2);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![2]);
+    }
+
+    #[test]
+    fn startup_plans_run_once_across_multiple_execute_calls() {
+        let mut context = Context::new();
+        add_startup_plan(&mut context, 1);
+        add_plan(&mut context, 0.0, 2);
+
+        context.execute();
+        add_plan(&mut context, 0.0, 3);
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Startup-time plans cannot be added after startup has completed.")]
+    fn add_startup_plan_after_startup_panics() {
+        let mut context = Context::new();
+        context.execute();
+
+        context.add_startup_plan_with_phase(|_| {}, ExecutionPhase::First);
+    }
+
+    #[test]
+    fn shutdown_during_startup_waits_for_startup_plans() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.shutdown();
+        });
+        add_startup_plan(&mut context, 2);
+        add_plan(&mut context, 0.0, 3);
+        add_plan(&mut context, 1.0, 4);
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(5);
+        });
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 5]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 5, 4]);
+    }
+
+    #[test]
+    fn abort_during_startup_resumes_remaining_startup_plans() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.abort();
+        });
+        add_startup_plan(&mut context, 2);
+        add_plan(&mut context, 0.0, 3);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn startup_plan_can_be_added_while_startup_is_stopped() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.abort();
+        });
+
+        context.execute();
+        add_startup_plan(&mut context, 2);
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn startup_plan_can_be_added_after_abort_before_execute() {
+        let mut context = Context::new();
+        context.abort();
+        add_startup_plan(&mut context, 1);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+    }
+
+    #[test]
+    fn startup_plan_can_be_added_after_pending_shutdown_is_aborted() {
+        let mut context = Context::new();
+        context.shutdown();
+        context.abort();
+        add_startup_plan(&mut context, 1);
+        add_plan(&mut context, 0.0, 2);
+
+        context.execute();
+
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+    }
+
+    #[test]
+    fn abort_during_startup_preserves_pending_shutdown() {
+        let mut context = Context::new();
+        context.add_startup_plan(|context| {
+            context.get_data_mut(ComponentA).push(1);
+            context.shutdown();
+            context.abort();
+        });
+        add_startup_plan(&mut context, 2);
+        add_plan(&mut context, 0.0, 3);
+        add_plan(&mut context, 1.0, 4);
+        context.add_shutdown_plan(|context| {
+            context.get_data_mut(ComponentA).push(5);
+        });
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 5]);
+
+        context.execute();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 5, 4]);
+    }
+
+    #[test]
+    fn execute_single_step_prioritizes_startup_plans_and_callbacks() {
+        let mut context = Context::new();
+        context.set_start_time(-2.0);
+        context.add_startup_plan(|context| {
+            assert_eq!(context.get_current_time(), -2.0);
+            context.get_data_mut(ComponentA).push(1);
+            context.queue_callback(|context| {
+                context.get_data_mut(ComponentA).push(2);
+            });
+        });
+        add_startup_plan(&mut context, 3);
+        add_plan(&mut context, -2.0, 4);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3]);
+        assert_eq!(context.event_loop_status, EventLoopStatus::RegularPlans);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Startup-time plans cannot be added after startup has completed.")]
+    fn add_startup_plan_after_single_step_completion_panics() {
+        let mut context = Context::new();
+        context.add_startup_plan(|_| {});
+
+        context.execute_single_step();
+        context.execute_single_step();
+
+        context.add_startup_plan(|_| {});
+    }
+
+    #[test]
     fn shutdown_runs_regular_plans_at_current_time_all_phases() {
         let mut context = Context::new();
         context.add_plan_with_phase(
@@ -1596,9 +1980,18 @@ mod tests {
 
         context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+        assert_eq!(context.event_loop_status, EventLoopStatus::RegularPlans);
 
         context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+        assert_eq!(context.event_loop_status, EventLoopStatus::NormalShutdown);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), Vec::<u32>::new());
+        assert_eq!(
+            context.event_loop_status,
+            EventLoopStatus::ShutdownTimePlans
+        );
 
         context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
@@ -1618,6 +2011,11 @@ mod tests {
 
         context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+        assert_eq!(context.event_loop_status, EventLoopStatus::StartupTimePlans);
+
+        context.execute_single_step();
+        assert_eq!(*context.get_data_mut(ComponentA), vec![1]);
+        assert_eq!(context.event_loop_status, EventLoopStatus::RegularPlans);
 
         context.execute_single_step();
         assert_eq!(*context.get_data_mut(ComponentA), vec![1, 2]);
@@ -1922,8 +2320,8 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_status_reset() {
-        // This test verifies that shutdown_status is properly reset after
+    fn event_loop_status_reset() {
+        // This test verifies that event_loop_status is properly reset after
         // being acted upon. This allows the context to be reused after shutdown.
         let mut context = Context::new();
         let _: PersonId = context.add_entity(with!(Person, Age(50))).unwrap();
@@ -1944,14 +2342,14 @@ mod tests {
         });
 
         // Second execute - should execute the new plan
-        // If shutdown_status wasn't reset, this would immediately break
+        // If event_loop_status wasn't reset, this would immediately break
         // without executing the plan, leaving population at 1.
         context.execute();
         assert_eq!(context.get_current_time(), 2.0);
         assert_eq!(
             context.get_entity_count::<Person>(),
             2,
-            "If this fails, shutdown_status was not properly reset"
+            "If this fails, event_loop_status was not properly reset"
         );
     }
 }
