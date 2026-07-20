@@ -200,10 +200,13 @@ mod tests {
     #[test]
     fn observe_entity_addition() {
         let mut context = Context::new();
+        context.index_property::<Person, Age>();
 
         let flag = Rc::new(RefCell::new(false));
         let flag_clone = flag.clone();
-        context.subscribe_to_event(move |_context, event: EntityCreatedEvent<Person>| {
+        context.subscribe_to_event(move |context, event: EntityCreatedEvent<Person>| {
+            let matching = context.query(with!(Person, Age(18)));
+            assert!(matching.contains(event.entity_id));
             *flag_clone.borrow_mut() = true;
             assert_eq!(event.entity_id.0, 0);
         });
