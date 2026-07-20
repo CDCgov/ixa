@@ -4,7 +4,7 @@
 use std::borrow::Borrow;
 
 use crate::rand::seq::index::sample as choose_range;
-use crate::rand::Rng;
+use crate::rand::{Rng, RngExt};
 
 /// Samples one element uniformly at random from an iterator whose length is known at runtime.
 ///
