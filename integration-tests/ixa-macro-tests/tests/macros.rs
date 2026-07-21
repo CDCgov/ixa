@@ -1,12 +1,30 @@
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::hash::{Hash, Hasher};
     use std::rc::Rc;
 
     use ixa::prelude::*;
     use ixa::{HashSet, IxaEvent};
     use serde::{Deserialize, Serialize};
+
+    struct CountingF64 {
+        value: f64,
+        conversions: Rc<Cell<usize>>,
+    }
+
+    impl CountingF64 {
+        fn new(value: f64, conversions: Rc<Cell<usize>>) -> Self {
+            Self { value, conversions }
+        }
+    }
+
+    impl From<CountingF64> for f64 {
+        fn from(value: CountingF64) -> Self {
+            value.conversions.set(value.conversions.get() + 1);
+            value.value
+        }
+    }
 
     define_entity!(Person);
 
@@ -445,6 +463,16 @@ mod tests {
             macro_named_value_change_handler,
         );
 
+        let period_conversions = Rc::new(Cell::new(0));
+        track_periodic_value_change_counts!(
+            ctx,
+            Person,
+            MacroInfectionStatus,
+            CountingF64::new(1.0, Rc::clone(&period_conversions)),
+            |_context, _counter| {},
+        );
+        assert_eq!(period_conversions.get(), 1);
+
         let person = ctx
             .add_entity(with!(
                 Person,
@@ -519,5 +547,24 @@ mod tests {
 
         context.execute();
         assert_eq!(*observed_records.borrow(), vec![0.75]);
+    }
+
+    #[test]
+    fn schedule_relative_converts_wrapped_delay_once() {
+        let mut context = Context::new();
+        let conversions = Rc::new(Cell::new(0));
+        let records = Rc::new(RefCell::new(Vec::new()));
+        let observed_records = Rc::clone(&records);
+
+        schedule_relative!(
+            &mut context,
+            CountingF64::new(1.25, Rc::clone(&conversions)),
+            record_current_time,
+            records
+        );
+
+        context.execute();
+        assert_eq!(conversions.get(), 1);
+        assert_eq!(*observed_records.borrow(), vec![1.25]);
     }
 }
