@@ -5,7 +5,7 @@ mod tests {
     use std::rc::Rc;
 
     use ixa::prelude::*;
-    use ixa::HashSet;
+    use ixa::{HashSet, IxaEvent};
     use serde::{Deserialize, Serialize};
 
     define_entity!(Person);
@@ -208,6 +208,15 @@ mod tests {
 
     // Test rng macro
     define_rng!(TestRngId);
+
+    #[derive(ixa::IxaEvent)]
+    struct PreludeTestEvent;
+
+    #[test]
+    fn prelude_exports_cancellation_ids() {
+        let _: Option<PlanId> = None;
+        let _: Option<EventListenerId<PreludeTestEvent>> = None;
+    }
 
     fn as_context(context: &mut Context) -> &mut Context {
         context

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0](https://github.com/CDCgov/ixa/compare/ixa-v2.1.0...ixa-v2.2.0) - 2026-07-13
+
+### Added
+
+- Deprecate the plan module ([#998](https://github.com/CDCgov/ixa/pull/998))
+- Passive plans ([#981](https://github.com/CDCgov/ixa/pull/981))
+- Shutdown semantics and shutdown-time plans ([#976](https://github.com/CDCgov/ixa/pull/976))
+
+### Other
+
+- Add RNG Debug State ([#978](https://github.com/CDCgov/ixa/pull/978))
+- bump rust-toolchain from 1.96.0 to 1.96.1 ([#994](https://github.com/CDCgov/ixa/pull/994))
+- Add unsubscribe support for event listeners ([#975](https://github.com/CDCgov/ixa/pull/975))
+
+### Deprecated
+
+- `ixa::plan::PlanId`; use `ixa::PlanId` instead ([#977](https://github.com/CDCgov/ixa/issues/977))
+
+## [2.1.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0...ixa-v2.1.0) - 2026-06-29
+
+### Added
+
+- Triggers ([#962](https://github.com/CDCgov/ixa/pull/962))
+
+### Other
+
+- Audit obsolete Clippy allow attributes ([#973](https://github.com/CDCgov/ixa/pull/973))
+- remove getrandom ([#970](https://github.com/CDCgov/ixa/pull/970))
+- refactor integration test crates by feature scope ([#963](https://github.com/CDCgov/ixa/pull/963))
+- bump actions/checkout from 6 to 7 ([#968](https://github.com/CDCgov/ixa/pull/968))
+- re-export IxaEvent derive from ixa ([#967](https://github.com/CDCgov/ixa/pull/967))
+- update actions versions ([#961](https://github.com/CDCgov/ixa/pull/961))
+- add must use ([#959](https://github.com/CDCgov/ixa/pull/959))
+
 ## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.0.0-beta2.5...ixa-v2.0.0) - 2026-06-16
 
 Ixa 2.0 replaces the single, hard-coded `people` module with a generalized,

@@ -49,7 +49,7 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/book/src/cli-usage.md"))]
 
 pub mod context;
-pub use context::{Context, ContextBase, ExecutionPhase, IxaEvent};
+pub use context::{Context, ContextBase, EventListenerId, ExecutionPhase, IxaEvent};
 pub use ixa_derive::IxaEvent;
 
 mod plugin_context;
@@ -69,7 +69,17 @@ pub use network::{ContextNetworkExt, Edge, EdgeType};
 
 pub mod macros;
 
-pub mod plan;
+pub mod plan_queue;
+pub use plan_queue::PlanId;
+
+/// Compatibility re-exports for plan-related public API.
+///
+/// This module is retained so existing `ixa::plan::PlanId` imports continue to
+/// work. Use [`crate::PlanId`] instead.
+#[deprecated(note = "use `ixa::PlanId` instead")]
+pub mod plan {
+    pub use crate::plan_queue::PlanId;
+}
 pub mod random;
 pub use random::{ContextRandomExt, RngId};
 
@@ -114,3 +124,4 @@ pub mod execution_stats;
 pub mod profiling;
 
 pub mod data_structures;
+pub mod triggers;

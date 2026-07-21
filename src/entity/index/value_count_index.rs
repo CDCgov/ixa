@@ -180,6 +180,74 @@ mod tests {
     }
 
     #[test]
+    fn enabling_multi_property_value_count_index_indexes_existing_entities() {
+        let mut context = Context::new();
+        let query = (Age(0), Weight(0), Height(0));
+        let representative_id = <AWH as QueryInternal<Person>>::multi_property_id(&query).unwrap();
+
+        let property_store = context.entity_store.get_property_store_mut::<Person>();
+        if representative_id == AWH::id() {
+            property_store.set_property_indexed::<AWH>(PropertyIndexType::Unindexed);
+        } else {
+            property_store.set_property_indexed::<WHA>(PropertyIndexType::Unindexed);
+        }
+
+        context
+            .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
+            .unwrap();
+        context
+            .add_entity(with!(Person, Age(3u8), Weight(2u8), Height(1u8)))
+            .unwrap();
+
+        if representative_id == AWH::id() {
+            context.index_property_counts::<Person, AWH>();
+        } else {
+            context.index_property_counts::<Person, WHA>();
+        }
+
+        assert_eq!(
+            context.query_entity_count(with!(Person, Age(1u8), Weight(2u8), Height(3u8))),
+            2
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, Age(3u8), Weight(2u8), Height(1u8))),
+            1
+        );
+    }
+
+    #[test]
+    fn enabling_value_count_index_indexes_existing_entities() {
+        let mut context = Context::new();
+
+        context.add_entity(with!(Person, Age(10))).unwrap();
+        context.add_entity(with!(Person, Age(10))).unwrap();
+
+        context.index_property_counts::<Person, Age>();
+
+        assert_eq!(context.query_entity_count(with!(Person, Age(10))), 2);
+    }
+
+    #[test]
+    fn changing_existing_entity_before_adding_another_does_not_double_count() {
+        let mut context = Context::new();
+
+        let first = context.add_entity(with!(Person, Age(10))).unwrap();
+        context.add_entity(with!(Person, Age(10))).unwrap();
+
+        context.index_property_counts::<Person, Age>();
+        context.set_property(first, Age(20));
+
+        // Adding another entity must not count the changed entity a second time.
+        context.add_entity(with!(Person, Age(10))).unwrap();
+
+        assert_eq!(context.query_entity_count(with!(Person, Age(20))), 1);
+        assert_eq!(context.query_entity_count(with!(Person, Age(10))), 2);
+    }
+
+    #[test]
     fn test_index_value_compute_same_values() {
         let value = one_shot_128(&"test value");
         let value2 = one_shot_128(&"test value");

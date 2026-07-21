@@ -409,6 +409,12 @@ pub fn init(context: &mut Context) {
 }
 ```
 
+Periodic plans are passive. They reschedule themselves after each report, but
+they do not keep the simulation running after non-passive plans are exhausted.
+This means a periodic report can run at the final simulation time,
+while later periodic report callbacks remain queued unless more work
+is scheduled.
+
 The implementation of `write_aggregate_sir_report_item` is straightforward: We
 fetch the values from the data plugin, construct an instance of
 `AggregateSIRReportItem`, and "send" it to the report.

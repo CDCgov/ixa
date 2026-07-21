@@ -58,10 +58,12 @@ mod test_plugin_context {
         }
         fn all_methods_mut(&mut self) {
             self.setup();
-            self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
+            let listener_id = self.subscribe_to_event(|_: &mut Context, event: MyEvent| {
                 assert_eq!(event.data, 42);
             });
             self.emit_event(MyEvent { data: 42 });
+            assert!(self.unsubscribe_from_event(&listener_id));
+            assert!(!self.unsubscribe_from_event(&listener_id));
             self.add_plan_with_phase(
                 1.0,
                 |context| {
@@ -74,6 +76,16 @@ mod test_plugin_context {
             self.add_plan(1.0, |context| {
                 assert_eq!(context.get_my_data(), 42);
             });
+            self.add_passive_plan(1.0, |context| {
+                assert_eq!(context.get_my_data(), 42);
+            });
+            self.add_passive_plan_with_phase(
+                1.0,
+                |context| {
+                    assert_eq!(context.get_my_data(), 100);
+                },
+                crate::ExecutionPhase::Last,
+            );
             self.add_periodic_plan_with_phase(
                 1.0,
                 |context| {

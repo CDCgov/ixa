@@ -76,12 +76,8 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
         let _ = std::mem::replace(slot.get_mut(), counter);
     }
 
-    if context.remaining_plan_count() == 0 {
-        return;
-    }
-
     let next_time = context.get_current_time() + period;
-    context.add_plan_with_phase(
+    context.add_passive_plan_with_phase(
         next_time,
         move |context| {
             handle_periodic_value_change_count_event::<E, PL, P, F>(
@@ -135,9 +131,11 @@ pub trait ContextEntitiesExt {
     /// Also panics if `period` is not finite and strictly positive.
     ///
     /// Recording starts at `ExecutionPhase::First` at simulation start time. The
-    /// first report runs at simulation start time in `ExecutionPhase::Last`, then at
-    /// each subsequent `start_time + k * period`. After the handler returns, the
-    /// matched counter is cleared.
+    /// report callbacks are passive plans: they do not keep the simulation
+    /// timeline alive. Reports run at simulation start time in
+    /// `ExecutionPhase::Last`, then at each subsequent `start_time + k * period`
+    /// that is reached while (non-passive) work remains or during final-time shutdown.
+    /// After the handler returns, the matched counter is cleared.
     ///
     /// ```rust,ignore
     /// context.track_periodic_value_change_counts::<Person, (InfectionStatus,), Age>(
@@ -378,10 +376,17 @@ impl ContextEntitiesExt for Context {
     }
 
     fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self) {
+        let property_id = P::id();
+        let context_ptr: *const Context = self;
         let property_store = self.entity_store.get_property_store_mut::<E>();
         let current_index_type = property_store.get::<P>().index_type();
         if current_index_type != PropertyIndexType::FullIndex {
             property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
+            // SAFETY: This only creates a shared reference to `Context` while mutably borrowing
+            // the property store to update index internals.
+            unsafe {
+                property_store.index_unindexed_entities_for_property_id(&*context_ptr, property_id);
+            }
         }
     }
 
@@ -409,7 +414,7 @@ impl ContextEntitiesExt for Context {
 
                 // We defer the first handler plan until now because it needs
                 // `counter_id`, and it must run in `ExecutionPhase::Last`.
-                context.add_plan_with_phase(
+                context.add_passive_plan_with_phase(
                     context.get_current_time(),
                     move |context| {
                         handle_periodic_value_change_count_event::<E, PL, P, F>(
@@ -1432,6 +1437,7 @@ mod tests {
             context.set_property(person, CounterValue(1));
             context.set_property(person, CounterValue(2));
         });
+        context.add_plan(1.0, |_| {});
 
         context.execute();
         assert_eq!(*observed.borrow(), vec![(0, 0), (1, 1)]);
@@ -1464,6 +1470,7 @@ mod tests {
         context.add_plan(1.5, move |context| {
             context.set_property(person, CounterValue(1));
         });
+        context.add_plan(2.0, |_| {});
 
         context.execute();
         assert_eq!(*observed.borrow(), vec![0, 1, 0]);
