@@ -3,7 +3,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::prelude::*;
 use ixa::rand::rngs::StdRng;
-use ixa::rand::{Rng, SeedableRng};
+use ixa::rand::{RngExt, SeedableRng};
 
 define_rng!(SampleBenchRng);
 

@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
 
 use ixa::rand::rngs::StdRng;
-use ixa::rand::{Rng, RngCore, SeedableRng};
+use ixa::rand::{Rng, RngExt, SeedableRng};
 
 const MIN_AGE: u8 = 0;
 const MAX_AGE: u8 = 100;
@@ -35,7 +35,7 @@ pub struct PopulationIterator {
     num_schools: usize,
     num_workplaces: usize,
     num_homes: usize,
-    rng: Box<dyn RngCore>,
+    rng: Box<dyn Rng>,
 }
 
 impl PopulationIterator {
@@ -51,7 +51,7 @@ impl PopulationIterator {
         let num_workplaces =
             ((n as f64 * number_of_workplaces_as_percent_of_pop / 100.0).round()) as usize;
         let num_homes = usize::max(1, n / HOUSEHOLD_SIZE);
-        let rng: Box<dyn RngCore> = match seed {
+        let rng: Box<dyn Rng> = match seed {
             Some(s) => Box::new(StdRng::seed_from_u64(s)),
             None => Box::new(StdRng::seed_from_u64(DEFAULT_POPULATION_SEED)),
         };

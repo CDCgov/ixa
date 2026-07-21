@@ -3,7 +3,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ixa::rand::rngs::SmallRng;
 use ixa::rand::seq::IteratorRandom;
-use ixa::rand::{Rng, SeedableRng};
+use ixa::rand::{RngExt, SeedableRng};
 use ixa::random::{
     sample_multiple_from_known_length, sample_multiple_l_reservoir,
     sample_single_from_known_length, sample_single_l_reservoir,
@@ -148,7 +148,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
             // let iterator = NonExactSize::new(data.iter());
 
             // Use the `rand` crate's reservoir sampling implementation
-            let selected = data.iter().choose_multiple(rng, requested);
+            let selected = data.iter().sample(rng, requested);
             assert_eq!(selected.len(), requested);
             count_idx = (count_idx + 1) % 1000;
             black_box(selected);

@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use std::ops::Range;
 
 use log::warn;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 use super::{EntitySetIterator, SourceSet};
 use crate::entity::{Entity, EntityId};
