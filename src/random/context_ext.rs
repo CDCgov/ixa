@@ -126,14 +126,37 @@ pub trait ContextRandomExt: ContextBase {
         self.sample(rng_id, |rng| rng.random_range(range))
     }
 
-    /// Gets a random boolean value which is true with probability `p`
-    /// using the generator associated with the given [`RngId`].
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// Gets a random boolean value which is true with probability `p` using the
+    /// generator associated with the given [`RngId`]. The supplied probability
+    /// is converted to `f64` before sampling.
+    ///
+    /// ```
+    /// use ixa::{define_rng, Context, ContextRandomExt};
+    ///
+    /// define_rng!(ExampleRng);
+    ///
+    /// struct Probability(f64);
+    ///
+    /// impl From<Probability> for f64 {
+    ///     fn from(probability: Probability) -> Self {
+    ///         probability.0
+    ///     }
+    /// }
+    ///
+    /// let mut context = Context::new();
+    /// context.init_random(42);
+    /// assert!(context.sample_bool(ExampleRng, Probability(1.0)));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the converted probability is outside `[0.0, 1.0]` or is NaN.
     #[must_use]
-    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
+    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: impl Into<f64>) -> bool
     where
         R::RngType: Rng,
     {
+        let p = p.into();
         self.sample(rng_id, |rng| rng.random_bool(p))
     }
 
@@ -171,6 +194,14 @@ mod test {
 
     define_rng!(FooRng);
     define_rng!(BarRng);
+
+    struct Probability(f64);
+
+    impl From<Probability> for f64 {
+        fn from(probability: Probability) -> Self {
+            probability.0
+        }
+    }
 
     #[test]
     fn get_rng_basic() {
@@ -364,6 +395,24 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
         let _r: bool = context.sample_bool(FooRng, 0.5);
+    }
+
+    #[test]
+    fn sample_bool_accepts_into_f64_without_extra_turbofish() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        assert!(!context.sample_bool::<FooRng>(FooRng, Probability(0.0)));
+        assert!(context.sample_bool::<FooRng>(FooRng, Probability(1.0)));
+    }
+
+    #[test]
+    #[should_panic(expected = "outside range [0.0, 1.0]")]
+    fn sample_bool_rejects_wrapped_invalid_probability() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        let _ = context.sample_bool(FooRng, Probability(1.1));
     }
 
     #[test]

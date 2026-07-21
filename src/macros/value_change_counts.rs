@@ -1,7 +1,7 @@
 /// Tracks periodic value change counts with concise entity, property, and strata syntax.
 ///
 /// The strata list is optional. Omitting it, or passing `[]`, uses the empty
-/// property list `()`.
+/// property list `()`. The period may be any value that converts into `f64`.
 ///
 /// ```ignore
 /// track_periodic_value_change_counts!(
