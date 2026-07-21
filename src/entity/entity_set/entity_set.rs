@@ -789,7 +789,7 @@ mod tests {
     }
 
     #[test]
-    fn union_of_equivalent_unindexed_multi_property_queries_deduplicates_to_one_source() {
+    fn union_of_equivalent_indexed_multi_property_queries_deduplicates_to_one_source() {
         let mut context = Context::new();
         let matching = context
             .add_entity(with!(Person, Age(28), County(7)))
@@ -807,7 +807,7 @@ mod tests {
 
         assert!(matches!(
             union,
-            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+            EntitySet(EntitySetInner::Source(SourceSet::IndexSet(_)))
         ));
         assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![matching]);
     }

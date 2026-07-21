@@ -122,6 +122,22 @@ pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -
 /// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
 /// our use case, this method is called in the `ctor` function of each `Property<E>` type.
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
+    add_to_property_registry_with_constructor::<E, P>(PropertyValueStoreCore::<E, P>::new_boxed);
+}
+
+/// Adds a new indexable item to the registry with its default index state.
+///
+/// Multi-properties use this so their representative property store is indexed
+/// as soon as a [`Context`] is constructed.
+pub fn add_indexed_to_property_registry<E: Entity, P: IndexableProperty<E>>() {
+    add_to_property_registry_with_constructor::<E, P>(
+        PropertyValueStoreCore::<E, P>::new_boxed_with_default_index,
+    );
+}
+
+fn add_to_property_registry_with_constructor<E: Entity, P: Property<E>>(
+    value_store_constructor: fn() -> Box<dyn PropertyValueStore<E>>,
+) {
     // Ensure the ID of the property type is initialized.
     let property_index = P::id();
 
@@ -147,7 +163,7 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let metadata: &mut PropertyMetadata<E> = metadata.downcast_mut().unwrap();
         metadata
             .value_store_constructor
-            .get_or_insert(PropertyValueStoreCore::<E, P>::new_boxed);
+            .get_or_insert(value_store_constructor);
     }
 
     // Construct the dependency graph

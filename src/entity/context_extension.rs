@@ -1139,13 +1139,16 @@ mod tests {
                 ))
                 .unwrap();
         }
-        context.index_property::<Person, InfectionStatusVaccinated>();
-        // Force an index build by running a query.
-        let _ = context.query_result_iterator(with!(
-            Person,
-            InfectionStatus::Susceptible,
-            Vaccinated(true)
-        ));
+        let query = (InfectionStatus::Susceptible, Vaccinated(true));
+        let representative_id = query.multi_property_id().unwrap();
+        assert_eq!(
+            context.is_property_indexed::<Person, InfectionStatusVaccinated>(),
+            representative_id == InfectionStatusVaccinated::id()
+        );
+        assert_eq!(
+            context.is_property_indexed::<Person, VaccinatedInfectionStatus>(),
+            representative_id == VaccinatedInfectionStatus::id()
+        );
 
         // Capture the set given by `with_query_results`.
         let mut result_entities: IndexSet<EntityId<Person>> = IndexSet::default();
@@ -1166,18 +1169,10 @@ mod tests {
             InfectionStatusVaccinated::type_id(),
             VaccinatedInfectionStatus::type_id()
         );
-        assert_eq!(
-            InfectionStatusVaccinated::id(),
-            (InfectionStatus::Susceptible, Vaccinated(true))
-                .multi_property_id()
-                .unwrap()
-        );
-
         // Check if it matches the expected bucket.
-        let property_id = InfectionStatusVaccinated::id();
+        let property_id = representative_id;
 
         let property_store = context.entity_store.get_property_store::<Person>();
-        let query = (InfectionStatus::Susceptible, Vaccinated(true));
         let query_parts = query.query_parts();
         let bucket =
             match property_store.get_index_set_for_query_parts(property_id, query_parts.as_ref()) {

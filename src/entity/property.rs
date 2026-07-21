@@ -13,7 +13,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::entity::property_store::get_property_dependents_static;
-use crate::entity::{Entity, EntityId};
+use crate::entity::{Entity, EntityId, PropertyIndexType};
 use crate::{Context, HashSet};
 
 /// The kind of initialization that a property has.
@@ -84,6 +84,16 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     #[inline]
     fn is_required() -> bool {
         Self::initialization_kind() == PropertyInitializationKind::Explicit
+    }
+
+    /// Which index type new [`Context`] instances should create for this property automatically.
+    ///
+    /// This is primarily used by multi-properties, whose main purpose is joint
+    /// indexing and query acceleration.
+    #[must_use]
+    #[inline]
+    fn default_index_type() -> PropertyIndexType {
+        PropertyIndexType::Unindexed
     }
 
     /// Compute the value of the property, possibly by accessing the context and using the entity's ID.
