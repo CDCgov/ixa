@@ -778,7 +778,13 @@ impl Context {
     }
 }
 
-pub trait ContextBase: Sized {
+// This allows client code to use `ContextBase` as a bound without implementing it.
+mod sealed {
+    pub(super) trait SealedContextBase {}
+}
+
+#[allow(private_bounds)]
+pub trait ContextBase: sealed::SealedContextBase + Sized {
     fn subscribe_to_event<E: IxaEvent>(
         &mut self,
         handler: impl Fn(&mut Context, E) + 'static,
@@ -837,6 +843,9 @@ pub trait ContextBase: Sized {
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
     fn abort(&mut self);
 }
+
+impl sealed::SealedContextBase for Context {}
+
 impl ContextBase for Context {
     delegate::delegate! {
         to self {
