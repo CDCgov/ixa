@@ -13,7 +13,9 @@ use std::path::{Component, Path};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::entity::events::EntityCreatedEvent;
-use crate::entity::property_store::{persisted_properties, PropertyPersistence};
+use crate::entity::property_store::{
+    index_new_entities, persisted_properties, PropertyPersistence,
+};
 use crate::entity::{Entity, EntityId};
 use crate::{warn, Context, HashMap, IxaError};
 
@@ -516,14 +518,7 @@ impl<E: Entity> PendingEntityImport for PendingEntityImportCore<E> {
             .entity_store
             .set_entity_count_for_population_import::<E>(entity_count);
 
-        let context_ptr: *const Context = context;
-        let property_store = context.entity_store.get_property_store_mut::<E>();
-        // SAFETY: This mirrors `ContextEntitiesExt::add_entity`. Index catch-up only reads
-        // property values through the shared context while mutating index internals in the
-        // exclusively borrowed property store.
-        unsafe {
-            property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
-        }
+        index_new_entities(context, (0..entity_count).map(EntityId::<E>::new));
 
         for entity_id in 0..entity_count {
             context.emit_event(EntityCreatedEvent::<E>::new(EntityId::new(entity_id)));
