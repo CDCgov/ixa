@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0](https://github.com/CDCgov/ixa/compare/ixa-v2.2.0...ixa-v2.3.0) - 2026-07-27
+
+### Added
+
+- Add on_unsubscribe hook to IxaEvent ([#1005](https://github.com/CDCgov/ixa/pull/1005))
+
+### Fixed
+
+- handle filtered criterion summaries ([#1011](https://github.com/CDCgov/ixa/pull/1011))
+- Eagerly compute property value count indexes ([#1007](https://github.com/CDCgov/ixa/pull/1007))
+
+### Other
+
+- bump release-plz/action from 0.5.130 to 0.5.131 ([#1012](https://github.com/CDCgov/ixa/pull/1012))
+
 ## [2.2.0](https://github.com/CDCgov/ixa/compare/ixa-v2.1.0...ixa-v2.2.0) - 2026-07-13
 
 ### Added
