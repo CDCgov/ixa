@@ -43,6 +43,7 @@
 //! The period must be positive, finite, and not NaN. A delay must be non-negative, finite, and not
 //! NaN. An absolute start time must be finite and not NaN; the context validates at trigger
 //! installation that it is not in the past.
+//! Builder inputs are converted to `f64` before these checks are applied.
 //!
 //! Since time is monotonic, this criterion does not use [`Direction`](super::Direction) or
 //! [`TriggerMode`](super::TriggerMode). It emits whenever its periodic schedule executes. If several
@@ -104,7 +105,8 @@ pub struct PeriodicTimeTriggerEvent {
 
 impl PeriodicTimeTrigger {
     #[must_use]
-    pub fn every(period: f64) -> Self {
+    pub fn every(period: impl Into<f64>) -> Self {
+        let period = period.into();
         validate_period(period);
         Self {
             period,
@@ -114,7 +116,8 @@ impl PeriodicTimeTrigger {
     }
 
     #[must_use]
-    pub fn every_with_phase(period: f64, phase: ExecutionPhase) -> Self {
+    pub fn every_with_phase(period: impl Into<f64>, phase: ExecutionPhase) -> Self {
+        let period = period.into();
         validate_period(period);
         Self {
             period,
@@ -130,7 +133,8 @@ impl PeriodicTimeTrigger {
     }
 
     #[must_use]
-    pub fn start_with_delay(mut self, delay: f64) -> Self {
+    pub fn start_with_delay(mut self, delay: impl Into<f64>) -> Self {
+        let delay = delay.into();
         assert!(
             delay >= 0.0 && !delay.is_nan() && !delay.is_infinite(),
             "delay must be greater than or equal to 0"
@@ -140,7 +144,8 @@ impl PeriodicTimeTrigger {
     }
 
     #[must_use]
-    pub fn start_at(mut self, start_time: f64) -> Self {
+    pub fn start_at(mut self, start_time: impl Into<f64>) -> Self {
+        let start_time = start_time.into();
         assert!(
             !start_time.is_nan(),
             "start_time {start_time} is invalid: cannot be NaN"

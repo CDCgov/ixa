@@ -32,6 +32,7 @@
 //! [`context.add_plan_with_phase`](crate::Context::add_plan_with_phase).
 //!
 //! [`TimeTrigger::at`] uses [`ExecutionPhase::Normal`](crate::ExecutionPhase::Normal).
+//! Constructor time inputs are converted to `f64` and validated when the trigger is installed.
 //! Since time is monotonic, this criterion does not use [`Direction`](super::Direction) or
 //! [`TriggerMode`](super::TriggerMode). It emits once, when its scheduled plan executes. If several
 //! plans are scheduled for the same time, the selected [`ExecutionPhase`](crate::ExecutionPhase)
@@ -80,16 +81,19 @@ pub struct TimeTriggerEvent {
 
 impl TimeTrigger {
     #[must_use]
-    pub fn at(at: f64) -> Self {
+    pub fn at(at: impl Into<f64>) -> Self {
         Self {
-            at,
+            at: at.into(),
             phase: ExecutionPhase::Normal,
         }
     }
 
     #[must_use]
-    pub fn at_phase(at: f64, phase: ExecutionPhase) -> Self {
-        Self { at, phase }
+    pub fn at_phase(at: impl Into<f64>, phase: ExecutionPhase) -> Self {
+        Self {
+            at: at.into(),
+            phase,
+        }
     }
 
     #[must_use]

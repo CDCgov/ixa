@@ -14,7 +14,9 @@
 ///
 /// ```ignore
 /// {
-///     let time = context.get_current_time() + my_delay;
+///     let current_time = context.get_current_time();
+///     let delay: f64 = my_delay.into();
+///     let time = current_time + delay;
 ///     context.add_plan(time, move |context| {
 ///         my_handler(context, arg1, arg2, arg3)
 ///     })
@@ -24,7 +26,9 @@
 macro_rules! schedule_relative {
     ($context:expr, $delay:expr, $action:expr $(, $arg:expr)* $(,)?) => {
         {
-            let time = ($context).get_current_time() + $delay;
+            let current_time = ($context).get_current_time();
+            let delay: f64 = ::core::convert::Into::into($delay);
+            let time = current_time + delay;
             ($context).add_plan(time, move |context| {
                 ($action)(context $(, $arg)*)
             })

@@ -128,6 +128,8 @@ pub trait ContextEntitiesExt {
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
+    /// The supplied period is converted to `f64` before validation.
+    ///
     /// Also panics if `period` is not finite and strictly positive.
     ///
     /// Recording starts at `ExecutionPhase::First` at simulation start time. The
@@ -145,8 +147,11 @@ pub trait ContextEntitiesExt {
     ///     },
     /// );
     /// ```
-    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
-    where
+    fn track_periodic_value_change_counts<E, PL, P, F>(
+        &mut self,
+        period: impl Into<f64>,
+        handler: F,
+    ) where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: Property<E> + Eq + Hash,
@@ -390,13 +395,17 @@ impl ContextEntitiesExt for Context {
         }
     }
 
-    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
-    where
+    fn track_periodic_value_change_counts<E, PL, P, F>(
+        &mut self,
+        period: impl Into<f64>,
+        handler: F,
+    ) where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: IndexableProperty<E>,
         F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
     {
+        let period = period.into();
         assert!(
             period > 0.0 && !period.is_nan() && !period.is_infinite(),
             "Period must be greater than 0"
@@ -632,6 +641,15 @@ mod tests {
         Person,
         default_const = CounterStratum(false)
     );
+
+    #[derive(Clone, Copy)]
+    struct WrappedF64(f64);
+
+    impl From<WrappedF64> for f64 {
+        fn from(value: WrappedF64) -> Self {
+            value.0
+        }
+    }
 
     define_property!(
         enum InfectionStatus {
@@ -1414,6 +1432,27 @@ mod tests {
 
         let property_value_store = context.get_property_value_store::<Person, CounterValue>();
         assert_eq!(property_value_store.value_change_counters.len(), 2);
+    }
+
+    #[test]
+    fn track_periodic_value_change_counts_accepts_into_f64() {
+        let mut context = Context::new();
+        let observed_times = Rc::new(RefCell::new(Vec::new()));
+        let observed_times_clone = Rc::clone(&observed_times);
+
+        context.track_periodic_value_change_counts::<Person, (CounterStratum,), CounterValue, _>(
+            WrappedF64(1.0),
+            move |context, _counter| {
+                observed_times_clone
+                    .borrow_mut()
+                    .push(context.get_current_time());
+            },
+        );
+        context.add_plan(1.0, |_| {});
+
+        context.execute();
+
+        assert_eq!(*observed_times.borrow(), vec![0.0, 1.0]);
     }
 
     #[test]
