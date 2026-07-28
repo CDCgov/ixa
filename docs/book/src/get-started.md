@@ -19,6 +19,10 @@ the script installs the blank starter used by this guide.
 curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
 ```
 
+The script also installs Ixa's `rust-toolchain.toml`. When Cargo is managed by
+rustup, this file automatically selects or installs the compatible Rust
+toolchain.
+
 Open `src/main.rs` in your favorite editor or IDE to verify the model looks like
 the following:
 

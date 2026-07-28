@@ -122,6 +122,11 @@ if [ -z "$(command -v cargo)" ]; then
     exit 1
 fi
 
+# Install the selected branch's toolchain configuration before invoking Cargo
+# so rustup can select or install the compatible Rust toolchain automatically.
+download_asset "rust-toolchain.toml" "rust-toolchain.toml" \
+    "rust-toolchain.toml"
+
 if [ ! -f "Cargo.toml" ]; then
     printf 'Creating Cargo project\n'
     if ! cargo init; then

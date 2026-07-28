@@ -31,12 +31,6 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
-      - name: Select repository Rust toolchain
-        shell: bash
-        run: |
-          toolchain="$(rustup show active-toolchain | awk '{print $1}')"
-          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
-
       - name: Create project with setup script
         shell: bash
         run: |
@@ -57,6 +51,7 @@ jobs:
 
           IXA_SETUP_ASSET_BASE_URL="file://$GITHUB_WORKSPACE" \
             sh "$GITHUB_WORKSPACE/scripts/setup_new_ixa_project.sh" "${setup_args[@]}"
+          test -f rust-toolchain.toml
 
       - name: cargo fmt
         run: cargo fmt --check
