@@ -224,6 +224,11 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// It is possible to call [`Context::load_global_properties()`] multiple
     /// times with different files as long as the files have disjoint
     /// sets of properties.
+    ///
+    /// Note: when a config file is passed to a runner entry point via
+    /// `--config`, its top-level `args` key is reserved for runner arguments
+    /// and is excluded from global properties. This method does not treat
+    /// `args` specially; every key must name a global property.
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
 impl ContextGlobalPropertiesExt for Context {

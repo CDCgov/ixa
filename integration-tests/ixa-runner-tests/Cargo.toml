@@ -35,3 +35,8 @@ bench = false
 name = "ixa-runner-tests"
 path = "bin/runner_config_hyphen_package.rs"
 bench = false
+
+[[bin]]
+name = "runner_merged_args"
+path = "bin/runner_merged_args.rs"
+bench = false
