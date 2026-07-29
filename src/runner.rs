@@ -15,7 +15,7 @@ use crate::global_properties::load_global_properties_from_map;
 use crate::log::level_to_string_list;
 use crate::random::ContextRandomExt;
 use crate::report::ContextReportExt;
-use crate::{info, set_log_level, set_module_filters, LevelFilter};
+use crate::{info, set_log_level, set_module_filters, HashSet, LevelFilter};
 
 /// Custom parser for log levels
 fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, IxaError> {
@@ -37,7 +37,7 @@ fn parse_log_levels(s: &str) -> Result<Vec<(String, LevelFilter)>, IxaError> {
 }
 
 /// Default cli arguments for Ixa runner
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone, Serialize, Deserialize)]
 pub struct BaseArgs {
     #[cfg(feature = "write_cli_usage")]
     /// Print help in Markdown format. This is enabled only for debug builds. Run an example with
@@ -144,21 +144,6 @@ struct LoadedRunnerConfig {
     global_properties: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PartialBaseArgs {
-    random_seed: Option<u64>,
-    output_dir: Option<PathBuf>,
-    file_prefix: Option<String>,
-    force_overwrite: Option<bool>,
-    log_level: Option<String>,
-    verbose: Option<u8>,
-    warn: Option<bool>,
-    debug: Option<bool>,
-    trace: Option<bool>,
-    no_stats: Option<bool>,
-}
-
 fn create_ixa_cli() -> Command {
     let cli = Command::new("ixa");
     BaseArgs::augment_args(cli)
@@ -196,6 +181,22 @@ fn read_runner_config(config_path: Option<&Path>) -> Result<LoadedRunnerConfig, 
     })
 }
 
+/// Entry points that don't merge custom args must reject `args.custom` rather
+/// than silently ignoring it.
+fn reject_unmerged_custom_args(loaded_config: &LoadedRunnerConfig) -> Result<(), IxaError> {
+    let has_custom = loaded_config
+        .args
+        .as_ref()
+        .is_some_and(|args| args.contains_key("custom"));
+    if has_custom {
+        return Err(IxaError::InvalidRunnerConfig {
+            section: "args.custom".to_string(),
+            message: "custom config args are only merged by `run_with_merged_args`; remove `args.custom` from the config or switch entry points".to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn deserialize_runner_config<T>(value: serde_json::Value, section: &str) -> Result<T, IxaError>
 where
     T: DeserializeOwned,
@@ -212,84 +213,34 @@ fn arg_was_set_on_command_line(matches: &ArgMatches, id: &str) -> bool {
 
 const LOG_ARG_IDS: [&str; 5] = ["log_level", "verbose", "warn", "debug", "trace"];
 
+/// Base args that can never be set from the config file: `config` locates the
+/// config file itself and `markdown_help` is a debug-only doc generator.
+const CLI_ONLY_ARG_IDS: [&str; 2] = ["config", "markdown_help"];
+
+/// Base args whose CLI values bypass JSON serialization (paths may not be UTF-8).
+const PATH_ARG_IDS: [&str; 2] = ["config", "output_dir"];
+
 fn command_line_logging_arg_was_set(matches: &ArgMatches) -> bool {
     LOG_ARG_IDS
         .iter()
         .any(|id| arg_was_set_on_command_line(matches, id))
 }
 
-fn reset_logging_args(args: &mut BaseArgs) {
-    args.log_level = None;
-    args.verbose = 0;
-    args.warn = false;
-    args.debug = false;
-    args.trace = false;
+fn arg_ids(command: &Command) -> HashSet<String> {
+    command
+        .get_arguments()
+        .map(|arg| arg.get_id().to_string())
+        .collect()
 }
 
-fn apply_partial_base_args(args: &mut BaseArgs, partial: PartialBaseArgs) {
-    if let Some(random_seed) = partial.random_seed {
-        args.random_seed = random_seed;
-    }
-    if let Some(output_dir) = partial.output_dir {
-        args.output_dir = Some(output_dir);
-    }
-    if let Some(file_prefix) = partial.file_prefix {
-        args.file_prefix = Some(file_prefix);
-    }
-    if let Some(force_overwrite) = partial.force_overwrite {
-        args.force_overwrite = force_overwrite;
-    }
-    if let Some(log_level) = partial.log_level {
-        args.log_level = Some(log_level);
-    }
-    if let Some(verbose) = partial.verbose {
-        args.verbose = verbose;
-    }
-    if let Some(warn) = partial.warn {
-        args.warn = warn;
-    }
-    if let Some(debug) = partial.debug {
-        args.debug = debug;
-    }
-    if let Some(trace) = partial.trace {
-        args.trace = trace;
-    }
-    if let Some(no_stats) = partial.no_stats {
-        args.no_stats = no_stats;
-    }
-}
-
-fn apply_command_line_base_args(args: &mut BaseArgs, cli_args: &BaseArgs, matches: &ArgMatches) {
-    if arg_was_set_on_command_line(matches, "random_seed") {
-        args.random_seed = cli_args.random_seed;
-    }
-    if arg_was_set_on_command_line(matches, "output_dir") {
-        args.output_dir = cli_args.output_dir.clone();
-    }
-    if arg_was_set_on_command_line(matches, "file_prefix") {
-        args.file_prefix = cli_args.file_prefix.clone();
-    }
-    if arg_was_set_on_command_line(matches, "force_overwrite") {
-        args.force_overwrite = cli_args.force_overwrite;
-    }
-    if arg_was_set_on_command_line(matches, "log_level") {
-        args.log_level = cli_args.log_level.clone();
-    }
-    if arg_was_set_on_command_line(matches, "verbose") {
-        args.verbose = cli_args.verbose;
-    }
-    if arg_was_set_on_command_line(matches, "warn") {
-        args.warn = cli_args.warn;
-    }
-    if arg_was_set_on_command_line(matches, "debug") {
-        args.debug = cli_args.debug;
-    }
-    if arg_was_set_on_command_line(matches, "trace") {
-        args.trace = cli_args.trace;
-    }
-    if arg_was_set_on_command_line(matches, "no_stats") {
-        args.no_stats = cli_args.no_stats;
-    }
+fn custom_only_arg_ids<A>() -> HashSet<String>
+where
+    A: Args,
+{
+    let base_arg_ids = arg_ids(&create_ixa_cli());
+    let mut ids = arg_ids(&create_ixa_cli_with_custom::<A>());
+    ids.retain(|id| !base_arg_ids.contains(id));
+    ids
 }
 
 fn merge_base_args(
@@ -297,26 +248,61 @@ fn merge_base_args(
     cli_args: &BaseArgs,
     runner_config: Option<&serde_json::Map<String, serde_json::Value>>,
 ) -> Result<BaseArgs, IxaError> {
-    let mut args = BaseArgs::default();
+    let defaults = serialize_to_object(&BaseArgs::default(), "args")?;
+    let mut merged = defaults.clone();
 
     if let Some(config_object) = runner_config {
-        let mut config_object = config_object.clone();
-        config_object.remove("custom");
-        let partial = deserialize_runner_config(serde_json::Value::Object(config_object), "args")?;
-        apply_partial_base_args(&mut args, partial);
+        let base_arg_ids = arg_ids(&create_ixa_cli());
+        for (key, value) in config_object {
+            if key == "custom" {
+                continue;
+            }
+            if !base_arg_ids.contains(key) || CLI_ONLY_ARG_IDS.contains(&key.as_str()) {
+                let mut allowed: Vec<&str> = base_arg_ids
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|id| !CLI_ONLY_ARG_IDS.contains(id))
+                    .collect();
+                allowed.sort_unstable();
+                return Err(IxaError::InvalidRunnerConfig {
+                    section: "args".to_string(),
+                    message: format!(
+                        "unknown field `{key}`, expected one of: {}",
+                        allowed.join(", ")
+                    ),
+                });
+            }
+            merged.insert(key.clone(), value.clone());
+        }
     }
 
+    // CLI logging flags are shortcuts for each other, so an explicit one
+    // replaces all config-sourced logging fields as a group.
     if command_line_logging_arg_was_set(matches) {
-        reset_logging_args(&mut args);
+        for id in LOG_ARG_IDS {
+            merged.insert(id.to_string(), defaults[id].clone());
+        }
     }
-    apply_command_line_base_args(&mut args, cli_args, matches);
+
+    // PathBuf args can hold non-UTF8 bytes that JSON can't represent, so they
+    // are copied directly instead of round-tripped through serialization.
+    let mut cli_utf8 = cli_args.clone();
+    cli_utf8.config = None;
+    cli_utf8.output_dir = None;
+    for (key, value) in serialize_to_object(&cli_utf8, "args")? {
+        if PATH_ARG_IDS.contains(&key.as_str()) {
+            continue;
+        }
+        if arg_was_set_on_command_line(matches, &key) {
+            merged.insert(key, value);
+        }
+    }
+
+    let mut args: BaseArgs = deserialize_runner_config(serde_json::Value::Object(merged), "args")?;
     args.config = cli_args.config.clone();
-
-    #[cfg(feature = "write_cli_usage")]
-    {
-        args.markdown_help = cli_args.markdown_help;
+    if arg_was_set_on_command_line(matches, "output_dir") {
+        args.output_dir = cli_args.output_dir.clone();
     }
-
     Ok(args)
 }
 
@@ -334,7 +320,7 @@ where
         serde_json::Value::Object(object) => Ok(object),
         _ => Err(IxaError::InvalidRunnerConfig {
             section: section.to_string(),
-            message: "expected custom args to serialize as a JSON object".to_string(),
+            message: format!("expected `{section}` to serialize as a JSON object"),
         }),
     }
 }
@@ -347,8 +333,9 @@ fn merge_custom_args<A>(
 where
     A: Args + Serialize + DeserializeOwned + Default,
 {
-    let cli_args = serialize_to_object(cli_args, "args.custom")?;
-    let mut args = cli_args.clone();
+    let cli_values = serialize_to_object(cli_args, "args.custom")?;
+    let custom_arg_ids = custom_only_arg_ids::<A>();
+    let mut args = cli_values.clone();
     let mut config_custom_args = None;
 
     if let Some(config_object) = runner_config {
@@ -360,14 +347,22 @@ where
                 });
             };
             for (key, value) in custom_object {
+                if !custom_arg_ids.contains(key) && !cli_values.contains_key(key) {
+                    return Err(IxaError::InvalidRunnerConfig {
+                        section: "args.custom".to_string(),
+                        message: format!("unknown field `{key}`"),
+                    });
+                }
                 args.insert(key.clone(), value.clone());
             }
             config_custom_args = Some(custom_object);
         }
     }
 
-    for (key, value) in cli_args {
-        if arg_was_set_on_command_line(matches, &key) {
+    // A field whose serde name is not a clap arg id (e.g. `#[serde(rename)]`)
+    // can't be checked with value_source, so the config value wins for it.
+    for (key, value) in cli_values {
+        if custom_arg_ids.contains(&key) && arg_was_set_on_command_line(matches, &key) {
             args.insert(key, value);
         }
     }
@@ -403,10 +398,7 @@ fn required_custom_arg_ids<A>() -> Vec<String>
 where
     A: Args,
 {
-    let base_arg_ids: std::collections::HashSet<_> = create_ixa_cli()
-        .get_arguments()
-        .map(|arg| arg.get_id().to_string())
-        .collect();
+    let base_arg_ids = arg_ids(&create_ixa_cli());
 
     create_ixa_cli_with_custom::<A>()
         .get_arguments()
@@ -447,7 +439,8 @@ where
 ///   a `Option<A>` where `A` is the custom cli arguments struct
 ///
 /// # Errors
-/// Returns an error if argument parsing or the setup function fails
+/// Returns an error if config loading/merging or the setup function fails.
+/// Invalid command line arguments print an error and exit the process.
 pub fn run_with_custom_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args,
@@ -459,6 +452,7 @@ where
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
     let custom_matches = A::from_arg_matches(&matches)?;
     let loaded_config = read_runner_config(base_args_matches.config.as_deref())?;
+    reject_unmerged_custom_args(&loaded_config)?;
     let effective_base_args =
         merge_base_args(&matches, &base_args_matches, loaded_config.args.as_ref())?;
     execute_runner(effective_base_args, loaded_config, |context, args| {
@@ -474,7 +468,8 @@ where
 /// - `setup_fn`: A function that takes a mutable reference to a [`Context`] and [`BaseArgs`] struct
 ///
 /// # Errors
-/// Returns an error if argument parsing or the setup function fails
+/// Returns an error if config loading/merging or the setup function fails.
+/// Invalid command line arguments print an error and exit the process.
 pub fn run_with_args<F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     F: Fn(&mut Context, BaseArgs, Option<PlaceholderCustom>) -> Result<(), IxaError>,
@@ -484,6 +479,7 @@ where
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
     let loaded_config = read_runner_config(base_args_matches.config.as_deref())?;
+    reject_unmerged_custom_args(&loaded_config)?;
     let effective_base_args =
         merge_base_args(&matches, &base_args_matches, loaded_config.args.as_ref())?;
     execute_runner(effective_base_args, loaded_config, |context, args| {
@@ -496,11 +492,19 @@ where
 /// Values in `args` from the JSON config override defaults. Explicit CLI flags
 /// override config values. Custom config values are read from `args.custom`.
 /// Custom merging supports top-level serde fields whose names match clap arg
-/// IDs. Nested or flattened custom layouts are not merged generically.
+/// IDs. A field whose serde name differs from its clap arg id (e.g. via
+/// `#[serde(rename)]` or `#[serde(flatten)]`) can still be set from the
+/// config, but an explicit CLI value for it cannot be detected, so the config
+/// value takes precedence for that field.
 /// `config` itself is CLI-only and is not read from the config file.
 ///
+/// Custom args are merged by round-tripping through JSON, so custom path
+/// arguments given on the command line must be valid UTF-8. Base path
+/// arguments (`--config`, `--output`) have no such restriction.
+///
 /// # Errors
-/// Returns an error if argument parsing, config merging, or the setup function fails.
+/// Returns an error if config merging or the setup function fails. Invalid
+/// command line arguments print an error and exit the process.
 pub fn run_with_merged_args<A, F>(setup_fn: F) -> Result<Context, Box<dyn std::error::Error>>
 where
     A: Args + Serialize + DeserializeOwned + Default,
@@ -508,7 +512,9 @@ where
 {
     let cli = create_ixa_cli_with_custom::<A>();
     let argv: Vec<_> = std::env::args_os().collect();
-    let matches = parse_matches_allowing_config_required_args(cli, argv)?;
+    // Print help/version and exit on parse errors, matching `Command::get_matches`.
+    let matches =
+        parse_matches_allowing_config_required_args(cli, argv).unwrap_or_else(|error| error.exit());
 
     let base_args_matches = BaseArgs::from_arg_matches(&matches)?;
     let custom_matches = custom_args_from_matches::<A>(&matches)?;
@@ -539,6 +545,7 @@ where
     F: Fn(&mut Context, BaseArgs, Option<A>) -> Result<(), IxaError>,
 {
     let loaded_config = read_runner_config(args.config.as_deref())?;
+    reject_unmerged_custom_args(&loaded_config)?;
     execute_runner(args, loaded_config, |context, args| {
         setup_fn(context, args, custom_args)
     })
@@ -935,6 +942,77 @@ mod tests {
             err,
             IxaError::InvalidRunnerConfig { section, .. } if section == "args.custom"
         ));
+    }
+
+    #[derive(Args, Debug, Default, Serialize, Deserialize)]
+    struct RenamedCustomArgs {
+        #[arg(long)]
+        #[serde(rename = "renamed")]
+        original: Option<String>,
+    }
+
+    #[test]
+    fn test_merge_custom_args_serde_renamed_field() {
+        let (matches, cli_args) = parse_custom_args_from::<RenamedCustomArgs, 1>(["ixa"]);
+
+        let args = merge_custom_args(&matches, &cli_args, None).unwrap();
+        assert_eq!(args.original, None);
+
+        let config = json_object(json!({ "custom": { "renamed": "from-config" } }));
+        let args = merge_custom_args(&matches, &cli_args, Some(&config)).unwrap();
+        assert_eq!(args.original, Some("from-config".to_string()));
+    }
+
+    #[test]
+    fn test_merge_custom_args_rejects_base_arg_key() {
+        let (matches, cli_args) = parse_custom_args_from::<CustomArgs, 1>(["ixa"]);
+        let config = json_object(json!({ "custom": { "random_seed": 5, "a": 7 } }));
+        let err = merge_custom_args(&matches, &cli_args, Some(&config)).unwrap_err();
+
+        assert!(matches!(
+            err,
+            IxaError::InvalidRunnerConfig { section, .. } if section == "args.custom"
+        ));
+    }
+
+    #[test]
+    fn test_merge_custom_args_rejects_unknown_field() {
+        let (matches, cli_args) = parse_custom_args_from::<CustomArgs, 1>(["ixa"]);
+        let config = json_object(json!({ "custom": { "typo": 1 } }));
+        let err = merge_custom_args(&matches, &cli_args, Some(&config)).unwrap_err();
+
+        assert!(matches!(
+            err,
+            IxaError::InvalidRunnerConfig { section, .. } if section == "args.custom"
+        ));
+    }
+
+    #[test]
+    fn test_merge_base_args_rejects_config_key() {
+        let (matches, cli_args) = parse_base_args_from(["ixa"]);
+        let config = json_object(json!({ "config": "other.json" }));
+        let err = merge_base_args(&matches, &cli_args, Some(&config)).unwrap_err();
+
+        assert!(matches!(
+            err,
+            IxaError::InvalidRunnerConfig { section, .. } if section == "args"
+        ));
+    }
+
+    #[test]
+    fn test_run_with_config_rejects_unmerged_custom_args() {
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.json");
+        fs::write(&config_path, r#"{ "args": { "custom": { "a": 1 } } }"#).unwrap();
+
+        let test_args = BaseArgs {
+            config: Some(config_path),
+            ..Default::default()
+        };
+        let err = run_with_args_internal(test_args, None, |_, _, _: Option<()>| Ok(()))
+            .err()
+            .unwrap();
+        assert!(err.to_string().contains("args.custom"));
     }
 
     #[test]
