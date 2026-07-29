@@ -322,11 +322,16 @@ impl ContextEntitiesExt for Context {
 
         // All explicit values are now available, so derived and multi-property dispatchers see
         // the entity's complete initialized state.
-        let index_count = self
-            .entity_store
-            .get_property_store::<E>()
-            .index_new_entity_fns
-            .len();
+
+        // We simultaneously fetch the index count and bit mask of property initialized event
+        // subscriptions from the entity store without retaining a borrow of the store.
+        let (index_count, property_initialized_event_subscriptions) = {
+            let property_store = self.entity_store.get_property_store::<E>();
+            (
+                property_store.index_new_entity_fns.len(),
+                property_store.property_initialized_event_subscriptions,
+            )
+        };
 
         for index in 0..index_count {
             let dispatch = self
@@ -340,7 +345,13 @@ impl ContextEntitiesExt for Context {
             dispatch(self, new_entity_id);
         }
 
-        property_list.emit_initialized_events(self, new_entity_id);
+        if property_initialized_event_subscriptions != 0 {
+            property_list.emit_initialized_events(
+                self,
+                new_entity_id,
+                property_initialized_event_subscriptions,
+            );
+        }
 
         // Emit an `EntityCreatedEvent<Entity>`.
         self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
