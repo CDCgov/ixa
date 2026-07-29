@@ -311,7 +311,8 @@ impl ContextEntitiesExt for Context {
         }
 
         // Now that we know we will succeed, we create the entity.
-        let new_entity_id = self.entity_store.new_entity_id::<E>();
+        let (new_entity_id, entity_created_event_subscribed) =
+            self.entity_store.new_entity_id::<E>();
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
@@ -353,8 +354,9 @@ impl ContextEntitiesExt for Context {
             );
         }
 
-        // Emit an `EntityCreatedEvent<Entity>`.
-        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
+        if entity_created_event_subscribed {
+            self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
+        }
 
         Ok(new_entity_id)
     }
