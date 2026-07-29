@@ -128,8 +128,14 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
             .set_values_for_new_entity(entity_id, property_store)
     }
 
-    fn emit_initialized_events(&self, context: &mut Context, entity_id: EntityId<E>) {
-        self.inner.emit_initialized_events(context, entity_id);
+    fn emit_initialized_events(
+        &self,
+        context: &mut Context,
+        entity_id: EntityId<E>,
+        subscription_mask: u32,
+    ) {
+        self.inner
+            .emit_initialized_events(context, entity_id, subscription_mask);
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {

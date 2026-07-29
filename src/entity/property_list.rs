@@ -54,7 +54,12 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
 
     /// Emits initialization events for the explicitly supplied property values.
     #[doc(hidden)]
-    fn emit_initialized_events(&self, context: &mut Context, entity_id: EntityId<E>);
+    fn emit_initialized_events(
+        &self,
+        context: &mut Context,
+        entity_id: EntityId<E>,
+        subscription_mask: u32,
+    );
 
     /// Gets the tuple of property values for the given entity.
     #[must_use]
@@ -80,7 +85,13 @@ impl<E: Entity> PropertyList<E> for () {
         // No values to assign.
     }
 
-    fn emit_initialized_events(&self, _context: &mut Context, _entity_id: EntityId<E>) {}
+    fn emit_initialized_events(
+        &self,
+        _context: &mut Context,
+        _entity_id: EntityId<E>,
+        _subscription_mask: u32,
+    ) {
+    }
 
     fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> Self {}
 }
@@ -102,7 +113,13 @@ impl<E: Entity + Copy> PropertyList<E> for E {
         // No values to assign.
     }
 
-    fn emit_initialized_events(&self, _context: &mut Context, _entity_id: EntityId<E>) {}
+    fn emit_initialized_events(
+        &self,
+        _context: &mut Context,
+        _entity_id: EntityId<E>,
+        _subscription_mask: u32,
+    ) {
+    }
 
     fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> E {
         E::default()
@@ -165,8 +182,15 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         property_value_store.set(entity_id, self.0);
     }
 
-    fn emit_initialized_events(&self, context: &mut Context, entity_id: EntityId<E>) {
-        emit_initialized_event(context, entity_id, self.0);
+    fn emit_initialized_events(
+        &self,
+        context: &mut Context,
+        entity_id: EntityId<E>,
+        subscription_mask: u32,
+    ) {
+        if subscription_mask & (1_u32 << P::id()) != 0 {
+            emit_initialized_event(context, entity_id, self.0);
+        }
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
@@ -210,8 +234,17 @@ macro_rules! impl_property_list {
                     })*
                 }
 
-                fn emit_initialized_events(&self, context: &mut Context, entity_id: EntityId<E>) {
-                    #(emit_initialized_event(context, entity_id, self.N);)*
+                fn emit_initialized_events(
+                    &self,
+                    context: &mut Context,
+                    entity_id: EntityId<E>,
+                    subscription_mask: u32,
+                ) {
+                    #(
+                        if subscription_mask & (1_u32 << P~N::id()) != 0 {
+                            emit_initialized_event(context, entity_id, self.N);
+                        }
+                    )*
                 }
 
                 fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
