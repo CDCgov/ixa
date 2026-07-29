@@ -138,10 +138,30 @@ impl<E: Entity, P: Property<E>> PartialPropertyChangeEventCore<E, P> {
 
 /// Emitted when a new entity is created.
 /// These should not be emitted outside this module.
-#[derive(IxaEvent)]
 pub struct EntityCreatedEvent<E: Entity> {
     /// The [`EntityId<E>`] of the new entity.
     pub entity_id: EntityId<E>,
+}
+
+// Implemented manually to maintain the subscription flag through the event hooks.
+impl<E: Entity> Clone for EntityCreatedEvent<E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: Entity> Copy for EntityCreatedEvent<E> {}
+
+impl<E: Entity> IxaEvent for EntityCreatedEvent<E> {
+    fn on_subscribe(context: &mut Context) {
+        context.entity_store.items[E::id()].entity_created_event_subscribed = true;
+    }
+
+    fn on_unsubscribe(context: &mut Context) {
+        if !context.has_event_handlers::<Self>() {
+            context.entity_store.items[E::id()].entity_created_event_subscribed = false;
+        }
+    }
 }
 
 impl<E: Entity> EntityCreatedEvent<E> {
@@ -625,6 +645,145 @@ mod tests {
             .unwrap();
         context.execute();
         assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_tracks_listener_lifecycle() {
+        let mut context = Context::new();
+        assert!(
+            !context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+
+        let first = context
+            .subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
+        assert!(
+            context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+
+        let second = context
+            .subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
+        assert!(context.unsubscribe_from_event(&first));
+        assert!(
+            context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+
+        assert!(context.unsubscribe_from_event(&second));
+        assert!(
+            !context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_ignores_failed_unsubscription() {
+        let mut context = Context::new();
+        let listener = context
+            .subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
+
+        assert!(context.unsubscribe_from_event(&listener));
+        assert!(!context.unsubscribe_from_event(&listener));
+        assert!(
+            !context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_is_scoped_to_entity_type() {
+        let mut context = Context::new();
+        context.subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
+
+        assert!(
+            context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+        assert!(
+            !context
+                .entity_store
+                .new_entity_id::<OtherInitializationPerson>()
+                .1
+        );
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_ignores_unrelated_event() {
+        let mut context = Context::new();
+        context.subscribe_to_event(
+            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
+        );
+
+        assert!(
+            !context
+                .entity_store
+                .new_entity_id::<InitializationPerson>()
+                .1
+        );
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_controls_delivery() {
+        let mut context = Context::new();
+        let count = Rc::new(Cell::new(0));
+        let count_clone = count.clone();
+        let listener = context.subscribe_to_event(
+            move |_context, _event: EntityCreatedEvent<InitializationPerson>| {
+                count_clone.set(count_clone.get() + 1);
+            },
+        );
+
+        context
+            .add_entity(with!(InitializationPerson, InitRequired(1)))
+            .unwrap();
+        context.execute();
+        assert_eq!(count.get(), 1);
+
+        assert!(context.unsubscribe_from_event(&listener));
+        context
+            .add_entity(with!(InitializationPerson, InitRequired(2)))
+            .unwrap();
+        context.execute();
+        assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn entity_created_subscription_cache_preserves_listener_order() {
+        let mut context = Context::new();
+        let order = Rc::new(RefCell::new(Vec::new()));
+
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |_context, _event: EntityCreatedEvent<InitializationPerson>| {
+                order_clone.borrow_mut().push(1);
+            },
+        );
+        let order_clone = order.clone();
+        context.subscribe_to_event(
+            move |_context, _event: EntityCreatedEvent<InitializationPerson>| {
+                order_clone.borrow_mut().push(2);
+            },
+        );
+
+        context
+            .add_entity(with!(InitializationPerson, InitRequired(1)))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(*order.borrow(), vec![1, 2]);
     }
 
     #[test]
