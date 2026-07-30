@@ -13,7 +13,7 @@ use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
 use super::profiling_data;
 #[cfg(feature = "profiling")]
-use super::QueryTimingRow;
+use super::QueryProfilingData;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
 
@@ -102,7 +102,7 @@ struct ComputedStatisticRecord {
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
-    query_timings: &[QueryTimingRow],
+    query_timings: &[(&'static str, QueryProfilingData)],
 ) -> std::io::Result<()> {
     let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
@@ -126,12 +126,12 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         .collect();
     let query_timings_data = query_timings
         .iter()
-        .map(|row| QueryTimingRecord {
-            query: row.query.clone(),
-            count: row.count,
-            total: SerializableDuration(row.total),
-            min: SerializableDuration(row.min),
-            max: SerializableDuration(row.max),
+        .map(|(query, data)| QueryTimingRecord {
+            query: (*query).to_string(),
+            count: data.count,
+            total: SerializableDuration(data.total),
+            min: SerializableDuration(data.min),
+            max: SerializableDuration(data.max),
         })
         .collect();
 
@@ -266,13 +266,15 @@ mod tests {
 
     #[test]
     fn test_write_profiling_data_includes_query_timings() {
-        let rows = vec![QueryTimingRow {
-            query: "FileQueryTiming: (Age)".to_string(),
-            count: 2,
-            total: Duration::from_micros(40),
-            min: Duration::from_micros(10),
-            max: Duration::from_micros(30),
-        }];
+        let rows = vec![(
+            "FileQueryTiming: (Age)",
+            QueryProfilingData {
+                count: 2,
+                total: Duration::from_micros(40),
+                min: Duration::from_micros(10),
+                max: Duration::from_micros(30),
+            },
+        )];
 
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("query_timing_test.json");

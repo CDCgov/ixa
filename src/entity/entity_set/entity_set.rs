@@ -144,19 +144,19 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     #[must_use]
     pub fn union(self, other: Self) -> Self {
-        let left = self;
-        let right = other;
+        // Mutation only happens for profiling feature.
+        #![allow(unused_mut)]
+        let mut left = self;
+        let mut right = other;
         #[cfg(feature = "profiling")]
-        let (left, right, query_profile) = {
-            let query_profile = Self::unique_query_profile(&left, &right);
-            let mut left = left;
-            let mut right = right;
+        let query_profile = Self::unique_query_profile(&left, &right);
+        #[cfg(feature = "profiling")]
+        {
             left.query_profile = None;
             right.query_profile = None;
-            (left, right, query_profile)
-        };
+        }
 
-        let result = 'result: {
+        let mut result = 'result: {
             // Idempotence: A ∪ A = A  (same structure over same sources)
             if left.structurally_eq(&right) {
                 break 'result left;
@@ -187,29 +187,27 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             break 'result Self::new(EntitySetInner::Union(Box::new(left), Box::new(right)));
         };
         #[cfg(feature = "profiling")]
-        let result = {
-            let mut result = result;
+        {
             result.query_profile = query_profile;
-            result
-        };
+        }
         result
     }
 
     #[must_use]
     pub fn intersection(self, other: Self) -> Self {
-        let left = self;
-        let right = other;
+        // Mutation only happens for profiling feature.
+        #![allow(unused_mut)]
+        let mut left = self;
+        let mut right = other;
         #[cfg(feature = "profiling")]
-        let (left, right, query_profile) = {
-            let query_profile = Self::unique_query_profile(&left, &right);
-            let mut left = left;
-            let mut right = right;
+        let query_profile = Self::unique_query_profile(&left, &right);
+        #[cfg(feature = "profiling")]
+        {
             left.query_profile = None;
             right.query_profile = None;
-            (left, right, query_profile)
-        };
+        }
 
-        let result = 'result: {
+        let mut result = 'result: {
             // Idempotence: A ∩ A = A
             if left.structurally_eq(&right) {
                 break 'result left;
@@ -247,29 +245,27 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             break 'result Self::new(EntitySetInner::Intersection(sets));
         };
         #[cfg(feature = "profiling")]
-        let result = {
-            let mut result = result;
+        {
             result.query_profile = query_profile;
-            result
-        };
+        }
         result
     }
 
     #[must_use]
     pub fn difference(self, other: Self) -> Self {
-        let left = self;
-        let right = other;
+        // Mutation only happens for profiling feature.
+        #![allow(unused_mut)]
+        let mut left = self;
+        let mut right = other;
         #[cfg(feature = "profiling")]
-        let (left, right, query_profile) = {
-            let query_profile = Self::unique_query_profile(&left, &right);
-            let mut left = left;
-            let mut right = right;
+        let query_profile = Self::unique_query_profile(&left, &right);
+        #[cfg(feature = "profiling")]
+        {
             left.query_profile = None;
             right.query_profile = None;
-            (left, right, query_profile)
-        };
+        }
 
-        let result = 'result: {
+        let mut result = 'result: {
             // Self-subtraction: A \ A = ∅
             if left.structurally_eq(&right) {
                 break 'result Self::empty();
@@ -308,11 +304,9 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             break 'result Self::new(EntitySetInner::Difference(Box::new(left), Box::new(right)));
         };
         #[cfg(feature = "profiling")]
-        let result = {
-            let mut result = result;
+        {
             result.query_profile = query_profile;
-            result
-        };
+        }
         result
     }
 
@@ -341,7 +335,14 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Collect this set's contents into an owned vector of `EntityId<E>`.
     #[must_use]
-    pub fn to_owned_vec(self) -> Vec<EntityId<E>> {
+    #[allow(unused_mut)]
+    pub fn to_owned_vec(mut self) -> Vec<EntityId<E>> {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .take()
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         self.into_iter().collect()
     }
 
@@ -385,13 +386,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 }
             }
         } else {
-            let set = self.clone();
+            #[allow(unused_mut)]
+            let mut set = self.clone();
             #[cfg(feature = "profiling")]
-            let set = {
-                let mut set = set;
+            {
                 set.query_profile = None;
-                set
-            };
+            }
             sample_single_excluding_l_reservoir(rng, set, excluded)
         }
     }
@@ -417,13 +417,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             let index = rng.random_range(0..n as u32) as usize;
             return self.try_nth(index);
         }
-        let set = self.clone();
+        #[allow(unused_mut)]
+        let mut set = self.clone();
         #[cfg(feature = "profiling")]
-        let set = {
-            let mut set = set;
+        {
             set.query_profile = None;
-            set
-        };
+        }
         sample_single_l_reservoir(rng, set)
     }
 
@@ -447,13 +446,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             let index = rng.random_range(0..n as u32) as usize;
             return (n, self.try_nth(index));
         }
-        let set = self.clone();
+        #[allow(unused_mut)]
+        let mut set = self.clone();
         #[cfg(feature = "profiling")]
-        let set = {
-            let mut set = set;
+        {
             set.query_profile = None;
-            set
-        };
+        }
         count_and_sample_single_l_reservoir(rng, set)
     }
 
@@ -475,23 +473,21 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 vec![]
             }
             Some(_) => {
-                let set = self.clone();
+                #[allow(unused_mut)]
+                let mut set = self.clone();
                 #[cfg(feature = "profiling")]
-                let set = {
-                    let mut set = set;
+                {
                     set.query_profile = None;
-                    set
-                };
+                }
                 sample_multiple_from_known_length(rng, set, requested)
             }
             None => {
-                let set = self.clone();
+                #[allow(unused_mut)]
+                let mut set = self.clone();
                 #[cfg(feature = "profiling")]
-                let set = {
-                    let mut set = set;
+                {
                     set.query_profile = None;
-                    set
-                };
+                }
                 sample_multiple_l_reservoir(rng, set, requested)
             }
         }

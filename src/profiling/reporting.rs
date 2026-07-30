@@ -34,7 +34,7 @@ impl ProfilingContextExt for Context {
         #[cfg(feature = "profiling")]
         {
             if include_profiling_data {
-                super::print_query_timings(&self.query_timings_table());
+                super::print_query_timings(&self.query_profiling_snapshot());
             }
         }
     }
@@ -42,7 +42,7 @@ impl ProfilingContextExt for Context {
     fn write_profiling_data(&mut self) {
         #[cfg(feature = "profiling")]
         {
-            let query_timings = self.query_timings_table();
+            let query_timings = self.query_profiling_snapshot();
             write_profiling_output(self, |path, statistics| {
                 write_profiling_data_to_file(path, statistics, &query_timings)
             });

@@ -1813,12 +1813,16 @@ mod tests {
 
     #[cfg(feature = "profiling")]
     fn query_count(context: &Context, query: &str) -> Option<usize> {
-        context.query_timing(query).map(|timing| timing.count)
+        context
+            .query_profiling_data(query)
+            .map(|profiling_data| profiling_data.count)
     }
 
     #[cfg(feature = "profiling")]
     fn query_total(context: &Context, query: &str) -> Option<Duration> {
-        context.query_timing(query).map(|timing| timing.total)
+        context
+            .query_profiling_data(query)
+            .map(|profiling_data| profiling_data.total)
     }
 
     #[cfg(feature = "profiling")]
@@ -1871,9 +1875,9 @@ mod tests {
             1
         );
         assert_eq!(query_count(&context, label), Some(1));
-        let timing = context.query_timing(label).unwrap();
-        assert_eq!(timing.min, timing.total);
-        assert_eq!(timing.max, timing.total);
+        let profiling_data = context.query_profiling_data(label).unwrap();
+        assert_eq!(profiling_data.min, profiling_data.total);
+        assert_eq!(profiling_data.max, profiling_data.total);
 
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
@@ -1904,7 +1908,24 @@ mod tests {
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn unused_query_result_iterator_does_not_record_query_timing() {
+    fn count_commits_work_from_a_partially_consumed_iterator_once() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
+            .unwrap();
+
+        let label = "ProfilingBoundaryPerson: (ProfilingBoundaryAge)";
+        let mut iter =
+            context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
+        assert_eq!(iter.next(), Some(person));
+        assert_eq!(iter.count(), 0);
+
+        assert_eq!(query_count(&context, label), Some(1));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn unused_query_result_iterator_does_not_record_profiling_data() {
         let mut context = Context::new();
         context
             .add_entity(with!(
@@ -2020,6 +2041,26 @@ mod tests {
         );
 
         assert_eq!(query_count(&context, label), Some(4));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn to_owned_vec_records_one_execution_without_nested_iterator_timing() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity(with!(ProfilingCallbackPerson, ProfilingCallbackAge(42)))
+            .unwrap();
+        context
+            .add_entity(with!(ProfilingCallbackPerson, ProfilingCallbackAge(7)))
+            .unwrap();
+
+        let label = "ProfilingCallbackPerson: (ProfilingCallbackAge)";
+        let people = context
+            .query(with!(ProfilingCallbackPerson, ProfilingCallbackAge(42)))
+            .to_owned_vec();
+
+        assert_eq!(people, vec![person]);
+        assert_eq!(query_count(&context, label), Some(1));
     }
 
     #[cfg(feature = "profiling")]

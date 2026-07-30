@@ -3,7 +3,7 @@ use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
 use super::{
-    profiling_data, ProfilingData, QueryTimingRow, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
+    profiling_data, ProfilingData, QueryProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
     QUERY_TIMINGS_HEADERS,
 };
 
@@ -88,7 +88,7 @@ pub fn print_named_spans() {
 pub fn print_named_spans() {}
 
 #[cfg(feature = "profiling")]
-pub(crate) fn print_query_timings(rows: &[QueryTimingRow]) {
+pub(crate) fn print_query_timings(rows: &[(&'static str, QueryProfilingData)]) {
     if rows.is_empty() {
         return;
     }
@@ -101,13 +101,13 @@ pub(crate) fn print_query_timings(rows: &[QueryTimingRow]) {
             .collect(),
     ];
 
-    formatted_rows.extend(rows.iter().map(|row| {
+    formatted_rows.extend(rows.iter().map(|(query, data)| {
         vec![
-            row.query.clone(),
-            format_with_commas(row.count),
-            format_duration(row.total).to_string(),
-            format_duration(row.min).to_string(),
-            format_duration(row.max).to_string(),
+            (*query).to_string(),
+            format_with_commas(data.count),
+            format_duration(data.total).to_string(),
+            format_duration(data.min).to_string(),
+            format_duration(data.max).to_string(),
         ]
     }));
 
@@ -417,20 +417,24 @@ mod tests {
     #[test]
     fn print_query_timings_outputs_expected_format() {
         let rows = vec![
-            QueryTimingRow {
-                query: "DisplayQueryTimings: (Age)".to_string(),
-                count: 2,
-                total: Duration::from_micros(40),
-                min: Duration::from_micros(10),
-                max: Duration::from_micros(30),
-            },
-            QueryTimingRow {
-                query: "DisplayQueryTimings: (County)".to_string(),
-                count: 1,
-                total: Duration::from_micros(20),
-                min: Duration::from_micros(20),
-                max: Duration::from_micros(20),
-            },
+            (
+                "DisplayQueryTimings: (Age)",
+                QueryProfilingData {
+                    count: 2,
+                    total: Duration::from_micros(40),
+                    min: Duration::from_micros(10),
+                    max: Duration::from_micros(30),
+                },
+            ),
+            (
+                "DisplayQueryTimings: (County)",
+                QueryProfilingData {
+                    count: 1,
+                    total: Duration::from_micros(20),
+                    min: Duration::from_micros(20),
+                    max: Duration::from_micros(20),
+                },
+            ),
         ];
 
         print_query_timings(&rows);
