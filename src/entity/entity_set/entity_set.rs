@@ -24,7 +24,11 @@ use crate::random::{
 };
 
 /// Opaque public wrapper around the internal set-expression tree.
-pub struct EntitySet<'a, E: Entity>(EntitySetInner<'a, E>);
+pub struct EntitySet<'a, E: Entity> {
+    pub(super) inner: EntitySetInner<'a, E>,
+    #[cfg(feature = "profiling")]
+    pub(in crate::entity) query_profile: Option<crate::profiling::QueryProfileHandle<'a>>,
+}
 
 /// Internal set-expression tree used to represent composed query sources.
 pub(super) enum EntitySetInner<'a, E: Entity> {
@@ -36,7 +40,11 @@ pub(super) enum EntitySetInner<'a, E: Entity> {
 
 impl<'a, E: Entity> Clone for EntitySet<'a, E> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self {
+            inner: self.inner.clone(),
+            #[cfg(feature = "profiling")]
+            query_profile: self.query_profile,
+        }
     }
 }
 
@@ -58,16 +66,40 @@ impl<'a, E: Entity> Default for EntitySet<'a, E> {
 }
 
 impl<'a, E: Entity> EntitySet<'a, E> {
-    pub(super) fn into_inner(self) -> EntitySetInner<'a, E> {
-        self.0
+    fn new(inner: EntitySetInner<'a, E>) -> Self {
+        Self {
+            inner,
+            #[cfg(feature = "profiling")]
+            query_profile: None,
+        }
+    }
+
+    /// Set algebra retains profiling only when all profiled operands have the
+    /// same query identity. This avoids charging a composed operation to an
+    /// arbitrary query while preserving a single identifiable query origin.
+    #[cfg(feature = "profiling")]
+    fn unique_query_profile(
+        left: &Self,
+        right: &Self,
+    ) -> Option<crate::profiling::QueryProfileHandle<'a>> {
+        match (left.query_profile, right.query_profile) {
+            (Some(left_profile), Some(right_profile))
+                if left_profile.same_query_as(right_profile) =>
+            {
+                Some(left_profile)
+            }
+            (Some(_), Some(_)) => None,
+            (profile @ Some(_), None) | (None, profile @ Some(_)) => profile,
+            (None, None) => None,
+        }
     }
 
     pub(super) fn is_source_leaf(&self) -> bool {
-        matches!(self.0, EntitySetInner::Source(_))
+        matches!(self.inner, EntitySetInner::Source(_))
     }
 
     pub(super) fn into_source_leaf(self) -> Option<SourceSet<'a, E>> {
-        match self.0 {
+        match self.inner {
             EntitySetInner::Source(source) => Some(source),
             _ => None,
         }
@@ -76,12 +108,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Create an empty entity set.
     #[must_use]
     pub fn empty() -> Self {
-        EntitySet(EntitySetInner::Source(SourceSet::empty()))
+        Self::new(EntitySetInner::Source(SourceSet::empty()))
     }
 
     /// Create an entity set from a single source set.
     pub(crate) fn from_source(source: SourceSet<'a, E>) -> Self {
-        EntitySet(EntitySetInner::Source(source))
+        Self::new(EntitySetInner::Source(source))
     }
 
     pub(crate) fn from_intersection_sources(mut sources: Vec<SourceSet<'a, E>>) -> Self {
@@ -97,126 +129,212 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
         let sets = sources.into_iter().map(Self::from_source).collect();
 
-        EntitySet(EntitySetInner::Intersection(sets))
+        Self::new(EntitySetInner::Intersection(sets))
+    }
+
+    #[cfg(feature = "profiling")]
+    #[inline]
+    pub(in crate::entity) fn with_query_profile(
+        mut self,
+        profile: crate::profiling::QueryProfileHandle<'a>,
+    ) -> Self {
+        self.query_profile = Some(profile);
+        self
     }
 
     #[must_use]
     pub fn union(self, other: Self) -> Self {
-        // Idempotence: A ∪ A = A  (same structure over same sources)
-        if self.structurally_eq(&other) {
-            return self;
-        }
-
-        // Adjacent or overlapping intervals
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            if a.start <= b.end && b.start <= a.end {
-                return Self::from_source(SourceSet::population_range(
-                    a.start.min(b.start)..a.end.max(b.end),
-                ));
-            }
-        }
-
-        // Union with empty set is identity: A ∪ ∅ = ∅ ∪ A = A
-        match (self.is_empty(), other.is_empty()) {
-            (true, _) => return other,
-            (_, true) => return self,
-            _ => { /* pass */ }
-        }
-
-        // Larger set on LHS: more likely to short-circuit `||`.
-        let (left, right) = if self.sort_key() >= other.sort_key() {
-            (self, other)
-        } else {
-            (other, self)
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
         };
-        EntitySet(EntitySetInner::Union(Box::new(left), Box::new(right)))
+
+        let result = 'result: {
+            // Idempotence: A ∪ A = A  (same structure over same sources)
+            if left.structurally_eq(&right) {
+                break 'result left;
+            }
+
+            // Adjacent or overlapping intervals
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                if a.start <= b.end && b.start <= a.end {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        a.start.min(b.start)..a.end.max(b.end),
+                    ));
+                }
+            }
+
+            // Union with empty set is identity: A ∪ ∅ = ∅ ∪ A = A
+            match (left.is_empty(), right.is_empty()) {
+                (true, _) => break 'result right,
+                (_, true) => break 'result left,
+                _ => { /* pass */ }
+            }
+
+            // Larger set on LHS: more likely to short-circuit `||`.
+            let (left, right) = if left.sort_key() >= right.sort_key() {
+                (left, right)
+            } else {
+                (right, left)
+            };
+            break 'result Self::new(EntitySetInner::Union(Box::new(left), Box::new(right)));
+        };
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
     }
 
     #[must_use]
     pub fn intersection(self, other: Self) -> Self {
-        // Idempotence: A ∩ A = A
-        if self.structurally_eq(&other) {
-            return self;
-        }
-
-        // Intersection of overlapping intervals
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            let overlap = a.start.max(b.start)..a.end.min(b.end);
-            return if overlap.is_empty() {
-                Self::empty()
-            } else {
-                Self::from_source(SourceSet::population_range(overlap))
-            };
-        }
-
-        // Intersection an empty set is empty: A ∩ ∅ = ∅ ∩ A = ∅
-        match (self.is_empty(), other.is_empty()) {
-            (true, _) => return self,
-            (_, true) => return other,
-            _ => { /* pass */ }
-        }
-
-        let mut sets = match self {
-            EntitySet(EntitySetInner::Intersection(sets)) => sets,
-            _ => vec![self],
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
         };
 
-        sets.push(other);
-        // Keep intersections sorted smallest-to-largest so iterators can take the
-        // first source as the driver and membership checks short-circuit quickly.
-        sets.sort_unstable_by_key(EntitySet::sort_key);
-        EntitySet(EntitySetInner::Intersection(sets))
+        let result = 'result: {
+            // Idempotence: A ∩ A = A
+            if left.structurally_eq(&right) {
+                break 'result left;
+            }
+
+            // Intersection of overlapping intervals
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                let overlap = a.start.max(b.start)..a.end.min(b.end);
+                break 'result if overlap.is_empty() {
+                    Self::empty()
+                } else {
+                    Self::from_source(SourceSet::population_range(overlap))
+                };
+            }
+
+            // Intersection an empty set is empty: A ∩ ∅ = ∅ ∩ A = ∅
+            match (left.is_empty(), right.is_empty()) {
+                (true, _) => break 'result left,
+                (_, true) => break 'result right,
+                _ => { /* pass */ }
+            }
+
+            let mut sets = match left {
+                EntitySet {
+                    inner: EntitySetInner::Intersection(sets),
+                    ..
+                } => sets,
+                _ => vec![left],
+            };
+
+            sets.push(right);
+            // Keep intersections sorted smallest-to-largest so iterators can take the
+            // first source as the driver and membership checks short-circuit quickly.
+            sets.sort_unstable_by_key(EntitySet::sort_key);
+            break 'result Self::new(EntitySetInner::Intersection(sets));
+        };
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
     }
 
     #[must_use]
     pub fn difference(self, other: Self) -> Self {
-        // Self-subtraction: A \ A = ∅
-        if self.structurally_eq(&other) {
-            return Self::empty();
-        }
+        let left = self;
+        let right = other;
+        #[cfg(feature = "profiling")]
+        let (left, right, query_profile) = {
+            let query_profile = Self::unique_query_profile(&left, &right);
+            let mut left = left;
+            let mut right = right;
+            left.query_profile = None;
+            right.query_profile = None;
+            (left, right, query_profile)
+        };
 
-        if let (Some(a), Some(b)) = (self.as_range(), other.as_range()) {
-            let overlap = a.start.max(b.start)..a.end.min(b.end);
-            // Disjoint ranges leave the left operand unchanged.
-            if overlap.is_empty() {
-                return Self::from_source(SourceSet::population_range(a));
+        let result = 'result: {
+            // Self-subtraction: A \ A = ∅
+            if left.structurally_eq(&right) {
+                break 'result Self::empty();
             }
-            // A covering subtraction removes the entire left range.
-            if overlap.start == a.start && overlap.end == a.end {
-                return Self::empty();
-            }
-            // Trimming the left edge still leaves one contiguous suffix.
-            if overlap.start == a.start {
-                return Self::from_source(SourceSet::population_range(overlap.end..a.end));
-            }
-            // Trimming the right edge still leaves one contiguous prefix.
-            if overlap.end == a.end {
-                return Self::from_source(SourceSet::population_range(a.start..overlap.start));
-            }
-            // An interior subtraction would split the range, so keep the generic difference node.
-        }
 
-        // Subtraction involving an empty set is identity: A \ ∅ = A, ∅ \ A = ∅
-        if self.is_empty() || other.is_empty() {
-            return self;
-        }
+            if let (Some(a), Some(b)) = (left.as_range(), right.as_range()) {
+                let overlap = a.start.max(b.start)..a.end.min(b.end);
+                // Disjoint ranges leave the left operand unchanged.
+                if overlap.is_empty() {
+                    break 'result Self::from_source(SourceSet::population_range(a));
+                }
+                // A covering subtraction removes the entire left range.
+                if overlap.start == a.start && overlap.end == a.end {
+                    break 'result Self::empty();
+                }
+                // Trimming the left edge still leaves one contiguous suffix.
+                if overlap.start == a.start {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        overlap.end..a.end,
+                    ));
+                }
+                // Trimming the right edge still leaves one contiguous prefix.
+                if overlap.end == a.end {
+                    break 'result Self::from_source(SourceSet::population_range(
+                        a.start..overlap.start,
+                    ));
+                }
+                // An interior subtraction would split the range, so keep the generic difference node.
+            }
 
-        EntitySet(EntitySetInner::Difference(Box::new(self), Box::new(other)))
+            // Subtraction involving an empty set is identity: A \ ∅ = A, ∅ \ A = ∅
+            if left.is_empty() || right.is_empty() {
+                break 'result left;
+            }
+
+            break 'result Self::new(EntitySetInner::Difference(Box::new(left), Box::new(right)));
+        };
+        #[cfg(feature = "profiling")]
+        let result = {
+            let mut result = result;
+            result.query_profile = query_profile;
+            result
+        };
+        result
     }
 
     /// Test whether `entity_id` is a member of this set.
     #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.contains(entity_id),
-            EntitySet(EntitySetInner::Union(a, b)) => {
-                a.contains(entity_id) || b.contains(entity_id)
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+        self.contains_impl(entity_id)
+    }
+
+    fn contains_impl(&self, entity_id: EntityId<E>) -> bool {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.contains(entity_id),
+            EntitySetInner::Union(a, b) => a.contains_impl(entity_id) || b.contains_impl(entity_id),
+            EntitySetInner::Intersection(sets) => {
+                sets.iter().all(|set| set.contains_impl(entity_id))
             }
-            EntitySet(EntitySetInner::Intersection(sets)) => {
-                sets.iter().all(|set| set.contains(entity_id))
-            }
-            EntitySet(EntitySetInner::Difference(a, b)) => {
-                a.contains(entity_id) && !b.contains(entity_id)
+            EntitySetInner::Difference(a, b) => {
+                a.contains_impl(entity_id) && !b.contains_impl(entity_id)
             }
         }
     }
@@ -241,27 +359,41 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
         X: Borrow<EntityId<E>>,
     {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
         let excluded = *excluded.borrow();
-        if let Some(n) = self.try_len() {
+        if let Some(n) = self.try_len_impl() {
             if n == 0 {
-                return None;
+                None
+            } else {
+                let p = rng.random_range(0..n as u32) as usize;
+                match self.try_nth(p) {
+                    Some(candidate) if candidate != excluded => Some(candidate),
+                    Some(_) if n == 1 => None,
+                    Some(_) => {
+                        // `excluded` is at position `p`. Resample from the n-1 remaining
+                        // positions: pick `k` uniform in `[0, n-1)`, then map it around
+                        // the hole at `p`.
+                        let k = rng.random_range(0..(n - 1) as u32) as usize;
+                        let target = if k < p { k } else { k + 1 };
+                        self.try_nth(target)
+                    }
+                    None => None,
+                }
             }
-            let p = rng.random_range(0..n as u32) as usize;
-            let candidate = self.try_nth(p)?;
-            if candidate != excluded {
-                return Some(candidate);
-            }
-            // `excluded` is at position `p`. Resample from the n-1 remaining
-            // positions: pick `k` uniform in `[0, n-1)`, then map it around
-            // the hole at `p`.
-            if n == 1 {
-                return None;
-            }
-            let k = rng.random_range(0..(n - 1) as u32) as usize;
-            let target = if k < p { k } else { k + 1 };
-            return self.try_nth(target);
+        } else {
+            let set = self.clone();
+            #[cfg(feature = "profiling")]
+            let set = {
+                let mut set = set;
+                set.query_profile = None;
+                set
+            };
+            sample_single_excluding_l_reservoir(rng, set, excluded)
         }
-        sample_single_excluding_l_reservoir(rng, self.clone(), excluded)
     }
 
     /// Sample a single entity uniformly from this set. Returns `None` if the
@@ -271,7 +403,12 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        if let Some(n) = self.try_len() {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
+        if let Some(n) = self.try_len_impl() {
             if n == 0 {
                 warn!("Requested a sample entity from an empty population");
                 return None;
@@ -280,7 +417,14 @@ impl<'a, E: Entity> EntitySet<'a, E> {
             let index = rng.random_range(0..n as u32) as usize;
             return self.try_nth(index);
         }
-        sample_single_l_reservoir(rng, self.clone())
+        let set = self.clone();
+        #[cfg(feature = "profiling")]
+        let set = {
+            let mut set = set;
+            set.query_profile = None;
+            set
+        };
+        sample_single_l_reservoir(rng, set)
     }
 
     /// Count the entities in this set and sample one uniformly from them.
@@ -291,14 +435,26 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        if let Some(n) = self.try_len() {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
+        if let Some(n) = self.try_len_impl() {
             if n == 0 {
                 return (0, None);
             }
             let index = rng.random_range(0..n as u32) as usize;
             return (n, self.try_nth(index));
         }
-        count_and_sample_single_l_reservoir(rng, self.clone())
+        let set = self.clone();
+        #[cfg(feature = "profiling")]
+        let set = {
+            let mut set = set;
+            set.query_profile = None;
+            set
+        };
+        count_and_sample_single_l_reservoir(rng, set)
     }
 
     /// Sample up to `requested` entities uniformly from this set. If the set
@@ -308,13 +464,36 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     where
         R: Rng,
     {
-        match self.try_len() {
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+
+        match self.try_len_impl() {
             Some(0) => {
                 warn!("Requested a sample of entities from an empty population");
                 vec![]
             }
-            Some(_) => sample_multiple_from_known_length(rng, self.clone(), requested),
-            None => sample_multiple_l_reservoir(rng, self.clone(), requested),
+            Some(_) => {
+                let set = self.clone();
+                #[cfg(feature = "profiling")]
+                let set = {
+                    let mut set = set;
+                    set.query_profile = None;
+                    set
+                };
+                sample_multiple_from_known_length(rng, set, requested)
+            }
+            None => {
+                let set = self.clone();
+                #[cfg(feature = "profiling")]
+                let set = {
+                    let mut set = set;
+                    set.query_profile = None;
+                    set
+                };
+                sample_multiple_l_reservoir(rng, set, requested)
+            }
         }
     }
 
@@ -324,42 +503,45 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Composite expressions return `None`.
     #[must_use]
     pub fn try_len(&self) -> Option<usize> {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.try_len(),
+        #[cfg(feature = "profiling")]
+        let _query_profile_scope = self
+            .query_profile
+            .map(crate::profiling::QueryProfileHandle::scope);
+        self.try_len_impl()
+    }
+
+    fn try_len_impl(&self) -> Option<usize> {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.try_len(),
             _ => None,
         }
     }
 
-    /// Random-access lookup. Defined for the same variants as `try_len`.
     fn try_nth(&self, idx: usize) -> Option<EntityId<E>> {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.try_nth(idx),
+        match &self.inner {
+            EntitySetInner::Source(source) => source.try_nth(idx),
             _ => None,
         }
     }
 
     fn as_range(&self) -> Option<Range<usize>> {
-        match self {
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) => {
-                Some(range.clone())
-            }
+        match &self.inner {
+            EntitySetInner::Source(SourceSet::PopulationRange(range)) => Some(range.clone()),
             _ => None,
         }
     }
 
     fn is_empty(&self) -> bool {
-        match self {
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(range))) => {
-                range.is_empty()
-            }
+        match &self.inner {
+            EntitySetInner::Source(SourceSet::PopulationRange(range)) => range.is_empty(),
             _ => false,
         }
     }
 
     fn sort_key(&self) -> (usize, u8) {
-        match self {
-            EntitySet(EntitySetInner::Source(source)) => source.sort_key(),
-            EntitySet(EntitySetInner::Union(left, right)) => {
+        match &self.inner {
+            EntitySetInner::Source(source) => source.sort_key(),
+            EntitySetInner::Union(left, right) => {
                 // Union upper bound is additive; cost hint tracks the cheaper side.
                 let (left_upper, left_hint) = left.sort_key();
                 let (right_upper, right_hint) = right.sort_key();
@@ -368,7 +550,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                     left_hint.min(right_hint),
                 )
             }
-            EntitySet(EntitySetInner::Intersection(sets)) => {
+            EntitySetInner::Intersection(sets) => {
                 let mut upper = usize::MAX;
                 let mut hint = 0u8;
                 for set in sets {
@@ -381,7 +563,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
                 }
                 (upper, hint)
             }
-            EntitySet(EntitySetInner::Difference(left, right)) => {
+            EntitySetInner::Difference(left, right) => {
                 let (left_upper, left_hint) = left.sort_key();
                 let (_, right_hint) = right.sort_key();
                 (left_upper, left_hint.saturating_add(right_hint))
@@ -391,20 +573,13 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     /// Structural equality check: same tree shape with same sources at leaves.
     fn structurally_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (EntitySet(EntitySetInner::Source(a)), EntitySet(EntitySetInner::Source(b))) => a == b,
-            (
-                EntitySet(EntitySetInner::Union(a1, a2)),
-                EntitySet(EntitySetInner::Union(b1, b2)),
-            )
-            | (
-                EntitySet(EntitySetInner::Difference(a1, a2)),
-                EntitySet(EntitySetInner::Difference(b1, b2)),
-            ) => a1.structurally_eq(b1) && a2.structurally_eq(b2),
-            (
-                EntitySet(EntitySetInner::Intersection(a_sets)),
-                EntitySet(EntitySetInner::Intersection(b_sets)),
-            ) => {
+        match (&self.inner, &other.inner) {
+            (EntitySetInner::Source(a), EntitySetInner::Source(b)) => a == b,
+            (EntitySetInner::Union(a1, a2), EntitySetInner::Union(b1, b2))
+            | (EntitySetInner::Difference(a1, a2), EntitySetInner::Difference(b1, b2)) => {
+                a1.structurally_eq(b1) && a2.structurally_eq(b2)
+            }
+            (EntitySetInner::Intersection(a_sets), EntitySetInner::Intersection(b_sets)) => {
                 a_sets.len() == b_sets.len()
                     && a_sets
                         .iter()
@@ -509,7 +684,7 @@ mod tests {
         );
         assert!(matches!(
             adjacent,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..6)
         ));
 
         let overlapping = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -518,14 +693,20 @@ mod tests {
             ));
         assert!(matches!(
             overlapping,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..8)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..8)
         ));
 
         let disjoint = EntitySet::from_source(SourceSet::<Person>::singleton(EntityId::new(1)))
             .union(EntitySet::from_source(SourceSet::<Person>::singleton(
                 EntityId::new(4),
             )));
-        assert!(matches!(disjoint, EntitySet(EntitySetInner::Union(_, _))));
+        assert!(matches!(
+            disjoint,
+            EntitySet {
+                inner: EntitySetInner::Union(_, _),
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -536,7 +717,7 @@ mod tests {
             ));
         assert!(matches!(
             overlap,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(4..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(4..6)
         ));
 
         let empty = EntitySet::from_source(SourceSet::<Person>::population_range(1..3))
@@ -545,7 +726,7 @@ mod tests {
             ));
         assert!(matches!(
             empty,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..0)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..0)
         ));
 
         let indexed_ids = finite_set(&[1, 2, 3]);
@@ -563,7 +744,7 @@ mod tests {
             ));
         assert!(matches!(
             unchanged,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..6)
         ));
 
         let empty = EntitySet::from_source(SourceSet::<Person>::population_range(2..6)).difference(
@@ -571,7 +752,7 @@ mod tests {
         );
         assert!(matches!(
             empty,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(0..0)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(0..0)
         ));
 
         let trim_left = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -580,7 +761,7 @@ mod tests {
             ));
         assert!(matches!(
             trim_left,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(4..6)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(4..6)
         ));
 
         let trim_right = EntitySet::from_source(SourceSet::<Person>::population_range(2..6))
@@ -589,13 +770,19 @@ mod tests {
             ));
         assert!(matches!(
             trim_right,
-            EntitySet(EntitySetInner::Source(SourceSet::PopulationRange(ref range))) if range == &(2..4)
+            EntitySet { inner: EntitySetInner::Source(SourceSet::PopulationRange(ref range)), .. } if range == &(2..4)
         ));
 
         let split = EntitySet::from_source(SourceSet::<Person>::population_range(2..8)).difference(
             EntitySet::from_source(SourceSet::<Person>::population_range(4..6)),
         );
-        assert!(matches!(split, EntitySet(EntitySetInner::Difference(_, _))));
+        assert!(matches!(
+            split,
+            EntitySet {
+                inner: EntitySetInner::Difference(_, _),
+                ..
+            }
+        ));
         assert!(split.contains(EntityId::<Person>::new(2)));
         assert!(split.contains(EntityId::<Person>::new(7)));
         assert!(!split.contains(EntityId::<Person>::new(4)));
@@ -783,7 +970,10 @@ mod tests {
 
         assert!(matches!(
             union,
-            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+            EntitySet {
+                inner: EntitySetInner::Source(SourceSet::PropertySet(_)),
+                ..
+            }
         ));
         assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![p1, p2]);
     }
@@ -807,7 +997,10 @@ mod tests {
 
         assert!(matches!(
             union,
-            EntitySet(EntitySetInner::Source(SourceSet::PropertySet(_)))
+            EntitySet {
+                inner: EntitySetInner::Source(SourceSet::PropertySet(_)),
+                ..
+            }
         ));
         assert_eq!(union.into_iter().collect::<Vec<_>>(), vec![matching]);
     }

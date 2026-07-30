@@ -12,6 +12,8 @@ use serde::{Serialize, Serializer};
 use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
 use super::profiling_data;
+#[cfg(feature = "profiling")]
+use super::QueryTimingRow;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
 
@@ -70,11 +72,22 @@ struct CountRecord {
 
 #[cfg(feature = "profiling")]
 #[derive(Serialize)]
+struct QueryTimingRecord {
+    query: String,
+    count: usize,
+    total: SerializableDuration,
+    min: SerializableDuration,
+    max: SerializableDuration,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Serialize)]
 struct ProfilingDataRecord {
     date_time: SystemTime,
     execution_statistics: SerializableExecutionStatistics,
     named_counts: Vec<CountRecord>,
     named_spans: Vec<SpanRecord>,
+    query_timings: Vec<QueryTimingRecord>,
     computed_statistics: HashMap<&'static str, ComputedStatisticRecord>,
 }
 
@@ -89,6 +102,7 @@ struct ComputedStatisticRecord {
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
+    query_timings: &[QueryTimingRow],
 ) -> std::io::Result<()> {
     let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
@@ -108,6 +122,16 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
             label,
             count,
             rate_per_second,
+        })
+        .collect();
+    let query_timings_data = query_timings
+        .iter()
+        .map(|row| QueryTimingRecord {
+            query: row.query.clone(),
+            count: row.count,
+            total: SerializableDuration(row.total),
+            min: SerializableDuration(row.min),
+            max: SerializableDuration(row.max),
         })
         .collect();
 
@@ -140,6 +164,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         execution_statistics: execution_statistics.into(),
         named_counts: named_counts_data,
         named_spans: named_spans_data,
+        query_timings: query_timings_data,
         computed_statistics,
     };
 
@@ -167,9 +192,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::profiling::{
-        add_computed_statistic, get_profiling_data, increment_named_count, open_span,
-    };
+    use crate::profiling::{add_computed_statistic, increment_named_count, open_span};
 
     #[test]
     fn test_write_profiling_data_to_file() {
@@ -199,7 +222,7 @@ mod tests {
             wall_time: Duration::from_secs(2),
         };
 
-        write_profiling_data_to_file(&file_path, exec_stats).expect("Failed to write file");
+        write_profiling_data_to_file(&file_path, exec_stats, &[]).expect("Failed to write file");
 
         assert!(file_path.exists());
 
@@ -212,6 +235,7 @@ mod tests {
         assert!(json["execution_statistics"].is_object());
         assert!(json["named_counts"].is_array());
         assert!(json["named_spans"].is_array());
+        assert!(json["query_timings"].is_array());
         assert!(json["computed_statistics"].is_object());
         assert_eq!(
             json["execution_statistics"]["max_memory_usage"],
@@ -241,6 +265,46 @@ mod tests {
     }
 
     #[test]
+    fn test_write_profiling_data_includes_query_timings() {
+        let rows = vec![QueryTimingRow {
+            query: "FileQueryTiming: (Age)".to_string(),
+            count: 2,
+            total: Duration::from_micros(40),
+            min: Duration::from_micros(10),
+            max: Duration::from_micros(30),
+        }];
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("query_timing_test.json");
+
+        let exec_stats = ExecutionStatistics {
+            max_memory_usage: 0,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
+            cpu_time: Duration::from_secs(0),
+            wall_time: Duration::from_secs(0),
+        };
+
+        write_profiling_data_to_file(&file_path, exec_stats, &rows).expect("Failed to write file");
+
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
+        let query_timings = json["query_timings"].as_array().unwrap();
+        let timing = query_timings
+            .iter()
+            .find(|row| row["query"] == "FileQueryTiming: (Age)")
+            .expect("FileQueryTiming: (Age) not found");
+
+        assert_eq!(timing["count"], 2);
+        assert!((timing["total"].as_f64().unwrap() - 0.00004).abs() < 0.000001);
+        assert!((timing["min"].as_f64().unwrap() - 0.00001).abs() < 0.000001);
+        assert!((timing["max"].as_f64().unwrap() - 0.00003).abs() < 0.000001);
+        assert!(timing.get("indexed").is_none());
+        assert!(timing.get("mean").is_none());
+        assert!(timing.get("percent_runtime").is_none());
+    }
+
+    #[test]
     fn test_json_serialization_format() {
         // Avoid clearing global profiling data
 
@@ -255,7 +319,7 @@ mod tests {
             wall_time: Duration::from_secs_f64(2.5),
         };
 
-        write_profiling_data_to_file(&file_path, exec_stats).expect("Failed to write file");
+        write_profiling_data_to_file(&file_path, exec_stats, &[]).expect("Failed to write file");
 
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
         let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");

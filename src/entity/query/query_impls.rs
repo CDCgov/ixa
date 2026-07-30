@@ -49,6 +49,9 @@ impl<E: Entity> QueryInternal<E> for () {
     fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
         // Nothing to do.
     }
+
+    #[cfg(feature = "profiling")]
+    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 // An Entity ZST itself is an empty query matching all entities of that type.
@@ -93,6 +96,9 @@ impl<E: Entity> QueryInternal<E> for E {
     fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
         // Nothing to do.
     }
+
+    #[cfg(feature = "profiling")]
+    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 // Implement the query version with one parameter.
@@ -189,6 +195,11 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
         let property_value_store = context.get_property_value_store::<E, P1>();
         entities.retain(|entity| self.0 == property_value_store.get(*entity));
+    }
+
+    #[cfg(feature = "profiling")]
+    fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
+        names.push(P1::name());
     }
 }
 
@@ -349,6 +360,13 @@ macro_rules! impl_query {
                                 }
                             );
                         }
+                    )*
+                }
+
+                #[cfg(feature = "profiling")]
+                fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
+                    #(
+                        names.push(T~N::name());
                     )*
                 }
             }
