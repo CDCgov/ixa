@@ -1,4 +1,9 @@
-# Conditional plan execution: three possible approaches
+# Research-0003: Conditional plan execution—three possible approaches
+
+**Investigation date:** 2026-05-07 (initial repository commit)
+
+> This is a historical design analysis. It compares possible approaches
+> without recording an adopted architectural decision.
 
 Here is my analysis of three different strategies for dealing with "canceling" in-flight plans associated with people who die. To understand *why* the pros and cons are what they are, it helps to first explain how plans are stored internally in Ixa today.
 
@@ -7,7 +12,7 @@ Here is my analysis of three different strategies for dealing with "canceling" i
 A scheduled plan is currently split into two parts.
 
 - The plan timing information - the `PlanId`, the execution time, and the execution phase - is stored in a priority queue called `queue`, implemented as a binary heap.
-- The plan payload - at the moment, this is just the callback to run - is stored separately in a hash map called `data_map`, keyed by `PlanId`: `data_map: HashMap<PlanId, Payload>`.
+- The plan payload - at the moment, this is just the callback to run - is stored separately in a hash map called `data_map`, keyed by `PlanId`: `data_map: HashMap&lt;PlanId, Payload&gt;`.
 
 This design matters because cancellation is already done lazily in a sense: When a plan is cancelled, Ixa removes the payload from `data_map`, but it does *not* remove the corresponding entry from `queue`. Later, when the scheduler looks for the next plan to execute, it may pop entries from `queue` that no longer have a payload in `data_map`, and simply discard them. The rationale for this design decision is:
 
@@ -127,7 +132,7 @@ Compared with the plan-index approach, the wrapper is clearly simpler and likely
 
 Compared with the built-in `RunCondition` approach, the lightweight wrapper contributes less to a future execution-semantics framework, but it remains forward-compatible with one. The scheduler itself does not know that a plan is conditional. From Ixa's point of view, it is just an ordinary callback that sometimes returns immediately without doing anything.
 
-One consequence of this is, in the generalized wrapper design, the condition cannot naturally receive the `PlanId` unless the underlying scheduling API changes, whereas if we had full in-built support in ixa for `RunCondition`, we could include both `context: &Context` and `plan_id: PlanId` parameters to the `RunCondition::should_run` method. Still, for the immediate use case, that difference may not matter much. If all we need is "do nothing if the person is no longer alive," then the wrapper behaves almost the same as a built-in condition check.
+One consequence of this is, in the generalized wrapper design, the condition cannot naturally receive the `PlanId` unless the underlying scheduling API changes, whereas if we had full in-built support in ixa for `RunCondition`, we could include both `context: &amp;Context` and `plan_id: PlanId` parameters to the `RunCondition::should_run` method. Still, for the immediate use case, that difference may not matter much. If all we need is "do nothing if the person is no longer alive," then the wrapper behaves almost the same as a built-in condition check.
 
 ## Overall comparison
 
