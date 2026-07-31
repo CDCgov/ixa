@@ -588,19 +588,18 @@ where
     let mut context = Context::new();
 
     // Optionally set global properties from a file
-    if args.config.is_some() {
-        let config_path = args.config.clone().unwrap();
+    if let Some(config_path) = args.config.as_ref() {
         println!("Loading global properties from: {config_path:?}");
         load_global_properties_from_map(&mut context, loaded_config.global_properties)?;
     }
 
     // Configure report options
     let report_config = context.report_options();
-    if args.output_dir.is_some() {
-        report_config.directory(args.output_dir.clone().unwrap());
+    if let Some(output_dir) = args.output_dir.as_ref() {
+        report_config.directory(output_dir);
     }
-    if args.file_prefix.is_some() {
-        report_config.file_prefix(args.file_prefix.clone().unwrap());
+    if let Some(file_prefix) = args.file_prefix.as_ref() {
+        report_config.file_prefix(file_prefix);
     }
     if args.force_overwrite {
         report_config.overwrite(true);

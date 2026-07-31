@@ -46,7 +46,7 @@ impl<E: Entity> NetworkStore<E> {
             .get(ET::id())
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: Network for EdgeType {} not found",
+                    "Ixa internal error: Network for EdgeType {} not found",
                     ET::name()
                 )
             })
@@ -54,7 +54,7 @@ impl<E: Entity> NetworkStore<E> {
             .downcast_ref()
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: found wrong Network type when accessing EdgeType {}",
+                    "Ixa internal error: found wrong Network type when accessing EdgeType {}",
                     ET::name()
                 )
             })
@@ -65,22 +65,25 @@ impl<E: Entity> NetworkStore<E> {
     pub fn get_mut<ET: EdgeType<E>>(&mut self) -> &mut Network<E, ET> {
         let cell = self.networks.get_mut(ET::id()).unwrap_or_else(|| {
             panic!(
-                "internal error: Network for EdgeType {} not found",
+                "Ixa internal error: Network for EdgeType {} not found",
                 ET::name()
             )
         });
 
         // Lazily initialize if needed.
         if cell.get().is_none() {
-            cell.set(Network::<E, ET>::new_boxed()).unwrap();
+            cell.set(Network::<E, ET>::new_boxed())
+                .expect("Ixa internal error: empty network cell became initialized");
         }
 
-        // Now the `unwrap` on `get_mut` is guaranteed to succeed.
-        cell.get_mut().unwrap().downcast_mut().unwrap_or_else(|| {
-            panic!(
-                "internal error: found wrong Network type when accessing EdgeType {}",
-                ET::name()
-            )
-        })
+        cell.get_mut()
+            .expect("Ixa internal error: initialized network cell is empty")
+            .downcast_mut()
+            .unwrap_or_else(|| {
+                panic!(
+                    "Ixa internal error: found wrong Network type when accessing EdgeType {}",
+                    ET::name()
+                )
+            })
     }
 }

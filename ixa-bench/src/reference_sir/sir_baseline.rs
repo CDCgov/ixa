@@ -68,7 +68,10 @@ impl Model {
     }
 
     fn get_infection_status(&self, person_id: PersonId) -> InfectionStatus {
-        *self.infection_status_lookup.get(person_id.id).unwrap()
+        *self
+            .infection_status_lookup
+            .get(person_id.id)
+            .expect("reference SIR person ID must have an infection status")
     }
 
     fn set_infection_status(&mut self, person_id: PersonId, infection_status: InfectionStatus) {
@@ -85,7 +88,10 @@ impl Model {
                 self.recovered_people.insert(person_id);
             }
         }
-        *self.infection_status_lookup.get_mut(person_id.id).unwrap() = infection_status;
+        *self
+            .infection_status_lookup
+            .get_mut(person_id.id)
+            .expect("reference SIR person ID must have an infection status") = infection_status;
     }
 
     fn infect_person(&mut self, person_id: PersonId, t: Option<f64>) {
@@ -102,7 +108,10 @@ impl Model {
 
     fn random_infectious_person(&mut self) -> PersonId {
         let index = self.rng.random_range(0..self.infectious_people.len());
-        *self.infectious_people.get_index(index).unwrap()
+        *self
+            .infectious_people
+            .get_index(index)
+            .expect("reference SIR infectious index must be in bounds")
     }
 
     fn random_contact(&mut self, source: PersonId) -> PersonId {
@@ -119,7 +128,10 @@ impl Model {
         if members.len() <= 1 {
             return self.sample_random_person();
         }
-        let self_idx = members.iter().position(|&p| p == source).unwrap();
+        let self_idx = members
+            .iter()
+            .position(|&person| person == source)
+            .expect("reference SIR household must contain its assigned source person");
         // Sample over members.len() - 1, then shift past self_idx so source
         // is never selected as their own contact.
         let mut idx = self.rng.random_range(0..members.len() - 1);
@@ -166,7 +178,10 @@ impl Model {
         for _ in 0..self.parameters.initial_infections {
             let n_susceptible = self.susceptible_people.len();
             let index = self.rng.random_range(0..n_susceptible);
-            let person_to_infect = *self.susceptible_people.get_index(index).unwrap();
+            let person_to_infect = *self
+                .susceptible_people
+                .get_index(index)
+                .expect("reference SIR susceptible index must be in bounds");
             self.infect_person(person_to_infect, None);
         }
 
@@ -178,8 +193,12 @@ impl Model {
             let infection_event_rate = infection_rate * (n_infectious as f64);
             let recovery_event_rate = (n_infectious as f64) / self.parameters.infectious_period;
 
-            let infection_event_time = self.rng.sample(Exp::new(infection_event_rate).unwrap());
-            let recovery_event_time = self.rng.sample(Exp::new(recovery_event_rate).unwrap());
+            let infection_distribution = Exp::new(infection_event_rate)
+                .expect("reference SIR infection event rate must be positive");
+            let recovery_distribution = Exp::new(recovery_event_rate)
+                .expect("reference SIR recovery event rate must be positive");
+            let infection_event_time = self.rng.sample(infection_distribution);
+            let recovery_event_time = self.rng.sample(recovery_distribution);
 
             if infection_event_time < recovery_event_time {
                 let source = self.random_infectious_person();
@@ -190,7 +209,10 @@ impl Model {
                 }
             } else {
                 let index = self.rng.random_range(0..n_infectious);
-                let person_to_recover = *self.infectious_people.get_index(index).unwrap();
+                let person_to_recover = *self
+                    .infectious_people
+                    .get_index(index)
+                    .expect("reference SIR infectious index must be in bounds");
                 self.set_infection_status(person_to_recover, InfectionStatus::Recovered);
                 self.stats.record_recovery();
                 self.time += recovery_event_time;

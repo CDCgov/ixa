@@ -32,7 +32,9 @@ impl LogConfiguration {
         Dispatch::new()
             .level(LevelFilter::Trace) // Set to lowest; we manually filter
             .filter(|metadata| {
-                let config = LOG_CONFIGURATION.lock().unwrap();
+                let config = LOG_CONFIGURATION
+                    .lock()
+                    .expect("Ixa internal error: log configuration mutex is poisoned");
                 config.should_log(metadata.target(), metadata.level())
             })
             .chain(fern::Output::call(|record| {

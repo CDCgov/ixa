@@ -65,7 +65,10 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
                     return Self::empty_source();
                 }
                 if sets.len() == 1 {
-                    return Self::from_entity_set(sets.pop().unwrap());
+                    return Self::from_entity_set(
+                        sets.pop()
+                            .expect("Ixa internal error: singleton entity set vector is empty"),
+                    );
                 }
 
                 if sets.iter().all(EntitySet::is_source_leaf) {
@@ -73,11 +76,19 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
                     // Keep that order so membership checks short-circuit early on small filters.
                     let mut set_iter = sets.into_iter();
 
-                    let first = set_iter.next().unwrap().into_source_leaf().unwrap();
+                    let first = set_iter
+                        .next()
+                        .expect("Ixa internal error: nonempty intersection has no first set")
+                        .into_source_leaf()
+                        .expect("Ixa internal error: source-only intersection contains a branch");
                     let driver = first.into_iter();
 
                     let filters = set_iter
-                        .map(|set| set.into_source_leaf().unwrap())
+                        .map(|set| {
+                            set.into_source_leaf().expect(
+                                "Ixa internal error: source-only intersection contains a branch",
+                            )
+                        })
                         .collect();
 
                     return Self::IntersectionSources { driver, filters };
@@ -87,7 +98,10 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
                 // Use the first set as the iteration driver and keep the remaining filters in
                 // ascending order for short-circuit-friendly `contains` checks.
                 let mut set_iter = sets.into_iter();
-                let driver = Box::new(Self::from_entity_set(set_iter.next().unwrap()));
+                let driver =
+                    Box::new(Self::from_entity_set(set_iter.next().expect(
+                        "Ixa internal error: nonempty intersection has no first set",
+                    )));
                 Self::Intersection {
                     driver,
                     filters: set_iter.collect(),
@@ -238,7 +252,12 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         }
         if sources.len() == 1 {
             return EntitySetIterator {
-                inner: EntitySetIteratorInner::Source(sources.pop().unwrap().into_iter()),
+                inner: EntitySetIteratorInner::Source(
+                    sources
+                        .pop()
+                        .expect("Ixa internal error: singleton source vector is empty")
+                        .into_iter(),
+                ),
             };
         }
 
@@ -246,7 +265,10 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
         // We keep ascending order so filters checked by `all()` are smallest-first.
         sources.sort_unstable_by_key(SourceSet::sort_key);
         let mut source_iter = sources.into_iter();
-        let driver = source_iter.next().unwrap().into_iter();
+        let driver = source_iter
+            .next()
+            .expect("Ixa internal error: nonempty source vector has no first source")
+            .into_iter();
         EntitySetIterator {
             inner: EntitySetIteratorInner::IntersectionSources {
                 driver,

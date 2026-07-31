@@ -74,7 +74,7 @@ pub fn type_ids_to_multi_property_id(entity_id: usize, type_ids: &[TypeId]) -> O
     let hash = one_shot_128(&type_ids);
     MULTI_PROPERTY_ID_MAP
         .lock()
-        .unwrap()
+        .expect("Ixa internal error: multi-property ID registry lock is poisoned")
         .get(&(entity_id, hash))
         .map(|value| value.id)
 }
@@ -87,7 +87,7 @@ pub(crate) fn multi_property_id_for_property_type_id(
 ) -> Option<(usize, &'static str)> {
     MULTI_PROPERTY_TYPE_ID_MAP
         .lock()
-        .unwrap()
+        .expect("Ixa internal error: multi-property type registry lock is poisoned")
         .get(&(entity_id, property_type_id))
         .map(|value| (value.id, value.name))
 }
@@ -107,7 +107,9 @@ pub fn register_type_ids_to_multi_property_id(
     let key = (entity_id, hash);
     let value = MultiPropertyId { id, name };
     let existing = {
-        let mut map = MULTI_PROPERTY_ID_MAP.lock().unwrap();
+        let mut map = MULTI_PROPERTY_ID_MAP
+            .lock()
+            .expect("Ixa internal error: multi-property ID registry lock is poisoned");
         match map.get(&key).copied() {
             Some(existing) => Some(existing),
             None => {
@@ -120,7 +122,7 @@ pub fn register_type_ids_to_multi_property_id(
     let representative = existing.unwrap_or(value);
     MULTI_PROPERTY_TYPE_ID_MAP
         .lock()
-        .unwrap()
+        .expect("Ixa internal error: multi-property type registry lock is poisoned")
         .entry((entity_id, property_type_id))
         .or_insert(representative);
 
@@ -131,12 +133,16 @@ pub fn register_type_ids_to_multi_property_id(
 pub fn record_pre_main_warning(message: String) {
     PRE_MAIN_DIAGNOSTICS
         .lock()
-        .unwrap()
+        .expect("Ixa internal error: pre-main diagnostic queue lock is poisoned")
         .push(PreMainDiagnostic::Warning(message));
 }
 
 pub(crate) fn emit_pre_main_diagnostics() {
-    for diagnostic in PRE_MAIN_DIAGNOSTICS.lock().unwrap().drain(..) {
+    for diagnostic in PRE_MAIN_DIAGNOSTICS
+        .lock()
+        .expect("Ixa internal error: pre-main diagnostic queue lock is poisoned")
+        .drain(..)
+    {
         match diagnostic {
             PreMainDiagnostic::Warning(message) => warn!("{message}"),
         }

@@ -147,6 +147,7 @@ module_inception = "allow"
 result_unit_err = "allow"
 uninlined_format_args = "allow"
 upper-case-acronyms = "allow"
+unwrap_used = "deny"
 
 [lints]
 workspace = true

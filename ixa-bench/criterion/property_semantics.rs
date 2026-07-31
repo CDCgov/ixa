@@ -91,7 +91,7 @@ fn build_float_query_context() -> Context {
         let value = ((i % 2048) as f64) * 0.25;
         context
             .add_entity(with!(Person, FloatQueryValue(value)))
-            .unwrap();
+            .expect("property-semantics benchmark properties must create a valid entity");
     }
     context.index_property::<Person, FloatQueryValue>();
     context
@@ -140,7 +140,7 @@ fn build_value_change_counter_context() -> Context {
                 CounterBucket((i % 32) as u8),
                 FloatCounterValue(((i % 256) as f64) * 0.5),
             ))
-            .unwrap();
+            .expect("property-semantics benchmark properties must create a valid entity");
         entities.push(entity_id);
     }
 

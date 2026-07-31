@@ -224,7 +224,9 @@ pub fn set_module_filters<S: ToString>(module_filters: &[(&S, LevelFilter)]) {
 
 /// Fetches a mutable reference to the global [`LogConfiguration`].
 fn get_log_configuration() -> MutexGuard<'static, LogConfiguration> {
-    LOG_CONFIGURATION.lock().expect("Mutex poisoned")
+    LOG_CONFIGURATION
+        .lock()
+        .expect("Ixa internal error: log configuration mutex is poisoned")
 }
 
 /// This utility function takes a `level` and returns a string representation of the list of levels

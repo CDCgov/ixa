@@ -82,9 +82,9 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     /// Returns the property value for the given entity.
     #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> P {
-        debug_assert!(
+        assert!(
             !P::is_derived(),
-            "Tried to get a derived property value from property value store."
+            "Ixa internal error: tried to get a derived property value from property value store",
         );
         self.data.get(entity_id.0).copied().unwrap_or_else(
             // `None` means index was out of bounds, which means the property has not been set.
@@ -95,9 +95,9 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
     /// Sets the value for `entity_id` to `value`.
     pub fn set(&mut self, entity_id: EntityId<E>, value: P) {
-        debug_assert!(
+        assert!(
             !P::is_derived(),
-            "Tried to set a derived property value in property value store."
+            "Ixa internal error: tried to set a derived property value in property value store",
         );
         let index = entity_id.0;
         let len = self.data.len();
@@ -133,16 +133,19 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         } else {
             // No default property value, and we are trying to set a value for an index past the end of the vector.
             // This is an internal error, as we enforce the invariant that every property must have a value.
-            unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
+            unreachable!(
+                "Ixa internal error: property storage state is inconsistent: one or more \
+                 properties do not have values",
+            );
         }
     }
 
     /// Sets the value for `entity_id` to `value`, returning the previous value.
     #[must_use]
     pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
-        debug_assert!(
+        assert!(
             !P::is_derived(),
-            "Tried to replace a derived property value in property value store."
+            "Ixa internal error: tried to replace a derived property value in property value store",
         );
         let index = entity_id.0;
         let len = self.data.len();
@@ -177,7 +180,10 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         } else {
             // No default property value, and we are trying to set a value for an index past the end of the vector.
             // This is an internal error, as we enforce the invariant that every property must have a value.
-            unreachable!("Property storage state is inconsistent: one or more properties do not have values.");
+            unreachable!(
+                "Ixa internal error: property storage state is inconsistent: one or more \
+                 properties do not have values",
+            );
         }
     }
 }
@@ -234,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Property storage state is inconsistent")]
+    #[should_panic(expected = "Ixa internal error: property storage state is inconsistent")]
     fn set_required_property_skipping_entity_id_panics() {
         let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
 
@@ -242,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Property storage state is inconsistent")]
+    #[should_panic(expected = "Ixa internal error: property storage state is inconsistent")]
     fn replace_required_property_skipping_entity_id_panics() {
         let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
 

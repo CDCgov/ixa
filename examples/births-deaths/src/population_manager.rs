@@ -67,27 +67,31 @@ fn do_age(context: &mut Context, person_id: PersonId) {
 fn do_birth(context: &mut Context) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .unwrap()
+        .expect("births-deaths parameters must be initialized before scheduling births")
         .clone();
-    let person = context.add_entity(with!(Person, Age(0))).unwrap();
+    let person = context
+        .add_entity(with!(Person, Age(0)))
+        .expect("births-deaths newborn properties must create a valid entity");
     schedule_relative!(context, 365.0, do_age, person);
 
-    let next_birth_delay =
-        context.sample_distr(PeopleRng, Exp::new(parameters.birth_rate).unwrap());
+    let birth_distribution = Exp::new(parameters.birth_rate)
+        .expect("births-deaths requires a positive birth rate when births are enabled");
+    let next_birth_delay = context.sample_distr(PeopleRng, birth_distribution);
     schedule_relative!(context, next_birth_delay, do_birth);
 }
 
 fn do_death(context: &mut Context) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .unwrap()
+        .expect("births-deaths parameters must be initialized before scheduling deaths")
         .clone();
 
     if let Some(person) = context.sample_entity(PeopleRng, with!(Person, Alive(true))) {
         context.set_property(person, Alive(false));
 
-        let next_death_delay =
-            context.sample_distr(PeopleRng, Exp::new(parameters.death_rate).unwrap());
+        let death_distribution = Exp::new(parameters.death_rate)
+            .expect("births-deaths requires a positive death rate when deaths are enabled");
+        let next_death_delay = context.sample_distr(PeopleRng, death_distribution);
 
         schedule_relative!(context, next_death_delay, do_death);
     }
@@ -96,13 +100,17 @@ fn do_death(context: &mut Context) {
 pub fn init(context: &mut Context) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .unwrap()
+        .expect("births-deaths parameters must be initialized before population setup")
         .clone();
 
     for _ in 0..parameters.population {
         let age: u8 = context.sample_range(PeopleRng, 0..MAX_AGE);
-        let person = context.add_entity(with!(Person, Age(age))).unwrap();
-        let birthday = context.sample_distr(PeopleRng, Uniform::new(0.0, 365.0).unwrap());
+        let person = context
+            .add_entity(with!(Person, Age(age)))
+            .expect("births-deaths initial properties must create a valid entity");
+        let birthday_distribution = Uniform::new(0.0, 365.0)
+            .expect("births-deaths birthday bounds must form a nonempty range");
+        let birthday = context.sample_distr(PeopleRng, birthday_distribution);
         context.add_plan(365.0 + birthday, move |context| do_age(context, person));
     }
 

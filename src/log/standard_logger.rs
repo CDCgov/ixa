@@ -34,7 +34,7 @@ impl LogConfiguration {
             .build(self.global_log_level);
         let new_config = match config.build(root) {
             Err(e) => {
-                panic!("failed to build config: {e}");
+                panic!("Ixa internal error: failed to build standard logger configuration: {e}");
             }
             Ok(config) => config,
         };
@@ -47,7 +47,10 @@ impl LogConfiguration {
 
             None => {
                 // The global logger has not yet been initialized
-                self.root_handle = Some(log4rs::init_config(new_config).unwrap());
+                self.root_handle = Some(
+                    log4rs::init_config(new_config)
+                        .expect("failed to initialize the standard logger configuration"),
+                );
             }
         }
     }

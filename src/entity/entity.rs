@@ -87,7 +87,7 @@ pub trait Entity: Any + Default {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap()
+        full.rsplit("::").next().unwrap_or(full)
     }
 
     #[must_use]

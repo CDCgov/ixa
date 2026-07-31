@@ -60,7 +60,7 @@ where
     let index = property_value_store
         .index
         .as_mut()
-        .expect("index_new_entity dispatch invoked for an unindexed property");
+        .expect("Ixa internal error: index_new_entity dispatch invoked for an unindexed property");
 
     index.add_entity(&value, entity_id);
 }
@@ -111,7 +111,9 @@ static PROPERTY_METADATA: OnceLock<HashMap<(usize, usize), Box<dyn Any + Send + 
 /// Private helper to fetch or initialize the frozen metadata.
 fn property_metadata() -> &'static HashMap<(usize, usize), Box<dyn Any + Send + Sync>> {
     PROPERTY_METADATA.get_or_init(|| {
-        let mut builder = PROPERTY_METADATA_BUILDER.lock().unwrap();
+        let mut builder = PROPERTY_METADATA_BUILDER
+            .lock()
+            .expect("Ixa internal error: property metadata registry lock is poisoned");
         std::mem::take(&mut *builder)
     })
 }
@@ -151,7 +153,9 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         P::is_required(),
     );
 
-    let mut property_metadata = PROPERTY_METADATA_BUILDER.lock().unwrap();
+    let mut property_metadata = PROPERTY_METADATA_BUILDER
+        .lock()
+        .expect("Ixa internal error: property metadata registry lock is poisoned");
     if PROPERTY_METADATA.get().is_some() {
         panic!(
             "`add_to_property_registry()` called after property metadata was frozen; registration must occur during startup/ctors."
@@ -163,7 +167,9 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let metadata = property_metadata
             .entry((E::id(), property_index))
             .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
-        let metadata: &mut PropertyMetadata<E> = metadata.downcast_mut().unwrap();
+        let metadata: &mut PropertyMetadata<E> = metadata
+            .downcast_mut()
+            .expect("Ixa internal error: property metadata has the wrong entity type");
         metadata
             .value_store_constructor
             .get_or_insert(PropertyValueStoreCore::<E, P>::new_boxed);
@@ -175,14 +181,18 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let dependency_meta = property_metadata
             .entry((E::id(), dependency))
             .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
-        let dependency_meta: &mut PropertyMetadata<E> = dependency_meta.downcast_mut().unwrap();
+        let dependency_meta: &mut PropertyMetadata<E> = dependency_meta
+            .downcast_mut()
+            .expect("Ixa internal error: dependency metadata has the wrong entity type");
         dependency_meta.dependents.push(property_index);
     }
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
 pub fn get_registered_property_count<E: Entity>() -> usize {
-    let map = NEXT_PROPERTY_ID.lock().unwrap();
+    let map = NEXT_PROPERTY_ID
+        .lock()
+        .expect("Ixa internal error: property ID registry lock is poisoned");
     *map.get(&E::id()).unwrap_or(&0)
 }
 
@@ -200,7 +210,9 @@ pub fn get_registered_property_count<E: Entity>() -> usize {
 /// should be the only time this method is ever called for the type.
 pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
+    let mut guard = NEXT_PROPERTY_ID
+        .lock()
+        .expect("Ixa internal error: property ID registry lock is poisoned");
     let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
     // Try to claim the candidate index. Here we guard against the potential race condition that
@@ -253,16 +265,19 @@ impl<E: Entity> PropertyStore<E> {
             .map(|idx| {
                 let metadata = property_metadata
                     .get(&(E::id(), idx))
-                    .unwrap_or_else(|| panic!("No property metadata entry for index {idx}"))
+                    .unwrap_or_else(|| {
+                        panic!("Ixa internal error: no property metadata entry for index {idx}")
+                    })
                     .downcast_ref::<PropertyMetadata<E>>()
                     .unwrap_or_else(|| {
                         panic!(
-                            "Property metadata entry for index {idx} does not match expected type"
+                            "Ixa internal error: property metadata entry for index {idx} does not \
+                             match the expected type"
                         )
                     });
-                let constructor = metadata
-                    .value_store_constructor
-                    .unwrap_or_else(|| panic!("No PropertyValueStore constructor for index {idx}"));
+                let constructor = metadata.value_store_constructor.unwrap_or_else(|| {
+                    panic!("Ixa internal error: no PropertyValueStore constructor for index {idx}")
+                });
                 constructor()
             })
             .collect();
@@ -343,9 +358,11 @@ impl<E: Entity> PropertyStore<E> {
         entity_id: EntityId<E>,
         context: &Context,
     ) -> PartialPropertyChangeEventBox {
-        let property_value_store = self.items
-                                       .get(property_index)
-            .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
+        let property_value_store = self.items.get(property_index).unwrap_or_else(|| {
+            panic!(
+                "Ixa internal error: dependent property index {property_index:?} is not registered"
+            )
+        });
 
         property_value_store.create_partial_property_change(entity_id, context)
     }
@@ -357,9 +374,11 @@ impl<E: Entity> PropertyStore<E> {
         property_index: usize,
         context: &Context,
     ) -> bool {
-        let property_value_store = self.items
-                                       .get(property_index)
-            .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
+        let property_value_store = self.items.get(property_index).unwrap_or_else(|| {
+            panic!(
+                "Ixa internal error: dependent property index {property_index:?} is not registered"
+            )
+        });
 
         property_value_store.should_create_partial_change(context)
     }
@@ -389,14 +408,16 @@ impl<E: Entity> PropertyStore<E> {
             .iter()
             .position(|(id, _)| *id == property_id);
 
-        if was_indexed {
-            assert!(
-                dispatcher_position.is_some(),
-                "indexed property missing its index_new_entity dispatcher",
-            );
-        } else {
-            debug_assert!(dispatcher_position.is_none());
-        }
+        // Report the removal-specific corruption before the broader consistency check. Keeping
+        // both checks before the commit point preserves the installed index if either one fails.
+        assert!(
+            !was_indexed || will_be_indexed || dispatcher_position.is_some(),
+            "Ixa internal error: indexed property is missing its index_new_entity dispatcher",
+        );
+        assert!(
+            was_indexed == dispatcher_position.is_some(),
+            "Ixa internal error: property index and index_new_entity dispatcher disagree",
+        );
 
         // Reserve before replacing a valid index so allocation failure cannot leave the index
         // installed without its dispatcher.
@@ -414,8 +435,9 @@ impl<E: Entity> PropertyStore<E> {
                     .push((property_id, index_new_entity::<E, P> as IndexNewEntityFn<E>));
             }
             (true, false) => {
-                self.index_new_entity_fns
-                    .swap_remove(dispatcher_position.unwrap());
+                self.index_new_entity_fns.swap_remove(dispatcher_position.expect(
+                    "Ixa internal error: indexed property is missing its index_new_entity dispatcher",
+                ));
             }
             _ => {}
         }
@@ -546,6 +568,30 @@ mod tests {
             ),
             IndexCountResult::Count(1),
         );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Ixa internal error: indexed property is missing its index_new_entity dispatcher"
+    )]
+    fn removing_index_without_dispatcher_panics() {
+        let mut property_store = PropertyStore::<Person>::new();
+        property_store.install_property_index::<Age>(Some(Box::new(FullIndex::new())));
+        property_store.index_new_entity_fns.clear();
+
+        property_store.install_property_index::<Age>(None);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Ixa internal error: property index and index_new_entity dispatcher disagree"
+    )]
+    fn dispatcher_without_index_panics() {
+        let mut property_store = PropertyStore::<Person>::new();
+        property_store.install_property_index::<Age>(Some(Box::new(FullIndex::new())));
+        property_store.get_mut::<Age>().index = None;
+
+        property_store.install_property_index::<Age>(None);
     }
 
     #[test]

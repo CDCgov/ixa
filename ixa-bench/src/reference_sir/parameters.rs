@@ -45,6 +45,8 @@ pub struct Parameters {
 
 impl Default for Parameters {
     fn default() -> Self {
-        ParametersBuilder::default().build().unwrap()
+        ParametersBuilder::default()
+            .build()
+            .expect("reference SIR default parameters must be complete")
     }
 }

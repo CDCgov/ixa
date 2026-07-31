@@ -52,7 +52,9 @@ static NEXT_GLOBAL_PROPERTY_ID: Mutex<usize> = Mutex::new(0);
 /// A convenience getter for `NEXT_GLOBAL_PROPERTY_ID`.
 #[must_use]
 pub fn get_global_property_count() -> usize {
-    *NEXT_GLOBAL_PROPERTY_ID.lock().unwrap()
+    *NEXT_GLOBAL_PROPERTY_ID
+        .lock()
+        .expect("Ixa internal error: global property index lock is poisoned")
 }
 
 /// Encapsulates the synchronization logic for initializing a global property's ID.
@@ -62,7 +64,9 @@ pub fn get_global_property_count() -> usize {
 /// global property is assigned at runtime but only once per type.
 #[must_use]
 pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
-    let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
+    let mut guard = NEXT_GLOBAL_PROPERTY_ID
+        .lock()
+        .expect("Ixa internal error: global property index lock is poisoned");
     let candidate = *guard;
 
     match global_property_id.compare_exchange(
@@ -84,7 +88,9 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     trace!("Adding global property {name}");
-    let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    let properties = GLOBAL_PROPERTIES
+        .lock()
+        .expect("Ixa internal error: global property registry lock is poisoned");
     properties
         .borrow_mut()
         .insert(
@@ -106,7 +112,9 @@ where
 }
 
 fn get_global_property_setter(name: &str) -> Option<Arc<PropertySetterFn>> {
-    let properties = GLOBAL_PROPERTIES.lock().unwrap();
+    let properties = GLOBAL_PROPERTIES
+        .lock()
+        .expect("Ixa internal error: global property registry lock is poisoned");
     let tmp = properties.borrow();
     tmp.get(name).map(Arc::clone)
 }
@@ -156,7 +164,7 @@ pub trait GlobalProperty: Any {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap()
+        full.rsplit("::").next().unwrap_or(full)
     }
 
     /// A function which validates the global property.
@@ -170,13 +178,25 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     /// Will return an error if an attempt is made to change a value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with
+    /// [`define_global_property!`](crate::define_global_property) or its manually
+    /// implemented registry metadata is inconsistent.
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
         value: T::Value,
     ) -> Result<(), IxaError>;
 
-    /// Return value of global property T
+    /// Return value of global property T.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with
+    /// [`define_global_property!`](crate::define_global_property) or its manually
+    /// implemented registry metadata is inconsistent.
     #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,

@@ -32,7 +32,7 @@ pub trait EdgeType<E: Entity>: Clone + 'static {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap()
+        full.rsplit("::").next().unwrap_or(full)
     }
 
     /// The index of this item in the owner, which is initialized globally per type
@@ -51,7 +51,9 @@ static NEXT_EDGE_TYPE_ID_BY_ENTITY: LazyLock<Mutex<HashMap<usize, usize>>> =
 /// Returns the number of registered edge types for the entity type `E`.
 #[must_use]
 pub fn get_registered_edge_type_count<E: Entity>() -> usize {
-    let map = NEXT_EDGE_TYPE_ID_BY_ENTITY.lock().unwrap();
+    let map = NEXT_EDGE_TYPE_ID_BY_ENTITY
+        .lock()
+        .expect("Ixa internal error: edge type registry lock is poisoned");
     *map.get(&E::id()).unwrap_or(&0)
 }
 
@@ -78,7 +80,9 @@ pub fn add_to_edge_type_to_registry<E: Entity, ET: EdgeType<E>>() {
 #[must_use]
 pub fn initialize_edge_type_id<E: Entity>(edge_type_id: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_EDGE_TYPE_ID_BY_ENTITY.lock().unwrap();
+    let mut guard = NEXT_EDGE_TYPE_ID_BY_ENTITY
+        .lock()
+        .expect("Ixa internal error: edge type registry lock is poisoned");
     let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
     // Try to claim the candidate index. Here we guard against the potential race condition that

@@ -23,13 +23,18 @@ pub struct ConfigReportOptions {
 }
 
 impl ConfigReportOptions {
+    /// Creates report options using the current directory as the output directory.
+    ///
+    /// Uses `.` as a relative fallback if the current directory cannot be
+    /// determined. Report creation will return an I/O error if that fallback is
+    /// unusable and the caller does not configure another directory.
     #[must_use]
     pub fn new() -> Self {
         trace!("new ConfigReportOptions");
         // Sets the defaults
         ConfigReportOptions {
             file_prefix: String::new(),
-            output_dir: env::current_dir().unwrap(),
+            output_dir: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             overwrite: false,
         }
     }
@@ -166,18 +171,32 @@ pub trait ContextReportExt: ContextBase {
         self.add_report_by_type_id(TypeId::of::<T>(), short_name)
     }
 
+    /// Returns the writer registered for `type_id`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the report writers are already mutably borrowed or if no report
+    /// was registered for `type_id`.
     fn get_writer(&self, type_id: TypeId) -> RefMut<Writer<File>> {
         // No data container will exist if no reports have been added
         let data_container = self.get_data(ReportPlugin);
-        let writers = data_container.file_writers.try_borrow_mut().unwrap();
+        let writers = data_container
+            .file_writers
+            .try_borrow_mut()
+            .expect("report writers are already mutably borrowed");
         RefMut::map(writers, |writers| {
             writers
                 .get_mut(&type_id)
-                .expect("No writer found for the report type")
+                .expect("no writer found for the report type; call add_report first")
         })
     }
 
-    /// Write a new row to the appropriate report file
+    /// Writes a new row to the appropriate report file.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the report writers are already mutably borrowed or if
+    /// [`ContextReportExt::add_report`] was not called for `T`.
     fn send_report<T: Report>(&self, report: T) {
         let writer = &mut self.get_writer(report.type_id());
         report.serialize(writer);
@@ -321,7 +340,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "No writer found for the report type")]
+    #[should_panic(expected = "no writer found for the report type; call add_report first")]
     fn send_report_without_adding_report() {
         let context = Context::new();
         let report = SampleReport {

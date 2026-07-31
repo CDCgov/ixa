@@ -104,6 +104,11 @@ pub struct PeriodicTimeTriggerEvent {
 }
 
 impl PeriodicTimeTrigger {
+    /// Creates a trigger that fires every `period` units of simulation time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `period` is not finite and strictly positive.
     #[must_use]
     pub fn every(period: impl Into<f64>) -> Self {
         let period = period.into();
@@ -115,6 +120,11 @@ impl PeriodicTimeTrigger {
         }
     }
 
+    /// Creates a trigger that fires every `period` in the specified execution phase.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `period` is not finite and strictly positive.
     #[must_use]
     pub fn every_with_phase(period: impl Into<f64>, phase: ExecutionPhase) -> Self {
         let period = period.into();
@@ -132,6 +142,11 @@ impl PeriodicTimeTrigger {
         self
     }
 
+    /// Delays the first trigger occurrence by `delay`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `delay` is negative, infinite, or NaN.
     #[must_use]
     pub fn start_with_delay(mut self, delay: impl Into<f64>) -> Self {
         let delay = delay.into();
@@ -143,6 +158,11 @@ impl PeriodicTimeTrigger {
         self
     }
 
+    /// Sets the absolute simulation time of the first trigger occurrence.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `start_time` is infinite or NaN.
     #[must_use]
     pub fn start_at(mut self, start_time: impl Into<f64>) -> Self {
         let start_time = start_time.into();

@@ -24,8 +24,7 @@ pub trait ParametersExt: PluginContext {
     }
     fn get_parameters(&self) -> &Parameters {
         self.get_global_property_value(ParametersKey)
-            .as_ref()
-            .unwrap()
+            .expect("parameter-loading parameters must be initialized before use")
     }
 }
 

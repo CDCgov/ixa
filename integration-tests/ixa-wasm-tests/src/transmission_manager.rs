@@ -10,7 +10,9 @@ define_rng!(TransmissionRng);
 fn attempt_infection(context: &mut Context) {
     trace!("Attempting infection");
     let population_size: usize = context.get_entity_count::<Person>();
-    let person_to_infect: PersonId = context.sample_entity(TransmissionRng, Person).unwrap(); //.sample_range(TransmissionRng, 0..population_size);
+    let person_to_infect: PersonId = context
+        .sample_entity(TransmissionRng, Person)
+        .expect("Wasm infection model requires a nonempty population");
 
     let person_status: InfectionStatus = context.get_property(person_to_infect);
 
@@ -26,8 +28,10 @@ fn attempt_infection(context: &mut Context) {
     // An alternative implementation calculates each person's time to infection
     // at the beginning of the simulation and schedules their infection at that time.
 
+    let infection_distribution =
+        Exp::new(FOI).expect("Wasm infection model requires a positive force of infection");
     let next_attempt_time = context.get_current_time()
-        + context.sample_distr(TransmissionRng, Exp::new(FOI).unwrap()) / population_size as f64;
+        + context.sample_distr(TransmissionRng, infection_distribution) / population_size as f64;
 
     if next_attempt_time <= MAX_TIME {
         context.add_plan(next_attempt_time, attempt_infection);

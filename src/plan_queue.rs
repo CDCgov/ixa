@@ -175,7 +175,7 @@ impl PlanQueue {
             let entry = self
                 .queue
                 .pop()
-                .expect("plan count was positive but no plan was available");
+                .expect("Ixa internal error: plan count was positive but no plan was available");
 
             // Discard any cancelled plans we encounter.
             if let Some(queued_plan) = self.data_map.remove(&entry.plan_id) {
@@ -204,12 +204,14 @@ impl PlanQueue {
 
                 // Return only if the plan is scheduled for the given time
                 Some(entry) if entry.time == time => {
-                    // Pop is infallible here.
-                    let entry = self.queue.pop().unwrap();
+                    let entry = self
+                        .queue
+                        .pop()
+                        .expect("Ixa internal error: peeked plan disappeared from the queue");
                     let queued_plan = self
                         .data_map
                         .remove(&entry.plan_id)
-                        .expect("live plan must have callback");
+                        .expect("Ixa internal error: live plan has no callback");
                     if !queued_plan.is_passive {
                         self.regular_plan_count -= 1;
                     }
@@ -296,10 +298,14 @@ impl PartialOrd for PlanSchedule {
 /// Entry objects are ordered in increasing order by time, phase, and then plan id.
 impl Ord for PlanSchedule {
     fn cmp(&self, other: &Self) -> Ordering {
-        let time_ordering = self.time.partial_cmp(&other.time).unwrap().reverse();
+        let time_ordering = self
+            .time
+            .partial_cmp(&other.time)
+            .expect("Ixa internal error: plan queue contains a NaN time")
+            .reverse();
         match time_ordering {
             Ordering::Equal => {
-                let phase_ordering = self.phase.partial_cmp(&other.phase).unwrap().reverse();
+                let phase_ordering = self.phase.cmp(&other.phase).reverse();
                 match phase_ordering {
                     Ordering::Equal => self.plan_id.cmp(&other.plan_id).reverse(),
                     _ => phase_ordering,

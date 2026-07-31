@@ -86,6 +86,12 @@ struct ComputedStatisticRecord {
 }
 
 #[cfg(feature = "profiling")]
+/// Writes profiling data and execution statistics to `file_path` as JSON.
+///
+/// # Errors
+///
+/// Returns an I/O error if the data cannot be serialized, the output file cannot
+/// be created, or the serialized data cannot be written.
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
@@ -115,14 +121,18 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     let stat_count = container.computed_statistics.len();
     for idx in 0..stat_count {
         // Temporarily take the statistic, because we need immutable access to `container`.
-        let mut statistic = container.computed_statistics[idx].take().unwrap();
+        let mut statistic = container.computed_statistics[idx]
+            .take()
+            .expect("Ixa internal error: computed statistic slot is empty");
         statistic.value = statistic.functions.compute(&container);
         // Return the statistic
         container.computed_statistics[idx] = Some(statistic);
     }
 
     let computed_statistics = container.computed_statistics.iter().filter_map(|stat| {
-        let stat = stat.as_ref().unwrap();
+        let stat = stat
+            .as_ref()
+            .expect("Ixa internal error: computed statistic slot is empty");
         stat.value.map(|value| {
             (
                 stat.label,
@@ -143,8 +153,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         computed_statistics,
     };
 
-    let json =
-        serde_json::to_string_pretty(&profiling_data).expect("ProfilingData serialization failed");
+    let json = serde_json::to_string_pretty(&profiling_data).map_err(std::io::Error::other)?;
 
     let mut file = File::create(file_path)?;
     file.write_all(json.as_bytes())?;
@@ -152,6 +161,11 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
 }
 
 #[cfg(not(feature = "profiling"))]
+/// Performs no work when the `profiling` feature is disabled.
+///
+/// # Errors
+///
+/// This implementation always returns `Ok(())`.
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     _file_path: P,
     _execution_statistics: ExecutionStatistics,

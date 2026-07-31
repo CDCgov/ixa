@@ -20,7 +20,7 @@ pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
     PROFILING_DATA
         .get_or_init(|| Mutex::new(ProfilingData::new()))
         .lock()
-        .unwrap()
+        .expect("Ixa internal error: profiling data lock is poisoned")
 }
 
 #[derive(Default)]
@@ -83,9 +83,10 @@ impl ProfilingData {
         if self.open_span_count > 0 {
             self.open_span_count -= 1;
             if self.open_span_count == 0 {
-                // Stop recording coverage time. The `total_measured` must be `Some(..)` if
-                // `open_span_count` was nonzero, so unwrap always succeeds.
-                let coverage = self.coverage.take().unwrap();
+                let coverage = self
+                    .coverage
+                    .take()
+                    .expect("Ixa internal error: open profiling spans have no coverage timer");
                 self.close_span_without_coverage(TOTAL_MEASURED, coverage.elapsed());
             }
         }

@@ -8,7 +8,10 @@ macro_rules! define_report {
             }
 
             fn serialize(&self, writer: &mut $crate::csv::Writer<std::fs::File>) {
-                writer.serialize(self).unwrap();
+                writer.serialize(self).expect(concat!(
+                    "failed to serialize report row for ",
+                    stringify!($name)
+                ));
             }
         }
     };

@@ -155,7 +155,9 @@ pub trait QueryInternal<E: Entity>: 'static {
             OnceLock::new();
 
         let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
-        let mut map = map.lock().unwrap();
+        let mut map = map
+            .lock()
+            .expect("Ixa internal error: query multi-property registry lock is poisoned");
         let key = (E::id(), TypeId::of::<Self>());
         let entry = *map.entry(key).or_insert_with(|| {
             let mut types = self.get_type_ids();

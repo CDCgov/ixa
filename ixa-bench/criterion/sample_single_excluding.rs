@@ -74,7 +74,10 @@ fn bench_ns_per_sample<F: FnMut()>(b: &mut criterion::Bencher, mut f: F) -> f64 
 }
 
 fn record(results: &Results, name: &'static str, n: usize, ns: f64) {
-    results.lock().unwrap().insert((name, n), ns);
+    results
+        .lock()
+        .expect("sample-single-excluding benchmark results lock is poisoned")
+        .insert((name, n), ns);
 }
 
 fn bench_strategies(c: &mut Criterion, results: &Results) {
@@ -93,7 +96,7 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
                     black_box(&slice),
                     excluded,
                 )
-                .unwrap();
+                .expect("benchmark slices contain a value other than the exclusion");
                 black_box(v);
             });
             record(results, "rejection", n, ns);
@@ -107,7 +110,7 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
                     black_box(&slice),
                     excluded,
                 )
-                .unwrap();
+                .expect("benchmark slices contain a value other than the exclusion");
                 black_box(v);
             });
             record(results, "iteration", n, ns);
@@ -117,7 +120,7 @@ fn bench_strategies(c: &mut Criterion, results: &Results) {
             let mut rng = StdRng::seed_from_u64(SEED);
             let ns = bench_ns_per_sample(b, || {
                 let v = sample_single_excluding(black_box(&mut rng), black_box(&slice), excluded)
-                    .unwrap();
+                    .expect("benchmark slices contain a value other than the exclusion");
                 black_box(v);
             });
             record(results, "auto", n, ns);
@@ -160,7 +163,11 @@ fn print_summary(results: &Measurements) {
 fn benches(c: &mut Criterion) {
     let results: Results = Arc::new(Mutex::new(Measurements::new()));
     bench_strategies(c, &results);
-    print_summary(&results.lock().unwrap());
+    print_summary(
+        &results
+            .lock()
+            .expect("sample-single-excluding benchmark results lock is poisoned"),
+    );
 }
 
 criterion_group!(group, benches);

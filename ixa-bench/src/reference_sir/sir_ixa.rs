@@ -22,7 +22,9 @@ define_rng!(HouseholdRng);
 define_rng!(ContactRng);
 
 define_data_plugin!(ModelStatsPlugin, ModelStats, |context| {
-    let params = context.get_global_property_value(Params).unwrap();
+    let params = context
+        .get_global_property_value(Params)
+        .expect("Ixa SIR parameters must be initialized before model statistics");
     ModelStats::new(params.initial_infections, params.population, 0.2)
 });
 
@@ -61,7 +63,8 @@ trait InfectionLoop: ContextEntitiesExt {
 
 impl InfectionLoop for Context {
     fn get_params(&self) -> &Parameters {
-        self.get_global_property_value(Params).unwrap()
+        self.get_global_property_value(Params)
+            .expect("Ixa SIR parameters must be initialized before model execution")
     }
     fn get_stats(&self) -> &ModelStats {
         self.get_data(ModelStatsPlugin)
@@ -116,14 +119,18 @@ impl InfectionLoop for Context {
     }
 
     fn recover_person(&mut self, p: PersonId, _t: f64) {
+        // These checks add property lookups to the measured per-event path, so keep them out of
+        // optimized benchmark builds. The transition API maintains this state in release builds.
         debug_assert_eq!(
             self.get_property::<_, InfectionStatus>(p),
-            InfectionStatus::Infectious
+            InfectionStatus::Infectious,
+            "Ixa SIR can only recover an infectious person",
         );
         self.set_property(p, InfectionStatus::Recovered);
         debug_assert_eq!(
             self.get_property::<_, InfectionStatus>(p),
-            InfectionStatus::Recovered
+            InfectionStatus::Recovered,
+            "Ixa SIR recovery must update the infection status",
         );
 
         let stats_data = self.get_data_mut(ModelStatsPlugin);
@@ -142,14 +149,20 @@ impl InfectionLoop for Context {
         let infection_event_rate = infection_rate * n;
         let recovery_event_rate = n / params.infectious_period;
 
-        let infection_event_time =
-            self.sample_distr(NextEventRng, Exp::new(infection_event_rate).unwrap());
-        let recovery_event_time =
-            self.sample_distr(NextEventRng, Exp::new(recovery_event_rate).unwrap());
+        let infection_distribution =
+            Exp::new(infection_event_rate).expect("Ixa SIR infection event rate must be positive");
+        let recovery_distribution =
+            Exp::new(recovery_event_rate).expect("Ixa SIR recovery event rate must be positive");
+        let infection_event_time = self.sample_distr(NextEventRng, infection_distribution);
+        let recovery_event_time = self.sample_distr(NextEventRng, recovery_distribution);
 
         if infection_event_time < recovery_event_time {
-            let source = self.random_infected_person().unwrap();
-            let contact = self.random_contact(source).unwrap();
+            let source = self
+                .random_infected_person()
+                .expect("Ixa SIR positive infectious count must yield an infectious person");
+            let contact = self
+                .random_contact(source)
+                .expect("Ixa SIR population and household data must yield a contact");
             if self.get_property::<_, InfectionStatus>(contact) == InfectionStatus::Susceptible {
                 self.add_plan(
                     self.get_current_time() + infection_event_time,
@@ -192,7 +205,10 @@ impl InfectionLoop for Context {
         // Set up households with at least MIN_HOUSEHOLD_SIZE members each.
         let num_households = (population / MIN_HOUSEHOLD_SIZE).max(1);
         let households: Vec<EntityId<Household>> = (0..num_households)
-            .map(|_| self.add_entity(Household).unwrap())
+            .map(|_| {
+                self.add_entity(Household)
+                    .expect("Ixa SIR Household defaults must create a valid entity")
+            })
             .collect();
 
         // Build a per-person household assignment list. Each household first
@@ -219,7 +235,9 @@ impl InfectionLoop for Context {
 
         // Add people in assignment order and record their household.
         for &h_idx in &assignment {
-            let person = self.add_entity(Person).unwrap();
+            let person = self
+                .add_entity(Person)
+                .expect("Ixa SIR Person defaults must create a valid entity");
             let household = households[h_idx];
             let households_data = self.get_data_mut(HouseholdPlugin);
             households_data
@@ -242,16 +260,16 @@ impl InfectionLoop for Context {
         // Cap the run without keeping an otherwise completed simulation alive.
         self.schedule_shutdown(max_time);
 
-        debug_assert_eq!(
+        assert_eq!(
             self.infected_people(),
             initial_infections,
-            "should have infected people at start"
+            "Ixa SIR setup must seed the requested initial infections",
         );
 
-        debug_assert_eq!(
+        assert_eq!(
             self.get_stats().get_current_infected(),
             initial_infections,
-            "stats should be initialized with initial infections"
+            "Ixa SIR statistics must start with the requested initial infections",
         );
     }
 }
@@ -264,8 +282,10 @@ impl Model {
     #[must_use]
     pub fn new(params: Parameters, options: ModelOptions) -> Self {
         let mut ctx = Context::new();
-        ctx.set_global_property_value(Params, params).unwrap();
-        ctx.set_global_property_value(Options, options).unwrap();
+        ctx.set_global_property_value(Params, params)
+            .expect("Ixa SIR parameters must be valid and initialized once");
+        ctx.set_global_property_value(Options, options)
+            .expect("Ixa SIR options must be valid and initialized once");
         Self { ctx }
     }
     #[must_use]

@@ -39,7 +39,7 @@ fn setup_context(population_size: usize) -> Context {
                 Region(context.sample_range(SampleScalingRng, 0..10)),
                 Unindexed10(context.sample_range(SampleScalingRng, 0..10)),
             ))
-            .unwrap();
+            .expect("sample-scaling benchmark properties must create a valid entity");
     }
 
     context
@@ -135,7 +135,7 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
 
             results
                 .lock()
-                .unwrap()
+                .expect("sample-scaling benchmark results lock is poisoned")
                 .insert((bench_name.to_string(), size), ns);
         });
     }
@@ -149,13 +149,16 @@ pub fn bench_sample_entity_whole_population(c: &mut Criterion, results: Results)
             black_box(sampled);
         });
 
-        results.lock().unwrap().insert(
-            (
-                format!("{bench_name}/{WHOLE_POPULATION_SENTINEL}"),
-                WHOLE_POPULATION_SENTINEL_RESULTS_SIZE,
-            ),
-            ns,
-        );
+        results
+            .lock()
+            .expect("sample-scaling benchmark results lock is poisoned")
+            .insert(
+                (
+                    format!("{bench_name}/{WHOLE_POPULATION_SENTINEL}"),
+                    WHOLE_POPULATION_SENTINEL_RESULTS_SIZE,
+                ),
+                ns,
+            );
     });
 
     group.finish();
@@ -175,7 +178,7 @@ pub fn bench_sample_entity_single_property_indexed(c: &mut Criterion, results: R
 
             results
                 .lock()
-                .unwrap()
+                .expect("sample-scaling benchmark results lock is poisoned")
                 .insert((bench_name.to_string(), size), ns);
         });
     }
@@ -198,7 +201,7 @@ pub fn bench_sample_entity_multi_property_indexed(c: &mut Criterion, results: Re
 
             results
                 .lock()
-                .unwrap()
+                .expect("sample-scaling benchmark results lock is poisoned")
                 .insert((bench_name.to_string(), size), ns);
         });
     }
@@ -222,7 +225,7 @@ pub fn bench_sample_entity_single_property_unindexed(c: &mut Criterion, results:
 
             results
                 .lock()
-                .unwrap()
+                .expect("sample-scaling benchmark results lock is poisoned")
                 .insert((bench_name.to_string(), size), ns);
         });
     }
@@ -245,7 +248,9 @@ fn sample_entity_scaling(c: &mut Criterion) {
     //     n=   1000:     789.94 ns/sample  (x1.000)
     //     n=  10000:    7675.09 ns/sample  (x9.716)
     //     n= 100000:   77670.29 ns/sample  (x98.325)
-    let results = results.lock().unwrap();
+    let results = results
+        .lock()
+        .expect("sample-scaling benchmark results lock is poisoned");
     print_scaling_summary(&results, "sample_entity_whole_population");
     print_scaling_summary(&results, "sample_entity_single_property_indexed");
     print_scaling_summary(&results, "sample_entity_multi_property_indexed");

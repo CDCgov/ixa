@@ -44,7 +44,7 @@ fn initialize_entities(context: &mut Context) {
                 SchoolId(person.school_id as u32),
                 WorkplaceId(person.workplace_id as u32),
             ))
-            .unwrap();
+            .expect("large-dataset benchmark properties must create a valid entity");
     }
 }
 

@@ -135,7 +135,7 @@ impl NetworkData {
             .get(E::id())
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: NetworkStore for Entity {} not found",
+                    "Ixa internal error: NetworkStore for Entity {} not found",
                     E::name()
                 )
             })
@@ -143,7 +143,7 @@ impl NetworkData {
             .downcast_ref::<NetworkStore<E>>()
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: found wrong NetworkStore type when accessing Entity {}",
+                    "Ixa internal error: found wrong NetworkStore type when accessing Entity {}",
                     E::name()
                 )
             })
@@ -154,24 +154,25 @@ impl NetworkData {
     fn get_network_mut<E: Entity, ET: EdgeType<E>>(&mut self) -> &mut Network<E, ET> {
         let network_store = self.network_stores.get_mut(E::id()).unwrap_or_else(|| {
             panic!(
-                "internal error: NetworkStore for Entity {} not found",
+                "Ixa internal error: NetworkStore for Entity {} not found",
                 E::name()
             )
         });
 
         // Lazily initialize the NetworkStore if needed.
         if network_store.get().is_none() {
-            network_store.set(NetworkStore::<E>::new_boxed()).unwrap();
+            network_store
+                .set(NetworkStore::<E>::new_boxed())
+                .expect("Ixa internal error: empty network store cell became initialized");
         }
 
-        // Now the unwrap on `get_mut` is guaranteed to succeed
         network_store
             .get_mut()
-            .unwrap()
+            .expect("Ixa internal error: initialized network store cell is empty")
             .downcast_mut::<NetworkStore<E>>()
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: found wrong NetworkStore type when accessing Entity {}",
+                    "Ixa internal error: found wrong NetworkStore type when accessing Entity {}",
                     E::name()
                 )
             })

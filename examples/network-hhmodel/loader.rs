@@ -42,7 +42,12 @@ struct PeopleRecord {
 pub fn open_csv(file_name: &str) -> Reader<File> {
     let current_dir = example_dir();
     let file_path = current_dir.join(file_name);
-    csv::Reader::from_path(file_path).unwrap()
+    csv::Reader::from_path(&file_path).unwrap_or_else(|error| {
+        panic!(
+            "network-hhmodel failed to open {}: {error}",
+            file_path.display()
+        )
+    })
 }
 
 pub fn init(context: &mut Context) {
@@ -59,7 +64,7 @@ pub fn init(context: &mut Context) {
                 record.sex,
                 record.household_id
             ))
-            .unwrap();
+            .expect("network-hhmodel input record must create a valid Person");
     }
 }
 

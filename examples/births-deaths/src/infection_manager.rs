@@ -23,13 +23,12 @@ struct InfectionPlansData {
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .unwrap()
+        .expect("births-deaths parameters must be initialized before scheduling recovery")
         .clone();
     let mean_infection_duration = parameters.infection_duration;
-    let infection_duration = context.sample_distr(
-        InfectionRng1,
-        Exp::new(1.0 / mean_infection_duration).unwrap(),
-    );
+    let recovery_distribution = Exp::new(1.0 / mean_infection_duration)
+        .expect("births-deaths requires a positive infection duration");
+    let infection_duration = context.sample_distr(InfectionRng1, recovery_distribution);
     let is_alive: Alive = context.get_property(person_id);
 
     if is_alive.0 {

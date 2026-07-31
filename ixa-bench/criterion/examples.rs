@@ -5,7 +5,8 @@ use ixa_example_births_deaths::initialize as births_deaths_initialize;
 use tempfile::tempdir;
 
 pub fn criterion_benchmark(criterion: &mut Criterion) {
-    let output_dir = tempdir().unwrap();
+    let output_dir =
+        tempdir().expect("examples benchmark must create a temporary output directory");
 
     let mut criterion = criterion.benchmark_group("examples");
     criterion.bench_function("example-basic-infection", |bencher| {

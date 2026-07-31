@@ -45,19 +45,25 @@ impl ComputedStatisticFunctions {
         match value {
             ComputedValue::USize(value) => {
                 let ComputedStatisticFunctions::USize { printer, .. } = self else {
-                    unreachable!()
+                    unreachable!(
+                        "Ixa internal error: computed statistic value and printer type disagree",
+                    )
                 };
                 (printer)(value);
             }
             ComputedValue::Int(value) => {
                 let ComputedStatisticFunctions::Int { printer, .. } = self else {
-                    unreachable!()
+                    unreachable!(
+                        "Ixa internal error: computed statistic value and printer type disagree",
+                    )
                 };
                 (printer)(value);
             }
             ComputedValue::Float(value) => {
                 let ComputedStatisticFunctions::Float { printer, .. } = self else {
-                    unreachable!()
+                    unreachable!(
+                        "Ixa internal error: computed statistic value and printer type disagree",
+                    )
                 };
                 (printer)(value);
             }
@@ -348,5 +354,18 @@ mod tests {
         stat.functions.print(value);
 
         assert!(PRINTED.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Ixa internal error: computed statistic value and printer type disagree"
+    )]
+    fn mismatched_computed_statistic_printer_panics() {
+        let functions = ComputedStatisticFunctions::USize {
+            computer: Box::new(|_| Some(0)),
+            printer: Box::new(|_| {}),
+        };
+
+        functions.print(ComputedValue::Int(0));
     }
 }

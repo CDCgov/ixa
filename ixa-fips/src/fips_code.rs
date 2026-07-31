@@ -95,7 +95,8 @@ impl FIPSCode {
     /// Constructs a new [`FIPSCode`] from a [`USState`]. Unlike the other constructors, this constructor is infallible.
     #[must_use]
     pub fn with_state(state: USState) -> Self {
-        Self::new(state.into(), 0, 0, 0, 0, 0).unwrap()
+        Self::new(state.into(), 0, 0, 0, 0, 0)
+            .expect("USState values always encode as valid FIPS state codes")
     }
     /// Constructs a new [`FIPSCode`].
     /// Returns `Err(())` if the data provided is out of range.
@@ -141,8 +142,8 @@ impl FIPSCode {
             | Self::encode_category(category)?
             | Self::encode_id(id)?
             | Self::encode_data(data)?;
-        // At the very least, `USState.encode()` will return a non-zero value, so this unwrapping is safe.
-        let encoded = NonZero::new(encoded).unwrap();
+        let encoded =
+            NonZero::new(encoded).expect("validated FIPS state codes always encode as nonzero");
         Ok(Self(encoded))
     }
     // endregion Constructors
@@ -210,7 +211,8 @@ impl FIPSCode {
     /// Creates a copy of `self` with the FIPS STATE set to `state`.
     #[must_use]
     pub fn set_state(&self, state: USState) -> Self {
-        self.set_state_code(state.into()).unwrap()
+        self.set_state_code(state.into())
+            .expect("USState values always encode as valid FIPS state codes")
     }
 
     /// Creates a copy of `self` with the FIPS STATE set to `state`.
@@ -264,8 +266,8 @@ impl FIPSCode {
         if data <= NINE_BIT_MASK {
             let inverse_mask = !(NINE_BIT_MASK as u64);
             let code = (self.0.get() & inverse_mask) | ((data & NINE_BIT_MASK) as u64);
-            // The result is guaranteed to be nonzero if the original code was valid, so unwrap will succeed.
-            self.0 = NonZero::new(code).unwrap();
+            self.0 = NonZero::new(code)
+                .expect("updating FIPS data bits preserves the nonzero state code");
             Ok(())
         } else {
             Err(FIPSError::from_data_code(data))

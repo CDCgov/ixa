@@ -18,7 +18,10 @@ use crate::{Context, ContextBase, RngId};
 fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
     let data_container = context.get_data(RngPlugin);
 
-    let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
+    let rng_holders = data_container
+        .rng_holders
+        .try_borrow_mut()
+        .expect("RNG state is already borrowed; sampler callbacks must not recursively sample");
     RefMut::map(rng_holders, |holders| {
         holders
             .entry(TypeId::of::<R>())
@@ -39,7 +42,7 @@ fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType>
             })
             .rng
             .downcast_mut::<R::RngType>()
-            .unwrap()
+            .expect("Ixa internal error: RngId resolved to the wrong RNG type")
     })
 }
 
@@ -48,20 +51,31 @@ fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType>
 pub trait ContextRandomExt: ContextBase {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is currently borrowed by an active sampler callback.
     fn init_random(&mut self, base_seed: u64) {
         trace!("initializing random module");
         let data_container = self.get_data_mut(RngPlugin);
         data_container.base_seed = base_seed;
 
         // Clear any existing Rngs to ensure they get re-seeded when `get_rng` is called
-        let mut rng_map = data_container.rng_holders.try_borrow_mut().unwrap();
+        let mut rng_map = data_container
+            .rng_holders
+            .try_borrow_mut()
+            .expect("RNG state cannot be reinitialized while it is borrowed");
         rng_map.clear();
     }
 
     /// Gets a random sample from the random number generator associated with the given
-    /// [`RngId`] by applying the specified sampler function. If the Rng has not been used
-    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// [`RngId`] by applying the specified sampler function. If the RNG has not been used
+    /// before, one will be created with the base seed configured by [`ContextRandomExt::init_random`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed, such as when a sampler callback
+    /// recursively samples from the same context.
     #[must_use]
     fn sample<R: RngId + 'static, T>(
         &self,
@@ -98,8 +112,11 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Gets a random sample from the specified distribution using a random number generator
     /// associated with the given [`RngId`]. If the Rng has not been used before, one will be
-    /// created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// created with the base seed configured by [`ContextRandomExt::init_random`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed by an active sampler callback.
     #[must_use]
     fn sample_distr<R: RngId + 'static, T>(
         &self,
@@ -115,7 +132,11 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Gets a random sample within the range provided by `range`
     /// using the generator associated with the given [`RngId`].
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed or if `range` is invalid for the
+    /// sampled type.
     #[must_use]
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
@@ -150,7 +171,8 @@ pub trait ContextRandomExt: ContextBase {
     ///
     /// # Panics
     ///
-    /// Panics if the converted probability is outside `[0.0, 1.0]` or is NaN.
+    /// Panics if RNG state is already borrowed or if the converted probability
+    /// is outside `[0.0, 1.0]` or is NaN.
     #[must_use]
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: impl Into<f64>) -> bool
     where
@@ -162,8 +184,12 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Draws a random entry out of the list provided in `weights`
     /// with the given weights using the generator associated with the
-    /// given [`RngId`].  Note that this will panic if
-    /// `set_base_random_seed` was not called yet.
+    /// given [`RngId`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed, or if `weights` is empty,
+    /// contains an invalid weight, or has no positive weights.
     #[must_use]
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
@@ -175,7 +201,8 @@ pub trait ContextRandomExt: ContextBase {
             + PartialOrd
             + Weight,
     {
-        let index = WeightedIndex::new(weights).unwrap();
+        let index = WeightedIndex::new(weights)
+            .expect("weights must contain at least one valid, positive weight");
         let mut rng = get_rng::<R>(self);
         index.sample(&mut *rng)
     }

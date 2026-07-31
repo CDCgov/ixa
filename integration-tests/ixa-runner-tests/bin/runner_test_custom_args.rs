@@ -7,12 +7,12 @@ struct Extra {
     a: u32,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_with_custom_args(|_context, _args, extra: Option<Extra>| {
         if let Some(extra) = extra {
             println!("{}", extra.a);
         }
         Ok(())
-    })
-    .unwrap();
+    })?;
+    Ok(())
 }
