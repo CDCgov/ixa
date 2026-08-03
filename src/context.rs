@@ -12,6 +12,8 @@ use std::rc::Rc;
 use crate::data_plugin::DataPlugin;
 use crate::entity::entity_store::EntityStore;
 use crate::entity::multi_property::emit_pre_main_diagnostics;
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::Entity;
@@ -22,6 +24,11 @@ use crate::execution_stats::{
 use crate::global_properties::get_global_property_count;
 use crate::plan_queue::{PlanId, PlanQueue};
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
+
+#[cfg(feature = "profiling")]
+use crate::profiling::{
+    print_profiling_data, print_query_timings, QueryProfileHandle, QueryProfilingData,
+};
 
 /// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -186,28 +193,23 @@ impl Context {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profile_handle(
-        &self,
-        query: &'static str,
-    ) -> crate::profiling::QueryProfileHandle<'_> {
-        crate::profiling::QueryProfileHandle::new(&self.execution_profiler.query_profiler, query)
+    pub(crate) fn query_profile_handle(&self, identity: QueryIdentityId) -> QueryProfileHandle<'_> {
+        QueryProfileHandle::new(&self.execution_profiler.query_profiler, identity)
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profiling_snapshot(
-        &self,
-    ) -> Vec<(&'static str, crate::profiling::QueryProfilingData)> {
+    pub(crate) fn query_profiling_snapshot(&self) -> Vec<(&'static str, QueryProfilingData)> {
         self.execution_profiler.query_profiler.snapshot()
     }
 
     #[cfg(all(test, feature = "profiling"))]
     pub(crate) fn query_profiling_data(
         &self,
-        query: &str,
-    ) -> Option<crate::profiling::QueryProfilingData> {
+        identity: QueryIdentityId,
+    ) -> Option<QueryProfilingData> {
         self.execution_profiler
             .query_profiler
-            .query_profiling_data(query)
+            .query_profiling_data(identity)
     }
 
     pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
@@ -728,8 +730,8 @@ impl Context {
             print_execution_statistics(&stats);
             #[cfg(feature = "profiling")]
             {
-                crate::profiling::print_profiling_data();
-                crate::profiling::print_query_timings(&self.query_profiling_snapshot());
+                print_profiling_data();
+                print_query_timings(&self.query_profiling_snapshot());
             }
         } else {
             log_execution_statistics(&stats);

@@ -6,6 +6,8 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_id;
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::{intern_query_identity, QueryIdentityId};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::property_store::PropertyStore;
 use crate::entity::Entity;
@@ -83,8 +85,8 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
         self.inner.get_type_ids()
     }
 
-    fn multi_property_id(&self) -> Option<usize> {
-        self.inner.multi_property_id()
+    fn resolved_query(&self) -> ResolvedQuery {
+        self.inner.resolved_query()
     }
 
     fn is_empty_query(&self) -> bool {
@@ -105,16 +107,6 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
 
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
         self.inner.filter_entities(entities, context)
-    }
-
-    #[cfg(feature = "profiling")]
-    fn query_profile_label(&self) -> &'static str {
-        self.inner.query_profile_label()
-    }
-
-    #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
-        self.inner.push_query_property_names(names);
     }
 }
 
@@ -145,6 +137,15 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
 
 impl<E: Entity, PL: PropertyList<E>> PropertyInitializationList<E> for EntityPropertyTuple<E, PL> {}
 
+/// Cached index and profiling resolution for one concrete query type.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[doc(hidden)]
+pub struct ResolvedQuery {
+    pub(crate) index_property_id: Option<usize>,
+    #[cfg(feature = "profiling")]
+    pub(crate) identity: QueryIdentityId,
+}
+
 /// Internal query machinery.
 pub trait QueryInternal<E: Entity>: 'static {
     /// Allocation-free representation of the query parts exposed by this query.
@@ -152,31 +153,50 @@ pub trait QueryInternal<E: Entity>: 'static {
     where
         Self: 'a;
 
-    /// Returns an unordered list of type IDs of the properties in this query.
+    /// Returns an unordered list of registered logical property type IDs for
+    /// this query.
     #[must_use]
     fn get_type_ids(&self) -> Vec<TypeId>;
+
+    /// Resolves the index property for an already sorted query shape without
+    /// consulting the concrete-query cache.
+    fn resolve_index_property_id(&self, type_ids: &[TypeId]) -> Option<usize> {
+        type_ids_to_multi_property_id(E::id(), type_ids)
+    }
+
+    /// Returns the cached index and profiling resolution for this query shape.
+    #[must_use]
+    fn resolved_query(&self) -> ResolvedQuery
+    where
+        Self: Sized,
+    {
+        static REGISTRY: OnceLock<Mutex<HashMap<(usize, TypeId), ResolvedQuery>>> = OnceLock::new();
+
+        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
+        let key = (E::id(), TypeId::of::<Self>());
+        if let Some(resolved) = map.lock().unwrap().get(&key).copied() {
+            return resolved;
+        }
+
+        let mut type_ids = self.get_type_ids();
+        type_ids.sort_unstable();
+        let resolved = ResolvedQuery {
+            index_property_id: self.resolve_index_property_id(&type_ids),
+            #[cfg(feature = "profiling")]
+            identity: intern_query_identity::<E>(&type_ids),
+        };
+
+        *map.lock().unwrap().entry(key).or_insert(resolved)
+    }
 
     /// Returns the property ID of the representative multi-property having the properties of
     /// this query, if any.
     #[must_use]
-    fn multi_property_id(&self) -> Option<usize> {
-        #[allow(clippy::type_complexity)]
-        static REGISTRY: OnceLock<Mutex<HashMap<(usize, TypeId), &'static Option<usize>>>> =
-            OnceLock::new();
-
-        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
-        let mut map = map.lock().unwrap();
-        let key = (E::id(), TypeId::of::<Self>());
-        let entry = *map.entry(key).or_insert_with(|| {
-            let mut types = self.get_type_ids();
-            types.sort_unstable();
-            Box::leak(Box::new(type_ids_to_multi_property_id(
-                E::id(),
-                types.as_slice(),
-            )))
-        });
-
-        *entry
+    fn multi_property_id(&self) -> Option<usize>
+    where
+        Self: Sized,
+    {
+        self.resolved_query().index_property_id
     }
 
     /// Indicates whether this query matches the entire population for `E`.
@@ -205,36 +225,6 @@ pub trait QueryInternal<E: Entity>: 'static {
 
     /// Removes all `EntityId`s from the given vector that do not match this query.
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context);
-
-    /// Returns a stable profiling identity for this query shape.
-    #[cfg(feature = "profiling")]
-    #[must_use]
-    fn query_profile_label(&self) -> &'static str
-    where
-        Self: Sized,
-    {
-        static REGISTRY: OnceLock<Mutex<HashMap<(TypeId, TypeId), &'static str>>> = OnceLock::new();
-
-        let map = REGISTRY.get_or_init(|| Mutex::new(HashMap::default()));
-        let mut map = map.lock().unwrap();
-        let key = (TypeId::of::<E>(), TypeId::of::<Self>());
-        map.entry(key).or_insert_with(|| {
-            let mut property_names = Vec::new();
-            self.push_query_property_names(&mut property_names);
-            property_names.sort_unstable();
-
-            let label = if property_names.is_empty() {
-                format!("{}: All", E::name())
-            } else {
-                format!("{}: ({})", E::name(), property_names.join(", "))
-            };
-            Box::leak(label.into_boxed_str())
-        })
-    }
-
-    /// Appends property names that identify this query shape.
-    #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 /// Values accepted by user-facing query APIs such as
@@ -251,16 +241,19 @@ impl<E: Entity> Query<E> for E {}
 
 #[cfg(test)]
 mod tests {
-
-    #[cfg(feature = "profiling")]
-    use super::EntityPropertyTuple;
     use super::QueryInternal;
+    #[cfg(feature = "profiling")]
+    use super::{EntityId, EntityPropertyTuple, EntitySet};
+    #[cfg(feature = "profiling")]
+    use crate::entity::multi_property::query_identity_label;
     use crate::prelude::*;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, Context,
     };
 
     define_entity!(Person);
+    #[cfg(feature = "profiling")]
+    define_entity!(Case);
 
     define_property!(struct Age(u8), Person, default_const = Age(0));
     define_property!(struct County(u32), Person, default_const = County(0));
@@ -342,65 +335,85 @@ mod tests {
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn empty_query_query_profile_label_is_entity_all() {
-        assert_eq!(
-            <() as QueryInternal<Person>>::query_profile_label(&()),
-            "Person: All"
-        );
-        assert_eq!(
-            <Person as QueryInternal<Person>>::query_profile_label(&Person),
-            "Person: All"
-        );
+    fn empty_queries_share_entity_all_query_identity() {
+        let empty = <() as QueryInternal<Person>>::resolved_query(&());
+        let entity = <Person as QueryInternal<Person>>::resolved_query(&Person);
+
+        assert_eq!(empty.identity, entity.identity);
+        assert_eq!(query_identity_label(empty.identity), "Person: All");
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn single_property_query_query_profile_label_includes_property_name() {
+    fn entity_type_is_part_of_query_identity() {
+        let person = <Person as QueryInternal<Person>>::resolved_query(&Person);
+        let case = <Case as QueryInternal<Case>>::resolved_query(&Case);
+
+        assert_ne!(person.identity, case.identity);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn single_property_query_identity_label_includes_property_name() {
         let query = (Age(42),);
+        let resolved = <(Age,) as QueryInternal<Person>>::resolved_query(&query);
 
-        assert_eq!(
-            <(Age,) as QueryInternal<Person>>::query_profile_label(&query),
-            "Person: (Age)"
-        );
+        assert_eq!(query_identity_label(resolved.identity), "Person: (Age)");
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn multi_property_query_query_profile_label_includes_property_names() {
+    fn multi_property_query_identity_ignores_order_and_values() {
         let query = (Age(42), County(1));
+        let resolved = <(Age, County) as QueryInternal<Person>>::resolved_query(&query);
 
         assert_eq!(
-            <(Age, County) as QueryInternal<Person>>::query_profile_label(&query),
+            query_identity_label(resolved.identity),
             "Person: (Age, County)"
         );
 
-        let reversed_query = (County(1), Age(42));
+        let reversed_query = (County(2), Age(20));
+        let reversed = <(County, Age) as QueryInternal<Person>>::resolved_query(&reversed_query);
+        assert_eq!(resolved.identity, reversed.identity);
+        assert_eq!(resolved.index_property_id, reversed.index_property_id);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn unregistered_multi_property_shape_still_has_an_identity() {
+        let query = (Age(42), Height(70));
+        let resolved = <(Age, Height) as QueryInternal<Person>>::resolved_query(&query);
+
+        assert_eq!(resolved.index_property_id, None);
         assert_eq!(
-            <(County, Age) as QueryInternal<Person>>::query_profile_label(&reversed_query),
-            "Person: (Age, County)"
+            query_identity_label(resolved.identity),
+            "Person: (Age, Height)"
         );
     }
 
     #[cfg(feature = "profiling")]
     #[test]
-    fn entity_property_tuple_query_profile_label_delegates_to_inner_query() {
+    fn entity_property_tuple_delegates_complete_query_resolution() {
         let query = EntityPropertyTuple::<Person, _>::new((Age(42), County(1)));
+        let inner = (Age(20), County(2));
 
-        assert_eq!(query.query_profile_label(), "Person: (Age, County)");
+        assert_eq!(query.resolved_query(), inner.resolved_query());
     }
 
     #[cfg(feature = "profiling")]
     #[test]
     fn custom_query_internal_impl_can_use_default_profile_names() {
+        use std::any::{Any, TypeId};
+
         struct CustomQuery;
 
         impl QueryInternal<Person> for CustomQuery {
             type QueryParts<'a>
-                = [&'a dyn std::any::Any; 0]
+                = [&'a dyn Any; 0]
             where
                 Self: 'a;
 
-            fn get_type_ids(&self) -> Vec<std::any::TypeId> {
+            fn get_type_ids(&self) -> Vec<TypeId> {
                 Vec::new()
             }
 
@@ -408,24 +421,21 @@ mod tests {
                 []
             }
 
-            fn new_query_result<'c>(&self, context: &'c Context) -> super::EntitySet<'c, Person> {
+            fn new_query_result<'c>(&self, context: &'c Context) -> EntitySet<'c, Person> {
                 <() as QueryInternal<Person>>::new_query_result(&(), context)
             }
 
-            fn match_entity(&self, entity_id: super::EntityId<Person>, context: &Context) -> bool {
+            fn match_entity(&self, entity_id: EntityId<Person>, context: &Context) -> bool {
                 <() as QueryInternal<Person>>::match_entity(&(), entity_id, context)
             }
 
-            fn filter_entities(
-                &self,
-                entities: &mut Vec<super::EntityId<Person>>,
-                context: &Context,
-            ) {
+            fn filter_entities(&self, entities: &mut Vec<EntityId<Person>>, context: &Context) {
                 <() as QueryInternal<Person>>::filter_entities(&(), entities, context);
             }
         }
 
-        assert_eq!(CustomQuery.query_profile_label(), "Person: All");
+        let resolved = CustomQuery.resolved_query();
+        assert_eq!(query_identity_label(resolved.identity), "Person: All");
     }
 
     #[test]

@@ -15,6 +15,8 @@ use crate::entity::entity_set::source_iterator::{PopulationRangeIterator, Source
 use crate::entity::entity_set::source_set::SourceSet;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::hashing::IndexSet;
+#[cfg(feature = "profiling")]
+use crate::profiling::{QueryExecutionProfile, QueryProfileHandle};
 
 enum EntitySetIteratorInner<'a, E: Entity> {
     Source(SourceIterator<'a, E>),
@@ -216,7 +218,7 @@ impl<'a, E: Entity> EntitySetIteratorInner<'a, E> {
 pub struct EntitySetIterator<'c, E: Entity> {
     inner: EntitySetIteratorInner<'c, E>,
     #[cfg(feature = "profiling")]
-    pub(in crate::entity) query_profile: Option<crate::profiling::QueryExecutionProfile<'c>>,
+    pub(in crate::entity) query_profile: Option<QueryExecutionProfile<'c>>,
 }
 
 impl<'c, E: Entity> EntitySetIterator<'c, E> {
@@ -269,10 +271,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
 
     #[cfg(feature = "profiling")]
     #[inline]
-    pub(in crate::entity) fn with_query_profile(
-        mut self,
-        profile: crate::profiling::QueryProfileHandle<'c>,
-    ) -> Self {
+    pub(in crate::entity) fn with_query_profile(mut self, profile: QueryProfileHandle<'c>) -> Self {
         self.query_profile = Some(profile.execution());
         self
     }
@@ -280,10 +279,7 @@ impl<'c, E: Entity> EntitySetIterator<'c, E> {
     #[allow(unused_mut)]
     pub(super) fn new(mut set: EntitySet<'c, E>) -> Self {
         #[cfg(feature = "profiling")]
-        let query_profile = set
-            .query_profile
-            .take()
-            .map(crate::profiling::QueryProfileHandle::execution);
+        let query_profile = set.query_profile.take().map(QueryProfileHandle::execution);
         Self {
             inner: EntitySetIteratorInner::from_entity_set(set),
             #[cfg(feature = "profiling")]
@@ -332,7 +328,7 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
         #[cfg(feature = "profiling")]
         let _query_execution_scope = query_profile
             .as_mut()
-            .and_then(crate::profiling::QueryExecutionProfile::scope);
+            .and_then(QueryExecutionProfile::scope);
 
         match inner {
             EntitySetIteratorInner::Source(source) => source.count(),
@@ -365,7 +361,7 @@ impl<'a, E: Entity> Iterator for EntitySetIterator<'a, E> {
             #[cfg(feature = "profiling")]
             let _query_execution_scope = query_profile
                 .as_mut()
-                .and_then(crate::profiling::QueryExecutionProfile::scope);
+                .and_then(QueryExecutionProfile::scope);
 
             match inner {
                 EntitySetIteratorInner::Source(source) => source.nth(n),

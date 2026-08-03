@@ -8,10 +8,10 @@
 //!
 //! To ensure that queries can efficiently find matching indexes, multi-properties that consist
 //! of the same set of component properties are considered equivalent, regardless of their
-//! definition order. Component properties are sorted alphabetically by property name to produce
-//! a canonical identity for that unordered component set. A query with the same component set can
-//! then resolve to the index (if it exists) of an equivalent (multi-)property regardless of the
-//! order client code provides the component values.
+//! definition order. Logical property `TypeId`s are sorted and hashed to produce a canonical
+//! identity for that unordered component set. A query with the same component set can then resolve
+//! to the index (if it exists) of an equivalent (multi-)property regardless of the order client
+//! code provides the component values.
 //!
 //! ## Query Integration
 //!
@@ -30,6 +30,10 @@
 use std::any::TypeId;
 use std::sync::{LazyLock, Mutex};
 
+#[cfg(feature = "profiling")]
+use crate::entity::property_store::registered_property_name;
+#[cfg(feature = "profiling")]
+use crate::entity::Entity;
 use crate::hashing::{one_shot_128, HashMap, HashValueType};
 use crate::warn;
 
@@ -40,17 +44,39 @@ struct MultiPropertyId {
     pub name: &'static str,
 }
 
+/// Process-local identifier for an entity-scoped unordered property set.
+///
+/// The numeric value is an implementation detail and is not stable across
+/// processes.
+#[cfg(feature = "profiling")]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct QueryIdentityId(usize);
+
+#[derive(Clone, Copy, Default)]
+struct QueryShapeRecord {
+    representative: Option<MultiPropertyId>,
+    #[cfg(feature = "profiling")]
+    identity: Option<QueryIdentityId>,
+}
+
+#[derive(Default)]
+struct QueryShapeRegistry {
+    shapes: HashMap<(usize, HashValueType), QueryShapeRecord>,
+    #[cfg(feature = "profiling")]
+    labels: Vec<&'static str>,
+}
+
 enum PreMainDiagnostic {
     Warning(String),
 }
 
-/// A map from an entity-scoped, sorted list of component `TypeId`s to the representative
-/// multi-property ID for that unordered component set.
+/// Metadata for entity-scoped, unordered component-property sets.
 ///
-/// Query tuple lookup uses this to resolve unordered query component sets to the
-/// multi-property index that can satisfy the query.
-static MULTI_PROPERTY_ID_MAP: LazyLock<Mutex<HashMap<(usize, HashValueType), MultiPropertyId>>> =
-    LazyLock::new(|| Mutex::new(HashMap::default()));
+/// Query tuple lookup uses this to resolve a representative multi-property
+/// index. Profiling additionally interns each observed shape to a compact ID
+/// and stores its reporting label here.
+static QUERY_SHAPE_REGISTRY: LazyLock<Mutex<QueryShapeRegistry>> =
+    LazyLock::new(|| Mutex::new(QueryShapeRegistry::default()));
 
 /// A map from an entity-scoped concrete multi-property logical `TypeId` to the representative
 /// multi-property ID for that unordered component set.
@@ -68,15 +94,21 @@ static MULTI_PROPERTY_TYPE_ID_MAP: LazyLock<Mutex<HashMap<(usize, TypeId), Multi
 static PRE_MAIN_DIAGNOSTICS: LazyLock<Mutex<Vec<PreMainDiagnostic>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
+fn query_shape_key(entity_id: usize, type_ids: &[TypeId]) -> (usize, HashValueType) {
+    (entity_id, one_shot_128(&type_ids))
+}
+
 /// Looks up the representative multi-property ID for a sorted list of component `TypeId`s.
 #[must_use]
 pub fn type_ids_to_multi_property_id(entity_id: usize, type_ids: &[TypeId]) -> Option<usize> {
-    let hash = one_shot_128(&type_ids);
-    MULTI_PROPERTY_ID_MAP
+    let key = query_shape_key(entity_id, type_ids);
+    QUERY_SHAPE_REGISTRY
         .lock()
         .unwrap()
-        .get(&(entity_id, hash))
-        .map(|value| value.id)
+        .shapes
+        .get(&key)
+        .and_then(|record| record.representative)
+        .map(|representative| representative.id)
 }
 
 /// Looks up the representative multi-property ID and name for a concrete multi-property
@@ -103,15 +135,15 @@ pub fn register_type_ids_to_multi_property_id(
     id: usize,
     name: &'static str,
 ) -> Option<(usize, &'static str)> {
-    let hash = one_shot_128(&type_ids);
-    let key = (entity_id, hash);
+    let key = query_shape_key(entity_id, type_ids);
     let value = MultiPropertyId { id, name };
     let existing = {
-        let mut map = MULTI_PROPERTY_ID_MAP.lock().unwrap();
-        match map.get(&key).copied() {
+        let mut registry = QUERY_SHAPE_REGISTRY.lock().unwrap();
+        let record = registry.shapes.entry(key).or_default();
+        match record.representative {
             Some(existing) => Some(existing),
             None => {
-                map.insert(key, value);
+                record.representative = Some(value);
                 None
             }
         }
@@ -125,6 +157,62 @@ pub fn register_type_ids_to_multi_property_id(
         .or_insert(representative);
 
     existing.map(|existing| (existing.id, existing.name))
+}
+
+#[cfg(feature = "profiling")]
+fn build_query_identity_label<E: Entity>(type_ids: &[TypeId]) -> String {
+    if type_ids.is_empty() {
+        return format!("{}: All", E::name());
+    }
+
+    let mut names = type_ids
+        .iter()
+        .map(|&type_id| registered_property_name(E::id(), type_id))
+        .collect::<Vec<_>>();
+    names.sort_unstable();
+
+    format!("{}: ({})", E::name(), names.join(", "))
+}
+
+/// Returns the process-local profiling identity for a sorted query shape.
+#[cfg(feature = "profiling")]
+pub(crate) fn intern_query_identity<E: Entity>(type_ids: &[TypeId]) -> QueryIdentityId {
+    let key = query_shape_key(E::id(), type_ids);
+
+    {
+        let registry = QUERY_SHAPE_REGISTRY.lock().unwrap();
+        if let Some(identity) = registry.shapes.get(&key).and_then(|record| record.identity) {
+            return identity;
+        }
+    }
+
+    // Property metadata has its own lock, so build the label without holding
+    // the query-shape registry lock.
+    let label = build_query_identity_label::<E>(type_ids);
+
+    let mut registry = QUERY_SHAPE_REGISTRY.lock().unwrap();
+    if let Some(identity) = registry.shapes.get(&key).and_then(|record| record.identity) {
+        return identity;
+    }
+
+    let identity = QueryIdentityId(registry.labels.len());
+    registry.labels.push(Box::leak(label.into_boxed_str()));
+    registry.shapes.entry(key).or_default().identity = Some(identity);
+    identity
+}
+
+/// Returns the reporting label for a process-local profiling identity.
+#[cfg(feature = "profiling")]
+pub(crate) fn query_identity_label(identity: QueryIdentityId) -> &'static str {
+    QUERY_SHAPE_REGISTRY.lock().unwrap().labels[identity.0]
+}
+
+#[cfg(all(test, feature = "profiling"))]
+pub(crate) fn test_query_identity(label: &'static str) -> QueryIdentityId {
+    let mut registry = QUERY_SHAPE_REGISTRY.lock().unwrap();
+    let identity = QueryIdentityId(registry.labels.len());
+    registry.labels.push(label);
+    identity
 }
 
 #[doc(hidden)]

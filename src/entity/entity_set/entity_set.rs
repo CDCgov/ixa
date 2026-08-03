@@ -18,6 +18,8 @@ use rand::Rng;
 
 use super::{EntitySetIterator, SourceSet};
 use crate::entity::{Entity, EntityId};
+#[cfg(feature = "profiling")]
+use crate::profiling::QueryProfileHandle;
 use crate::random::{
     count_and_sample_single_l_reservoir, sample_multiple_from_known_length,
     sample_multiple_l_reservoir, sample_single_excluding_l_reservoir, sample_single_l_reservoir,
@@ -27,7 +29,7 @@ use crate::random::{
 pub struct EntitySet<'a, E: Entity> {
     pub(super) inner: EntitySetInner<'a, E>,
     #[cfg(feature = "profiling")]
-    pub(in crate::entity) query_profile: Option<crate::profiling::QueryProfileHandle<'a>>,
+    pub(in crate::entity) query_profile: Option<QueryProfileHandle<'a>>,
 }
 
 /// Internal set-expression tree used to represent composed query sources.
@@ -78,14 +80,9 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// same query identity. This avoids charging a composed operation to an
     /// arbitrary query while preserving a single identifiable query origin.
     #[cfg(feature = "profiling")]
-    fn unique_query_profile(
-        left: &Self,
-        right: &Self,
-    ) -> Option<crate::profiling::QueryProfileHandle<'a>> {
+    fn unique_query_profile(left: &Self, right: &Self) -> Option<QueryProfileHandle<'a>> {
         match (left.query_profile, right.query_profile) {
-            (Some(left_profile), Some(right_profile))
-                if left_profile.same_query_as(right_profile) =>
-            {
+            (Some(left_profile), Some(right_profile)) if left_profile == right_profile => {
                 Some(left_profile)
             }
             (Some(_), Some(_)) => None,
@@ -134,10 +131,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
 
     #[cfg(feature = "profiling")]
     #[inline]
-    pub(in crate::entity) fn with_query_profile(
-        mut self,
-        profile: crate::profiling::QueryProfileHandle<'a>,
-    ) -> Self {
+    pub(in crate::entity) fn with_query_profile(mut self, profile: QueryProfileHandle<'a>) -> Self {
         self.query_profile = Some(profile);
         self
     }
@@ -314,9 +308,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     #[must_use]
     pub fn contains(&self, entity_id: EntityId<E>) -> bool {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
         self.contains_impl(entity_id)
     }
 
@@ -338,10 +330,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     #[allow(unused_mut)]
     pub fn to_owned_vec(mut self) -> Vec<EntityId<E>> {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .take()
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.take().map(QueryProfileHandle::scope);
 
         self.into_iter().collect()
     }
@@ -361,9 +350,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         X: Borrow<EntityId<E>>,
     {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
 
         let excluded = *excluded.borrow();
         if let Some(n) = self.try_len_impl() {
@@ -404,9 +391,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
 
         if let Some(n) = self.try_len_impl() {
             if n == 0 {
@@ -435,9 +420,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
 
         if let Some(n) = self.try_len_impl() {
             if n == 0 {
@@ -463,9 +446,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
         R: Rng,
     {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
 
         match self.try_len_impl() {
             Some(0) => {
@@ -500,9 +481,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     #[must_use]
     pub fn try_len(&self) -> Option<usize> {
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile
-            .map(crate::profiling::QueryProfileHandle::scope);
+        let _query_profile_scope = self.query_profile.map(QueryProfileHandle::scope);
         self.try_len_impl()
     }
 

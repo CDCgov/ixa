@@ -189,6 +189,7 @@ mod tests {
     use std::fs;
     use std::time::Duration;
 
+    use serde_json::{from_str, Value};
     use tempfile::TempDir;
 
     use super::*;
@@ -227,7 +228,7 @@ mod tests {
         assert!(file_path.exists());
 
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
-        let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
+        let json: Value = from_str(&content).expect("Invalid JSON");
 
         assert!(json["date_time"].is_object());
         assert!(json["date_time"]["secs_since_epoch"].is_number());
@@ -290,7 +291,7 @@ mod tests {
         write_profiling_data_to_file(&file_path, exec_stats, &rows).expect("Failed to write file");
 
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
-        let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
+        let json: Value = from_str(&content).expect("Invalid JSON");
         let query_timings = json["query_timings"].as_array().unwrap();
         let timing = query_timings
             .iter()
@@ -324,7 +325,7 @@ mod tests {
         write_profiling_data_to_file(&file_path, exec_stats, &[]).expect("Failed to write file");
 
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
-        let json: serde_json::Value = serde_json::from_str(&content).expect("Invalid JSON");
+        let json: Value = from_str(&content).expect("Invalid JSON");
 
         let cpu_time = json["execution_statistics"]["cpu_time"].as_f64().unwrap();
         assert!((cpu_time - 1.5).abs() < 0.01);

@@ -3,6 +3,8 @@ use std::cell::RefCell;
 #[cfg(feature = "profiling")]
 use std::collections::hash_map::Entry;
 #[cfg(feature = "profiling")]
+use std::ptr::eq;
+#[cfg(feature = "profiling")]
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -13,6 +15,8 @@ use super::{
     ComputedStatistic, ComputedValue, CustomStatisticComputer, CustomStatisticPrinter,
     TOTAL_MEASURED,
 };
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::{query_identity_label, QueryIdentityId};
 use crate::HashMap;
 
 #[cfg(feature = "profiling")]
@@ -52,7 +56,7 @@ pub struct ProfilingData {
 
 /// Aggregate profiling data for all committed executions of one query shape.
 ///
-/// [`QueryProfiler`] stores one value per static query label and updates it
+/// [`QueryProfiler`] stores one value per query identity and updates it
 /// whenever a completed query execution is recorded.
 #[cfg(feature = "profiling")]
 #[derive(Clone, Copy, Debug)]
@@ -84,20 +88,20 @@ impl QueryProfilingData {
 
 /// Context-owned storage for aggregate query-profiling data.
 ///
-/// Recording handles submit completed query labels and elapsed durations to
+/// Recording handles submit completed query identities and elapsed durations to
 /// this collection. Interior mutability permits profiling through query APIs
 /// that borrow the owning context immutably.
 #[cfg(feature = "profiling")]
 #[derive(Default)]
 pub(crate) struct QueryProfiler {
-    timings: RefCell<HashMap<&'static str, QueryProfilingData>>,
+    timings: RefCell<HashMap<QueryIdentityId, QueryProfilingData>>,
 }
 
 #[cfg(feature = "profiling")]
 impl QueryProfiler {
-    fn record(&self, query: &'static str, elapsed: Duration) {
+    fn record(&self, identity: QueryIdentityId, elapsed: Duration) {
         let mut timings = self.timings.borrow_mut();
-        match timings.entry(query) {
+        match timings.entry(identity) {
             Entry::Occupied(mut entry) => entry.get_mut().record(elapsed),
             Entry::Vacant(entry) => {
                 entry.insert(QueryProfilingData::new(elapsed));
@@ -111,7 +115,7 @@ impl QueryProfiler {
         let timings = self.timings.borrow();
         let mut rows = timings
             .iter()
-            .map(|(&query, &data)| (query, data))
+            .map(|(&identity, &data)| (query_identity_label(identity), data))
             .collect::<Vec<_>>();
 
         rows.sort_by(|(left_query, left_data), (right_query, right_data)| {
@@ -124,8 +128,11 @@ impl QueryProfiler {
     }
 
     #[cfg(test)]
-    pub(crate) fn query_profiling_data(&self, query: &str) -> Option<QueryProfilingData> {
-        self.timings.borrow().get(query).copied()
+    pub(crate) fn query_profiling_data(
+        &self,
+        identity: QueryIdentityId,
+    ) -> Option<QueryProfilingData> {
+        self.timings.borrow().get(&identity).copied()
     }
 }
 
@@ -138,21 +145,17 @@ impl QueryProfiler {
 #[derive(Clone, Copy)]
 pub(crate) struct QueryProfileHandle<'a> {
     profiler: &'a QueryProfiler,
-    query: &'static str,
+    identity: QueryIdentityId,
 }
 
 #[cfg(feature = "profiling")]
 impl<'a> QueryProfileHandle<'a> {
-    pub(crate) fn new(profiler: &'a QueryProfiler, query: &'static str) -> Self {
-        Self { profiler, query }
-    }
-
-    pub(crate) fn same_query_as(self, other: Self) -> bool {
-        std::ptr::eq(self.profiler, other.profiler) && self.query == other.query
+    pub(crate) fn new(profiler: &'a QueryProfiler, identity: QueryIdentityId) -> Self {
+        Self { profiler, identity }
     }
 
     fn record(self, elapsed: Duration) {
-        self.profiler.record(self.query, elapsed);
+        self.profiler.record(self.identity, elapsed);
     }
 
     #[must_use]
@@ -167,6 +170,16 @@ impl<'a> QueryProfileHandle<'a> {
         QueryExecutionProfile::new(self)
     }
 }
+
+#[cfg(feature = "profiling")]
+impl PartialEq for QueryProfileHandle<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        eq(self.profiler, other.profiler) && self.identity == other.identity
+    }
+}
+
+#[cfg(feature = "profiling")]
+impl Eq for QueryProfileHandle<'_> {}
 
 /// RAII guard that records one continuously measured query execution.
 ///
@@ -408,6 +421,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::entity::multi_property::test_query_identity;
     use crate::profiling::{get_profiling_data, increment_named_count};
 
     #[test]
@@ -591,11 +605,10 @@ mod tests {
     #[test]
     fn query_profiler_first_observation_initializes_record() {
         let profiler = QueryProfiler::default();
-        profiler.record("QueryTimingInit: (Age)", Duration::from_micros(10));
+        let identity = test_query_identity("QueryTimingInit: (Age)");
+        profiler.record(identity, Duration::from_micros(10));
 
-        let data = profiler
-            .query_profiling_data("QueryTimingInit: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
         assert_eq!(data.total, Duration::from_micros(10));
         assert_eq!(data.min, Duration::from_micros(10));
@@ -605,13 +618,12 @@ mod tests {
     #[test]
     fn query_profiler_later_observations_update_aggregate() {
         let profiler = QueryProfiler::default();
-        profiler.record("QueryTimingUpdate: (Age)", Duration::from_micros(10));
-        profiler.record("QueryTimingUpdate: (Age)", Duration::from_micros(30));
-        profiler.record("QueryTimingUpdate: (Age)", Duration::from_micros(5));
+        let identity = test_query_identity("QueryTimingUpdate: (Age)");
+        profiler.record(identity, Duration::from_micros(10));
+        profiler.record(identity, Duration::from_micros(30));
+        profiler.record(identity, Duration::from_micros(5));
 
-        let data = profiler
-            .query_profiling_data("QueryTimingUpdate: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 3);
         assert_eq!(data.total, Duration::from_micros(45));
         assert_eq!(data.min, Duration::from_micros(5));
@@ -621,8 +633,9 @@ mod tests {
     #[test]
     fn query_profiler_snapshot_includes_count_total_min_and_max() {
         let profiler = QueryProfiler::default();
-        profiler.record("QueryTimingTable: (Age)", Duration::from_millis(10));
-        profiler.record("QueryTimingTable: (Age)", Duration::from_millis(30));
+        let identity = test_query_identity("QueryTimingTable: (Age)");
+        profiler.record(identity, Duration::from_millis(10));
+        profiler.record(identity, Duration::from_millis(30));
 
         let snapshot = profiler.snapshot();
         let (_, data) = snapshot
@@ -637,15 +650,14 @@ mod tests {
     }
 
     #[test]
-    fn query_profiler_same_label_aggregates_into_one_row() {
+    fn query_profiler_same_identity_aggregates_into_one_row() {
         let profiler = QueryProfiler::default();
-        profiler.record("QueryTimingSame: (Age)", Duration::from_micros(10));
-        profiler.record("QueryTimingSame: (Age)", Duration::from_micros(30));
-        profiler.record("QueryTimingSame: (Age)", Duration::from_micros(5));
+        let identity = test_query_identity("QueryTimingSame: (Age)");
+        profiler.record(identity, Duration::from_micros(10));
+        profiler.record(identity, Duration::from_micros(30));
+        profiler.record(identity, Duration::from_micros(5));
 
-        let data = profiler
-            .query_profiling_data("QueryTimingSame: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 3);
         assert_eq!(data.total, Duration::from_micros(45));
     }
@@ -653,9 +665,12 @@ mod tests {
     #[test]
     fn query_profiler_snapshot_sorts_by_total_then_label() {
         let profiler = QueryProfiler::default();
-        profiler.record("QueryTimingSort: B", Duration::from_micros(20));
-        profiler.record("QueryTimingSort: C", Duration::from_micros(10));
-        profiler.record("QueryTimingSort: A", Duration::from_micros(20));
+        let b = test_query_identity("QueryTimingSort: B");
+        let c = test_query_identity("QueryTimingSort: C");
+        let a = test_query_identity("QueryTimingSort: A");
+        profiler.record(b, Duration::from_micros(20));
+        profiler.record(c, Duration::from_micros(10));
+        profiler.record(a, Duration::from_micros(20));
 
         let snapshot = profiler.snapshot();
         let labels = snapshot.iter().map(|(query, _)| *query).collect::<Vec<_>>();
@@ -673,71 +688,83 @@ mod tests {
     #[test]
     fn query_profile_scope_records_on_drop() {
         let profiler = QueryProfiler::default();
+        let identity = test_query_identity("QueryProfileScope: (Age)");
         {
-            let _scope = QueryProfileHandle::new(&profiler, "QueryProfileScope: (Age)").scope();
+            let _scope = QueryProfileHandle::new(&profiler, identity).scope();
         }
 
-        let data = profiler
-            .query_profiling_data("QueryProfileScope: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
+    }
+
+    #[test]
+    fn query_profile_handle_equality_uses_profiler_and_identity() {
+        fn requires_eq<T: Eq>(_value: T) {}
+
+        let first_profiler = QueryProfiler::default();
+        let second_profiler = QueryProfiler::default();
+        let first_identity = test_query_identity("QueryHandleEquality: A");
+        let second_identity = test_query_identity("QueryHandleEquality: B");
+
+        let first = QueryProfileHandle::new(&first_profiler, first_identity);
+        let same = QueryProfileHandle::new(&first_profiler, first_identity);
+        let different_identity = QueryProfileHandle::new(&first_profiler, second_identity);
+        let different_profiler = QueryProfileHandle::new(&second_profiler, first_identity);
+
+        assert!(first == same);
+        assert!(first != different_identity);
+        assert!(first != different_profiler);
+        requires_eq(first);
     }
 
     #[test]
     fn query_execution_scopes_accumulate_into_one_observation() {
         let profiler = QueryProfiler::default();
+        let identity = test_query_identity("QueryExecutionScopes: (Age)");
         {
-            let mut execution =
-                QueryProfileHandle::new(&profiler, "QueryExecutionScopes: (Age)").execution();
+            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
             drop(execution.scope());
             drop(execution.scope());
         }
 
-        let data = profiler
-            .query_profiling_data("QueryExecutionScopes: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
     #[test]
     fn unused_query_execution_records_nothing() {
         let profiler = QueryProfiler::default();
-        drop(QueryProfileHandle::new(&profiler, "UnusedQueryExecution: (Age)").execution());
+        let identity = test_query_identity("UnusedQueryExecution: (Age)");
+        drop(QueryProfileHandle::new(&profiler, identity).execution());
 
-        assert!(profiler
-            .query_profiling_data("UnusedQueryExecution: (Age)")
-            .is_none());
+        assert!(profiler.query_profiling_data(identity).is_none());
     }
 
     #[test]
     fn explicitly_finished_query_execution_records_only_once() {
         let profiler = QueryProfiler::default();
+        let identity = test_query_identity("FinishedQueryExecution: (Age)");
         {
-            let mut execution =
-                QueryProfileHandle::new(&profiler, "FinishedQueryExecution: (Age)").execution();
+            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
             drop(execution.scope());
             execution.finish();
         }
 
-        let data = profiler
-            .query_profiling_data("FinishedQueryExecution: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
     #[test]
     fn finished_query_execution_cannot_open_another_scope() {
         let profiler = QueryProfiler::default();
-        let mut execution =
-            QueryProfileHandle::new(&profiler, "NoScopeAfterFinish: (Age)").execution();
+        let identity = test_query_identity("NoScopeAfterFinish: (Age)");
+        let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
         drop(execution.scope());
         execution.finish();
 
         assert!(execution.scope().is_none());
         drop(execution);
-        let data = profiler
-            .query_profiling_data("NoScopeAfterFinish: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
@@ -746,17 +773,15 @@ mod tests {
         use std::panic::{catch_unwind, AssertUnwindSafe};
 
         let profiler = QueryProfiler::default();
+        let identity = test_query_identity("PanickingQueryExecution: (Age)");
         let result = catch_unwind(AssertUnwindSafe(|| {
-            let mut execution =
-                QueryProfileHandle::new(&profiler, "PanickingQueryExecution: (Age)").execution();
+            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
             let _scope = execution.scope();
             panic!("end the measured work slice");
         }));
 
         assert!(result.is_err());
-        let data = profiler
-            .query_profiling_data("PanickingQueryExecution: (Age)")
-            .unwrap();
+        let data = profiler.query_profiling_data(identity).unwrap();
         assert_eq!(data.count, 1);
     }
 }

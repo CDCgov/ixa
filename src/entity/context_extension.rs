@@ -15,11 +15,6 @@ use crate::rand::Rng;
 use crate::random::sample_multiple_from_known_length;
 use crate::{warn, Context, ContextRandomExt, ExecutionPhase, IxaError, RngId};
 
-#[cfg(feature = "profiling")]
-fn query_profile_label<E: Entity, Q: Query<E>>(query: &Q) -> &'static str {
-    <Q as crate::entity::QueryInternal<E>>::query_profile_label(query)
-}
-
 fn create_property_index<E, P>(context: &mut Context, requested: PropertyIndexType)
 where
     E: Entity,
@@ -497,14 +492,15 @@ impl ContextEntitiesExt for Context {
         query: Q,
         callback: &mut dyn FnMut(EntitySet<'a, E>),
     ) {
+        let resolved = query.resolved_query();
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(query_profile_label::<E, Q>(&query));
+        let profile = self.query_profile_handle(resolved.identity);
 
         // The fast path for indexed queries.
         //
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and
         // `QueryInternal::new_query_result`. The difference is, we access the index set if we find it.
-        if let Some(multi_property_id) = query.multi_property_id() {
+        if let Some(multi_property_id) = resolved.index_property_id {
             let property_store = self.entity_store.get_property_store::<E>();
             let query_parts = query.query_parts();
             let lookup_result = property_store
@@ -550,15 +546,14 @@ impl ContextEntitiesExt for Context {
     }
 
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
+        let resolved = query.resolved_query();
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
-            .scope();
+        let _query_profile_scope = self.query_profile_handle(resolved.identity).scope();
 
         // The fast path for indexed queries.
         //
         // This mirrors the indexed case in `SourceSet<'a, E>::new()` and `QueryInternal::new_query_result`.
-        if let Some(multi_property_id) = query.multi_property_id() {
+        if let Some(multi_property_id) = resolved.index_property_id {
             let property_store = self.entity_store.get_property_store::<E>();
             let query_parts = query.query_parts();
             let lookup_result = property_store
@@ -582,7 +577,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
+            .query_profile_handle(query.resolved_query().identity)
             .scope();
 
         if query.is_empty_query() {
@@ -614,7 +609,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
+            .query_profile_handle(query.resolved_query().identity)
             .scope();
 
         if query.is_empty_query() {
@@ -645,7 +640,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
+            .query_profile_handle(query.resolved_query().identity)
             .scope();
 
         if query.is_empty_query() {
@@ -676,7 +671,7 @@ impl ContextEntitiesExt for Context {
 
     fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(query_profile_label::<E, Q>(&query));
+        let profile = self.query_profile_handle(query.resolved_query().identity);
         let result = query.new_query_result(self);
         #[cfg(feature = "profiling")]
         let result = result.with_query_profile(profile);
@@ -685,7 +680,7 @@ impl ContextEntitiesExt for Context {
 
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(query_profile_label::<E, Q>(&query));
+        let profile = self.query_profile_handle(query.resolved_query().identity);
         let result = query.new_query_result_iterator(self);
         #[cfg(feature = "profiling")]
         let result = result.with_query_profile(profile);
@@ -695,7 +690,7 @@ impl ContextEntitiesExt for Context {
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
+            .query_profile_handle(query.resolved_query().identity)
             .scope();
         query.match_entity(entity_id, self)
     }
@@ -703,7 +698,7 @@ impl ContextEntitiesExt for Context {
     fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query_profile_label::<E, Q>(&query))
+            .query_profile_handle(query.resolved_query().identity)
             .scope();
         query.filter_entities(entities, self);
     }
@@ -714,9 +709,13 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     #[cfg(feature = "profiling")]
+    use std::thread;
+    #[cfg(feature = "profiling")]
     use std::time::Duration;
 
     use super::*;
+    #[cfg(feature = "profiling")]
+    use crate::entity::multi_property::QueryIdentityId;
     use crate::entity::query::QueryInternal;
     use crate::hashing::IndexSet;
     use crate::prelude::PropertyChangeEvent;
@@ -1812,16 +1811,16 @@ mod tests {
     }
 
     #[cfg(feature = "profiling")]
-    fn query_count(context: &Context, query: &str) -> Option<usize> {
+    fn query_count(context: &Context, identity: QueryIdentityId) -> Option<usize> {
         context
-            .query_profiling_data(query)
+            .query_profiling_data(identity)
             .map(|profiling_data| profiling_data.count)
     }
 
     #[cfg(feature = "profiling")]
-    fn query_total(context: &Context, query: &str) -> Option<Duration> {
+    fn query_total(context: &Context, identity: QueryIdentityId) -> Option<Duration> {
         context
-            .query_profiling_data(query)
+            .query_profiling_data(identity)
             .map(|profiling_data| profiling_data.total)
     }
 
@@ -1836,7 +1835,9 @@ mod tests {
             .add_entity(with!(ProfilingPerson, ProfilingAge(7), ProfilingCounty(2)))
             .unwrap();
 
-        let label = "ProfilingPerson: (ProfilingAge, ProfilingCounty)";
+        let identity = with!(ProfilingPerson, ProfilingAge(0), ProfilingCounty(0))
+            .resolved_query()
+            .identity;
         assert_eq!(
             context
                 .query_result_iterator(with!(ProfilingPerson, ProfilingAge(42), ProfilingCounty(1)))
@@ -1856,7 +1857,7 @@ mod tests {
             1
         );
 
-        assert_eq!(query_count(&context, label), Some(3));
+        assert_eq!(query_count(&context, identity), Some(3));
     }
 
     #[cfg(feature = "profiling")]
@@ -1867,26 +1868,28 @@ mod tests {
             .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
             .unwrap();
 
-        let label = "ProfilingBoundaryPerson: (ProfilingBoundaryAge)";
+        let identity = with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(0))
+            .resolved_query()
+            .identity;
         assert_eq!(
             context
                 .query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
                 .count(),
             1
         );
-        assert_eq!(query_count(&context, label), Some(1));
-        let profiling_data = context.query_profiling_data(label).unwrap();
+        assert_eq!(query_count(&context, identity), Some(1));
+        let profiling_data = context.query_profiling_data(identity).unwrap();
         assert_eq!(profiling_data.min, profiling_data.total);
         assert_eq!(profiling_data.max, profiling_data.total);
 
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
         assert_eq!(iter.next(), Some(person));
-        assert_eq!(query_count(&context, label), Some(1));
+        assert_eq!(query_count(&context, identity), Some(1));
         assert_eq!(iter.next(), None);
-        assert_eq!(query_count(&context, label), Some(2));
+        assert_eq!(query_count(&context, identity), Some(2));
         assert_eq!(iter.next(), None);
-        assert_eq!(query_count(&context, label), Some(2));
+        assert_eq!(query_count(&context, identity), Some(2));
     }
 
     #[cfg(feature = "profiling")]
@@ -1897,13 +1900,15 @@ mod tests {
             .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
             .unwrap();
 
-        let label = "ProfilingBoundaryPerson: (ProfilingBoundaryAge)";
+        let identity = with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(0))
+            .resolved_query()
+            .identity;
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
         assert_eq!(iter.next(), Some(person));
-        assert_eq!(query_count(&context, label), None);
+        assert_eq!(query_count(&context, identity), None);
         drop(iter);
-        assert_eq!(query_count(&context, label), Some(1));
+        assert_eq!(query_count(&context, identity), Some(1));
     }
 
     #[cfg(feature = "profiling")]
@@ -1914,13 +1919,15 @@ mod tests {
             .add_entity(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)))
             .unwrap();
 
-        let label = "ProfilingBoundaryPerson: (ProfilingBoundaryAge)";
+        let identity = with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(0))
+            .resolved_query()
+            .identity;
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
         assert_eq!(iter.next(), Some(person));
         assert_eq!(iter.count(), 0);
 
-        assert_eq!(query_count(&context, label), Some(1));
+        assert_eq!(query_count(&context, identity), Some(1));
     }
 
     #[cfg(feature = "profiling")]
@@ -1934,14 +1941,16 @@ mod tests {
             ))
             .unwrap();
 
-        let label = "ProfilingUnusedIteratorPerson: (ProfilingUnusedIteratorAge)";
+        let identity = with!(ProfilingUnusedIteratorPerson, ProfilingUnusedIteratorAge(0))
+            .resolved_query()
+            .identity;
         let iter = context.query_result_iterator(with!(
             ProfilingUnusedIteratorPerson,
             ProfilingUnusedIteratorAge(42)
         ));
         drop(iter);
 
-        assert_eq!(query_count(&context, label), None);
+        assert_eq!(query_count(&context, identity), None);
     }
 
     #[cfg(feature = "profiling")]
@@ -1954,7 +1963,9 @@ mod tests {
                 .unwrap();
         }
 
-        let label = "ProfilingIdlePerson: (ProfilingIdleAge)";
+        let identity = with!(ProfilingIdlePerson, ProfilingIdleAge(0))
+            .resolved_query()
+            .identity;
         assert_eq!(
             context
                 .query_result_iterator(with!(ProfilingIdlePerson, ProfilingIdleAge(1)))
@@ -1973,7 +1984,7 @@ mod tests {
             .fold(0usize, |count, _| count + 1);
         assert_eq!(folded, 1);
 
-        assert_eq!(query_count(&context, label), Some(4));
+        assert_eq!(query_count(&context, identity), Some(4));
     }
 
     #[cfg(feature = "profiling")]
@@ -1986,22 +1997,24 @@ mod tests {
                 .unwrap();
         }
 
-        let label = "ProfilingIdlePerson: (ProfilingIdleAge)";
+        let identity = with!(ProfilingIdlePerson, ProfilingIdleAge(0))
+            .resolved_query()
+            .identity;
         context
             .query_result_iterator(with!(ProfilingIdlePerson, ProfilingIdleAge(10)))
-            .for_each(|_| std::thread::sleep(Duration::from_millis(50)));
+            .for_each(|_| thread::sleep(Duration::from_millis(50)));
 
         let folded = context
             .query_result_iterator(with!(ProfilingIdlePerson, ProfilingIdleAge(11)))
             .fold(0usize, |count, _| {
-                std::thread::sleep(Duration::from_millis(50));
+                thread::sleep(Duration::from_millis(50));
                 count + 1
             });
 
         assert_eq!(folded, 1);
-        assert_eq!(query_count(&context, label), Some(2));
+        assert_eq!(query_count(&context, identity), Some(2));
         assert!(
-            query_total(&context, label).unwrap() < Duration::from_millis(50),
+            query_total(&context, identity).unwrap() < Duration::from_millis(50),
             "query timing should exclude callback work"
         );
     }
@@ -2020,14 +2033,16 @@ mod tests {
             .add_entity(with!(ProfilingCallbackPerson, ProfilingCallbackAge(7)))
             .unwrap();
 
-        let label = "ProfilingCallbackPerson: (ProfilingCallbackAge)";
+        let identity = with!(ProfilingCallbackPerson, ProfilingCallbackAge(0))
+            .resolved_query()
+            .identity;
         context.with_query_results(
             with!(ProfilingCallbackPerson, ProfilingCallbackAge(42)),
             &mut |_people| {
-                std::thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(10));
             },
         );
-        assert_eq!(query_count(&context, label), None);
+        assert_eq!(query_count(&context, identity), None);
 
         context.with_query_results(
             with!(ProfilingCallbackPerson, ProfilingCallbackAge(42)),
@@ -2040,7 +2055,7 @@ mod tests {
             },
         );
 
-        assert_eq!(query_count(&context, label), Some(4));
+        assert_eq!(query_count(&context, identity), Some(4));
     }
 
     #[cfg(feature = "profiling")]
@@ -2054,13 +2069,15 @@ mod tests {
             .add_entity(with!(ProfilingCallbackPerson, ProfilingCallbackAge(7)))
             .unwrap();
 
-        let label = "ProfilingCallbackPerson: (ProfilingCallbackAge)";
+        let identity = with!(ProfilingCallbackPerson, ProfilingCallbackAge(0))
+            .resolved_query()
+            .identity;
         let people = context
             .query(with!(ProfilingCallbackPerson, ProfilingCallbackAge(42)))
             .to_owned_vec();
 
         assert_eq!(people, vec![person]);
-        assert_eq!(query_count(&context, label), Some(1));
+        assert_eq!(query_count(&context, identity), Some(1));
     }
 
     #[cfg(feature = "profiling")]
@@ -2074,7 +2091,9 @@ mod tests {
             .add_entity(with!(ProfilingContainsPerson, ProfilingContainsAge(7)))
             .unwrap();
 
-        let label = "ProfilingContainsPerson: (ProfilingContainsAge)";
+        let identity = with!(ProfilingContainsPerson, ProfilingContainsAge(0))
+            .resolved_query()
+            .identity;
         assert_eq!(
             context.query_entity_count(with!(ProfilingContainsPerson, ProfilingContainsAge(42))),
             1
@@ -2090,7 +2109,7 @@ mod tests {
         );
         assert_eq!(people, vec![person]);
 
-        assert_eq!(query_count(&context, label), Some(3));
+        assert_eq!(query_count(&context, identity), Some(3));
     }
 
     #[cfg(feature = "profiling")]
@@ -2119,6 +2138,9 @@ mod tests {
             ))
             .unwrap();
 
+        let identity = with!(ProfilingComposedPerson, ProfilingComposedAge(0))
+            .resolved_query()
+            .identity;
         let exclusions = EntitySet::from_source(SourceSet::singleton(excluded));
         let count = context
             .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
@@ -2127,10 +2149,7 @@ mod tests {
             .count();
 
         assert_eq!(count, 1);
-        assert_eq!(
-            query_count(&context, "ProfilingComposedPerson: (ProfilingComposedAge)"),
-            Some(1)
-        );
+        assert_eq!(query_count(&context, identity), Some(1));
         assert!(context
             .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
             .difference(EntitySet::from_source(SourceSet::singleton(excluded)))
@@ -2156,6 +2175,9 @@ mod tests {
             ))
             .unwrap();
 
+        let identity = with!(ProfilingComposedPerson, ProfilingComposedAge(0))
+            .resolved_query()
+            .identity;
         let count = context
             .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
             .union(context.query(with!(ProfilingComposedPerson, ProfilingComposedAge(7))))
@@ -2163,10 +2185,7 @@ mod tests {
             .count();
 
         assert_eq!(count, 2);
-        assert_eq!(
-            query_count(&context, "ProfilingComposedPerson: (ProfilingComposedAge)"),
-            Some(1)
-        );
+        assert_eq!(query_count(&context, identity), Some(1));
     }
 
     #[cfg(feature = "profiling")]
@@ -2181,6 +2200,12 @@ mod tests {
             ))
             .unwrap();
 
+        let age_identity = with!(ProfilingComposedPerson, ProfilingComposedAge(0))
+            .resolved_query()
+            .identity;
+        let county_identity = with!(ProfilingComposedPerson, ProfilingComposedCounty(0))
+            .resolved_query()
+            .identity;
         let count = context
             .query(with!(ProfilingComposedPerson, ProfilingComposedAge(42)))
             .intersection(context.query(with!(ProfilingComposedPerson, ProfilingComposedCounty(1))))
@@ -2188,16 +2213,7 @@ mod tests {
             .count();
 
         assert_eq!(count, 1);
-        assert_eq!(
-            query_count(&context, "ProfilingComposedPerson: (ProfilingComposedAge)"),
-            None
-        );
-        assert_eq!(
-            query_count(
-                &context,
-                "ProfilingComposedPerson: (ProfilingComposedCounty)"
-            ),
-            None
-        );
+        assert_eq!(query_count(&context, age_identity), None);
+        assert_eq!(query_count(&context, county_identity), None);
     }
 }

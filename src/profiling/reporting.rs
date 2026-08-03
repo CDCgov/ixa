@@ -1,7 +1,11 @@
+use std::io::Result as IoResult;
 use std::path::Path;
 
 use super::file::write_profiling_data_to_file;
-use crate::execution_stats::ExecutionStatistics;
+use super::print_profiling_data;
+#[cfg(feature = "profiling")]
+use super::print_query_timings;
+use crate::execution_stats::{print_execution_statistics as print_statistics, ExecutionStatistics};
 use crate::{error, Context, ContextReportExt};
 
 /// Trait extension for [`Context`] providing profiling capabilities.
@@ -34,7 +38,7 @@ impl ProfilingContextExt for Context {
         #[cfg(feature = "profiling")]
         {
             if include_profiling_data {
-                super::print_query_timings(&self.query_profiling_snapshot());
+                print_query_timings(&self.query_profiling_snapshot());
             }
         }
     }
@@ -56,17 +60,17 @@ impl ProfilingContextExt for Context {
 
 fn print_execution_statistics<C: ContextReportExt>(context: &mut C, include_profiling_data: bool) {
     let stats = context.get_execution_statistics();
-    crate::execution_stats::print_execution_statistics(&stats);
+    print_statistics(&stats);
 
     if include_profiling_data {
-        super::print_profiling_data();
+        print_profiling_data();
     }
 }
 
 fn write_profiling_output<C, F>(context: &mut C, write: F)
 where
     C: ContextReportExt,
-    F: FnOnce(&Path, ExecutionStatistics) -> std::io::Result<()>,
+    F: FnOnce(&Path, ExecutionStatistics) -> IoResult<()>,
 {
     let (mut prefix, directory, overwrite) = {
         let report_options = context.report_options();

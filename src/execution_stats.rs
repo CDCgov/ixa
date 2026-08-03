@@ -12,6 +12,9 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(feature = "profiling")]
+use crate::profiling::QueryProfiler;
+
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 #[must_use]
@@ -48,7 +51,7 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) struct ExecutionProfilingCollector {
     /// Aggregate profiling data for entity queries executed by this context.
-    pub(crate) query_profiler: crate::profiling::QueryProfiler,
+    pub(crate) query_profiler: QueryProfiler,
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
     #[cfg(not(target_arch = "wasm32"))]
     start_time: Instant,
@@ -84,7 +87,7 @@ impl ExecutionProfilingCollector {
         let now = Instant::now();
 
         let mut new_stats = ExecutionProfilingCollector {
-            query_profiler: crate::profiling::QueryProfiler::default(),
+            query_profiler: QueryProfiler::default(),
             start_time: now,
             last_refresh: now,
             start_cpu_time: 0,

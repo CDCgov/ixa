@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 
 use seq_macro::seq;
 
@@ -11,16 +11,12 @@ use crate::Context;
 
 impl<E: Entity> QueryInternal<E> for () {
     type QueryParts<'a>
-        = [&'a dyn std::any::Any; 0]
+        = [&'a dyn Any; 0]
     where
         Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
-    }
-
-    fn multi_property_id(&self) -> Option<usize> {
-        None
     }
 
     fn is_empty_query(&self) -> bool {
@@ -49,25 +45,18 @@ impl<E: Entity> QueryInternal<E> for () {
     fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
         // Nothing to do.
     }
-
-    #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 // An Entity ZST itself is an empty query matching all entities of that type.
 // This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
 impl<E: Entity> QueryInternal<E> for E {
     type QueryParts<'a>
-        = [&'a dyn std::any::Any; 0]
+        = [&'a dyn Any; 0]
     where
         Self: 'a;
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
-    }
-
-    fn multi_property_id(&self) -> Option<usize> {
-        None
     }
 
     fn is_empty_query(&self) -> bool {
@@ -96,9 +85,6 @@ impl<E: Entity> QueryInternal<E> for E {
     fn filter_entities(&self, _entities: &mut Vec<EntityId<E>>, _context: &Context) {
         // Nothing to do.
     }
-
-    #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 // Implement the query version with one parameter.
@@ -112,7 +98,7 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
         vec![P1::type_id()]
     }
 
-    fn multi_property_id(&self) -> Option<usize> {
+    fn resolve_index_property_id(&self, _type_ids: &[TypeId]) -> Option<usize> {
         Some(P1::id())
     }
 
@@ -195,11 +181,6 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     fn filter_entities(&self, entities: &mut Vec<EntityId<E>>, context: &Context) {
         let property_value_store = context.get_property_value_store::<E, P1>();
         entities.retain(|entity| self.0 == property_value_store.get(*entity));
-    }
-
-    #[cfg(feature = "profiling")]
-    fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
-        names.push(P1::name());
     }
 }
 
@@ -363,12 +344,6 @@ macro_rules! impl_query {
                     )*
                 }
 
-                #[cfg(feature = "profiling")]
-                fn push_query_property_names(&self, names: &mut Vec<&'static str>) {
-                    #(
-                        names.push(T~N::name());
-                    )*
-                }
             }
         });
     }
