@@ -339,8 +339,14 @@ mod tests {
         let empty = <() as QueryInternal<Person>>::resolved_query(&());
         let entity = <Person as QueryInternal<Person>>::resolved_query(&Person);
 
+        assert_eq!(empty.index_property_id, None);
+        assert_eq!(entity.index_property_id, None);
         assert_eq!(empty.identity, entity.identity);
         assert_eq!(query_identity_label(empty.identity), "Person: All");
+        assert_eq!(
+            <() as QueryInternal<Person>>::resolved_query(&()).identity,
+            empty.identity
+        );
     }
 
     #[cfg(feature = "profiling")]
@@ -352,13 +358,21 @@ mod tests {
         assert_ne!(person.identity, case.identity);
     }
 
-    #[cfg(feature = "profiling")]
     #[test]
-    fn single_property_query_identity_label_includes_property_name() {
+    fn singleton_query_resolves_direct_property_id() {
         let query = (Age(42),);
         let resolved = <(Age,) as QueryInternal<Person>>::resolved_query(&query);
 
-        assert_eq!(query_identity_label(resolved.identity), "Person: (Age)");
+        assert_eq!(resolved.index_property_id, Some(Age::id()));
+
+        #[cfg(feature = "profiling")]
+        {
+            assert_eq!(
+                resolved.identity,
+                <(Age,) as QueryInternal<Person>>::resolved_query(&(Age(7),)).identity
+            );
+            assert_eq!(query_identity_label(resolved.identity), "Person: (Age)");
+        }
     }
 
     #[cfg(feature = "profiling")]
@@ -435,6 +449,10 @@ mod tests {
         }
 
         let resolved = CustomQuery.resolved_query();
+        assert_eq!(
+            resolved.identity,
+            <Person as QueryInternal<Person>>::resolved_query(&Person).identity
+        );
         assert_eq!(query_identity_label(resolved.identity), "Person: All");
     }
 

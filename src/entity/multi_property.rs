@@ -32,7 +32,6 @@ use std::sync::{LazyLock, Mutex};
 
 #[cfg(feature = "profiling")]
 use crate::entity::property_store::registered_property_name;
-#[cfg(feature = "profiling")]
 use crate::entity::Entity;
 use crate::hashing::{one_shot_128, HashMap, HashValueType};
 use crate::warn;
@@ -51,6 +50,13 @@ struct MultiPropertyId {
 #[cfg(feature = "profiling")]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct QueryIdentityId(usize);
+
+#[cfg(feature = "profiling")]
+impl QueryIdentityId {
+    pub(crate) const fn from_raw(raw: usize) -> Self {
+        Self(raw)
+    }
+}
 
 #[derive(Clone, Copy, Default)]
 struct QueryShapeRecord {
@@ -199,6 +205,24 @@ pub(crate) fn intern_query_identity<E: Entity>(type_ids: &[TypeId]) -> QueryIden
     registry.labels.push(Box::leak(label.into_boxed_str()));
     registry.shapes.entry(key).or_default().identity = Some(identity);
     identity
+}
+
+/// Returns the raw process-local profiling identity for an entity-scoped query shape.
+///
+/// This function exists for Ixa's exported entity and property macros. The returned value is an
+/// implementation detail and is not stable across processes.
+#[doc(hidden)]
+pub fn intern_query_identity_raw<E: Entity>(type_ids: &[TypeId]) -> usize {
+    #[cfg(feature = "profiling")]
+    {
+        intern_query_identity::<E>(type_ids).0
+    }
+
+    #[cfg(not(feature = "profiling"))]
+    {
+        let _ = type_ids;
+        panic!("query profiling identities require the profiling feature")
+    }
 }
 
 /// Returns the reporting label for a process-local profiling identity.

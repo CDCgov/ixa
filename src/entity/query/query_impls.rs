@@ -4,8 +4,10 @@ use seq_macro::seq;
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
-use crate::entity::query::QueryInternal;
+use crate::entity::query::{QueryInternal, ResolvedQuery};
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::Context;
 
@@ -17,6 +19,14 @@ impl<E: Entity> QueryInternal<E> for () {
 
     fn get_type_ids(&self) -> Vec<TypeId> {
         Vec::new()
+    }
+
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: None,
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(E::all_query_identity()),
+        }
     }
 
     fn is_empty_query(&self) -> bool {
@@ -59,6 +69,14 @@ impl<E: Entity> QueryInternal<E> for E {
         Vec::new()
     }
 
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: None,
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(E::all_query_identity()),
+        }
+    }
+
     fn is_empty_query(&self) -> bool {
         true
     }
@@ -98,8 +116,12 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
         vec![P1::type_id()]
     }
 
-    fn resolve_index_property_id(&self, _type_ids: &[TypeId]) -> Option<usize> {
-        Some(P1::id())
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: Some(P1::id()),
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(P1::query_identity_id()),
+        }
     }
 
     fn query_parts(&self) -> Self::QueryParts<'_> {

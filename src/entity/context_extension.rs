@@ -568,6 +568,7 @@ impl ContextEntitiesExt for Context {
         query.new_query_result_iterator(self).count()
     }
 
+    #[inline]
     fn sample_entity<E, Q, R>(&self, rng_id: R, query: Q) -> Option<EntityId<E>>
     where
         E: Entity,

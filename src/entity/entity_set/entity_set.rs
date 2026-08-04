@@ -386,6 +386,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     /// Sample a single entity uniformly from this set. Returns `None` if the
     /// set is empty.
     #[must_use]
+    #[inline]
     pub fn sample_entity<R>(&self, rng: &mut R) -> Option<EntityId<E>>
     where
         R: Rng,

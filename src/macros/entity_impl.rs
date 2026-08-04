@@ -54,6 +54,14 @@ macro_rules! impl_entity {
                 $crate::entity::entity_store::initialize_entity_index(&INDEX)
             }
 
+            fn all_query_identity() -> usize {
+                static IDENTITY: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+                *IDENTITY.get_or_init(|| {
+                    $crate::entity::multi_property::intern_query_identity_raw::<Self>(&[])
+                })
+            }
+
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }

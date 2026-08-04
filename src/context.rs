@@ -23,12 +23,11 @@ use crate::execution_stats::{
 };
 use crate::global_properties::get_global_property_count;
 use crate::plan_queue::{PlanId, PlanQueue};
-use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
-
 #[cfg(feature = "profiling")]
 use crate::profiling::{
     print_profiling_data, print_query_timings, QueryProfileHandle, QueryProfilingData,
 };
+use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
 
 /// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -212,6 +211,7 @@ impl Context {
             .query_profiling_data(identity)
     }
 
+    #[inline]
     pub(crate) fn get_property_value_store<E: Entity, P: Property<E>>(
         &self,
     ) -> &PropertyValueStoreCore<E, P> {
