@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.2.0...ixa-v3.0.0) - 2026-08-04
+
+### Added
+
+- add scheduled shutdown helper
+- accept Into<f64> at numeric API boundaries ([#1016](https://github.com/CDCgov/ixa/pull/1016))
+- Add on_unsubscribe hook to IxaEvent ([#1005](https://github.com/CDCgov/ixa/pull/1005))
+
+### Fixed
+
+- harden runner config/CLI arg merging
+- Moved private module docs for triggers to the public trigger types ([#996](https://github.com/CDCgov/ixa/pull/996))
+- handle filtered criterion summaries ([#1011](https://github.com/CDCgov/ixa/pull/1011))
+- Eagerly compute property value count indexes ([#1007](https://github.com/CDCgov/ixa/pull/1007))
+
+### Other
+
+- update rand requirement from ^0.9.2 to ^0.10.2 ([#1015](https://github.com/CDCgov/ixa/pull/1015))
+- bump rust-toolchain from 1.96.1 to 1.97.1 ([#1030](https://github.com/CDCgov/ixa/pull/1030))
+- Merge runner config args with CLI overrides
+- Refactor `add_entity` and index maintenance ([#1009](https://github.com/CDCgov/ixa/pull/1009))
+- update syn requirement from ^2.0.95 to ^3.0.3
+- correct periodic report row counts for passive shutdown
+- bump release-plz/action from 0.5.130 to 0.5.131 ([#1012](https://github.com/CDCgov/ixa/pull/1012))
+
 ## [2.2.0](https://github.com/CDCgov/ixa/compare/ixa-v2.1.0...ixa-v2.2.0) - 2026-07-13
 
 ### Added
