@@ -1,6 +1,6 @@
 use indexmap::IndexSet;
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_distr::Exp;
 
 use super::{ModelStats, Parameters};
