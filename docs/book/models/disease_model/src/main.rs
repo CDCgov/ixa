@@ -14,11 +14,8 @@ static MAX_TIME: f64 = 200.0;
 
 fn main() {
     let result = run_with_args(|context: &mut Context, _args, _| {
-        // Add a plan to shut down the simulation after `max_time`, regardless of
-        // what else is happening in the model.
-        context.add_plan(MAX_TIME, |context| {
-            context.shutdown();
-        });
+        // Cap the run without keeping an otherwise completed simulation alive.
+        context.schedule_shutdown(MAX_TIME);
         people::init(context);
         transmission_manager::init(context);
         infection_manager::init(context);

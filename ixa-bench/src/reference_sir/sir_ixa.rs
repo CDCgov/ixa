@@ -239,9 +239,8 @@ impl InfectionLoop for Context {
             self.infect_person(p, None);
         }
 
-        self.add_plan(max_time, |context| {
-            context.shutdown();
-        });
+        // Cap the run without keeping an otherwise completed simulation alive.
+        self.schedule_shutdown(max_time);
 
         debug_assert_eq!(
             self.infected_people(),

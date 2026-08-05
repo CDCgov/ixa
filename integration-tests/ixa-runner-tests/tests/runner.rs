@@ -49,6 +49,59 @@ Run runner_test_custom_args --help -v to see more options
     }
 
     #[test]
+    fn test_merged_args_help_exits_zero() {
+        let output = assert_cmd::cargo::cargo_bin_cmd!("runner_merged_args")
+            .arg("--help")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains("Usage:"));
+        assert!(stdout.contains("--random-seed"));
+    }
+
+    #[test]
+    fn test_merged_args_config_with_cli_override() {
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.json");
+        fs::write(
+            &config_path,
+            r#"{
+  "args": {
+    "random_seed": 42,
+    "custom": { "a": 7 }
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        assert_cmd::cargo::cargo_bin_cmd!("runner_merged_args")
+            .arg("--config")
+            .arg(&config_path)
+            .arg("--no-stats")
+            .assert()
+            .success()
+            .stdout(format!(
+                "Loading global properties from: {:?}\nCurrent log levels enabled: ERROR\nRun runner_merged_args --help -v to see more options\nseed=42 a=7\n",
+                config_path
+            ));
+
+        assert_cmd::cargo::cargo_bin_cmd!("runner_merged_args")
+            .arg("--config")
+            .arg(&config_path)
+            .arg("--no-stats")
+            .arg("-a")
+            .arg("9")
+            .assert()
+            .success()
+            .stdout(format!(
+                "Loading global properties from: {:?}\nCurrent log levels enabled: ERROR\nRun runner_merged_args --help -v to see more options\nseed=42 a=9\n",
+                config_path
+            ));
+    }
+
+    #[test]
     fn test_run_with_logging_modules() {
         assert_cmd::Command::new("cargo")
             .args(["build", "--bin", "runner_generic"])

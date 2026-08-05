@@ -36,15 +36,34 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEventBox;
-use crate::entity::index::{FullIndex, IndexCountResult, IndexSetResult, ValueCountIndex};
-use crate::entity::multi_property::multi_property_id_for_property_type_id;
+use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
 use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::PropertyList;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
-use crate::entity::{EntityId, PropertyIndexType};
-use crate::Context;
+use crate::entity::EntityId;
+use crate::{Context, ContextEntitiesExt};
+
+pub(in crate::entity) type IndexNewEntityFn<E> = fn(&mut Context, EntityId<E>);
+
+fn index_new_entity<E, P>(context: &mut Context, entity_id: EntityId<E>)
+where
+    E: Entity,
+    P: IndexableProperty<E>,
+{
+    // This may compute a derived or multi-property. `P` is copied, so no reference into Context
+    // survives into the subsequent mutable borrow.
+    let value: P = context.get_property(entity_id);
+
+    let property_value_store = context.get_property_value_store_mut::<E, P>();
+    let index = property_value_store
+        .index
+        .as_mut()
+        .expect("index_new_entity dispatch invoked for an unindexed property");
+
+    index.add_entity(&value, entity_id);
+}
 
 /// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
 /// equivalent to the next property ID that will be assigned to the next property that requests an ID. Each `Entity`
@@ -209,6 +228,10 @@ pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
 pub struct PropertyStore<E: Entity> {
     /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn PropertyValueStore<E>>`
     items: Vec<Box<dyn PropertyValueStore<E>>>,
+
+    /// One entry for every property whose `PropertyValueStoreCore` currently has an index.
+    /// The property ID supports removal without relying on deduplicable function addresses.
+    pub(in crate::entity) index_new_entity_fns: Vec<(usize, IndexNewEntityFn<E>)>,
 }
 
 impl<E: Entity> Default for PropertyStore<E> {
@@ -244,7 +267,10 @@ impl<E: Entity> PropertyStore<E> {
             })
             .collect();
 
-        Self { items }
+        Self {
+            items,
+            index_new_entity_fns: Vec::new(),
+        }
     }
 
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
@@ -343,58 +369,55 @@ impl<E: Entity> PropertyStore<E> {
     #[cfg(test)]
     #[must_use]
     pub fn is_property_indexed<P: Property<E>>(&self) -> bool {
-        self.items
-            .get(P::id())
-            .unwrap_or_else(|| panic!("No registered property {} found with id = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::id()))
-            .index_type()
-            != PropertyIndexType::Unindexed
+        self.get::<P>().index.is_some()
     }
 
-    /// Sets the index type for `P`. Passing `PropertyIndexType::Unindexed` removes any existing index for `P`.
-    ///
-    /// Equivalent multi-properties do not share index storage. Only the representative
-    /// multi-property for an equivalent set can be indexed.
-    pub fn set_property_indexed<P: IndexableProperty<E>>(&mut self, index_type: PropertyIndexType) {
-        if index_type != PropertyIndexType::Unindexed {
-            if let Some((representative_id, representative_name)) =
-                multi_property_id_for_property_type_id(E::id(), P::type_id())
-            {
-                if representative_id != P::id() {
-                    panic!(
-                        "Cannot index multi-property {} because it is equivalent to representative multi-property {}. Index the representative multi-property instead.",
-                        P::name(),
-                        representative_name
-                    );
-                }
-            }
+    pub(in crate::entity) fn install_property_index<P>(
+        &mut self,
+        new_index: Option<Box<dyn PropertyIndex<E, P>>>,
+    ) where
+        P: IndexableProperty<E>,
+    {
+        let property_id = P::id();
+        let was_indexed = self.get::<P>().index.is_some();
+        let will_be_indexed = new_index.is_some();
+
+        // Property IDs are stable dispatcher identities; function-pointer addresses are not,
+        // because the linker may deduplicate distinct monomorphizations.
+        let dispatcher_position = self
+            .index_new_entity_fns
+            .iter()
+            .position(|(id, _)| *id == property_id);
+
+        if was_indexed {
+            assert!(
+                dispatcher_position.is_some(),
+                "indexed property missing its index_new_entity dispatcher",
+            );
+        } else {
+            debug_assert!(dispatcher_position.is_none());
         }
 
-        let property_value_store = self.items
-            .get_mut(P::id())
-            .unwrap_or_else(|| panic!("No registered property {} found with id = {:?}. You must use the `define_property!` macro to create a registered property.", P::name(), P::id()));
-        let property_value_store = property_value_store
-            .as_any_mut()
-            .downcast_mut::<PropertyValueStoreCore<E, P>>()
-            .unwrap_or_else(|| {
-                panic!(
-                    "Property type at index {:?} does not match registered property type. You must use the `define_property!` macro to create a registered property.",
-                    P::id()
-                )
-            });
-        match index_type {
-            PropertyIndexType::Unindexed => {
-                property_value_store.index = None;
+        // Reserve before replacing a valid index so allocation failure cannot leave the index
+        // installed without its dispatcher.
+        if !was_indexed && will_be_indexed {
+            self.index_new_entity_fns.reserve(1);
+        }
+
+        // All invariant checks and potentially allocating preparation are complete. Replacing the
+        // installed index is the commit point.
+        self.get_mut::<P>().index = new_index;
+
+        match (was_indexed, will_be_indexed) {
+            (false, true) => {
+                self.index_new_entity_fns
+                    .push((property_id, index_new_entity::<E, P> as IndexNewEntityFn<E>));
             }
-            PropertyIndexType::FullIndex => {
-                if property_value_store.index_type() != PropertyIndexType::FullIndex {
-                    property_value_store.index = Some(Box::new(FullIndex::<E, P>::new()));
-                }
+            (true, false) => {
+                self.index_new_entity_fns
+                    .swap_remove(dispatcher_position.unwrap());
             }
-            PropertyIndexType::ValueCountIndex => {
-                if property_value_store.index_type() != PropertyIndexType::ValueCountIndex {
-                    property_value_store.index = Some(Box::new(ValueCountIndex::<E, P>::new()));
-                }
-            }
+            _ => {}
         }
     }
 
@@ -413,23 +436,6 @@ impl<E: Entity> PropertyStore<E> {
             PL,
             P,
         >::new()))
-    }
-
-    /// Updates the index of the property having the given ID for any entities that have been added to the context
-    /// since the last time the index was updated.
-    pub fn index_unindexed_entities_for_property_id(
-        &mut self,
-        context: &Context,
-        property_id: usize,
-    ) {
-        self.items[property_id].index_unindexed_entities(context)
-    }
-
-    /// Updates all indexed properties for any entities that have been added since the last update.
-    pub fn index_unindexed_entities_for_all_properties(&mut self, context: &Context) {
-        for store in &mut self.items {
-            store.index_unindexed_entities(context);
-        }
     }
 
     #[must_use]
@@ -455,11 +461,13 @@ impl<E: Entity> PropertyStore<E> {
 mod tests {
     #![allow(dead_code)]
     use std::any::Any;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use super::*;
-    use crate::entity::index::{IndexCountResult, IndexSetResult};
+    use crate::entity::index::{FullIndex, IndexCountResult, IndexSetResult, ValueCountIndex};
+    use crate::entity::PropertyIndexType;
     use crate::prelude::*;
-    use crate::{define_entity, define_property, with, Context};
+    use crate::{define_derived_property, define_entity, define_property, with, Context};
 
     define_entity!(Person);
 
@@ -474,6 +482,19 @@ mod tests {
         default_const = InfectionStatus::Susceptible
     );
     define_property!(struct Vaccinated(bool), Person, default_const = Vaccinated(false));
+    define_property!(struct PanicDependency(u8), Person, default_const = PanicDependency(0));
+
+    define_derived_property!(
+        struct PanickingDerived(u8),
+        Person,
+        [PanicDependency],
+        [],
+        |dependency| {
+            let dependency: PanicDependency = dependency;
+            assert_ne!(dependency, PanicDependency(255), "sentinel property value");
+            PanickingDerived(dependency.0)
+        }
+    );
 
     #[test]
     fn property_store_default_matches_new() {
@@ -481,6 +502,121 @@ mod tests {
         assert_eq!(
             property_store.items.len(),
             get_registered_property_count::<Person>()
+        );
+    }
+
+    #[test]
+    fn install_property_index_maintains_active_dispatchers() {
+        let mut context = Context::new();
+
+        {
+            let property_store = context.entity_store.get_property_store_mut::<Person>();
+            assert_eq!(property_store.index_new_entity_fns.len(), 0);
+
+            property_store.install_property_index::<Age>(Some(Box::new(ValueCountIndex::new())));
+            assert_eq!(property_store.index_new_entity_fns.len(), 1);
+
+            property_store.install_property_index::<Age>(Some(Box::new(ValueCountIndex::new())));
+            assert_eq!(property_store.index_new_entity_fns.len(), 1);
+
+            property_store.install_property_index::<Age>(Some(Box::new(FullIndex::new())));
+            assert_eq!(property_store.index_new_entity_fns.len(), 1);
+
+            property_store.install_property_index::<Age>(None);
+            assert_eq!(property_store.index_new_entity_fns.len(), 0);
+
+            property_store.install_property_index::<Age>(Some(Box::new(ValueCountIndex::new())));
+            property_store.install_property_index::<Vaccinated>(Some(Box::new(FullIndex::new())));
+            property_store.install_property_index::<Age>(None);
+
+            assert_eq!(property_store.index_new_entity_fns.len(), 1);
+            assert_eq!(property_store.index_new_entity_fns[0].0, Vaccinated::id());
+        }
+
+        context.add_entity(with!(Person, Age(10))).unwrap();
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(
+            property_store.get::<Age>().index_type(),
+            PropertyIndexType::Unindexed
+        );
+        assert_eq!(
+            property_store.get_index_count_for_query_parts(
+                Vaccinated::id(),
+                &[&Vaccinated(false) as &dyn Any],
+            ),
+            IndexCountResult::Count(1),
+        );
+    }
+
+    #[test]
+    fn failed_replacement_keeps_old_index_and_dispatcher() {
+        let mut context = Context::new();
+        let ordinary = context
+            .add_entity(with!(Person, Age(10), PanicDependency(10)))
+            .unwrap();
+        let sentinel = context
+            .add_entity(with!(Person, Age(20), PanicDependency(255)))
+            .unwrap();
+
+        let mut old_index = ValueCountIndex::<Person, PanickingDerived>::new();
+        old_index.add_entity(&PanickingDerived(10), ordinary);
+        old_index.add_entity(&PanickingDerived(255), sentinel);
+        context
+            .entity_store
+            .get_property_store_mut::<Person>()
+            .install_property_index::<PanickingDerived>(Some(Box::new(old_index)));
+
+        let (old_type, old_dispatcher_count, old_dispatcher_property_id) = {
+            let property_store = context.entity_store.get_property_store::<Person>();
+            (
+                property_store.get::<PanickingDerived>().index_type(),
+                property_store.index_new_entity_fns.len(),
+                property_store.index_new_entity_fns[0].0,
+            )
+        };
+        assert_eq!(old_type, PropertyIndexType::ValueCountIndex);
+        assert_eq!(
+            context.query_entity_count(with!(Person, PanickingDerived(10))),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, PanickingDerived(255))),
+            1
+        );
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            context.index_property::<Person, PanickingDerived>();
+        }));
+        assert!(result.is_err());
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(
+            property_store.get::<PanickingDerived>().index_type(),
+            old_type
+        );
+        assert_eq!(
+            property_store.index_new_entity_fns.len(),
+            old_dispatcher_count
+        );
+        assert_eq!(
+            property_store.index_new_entity_fns[0].0,
+            old_dispatcher_property_id
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, PanickingDerived(10))),
+            1
+        );
+        assert_eq!(
+            context.query_entity_count(with!(Person, PanickingDerived(255))),
+            1
+        );
+
+        context
+            .add_entity(with!(Person, Age(30), PanicDependency(10)))
+            .unwrap();
+        assert_eq!(
+            context.query_entity_count(with!(Person, PanickingDerived(10))),
+            2
         );
     }
 

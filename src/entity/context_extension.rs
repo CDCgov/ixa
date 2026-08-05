@@ -5,14 +5,66 @@ use smallvec::SmallVec;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
+use crate::entity::multi_property::multi_property_id_for_property_type_id;
 use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::{Entity, EntityId, PopulationIterator};
-use crate::rand::Rng;
+use crate::rand::{Rng, RngExt};
 use crate::random::sample_multiple_from_known_length;
 use crate::{warn, Context, ContextRandomExt, ExecutionPhase, IxaError, RngId};
+
+fn create_property_index<E, P>(context: &mut Context, requested: PropertyIndexType)
+where
+    E: Entity,
+    P: IndexableProperty<E>,
+{
+    debug_assert_ne!(requested, PropertyIndexType::Unindexed);
+
+    if let Some((representative_id, representative_name)) =
+        multi_property_id_for_property_type_id(E::id(), P::type_id())
+    {
+        if representative_id != P::id() {
+            panic!(
+                "Cannot index multi-property {} because it is equivalent to representative \
+                 multi-property {}.",
+                P::name(),
+                representative_name,
+            );
+        }
+    }
+
+    let current = context.get_property_value_store::<E, P>().index_type();
+    let current_satisfies_request = current == requested
+        || matches!(
+            (current, requested),
+            (
+                PropertyIndexType::FullIndex,
+                PropertyIndexType::ValueCountIndex,
+            )
+        );
+
+    if current_satisfies_request {
+        return;
+    }
+
+    let mut new_index = requested
+        .new_property_index::<E, P>()
+        .expect("an indexed request must construct an index");
+
+    // Populate while detached so a panic from allocation or property computation leaves the
+    // previously installed index and dispatcher state unchanged.
+    for entity_id in context.get_entity_iterator::<E>() {
+        let value: P = context.get_property(entity_id);
+        new_index.add_entity(&value, entity_id);
+    }
+
+    context
+        .entity_store
+        .get_property_store_mut::<E>()
+        .install_property_index::<P>(Some(new_index));
+}
 
 fn handle_periodic_value_change_count_event<E, PL, P, F>(
     context: &mut Context,
@@ -128,6 +180,8 @@ pub trait ContextEntitiesExt {
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
+    /// The supplied period is converted to `f64` before validation.
+    ///
     /// Also panics if `period` is not finite and strictly positive.
     ///
     /// Recording starts at `ExecutionPhase::First` at simulation start time. The
@@ -145,8 +199,11 @@ pub trait ContextEntitiesExt {
     ///     },
     /// );
     /// ```
-    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
-    where
+    fn track_periodic_value_change_counts<E, PL, P, F>(
+        &mut self,
+        period: impl Into<f64>,
+        handler: F,
+    ) where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: Property<E> + Eq + Hash,
@@ -263,13 +320,24 @@ impl ContextEntitiesExt for Context {
             self.entity_store.get_property_store_mut::<E>(),
         );
 
-        // Keep all enabled indexes caught up as entities are created.
-        let context_ptr: *const Context = self;
-        let property_store = self.entity_store.get_property_store_mut::<E>();
-        // SAFETY: We create a shared `&Context` for read-only property access while mutably
-        // borrowing the property store to update index internals.
-        unsafe {
-            property_store.index_unindexed_entities_for_all_properties(&*context_ptr);
+        // All explicit values are now available, so derived and multi-property dispatchers see
+        // the entity's complete initialized state.
+        let index_count = self
+            .entity_store
+            .get_property_store::<E>()
+            .index_new_entity_fns
+            .len();
+
+        for index in 0..index_count {
+            let dispatch = self
+                .entity_store
+                .get_property_store::<E>()
+                .index_new_entity_fns[index]
+                .1;
+
+            // Copy the function pointer so the immutable PropertyStore borrow ends before dispatch
+            // mutably borrows the Context.
+            dispatch(self, new_entity_id);
         }
 
         // Emit an `EntityCreatedEvent<Entity>`.
@@ -364,32 +432,24 @@ impl ContextEntitiesExt for Context {
     }
 
     fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self) {
-        let property_id = P::id();
-        let context_ptr: *const Context = self;
-        let property_store = self.entity_store.get_property_store_mut::<E>();
-        property_store.set_property_indexed::<P>(PropertyIndexType::FullIndex);
-        // SAFETY: This only creates a shared reference to `Context` while mutably borrowing
-        // the property store to update index internals.
-        unsafe {
-            property_store.index_unindexed_entities_for_property_id(&*context_ptr, property_id);
-        }
+        create_property_index::<E, P>(self, PropertyIndexType::FullIndex);
     }
 
     fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self) {
-        let property_store = self.entity_store.get_property_store_mut::<E>();
-        let current_index_type = property_store.get::<P>().index_type();
-        if current_index_type != PropertyIndexType::FullIndex {
-            property_store.set_property_indexed::<P>(PropertyIndexType::ValueCountIndex);
-        }
+        create_property_index::<E, P>(self, PropertyIndexType::ValueCountIndex);
     }
 
-    fn track_periodic_value_change_counts<E, PL, P, F>(&mut self, period: f64, handler: F)
-    where
+    fn track_periodic_value_change_counts<E, PL, P, F>(
+        &mut self,
+        period: impl Into<f64>,
+        handler: F,
+    ) where
         E: Entity,
         PL: PropertyList<E> + Eq + Hash,
         P: IndexableProperty<E>,
         F: Fn(&mut Context, &mut StratifiedValueChangeCounter<E, PL, P>) + 'static,
     {
+        let period = period.into();
         assert!(
             period > 0.0 && !period.is_nan() && !period.is_infinite(),
             "Period must be greater than 0"
@@ -625,6 +685,15 @@ mod tests {
         Person,
         default_const = CounterStratum(false)
     );
+
+    #[derive(Clone, Copy)]
+    struct WrappedF64(f64);
+
+    impl From<WrappedF64> for f64 {
+        fn from(value: WrappedF64) -> Self {
+            value.0
+        }
+    }
 
     define_property!(
         enum InfectionStatus {
@@ -964,6 +1033,7 @@ mod tests {
     #[test]
     fn get_derived_property_multiple_deps() {
         let mut context = Context::new();
+        context.index_property::<Person, RiskLevel>();
 
         let expected_high_id: PersonId = context
             .add_entity(with!(
@@ -996,6 +1066,48 @@ mod tests {
         assert_eq!(actual_med, RiskLevel::Medium);
         let actual_low: RiskLevel = context.get_property(expected_low_id);
         assert_eq!(actual_low, RiskLevel::Low);
+
+        assert_eq!(
+            context
+                .query(with!(Person, RiskLevel::High))
+                .into_iter()
+                .collect::<IndexSet<_>>(),
+            [expected_high_id].into_iter().collect::<IndexSet<_>>(),
+        );
+        assert_eq!(
+            context
+                .query(with!(Person, RiskLevel::Medium))
+                .into_iter()
+                .collect::<IndexSet<_>>(),
+            [expected_med_id].into_iter().collect::<IndexSet<_>>(),
+        );
+        assert_eq!(
+            context
+                .query(with!(Person, RiskLevel::Low))
+                .into_iter()
+                .collect::<IndexSet<_>>(),
+            [expected_low_id].into_iter().collect::<IndexSet<_>>(),
+        );
+    }
+
+    #[test]
+    fn indexed_constant_default_handles_sparse_creation_paths() {
+        let mut context = Context::new();
+        context.index_property::<Person, IsRunner>();
+
+        let omitted = context.add_entity(with!(Person, Age(20))).unwrap();
+        let explicit = context
+            .add_entity(with!(Person, Age(21), IsRunner(false)))
+            .unwrap();
+
+        let matching = context
+            .query(with!(Person, IsRunner(false)))
+            .into_iter()
+            .collect::<IndexSet<_>>();
+        assert_eq!(
+            matching,
+            [omitted, explicit].into_iter().collect::<IndexSet<_>>()
+        );
     }
 
     #[test]
@@ -1407,6 +1519,27 @@ mod tests {
 
         let property_value_store = context.get_property_value_store::<Person, CounterValue>();
         assert_eq!(property_value_store.value_change_counters.len(), 2);
+    }
+
+    #[test]
+    fn track_periodic_value_change_counts_accepts_into_f64() {
+        let mut context = Context::new();
+        let observed_times = Rc::new(RefCell::new(Vec::new()));
+        let observed_times_clone = Rc::clone(&observed_times);
+
+        context.track_periodic_value_change_counts::<Person, (CounterStratum,), CounterValue, _>(
+            WrappedF64(1.0),
+            move |context, _counter| {
+                observed_times_clone
+                    .borrow_mut()
+                    .push(context.get_current_time());
+            },
+        );
+        context.add_plan(1.0, |_| {});
+
+        context.execute();
+
+        assert_eq!(*observed_times.borrow(), vec![0.0, 1.0]);
     }
 
     #[test]

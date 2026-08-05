@@ -8,7 +8,7 @@ use crate::hashing::{hash_str, DeterministicHasher};
 use crate::rand::distr::uniform::{SampleRange, SampleUniform};
 use crate::rand::distr::weighted::{Weight, WeightedIndex};
 use crate::rand::distr::Distribution;
-use crate::rand::{Rng, RngCore, SeedableRng};
+use crate::rand::{Rng, RngExt, SeedableRng};
 use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
@@ -83,7 +83,7 @@ pub trait ContextRandomExt: ContextBase {
     #[must_use]
     fn debug_rng_state<R: RngId + 'static>(&self, _rng_id: R) -> u64
     where
-        R::RngType: Clone + RngCore,
+        R::RngType: Clone + Rng,
     {
         let rng = get_rng::<R>(self);
         let mut rng_snapshot = (*rng).clone();
@@ -126,14 +126,37 @@ pub trait ContextRandomExt: ContextBase {
         self.sample(rng_id, |rng| rng.random_range(range))
     }
 
-    /// Gets a random boolean value which is true with probability `p`
-    /// using the generator associated with the given [`RngId`].
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// Gets a random boolean value which is true with probability `p` using the
+    /// generator associated with the given [`RngId`]. The supplied probability
+    /// is converted to `f64` before sampling.
+    ///
+    /// ```
+    /// use ixa::{define_rng, Context, ContextRandomExt};
+    ///
+    /// define_rng!(ExampleRng);
+    ///
+    /// struct Probability(f64);
+    ///
+    /// impl From<Probability> for f64 {
+    ///     fn from(probability: Probability) -> Self {
+    ///         probability.0
+    ///     }
+    /// }
+    ///
+    /// let mut context = Context::new();
+    /// context.init_random(42);
+    /// assert!(context.sample_bool(ExampleRng, Probability(1.0)));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the converted probability is outside `[0.0, 1.0]` or is NaN.
     #[must_use]
-    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: f64) -> bool
+    fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: impl Into<f64>) -> bool
     where
         R::RngType: Rng,
     {
+        let p = p.into();
         self.sample(rng_id, |rng| rng.random_bool(p))
     }
 
@@ -165,12 +188,20 @@ mod test {
     use crate::context::Context;
     use crate::rand::distr::weighted::WeightedIndex;
     use crate::rand::distr::Distribution;
-    use crate::rand::RngCore;
+    use crate::rand::Rng;
     use crate::random::context_ext::ContextRandomExt;
     use crate::{define_data_plugin, define_rng};
 
     define_rng!(FooRng);
     define_rng!(BarRng);
+
+    struct Probability(f64);
+
+    impl From<Probability> for f64 {
+        fn from(probability: Probability) -> Self {
+            probability.0
+        }
+    }
 
     #[test]
     fn get_rng_basic() {
@@ -178,8 +209,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample(FooRng, RngCore::next_u64),
-            context.sample(FooRng, RngCore::next_u64)
+            context.sample(FooRng, Rng::next_u64),
+            context.sample(FooRng, Rng::next_u64)
         );
     }
 
@@ -189,8 +220,8 @@ mod test {
         context.init_random(42);
 
         assert_ne!(
-            context.sample(FooRng, RngCore::next_u64),
-            context.sample(BarRng, RngCore::next_u64)
+            context.sample(FooRng, Rng::next_u64),
+            context.sample(BarRng, Rng::next_u64)
         );
     }
 
@@ -199,18 +230,18 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
 
-        let run_0 = context.sample(FooRng, RngCore::next_u64);
-        let run_1 = context.sample(FooRng, RngCore::next_u64);
+        let run_0 = context.sample(FooRng, Rng::next_u64);
+        let run_1 = context.sample(FooRng, Rng::next_u64);
 
         // Reset with same seed, ensure we get the same values
         context.init_random(42);
-        assert_eq!(run_0, context.sample(FooRng, RngCore::next_u64));
-        assert_eq!(run_1, context.sample(FooRng, RngCore::next_u64));
+        assert_eq!(run_0, context.sample(FooRng, Rng::next_u64));
+        assert_eq!(run_1, context.sample(FooRng, Rng::next_u64));
 
         // Reset with different seed, ensure we get different values
         context.init_random(88);
-        assert_ne!(run_0, context.sample(FooRng, RngCore::next_u64));
-        assert_ne!(run_1, context.sample(FooRng, RngCore::next_u64));
+        assert_ne!(run_0, context.sample(FooRng, Rng::next_u64));
+        assert_ne!(run_1, context.sample(FooRng, Rng::next_u64));
     }
 
     #[test]
@@ -221,8 +252,8 @@ mod test {
         context_1.init_random(42);
 
         for _ in 0..3 {
-            let _ = context_0.sample(FooRng, RngCore::next_u64);
-            let _ = context_1.sample(FooRng, RngCore::next_u64);
+            let _ = context_0.sample(FooRng, Rng::next_u64);
+            let _ = context_1.sample(FooRng, Rng::next_u64);
         }
 
         assert_eq!(
@@ -237,7 +268,7 @@ mod test {
         context.init_random(42);
 
         let initial = context.debug_rng_state(FooRng);
-        let _ = context.sample(FooRng, RngCore::next_u64);
+        let _ = context.sample(FooRng, Rng::next_u64);
 
         assert_ne!(initial, context.debug_rng_state(FooRng));
     }
@@ -263,8 +294,8 @@ mod test {
         let _ = with_debug.debug_rng_state(FooRng);
 
         assert_eq!(
-            with_debug.sample(FooRng, RngCore::next_u64),
-            without_debug.sample(FooRng, RngCore::next_u64)
+            with_debug.sample(FooRng, Rng::next_u64),
+            without_debug.sample(FooRng, Rng::next_u64)
         );
     }
 
@@ -274,7 +305,7 @@ mod test {
         context.init_random(42);
 
         let initial = context.debug_rng_state(FooRng);
-        let _ = context.sample(FooRng, RngCore::next_u64);
+        let _ = context.sample(FooRng, Rng::next_u64);
         assert_ne!(initial, context.debug_rng_state(FooRng));
 
         context.init_random(42);
@@ -292,8 +323,8 @@ mod test {
         let bar_initial = context_0.debug_rng_state(BarRng);
         assert_ne!(foo_initial, bar_initial);
 
-        let _ = context_0.sample(FooRng, RngCore::next_u64);
-        let _ = context_1.sample(BarRng, RngCore::next_u64);
+        let _ = context_0.sample(FooRng, Rng::next_u64);
+        let _ = context_1.sample(BarRng, Rng::next_u64);
 
         assert_ne!(context_0.debug_rng_state(FooRng), foo_initial);
         assert_eq!(context_0.debug_rng_state(BarRng), bar_initial);
@@ -364,6 +395,24 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
         let _r: bool = context.sample_bool(FooRng, 0.5);
+    }
+
+    #[test]
+    fn sample_bool_accepts_into_f64_without_extra_turbofish() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        assert!(!context.sample_bool::<FooRng>(FooRng, Probability(0.0)));
+        assert!(context.sample_bool::<FooRng>(FooRng, Probability(1.0)));
+    }
+
+    #[test]
+    #[should_panic(expected = "outside range [0.0, 1.0]")]
+    fn sample_bool_rejects_wrapped_invalid_probability() {
+        let mut context = Context::new();
+        context.init_random(42);
+
+        let _ = context.sample_bool(FooRng, Probability(1.1));
     }
 
     #[test]

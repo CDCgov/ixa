@@ -2,7 +2,7 @@
 
 use crate::entity::{Entity, EntityId};
 use crate::hashing::IndexSet;
-use crate::prelude::Property;
+use crate::prelude::{IndexableProperty, Property};
 
 mod full_index;
 mod value_count_index;
@@ -35,6 +35,21 @@ pub enum PropertyIndexType {
     ValueCountIndex,
 }
 
+impl PropertyIndexType {
+    /// Constructs an unattached empty index of this type. Returns `None` only for `Unindexed`.
+    pub(crate) fn new_property_index<E, P>(self) -> Option<Box<dyn PropertyIndex<E, P>>>
+    where
+        E: Entity,
+        P: IndexableProperty<E>,
+    {
+        match self {
+            Self::Unindexed => None,
+            Self::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
+            Self::ValueCountIndex => Some(Box::new(ValueCountIndex::<E, P>::new())),
+        }
+    }
+}
+
 pub trait PropertyIndex<E: Entity, P: Property<E>> {
     #[must_use]
     fn index_type(&self) -> PropertyIndexType;
@@ -48,9 +63,4 @@ pub trait PropertyIndex<E: Entity, P: Property<E>> {
     fn remove_entity(&mut self, value: &P, entity_id: EntityId<E>);
 
     fn add_entity(&mut self, value: &P, entity_id: EntityId<E>);
-
-    #[must_use]
-    fn max_indexed(&self) -> usize;
-
-    fn set_max_indexed(&mut self, max_indexed: usize);
 }

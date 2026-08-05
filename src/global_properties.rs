@@ -121,6 +121,21 @@ fn get_global_property_setter_for_config_key(name: &str) -> Option<Arc<PropertyS
     })
 }
 
+pub(crate) fn load_global_properties_from_map(
+    context: &mut Context,
+    val: serde_json::Map<String, serde_json::Value>,
+) -> Result<(), IxaError> {
+    for (k, v) in val {
+        if let Some(setter) = get_global_property_setter_for_config_key(&k) {
+            setter(context, &k, v)?;
+        } else {
+            return Err(IxaError::NoGlobalProperty { name: k });
+        }
+    }
+
+    Ok(())
+}
+
 /// The trait representing a global property. Do not use this
 /// directly, but instead define global properties with
 /// [`define_global_property!`](crate::define_global_property!).
@@ -209,6 +224,11 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// It is possible to call [`Context::load_global_properties()`] multiple
     /// times with different files as long as the files have disjoint
     /// sets of properties.
+    ///
+    /// Note: when a config file is passed to a runner entry point via
+    /// `--config`, its top-level `args` key is reserved for runner arguments
+    /// and is excluded from global properties. This method does not treat
+    /// `args` specially; every key must name a global property.
     fn load_global_properties(&mut self, file_name: &Path) -> Result<(), IxaError>;
 }
 impl ContextGlobalPropertiesExt for Context {
@@ -266,15 +286,7 @@ impl ContextGlobalPropertiesExt for Context {
         let reader = BufReader::new(config_file);
         let val: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(reader)?;
 
-        for (k, v) in val {
-            if let Some(setter) = get_global_property_setter_for_config_key(&k) {
-                setter(self, &k, v)?;
-            } else {
-                return Err(IxaError::NoGlobalProperty { name: k });
-            }
-        }
-
-        Ok(())
+        load_global_properties_from_map(self, val)
     }
 }
 

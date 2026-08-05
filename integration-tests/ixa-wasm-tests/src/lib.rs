@@ -22,9 +22,8 @@ pub fn initialize(context: &mut Context) {
     transmission_manager::init(context);
     infection_manager::init(context);
 
-    context.add_plan(MAX_TIME, |context| {
-        context.shutdown();
-    });
+    // Cap the run without keeping an otherwise completed simulation alive.
+    context.schedule_shutdown(MAX_TIME);
 }
 
 // Ensure that errors are reported in console

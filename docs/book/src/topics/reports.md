@@ -282,8 +282,10 @@ within the model so that we write only exactly the data we need.
 | 4.0      | 661               | 226            | 113             |
 | &vellip; | &vellip;          | &vellip;       | &vellip;        |
 
-The `MAX_TIME` is set to 300 for this model, so this will result in only 301
-rows of data (counting "day 0").
+The `MAX_TIME` is set to 300 for this model. Since the shutdown scheduled by
+`schedule_shutdown` is passive, the simulation ends with the last infection
+attempt, just before `MAX_TIME`, so this will result in only 300 rows of data,
+one for each day from day 0 through day 299.
 
 ### Aggregation
 
@@ -436,8 +438,8 @@ fn write_aggregate_sir_report_item(context: &mut Context) {
 
 Exercise:
 
-1. The `aggregate_sir_report` is 301 lines long, one row every day until
-   `MAX_TIME=300`, but most of the rows are of the form `#, 0, 0, 1000`, because
+1. The `aggregate_sir_report` is 300 lines long, one row for every day of the
+   simulation, but most of the rows are of the form `#, 0, 0, 1000`, because
    the entire population is recovered long before we reach `MAX_TIME`. This is
    pretty typical of periodic reports—you get a lot of data you don't need at
    the end of the simulation. Add a simple filter to
