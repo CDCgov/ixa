@@ -13,10 +13,6 @@ use crate::prelude::{IndexableProperty, Property};
 #[derive(Default)]
 pub struct FullIndex<E: Entity, P: Property<E>> {
     data: HashMap<P, IndexSet<EntityId<E>>>,
-
-    // The largest person ID that has been indexed. Used so that we
-    // can lazily index when a person is added.
-    pub(in crate::entity) max_indexed: usize,
 }
 
 impl<E: Entity, P: IndexableProperty<E>> FullIndex<E, P> {
@@ -24,7 +20,6 @@ impl<E: Entity, P: IndexableProperty<E>> FullIndex<E, P> {
     pub fn new() -> Self {
         Self {
             data: HashMap::default(),
-            max_indexed: 0,
         }
     }
 
@@ -78,14 +73,6 @@ where
 
     fn add_entity(&mut self, value: &P, entity_id: EntityId<E>) {
         FullIndex::add_entity(self, value, entity_id);
-    }
-
-    fn max_indexed(&self) -> usize {
-        self.max_indexed
-    }
-
-    fn set_max_indexed(&mut self, max_indexed: usize) {
-        self.max_indexed = max_indexed;
     }
 }
 

@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ixa::prelude::*;
-use ixa::rand::Rng;
+use ixa::rand::RngExt;
 
 define_rng!(SampleScalingRng);
 

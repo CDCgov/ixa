@@ -1,7 +1,7 @@
 //! Trigger criteria that emit user-defined events.
 //!
 //! A trigger is a way to say: when some simulation criterion is met, emit a
-//! concrete user-defined [`IxaEvent`](crate::IxaEvent). Trigger-emitted events
+//! concrete user-defined [`IxaEvent`]. Trigger-emitted events
 //! are ordinary Ixa events, so any number of subscribers can listen for them
 //! with [`Context::subscribe_to_event`](crate::Context::subscribe_to_event).
 //!
@@ -48,7 +48,7 @@
 //! Use [`TriggerCriterion::emit_with`] when the emitted event should contain data from the trigger
 //! observation. When the criterion is met, this observation value is passed to the event
 //! constructor (typically a closure or static constructor method) supplied to `emit_with`, and that
-//! constructor returns the concrete user-defined [`IxaEvent`](crate::IxaEvent) that subscribers
+//! constructor returns the concrete user-defined [`IxaEvent`] that subscribers
 //! will receive.
 //!
 //! ```rust
@@ -257,6 +257,81 @@ mod tests {
         time: f64,
         period: f64,
         phase: ExecutionPhase,
+    }
+
+    #[derive(Clone, Copy)]
+    struct WrappedF64(f64);
+
+    impl From<WrappedF64> for f64 {
+        fn from(value: WrappedF64) -> Self {
+            value.0
+        }
+    }
+
+    #[test]
+    fn time_trigger_builders_accept_into_f64() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        TimeTrigger::at(WrappedF64(0.5)).install(&mut context, {
+            let observed = Rc::clone(&observed);
+            move |_context, event| {
+                observed.borrow_mut().push((event.time, event.phase));
+            }
+        });
+        TimeTrigger::at_phase(WrappedF64(0.5), ExecutionPhase::Last).install(&mut context, {
+            let observed = Rc::clone(&observed);
+            move |_context, event| {
+                observed.borrow_mut().push((event.time, event.phase));
+            }
+        });
+
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![(0.5, ExecutionPhase::Normal), (0.5, ExecutionPhase::Last),]
+        );
+    }
+
+    #[test]
+    fn periodic_time_trigger_builders_accept_into_f64() {
+        let mut context = Context::new();
+        let observed = Rc::new(RefCell::new(Vec::new()));
+
+        PeriodicTimeTrigger::every(WrappedF64(1.0))
+            .start_at(WrappedF64(0.5))
+            .install(&mut context, {
+                let observed = Rc::clone(&observed);
+                move |_context, event| {
+                    observed
+                        .borrow_mut()
+                        .push(("at", event.time, event.period, event.phase));
+                }
+            });
+        PeriodicTimeTrigger::every_with_phase(WrappedF64(1.0), ExecutionPhase::Last)
+            .start_with_delay(WrappedF64(0.5))
+            .install(&mut context, {
+                let observed = Rc::clone(&observed);
+                move |_context, event| {
+                    observed
+                        .borrow_mut()
+                        .push(("delay", event.time, event.period, event.phase));
+                }
+            });
+        context.add_plan(1.5, |_| {});
+
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![
+                ("at", 0.5, 1.0, ExecutionPhase::Normal),
+                ("delay", 0.5, 1.0, ExecutionPhase::Last),
+                ("at", 1.5, 1.0, ExecutionPhase::Normal),
+                ("delay", 1.5, 1.0, ExecutionPhase::Last),
+            ]
+        );
     }
 
     #[test]
@@ -777,6 +852,12 @@ mod tests {
     #[should_panic(expected = "delay must be greater than or equal to 0")]
     fn periodic_time_trigger_infinite_delay_panics() {
         let _ = PeriodicTimeTrigger::every(1.0).start_with_delay(f64::INFINITY);
+    }
+
+    #[test]
+    #[should_panic(expected = "delay must be greater than or equal to 0")]
+    fn periodic_time_trigger_rejects_wrapped_invalid_delay() {
+        let _ = PeriodicTimeTrigger::every(1.0).start_with_delay(WrappedF64(-1.0));
     }
 
     #[test]

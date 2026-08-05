@@ -20,7 +20,6 @@ pub fn initialize(context: &mut Context) {
     incidence_report::init(context).unwrap_or_else(|e| {
         eprintln!("failed to init incidence_report: {}", e);
     });
-    context.add_plan(MAX_TIME, |context| {
-        context.shutdown();
-    });
+    // Cap the run without keeping an otherwise completed simulation alive.
+    context.schedule_shutdown(MAX_TIME);
 }
