@@ -57,7 +57,7 @@ fn setup() -> (Context, Vec<u8>) {
                 Unindexed10(context.sample_range(SampleBenchRng, 0..10)),
                 Age(context.sample_range(SampleBenchRng, 0..100)),
             ))
-            .expect("sampling benchmark properties must create a valid entity");
+            .unwrap();
     }
 
     (context, counts)

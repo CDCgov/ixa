@@ -36,7 +36,7 @@ fn handle_infection_status_change(
 pub fn init(context: &mut Context, output_path: &Path) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
-        .expect("births-deaths parameters must be initialized before the incidence report")
+        .unwrap()
         .clone();
     let current_dir = output_path.to_path_buf();
     context

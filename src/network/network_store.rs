@@ -72,18 +72,15 @@ impl<E: Entity> NetworkStore<E> {
 
         // Lazily initialize if needed.
         if cell.get().is_none() {
-            cell.set(Network::<E, ET>::new_boxed())
-                .expect("Ixa internal error: empty network cell became initialized");
+            cell.set(Network::<E, ET>::new_boxed()).unwrap();
         }
 
-        cell.get_mut()
-            .expect("Ixa internal error: initialized network cell is empty")
-            .downcast_mut()
-            .unwrap_or_else(|| {
-                panic!(
-                    "Ixa internal error: found wrong Network type when accessing EdgeType {}",
-                    ET::name()
-                )
-            })
+        // The cell was already initialized or was initialized immediately above.
+        cell.get_mut().unwrap().downcast_mut().unwrap_or_else(|| {
+            panic!(
+                "Ixa internal error: found wrong Network type when accessing EdgeType {}",
+                ET::name()
+            )
+        })
     }
 }

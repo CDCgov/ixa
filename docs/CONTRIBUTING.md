@@ -36,31 +36,6 @@ commit to auto-close it.
 See
 [GitHub documentation on linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword)
 
-## Rust panics and invariants
-
-Use `Result` for recoverable failures. Panics are appropriate for invalid
-client use of intentionally panic-based APIs and for internal invariants that
-prove an Ixa defect.
-
-- Use `assert!` for inexpensive invariants that must also be checked in release
-  builds.
-- Use `debug_assert!` only when the check is safe to omit and its cost justifies
-  doing so. Document that rationale next to the assertion.
-- Use `expect()` when unwrapping an infallible value, with a message that
-  explains the invariant.
-- Prefix core invariant failures exactly with `Ixa internal error:`.
-- Keep assertions caused by invalid client input user-focused, without the
-  internal-error prefix.
-- Document the panic conditions of public APIs in a `# Panics` rustdoc section.
-
-Do not turn assertions into naked `unwrap()` calls. When an assertion checks
-that an `Option` or `Result` contains a value immediately before it is
-unwrapped, replace both operations with one contextual `expect()`.
-
-Production `unwrap()` calls are denied by the workspace Clippy policy. If an
-exception is unavoidable, use a narrowly scoped lint expectation with a
-written `reason`. Test code may use `unwrap()` for concise fixture setup.
-
 ## Releasing Ixa
 
 This project uses release-plz to automate release publishing.

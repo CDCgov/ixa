@@ -9,7 +9,7 @@ pub struct RunnerPropertyType {
 
 define_global_property!(RunnerProperty, RunnerPropertyType);
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     run_with_args(|context, _args, _| {
         let property = context
             .get_global_property_value(RunnerProperty)
@@ -18,6 +18,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })?;
         println!("{}", property.field_int);
         Ok(())
-    })?;
-    Ok(())
+    })
+    .unwrap();
 }

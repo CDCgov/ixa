@@ -104,9 +104,7 @@ pub fn parse_decimal_digits_to_bits(
                             // The UTF-8 encoded character at `idx` might not be represented as a single byte.
                             // However, as we assume ASCII decimal digits, we are guaranteed that the first
                             // `idx-1` bytes represent `idx-1` characters.
-                            found: input.chars().nth(idx as usize).expect(
-                                "the current FIPS input byte has a corresponding character",
-                            ),
+                            found: input.chars().nth(idx as usize).unwrap(),
                         },
                     ));
                 }

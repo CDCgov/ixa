@@ -108,7 +108,7 @@ impl PeriodicTimeTrigger {
     ///
     /// # Panics
     ///
-    /// Panics if `period` is not finite and strictly positive.
+    /// Panics if `period` is not a strictly positive finite number.
     #[must_use]
     pub fn every(period: impl Into<f64>) -> Self {
         let period = period.into();
@@ -124,7 +124,7 @@ impl PeriodicTimeTrigger {
     ///
     /// # Panics
     ///
-    /// Panics if `period` is not finite and strictly positive.
+    /// Panics if `period` is not a strictly positive finite number.
     #[must_use]
     pub fn every_with_phase(period: impl Into<f64>, phase: ExecutionPhase) -> Self {
         let period = period.into();

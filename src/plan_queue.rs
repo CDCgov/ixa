@@ -204,10 +204,8 @@ impl PlanQueue {
 
                 // Return only if the plan is scheduled for the given time
                 Some(entry) if entry.time == time => {
-                    let entry = self
-                        .queue
-                        .pop()
-                        .expect("Ixa internal error: peeked plan disappeared from the queue");
+                    // The preceding `peek` proves that `pop` will return an entry.
+                    let entry = self.queue.pop().unwrap();
                     let queued_plan = self
                         .data_map
                         .remove(&entry.plan_id)

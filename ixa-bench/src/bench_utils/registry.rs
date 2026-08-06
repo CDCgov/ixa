@@ -14,9 +14,7 @@ static BENCH_REGISTRY: LazyLock<Mutex<RefCell<HashMap<&'static str, BenchGroupEn
     LazyLock::new(|| Mutex::new(RefCell::new(HashMap::default())));
 
 pub fn run_bench(group: &str, bench: &str) -> Result<()> {
-    let registry = BENCH_REGISTRY
-        .lock()
-        .expect("benchmark registry lock is poisoned");
+    let registry = BENCH_REGISTRY.lock().unwrap();
     let registry = registry.borrow();
     if let Some(entry) = registry.get(group) {
         (entry.runner)(bench)
@@ -27,9 +25,7 @@ pub fn run_bench(group: &str, bench: &str) -> Result<()> {
 
 pub fn register_group(name: &'static str, entry: BenchGroupEntry) {
     // Check for conflicts
-    let map = BENCH_REGISTRY
-        .lock()
-        .expect("benchmark registry lock is poisoned");
+    let map = BENCH_REGISTRY.lock().unwrap();
     let mut map = map.borrow_mut();
 
     map.entry(name)
@@ -40,7 +36,7 @@ pub fn register_group(name: &'static str, entry: BenchGroupEntry) {
 pub fn is_valid_bench(group: &'static str, bench: &'static str) -> bool {
     BENCH_REGISTRY
         .lock()
-        .expect("benchmark registry lock is poisoned")
+        .unwrap()
         .borrow()
         .get(group)
         .map(|g| g.bench_names.contains(&bench))
@@ -48,17 +44,13 @@ pub fn is_valid_bench(group: &'static str, bench: &'static str) -> bool {
 }
 
 pub fn is_valid_group(group: &'static str) -> bool {
-    BENCH_REGISTRY
-        .lock()
-        .expect("benchmark registry lock is poisoned")
-        .borrow()
-        .contains_key(group)
+    BENCH_REGISTRY.lock().unwrap().borrow().contains_key(group)
 }
 
 pub fn list_groups() -> Vec<&'static str> {
     BENCH_REGISTRY
         .lock()
-        .expect("benchmark registry lock is poisoned")
+        .unwrap()
         .borrow()
         .keys()
         .cloned()
@@ -70,7 +62,7 @@ pub fn list_benches(group: &str) -> Result<Vec<&'static str>> {
     if let Some(benches) = {
         BENCH_REGISTRY
             .lock()
-            .expect("benchmark registry lock is poisoned")
+            .unwrap()
             .borrow()
             .get(group)
             .map(|g| g.bench_names.clone())

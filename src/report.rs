@@ -23,18 +23,13 @@ pub struct ConfigReportOptions {
 }
 
 impl ConfigReportOptions {
-    /// Creates report options using the current directory as the output directory.
-    ///
-    /// Uses `.` as a relative fallback if the current directory cannot be
-    /// determined. Report creation will return an I/O error if that fallback is
-    /// unusable and the caller does not configure another directory.
     #[must_use]
     pub fn new() -> Self {
         trace!("new ConfigReportOptions");
         // Sets the defaults
         ConfigReportOptions {
             file_prefix: String::new(),
-            output_dir: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            output_dir: env::current_dir().unwrap(),
             overwrite: false,
         }
     }

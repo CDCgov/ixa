@@ -43,9 +43,7 @@ static ENTITY_METADATA: OnceLock<HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)>
 #[allow(clippy::type_complexity)]
 fn entity_metadata() -> &'static HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)> {
     ENTITY_METADATA.get_or_init(|| {
-        let mut builder = ENTITY_METADATA_BUILDER
-            .lock()
-            .expect("Ixa internal error: entity metadata registry lock is poisoned");
+        let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
         let builder = std::mem::take(&mut *builder);
         builder
             .into_iter()
@@ -65,9 +63,7 @@ pub fn register_property_with_entity(
     property_type_id: TypeId,
     required: bool,
 ) {
-    let mut builder = ENTITY_METADATA_BUILDER
-        .lock()
-        .expect("Ixa internal error: entity metadata registry lock is poisoned");
+    let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
     if ENTITY_METADATA.get().is_some() {
         panic!(
             "`register_property_with_entity()` called after entity metadata was frozen; registration must occur during startup/ctors."
@@ -112,9 +108,7 @@ pub fn add_to_entity_registry<R: Entity>() {
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
 pub fn get_registered_entity_count() -> usize {
-    *NEXT_ENTITY_INDEX
-        .lock()
-        .expect("Ixa internal error: entity index lock is poisoned")
+    *NEXT_ENTITY_INDEX.lock().unwrap()
 }
 
 /// Encapsulates the synchronization logic for initializing an entity's index.
@@ -131,9 +125,7 @@ pub fn get_registered_entity_count() -> usize {
 /// should be the only time this method is ever called for the type.
 pub fn initialize_entity_index(plugin_index: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_ENTITY_INDEX
-        .lock()
-        .expect("Ixa internal error: entity index lock is poisoned");
+    let mut guard = NEXT_ENTITY_INDEX.lock().unwrap();
     let candidate = *guard;
 
     // Try to claim the candidate index. Here we guard against the potential race condition that
@@ -233,21 +225,14 @@ impl EntityStore {
 
         // Initialize if needed
         if record.entity.get().is_none() {
-            record
-                .entity
-                .set(E::new_boxed())
-                .expect("Ixa internal error: empty entity cell became initialized");
+            record.entity.set(E::new_boxed()).unwrap();
         }
 
-        record
-            .entity
-            .get_mut()
-            .expect("Ixa internal error: initialized entity cell is empty")
-            .downcast_mut::<E>()
-            .expect(
-                "TypeId does not match registered entity type. \
-                 You must use the `define_entity!` macro to create an entity.",
-            )
+        // The cell was already initialized or was initialized immediately above.
+        record.entity.get_mut().unwrap().downcast_mut::<E>().expect(
+            "TypeID does not match registered entity type. \
+             You must use the `define_entity!` macro to create an entity.",
+        )
     }
 
     /// Creates a new `EntityId` for the given `Entity` type `E`.
@@ -303,10 +288,8 @@ impl EntityStore {
         let _ = record
             .property_store
             .get_or_init(|| Box::new(PropertyStore::<E>::new()));
-        let property_store = record
-            .property_store
-            .get_mut()
-            .expect("Ixa internal error: initialized property store cell is empty");
+        // `get_or_init` guarantees that the cell now contains a property store.
+        let property_store = record.property_store.get_mut().unwrap();
         property_store.downcast_mut::<PropertyStore<E>>()
                       .expect("TypeID does not match registered item type. You must use the `define_registered_item!` macro to create a registered item.")
     }

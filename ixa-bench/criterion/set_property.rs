@@ -85,7 +85,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut context = Context::new();
         let person = context
             .add_entity(with!(Person, IndependentValue(0)))
-            .expect("set-property benchmark properties must create a valid entity");
+            .unwrap();
         let mut next_value = 0u64;
 
         bencher.iter(|| {
@@ -96,9 +96,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("set_property_three_dependents", |bencher| {
         let mut context = Context::new();
-        let person = context
-            .add_entity(with!(Person, BaseValue(0)))
-            .expect("set-property benchmark properties must create a valid entity");
+        let person = context.add_entity(with!(Person, BaseValue(0))).unwrap();
         let mut next_value = 0u64;
 
         bencher.iter(|| {
@@ -111,7 +109,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut context = Context::new();
         let person = context
             .add_entity(with!(Person, MixedBaseValue(0), IndependentValue(0)))
-            .expect("set-property benchmark properties must create a valid entity");
+            .unwrap();
 
         context.index_property::<Person, MixedDerivedIndexed>();
         context

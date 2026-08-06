@@ -5,7 +5,7 @@ use std::time::Instant;
 use humantime::format_duration;
 use log::info;
 #[cfg(feature = "profiling")]
-use log::{debug, warn};
+use log::{debug, error};
 use serde_derive::Serialize;
 #[cfg(feature = "profiling")]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
@@ -93,14 +93,12 @@ impl ExecutionProfilingCollector {
         if let Some(process_id) = process_id {
             debug!("Process ID: {}", process_id);
             let process_refresh_kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
-            if new_stats.update_system_info(process_refresh_kind) {
-                if let Some(process) = new_stats.system.process(process_id) {
-                    new_stats.max_memory_usage = process.memory();
-                    new_stats.start_cpu_time = process.accumulated_cpu_time();
-                } else {
-                    new_stats.disable_process_statistics("the current process was not found");
-                }
-            }
+            new_stats.update_system_info(process_refresh_kind);
+
+            let process = new_stats.system.process(process_id).unwrap();
+
+            new_stats.max_memory_usage = process.memory();
+            new_stats.start_cpu_time = process.accumulated_cpu_time();
         }
 
         new_stats
@@ -124,14 +122,9 @@ impl ExecutionProfilingCollector {
     fn poll_memory(&mut self) {
         if let Some(pid) = self.process_id {
             // Only refreshes memory statistics
-            if !self.update_system_info(ProcessRefreshKind::nothing().with_memory()) {
-                return;
-            }
-            if let Some(memory) = self.system.process(pid).map(|process| process.memory()) {
-                self.max_memory_usage = self.max_memory_usage.max(memory);
-            } else {
-                self.disable_process_statistics("the current process was not found");
-            }
+            self.update_system_info(ProcessRefreshKind::nothing().with_memory());
+            let process = self.system.process(pid).unwrap();
+            self.max_memory_usage = self.max_memory_usage.max(process.memory());
         }
     }
 
@@ -141,20 +134,10 @@ impl ExecutionProfilingCollector {
     pub fn cpu_time(&mut self) -> u64 {
         if let Some(process_id) = self.process_id {
             // Only refresh cpu statistics
-            if !self.update_system_info(ProcessRefreshKind::nothing().with_cpu()) {
-                return 0;
-            }
+            self.update_system_info(ProcessRefreshKind::nothing().with_cpu());
 
-            if let Some(accumulated_cpu_time) = self
-                .system
-                .process(process_id)
-                .map(|process| process.accumulated_cpu_time())
-            {
-                self.elapsed_cpu_time(accumulated_cpu_time)
-            } else {
-                self.disable_process_statistics("the current process was not found");
-                0
-            }
+            let process = self.system.process(process_id).unwrap();
+            process.accumulated_cpu_time() - self.start_cpu_time
         } else {
             0
         }
@@ -163,7 +146,7 @@ impl ExecutionProfilingCollector {
     /// Refreshes the internal `sysinfo::System` object for this process using the given
     /// [`ProcessRefreshKind`](sysinfo::ProcessRefreshKind).
     #[inline]
-    fn update_system_info(&mut self, process_refresh_kind: ProcessRefreshKind) -> bool {
+    fn update_system_info(&mut self, process_refresh_kind: ProcessRefreshKind) {
         if let Some(pid) = self.process_id {
             if self.system.refresh_processes_specifics(
                 ProcessesToUpdate::Some(&[pid]),
@@ -171,27 +154,8 @@ impl ExecutionProfilingCollector {
                 process_refresh_kind,
             ) < 1
             {
-                self.disable_process_statistics("the current process could not be refreshed");
-                return false;
+                error!("could not refresh process statistics");
             }
-            true
-        } else {
-            false
-        }
-    }
-
-    fn elapsed_cpu_time(&mut self, accumulated_cpu_time: u64) -> u64 {
-        if let Some(elapsed) = accumulated_cpu_time.checked_sub(self.start_cpu_time) {
-            elapsed
-        } else {
-            self.disable_process_statistics("the process CPU time moved backwards");
-            0
-        }
-    }
-
-    fn disable_process_statistics(&mut self, reason: &str) {
-        if self.process_id.take().is_some() {
-            warn!("process statistics unavailable ({reason}); disabling execution profiling");
         }
     }
 
@@ -202,25 +166,13 @@ impl ExecutionProfilingCollector {
 
         if let Some(pid) = self.process_id {
             // Update both memory and cpu statistics
-            if !self.update_system_info(ProcessRefreshKind::nothing().with_cpu().with_memory()) {
-                return self.statistics_with_cpu_time(cpu_time_millis);
-            }
-            if let Some((memory, accumulated_cpu_time)) = self
-                .system
-                .process(pid)
-                .map(|process| (process.memory(), process.accumulated_cpu_time()))
-            {
-                self.max_memory_usage = self.max_memory_usage.max(memory);
-                cpu_time_millis = self.elapsed_cpu_time(accumulated_cpu_time);
-            } else {
-                self.disable_process_statistics("the current process was not found");
-            }
+            self.update_system_info(ProcessRefreshKind::nothing().with_cpu().with_memory());
+            let process = self.system.process(pid).unwrap();
+
+            self.max_memory_usage = self.max_memory_usage.max(process.memory());
+            cpu_time_millis = process.accumulated_cpu_time() - self.start_cpu_time;
         }
 
-        self.statistics_with_cpu_time(cpu_time_millis)
-    }
-
-    fn statistics_with_cpu_time(&self, cpu_time_millis: u64) -> ExecutionStatistics {
         // Convert to `Duration`s in preparation for formatting
         let cpu_time = Duration::from_millis(cpu_time_millis);
         #[cfg(target_arch = "wasm32")]
@@ -407,15 +359,5 @@ mod tests {
 
         let cpu_time_2 = collector.cpu_time();
         assert!(cpu_time_2 > cpu_time_1);
-    }
-
-    #[test]
-    fn cpu_time_regression_disables_process_statistics() {
-        let mut collector = ExecutionProfilingCollector::new();
-        collector.process_id = sysinfo::get_current_pid().ok();
-        collector.start_cpu_time = 10;
-
-        assert_eq!(collector.elapsed_cpu_time(9), 0);
-        assert!(collector.process_id.is_none());
     }
 }

@@ -12,12 +12,12 @@ use parameters::Parameters;
 define_entity!(Person);
 define_rng!(MainRng);
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     run_with_args(|context, _, _| {
-        initialize(context)?;
+        initialize(context);
         Ok(())
-    })?;
-    Ok(())
+    })
+    .unwrap();
 }
 
 fn example_dir() -> PathBuf {
@@ -25,7 +25,7 @@ fn example_dir() -> PathBuf {
     parameters_path.join("examples").join("network-hhmodel")
 }
 
-fn initialize(context: &mut Context) -> Result<(), IxaError> {
+fn initialize(context: &mut Context) {
     context.init_random(1);
 
     // Load people from csv and set up some base properties
@@ -33,26 +33,21 @@ fn initialize(context: &mut Context) -> Result<(), IxaError> {
 
     // Load parameters from json
     let file_path = example_dir().join("config.json");
-    context.load_global_properties(&file_path)?;
+    context.load_global_properties(&file_path).unwrap();
 
     let parameters = context
         .get_global_property_value(Parameters)
-        .ok_or_else(|| IxaError::PropertyNotSet {
-            name: "Parameters".to_string(),
-        })?
+        .unwrap()
         .clone();
 
     // Load network
     network::init(context, parameters.relative_rate);
 
     // Initialize incidence report
-    incidence_report::init(context)?;
+    incidence_report::init(context).unwrap();
 
     // Initialize infected person with InfectedBy value equal to their own PersonId
-    let to_infect: Vec<PersonId> = vec![context
-        .sample_entity(MainRng, Person)
-        .expect("network-hhmodel requires a nonempty population")];
+    let to_infect: Vec<PersonId> = vec![context.sample_entity(MainRng, Person).unwrap()];
 
     seir::init(context, &to_infect, 1.0);
-    Ok(())
 }

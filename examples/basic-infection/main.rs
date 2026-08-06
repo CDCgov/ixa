@@ -1,10 +1,10 @@
 use ixa::runner::run_with_args;
 use ixa_example_basic_infection::initialize;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     run_with_args(|context, _, _| {
         initialize(context);
         Ok(())
-    })?;
-    Ok(())
+    })
+    .unwrap();
 }

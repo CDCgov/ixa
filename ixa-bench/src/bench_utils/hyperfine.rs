@@ -93,14 +93,10 @@ fn run_hyperfine(group: &str, extra_args: &[String]) {
                     eprintln!("{}", line);
                 }
             });
-            stderr_thread
-                .join()
-                .expect("hyperfine stderr forwarding thread panicked");
+            stderr_thread.join().unwrap();
         }
 
-        stdout_thread
-            .join()
-            .expect("hyperfine stdout forwarding thread panicked");
+        stdout_thread.join().unwrap();
     }
     let status = child.wait().expect("failed to wait on hyperfine");
     if !status.success() {

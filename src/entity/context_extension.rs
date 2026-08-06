@@ -20,7 +20,7 @@ where
     E: Entity,
     P: IndexableProperty<E>,
 {
-    assert_ne!(
+    debug_assert_ne!(
         requested,
         PropertyIndexType::Unindexed,
         "Ixa internal error: create_property_index received an unindexed request",
@@ -221,7 +221,7 @@ pub trait ContextEntitiesExt {
     ///
     /// # Panics
     ///
-    /// Panics if `period` is not finite and strictly positive.
+    /// Panics if `period` is not a strictly positive finite number.
     fn track_periodic_value_change_counts<E, PL, P, F>(
         &mut self,
         period: impl Into<f64>,
@@ -383,7 +383,7 @@ impl ContextEntitiesExt for Context {
         entity_id: EntityId<E>,
         property_value: P,
     ) {
-        assert!(!P::is_derived(), "cannot set a derived property");
+        debug_assert!(!P::is_derived(), "cannot set a derived property");
 
         // The algorithm is as follows:
         // 1. Snapshot previous values for the main property and any dependents that need change

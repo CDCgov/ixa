@@ -186,8 +186,7 @@ impl<E: Entity, V> EntityMap<E, V> {
             self.len += 1;
         }
 
-        slot.as_mut()
-            .expect("Ixa internal error: newly inserted entity map slot is empty")
+        slot.as_mut().unwrap()
     }
 
     /// Removes and returns the value for `entity_id`, if present.

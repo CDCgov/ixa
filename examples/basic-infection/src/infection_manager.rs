@@ -14,9 +14,8 @@ define_rng!(InfectionRng);
 
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     trace!("Scheduling recovery");
-    let recovery_distribution = Exp::new(1.0 / INFECTION_DURATION)
-        .expect("basic-infection requires a positive infection duration");
-    let infection_duration = context.sample_distr(InfectionRng, recovery_distribution);
+    let infection_duration =
+        context.sample_distr(InfectionRng, Exp::new(1.0 / INFECTION_DURATION).unwrap());
     schedule_relative!(context, infection_duration, recover, person_id);
 }
 

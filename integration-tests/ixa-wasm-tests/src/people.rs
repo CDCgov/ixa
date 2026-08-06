@@ -20,8 +20,6 @@ define_property!(
 pub fn init(context: &mut Context) {
     trace!("Initializing people");
     for _ in 0..POPULATION {
-        let _: PersonId = context
-            .add_entity(Person)
-            .expect("Wasm infection model Person defaults must create a valid entity");
+        let _: PersonId = context.add_entity(Person).unwrap();
     }
 }

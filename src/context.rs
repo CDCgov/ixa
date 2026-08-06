@@ -566,9 +566,10 @@ impl Context {
 
         // If the data plugin is already initialized, return a mutable reference.
         if self.data_plugins[index].get().is_some() {
+            // The preceding check proves that the cell contains a value.
             return self.data_plugins[index]
                 .get_mut()
-                .expect("Ixa internal error: initialized data plugin is missing")
+                .unwrap()
                 .downcast_mut::<T::DataContainer>()
                 .expect("TypeID does not match data plugin type");
         }
@@ -580,8 +581,9 @@ impl Context {
             .get_mut(index)
             .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."));
         let _ = cell.set(Box::new(data));
+        // `cell` was empty and has just been initialized above.
         cell.get_mut()
-            .expect("Ixa internal error: newly initialized data plugin is missing")
+            .unwrap()
             .downcast_mut::<T::DataContainer>()
             .expect("TypeID does not match data plugin type. You must use the `define_data_plugin!` macro to create a data plugin.")
     }

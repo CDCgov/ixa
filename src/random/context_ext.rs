@@ -13,8 +13,10 @@ use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
 /// Gets a mutable reference to the random number generator associated with the given
-/// [`RngId`]. If the Rng has not been used before, one will be created with the base seed
-/// you defined in `init`. Note that this will panic if `init` was not called yet.
+/// [`RngId`]. If the RNG has not been used before, one will be created with the current
+/// base seed, which is zero until configured by [`ContextRandomExt::init_random`].
+///
+/// Panics if RNG state is already borrowed by an active sampler callback.
 fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
     let data_container = context.get_data(RngPlugin);
 
@@ -70,7 +72,8 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Gets a random sample from the random number generator associated with the given
     /// [`RngId`] by applying the specified sampler function. If the RNG has not been used
-    /// before, one will be created with the base seed configured by [`ContextRandomExt::init_random`].
+    /// before, one will be created with the current base seed, which is zero until configured by
+    /// [`ContextRandomExt::init_random`].
     ///
     /// # Panics
     ///
@@ -111,8 +114,9 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given [`RngId`]. If the Rng has not been used before, one will be
-    /// created with the base seed configured by [`ContextRandomExt::init_random`].
+    /// associated with the given [`RngId`]. If the RNG has not been used before, one will be
+    /// created with the current base seed, which is zero until configured by
+    /// [`ContextRandomExt::init_random`].
     ///
     /// # Panics
     ///

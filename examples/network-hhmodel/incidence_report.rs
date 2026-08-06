@@ -43,9 +43,7 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context
-        .get_global_property_value(Parameters)
-        .expect("network-hhmodel parameters must be initialized before the incidence report");
+    let parameters = context.get_global_property_value(Parameters).unwrap();
 
     // Output directory is relative to the directory with the Cargo.toml file.
     let mut output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

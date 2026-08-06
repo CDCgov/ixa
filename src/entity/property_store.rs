@@ -111,9 +111,7 @@ static PROPERTY_METADATA: OnceLock<HashMap<(usize, usize), Box<dyn Any + Send + 
 /// Private helper to fetch or initialize the frozen metadata.
 fn property_metadata() -> &'static HashMap<(usize, usize), Box<dyn Any + Send + Sync>> {
     PROPERTY_METADATA.get_or_init(|| {
-        let mut builder = PROPERTY_METADATA_BUILDER
-            .lock()
-            .expect("Ixa internal error: property metadata registry lock is poisoned");
+        let mut builder = PROPERTY_METADATA_BUILDER.lock().unwrap();
         std::mem::take(&mut *builder)
     })
 }
@@ -153,9 +151,7 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         P::is_required(),
     );
 
-    let mut property_metadata = PROPERTY_METADATA_BUILDER
-        .lock()
-        .expect("Ixa internal error: property metadata registry lock is poisoned");
+    let mut property_metadata = PROPERTY_METADATA_BUILDER.lock().unwrap();
     if PROPERTY_METADATA.get().is_some() {
         panic!(
             "`add_to_property_registry()` called after property metadata was frozen; registration must occur during startup/ctors."
@@ -190,9 +186,7 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.
 pub fn get_registered_property_count<E: Entity>() -> usize {
-    let map = NEXT_PROPERTY_ID
-        .lock()
-        .expect("Ixa internal error: property ID registry lock is poisoned");
+    let map = NEXT_PROPERTY_ID.lock().unwrap();
     *map.get(&E::id()).unwrap_or(&0)
 }
 
@@ -210,9 +204,7 @@ pub fn get_registered_property_count<E: Entity>() -> usize {
 /// should be the only time this method is ever called for the type.
 pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_PROPERTY_ID
-        .lock()
-        .expect("Ixa internal error: property ID registry lock is poisoned");
+    let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
     let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
     // Try to claim the candidate index. Here we guard against the potential race condition that
@@ -408,16 +400,17 @@ impl<E: Entity> PropertyStore<E> {
             .iter()
             .position(|(id, _)| *id == property_id);
 
-        // Report the removal-specific corruption before the broader consistency check. Keeping
-        // both checks before the commit point preserves the installed index if either one fails.
-        assert!(
-            !was_indexed || will_be_indexed || dispatcher_position.is_some(),
-            "Ixa internal error: indexed property is missing its index_new_entity dispatcher",
-        );
-        assert!(
-            was_indexed == dispatcher_position.is_some(),
-            "Ixa internal error: property index and index_new_entity dispatcher disagree",
-        );
+        if was_indexed {
+            assert!(
+                dispatcher_position.is_some(),
+                "Ixa internal error: indexed property is missing its index_new_entity dispatcher",
+            );
+        } else {
+            debug_assert!(
+                dispatcher_position.is_none(),
+                "Ixa internal error: unindexed property unexpectedly has an index_new_entity dispatcher",
+            );
+        }
 
         // Reserve before replacing a valid index so allocation failure cannot leave the index
         // installed without its dispatcher.
@@ -435,9 +428,9 @@ impl<E: Entity> PropertyStore<E> {
                     .push((property_id, index_new_entity::<E, P> as IndexNewEntityFn<E>));
             }
             (true, false) => {
-                self.index_new_entity_fns.swap_remove(dispatcher_position.expect(
-                    "Ixa internal error: indexed property is missing its index_new_entity dispatcher",
-                ));
+                // The invariant check above proves that an indexed property has a dispatcher.
+                self.index_new_entity_fns
+                    .swap_remove(dispatcher_position.unwrap());
             }
             _ => {}
         }
@@ -584,7 +577,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Ixa internal error: property index and index_new_entity dispatcher disagree"
+        expected = "Ixa internal error: unindexed property unexpectedly has an index_new_entity dispatcher"
     )]
     fn dispatcher_without_index_panics() {
         let mut property_store = PropertyStore::<Person>::new();

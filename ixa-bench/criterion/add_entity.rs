@@ -70,7 +70,7 @@ fn initialize_context_for_no_indexes_explicit_nondefault_wide() -> Context {
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -84,7 +84,7 @@ fn initialize_context_for_one_full_index_explicit_nondefault_wide() -> Context {
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -100,7 +100,7 @@ fn initialize_context_for_three_full_indexes_explicit_nondefault_wide() -> Conte
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -114,7 +114,7 @@ fn initialize_context_for_one_value_count_index_explicit_nondefault_wide() -> Co
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -127,7 +127,7 @@ fn initialize_context_for_one_full_index_omitted_default_wide() -> Context {
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -141,7 +141,7 @@ fn initialize_context_for_one_full_index_explicit_default_wide() -> Context {
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -155,7 +155,7 @@ fn initialize_context_for_one_full_index_explicit_nondefault_narrow() -> Context
             AuxiliaryValueOne(1),
             AuxiliaryValueTwo(1),
         ))
-        .expect("add_entity benchmark properties must be valid");
+        .unwrap();
     context
 }
 
@@ -176,7 +176,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },
@@ -197,7 +197,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },
@@ -218,7 +218,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },
@@ -241,7 +241,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                     AuxiliaryValueOne(1),
                                     AuxiliaryValueTwo(1),
                                 ))
-                                .expect("add_entity benchmark properties must be valid"),
+                                .unwrap(),
                         );
                     }
                 },
@@ -262,7 +262,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },
@@ -283,7 +283,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },
@@ -304,7 +304,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 AuxiliaryValueOne(1),
                                 AuxiliaryValueTwo(1),
                             ))
-                            .expect("add_entity benchmark properties must be valid"),
+                            .unwrap(),
                     );
                 }
             },

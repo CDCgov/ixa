@@ -12,7 +12,7 @@ static DATA_PLUGINS: LazyLock<Mutex<RefCell<HashSet<TypeId>>>> =
 pub fn add_data_plugin_to_registry<T: DataPlugin>() {
     DATA_PLUGINS
         .lock()
-        .expect("Ixa internal error: data plugin registry lock is poisoned")
+        .unwrap()
         .borrow_mut()
         .insert(TypeId::of::<T>());
 }
@@ -21,7 +21,7 @@ pub fn add_data_plugin_to_registry<T: DataPlugin>() {
 pub fn get_data_plugin_ids() -> Vec<TypeId> {
     DATA_PLUGINS
         .lock()
-        .expect("Ixa internal error: data plugin registry lock is poisoned")
+        .unwrap()
         .borrow()
         .iter()
         .copied()
@@ -30,11 +30,7 @@ pub fn get_data_plugin_ids() -> Vec<TypeId> {
 
 #[must_use]
 pub fn get_data_plugin_count() -> usize {
-    DATA_PLUGINS
-        .lock()
-        .expect("Ixa internal error: data plugin registry lock is poisoned")
-        .borrow()
-        .len()
+    DATA_PLUGINS.lock().unwrap().borrow().len()
 }
 
 /// Global data plugin index counter, keeps track of the index that will be assigned to the next
@@ -51,9 +47,7 @@ static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
 #[must_use]
 pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     // Acquire a global lock.
-    let mut guard = NEXT_DATA_PLUGIN_INDEX
-        .lock()
-        .expect("Ixa internal error: data plugin index lock is poisoned");
+    let mut guard = NEXT_DATA_PLUGIN_INDEX.lock().unwrap();
     let candidate = *guard;
 
     // Try to claim the candidate index. Here we guard against the potential race condition that

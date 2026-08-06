@@ -20,10 +20,10 @@ fn add_bidi_edge(context: &mut Context, p1: PersonId, p2: PersonId, relative_rat
 
     context
         .add_entity(with!(Edge, Node1(p1), Node2(p2), rr))
-        .expect("network-hhmodel edge properties must create a valid entity");
+        .unwrap();
     context
         .add_entity(with!(Edge, Node2(p1), Node1(p2), rr))
-        .expect("network-hhmodel edge properties must create a valid entity");
+        .unwrap();
 }
 
 fn create_household_networks(context: &mut Context) {
@@ -78,7 +78,7 @@ fn sar_to_prob(sar: f64, infectious_period: f64, duration: f64) -> f64 {
 pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> HashSet<PersonId> {
     let parameters = context
         .get_global_property_value(Parameters)
-        .expect("network-hhmodel parameters must be initialized before contact sampling")
+        .unwrap()
         .clone();
 
     // Base probability of transmission during the duration.
@@ -93,8 +93,7 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
         let Node2(person2) = context.get_property(edge);
         if context.sample_distr(
             NetworkRng,
-            Bernoulli::new(base_prob * relative_rate)
-                .expect("network-hhmodel contact probability must be between zero and one"),
+            Bernoulli::new(base_prob * relative_rate).unwrap(),
         ) {
             contacts.insert(person2);
         }

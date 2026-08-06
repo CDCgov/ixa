@@ -82,7 +82,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     /// Returns the property value for the given entity.
     #[must_use]
     pub fn get(&self, entity_id: EntityId<E>) -> P {
-        assert!(
+        debug_assert!(
             !P::is_derived(),
             "Ixa internal error: tried to get a derived property value from property value store",
         );
@@ -95,7 +95,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
 
     /// Sets the value for `entity_id` to `value`.
     pub fn set(&mut self, entity_id: EntityId<E>, value: P) {
-        assert!(
+        debug_assert!(
             !P::is_derived(),
             "Ixa internal error: tried to set a derived property value in property value store",
         );
@@ -143,7 +143,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     /// Sets the value for `entity_id` to `value`, returning the previous value.
     #[must_use]
     pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
-        assert!(
+        debug_assert!(
             !P::is_derived(),
             "Ixa internal error: tried to replace a derived property value in property value store",
         );

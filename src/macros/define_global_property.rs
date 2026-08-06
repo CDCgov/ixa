@@ -40,7 +40,8 @@ macro_rules! define_global_property {
 
             fn name() -> &'static str {
                 let full = std::any::type_name::<Self>();
-                full.rsplit("::").next().unwrap_or(full)
+                // Splitting any string, including an empty one, always yields at least one segment.
+                full.rsplit("::").next().unwrap()
             }
 
             fn validate(
@@ -55,11 +56,8 @@ macro_rules! define_global_property {
                 #[ctor(unsafe)]
                 fn [<$global_property:snake _register>]() {
                     let module = module_path!();
-                    let mut name = module
-                        .split("::")
-                        .next()
-                        .expect("Ixa internal error: a Rust module path must contain a first segment")
-                        .to_string();
+                    // Splitting any module path always yields at least one segment.
+                    let mut name = module.split("::").next().unwrap().to_string();
                     name += ".";
                     name += stringify!($global_property);
                     let _ = <$global_property as $crate::global_properties::GlobalProperty>::id();

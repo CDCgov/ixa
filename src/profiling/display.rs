@@ -96,9 +96,7 @@ pub fn print_computed_statistics() {
     }
     for idx in 0..stat_count {
         // Temporarily take the statistic, because we need immutable access to `container`.
-        let mut statistic = container.computed_statistics[idx]
-            .take()
-            .expect("Ixa internal error: computed statistic slot is empty");
+        let mut statistic = container.computed_statistics[idx].take().unwrap();
         statistic.value = statistic.functions.compute(&container);
         // Return the statistic
         container.computed_statistics[idx] = Some(statistic);
@@ -107,13 +105,11 @@ pub fn print_computed_statistics() {
     println!();
 
     for statistic in &container.computed_statistics {
-        let statistic = statistic
-            .as_ref()
-            .expect("Ixa internal error: computed statistic slot is empty");
-        let Some(value) = statistic.value else {
+        let statistic = statistic.as_ref().unwrap();
+        if statistic.value.is_none() {
             continue;
-        };
-        statistic.functions.print(value);
+        }
+        statistic.functions.print(statistic.value.unwrap());
     }
 }
 #[cfg(not(feature = "profiling"))]

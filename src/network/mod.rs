@@ -161,14 +161,13 @@ impl NetworkData {
 
         // Lazily initialize the NetworkStore if needed.
         if network_store.get().is_none() {
-            network_store
-                .set(NetworkStore::<E>::new_boxed())
-                .expect("Ixa internal error: empty network store cell became initialized");
+            network_store.set(NetworkStore::<E>::new_boxed()).unwrap();
         }
 
+        // The cell was already initialized or was initialized immediately above.
         network_store
             .get_mut()
-            .expect("Ixa internal error: initialized network store cell is empty")
+            .unwrap()
             .downcast_mut::<NetworkStore<E>>()
             .unwrap_or_else(|| {
                 panic!(

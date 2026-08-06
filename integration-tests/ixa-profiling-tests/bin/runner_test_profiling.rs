@@ -5,7 +5,7 @@ use ixa::profiling::{
 };
 use ixa::runner::run_with_args;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let mut context = run_with_args(|context, _args, _| {
         context.add_plan(0.0, |context| {
             increment_named_count("it_prof_event");
@@ -28,8 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             context.shutdown();
         });
         Ok(())
-    })?;
+    })
+    .unwrap();
 
     context.write_profiling_data();
-    Ok(())
 }

@@ -27,7 +27,7 @@ pub fn criterion_benchmark(criterion: &mut Criterion) {
                 MultiProperty10(context.sample_range(IndexBenchRng, 0..10)),
                 MultiProperty100(context.sample_range(IndexBenchRng, 0..100)),
             ))
-            .expect("index benchmark properties must create a valid entity");
+            .unwrap();
     }
 
     let mut numbers: Vec<u8> = Vec::with_capacity(1000);

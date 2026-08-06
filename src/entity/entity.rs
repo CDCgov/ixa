@@ -87,7 +87,8 @@ pub trait Entity: Any + Default {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap_or(full)
+        // Splitting any string, including an empty one, always yields at least one segment.
+        full.rsplit("::").next().unwrap()
     }
 
     #[must_use]

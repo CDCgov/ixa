@@ -52,9 +52,7 @@ static NEXT_GLOBAL_PROPERTY_ID: Mutex<usize> = Mutex::new(0);
 /// A convenience getter for `NEXT_GLOBAL_PROPERTY_ID`.
 #[must_use]
 pub fn get_global_property_count() -> usize {
-    *NEXT_GLOBAL_PROPERTY_ID
-        .lock()
-        .expect("Ixa internal error: global property index lock is poisoned")
+    *NEXT_GLOBAL_PROPERTY_ID.lock().unwrap()
 }
 
 /// Encapsulates the synchronization logic for initializing a global property's ID.
@@ -64,9 +62,7 @@ pub fn get_global_property_count() -> usize {
 /// global property is assigned at runtime but only once per type.
 #[must_use]
 pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
-    let mut guard = NEXT_GLOBAL_PROPERTY_ID
-        .lock()
-        .expect("Ixa internal error: global property index lock is poisoned");
+    let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
     let candidate = *guard;
 
     match global_property_id.compare_exchange(
@@ -88,9 +84,7 @@ where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,
 {
     trace!("Adding global property {name}");
-    let properties = GLOBAL_PROPERTIES
-        .lock()
-        .expect("Ixa internal error: global property registry lock is poisoned");
+    let properties = GLOBAL_PROPERTIES.lock().unwrap();
     properties
         .borrow_mut()
         .insert(
@@ -112,9 +106,7 @@ where
 }
 
 fn get_global_property_setter(name: &str) -> Option<Arc<PropertySetterFn>> {
-    let properties = GLOBAL_PROPERTIES
-        .lock()
-        .expect("Ixa internal error: global property registry lock is poisoned");
+    let properties = GLOBAL_PROPERTIES.lock().unwrap();
     let tmp = properties.borrow();
     tmp.get(name).map(Arc::clone)
 }
@@ -164,7 +156,8 @@ pub trait GlobalProperty: Any {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
-        full.rsplit("::").next().unwrap_or(full)
+        // Splitting any string, including an empty one, always yields at least one segment.
+        full.rsplit("::").next().unwrap()
     }
 
     /// A function which validates the global property.

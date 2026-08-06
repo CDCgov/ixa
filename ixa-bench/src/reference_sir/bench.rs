@@ -9,7 +9,7 @@ fn build_params(itinerary: Itinerary) -> Parameters {
         .max_time(10.0)
         .itinerary(itinerary)
         .build()
-        .expect("reference SIR benchmark parameters must be complete")
+        .unwrap()
 }
 
 const HOMOGENEOUS: Itinerary = Itinerary {

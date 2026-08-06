@@ -27,8 +27,7 @@ define_property!(
 );
 
 fn calculate_waiting_time(context: &Context, shape: f64, mean_period: f64) -> f64 {
-    let d = Gamma::new(shape, mean_period / shape)
-        .expect("network-hhmodel waiting-time shape and mean must be positive");
+    let d = Gamma::new(shape, mean_period / shape).unwrap();
     context.sample_distr(SeirRng, d)
 }
 
@@ -62,7 +61,7 @@ fn schedule_waiting_event(
 fn schedule_infectiousness(context: &mut Context, person_id: PersonId) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .expect("network-hhmodel parameters must be initialized before scheduling infectiousness")
+        .unwrap()
         .clone();
 
     schedule_waiting_event(
@@ -77,7 +76,7 @@ fn schedule_infectiousness(context: &mut Context, person_id: PersonId) {
 fn schedule_recovery(context: &mut Context, person_id: PersonId) {
     let parameters = context
         .get_global_property_value(Parameters)
-        .expect("network-hhmodel parameters must be initialized before scheduling recovery")
+        .unwrap()
         .clone();
 
     schedule_waiting_event(

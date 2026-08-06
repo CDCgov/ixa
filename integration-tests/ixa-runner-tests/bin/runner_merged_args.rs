@@ -9,10 +9,10 @@ struct Extra {
     a: u32,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     run_with_merged_args(|_context, args: RunnerArgs<Extra>| {
         println!("seed={} a={}", args.base.random_seed, args.custom.a);
         Ok(())
-    })?;
-    Ok(())
+    })
+    .unwrap();
 }

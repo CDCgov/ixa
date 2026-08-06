@@ -87,13 +87,7 @@ impl<'a, E: Entity> EntitySet<'a, E> {
     pub(crate) fn from_intersection_sources(mut sources: Vec<SourceSet<'a, E>>) -> Self {
         match sources.len() {
             0 => return Self::empty(),
-            1 => {
-                return Self::from_source(
-                    sources
-                        .pop()
-                        .expect("Ixa internal error: singleton source vector is empty"),
-                )
-            }
+            1 => return Self::from_source(sources.pop().unwrap()),
             _ => {}
         }
 
