@@ -6,9 +6,11 @@ use std::collections::hash_map::Entry;
 use std::ptr::eq;
 #[cfg(feature = "profiling")]
 use std::sync::{Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::computed_statistic::ComputableType;
+#[cfg(feature = "profiling")]
+use super::ProfilingInstant;
 use super::Span;
 #[cfg(feature = "profiling")]
 use super::{
@@ -33,7 +35,8 @@ pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
 
 #[derive(Default)]
 pub struct ProfilingData {
-    pub start_time: Option<Instant>,
+    #[cfg(feature = "profiling")]
+    pub start_time: Option<ProfilingInstant>,
     pub counts: HashMap<&'static str, usize>,
     // We store span counts with the span duration, because they are updated when
     // the spans are and displayed with the spans rather than with the other counts.
@@ -47,7 +50,7 @@ pub struct ProfilingData {
     #[cfg(feature = "profiling")]
     pub(super) open_span_count: usize,
     #[cfg(feature = "profiling")]
-    pub(super) coverage: Option<Instant>,
+    pub(super) coverage: Option<ProfilingInstant>,
     // Custom computed statistics. They are wrapped in an `Option` to allow for temporarily
     // removing them to avoid a double borrow.
     #[cfg(feature = "profiling")]
@@ -162,7 +165,7 @@ impl<'a> QueryProfileHandle<'a> {
     pub(crate) fn scope(self) -> QueryProfileScope<'a> {
         QueryProfileScope {
             handle: self,
-            start_time: Instant::now(),
+            start_time: ProfilingInstant::now(),
         }
     }
 
@@ -188,7 +191,7 @@ impl Eq for QueryProfileHandle<'_> {}
 #[cfg(feature = "profiling")]
 pub(crate) struct QueryProfileScope<'a> {
     handle: QueryProfileHandle<'a>,
-    start_time: Instant,
+    start_time: ProfilingInstant,
 }
 
 #[cfg(feature = "profiling")]
@@ -224,7 +227,7 @@ impl<'a> QueryExecutionProfile<'a> {
         self.elapsed.get_or_insert(Duration::ZERO);
         Some(QueryExecutionScope {
             execution: self,
-            start_time: Instant::now(),
+            start_time: ProfilingInstant::now(),
         })
     }
 
@@ -249,7 +252,7 @@ impl Drop for QueryExecutionProfile<'_> {
 #[cfg(feature = "profiling")]
 pub(crate) struct QueryExecutionScope<'execution, 'context> {
     execution: &'execution mut QueryExecutionProfile<'context>,
-    start_time: Instant,
+    start_time: ProfilingInstant,
 }
 
 #[cfg(feature = "profiling")]
@@ -277,7 +280,7 @@ impl ProfilingData {
 
     fn init_start_time(&mut self) {
         if self.start_time.is_none() {
-            self.start_time = Some(Instant::now());
+            self.start_time = Some(ProfilingInstant::now());
         }
     }
 
@@ -285,7 +288,7 @@ impl ProfilingData {
         self.init_start_time();
         if self.open_span_count == 0 {
             // Start recording coverage time.
-            self.coverage = Some(Instant::now());
+            self.coverage = Some(ProfilingInstant::now());
         }
         self.open_span_count += 1;
         Span::new(label)
@@ -531,7 +534,7 @@ mod tests {
             start_time.elapsed().as_secs_f64()
         } else {
             // If profiling hasn't started yet, rate will be based on init at first increment,
-            // so approximate by measuring from the first increment call using a local Instant.
+            // so approximate the elapsed time from the first increment call.
             // In practice, this path should rarely trigger.
             0.1
         };

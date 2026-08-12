@@ -79,7 +79,7 @@ default = ["logging"]
 
 logging = ["log4rs", "fern", "wasm-bindgen", "web-sys"]
 
-profiling = ["dep:sysinfo", "dep:bytesize"]
+profiling = ["dep:sysinfo", "dep:bytesize", "wasm-bindgen", "web-sys"]
 
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
