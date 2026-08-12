@@ -95,7 +95,7 @@ run = '''
 [tasks.'test:wasm']
 description = "Run wasm integration tests"
 dir = "integration-tests/ixa-wasm-tests"
-depends = ["wasm:pnpm", "wasm:compile"]
+depends = ["wasm:pnpm", "wasm:check-profiling", "wasm:compile"]
 run = "pnpm exec playwright test"
 
 [tasks.'test:features']
@@ -126,6 +126,12 @@ dir = "integration-tests/ixa-wasm-tests"
 run = ["mise run rust:version", "wasm-pack build --target web"]
 sources = ["src/*.rs", "Cargo.toml"]
 outputs = "pkg"
+
+[tasks.'wasm:check-profiling']
+run = [
+  "mise run rust:version",
+  "cargo check --package ixa --target wasm32-unknown-unknown --no-default-features --features profiling",
+]
 
 [tasks.'bench']
 description = "Run all benchmarks"

@@ -20,7 +20,7 @@ js-sys = "^0.3.77"
 console_error_panic_hook = "0.1.7"
 
 # Explicitly use the Ixa in this same project.
-ixa = { path = "../../", default-features = false, features = ["logging"] }
+ixa = { path = "../../", default-features = false, features = ["logging", "profiling"] }
 rand_distr.workspace = true
 serde.workspace = true
 
