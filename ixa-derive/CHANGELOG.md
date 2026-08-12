@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0...ixa-derive-v2.0.1) - 2026-08-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [2.0.0](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0-beta.2...ixa-derive-v2.0.0) - 2026-06-16
 
 Ixa 2.0 replaces the single, hard-coded `people` module with a generalized,
