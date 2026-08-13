@@ -195,7 +195,8 @@ impl<E: Entity, P: Property<E>> IxaEvent for PropertyInitializedEvent<E, P> {
                 context
                     .entity_store
                     .get_property_store_mut::<E>()
-                    .property_initialized_event_subscriptions |= 1_u32 << P::id();
+                    .property_initialized_event_subscriptions
+                    .set(P::id());
             }
             PropertyInitializationKind::Derived => {}
         }
@@ -209,7 +210,8 @@ impl<E: Entity, P: Property<E>> IxaEvent for PropertyInitializedEvent<E, P> {
                 context
                     .entity_store
                     .get_property_store_mut::<E>()
-                    .property_initialized_event_subscriptions &= !(1_u32 << P::id());
+                    .property_initialized_event_subscriptions
+                    .reset(P::id());
             }
             PropertyInitializationKind::Explicit
             | PropertyInitializationKind::Constant
@@ -481,42 +483,33 @@ mod tests {
     #[test]
     fn property_initialized_subscription_cache_tracks_listener_lifecycle() {
         let mut context = Context::new();
-        let bit = 1_u32 << <InitConstant as Property<InitializationPerson>>::id();
+        let property_id = <InitConstant as Property<InitializationPerson>>::id();
 
         let first = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions
-                & bit,
-            bit
-        );
+        assert!(context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .get(property_id));
 
         let second = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
         assert!(context.unsubscribe_from_event(&first));
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions
-                & bit,
-            bit
-        );
+        assert!(context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .get(property_id));
 
         assert!(context.unsubscribe_from_event(&second));
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions
-                & bit,
-            0
-        );
+        assert!(!context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .get(property_id));
     }
 
     #[test]
@@ -525,18 +518,15 @@ mod tests {
         let listener = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
-        let bit = 1_u32 << <InitConstant as Property<InitializationPerson>>::id();
+        let property_id = <InitConstant as Property<InitializationPerson>>::id();
 
         assert!(context.unsubscribe_from_event(&listener));
         assert!(!context.unsubscribe_from_event(&listener));
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions
-                & bit,
-            0
-        );
+        assert!(!context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .get(property_id));
     }
 
     #[test]
@@ -546,13 +536,11 @@ mod tests {
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitDerived>| {},
         );
 
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions,
-            0
-        );
+        assert!(context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .is_empty());
     }
 
     #[test]
@@ -565,15 +553,12 @@ mod tests {
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitRequired>| {},
         );
 
-        let expected = (1_u32 << <InitConstant as Property<InitializationPerson>>::id())
-            | (1_u32 << InitRequired::id());
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions,
-            expected
-        );
+        let subscriptions = &context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions;
+        assert!(subscriptions.get(<InitConstant as Property<InitializationPerson>>::id()));
+        assert!(subscriptions.get(InitRequired::id()));
     }
 
     #[test]
@@ -583,20 +568,16 @@ mod tests {
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
 
-        assert_ne!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions,
-            0
-        );
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<OtherInitializationPerson>()
-                .property_initialized_event_subscriptions,
-            0
-        );
+        assert!(!context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .is_empty());
+        assert!(context
+            .entity_store
+            .get_property_store::<OtherInitializationPerson>()
+            .property_initialized_event_subscriptions
+            .is_empty());
     }
 
     #[test]
@@ -604,13 +585,11 @@ mod tests {
         let mut context = Context::new();
         context.subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
 
-        assert_eq!(
-            context
-                .entity_store
-                .get_property_store::<InitializationPerson>()
-                .property_initialized_event_subscriptions,
-            0
-        );
+        assert!(context
+            .entity_store
+            .get_property_store::<InitializationPerson>()
+            .property_initialized_event_subscriptions
+            .is_empty());
     }
 
     #[test]

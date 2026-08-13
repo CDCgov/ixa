@@ -4,6 +4,7 @@ use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::{Mutex, OnceLock};
 
+use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_id;
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
@@ -132,10 +133,10 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
         &self,
         context: &mut Context,
         entity_id: EntityId<E>,
-        subscription_mask: u32,
+        subscriptions: &BitSet,
     ) {
         self.inner
-            .emit_initialized_events(context, entity_id, subscription_mask);
+            .emit_initialized_events(context, entity_id, subscriptions);
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
