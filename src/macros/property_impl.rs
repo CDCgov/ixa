@@ -8,9 +8,6 @@ For the most common cases, use the [`define_property!`][macro@crate::define_prop
 with the standard derives required by the [`Property`][crate::entity::property::Property] trait and implements [`Property`][crate::entity::property::Property] (via
 [`impl_property!`][macro@crate::impl_property]) for you.
 
-An entity may have at most 32 registered properties, including explicit, constant, derived, and
-multi-properties. If there is a use-case for more properties, we can increase this cap.
-
 ```rust,ignore
 define_property!(struct Age(u8), Person);
 define_property!(struct Location(City, State), Person);
@@ -197,8 +194,6 @@ impl_property!(
 /// ### Notes
 ///
 /// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, and `Copy`.
-/// - An entity may have at most 32 registered properties, including explicit, constant, derived,
-///   and multi-properties.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` as the first optional argument to suppress the default

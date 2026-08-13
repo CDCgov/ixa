@@ -27,6 +27,7 @@ use super::entity::{Entity, EntityId};
 use super::events::PropertyInitializedEvent;
 use super::property::{Property, PropertyInitializationKind};
 use super::property_store::PropertyStore;
+use crate::data_structures::bit_set::BitSet;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
 
@@ -58,7 +59,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
         &self,
         context: &mut Context,
         entity_id: EntityId<E>,
-        subscription_mask: u32,
+        subscriptions: &BitSet,
     );
 
     /// Gets the tuple of property values for the given entity.
@@ -89,7 +90,7 @@ impl<E: Entity> PropertyList<E> for () {
         &self,
         _context: &mut Context,
         _entity_id: EntityId<E>,
-        _subscription_mask: u32,
+        _subscriptions: &BitSet,
     ) {
     }
 
@@ -117,7 +118,7 @@ impl<E: Entity + Copy> PropertyList<E> for E {
         &self,
         _context: &mut Context,
         _entity_id: EntityId<E>,
-        _subscription_mask: u32,
+        _subscriptions: &BitSet,
     ) {
     }
 
@@ -186,9 +187,9 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         &self,
         context: &mut Context,
         entity_id: EntityId<E>,
-        subscription_mask: u32,
+        subscriptions: &BitSet,
     ) {
-        if subscription_mask & (1_u32 << P::id()) != 0 {
+        if subscriptions.get(P::id()) {
             emit_initialized_event(context, entity_id, self.0);
         }
     }
@@ -238,10 +239,10 @@ macro_rules! impl_property_list {
                     &self,
                     context: &mut Context,
                     entity_id: EntityId<E>,
-                    subscription_mask: u32,
+                    subscriptions: &BitSet,
                 ) {
                     #(
-                        if subscription_mask & (1_u32 << P~N::id()) != 0 {
+                        if subscriptions.get(P~N::id()) {
                             emit_initialized_event(context, entity_id, self.N);
                         }
                     )*
