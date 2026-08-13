@@ -558,6 +558,13 @@ macro_rules! impl_property {
                 std::any::TypeId::of::<Self>()
             },
 
+            // query_identity_fn
+            {
+                $crate::entity::multi_property::intern_query_identity_raw::<$entity>(&[
+                    <Self as $crate::entity::property::Property<$entity>>::type_id(),
+                ])
+            },
+
             // display_impl
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
 
@@ -684,6 +691,15 @@ macro_rules! impl_property {
             {
                 std::any::TypeId::of::<Self>()
             },
+            {
+                let mut type_ids = [
+                    $(
+                        <$dependency as $crate::entity::property::Property<$entity>>::type_id(),
+                    )+
+                ];
+                type_ids.sort_unstable();
+                $crate::entity::multi_property::intern_query_identity_raw::<$entity>(&type_ids)
+            },
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
@@ -743,6 +759,7 @@ macro_rules! impl_property {
         $value_from_query_parts_fn:expr,
         $query_parts_for_value_fn:expr,
         $type_id_fn:expr,          // Code that returns the logical type ID for this property
+        $query_identity_fn:expr,   // Code that resolves this property's profiling query identity
         $display_impl:expr,        // A function that takes a value and returns a string representation of this property
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
@@ -805,11 +822,7 @@ macro_rules! impl_property {
             fn query_identity_id() -> usize {
                 static IDENTITY: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
-                *IDENTITY.get_or_init(|| {
-                    $crate::entity::multi_property::intern_query_identity_raw::<$entity>(&[
-                        <Self as $crate::entity::property::Property<$entity>>::type_id(),
-                    ])
-                })
+                *IDENTITY.get_or_init(|| $query_identity_fn)
             }
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {

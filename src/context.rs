@@ -16,7 +16,11 @@ use crate::entity::multi_property::emit_pre_main_diagnostics;
 use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+#[cfg(feature = "profiling")]
+use crate::entity::query::ResolvedQuery;
 use crate::entity::Entity;
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 use crate::execution_stats::{
     log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
     ExecutionStatistics,
@@ -192,12 +196,40 @@ impl Context {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profile_handle(&self, identity: QueryIdentityId) -> QueryProfileHandle<'_> {
-        QueryProfileHandle::new(&self.execution_profiler.query_profiler, identity)
+    pub(crate) fn query_profile_handle<E: Entity>(
+        &self,
+        resolved: ResolvedQuery,
+    ) -> QueryProfileHandle<'_> {
+        let index_type =
+            resolved
+                .index_property_id
+                .map_or(PropertyIndexType::Unindexed, |property_id| {
+                    self.entity_store
+                        .get_property_store::<E>()
+                        .property_index_type(property_id)
+                });
+        QueryProfileHandle::new(
+            &self.execution_profiler.query_profiler,
+            resolved.identity,
+            index_type,
+        )
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profiling_snapshot(&self) -> Vec<(&'static str, QueryProfilingData)> {
+    pub(crate) fn seed_query_profile(
+        &self,
+        identity: QueryIdentityId,
+        index_type: PropertyIndexType,
+    ) {
+        self.execution_profiler
+            .query_profiler
+            .seed(identity, index_type);
+    }
+
+    #[cfg(feature = "profiling")]
+    pub(crate) fn query_profiling_snapshot(
+        &self,
+    ) -> Vec<(&'static str, PropertyIndexType, QueryProfilingData)> {
         self.execution_profiler.query_profiler.snapshot()
     }
 
@@ -205,10 +237,11 @@ impl Context {
     pub(crate) fn query_profiling_data(
         &self,
         identity: QueryIdentityId,
+        index_type: PropertyIndexType,
     ) -> Option<QueryProfilingData> {
         self.execution_profiler
             .query_profiler
-            .query_profiling_data(identity)
+            .query_profiling_data(identity, index_type)
     }
 
     #[inline]

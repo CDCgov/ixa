@@ -6,6 +6,8 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::events::{EntityCreatedEvent, PartialPropertyChangeEventBox};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndexType};
 use crate::entity::multi_property::multi_property_id_for_property_type_id;
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
 use crate::entity::query::Query;
@@ -46,6 +48,8 @@ where
         );
 
     if current_satisfies_request {
+        #[cfg(feature = "profiling")]
+        context.seed_query_profile(QueryIdentityId::from_raw(P::query_identity_id()), current);
         return;
     }
 
@@ -64,6 +68,9 @@ where
         .entity_store
         .get_property_store_mut::<E>()
         .install_property_index::<P>(Some(new_index));
+
+    #[cfg(feature = "profiling")]
+    context.seed_query_profile(QueryIdentityId::from_raw(P::query_identity_id()), requested);
 }
 
 fn handle_periodic_value_change_count_event<E, PL, P, F>(
@@ -494,7 +501,7 @@ impl ContextEntitiesExt for Context {
     ) {
         let resolved = query.resolved_query();
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(resolved.identity);
+        let profile = self.query_profile_handle::<E>(resolved);
 
         // The fast path for indexed queries.
         //
@@ -548,7 +555,7 @@ impl ContextEntitiesExt for Context {
     fn query_entity_count<E: Entity, Q: Query<E>>(&self, query: Q) -> usize {
         let resolved = query.resolved_query();
         #[cfg(feature = "profiling")]
-        let _query_profile_scope = self.query_profile_handle(resolved.identity).scope();
+        let _query_profile_scope = self.query_profile_handle::<E>(resolved).scope();
 
         // The fast path for indexed queries.
         //
@@ -578,7 +585,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query.resolved_query().identity)
+            .query_profile_handle::<E>(query.resolved_query())
             .scope();
 
         if query.is_empty_query() {
@@ -610,7 +617,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query.resolved_query().identity)
+            .query_profile_handle::<E>(query.resolved_query())
             .scope();
 
         if query.is_empty_query() {
@@ -641,7 +648,7 @@ impl ContextEntitiesExt for Context {
     {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query.resolved_query().identity)
+            .query_profile_handle::<E>(query.resolved_query())
             .scope();
 
         if query.is_empty_query() {
@@ -672,7 +679,7 @@ impl ContextEntitiesExt for Context {
 
     fn query<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySet<E> {
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(query.resolved_query().identity);
+        let profile = self.query_profile_handle::<E>(query.resolved_query());
         let result = query.new_query_result(self);
         #[cfg(feature = "profiling")]
         let result = result.with_query_profile(profile);
@@ -681,7 +688,7 @@ impl ContextEntitiesExt for Context {
 
     fn query_result_iterator<E: Entity, Q: Query<E>>(&self, query: Q) -> EntitySetIterator<E> {
         #[cfg(feature = "profiling")]
-        let profile = self.query_profile_handle(query.resolved_query().identity);
+        let profile = self.query_profile_handle::<E>(query.resolved_query());
         let result = query.new_query_result_iterator(self);
         #[cfg(feature = "profiling")]
         let result = result.with_query_profile(profile);
@@ -691,7 +698,7 @@ impl ContextEntitiesExt for Context {
     fn match_entity<E: Entity, Q: Query<E>>(&self, entity_id: EntityId<E>, query: Q) -> bool {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query.resolved_query().identity)
+            .query_profile_handle::<E>(query.resolved_query())
             .scope();
         query.match_entity(entity_id, self)
     }
@@ -699,7 +706,7 @@ impl ContextEntitiesExt for Context {
     fn filter_entities<E: Entity, Q: Query<E>>(&self, entities: &mut Vec<EntityId<E>>, query: Q) {
         #[cfg(feature = "profiling")]
         let _query_profile_scope = self
-            .query_profile_handle(query.resolved_query().identity)
+            .query_profile_handle::<E>(query.resolved_query())
             .scope();
         query.filter_entities(entities, self);
     }
@@ -1814,14 +1821,14 @@ mod tests {
     #[cfg(feature = "profiling")]
     fn query_count(context: &Context, identity: QueryIdentityId) -> Option<usize> {
         context
-            .query_profiling_data(identity)
+            .query_profiling_data(identity, PropertyIndexType::Unindexed)
             .map(|profiling_data| profiling_data.count)
     }
 
     #[cfg(feature = "profiling")]
     fn query_total(context: &Context, identity: QueryIdentityId) -> Option<Duration> {
         context
-            .query_profiling_data(identity)
+            .query_profiling_data(identity, PropertyIndexType::Unindexed)
             .map(|profiling_data| profiling_data.total)
     }
 
@@ -1879,9 +1886,11 @@ mod tests {
             1
         );
         assert_eq!(query_count(&context, identity), Some(1));
-        let profiling_data = context.query_profiling_data(identity).unwrap();
-        assert_eq!(profiling_data.min, profiling_data.total);
-        assert_eq!(profiling_data.max, profiling_data.total);
+        let profiling_data = context
+            .query_profiling_data(identity, PropertyIndexType::Unindexed)
+            .unwrap();
+        assert_eq!(profiling_data.min, Some(profiling_data.total));
+        assert_eq!(profiling_data.max, Some(profiling_data.total));
 
         let mut iter =
             context.query_result_iterator(with!(ProfilingBoundaryPerson, ProfilingBoundaryAge(42)));
@@ -2111,6 +2120,123 @@ mod tests {
         assert_eq!(people, vec![person]);
 
         assert_eq!(query_count(&context, identity), Some(3));
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn configured_index_type_splits_profiles_across_runtime_changes() {
+        let mut context = Context::new();
+        let person = context
+            .add_entity(with!(
+                ProfilingIndexedCountPerson,
+                ProfilingIndexedCountAge(42)
+            ))
+            .unwrap();
+        let identity = with!(ProfilingIndexedCountPerson, ProfilingIndexedCountAge(0))
+            .resolved_query()
+            .identity;
+
+        assert_eq!(
+            context.query_entity_count(with!(
+                ProfilingIndexedCountPerson,
+                ProfilingIndexedCountAge(42)
+            )),
+            1
+        );
+        context.index_property_counts::<ProfilingIndexedCountPerson, ProfilingIndexedCountAge>();
+        assert!(context.match_entity(
+            person,
+            with!(ProfilingIndexedCountPerson, ProfilingIndexedCountAge(42))
+        ));
+        context.index_property::<ProfilingIndexedCountPerson, ProfilingIndexedCountAge>();
+        assert!(context.match_entity(
+            person,
+            with!(ProfilingIndexedCountPerson, ProfilingIndexedCountAge(42))
+        ));
+
+        let unindexed = context
+            .query_profiling_data(identity, PropertyIndexType::Unindexed)
+            .unwrap();
+        let value_count = context
+            .query_profiling_data(identity, PropertyIndexType::ValueCountIndex)
+            .unwrap();
+        let full = context
+            .query_profiling_data(identity, PropertyIndexType::FullIndex)
+            .unwrap();
+        assert_eq!(unindexed.count, 1);
+        assert_eq!(value_count.count, 1);
+        assert_eq!(full.count, 1);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn unused_single_and_multi_property_indexes_seed_profiles() {
+        let mut single_context = Context::new();
+        single_context
+            .index_property_counts::<ProfilingIndexedIteratorPerson, ProfilingIndexedIteratorAge>();
+        single_context
+            .index_property_counts::<ProfilingIndexedIteratorPerson, ProfilingIndexedIteratorAge>();
+        let single_identity = with!(
+            ProfilingIndexedIteratorPerson,
+            ProfilingIndexedIteratorAge(0)
+        )
+        .resolved_query()
+        .identity;
+        let single = single_context
+            .query_profiling_data(single_identity, PropertyIndexType::ValueCountIndex)
+            .unwrap();
+        assert_eq!(single.count, 0);
+        assert_eq!(single.min, None);
+        assert_eq!(single.max, None);
+
+        let mut multi_context = Context::new();
+        multi_context.index_property::<
+            ProfilingIndexedFilterPerson,
+            (ProfilingIndexedFilterAge, ProfilingIndexedFilterCounty),
+        >();
+        let multi_identity = with!(
+            ProfilingIndexedFilterPerson,
+            ProfilingIndexedFilterCounty(0),
+            ProfilingIndexedFilterAge(0)
+        )
+        .resolved_query()
+        .identity;
+        let multi = multi_context
+            .query_profiling_data(multi_identity, PropertyIndexType::FullIndex)
+            .unwrap();
+        assert_eq!(multi.count, 0);
+        assert_eq!(multi.min, None);
+        assert_eq!(multi.max, None);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn component_index_does_not_mark_joint_query_as_indexed() {
+        let mut context = Context::new();
+        context.index_property::<ProfilingIndexedFilterPerson, ProfilingIndexedFilterAge>();
+        context
+            .add_entity(with!(
+                ProfilingIndexedFilterPerson,
+                ProfilingIndexedFilterAge(42),
+                ProfilingIndexedFilterCounty(1)
+            ))
+            .unwrap();
+        let query = with!(
+            ProfilingIndexedFilterPerson,
+            ProfilingIndexedFilterAge(42),
+            ProfilingIndexedFilterCounty(1)
+        );
+        let identity = query.resolved_query().identity;
+
+        assert_eq!(context.query_entity_count(query), 1);
+
+        let data = context
+            .query_profiling_data(identity, PropertyIndexType::Unindexed)
+            .unwrap();
+        assert_eq!(data.count, 1);
+        assert!(context
+            .query_profiling_data(identity, PropertyIndexType::FullIndex)
+            .is_none());
     }
 
     #[cfg(feature = "profiling")]
