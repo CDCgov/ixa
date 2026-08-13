@@ -311,7 +311,8 @@ impl ContextEntitiesExt for Context {
         }
 
         // Now that we know we will succeed, we create the entity.
-        let new_entity_id = self.entity_store.new_entity_id::<E>();
+        let (new_entity_id, entity_created_event_subscribed) =
+            self.entity_store.new_entity_id::<E>();
 
         // Assign the properties in the list to the new entity.
         // This does not generate a property change event.
@@ -322,11 +323,18 @@ impl ContextEntitiesExt for Context {
 
         // All explicit values are now available, so derived and multi-property dispatchers see
         // the entity's complete initialized state.
-        let index_count = self
-            .entity_store
-            .get_property_store::<E>()
-            .index_new_entity_fns
-            .len();
+
+        // We simultaneously fetch the index count and set of property initialized event
+        // subscriptions from the entity store without retaining a borrow of the store.
+        let (index_count, property_initialized_event_subscriptions) = {
+            let property_store = self.entity_store.get_property_store::<E>();
+            (
+                property_store.index_new_entity_fns.len(),
+                property_store
+                    .property_initialized_event_subscriptions
+                    .clone(),
+            )
+        };
 
         for index in 0..index_count {
             let dispatch = self
@@ -340,8 +348,17 @@ impl ContextEntitiesExt for Context {
             dispatch(self, new_entity_id);
         }
 
-        // Emit an `EntityCreatedEvent<Entity>`.
-        self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
+        if !property_initialized_event_subscriptions.is_empty() {
+            property_list.emit_initialized_events(
+                self,
+                new_entity_id,
+                &property_initialized_event_subscriptions,
+            );
+        }
+
+        if entity_created_event_subscribed {
+            self.emit_event(EntityCreatedEvent::<E>::new(new_entity_id));
+        }
 
         Ok(new_entity_id)
     }
