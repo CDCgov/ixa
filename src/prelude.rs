@@ -1,3 +1,6 @@
+pub use crate::calendar::{
+    Calendar, CalendarError, ContextCalendarExt, Date, Datelike, Days, Months, Weekday,
+};
 pub use crate::context::{Context, EventListenerId};
 pub use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
 pub use crate::entity::property::{IndexableProperty, Property};
