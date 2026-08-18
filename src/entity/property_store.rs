@@ -75,6 +75,25 @@ where
 static NEXT_PROPERTY_ID: LazyLock<Mutex<HashMap<usize, usize>>> =
     LazyLock::new(|| Mutex::new(HashMap::default()));
 
+/// Entity-scoped names for logical property identities, used to construct
+/// query-profiling labels without query-specific name collection.
+#[cfg(feature = "profiling")]
+static PROPERTY_NAMES: LazyLock<Mutex<HashMap<(usize, TypeId), &'static str>>> =
+    LazyLock::new(|| Mutex::new(HashMap::default()));
+
+#[cfg(feature = "profiling")]
+pub(crate) fn registered_property_name(entity_id: usize, property_type_id: TypeId) -> &'static str {
+    PROPERTY_NAMES
+        .lock()
+        .unwrap()
+        .get(&(entity_id, property_type_id))
+        .unwrap_or_else(|| {
+            panic!(
+                "No registered property name for entity ID {entity_id} and logical property type ID {property_type_id:?}"
+            )
+        })
+}
+
 /// A container struct to hold the (global) metadata for a single property.
 ///
 /// At program startup (before `main()`, using ctors) we compute metadata for all properties
@@ -143,6 +162,19 @@ pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     // Ensure the ID of the property type is initialized.
     let property_index = P::id();
+
+    #[cfg(feature = "profiling")]
+    {
+        let key = (E::id(), P::type_id());
+        let mut names = PROPERTY_NAMES.lock().unwrap();
+        if let Some(existing) = names.insert(key, P::name()) {
+            assert_eq!(
+                existing,
+                P::name(),
+                "conflicting names for one logical property identity"
+            );
+        }
+    }
 
     // Registers the property with the entity type.
     register_property_with_entity(

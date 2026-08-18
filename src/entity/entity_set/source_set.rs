@@ -306,6 +306,14 @@ impl<'a, E: Entity, P: Property<E>> Iterator for ConcretePropertySource<'a, E, P
         // The population is exhausted.
         None
     }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        for _ in 0..n {
+            self.next()?;
+        }
+        self.next()
+    }
 }
 
 /// Represents a concrete source of `EntityId<E>` values used by `EntitySet`.
@@ -532,6 +540,13 @@ mod tests {
             .unwrap()
             .into_iter()
             .collect::<Vec<_>>();
+        {
+            let mut unindexed_iter = SourceSet::<Person>::new::<Age>(Age(2), &context)
+                .unwrap()
+                .into_iter();
+            assert_eq!(unindexed_iter.nth(1), Some(EntityId::new(2)));
+            assert_eq!(unindexed_iter.next(), None);
+        }
 
         context.index_property::<Person, Age>();
         assert!(matches!(

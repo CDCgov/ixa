@@ -129,6 +129,15 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     #[must_use]
     fn id() -> usize;
 
+    /// Returns the process-local profiling identity for this singleton property query.
+    ///
+    /// This is macro support and is not a stable identifier. Property implementations generated
+    /// by Ixa macros override it with a per-concrete-implementation cache.
+    #[doc(hidden)]
+    fn query_identity_id() -> usize {
+        panic!("Property implementations must be created with an Ixa property macro")
+    }
+
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
     /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.
     ///

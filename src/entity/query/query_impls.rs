@@ -1,17 +1,19 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 
 use seq_macro::seq;
 
 use crate::entity::entity_set::{EntitySet, EntitySetIterator, SourceSet};
 use crate::entity::index::IndexSetResult;
+#[cfg(feature = "profiling")]
+use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
-use crate::entity::query::QueryInternal;
+use crate::entity::query::{QueryInternal, ResolvedQuery};
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::Context;
 
 impl<E: Entity> QueryInternal<E> for () {
     type QueryParts<'a>
-        = [&'a dyn std::any::Any; 0]
+        = [&'a dyn Any; 0]
     where
         Self: 'a;
 
@@ -19,8 +21,12 @@ impl<E: Entity> QueryInternal<E> for () {
         Vec::new()
     }
 
-    fn multi_property_id(&self) -> Option<usize> {
-        None
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: None,
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(E::all_query_identity()),
+        }
     }
 
     fn is_empty_query(&self) -> bool {
@@ -55,7 +61,7 @@ impl<E: Entity> QueryInternal<E> for () {
 // This allows `context.sample_entity(Rng, Person)` instead of `context.sample_entity(Rng, ())`.
 impl<E: Entity> QueryInternal<E> for E {
     type QueryParts<'a>
-        = [&'a dyn std::any::Any; 0]
+        = [&'a dyn Any; 0]
     where
         Self: 'a;
 
@@ -63,8 +69,12 @@ impl<E: Entity> QueryInternal<E> for E {
         Vec::new()
     }
 
-    fn multi_property_id(&self) -> Option<usize> {
-        None
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: None,
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(E::all_query_identity()),
+        }
     }
 
     fn is_empty_query(&self) -> bool {
@@ -106,8 +116,12 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
         vec![P1::type_id()]
     }
 
-    fn multi_property_id(&self) -> Option<usize> {
-        Some(P1::id())
+    fn resolved_query(&self) -> ResolvedQuery {
+        ResolvedQuery {
+            index_property_id: Some(P1::id()),
+            #[cfg(feature = "profiling")]
+            identity: QueryIdentityId::from_raw(P1::query_identity_id()),
+        }
     }
 
     fn query_parts(&self) -> Self::QueryParts<'_> {
@@ -351,6 +365,7 @@ macro_rules! impl_query {
                         }
                     )*
                 }
+
             }
         });
     }

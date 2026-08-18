@@ -268,6 +268,7 @@ impl EntityStore {
     }
 
     #[must_use]
+    #[inline]
     pub fn get_property_store<E: Entity>(&self) -> &PropertyStore<E> {
         let index = E::id();
         let record = self.items
