@@ -33,6 +33,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
+use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEventBox;
@@ -235,6 +236,12 @@ pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
     let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
     let candidate = guard.entry(E::id()).or_insert_with(|| 0);
 
+    // The property may have been initialized while this call waited for the lock.
+    let existing = property_id.load(Ordering::Acquire);
+    if existing != usize::MAX {
+        return existing;
+    }
+
     // Try to claim the candidate index. Here we guard against the potential race condition that
     // another instance of this plugin in another thread just initialized the index prior to us
     // obtaining the lock. If the index has been initialized beneath us, we do not update
@@ -260,6 +267,13 @@ pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
 pub struct PropertyStore<E: Entity> {
     /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn PropertyValueStore<E>>`
     items: Vec<Box<dyn PropertyValueStore<E>>>,
+
+    /// Set of properties that currently have `PropertyInitializedEvent` subscribers.
+    ///
+    /// `PropertyList::emit_initialized_events` reads this in the hot path to skip
+    /// per-property initialization-event work unless a handler is registered as a performance
+    /// optimization.
+    pub(in crate::entity) property_initialized_event_subscriptions: BitSet,
 
     /// One entry for every property whose `PropertyValueStoreCore` currently has an index.
     /// The property ID supports removal without relying on deduplicable function addresses.
@@ -301,6 +315,7 @@ impl<E: Entity> PropertyStore<E> {
 
         Self {
             items,
+            property_initialized_event_subscriptions: BitSet::new(num_items),
             index_new_entity_fns: Vec::new(),
         }
     }
