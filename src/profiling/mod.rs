@@ -169,48 +169,13 @@ mod reporting;
 
 use std::path::Path;
 
-#[cfg(all(feature = "profiling", target_arch = "wasm32"))]
-use crate::execution_stats::get_high_res_time;
-
-/// A monotonic timestamp used to measure profiling intervals.
-///
-/// Only `now()` and `elapsed()` are part of the portable API shared by native
-/// and WASM targets.
-#[cfg(all(feature = "profiling", not(target_arch = "wasm32")))]
-pub type ProfilingInstant = std::time::Instant;
-
-/// A monotonic timestamp used to measure profiling intervals.
-///
-/// Only `now()` and `elapsed()` are part of the portable API shared by native
-/// and WASM targets.
-#[cfg(all(feature = "profiling", target_arch = "wasm32"))]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct ProfilingInstant(f64);
-
-#[cfg(all(feature = "profiling", target_arch = "wasm32"))]
-impl ProfilingInstant {
-    #[must_use]
-    pub fn now() -> Self {
-        Self(get_high_res_time())
-    }
-
-    #[must_use]
-    pub fn elapsed(&self) -> std::time::Duration {
-        let elapsed_milliseconds = get_high_res_time() - self.0;
-        if !elapsed_milliseconds.is_finite() || elapsed_milliseconds <= 0.0 {
-            return std::time::Duration::ZERO;
-        }
-
-        std::time::Duration::from_secs_f64(elapsed_milliseconds / 1000.0)
-    }
-}
-
 pub use computed_statistic::*;
 pub use data::*;
 pub use display::*;
 use file::write_profiling_data_to_file;
 pub use reporting::*;
 
+pub use crate::execution_stats::ProfilingInstant;
 use crate::{error, Context, ContextReportExt};
 
 #[cfg(all(test, feature = "profiling"))]
