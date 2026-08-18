@@ -194,11 +194,9 @@ fn print_formatted_row(row: &[String], col_widths: &[usize]) {
     let mut line = String::new();
     for (i, cell) in row.iter().enumerate() {
         if i == 0 {
-            write!(&mut line, "{:<width$} ", cell, width = col_widths[i] + 1)
-                .expect("writing to a String cannot fail");
+            write!(&mut line, "{:<width$} ", cell, width = col_widths[i] + 1).unwrap();
         } else {
-            write!(&mut line, "{:>width$} ", cell, width = col_widths[i] + 1)
-                .expect("writing to a String cannot fail");
+            write!(&mut line, "{:>width$} ", cell, width = col_widths[i] + 1).unwrap();
         }
     }
     print_table_line(&line);
