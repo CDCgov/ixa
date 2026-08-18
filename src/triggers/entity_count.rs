@@ -86,6 +86,7 @@ pub struct EntityCountTriggerEvent<E: Entity> {
 
 impl<E: Entity> EntityCountTrigger<E> {
     /// Creates a trigger that fires when the entity count reaches `threshold`.
+    /// The `threshold` must be positive.
     ///
     /// # Panics
     ///

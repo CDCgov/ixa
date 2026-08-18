@@ -13,8 +13,9 @@ use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
 /// Gets a mutable reference to the random number generator associated with the given
-/// [`RngId`]. If the RNG has not been used before, one will be created with the current
-/// base seed, which is zero until configured by [`ContextRandomExt::init_random`].
+/// [`RngId`]. The RNG is created lazily: the first time a given [`RngId`] is used, its
+/// generator is initialized from the current base seed. The base seed is `0` unless it
+/// has been set with [`ContextRandomExt::init_random`].
 ///
 /// Panics if RNG state is already borrowed by an active sampler callback.
 fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
@@ -71,8 +72,8 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the random number generator associated with the given
-    /// [`RngId`] by applying the specified sampler function. If the RNG has not been used
-    /// before, one will be created with the current base seed, which is zero until configured by
+    /// [`RngId`] by applying the specified sampler function. The RNG is created lazily from
+    /// the current base seed on first use. The base seed is `0` unless it has been set with
     /// [`ContextRandomExt::init_random`].
     ///
     /// # Panics
@@ -114,8 +115,8 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given [`RngId`]. If the RNG has not been used before, one will be
-    /// created with the current base seed, which is zero until configured by
+    /// associated with the given [`RngId`]. The RNG is created lazily from the current base seed
+    /// on first use. The base seed is `0` unless it has been set with
     /// [`ContextRandomExt::init_random`].
     ///
     /// # Panics
@@ -175,8 +176,8 @@ pub trait ContextRandomExt: ContextBase {
     ///
     /// # Panics
     ///
-    /// Panics if RNG state is already borrowed or if the converted probability
-    /// is outside `[0.0, 1.0]` or is NaN.
+    /// Panics if RNG state is already borrowed or if the provided probability `p`
+    /// is not in the interval `0.0..=1.0`.
     #[must_use]
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: impl Into<f64>) -> bool
     where
@@ -188,12 +189,13 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Draws a random entry out of the list provided in `weights`
     /// with the given weights using the generator associated with the
-    /// given [`RngId`].
+    /// given [`RngId`]. The weights must be nonnegative numbers with at
+    /// least one positive weight.
     ///
     /// # Panics
     ///
-    /// Panics if RNG state is already borrowed, or if `weights` is empty,
-    /// contains an invalid weight, or has no positive weights.
+    /// Panics if RNG state is already borrowed or if `weights` is not a list
+    /// of nonnegative numbers with at least one positive weight.
     #[must_use]
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
@@ -206,7 +208,7 @@ pub trait ContextRandomExt: ContextBase {
             + Weight,
     {
         let index = WeightedIndex::new(weights)
-            .expect("weights must contain at least one valid, positive weight");
+            .expect("weights must be nonnegative numbers with at least one positive weight");
         let mut rng = get_rng::<R>(self);
         index.sample(&mut *rng)
     }
@@ -452,5 +454,41 @@ mod test {
         context.init_random(42);
         let r: usize = context.sample_weighted(FooRng, &[0.1, 0.3, 0.4]);
         assert!(r < 3);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_empty_weights() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[] as &[f64]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_negative_weight() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[1.0, -1.0]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_all_zero_weights() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[0.0, 0.0]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_nan_weight() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[1.0, f64::NAN]);
     }
 }

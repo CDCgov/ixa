@@ -91,10 +91,7 @@ impl<const N: usize> rkyv::ser::Positional for EqualityBufferWriter<N> {
 
 impl<const N: usize, E: rkyv::rancor::Source> rkyv::ser::Writer<E> for EqualityBufferWriter<N> {
     fn write(&mut self, bytes: &[u8]) -> Result<(), E> {
-        let end = self
-            .pos
-            .checked_add(bytes.len())
-            .expect("Ixa internal error: serialized buffer position overflowed usize");
+        let end = self.pos + bytes.len();
         assert!(
             end <= N,
             "Ixa internal error: serialized form exceeded fixed buffer size: {} > {}",

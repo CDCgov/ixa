@@ -175,8 +175,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// # Panics
     ///
     /// Panics if `T` was not defined with
-    /// [`define_global_property!`](crate::define_global_property) or its manually
-    /// implemented registry metadata is inconsistent.
+    /// [`define_global_property!`](crate::define_global_property).
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
@@ -188,8 +187,7 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     /// # Panics
     ///
     /// Panics if `T` was not defined with
-    /// [`define_global_property!`](crate::define_global_property) or its manually
-    /// implemented registry metadata is inconsistent.
+    /// [`define_global_property!`](crate::define_global_property).
     #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,

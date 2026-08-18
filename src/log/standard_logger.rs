@@ -49,7 +49,7 @@ impl LogConfiguration {
                 // The global logger has not yet been initialized
                 self.root_handle = Some(
                     log4rs::init_config(new_config)
-                        .expect("failed to initialize the standard logger configuration"),
+                        .expect("failed to install Ixa's standard logger; a global logger may already be installed"),
                 );
             }
         }

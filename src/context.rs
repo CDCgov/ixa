@@ -210,7 +210,7 @@ impl Context {
         self.next_event_listener_id = self
             .next_event_listener_id
             .checked_add(1)
-            .unwrap_or_else(|| panic!("Ixa internal error: event listener id overflow"));
+            .expect("Ixa internal error: event listener id overflow");
 
         let handler_vec = self
             .event_handlers
@@ -558,8 +558,7 @@ impl Context {
     ///
     /// # Panics
     ///
-    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin)
-    /// or its manually implemented registry metadata is inconsistent.
+    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin).
     #[must_use]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let index = T::index_within_context();
@@ -595,8 +594,7 @@ impl Context {
     ///
     /// # Panics
     ///
-    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin)
-    /// or its manually implemented registry metadata is inconsistent.
+    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin).
     #[must_use]
     pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
         let index = T::index_within_context();
