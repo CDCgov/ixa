@@ -154,6 +154,9 @@ pub fn initialize_entity_index(plugin_index: &AtomicUsize) -> usize {
 pub struct EntityRecord {
     /// The total count of all entities of this type (i.e., the next index to assign).
     pub(crate) entity_count: usize,
+    /// Whether `EntityCreatedEvent` has any subscribers for this entity type. This is a performance
+    /// optimization for `add_entity`.
+    pub(in crate::entity) entity_created_event_subscribed: bool,
     /// Lazily initialized `Entity` instance.
     pub(crate) entity: OnceCell<Box<dyn Any>>,
     /// A type-erased `Box<PropertyStore<E>>`, lazily initialized.
@@ -164,6 +167,7 @@ impl EntityRecord {
     pub(crate) fn new() -> Self {
         Self {
             entity_count: 0,
+            entity_created_event_subscribed: false,
             entity: OnceCell::new(),
             property_store: OnceCell::new(),
         }
@@ -172,7 +176,7 @@ impl EntityRecord {
 
 /// A wrapper around a vector of entities.
 pub struct EntityStore {
-    items: Vec<EntityRecord>,
+    pub(in crate::entity) items: Vec<EntityRecord>,
 }
 
 impl Default for EntityStore {
@@ -237,13 +241,14 @@ impl EntityStore {
     }
 
     /// Creates a new `EntityId` for the given `Entity` type `E`.
-    /// Increments the entity counter and returns the next valid ID.
-    pub(crate) fn new_entity_id<E: Entity>(&mut self) -> EntityId<E> {
+    /// Increments the entity counter and returns the next valid ID together with whether
+    /// `EntityCreatedEvent<E>` has subscribers.
+    pub(crate) fn new_entity_id<E: Entity>(&mut self) -> (EntityId<E>, bool) {
         let index = E::id();
         let record = &mut self.items[index];
         let id = record.entity_count;
         record.entity_count += 1;
-        EntityId::new(id)
+        (EntityId::new(id), record.entity_created_event_subscribed)
     }
 
     /// Sets an entity count after a population import has validated that the target is empty.
@@ -276,6 +281,7 @@ impl EntityStore {
     }
 
     #[must_use]
+    #[inline]
     pub fn get_property_store<E: Entity>(&self) -> &PropertyStore<E> {
         let index = E::id();
         let record = self.items

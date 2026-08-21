@@ -829,6 +829,16 @@ macro_rules! impl_property {
                 $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
             }
 
+            fn query_identity_id() -> usize {
+                static IDENTITY: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+                *IDENTITY.get_or_init(|| {
+                    $crate::entity::multi_property::intern_query_identity_raw::<$entity>(&[
+                        <Self as $crate::entity::property::Property<$entity>>::type_id(),
+                    ])
+                })
+            }
+
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
                 ($collect_deps_fn)(result)
             }

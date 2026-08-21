@@ -115,6 +115,15 @@ pub trait Entity: Any + Default {
     #[must_use]
     fn id() -> usize;
 
+    /// Returns the process-local profiling identity for this entity's whole-population query.
+    ///
+    /// This is macro support and is not a stable identifier. Entity implementations generated
+    /// by Ixa macros override it with a per-concrete-type cache.
+    #[doc(hidden)]
+    fn all_query_identity() -> usize {
+        panic!("Entity implementations must be created with define_entity! or impl_entity!")
+    }
+
     /// Creates a new boxed instance of the item.
     #[must_use]
     fn new_boxed() -> Box<Self> {
