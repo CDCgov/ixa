@@ -13,12 +13,18 @@ use crate::random::{RngHolder, RngPlugin};
 use crate::{Context, ContextBase, RngId};
 
 /// Gets a mutable reference to the random number generator associated with the given
-/// [`RngId`]. If the Rng has not been used before, one will be created with the base seed
-/// you defined in `init`. Note that this will panic if `init` was not called yet.
+/// [`RngId`]. The RNG is created lazily: the first time a given [`RngId`] is used, its
+/// generator is initialized from the current base seed. The base seed is `0` unless it
+/// has been set with [`ContextRandomExt::init_random`].
+///
+/// Panics if RNG state is already borrowed by an active sampler callback.
 fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType> {
     let data_container = context.get_data(RngPlugin);
 
-    let rng_holders = data_container.rng_holders.try_borrow_mut().unwrap();
+    let rng_holders = data_container
+        .rng_holders
+        .try_borrow_mut()
+        .expect("RNG state is already borrowed; sampler callbacks must not recursively sample");
     RefMut::map(rng_holders, |holders| {
         holders
             .entry(TypeId::of::<R>())
@@ -39,7 +45,7 @@ fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType>
             })
             .rng
             .downcast_mut::<R::RngType>()
-            .unwrap()
+            .expect("Ixa internal error: RngId resolved to the wrong RNG type")
     })
 }
 
@@ -48,20 +54,32 @@ fn get_rng<R: RngId + 'static>(context: &impl ContextBase) -> RefMut<R::RngType>
 pub trait ContextRandomExt: ContextBase {
     /// Initializes the `RngPlugin` data container to store rngs as well as a base
     /// seed. Note that rngs are created lazily when `get_rng` is called.
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is currently borrowed by an active sampler callback.
     fn init_random(&mut self, base_seed: u64) {
         trace!("initializing random module");
         let data_container = self.get_data_mut(RngPlugin);
         data_container.base_seed = base_seed;
 
         // Clear any existing Rngs to ensure they get re-seeded when `get_rng` is called
-        let mut rng_map = data_container.rng_holders.try_borrow_mut().unwrap();
+        let mut rng_map = data_container
+            .rng_holders
+            .try_borrow_mut()
+            .expect("RNG state cannot be reinitialized while it is borrowed");
         rng_map.clear();
     }
 
     /// Gets a random sample from the random number generator associated with the given
-    /// [`RngId`] by applying the specified sampler function. If the Rng has not been used
-    /// before, one will be created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// [`RngId`] by applying the specified sampler function. The RNG is created lazily from
+    /// the current base seed on first use. The base seed is `0` unless it has been set with
+    /// [`ContextRandomExt::init_random`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed, such as when a sampler callback
+    /// recursively samples from the same context.
     #[must_use]
     fn sample<R: RngId + 'static, T>(
         &self,
@@ -97,9 +115,13 @@ pub trait ContextRandomExt: ContextBase {
     }
 
     /// Gets a random sample from the specified distribution using a random number generator
-    /// associated with the given [`RngId`]. If the Rng has not been used before, one will be
-    /// created with the base seed you defined in `set_base_random_seed`.
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    /// associated with the given [`RngId`]. The RNG is created lazily from the current base seed
+    /// on first use. The base seed is `0` unless it has been set with
+    /// [`ContextRandomExt::init_random`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed by an active sampler callback.
     #[must_use]
     fn sample_distr<R: RngId + 'static, T>(
         &self,
@@ -115,7 +137,11 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Gets a random sample within the range provided by `range`
     /// using the generator associated with the given [`RngId`].
-    /// Note that this will panic if `set_base_random_seed` was not called yet.
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed or if `range` is invalid for the
+    /// sampled type.
     #[must_use]
     fn sample_range<R: RngId + 'static, S, T>(&self, rng_id: R, range: S) -> T
     where
@@ -150,7 +176,8 @@ pub trait ContextRandomExt: ContextBase {
     ///
     /// # Panics
     ///
-    /// Panics if the converted probability is outside `[0.0, 1.0]` or is NaN.
+    /// Panics if RNG state is already borrowed or if the provided probability `p`
+    /// is not in the interval `0.0..=1.0`.
     #[must_use]
     fn sample_bool<R: RngId + 'static>(&self, rng_id: R, p: impl Into<f64>) -> bool
     where
@@ -162,8 +189,13 @@ pub trait ContextRandomExt: ContextBase {
 
     /// Draws a random entry out of the list provided in `weights`
     /// with the given weights using the generator associated with the
-    /// given [`RngId`].  Note that this will panic if
-    /// `set_base_random_seed` was not called yet.
+    /// given [`RngId`]. The weights must be nonnegative numbers with at
+    /// least one positive weight.
+    ///
+    /// # Panics
+    ///
+    /// Panics if RNG state is already borrowed or if `weights` is not a list
+    /// of nonnegative numbers with at least one positive weight.
     #[must_use]
     fn sample_weighted<R: RngId + 'static, T>(&self, _rng_id: R, weights: &[T]) -> usize
     where
@@ -175,7 +207,8 @@ pub trait ContextRandomExt: ContextBase {
             + PartialOrd
             + Weight,
     {
-        let index = WeightedIndex::new(weights).unwrap();
+        let index = WeightedIndex::new(weights)
+            .expect("weights must be nonnegative numbers with at least one positive weight");
         let mut rng = get_rng::<R>(self);
         index.sample(&mut *rng)
     }
@@ -421,5 +454,41 @@ mod test {
         context.init_random(42);
         let r: usize = context.sample_weighted(FooRng, &[0.1, 0.3, 0.4]);
         assert!(r < 3);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_empty_weights() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[] as &[f64]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_negative_weight() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[1.0, -1.0]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_all_zero_weights() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[0.0, 0.0]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "weights must be nonnegative numbers with at least one positive weight"
+    )]
+    fn sample_weighted_panics_for_nan_weight() {
+        let context = Context::new();
+        let _ = context.sample_weighted(FooRng, &[1.0, f64::NAN]);
     }
 }

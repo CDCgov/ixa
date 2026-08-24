@@ -156,6 +156,7 @@ pub trait GlobalProperty: Any {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
+        // Splitting any string, including an empty one, always yields at least one segment.
         full.rsplit("::").next().unwrap()
     }
 
@@ -170,13 +171,23 @@ pub trait ContextGlobalPropertiesExt: ContextBase {
     ///
     /// # Errors
     /// Will return an error if an attempt is made to change a value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with
+    /// [`define_global_property!`](crate::define_global_property).
     fn set_global_property_value<T: GlobalProperty + 'static>(
         &mut self,
         property: T,
         value: T::Value,
     ) -> Result<(), IxaError>;
 
-    /// Return value of global property T
+    /// Return value of global property T.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with
+    /// [`define_global_property!`](crate::define_global_property).
     #[must_use]
     fn get_global_property_value<T: GlobalProperty + 'static>(
         &self,
