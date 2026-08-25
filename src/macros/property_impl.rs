@@ -35,8 +35,9 @@ optional `impl_eq_hash = ...` argument with one of the following values: `Eq`, `
 `neither`.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
-specify the visibility. A `pub` visibility is added automatically to the struct
-and to inner fields of tuple structs in the expansion.
+specify the visibility. A `pub` visibility is added automatically to the type
+and its fields. Pass `private = true` as the first optional argument to make
+both the generated type and its fields module-private instead.
 
 # [`impl_property!`][macro@crate::impl_property]
 
@@ -60,10 +61,9 @@ Some examples:
 ```rust,ignore
 define_entity!(Person);
 
-// The `define_property!` automatically adds `pub` visibility to the struct and its tuple fields. If
-// we want to restrict the visibility of our `Property` type, we can use the `impl_property!` macro
-// instead. The only catch is, we have to remember to derive or implement the traits required by
-// `Property`. We also derive `Eq` and `Hash` here so the property can be indexed.
+// `define_property!` supports private types directly, but a manual declaration gives us control
+// over all aspects of the type. We have to derive or implement the traits required by `Property`.
+// We also derive `Eq` and `Hash` here so the property can be indexed.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct Age(pub u8);
 impl_property!(Age, Person);
@@ -194,13 +194,53 @@ impl_property!(
 /// ### Notes
 ///
 /// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, and `Copy`.
+/// - The macro controls visibility for the generated type and all of its fields. Omit visibility
+///   modifiers from the declaration: generated types and fields are public by default, while
+///   `private = true` as the first optional argument makes them module-private.
+/// - `private = false` is not supported; omit the option to use the public default.
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
-/// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` as the first optional argument to suppress the default
-///   `Eq`/`Hash` derives and switch to generated or user-supplied implementations.
+/// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` after `private = true`, when present, to
+///   suppress the default `Eq`/`Hash` derives and switch to generated or user-supplied implementations.
 /// - Remaining optional arguments follow the same ordering as [`impl_property!`][macro@crate::impl_property].
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
 ///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
+///
+/// Private properties can be used inside the module where they are declared, but cannot be named
+/// from outside that module:
+///
+/// ```compile_fail,E0603
+/// mod model {
+///     use ixa::{define_entity, define_property};
+///
+///     define_entity!(Person);
+///     define_property!(struct Age(u8), Person, private = true);
+/// }
+///
+/// let _ = model::Age(42);
+/// ```
+///
+/// `private = false` is rejected by this macro:
+///
+/// ```compile_fail
+/// # use ixa::{define_entity, define_property};
+/// # define_entity!(Person);
+/// define_property!(struct InvalidFalse(u8), Person, private = false);
+/// ```
+///
+/// Placing other options before `private = true` is also rejected:
+///
+/// ```compile_fail
+/// # use ixa::{define_entity, define_property};
+/// # define_entity!(Person);
+/// define_property!(
+///     struct InvalidOrder(u8),
+///     Person,
+///     impl_eq_hash = both,
+///     default_const = InvalidOrder(0),
+///     private = true
+/// );
+/// ```
 #[macro_export]
 macro_rules! define_property {
     // Implementation Notes
@@ -210,17 +250,108 @@ macro_rules! define_property {
     // 1. Have a single public match branch per type form with `$(, impl_eq_hash =
     //    $impl_eq_hash:ident)?`, but explicitly list all the keyword options. This option disallows
     //    the `$(, $($extra:tt)+)*` pattern for the tail.
-    // 2. Have two branches per type form, one with the `impl_eq_hash = ...` keyword present and one
-    //    with it absent, and use the `$(, $($extra:tt)+)*` pattern for the tail. This duplicates the
-    //    number of public match arms, but it allows us to keep the keyword arguments defined in
-    //    `impl_property!` instead of repeated throughout the code.
-    // 3. Use a proc macro or "TT munching", both of which are more heavy weight.
+    // 2. Have separate branches per type form with and without `impl_eq_hash = ...`, and use the
+    //    `$(, $($extra:tt)+)*` pattern for the tail. The `private = true` forms mirror these branches
+    //    so visibility and `impl_eq_hash` remain ordered declaration options. This duplicates match
+    //    arms, but it allows us to keep the remaining keyword arguments defined in `impl_property!`
+    //    instead of repeated throughout the code.
+    // 3. Use a proc macro or a full TT-munching definition parser, both of which are more heavy
+    //    weight.
     //
     // We choose the second option. Unfortunately, this doesn't completely eliminate repetition of
     // the list of keyword arguments. We still have them in the
     // `impl_derived_property!(@with_option_display_default ...)` and
     // `impl_property!(@with_option_display_default ...)` subcommands.
 
+    // Scan forwarded `name = expression` options one at a time so visibility diagnostics do not
+    // duplicate the option vocabulary or depend on its ordering.
+    (@private_false_error) => {
+        compile_error!("`private` only accepts `true`; omit `private` to use public visibility");
+    };
+    (@misplaced_private_error) => {
+        compile_error!("`private = true` must be the first optional argument");
+    };
+    (@checked_impl [$($on_valid:tt)*]; $($options:tt)*) => {
+        $crate::define_property!(
+            @check_private_options
+            [$crate::define_property!(@private_false_error);]
+            [$crate::define_property!(@misplaced_private_error);]
+            [$($on_valid)*];
+            $($options)*
+        );
+    };
+    (
+        @check_private_options
+        [$($on_false:tt)*]
+        [$($on_misplaced:tt)*]
+        [$($on_valid:tt)*];
+    ) => {
+        $($on_valid)*
+    };
+    (
+        @check_private_options
+        [$($on_false:tt)*]
+        [$($on_misplaced:tt)*]
+        [$($on_valid:tt)*];
+        private = false
+        $(, $($rest:tt)*)?
+    ) => {
+        $($on_false)*
+    };
+    (
+        @check_private_options
+        [$($on_false:tt)*]
+        [$($on_misplaced:tt)*]
+        [$($on_valid:tt)*];
+        private = true
+        $(, $($rest:tt)*)?
+    ) => {
+        $($on_misplaced)*
+    };
+    (
+        @check_private_options
+        [$($on_false:tt)*]
+        [$($on_misplaced:tt)*]
+        [$($on_valid:tt)*];
+        $option:ident = $value:expr
+        $(, $($rest:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @check_private_options
+            [$($on_false)*]
+            [$($on_misplaced)*]
+            [$($on_valid)*];
+            $($($rest)*)?
+        );
+    };
+
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        private = true,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            struct $name(Option<$inner_ty>);,
+            $name
+        );
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        private = true
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            struct $name(Option<$inner_ty>);,
+            $name
+        );
+        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+    };
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
@@ -232,7 +363,11 @@ macro_rules! define_property {
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
-        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
@@ -244,9 +379,40 @@ macro_rules! define_property {
             pub struct $name(pub Option<$inner_ty>);,
             $name
         );
-        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
 
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        private = true,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            struct $name($($field_ty),*);,
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        private = true
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            struct $name($($field_ty),*);,
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident,
@@ -258,7 +424,11 @@ macro_rules! define_property {
             pub struct $name($(pub $field_ty),*);,
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
@@ -270,9 +440,40 @@ macro_rules! define_property {
             pub struct $name($(pub $field_ty),*);,
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
 
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        private = true,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            struct $name { $($field_name : $field_ty),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        private = true
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            struct $name { $($field_name : $field_ty),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident,
@@ -284,7 +485,11 @@ macro_rules! define_property {
             pub struct $name { $(pub $field_name : $field_ty),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
@@ -296,9 +501,44 @@ macro_rules! define_property {
             pub struct $name { $(pub $field_name : $field_ty),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
 
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        private = true,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration $impl_eq_hash,
+            enum $name { $($variant),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        private = true
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration ,
+            enum $name { $($variant),* },
+            $name
+        );
+        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+    };
     (
         enum $name:ident {
             $($variant:ident),* $(,)?
@@ -312,7 +552,11 @@ macro_rules! define_property {
             pub enum $name { $($variant),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
     (
         enum $name:ident {
@@ -326,7 +570,11 @@ macro_rules! define_property {
             pub enum $name { $($variant),* },
             $name
         );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
+        $crate::define_property!(
+            @checked_impl
+            [$crate::impl_property!($name, $entity $(, $($extra)*)?);];
+            $($($extra)*)?
+        );
     };
 
     // Both `define_property!` and `define_derived_property!` need to attach derives to a
@@ -839,8 +1087,64 @@ macro_rules! impl_property {
 /// * `[$(global_dependency),*]`: A list of global properties the derived property depends on. Can optionally be omitted if empty.
 /// * `$calculate`: A closure that takes the values of each dependency and returns the derived value.
 /// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property],
-///   plus `impl_eq_hash = Eq | Hash | both | neither` to control whether `Eq`/`Hash` are derived or generated
-///   for the declared type, mirroring [`define_property!`][macro@crate::define_property].
+///   plus `private = true` to make the type and its fields module-private and
+///   `impl_eq_hash = Eq | Hash | both | neither` to control whether `Eq`/`Hash` are derived or generated
+///   for the declared type, mirroring [`define_property!`][macro@crate::define_property]. The macro
+///   controls field visibility, so omit field visibility modifiers. `private = false` is not
+///   supported; omit the option for public visibility. When both options are present,
+///   `private = true` must come first.
+///
+/// Private derived properties cannot be named outside their defining module:
+///
+/// ```compile_fail,E0603
+/// mod model {
+///     use ixa::{define_derived_property, define_entity, define_property};
+///
+///     define_entity!(Person);
+///     define_property!(struct Age(u8), Person);
+///     define_derived_property!(
+///         struct AgeGroup(u8),
+///         Person,
+///         [Age],
+///         |age| AgeGroup(age.0 / 10),
+///         private = true
+///     );
+/// }
+///
+/// let _ = model::AgeGroup(4);
+/// ```
+///
+/// `private = false` is rejected by this macro:
+///
+/// ```compile_fail
+/// # use ixa::{define_derived_property, define_entity, define_property};
+/// # define_entity!(Person);
+/// # define_property!(struct Age(u8), Person);
+/// define_derived_property!(
+///     struct InvalidFalse(u8),
+///     Person,
+///     [Age],
+///     |age| InvalidFalse(age.0),
+///     private = false
+/// );
+/// ```
+///
+/// Placing other options before `private = true` is also rejected:
+///
+/// ```compile_fail
+/// # use ixa::{define_derived_property, define_entity, define_property};
+/// # define_entity!(Person);
+/// # define_property!(struct Age(u8), Person);
+/// define_derived_property!(
+///     struct InvalidOrder(u8),
+///     Person,
+///     [Age],
+///     |age| InvalidOrder(age.0),
+///     impl_eq_hash = both,
+///     display_impl = |value: &InvalidOrder| value.0.to_string(),
+///     private = true
+/// );
+/// ```
 #[macro_export]
 macro_rules! define_derived_property {
     // Implementation Notes
@@ -850,6 +1154,24 @@ macro_rules! define_derived_property {
     //
     // See `derive_property!` implementation notes for why each type form is duplicated.
 
+    // Reuse `define_property!`'s vocabulary-independent scanner while keeping diagnostics tied to
+    // the derived definition macro.
+    (@private_false_error) => {
+        compile_error!("`private` only accepts `true`; omit `private` to use public visibility");
+    };
+    (@misplaced_private_error) => {
+        compile_error!("`private = true` must be the first optional argument");
+    };
+    (@checked_impl [$($on_valid:tt)*]; $($options:tt)*) => {
+        $crate::define_property!(
+            @check_private_options
+            [$crate::define_derived_property!(@private_false_error);]
+            [$crate::define_derived_property!(@misplaced_private_error);]
+            [$($on_valid)*];
+            $($options)*
+        );
+    };
+
     // Struct (tuple) with single Option<T> field
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
@@ -857,8 +1179,61 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr,
+        private = true,
         impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
+            struct $name(Option<$inner_ty>);,
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            @with_option_display_default
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        private = true
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
+            struct $name(Option<$inner_ty>);,
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            @with_option_display_default
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -867,14 +1242,18 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            @with_option_display_default
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                @with_option_display_default
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
     (
@@ -883,7 +1262,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -892,14 +1271,18 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            @with_option_display_default
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                @with_option_display_default
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
 
@@ -910,8 +1293,59 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr,
+        private = true,
         impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
+            struct $name( $($field_ty),* );,
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        private = true
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
+            struct $name( $($field_ty),* );,
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -920,13 +1354,17 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
     (
@@ -935,7 +1373,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -944,13 +1382,17 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
 
@@ -961,13 +1403,14 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr,
+        private = true,
         impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
             $impl_eq_hash,
-            pub struct $name { $($visibility $field_name : $field_ty),* },
+            struct $name { $($field_name : $field_ty),* },
             $name
         );
 
@@ -977,7 +1420,61 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
-            $(, $($extra)+)*
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        private = true
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
+            struct $name { $($field_name : $field_ty),* },
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
+            pub struct $name { $(pub $field_name : $field_ty),* },
+            $name
+        );
+
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
     (
@@ -986,22 +1483,26 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
             ,
-            pub struct $name { $($visibility $field_name : $field_ty),* },
+            pub struct $name { $(pub $field_name : $field_ty),* },
             $name
         );
 
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
 
@@ -1014,8 +1515,67 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr,
+        private = true,
         impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            $impl_eq_hash,
+            enum $name {
+                $($variant),*
+            },
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        private = true
+        $(, $($extra:tt)+)?
+    ) => {
+        $crate::define_property!(
+            @apply_property_decoration
+            ,
+            enum $name {
+                $($variant),*
+            },
+            $name
+        );
+
+        $crate::impl_derived_property!(
+            $name,
+            $entity,
+            [$($dependency),*],
+            [$($($global_dependency),*)?],
+            |$($param),+| $derive_fn
+            $(, $($extra)+)?
+        );
+    };
+    (
+        enum $name:ident {
+            $($variant:ident),* $(,)?
+        },
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $impl_eq_hash:ident
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -1026,13 +1586,17 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
     (
@@ -1043,7 +1607,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(
             @apply_property_decoration
@@ -1054,13 +1618,17 @@ macro_rules! define_derived_property {
             $name
         );
 
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
+        $crate::define_derived_property!(
+            @checked_impl
+            [$crate::impl_derived_property!(
+                $name,
+                $entity,
+                [$($dependency),*],
+                [$($($global_dependency),*)?],
+                |$($param),+| $derive_fn
+                $(, $($extra)+)?
+            );];
+            $($($extra)+)?
         );
     };
 }
