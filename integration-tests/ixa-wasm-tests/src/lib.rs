@@ -1,5 +1,6 @@
 use ixa::log::{debug, error, info, set_log_level, warn};
 use ixa::prelude::*;
+use ixa::profiling::{increment_named_count, open_span, ProfilingContextExt};
 use ixa::LevelFilter;
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
@@ -50,7 +51,11 @@ pub fn run_simulation() -> Promise {
         // Actually run the simulation
         let mut context = Context::new();
         initialize(&mut context);
-        context.execute();
+        increment_named_count("wasm_simulation");
+        {
+            let _span = open_span("wasm_simulation");
+            context.execute();
+        }
 
         let end = performance.now();
         let elapsed = end - start;
@@ -64,6 +69,17 @@ pub fn run_simulation() -> Promise {
 
         Ok(JsValue::from_str(&result))
     })
+}
+
+#[wasm_bindgen]
+pub fn run_query_profiling() -> usize {
+    let mut context = Context::new();
+    people::init(&mut context);
+    let count = context
+        .query_result_iterator(with!(people::Person, people::InfectionStatus::S))
+        .count();
+    context.print_execution_statistics(true);
+    count
 }
 
 // Simulates a panic by returning a rejected promise instead of triggering a

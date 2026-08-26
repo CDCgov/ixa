@@ -94,7 +94,7 @@ impl<const N: usize, E: rkyv::rancor::Source> rkyv::ser::Writer<E> for EqualityB
         let end = self.pos + bytes.len();
         assert!(
             end <= N,
-            "serialized form exceeded fixed buffer size: {} > {}",
+            "Ixa internal error: serialized form exceeded fixed buffer size: {} > {}",
             end,
             N
         );

@@ -168,8 +168,6 @@ mod file;
 mod reporting;
 
 use std::path::Path;
-#[cfg(feature = "profiling")]
-use std::time::Instant;
 
 pub use computed_statistic::*;
 pub use data::*;
@@ -177,6 +175,7 @@ pub use display::*;
 use file::write_profiling_data_to_file;
 pub use reporting::*;
 
+pub use crate::execution_stats::ProfilingInstant;
 use crate::{error, Context, ContextReportExt};
 
 #[cfg(all(test, feature = "profiling"))]
@@ -200,7 +199,7 @@ pub struct Span {
     #[cfg(feature = "profiling")]
     label: &'static str,
     #[cfg(feature = "profiling")]
-    start_time: Instant,
+    start_time: ProfilingInstant,
 }
 
 impl Span {
@@ -209,7 +208,7 @@ impl Span {
             #[cfg(feature = "profiling")]
             label,
             #[cfg(feature = "profiling")]
-            start_time: Instant::now(),
+            start_time: ProfilingInstant::now(),
         }
     }
 }

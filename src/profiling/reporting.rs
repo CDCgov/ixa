@@ -20,6 +20,10 @@ pub trait ProfilingContextExt: ContextReportExt {
 
     /// Writes the execution statistics for the context and all profiling data
     /// to a JSON file.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the profiling data cannot be written to the configured output file.
     fn write_profiling_data(&mut self) {
         #[cfg(feature = "profiling")]
         write_profiling_output(self, |path, statistics| {
