@@ -71,7 +71,9 @@ pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     }
 }
 
-/// A trait for objects that can provide data containers to be held by [`Context`](crate::Context)
+/// A trait for objects that can provide data containers to be held by [`Context`](crate::Context).
+/// Do not implement this trait manually; define data plugins with
+/// [`define_data_plugin!`](crate::define_data_plugin).
 pub trait DataPlugin: Any {
     type DataContainer;
 

@@ -1,4 +1,7 @@
 #[cfg(feature = "profiling")]
+use std::fmt::Write;
+
+#[cfg(feature = "profiling")]
 use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
@@ -165,33 +168,36 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
         }
     }
 
-    // Print header row
-    let header = &rows[0];
-    for (i, cell) in header.iter().enumerate() {
-        if i == 0 {
-            print!("{:<width$} ", cell, width = col_widths[i] + 1);
-        } else {
-            print!("{:>width$} ", cell, width = col_widths[i] + 1);
-        }
-    }
-    println!();
+    print_formatted_row(&rows[0], &col_widths);
 
     // Print separator
     let total_width: usize = col_widths.iter().map(|w| *w + 2).sum();
-    println!("{}", "-".repeat(total_width));
+    let separator = "-".repeat(total_width);
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::log_1(&separator.into());
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{separator}");
 
     // Print data rows
     for row in &rows[1..] {
-        // First column left-aligned, rest right-aligned
-        for (i, cell) in row.iter().enumerate() {
-            if i == 0 {
-                print!("{:<width$} ", cell, width = col_widths[i] + 1);
-            } else {
-                print!("{:>width$} ", cell, width = col_widths[i] + 1);
-            }
-        }
-        println!();
+        print_formatted_row(row, &col_widths);
     }
+}
+
+#[cfg(feature = "profiling")]
+fn print_formatted_row(row: &[String], col_widths: &[usize]) {
+    let mut line = String::new();
+    for (i, cell) in row.iter().enumerate() {
+        if i == 0 {
+            write!(&mut line, "{:<width$} ", cell, width = col_widths[i] + 1).unwrap();
+        } else {
+            write!(&mut line, "{:>width$} ", cell, width = col_widths[i] + 1).unwrap();
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::log_1(&line.into());
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{line}");
 }
 
 /// Formats an integer with thousands separator.

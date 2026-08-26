@@ -135,7 +135,7 @@ impl NetworkData {
             .get(E::id())
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: NetworkStore for Entity {} not found",
+                    "Ixa internal error: NetworkStore for Entity {} not found",
                     E::name()
                 )
             })
@@ -143,7 +143,7 @@ impl NetworkData {
             .downcast_ref::<NetworkStore<E>>()
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: found wrong NetworkStore type when accessing Entity {}",
+                    "Ixa internal error: found wrong NetworkStore type when accessing Entity {}",
                     E::name()
                 )
             })
@@ -154,7 +154,7 @@ impl NetworkData {
     fn get_network_mut<E: Entity, ET: EdgeType<E>>(&mut self) -> &mut Network<E, ET> {
         let network_store = self.network_stores.get_mut(E::id()).unwrap_or_else(|| {
             panic!(
-                "internal error: NetworkStore for Entity {} not found",
+                "Ixa internal error: NetworkStore for Entity {} not found",
                 E::name()
             )
         });
@@ -164,14 +164,14 @@ impl NetworkData {
             network_store.set(NetworkStore::<E>::new_boxed()).unwrap();
         }
 
-        // Now the unwrap on `get_mut` is guaranteed to succeed
+        // The cell was already initialized or was initialized immediately above.
         network_store
             .get_mut()
             .unwrap()
             .downcast_mut::<NetworkStore<E>>()
             .unwrap_or_else(|| {
                 panic!(
-                    "internal error: found wrong NetworkStore type when accessing Entity {}",
+                    "Ixa internal error: found wrong NetworkStore type when accessing Entity {}",
                     E::name()
                 )
             })

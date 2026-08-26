@@ -32,6 +32,7 @@ pub trait EdgeType<E: Entity>: Clone + 'static {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
+        // Splitting any string, including an empty one, always yields at least one segment.
         full.rsplit("::").next().unwrap()
     }
 

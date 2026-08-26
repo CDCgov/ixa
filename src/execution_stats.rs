@@ -1,6 +1,4 @@
 use std::time::Duration;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
 
 use humantime::format_duration;
 use log::info;
@@ -10,25 +8,48 @@ use serde_derive::Serialize;
 #[cfg(feature = "profiling")]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{JsCast, JsValue};
 
 #[cfg(feature = "profiling")]
 use crate::profiling::QueryProfiler;
 
+/// A monotonic timestamp used to measure profiling intervals.
+///
+/// Only `now()` and `elapsed()` are part of the portable API shared by native
+/// and WASM targets.
+#[cfg(not(target_arch = "wasm32"))]
+pub type ProfilingInstant = std::time::Instant;
+
+/// A monotonic timestamp used to measure profiling intervals.
+///
+/// Only `now()` and `elapsed()` are part of the portable API shared by native
+/// and WASM targets.
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-#[must_use]
-/// The `wasm` target does not support `std::time::Instant::now()`.
-/// Works in both Window and Web Worker contexts.
-pub fn get_high_res_time() -> f64 {
-    use web_sys::js_sys::Reflect;
-    let global = web_sys::js_sys::global();
-    let performance = Reflect::get(&global, &"performance".into())
-        .ok()
-        .and_then(|v: JsValue| v.dyn_into::<web_sys::Performance>().ok());
-    match performance {
-        Some(perf) => perf.now(),
-        None => 0.0,
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct ProfilingInstant(f64);
+
+#[cfg(target_arch = "wasm32")]
+impl ProfilingInstant {
+    #[must_use]
+    pub fn now() -> Self {
+        use web_sys::js_sys::Reflect;
+
+        let global = web_sys::js_sys::global();
+        let performance = Reflect::get(&global, &"performance".into())
+            .ok()
+            .and_then(|value: JsValue| value.dyn_into::<web_sys::Performance>().ok());
+
+        Self(performance.map_or(0.0, |performance| performance.now()))
+    }
+
+    #[must_use]
+    pub fn elapsed(&self) -> Duration {
+        let elapsed_milliseconds = Self::now().0 - self.0;
+        if !elapsed_milliseconds.is_finite() || elapsed_milliseconds <= 0.0 {
+            return Duration::ZERO;
+        }
+
+        Duration::from_secs_f64(elapsed_milliseconds / 1000.0)
     }
 }
 
@@ -53,16 +74,10 @@ pub(crate) struct ExecutionProfilingCollector {
     /// Aggregate profiling data for entity queries executed by this context.
     pub(crate) query_profiler: QueryProfiler,
     /// Simulation start time, used to compute elapsed wall time for the simulation execution
-    #[cfg(not(target_arch = "wasm32"))]
-    start_time: Instant,
-    #[cfg(target_arch = "wasm32")]
-    start_time: f64,
+    start_time: ProfilingInstant,
     /// We keep track of the last time we refreshed so that client code doesn't have to and can
     /// just call `ExecutionProfilingCollector::refresh` in its event loop.
-    #[cfg(not(target_arch = "wasm32"))]
-    last_refresh: Instant,
-    #[cfg(target_arch = "wasm32")]
-    last_refresh: f64,
+    last_refresh: ProfilingInstant,
     /// The accumulated CPU time of the process in CPU-milliseconds at simulation start, used
     /// to compute the CPU time of the simulation execution
     start_cpu_time: u64,
@@ -81,10 +96,7 @@ impl ExecutionProfilingCollector {
     #[must_use]
     pub fn new() -> ExecutionProfilingCollector {
         let process_id = sysinfo::get_current_pid().ok();
-        #[cfg(target_arch = "wasm32")]
-        let now = get_high_res_time();
-        #[cfg(not(target_arch = "wasm32"))]
-        let now = Instant::now();
+        let now = ProfilingInstant::now();
 
         let mut new_stats = ExecutionProfilingCollector {
             query_profiler: QueryProfiler::default(),
@@ -118,7 +130,7 @@ impl ExecutionProfilingCollector {
         #[cfg(not(target_arch = "wasm32"))]
         if self.last_refresh.elapsed() >= REFRESH_INTERVAL {
             self.poll_memory();
-            self.last_refresh = Instant::now();
+            self.last_refresh = ProfilingInstant::now();
         }
     }
 
@@ -181,13 +193,7 @@ impl ExecutionProfilingCollector {
 
         // Convert to `Duration`s in preparation for formatting
         let cpu_time = Duration::from_millis(cpu_time_millis);
-        #[cfg(target_arch = "wasm32")]
-        let wall_time = get_high_res_time() - self.start_time;
-        #[cfg(not(target_arch = "wasm32"))]
         let wall_time = self.start_time.elapsed();
-
-        #[cfg(target_arch = "wasm32")]
-        let wall_time = Duration::from_millis(wall_time as u64);
 
         ExecutionStatistics {
             max_memory_usage: self.max_memory_usage,
@@ -201,22 +207,16 @@ impl ExecutionProfilingCollector {
 
 #[cfg(not(feature = "profiling"))]
 pub(crate) struct ExecutionProfilingCollector {
-    #[cfg(not(target_arch = "wasm32"))]
-    start_time: Instant,
-    #[cfg(target_arch = "wasm32")]
-    start_time: f64,
+    start_time: ProfilingInstant,
 }
 
 #[cfg(not(feature = "profiling"))]
 impl ExecutionProfilingCollector {
     #[must_use]
     pub fn new() -> ExecutionProfilingCollector {
-        #[cfg(target_arch = "wasm32")]
-        let now = get_high_res_time();
-        #[cfg(not(target_arch = "wasm32"))]
-        let now = Instant::now();
-
-        ExecutionProfilingCollector { start_time: now }
+        ExecutionProfilingCollector {
+            start_time: ProfilingInstant::now(),
+        }
     }
 
     #[inline]
@@ -224,13 +224,7 @@ impl ExecutionProfilingCollector {
 
     #[must_use]
     pub fn compute_final_statistics(&mut self) -> ExecutionStatistics {
-        #[cfg(target_arch = "wasm32")]
-        let wall_time = get_high_res_time() - self.start_time;
-        #[cfg(not(target_arch = "wasm32"))]
         let wall_time = self.start_time.elapsed();
-
-        #[cfg(target_arch = "wasm32")]
-        let wall_time = Duration::from_millis(wall_time as u64);
 
         ExecutionStatistics {
             max_memory_usage: 0,
@@ -350,7 +344,7 @@ mod tests {
 
         // Burn ~30ms CPU time. Likely will be < 30ms, as this thread will not have 100% of CPU
         // during 30ms wall time.
-        let start = Instant::now();
+        let start = ProfilingInstant::now();
         while start.elapsed().as_millis() < 30u128 {
             std::hint::black_box(0); // Prevent optimization
         }
@@ -358,7 +352,7 @@ mod tests {
         let cpu_time_1 = collector.cpu_time();
 
         // Burn ~50ms CPU time
-        let start = Instant::now();
+        let start = ProfilingInstant::now();
         while start.elapsed().as_millis() < 50u128 {
             std::hint::black_box(0); // Prevent optimization
         }

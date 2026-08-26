@@ -85,6 +85,12 @@ pub struct EntityCountTriggerEvent<E: Entity> {
 }
 
 impl<E: Entity> EntityCountTrigger<E> {
+    /// Creates a trigger that fires when the entity count reaches `threshold`.
+    /// The `threshold` must be positive.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `threshold` is zero.
     #[must_use]
     pub fn increases_to(threshold: usize) -> Self {
         assert!(threshold > 0, "threshold must be greater than 0");
