@@ -232,7 +232,7 @@ impl EntityStore {
             record.entity.set(E::new_boxed()).unwrap();
         }
 
-        // Now the `unwrap` on `get_mut` is guaranteed to succeed.
+        // The cell was already initialized or was initialized immediately above.
         record.entity.get_mut().unwrap().downcast_mut::<E>().expect(
             "TypeID does not match registered entity type. \
              You must use the `define_entity!` macro to create an entity.",
@@ -294,6 +294,7 @@ impl EntityStore {
         let _ = record
             .property_store
             .get_or_init(|| Box::new(PropertyStore::<E>::new()));
+        // `get_or_init` guarantees that the cell now contains a property store.
         let property_store = record.property_store.get_mut().unwrap();
         property_store.downcast_mut::<PropertyStore<E>>()
                       .expect("TypeID does not match registered item type. You must use the `define_registered_item!` macro to create a registered item.")

@@ -22,7 +22,11 @@ where
     E: Entity,
     P: IndexableProperty<E>,
 {
-    debug_assert_ne!(requested, PropertyIndexType::Unindexed);
+    debug_assert_ne!(
+        requested,
+        PropertyIndexType::Unindexed,
+        "Ixa internal error: create_property_index received an unindexed request",
+    );
 
     if let Some((representative_id, representative_name)) =
         multi_property_id_for_property_type_id(E::id(), P::type_id())
@@ -55,7 +59,7 @@ where
 
     let mut new_index = requested
         .new_property_index::<E, P>()
-        .expect("an indexed request must construct an index");
+        .expect("Ixa internal error: an indexed request must construct an index");
 
     // Populate while detached so a panic from allocation or property computation leaves the
     // previously installed index and dispatcher state unchanged.
@@ -91,7 +95,8 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
             .get_mut(counter_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "No value change counter found for property {} with counter_id {}",
+                    "Ixa internal error: no value change counter found for property {} with \
+                     counter_id {}",
                     P::name(),
                     counter_id
                 )
@@ -108,7 +113,8 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
             .downcast_mut::<StratifiedValueChangeCounter<E, PL, P>>()
             .unwrap_or_else(|| {
                 panic!(
-                    "Value change counter for property {} and counter_id {} had unexpected type",
+                    "Ixa internal error: value change counter for property {} and counter_id {} \
+                     had unexpected type",
                     P::name(),
                     counter_id
                 )
@@ -125,7 +131,8 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
             .get_mut(counter_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "No value change counter found for property {} with counter_id {}",
+                    "Ixa internal error: no value change counter found for property {} with \
+                     counter_id {}",
                     P::name(),
                     counter_id
                 )
@@ -165,6 +172,10 @@ pub trait ContextEntitiesExt {
     fn get_property<E: Entity, P: Property<E>>(&self, entity_id: EntityId<E>) -> P;
 
     /// Sets the value of the given property. This method unconditionally emits a `PropertyChangeEvent`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `P` is a derived property, which cannot be set directly.
     fn set_property<E: Entity, P: Property<E>>(
         &mut self,
         entity_id: EntityId<E>,
@@ -177,19 +188,27 @@ pub trait ContextEntitiesExt {
     ///     `context.index_property::<Person, Age>()`
     ///
     /// This method both enables the index and catches it up to the current population.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `P` is a nonrepresentative multi-property equivalent to another
+    /// registered multi-property.
     fn index_property<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Enables value-count indexing of property values for the property `P`.
     ///
     /// If the property already has a full index, that index is left unchanged, as it
     /// already supports value-count queries.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `P` is a nonrepresentative multi-property equivalent to another
+    /// registered multi-property.
     fn index_property_counts<E: Entity, P: IndexableProperty<E>>(&mut self);
 
     /// Tracks periodic value change counts for a newly created counter.
     ///
     /// The supplied period is converted to `f64` before validation.
-    ///
-    /// Also panics if `period` is not finite and strictly positive.
     ///
     /// Recording starts at `ExecutionPhase::First` at simulation start time. The
     /// report callbacks are passive plans: they do not keep the simulation
@@ -206,6 +225,10 @@ pub trait ContextEntitiesExt {
     ///     },
     /// );
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `period` is not a strictly positive finite number.
     fn track_periodic_value_change_counts<E, PL, P, F>(
         &mut self,
         period: impl Into<f64>,

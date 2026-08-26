@@ -270,14 +270,15 @@ impl Context {
         self.next_event_listener_id = self
             .next_event_listener_id
             .checked_add(1)
-            .unwrap_or_else(|| panic!("event listener id overflow"));
+            .expect("Ixa internal error: event listener id overflow");
 
         let handler_vec = self
             .event_handlers
             .entry(TypeId::of::<E>())
             .or_insert_with(|| Box::<Vec<EventHandlerRegistration<E>>>::default());
-        let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
-            handler_vec.downcast_mut().unwrap();
+        let handler_vec: &mut Vec<EventHandlerRegistration<E>> = handler_vec
+            .downcast_mut()
+            .expect("Ixa internal error: event handler registry type mismatch");
         handler_vec.push(EventHandlerRegistration {
             listener_id,
             handler: Rc::new(handler),
@@ -299,8 +300,9 @@ impl Context {
             let Some(handler_vec) = self.event_handlers.get_mut(&TypeId::of::<E>()) else {
                 return false;
             };
-            let handler_vec: &mut Vec<EventHandlerRegistration<E>> =
-                handler_vec.downcast_mut().unwrap();
+            let handler_vec: &mut Vec<EventHandlerRegistration<E>> = handler_vec
+                .downcast_mut()
+                .expect("Ixa internal error: event handler registry type mismatch");
             let Some(index) = handler_vec
                 .iter()
                 .position(|entry| entry.listener_id.id == listener_id.id)
@@ -319,8 +321,9 @@ impl Context {
         self.event_handlers
             .get(&TypeId::of::<E>())
             .is_some_and(|handler_vec| {
-                let handler_vec: &Vec<EventHandlerRegistration<E>> =
-                    handler_vec.downcast_ref().unwrap();
+                let handler_vec: &Vec<EventHandlerRegistration<E>> = handler_vec
+                    .downcast_ref()
+                    .expect("Ixa internal error: event handler registry type mismatch");
                 !handler_vec.is_empty()
             })
     }
@@ -337,8 +340,9 @@ impl Context {
             ..
         } = self;
         if let Some(handler_vec) = event_handlers.get(&TypeId::of::<E>()) {
-            let handler_vec: &Vec<EventHandlerRegistration<E>> =
-                handler_vec.downcast_ref().unwrap();
+            let handler_vec: &Vec<EventHandlerRegistration<E>> = handler_vec
+                .downcast_ref()
+                .expect("Ixa internal error: event handler registry type mismatch");
             for registration in handler_vec {
                 let handler_clone = Rc::clone(&registration.handler);
                 callback_queue.push_back(Box::new(move |context| handler_clone(context, event)));
@@ -611,12 +615,17 @@ impl Context {
     /// to construct a new data container and store it in the [`Context`].
     ///
     /// Returns a mutable reference to the data container
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin).
     #[must_use]
     pub fn get_data_mut<T: DataPlugin>(&mut self, _data_plugin: T) -> &mut T::DataContainer {
         let index = T::index_within_context();
 
         // If the data plugin is already initialized, return a mutable reference.
         if self.data_plugins[index].get().is_some() {
+            // The preceding check proves that the cell contains a value.
             return self.data_plugins[index]
                 .get_mut()
                 .unwrap()
@@ -631,6 +640,7 @@ impl Context {
             .get_mut(index)
             .unwrap_or_else(|| panic!("No data plugin found with index = {index:?}. You must use the `define_data_plugin!` macro to create a data plugin."));
         let _ = cell.set(Box::new(data));
+        // `cell` was empty and has just been initialized above.
         cell.get_mut()
             .unwrap()
             .downcast_mut::<T::DataContainer>()
@@ -641,6 +651,10 @@ impl Context {
     /// [`DataPlugin`]
     ///
     /// Returns a reference to the data container if it exists or else `None`
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T` was not defined with [`define_data_plugin!`](crate::define_data_plugin).
     #[must_use]
     pub fn get_data<T: DataPlugin>(&self, _data_plugin: T) -> &T::DataContainer {
         let index = T::index_within_context();

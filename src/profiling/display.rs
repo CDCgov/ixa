@@ -181,7 +181,11 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
 
     // Print separator
     let total_width: usize = col_widths.iter().map(|w| *w + 2).sum();
-    print_table_line(&"-".repeat(total_width));
+    let separator = "-".repeat(total_width);
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::log_1(&separator.into());
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{separator}");
 
     // Print data rows
     for row in &rows[1..] {
@@ -199,16 +203,9 @@ fn print_formatted_row(row: &[String], col_widths: &[usize]) {
             write!(&mut line, "{:>width$} ", cell, width = col_widths[i] + 1).unwrap();
         }
     }
-    print_table_line(&line);
-}
-
-#[cfg(all(feature = "profiling", target_arch = "wasm32"))]
-fn print_table_line(line: &str) {
+    #[cfg(target_arch = "wasm32")]
     web_sys::console::log_1(&line.into());
-}
-
-#[cfg(all(feature = "profiling", not(target_arch = "wasm32")))]
-fn print_table_line(line: &str) {
+    #[cfg(not(target_arch = "wasm32"))]
     println!("{line}");
 }
 
