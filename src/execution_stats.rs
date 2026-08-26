@@ -8,7 +8,7 @@ use serde_derive::Serialize;
 #[cfg(feature = "profiling")]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{JsCast, JsValue};
 
 #[cfg(feature = "profiling")]
 use crate::profiling::QueryProfiler;
@@ -51,16 +51,6 @@ impl ProfilingInstant {
 
         Duration::from_secs_f64(elapsed_milliseconds / 1000.0)
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-#[must_use]
-/// Returns a high-resolution monotonic timestamp in milliseconds.
-///
-/// This works in both Window and Web Worker contexts.
-pub fn get_high_res_time() -> f64 {
-    ProfilingInstant::now().0
 }
 
 /// A container struct for computed final statistics.
