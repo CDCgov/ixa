@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0](https://github.com/CDCgov/ixa/compare/ixa-v3.0.0...ixa-v3.1.0) - 2026-08-24
+
+### Added
+
+- Emit `PropertyInitializedEvent` in `add_event` ([#1025](https://github.com/CDCgov/ixa/pull/1025))
+- Add query profiling feature ([#1033](https://github.com/CDCgov/ixa/pull/1033))
+
 ## [3.0.0](https://github.com/CDCgov/ixa/compare/ixa-v2.2.0...ixa-v3.0.0) - 2026-08-04
 
 ### Added
