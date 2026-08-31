@@ -30,8 +30,12 @@ Metadata stored on `ENTITY_METADATA`, which for each entity stores:
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
+
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
@@ -44,6 +48,7 @@ use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::EntityId;
+use crate::population::scalar::{from_cell, to_cell, ScalarCodecError};
 use crate::{Context, ContextEntitiesExt};
 
 pub(in crate::entity) type IndexNewEntityFn<E> = fn(&mut Context, EntityId<E>);
@@ -64,6 +69,30 @@ where
         .expect("Ixa internal error: index_new_entity dispatch invoked for an unindexed property");
 
     index.add_entity(&value, entity_id);
+}
+
+pub(crate) fn index_new_entities<E>(
+    context: &mut Context,
+    entity_ids: impl IntoIterator<Item = EntityId<E>>,
+) where
+    E: Entity,
+{
+    let index_count = context
+        .entity_store
+        .get_property_store::<E>()
+        .index_new_entity_fns
+        .len();
+
+    for entity_id in entity_ids {
+        for index in 0..index_count {
+            let dispatch = context
+                .entity_store
+                .get_property_store::<E>()
+                .index_new_entity_fns[index]
+                .1;
+            dispatch(context, entity_id);
+        }
+    }
 }
 
 /// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
@@ -99,7 +128,6 @@ pub(crate) fn registered_property_name(entity_id: usize, property_type_id: TypeI
 ///
 /// At program startup (before `main()`, using ctors) we compute metadata for all properties
 /// that are linked into the binary, and this data remains unchanged for the life of the program.
-#[derive(Default)]
 pub(super) struct PropertyMetadata<E: Entity> {
     /// The (derived) properties that depend on this property, as represented by their
     /// `Property::id` value. This list is used to update the index (if applicable)
@@ -111,6 +139,130 @@ pub(super) struct PropertyMetadata<E: Entity> {
     /// instance for this property needs to exist (when its dependents are recorded).
     #[allow(clippy::type_complexity)]
     pub value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore<E>>>,
+    /// Fully qualified Rust type name used as the persistent schema identifier.
+    pub type_name: Option<&'static str>,
+    /// Initialization kind, recorded so derived properties can be excluded from persistence.
+    pub initialization_kind: Option<crate::entity::property::PropertyInitializationKind>,
+    /// Scalar persistence callbacks, present for properties that opt in.
+    pub persistence: Option<PropertyPersistence<E>>,
+}
+
+impl<E: Entity> Default for PropertyMetadata<E> {
+    fn default() -> Self {
+        Self {
+            dependents: Vec::new(),
+            value_store_constructor: None,
+            type_name: None,
+            initialization_kind: None,
+            persistence: None,
+        }
+    }
+}
+
+/// Error returned while decoding a column, including the zero-based entity ID.
+pub(crate) struct PropertyColumnDecodeError {
+    pub entity_id: usize,
+    pub source: ScalarCodecError,
+}
+
+type EncodePropertyFn<E> =
+    fn(&PropertyStore<E>, EntityId<E>) -> Result<Option<String>, ScalarCodecError>;
+type DecodePropertyFn = fn(&[String]) -> Result<Box<dyn Any>, PropertyColumnDecodeError>;
+
+/// Type-erased persistence callbacks for one concrete property type.
+pub(crate) struct PropertyPersistence<E: Entity> {
+    pub type_name: &'static str,
+    pub encode: EncodePropertyFn<E>,
+    pub decode: DecodePropertyFn,
+    pub apply: fn(&mut PropertyStore<E>, Box<dyn Any>),
+}
+
+impl<E: Entity> Clone for PropertyPersistence<E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: Entity> Copy for PropertyPersistence<E> {}
+
+/// Macro support for conditionally registering persistence when a property supports owned Serde
+/// deserialization.
+#[doc(hidden)]
+pub struct PropertyPersistenceRegistration<E, P>(PhantomData<(E, P)>);
+
+impl<E, P> PropertyPersistenceRegistration<E, P> {
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+/// Autoref-dispatch trait used by `define_property!` to preserve support for borrowed properties.
+#[doc(hidden)]
+pub trait RegisterPropertyPersistence {
+    #[doc(hidden)]
+    fn register(&self);
+}
+
+impl<E, P> RegisterPropertyPersistence for PropertyPersistenceRegistration<E, P>
+where
+    E: Entity,
+    P: Property<E>,
+{
+    fn register(&self) {
+        add_to_property_registry::<E, P>();
+    }
+}
+
+impl<E, P> RegisterPropertyPersistence for &PropertyPersistenceRegistration<E, P>
+where
+    E: Entity,
+    P: Property<E> + Serialize + DeserializeOwned,
+{
+    fn register(&self) {
+        add_to_persistable_property_registry::<E, P>();
+    }
+}
+
+fn encode_property<E, P>(
+    property_store: &PropertyStore<E>,
+    entity_id: EntityId<E>,
+) -> Result<Option<String>, ScalarCodecError>
+where
+    E: Entity,
+    P: Property<E> + Serialize,
+{
+    to_cell(&property_store.get::<P>().get(entity_id))
+}
+
+fn decode_property_column<E, P>(cells: &[String]) -> Result<Box<dyn Any>, PropertyColumnDecodeError>
+where
+    E: Entity,
+    P: Property<E> + DeserializeOwned,
+{
+    let mut values = Vec::<P>::with_capacity(cells.len());
+    for (entity_id, cell) in cells.iter().enumerate() {
+        let value =
+            from_cell(cell).map_err(|source| PropertyColumnDecodeError { entity_id, source })?;
+        values.push(value);
+    }
+    Ok(Box::new(values))
+}
+
+fn apply_property_column<E, P>(property_store: &mut PropertyStore<E>, values: Box<dyn Any>)
+where
+    E: Entity,
+    P: Property<E>,
+{
+    let values = values
+        .downcast::<Vec<P>>()
+        .expect("pending population property values had an unexpected concrete type");
+    let value_store = property_store.get_mut::<P>();
+    value_store.reserve(values.len());
+    for (entity_id, value) in values.into_iter().enumerate() {
+        value_store.set(EntityId::new(entity_id), value);
+    }
 }
 
 /// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector of dependents (as IDs)
@@ -199,6 +351,10 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
         let metadata: &mut PropertyMetadata<E> = metadata
             .downcast_mut()
             .expect("Ixa internal error: property metadata has the wrong entity type");
+        metadata.type_name.get_or_insert(std::any::type_name::<P>());
+        metadata
+            .initialization_kind
+            .get_or_insert(P::initialization_kind());
         metadata
             .value_store_constructor
             .get_or_insert(PropertyValueStoreCore::<E, P>::new_boxed);
@@ -215,6 +371,66 @@ pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
             .expect("Ixa internal error: dependency metadata has the wrong entity type");
         dependency_meta.dependents.push(property_index);
     }
+}
+
+/// Registers a property with scalar CSV persistence callbacks.
+pub fn add_to_persistable_property_registry<E, P>()
+where
+    E: Entity,
+    P: Property<E> + Serialize + DeserializeOwned,
+{
+    add_to_property_registry::<E, P>();
+
+    let mut property_metadata = PROPERTY_METADATA_BUILDER.lock().unwrap();
+    if PROPERTY_METADATA.get().is_some() {
+        panic!(
+            "`add_to_persistable_property_registry()` called after property metadata was frozen; registration must occur during startup/ctors."
+        );
+    }
+
+    let metadata = property_metadata
+        .get_mut(&(E::id(), P::id()))
+        .expect("property metadata must exist after property registration");
+    let metadata = metadata
+        .downcast_mut::<PropertyMetadata<E>>()
+        .expect("property metadata had an unexpected concrete entity type");
+    metadata.persistence.get_or_insert(PropertyPersistence {
+        type_name: std::any::type_name::<P>(),
+        encode: encode_property::<E, P>,
+        decode: decode_property_column::<E, P>,
+        apply: apply_property_column::<E, P>,
+    });
+}
+
+/// Returns the persisted non-derived properties for an entity in canonical name order.
+pub(crate) fn persisted_properties<E: Entity>() -> Result<Vec<PropertyPersistence<E>>, &'static str>
+{
+    let property_metadata = property_metadata();
+    let mut result = Vec::new();
+
+    for property_id in 0..get_registered_property_count::<E>() {
+        let metadata = property_metadata
+            .get(&(E::id(), property_id))
+            .expect("registered property metadata is missing")
+            .downcast_ref::<PropertyMetadata<E>>()
+            .expect("property metadata had an unexpected concrete entity type");
+        let type_name = metadata
+            .type_name
+            .expect("registered property metadata is missing its type name");
+        let initialization_kind = metadata
+            .initialization_kind
+            .expect("registered property metadata is missing its initialization kind");
+        if initialization_kind == crate::entity::property::PropertyInitializationKind::Derived {
+            continue;
+        }
+        let Some(persistence) = metadata.persistence else {
+            return Err(type_name);
+        };
+        result.push(persistence);
+    }
+
+    result.sort_unstable_by_key(|property| property.type_name);
+    Ok(result)
 }
 
 /// A convenience getter for `NEXT_ENTITY_INDEX`.

@@ -12,6 +12,7 @@
   - [Next Steps](first_model/next-steps.md)
 - [Topics](topics/topics.md)
   - [Properties](topics/properties.md)
+  - [Population Persistence](topics/population-persistence.md)
   - [Indexing](topics/indexing.md)
   - [Burn-in Periods and Negative Time](topics/burn-in-and-negative-time.md)
   - [Handling Errors](topics/handling-errors.md)
