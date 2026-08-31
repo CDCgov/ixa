@@ -6,9 +6,11 @@ use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
 use super::{
-    profiling_data, ProfilingData, QueryProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
-    QUERY_TIMINGS_HEADERS,
+    index_type_label, profiling_data, ProfilingData, QueryProfilingData, NAMED_COUNTS_HEADERS,
+    NAMED_SPANS_HEADERS, QUERY_TIMINGS_HEADERS,
 };
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
@@ -91,7 +93,7 @@ pub fn print_named_spans() {
 pub fn print_named_spans() {}
 
 #[cfg(feature = "profiling")]
-pub(crate) fn print_query_timings(rows: &[(&'static str, QueryProfilingData)]) {
+pub(crate) fn print_query_timings(rows: &[(&'static str, PropertyIndexType, QueryProfilingData)]) {
     if rows.is_empty() {
         return;
     }
@@ -104,13 +106,20 @@ pub(crate) fn print_query_timings(rows: &[(&'static str, QueryProfilingData)]) {
             .collect(),
     ];
 
-    formatted_rows.extend(rows.iter().map(|(query, data)| {
+    formatted_rows.extend(rows.iter().map(|(query, index_type, data)| {
         vec![
             (*query).to_string(),
+            index_type_label(*index_type).to_string(),
             format_with_commas(data.count),
             format_duration(data.total).to_string(),
-            format_duration(data.min).to_string(),
-            format_duration(data.max).to_string(),
+            data.min.map_or_else(
+                || "-".to_string(),
+                |value| format_duration(value).to_string(),
+            ),
+            data.max.map_or_else(
+                || "-".to_string(),
+                |value| format_duration(value).to_string(),
+            ),
         ]
     }));
 
@@ -425,21 +434,28 @@ mod tests {
         let rows = vec![
             (
                 "DisplayQueryTimings: (Age)",
+                PropertyIndexType::FullIndex,
                 QueryProfilingData {
                     count: 2,
                     total: Duration::from_micros(40),
-                    min: Duration::from_micros(10),
-                    max: Duration::from_micros(30),
+                    min: Some(Duration::from_micros(10)),
+                    max: Some(Duration::from_micros(30)),
                 },
             ),
             (
                 "DisplayQueryTimings: (County)",
+                PropertyIndexType::Unindexed,
                 QueryProfilingData {
                     count: 1,
                     total: Duration::from_micros(20),
-                    min: Duration::from_micros(20),
-                    max: Duration::from_micros(20),
+                    min: Some(Duration::from_micros(20)),
+                    max: Some(Duration::from_micros(20)),
                 },
+            ),
+            (
+                "DisplayQueryTimings: (Unused)",
+                PropertyIndexType::ValueCountIndex,
+                QueryProfilingData::default(),
             ),
         ];
 
