@@ -88,8 +88,9 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
 
     /// Which index type new [`Context`] instances should create for this property automatically.
     ///
-    /// This is primarily used by multi-properties, whose main purpose is joint
-    /// indexing and query acceleration.
+    /// This is macro support primarily used by multi-properties, whose main purpose is joint
+    /// indexing and query acceleration. Indexed return values are honored only for properties
+    /// registered through the [`IndexableProperty`] path; ordinary properties remain unindexed.
     #[must_use]
     #[inline]
     fn default_index_type() -> PropertyIndexType {

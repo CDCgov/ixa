@@ -197,6 +197,11 @@ Ixa hides the boilerplate required for creating a multi-index with the macro
 define_multi_property!(Person, (AgeGroup, InfectionStatus));
 ```
 
+Each `Context` owns an independent instance of the default index. Ixa updates
+that index after all property values for each new entity have been assigned, so
+derived and multi-property values observe the entity's complete initialized
+state.
+
 You can choose a different default index type with the optional third argument.
 A `ValueCountIndex` stores only counts for each value tuple, so
 `query_entity_count` can use it without storing the full set of matching

@@ -12,8 +12,8 @@ use std::cell::RefCell;
 use std::vec::Vec;
 
 use super::entity::{Entity, EntityId};
-use super::property::{IndexableProperty, Property, PropertyInitializationKind};
-use crate::entity::index::{FullIndex, PropertyIndex, PropertyIndexType, ValueCountIndex};
+use super::property::{Property, PropertyInitializationKind};
+use crate::entity::index::{PropertyIndex, PropertyIndexType};
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::value_change_counter::ValueChangeCounter;
 /// The underlying storage type for property values.
@@ -43,8 +43,18 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Self::default()
     }
 
-    pub(crate) fn new_boxed() -> Box<dyn PropertyValueStore<E>> {
+    pub(super) fn new_boxed() -> Box<dyn PropertyValueStore<E>> {
         Box::new(Self::new())
+    }
+
+    pub(super) fn new_boxed_with_index(
+        index: Option<Box<dyn PropertyIndex<E, P>>>,
+    ) -> Box<dyn PropertyValueStore<E>> {
+        Box::new(Self {
+            data: RawPropertyValueVec::default(),
+            index,
+            value_change_counters: Vec::new(),
+        })
     }
 
     #[must_use]
@@ -185,22 +195,6 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
                  properties do not have values",
             );
         }
-    }
-}
-
-impl<E: Entity, P: IndexableProperty<E>> PropertyValueStoreCore<E, P> {
-    pub(crate) fn new_boxed_with_default_index() -> Box<dyn PropertyValueStore<E>> {
-        Box::new(Self {
-            data: RawPropertyValueVec::default(),
-            index: match P::default_index_type() {
-                PropertyIndexType::Unindexed => None,
-                PropertyIndexType::FullIndex => Some(Box::new(FullIndex::<E, P>::new())),
-                PropertyIndexType::ValueCountIndex => {
-                    Some(Box::new(ValueCountIndex::<E, P>::new()))
-                }
-            },
-            value_change_counters: Vec::new(),
-        })
     }
 }
 

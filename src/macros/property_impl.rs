@@ -1695,6 +1695,38 @@ mod tests {
     }
 
     #[test]
+    fn test_default_multi_property_indexes_are_independent_between_contexts() {
+        let mut first_context = Context::new();
+        let mut second_context = Context::new();
+
+        first_context
+            .add_entity(with!(
+                DefaultMultiIndexPerson,
+                DefaultMultiAge(10),
+                DefaultMultiStatus(1)
+            ))
+            .unwrap();
+
+        for _ in 0..2 {
+            second_context
+                .add_entity(with!(
+                    DefaultMultiIndexPerson,
+                    DefaultMultiAge(10),
+                    DefaultMultiStatus(1)
+                ))
+                .unwrap();
+        }
+
+        let query = with!(
+            DefaultMultiIndexPerson,
+            DefaultMultiAge(10),
+            DefaultMultiStatus(1)
+        );
+        assert_eq!(first_context.query_entity_count(query), 1);
+        assert_eq!(second_context.query_entity_count(query), 2);
+    }
+
+    #[test]
     fn test_multi_property_type_alias_components_support_indexed_queries() {
         let mut context = Context::new();
         let matching = context
@@ -1898,6 +1930,14 @@ mod tests {
             crate::entity::PropertyIndexType::FullIndex
         );
 
+        let third = context
+            .add_entity(with!(
+                UnindexedMultiIndexPerson,
+                UnindexedMultiAge(30),
+                UnindexedMultiStatus(2)
+            ))
+            .unwrap();
+
         let mut results = Vec::new();
         context.with_query_results(
             with!(
@@ -1907,9 +1947,10 @@ mod tests {
             ),
             &mut |entity_ids| results = entity_ids.into_iter().collect::<Vec<_>>(),
         );
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
         assert!(results.contains(&first));
         assert!(results.contains(&second));
+        assert!(results.contains(&third));
         assert!(!results.contains(&non_matching));
     }
 

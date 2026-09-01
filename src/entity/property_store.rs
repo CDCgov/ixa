@@ -12,14 +12,15 @@ There's no need, then, for lazy initialization of the `PropertyValueStore`s them
 
 This module also implements the initialization of "static" data associated with a property,
 that is, data that is the same across all [`crate::context::Context`] instances, which is computed before `main()`
-using `ctor` magic. (Each property implements a ctor that calls [`add_to_property_registry()`].)
-For simplicity, a property's ctor implementation, supplied by a macro, just calls
-`add_to_property_registry<E: Entity, P: Property<E>>()`, which does all the work. The
-`add_to_property_registry` function adds the following metadata to global metadata stores:
+using `ctor` magic. Each property implements a ctor that calls either
+[`add_to_property_registry()`] or [`add_indexed_to_property_registry()`]. Ordinary properties use
+the former; indexable properties that declare a default index use the latter. These registration
+functions add the following metadata to global metadata stores:
 
 Metadata stored on `PROPERTY_METADATA`, which for each property stores:
 - a list of dependent (derived) properties, and
-- a constructor function to create a new `PropertyValueStore` instance for the property.
+- a constructor function that creates a new `PropertyValueStore` instance and
+  its optional new-entity index dispatcher as one matched value.
 
 Metadata stored on `ENTITY_METADATA`, which for each entity stores:
 - a list of properties associated with the entity, and
@@ -47,6 +48,17 @@ use crate::entity::EntityId;
 use crate::{Context, ContextEntitiesExt};
 
 pub(in crate::entity) type IndexNewEntityFn<E> = fn(&mut Context, EntityId<E>);
+
+/// A newly constructed property value store and the dispatcher that maintains its index.
+///
+/// Keeping these values together prevents a default index from being created without the
+/// corresponding new-entity dispatcher, or a dispatcher from being installed without an index.
+struct ConstructedPropertyValueStore<E: Entity> {
+    value_store: Box<dyn PropertyValueStore<E>>,
+    index_new_entity_fn: Option<IndexNewEntityFn<E>>,
+}
+
+type PropertyValueStoreConstructor<E> = fn() -> ConstructedPropertyValueStore<E>;
 
 fn index_new_entity<E, P>(context: &mut Context, entity_id: EntityId<E>)
 where
@@ -100,26 +112,22 @@ pub(crate) fn registered_property_name(entity_id: usize, property_type_id: TypeI
 /// At program startup (before `main()`, using ctors) we compute metadata for all properties
 /// that are linked into the binary, and this data remains unchanged for the life of the program.
 #[derive(Default)]
-pub(super) struct PropertyMetadata<E: Entity> {
+struct PropertyMetadata<E: Entity> {
     /// The (derived) properties that depend on this property, as represented by their
     /// `Property::id` value. This list is used to update the index (if applicable)
     /// and emit change events for these properties when this property changes.
-    pub dependents: Vec<usize>,
-    /// A function that constructs a new `PropertyValueStoreCore<E, P>` instance in a type-erased
-    /// way, used in the constructor of `PropertyStore`. This is an `Option` because this
+    dependents: Vec<usize>,
+    /// A function that constructs the type-erased property value store together with the
+    /// dispatcher required to maintain any default index. This is an `Option` because this
     /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
     /// instance for this property needs to exist (when its dependents are recorded).
-    #[allow(clippy::type_complexity)]
-    pub value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore<E>>>,
-    /// Updates this property's index when a new entity is created.
-    ///
-    /// This is present when the property value store constructor installs an index by default.
-    pub index_new_entity_fn: Option<IndexNewEntityFn<E>>,
+    value_store_constructor: Option<PropertyValueStoreConstructor<E>>,
 }
 
-/// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector of dependents (as IDs)
-/// and a function pointer to the constructor that constucts a `PropertyValueStoreCore<E, P>` type erased as
-/// a `Box<dyn PropertyValueStore<E>>`. This data is actually written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
+/// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector
+/// of dependents (as IDs) and a function pointer that constructs the type-erased property value
+/// store together with its optional new-entity index dispatcher. This data is written by the
+/// property `ctor`s during property registration.
 #[allow(clippy::type_complexity)]
 static PROPERTY_METADATA_BUILDER: LazyLock<
     Mutex<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>>,
@@ -165,27 +173,47 @@ pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -
 /// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
 /// our use case, this method is called in the `ctor` function of each `Property<E>` type.
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
-    add_to_property_registry_with_constructor::<E, P>(
-        PropertyValueStoreCore::<E, P>::new_boxed,
-        None,
-    );
+    add_to_property_registry_with_constructor::<E, P>(construct_property_value_store::<E, P>);
 }
 
 /// Adds a new indexable item to the registry with its default index state.
 ///
 /// Multi-properties use this so their representative property store is indexed
-/// as soon as a [`Context`] is constructed.
+/// as soon as a [`Context`] is constructed. This path is separate from
+/// [`add_to_property_registry`] because constructing an index requires the `Eq + Hash` guarantees
+/// provided by [`IndexableProperty`]. The registered constructor also supplies the dispatcher
+/// that maintains the index as new entities are added.
 pub fn add_indexed_to_property_registry<E: Entity, P: IndexableProperty<E>>() {
     add_to_property_registry_with_constructor::<E, P>(
-        PropertyValueStoreCore::<E, P>::new_boxed_with_default_index,
-        (P::default_index_type() != crate::entity::PropertyIndexType::Unindexed)
-            .then_some(index_new_entity::<E, P> as IndexNewEntityFn<E>),
+        construct_indexable_property_value_store::<E, P>,
     );
 }
 
+fn construct_property_value_store<E: Entity, P: Property<E>>() -> ConstructedPropertyValueStore<E> {
+    ConstructedPropertyValueStore {
+        value_store: PropertyValueStoreCore::<E, P>::new_boxed(),
+        index_new_entity_fn: None,
+    }
+}
+
+fn construct_indexable_property_value_store<E, P>() -> ConstructedPropertyValueStore<E>
+where
+    E: Entity,
+    P: IndexableProperty<E>,
+{
+    let index = P::default_index_type().new_property_index::<E, P>();
+    let index_new_entity_fn = index
+        .is_some()
+        .then_some(index_new_entity::<E, P> as IndexNewEntityFn<E>);
+
+    ConstructedPropertyValueStore {
+        value_store: PropertyValueStoreCore::<E, P>::new_boxed_with_index(index),
+        index_new_entity_fn,
+    }
+}
+
 fn add_to_property_registry_with_constructor<E: Entity, P: Property<E>>(
-    value_store_constructor: fn() -> Box<dyn PropertyValueStore<E>>,
-    index_new_entity_fn: Option<IndexNewEntityFn<E>>,
+    value_store_constructor: PropertyValueStoreConstructor<E>,
 ) {
     // Ensure the ID of the property type is initialized.
     let property_index = P::id();
@@ -228,11 +256,6 @@ fn add_to_property_registry_with_constructor<E: Entity, P: Property<E>>(
         metadata
             .value_store_constructor
             .get_or_insert(value_store_constructor);
-        if let Some(index_new_entity_fn) = index_new_entity_fn {
-            metadata
-                .index_new_entity_fn
-                .get_or_insert(index_new_entity_fn);
-        }
     }
 
     // Construct the dependency graph
@@ -326,10 +349,11 @@ impl<E: Entity> PropertyStore<E> {
     #[must_use]
     pub fn new() -> Self {
         let num_items = get_registered_property_count::<E>();
-        // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
+        // Constructors for each type-erased property value store and its optional index dispatcher
+        // are stored in the `PROPERTY_METADATA` global.
         let property_metadata = property_metadata();
 
-        // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each ID.
+        // Construct the correct concrete property value store and dispatcher for each ID.
         let mut items = Vec::with_capacity(num_items);
         let mut index_new_entity_fns = Vec::new();
         for idx in 0..num_items {
@@ -348,8 +372,9 @@ impl<E: Entity> PropertyStore<E> {
             let constructor = metadata.value_store_constructor.unwrap_or_else(|| {
                 panic!("Ixa internal error: no PropertyValueStore constructor for index {idx}")
             });
-            items.push(constructor());
-            if let Some(index_new_entity_fn) = metadata.index_new_entity_fn {
+            let constructed = constructor();
+            items.push(constructed.value_store);
+            if let Some(index_new_entity_fn) = constructed.index_new_entity_fn {
                 index_new_entity_fns.push((idx, index_new_entity_fn));
             }
         }
@@ -563,7 +588,10 @@ mod tests {
     use crate::entity::index::{FullIndex, IndexCountResult, IndexSetResult, ValueCountIndex};
     use crate::entity::PropertyIndexType;
     use crate::prelude::*;
-    use crate::{define_derived_property, define_entity, define_property, with, Context};
+    use crate::{
+        define_derived_property, define_entity, define_multi_property, define_property, with,
+        Context,
+    };
 
     define_entity!(Person);
 
@@ -592,6 +620,23 @@ mod tests {
         }
     );
 
+    define_entity!(DefaultIndexedPerson);
+    define_property!(
+        struct DefaultIndexedAge(u8),
+        DefaultIndexedPerson,
+        default_const = DefaultIndexedAge(0)
+    );
+    define_property!(
+        struct DefaultIndexedStatus(u8),
+        DefaultIndexedPerson,
+        default_const = DefaultIndexedStatus(0)
+    );
+    define_multi_property!(
+        DefaultIndexedPerson,
+        (DefaultIndexedAge, DefaultIndexedStatus)
+    );
+    type DefaultIndexedProfile = (DefaultIndexedAge, DefaultIndexedStatus);
+
     #[test]
     fn property_store_default_matches_new() {
         let property_store = PropertyStore::<Person>::default();
@@ -599,6 +644,24 @@ mod tests {
             property_store.items.len(),
             get_registered_property_count::<Person>()
         );
+    }
+
+    #[test]
+    fn default_index_constructor_pairs_each_store_with_its_dispatcher() {
+        let first = PropertyStore::<DefaultIndexedPerson>::new();
+        let second = PropertyStore::<DefaultIndexedPerson>::new();
+
+        for property_store in [&first, &second] {
+            assert_eq!(
+                property_store.get::<DefaultIndexedProfile>().index_type(),
+                PropertyIndexType::FullIndex
+            );
+            assert_eq!(property_store.index_new_entity_fns.len(), 1);
+            assert_eq!(
+                property_store.index_new_entity_fns[0].0,
+                DefaultIndexedProfile::id()
+            );
+        }
     }
 
     #[test]
