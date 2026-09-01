@@ -2,8 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(async () => {
-        window.setupWasm = async () => {
-            const wasm = await import('/pkg/ixa_wasm_tests.js');
+        window.setupWasm = async (packagePath = '/pkg/ixa_wasm_tests.js') => {
+            const wasm = await import(packagePath);
             await wasm.default();
             wasm.setup_error_hook();
             return wasm;
@@ -20,6 +20,49 @@ test('simulation completes successfully', async ({ page }) => {
     });
 
     expect(result).toContain('Simulation complete');
+});
+
+test('logging works with only the logging feature enabled', async ({ page }) => {
+    const loggingOutput = [];
+    page.on('console', message => {
+        const text = message.text();
+        if (text.includes('This is a')) {
+            loggingOutput.push(text);
+        }
+    });
+
+    await page.goto('http://localhost:8080');
+
+    const result = await page.evaluate(async () => {
+        const wasm = await window.setupWasm('/pkg/logging/ixa_wasm_tests.js');
+        return wasm.run_simulation();
+    });
+
+    expect(result).toContain('Simulation complete');
+    for (const message of [
+        'This is a debug message.',
+        'This is an info message.',
+        'This is a warning message.',
+        'This is an error message.',
+    ]) {
+        expect(loggingOutput.some(line => line.includes(message))).toBeTruthy();
+    }
+});
+
+test('profiling works with only the profiling feature enabled', async ({ page }) => {
+    const profilingOutput = [];
+    page.on('console', message => profilingOutput.push(message.text()));
+
+    await page.goto('http://localhost:8080');
+
+    const result = await page.evaluate(async () => {
+        const wasm = await window.setupWasm('/pkg/profiling/ixa_wasm_tests.js');
+        return wasm.run_query_profiling();
+    });
+
+    expect(result).toBe(100);
+    expect(profilingOutput.some(line => line.includes('Query') && line.includes('Count'))).toBeTruthy();
+    expect(profilingOutput.some(line => line.includes('Person: (InfectionStatus)'))).toBeTruthy();
 });
 
 test('simulation error (simulated panic) as expected', async ({ page }) => {

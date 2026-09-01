@@ -1,6 +1,9 @@
+#[cfg(feature = "logging")]
 use ixa::log::{debug, error, info, set_log_level, warn};
 use ixa::prelude::*;
+#[cfg(feature = "profiling")]
 use ixa::profiling::{increment_named_count, open_span, ProfilingContextExt};
+#[cfg(feature = "logging")]
 use ixa::LevelFilter;
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
@@ -45,32 +48,40 @@ pub fn run_simulation() -> Promise {
             .ok_or("performance not available")?;
         let start = performance.now();
 
-        // Logging
+        #[cfg(feature = "logging")]
         set_log_level(LevelFilter::Trace);
 
         // Actually run the simulation
         let mut context = Context::new();
         initialize(&mut context);
-        increment_named_count("wasm_simulation");
+
+        #[cfg(feature = "profiling")]
         {
+            increment_named_count("wasm_simulation");
             let _span = open_span("wasm_simulation");
             context.execute();
         }
+        #[cfg(not(feature = "profiling"))]
+        context.execute();
 
         let end = performance.now();
         let elapsed = end - start;
 
         let result = format!("Simulation complete in {:.2} ms", elapsed);
 
-        debug!("This is a debug message.");
-        info!("This is an info message.");
-        warn!("This is a warning message.");
-        error!("This is an error message.");
+        #[cfg(feature = "logging")]
+        {
+            debug!("This is a debug message.");
+            info!("This is an info message.");
+            warn!("This is a warning message.");
+            error!("This is an error message.");
+        }
 
         Ok(JsValue::from_str(&result))
     })
 }
 
+#[cfg(feature = "profiling")]
 #[wasm_bindgen]
 pub fn run_query_profiling() -> usize {
     let mut context = Context::new();
