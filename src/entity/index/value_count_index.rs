@@ -82,6 +82,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::entity::index::ValueCountIndex;
+    use crate::entity::{PropertyIndexType, QueryInternal};
     use crate::hashing::{one_shot_128, IndexSet};
     use crate::prelude::*;
 
@@ -99,9 +100,16 @@ mod tests {
     #[test]
     fn test_multi_property_index_typed_api() {
         let mut context = Context::new();
+        let property_store = context.entity_store.get_property_store_mut::<Person>();
+        let query = (Age(0), Weight(0), Height(0));
+        let representative_id = <AWH as QueryInternal<Person>>::multi_property_id(&query).unwrap();
 
         assert_ne!(AWH::type_id(), WHA::type_id());
-        context.index_property_counts::<Person, AWH>();
+        if representative_id == AWH::id() {
+            property_store.install_property_index::<AWH>(Some(Box::new(ValueCountIndex::new())));
+        } else {
+            property_store.install_property_index::<WHA>(Some(Box::new(ValueCountIndex::new())));
+        }
 
         context
             .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
@@ -131,8 +139,48 @@ mod tests {
     }
 
     #[test]
+    fn index_property_counts_preserves_representative_default_multi_property_full_index() {
+        let mut context = Context::new();
+        let query = (Age(0), Weight(0), Height(0));
+        let representative_id = <AWH as QueryInternal<Person>>::multi_property_id(&query).unwrap();
+
+        if representative_id == AWH::id() {
+            context.index_property_counts::<Person, AWH>();
+        } else {
+            context.index_property_counts::<Person, WHA>();
+        }
+
+        let property_store = context.entity_store.get_property_store::<Person>();
+        assert_eq!(
+            property_store.get::<AWH>().index_type(),
+            if representative_id == AWH::id() {
+                PropertyIndexType::FullIndex
+            } else {
+                PropertyIndexType::Unindexed
+            }
+        );
+        assert_eq!(
+            property_store.get::<WHA>().index_type(),
+            if representative_id == WHA::id() {
+                PropertyIndexType::FullIndex
+            } else {
+                PropertyIndexType::Unindexed
+            }
+        );
+    }
+
+    #[test]
     fn enabling_multi_property_value_count_index_indexes_existing_entities() {
         let mut context = Context::new();
+        let query = (Age(0), Weight(0), Height(0));
+        let representative_id = <AWH as QueryInternal<Person>>::multi_property_id(&query).unwrap();
+
+        let property_store = context.entity_store.get_property_store_mut::<Person>();
+        if representative_id == AWH::id() {
+            property_store.install_property_index::<AWH>(None);
+        } else {
+            property_store.install_property_index::<WHA>(None);
+        }
 
         context
             .add_entity(with!(Person, Age(1u8), Weight(2u8), Height(3u8)))
@@ -144,7 +192,11 @@ mod tests {
             .add_entity(with!(Person, Age(3u8), Weight(2u8), Height(1u8)))
             .unwrap();
 
-        context.index_property_counts::<Person, AWH>();
+        if representative_id == AWH::id() {
+            context.index_property_counts::<Person, AWH>();
+        } else {
+            context.index_property_counts::<Person, WHA>();
+        }
 
         assert_eq!(
             context.query_entity_count(with!(Person, Age(1u8), Weight(2u8), Height(3u8))),

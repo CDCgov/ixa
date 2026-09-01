@@ -43,8 +43,18 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         Self::default()
     }
 
-    pub(crate) fn new_boxed() -> Box<dyn PropertyValueStore<E>> {
+    pub(super) fn new_boxed() -> Box<dyn PropertyValueStore<E>> {
         Box::new(Self::new())
+    }
+
+    pub(super) fn new_boxed_with_index(
+        index: Option<Box<dyn PropertyIndex<E, P>>>,
+    ) -> Box<dyn PropertyValueStore<E>> {
+        Box::new(Self {
+            data: RawPropertyValueVec::default(),
+            index,
+            value_change_counters: Vec::new(),
+        })
     }
 
     #[must_use]
