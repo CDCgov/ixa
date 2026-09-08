@@ -1,5 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
+const TEST_PAGE = 'http://localhost:8080/test-harness.html';
+const CONSOLE_EVENT_TIMEOUT_MS = 5_000;
+
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(async () => {
         window.setupWasm = async (packagePath = '/pkg/ixa_wasm_tests.js') => {
@@ -11,8 +14,20 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
+const waitForProfilingTable = page => Promise.all([
+    page.waitForEvent('console', {
+        predicate: message =>
+            message.text().includes('Query') && message.text().includes('Count'),
+        timeout: CONSOLE_EVENT_TIMEOUT_MS,
+    }),
+    page.waitForEvent('console', {
+        predicate: message => message.text().includes('Person: (InfectionStatus)'),
+        timeout: CONSOLE_EVENT_TIMEOUT_MS,
+    }),
+]);
+
 test('simulation completes successfully', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         let wasm = await window.setupWasm();
@@ -23,50 +38,48 @@ test('simulation completes successfully', async ({ page }) => {
 });
 
 test('logging works with only the logging feature enabled', async ({ page }) => {
-    const loggingOutput = [];
-    page.on('console', message => {
-        const text = message.text();
-        if (text.includes('This is a')) {
-            loggingOutput.push(text);
-        }
-    });
+    await page.goto(TEST_PAGE);
 
-    await page.goto('http://localhost:8080');
-
-    const result = await page.evaluate(async () => {
-        const wasm = await window.setupWasm('/pkg/logging/ixa_wasm_tests.js');
-        return wasm.run_simulation();
-    });
-
-    expect(result).toContain('Simulation complete');
-    for (const message of [
+    const expectedMessages = [
         'This is a debug message.',
         'This is an info message.',
         'This is a warning message.',
         'This is an error message.',
-    ]) {
-        expect(loggingOutput.some(line => line.includes(message))).toBeTruthy();
-    }
+    ];
+    const loggingOutput = Promise.all(expectedMessages.map(expectedMessage =>
+        page.waitForEvent('console', {
+            predicate: message => message.text().includes(expectedMessage),
+            timeout: CONSOLE_EVENT_TIMEOUT_MS,
+        })
+    ));
+    const [result] = await Promise.all([
+        page.evaluate(async () => {
+            const wasm = await window.setupWasm('/pkg/logging/ixa_wasm_tests.js');
+            return wasm.run_simulation();
+        }),
+        loggingOutput,
+    ]);
+
+    expect(result).toContain('Simulation complete');
 });
 
 test('profiling works with only the profiling feature enabled', async ({ page }) => {
-    const profilingOutput = [];
-    page.on('console', message => profilingOutput.push(message.text()));
+    await page.goto(TEST_PAGE);
 
-    await page.goto('http://localhost:8080');
-
-    const result = await page.evaluate(async () => {
-        const wasm = await window.setupWasm('/pkg/profiling/ixa_wasm_tests.js');
-        return wasm.run_query_profiling();
-    });
+    const profilingOutput = waitForProfilingTable(page);
+    const [result] = await Promise.all([
+        page.evaluate(async () => {
+            const wasm = await window.setupWasm('/pkg/profiling/ixa_wasm_tests.js');
+            return wasm.run_query_profiling();
+        }),
+        profilingOutput,
+    ]);
 
     expect(result).toBe(100);
-    expect(profilingOutput.some(line => line.includes('Query') && line.includes('Count'))).toBeTruthy();
-    expect(profilingOutput.some(line => line.includes('Person: (InfectionStatus)'))).toBeTruthy();
 });
 
 test('simulation error (simulated panic) as expected', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         let wasm = await window.setupWasm();
@@ -84,7 +97,7 @@ test('simulation error (simulated panic) as expected', async ({ page }) => {
 });
 
 test('simulation completes successfully in a web worker', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         return new Promise((resolve, reject) => {
@@ -109,51 +122,50 @@ test('simulation completes successfully in a web worker', async ({ page }) => {
 });
 
 test('query profiling prints in the browser and a web worker', async ({ page }) => {
-    const profilingOutput = [];
-    page.on('console', message => {
-        const text = message.text();
-        if (!(text.includes('Query') && text.includes('Count')) &&
-            !text.includes('Person: (InfectionStatus)')) {
-            return;
-        }
+    await page.goto(TEST_PAGE);
 
-        profilingOutput.push(text);
-        // eslint-disable-next-line no-console
-        console.log(text);
-    });
+    const browserOutput = waitForProfilingTable(page);
+    const [browserResult] = await Promise.all([
+        page.evaluate(async () => {
+            const wasm = await window.setupWasm();
+            return wasm.run_query_profiling();
+        }),
+        browserOutput,
+    ]);
 
-    await page.goto('http://localhost:8080');
-
-    const browserResult = await page.evaluate(async () => {
-        const wasm = await window.setupWasm();
-        return wasm.run_query_profiling();
-    });
-
-    const workerResult = await page.evaluate(async () => {
-        return new Promise((resolve, reject) => {
-            const worker = new Worker('/worker.js', { type: 'module' });
+    const workerController = await page.evaluateHandle(() => {
+        const worker = new Worker('/worker.js', { type: 'module' });
+        const result = new Promise((resolve, reject) => {
             worker.onmessage = (e) => {
-                worker.terminate();
                 if (e.data.status === 'ok') {
                     resolve(e.data.result);
                 } else {
                     reject(new Error(e.data.message));
                 }
             };
-            worker.onerror = (e) => {
-                worker.terminate();
-                reject(new Error(e.message));
-            };
-            worker.postMessage('query-profiling');
+            worker.onerror = (e) => reject(new Error(e.message));
         });
+
+        return { worker, result };
     });
+    const workerOutput = waitForProfilingTable(page);
+    let workerResult;
+
+    try {
+        [workerResult] = await Promise.all([
+            workerController.evaluate(({ worker, result }) => {
+                worker.postMessage('query-profiling');
+                return result;
+            }),
+            workerOutput,
+        ]);
+    } finally {
+        await workerController.evaluate(({ worker }) => worker.terminate());
+        await workerController.dispose();
+    }
 
     expect(browserResult).toBe(100);
     expect(workerResult).toBe(100);
-    const headers = profilingOutput.filter(line => line.includes('Query') && line.includes('Count'));
-    const rows = profilingOutput.filter(line => line.includes('Person: (InfectionStatus)'));
-    expect(headers).toHaveLength(2);
-    expect(rows).toHaveLength(2);
 });
 
 test('real wasm panic emits console error', async ({ page }) => {
@@ -162,7 +174,7 @@ test('real wasm panic emits console error', async ({ page }) => {
     const pageErrors = [];
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     // Trigger the panic synchronously (not awaited) so the panic hook
     // can output to console before the promise rejection is handled.

@@ -137,6 +137,7 @@ run = [
   "mise run rust:version",
   "cargo check --package ixa --target wasm32-unknown-unknown --no-default-features --features logging",
   "cargo check --package ixa --target wasm32-unknown-unknown --no-default-features --features profiling",
+  "cargo check --manifest-path integration-tests/ixa-wasm-tests/Cargo.toml --target wasm32-unknown-unknown --no-default-features",
 ]
 
 [tasks.'bench']
