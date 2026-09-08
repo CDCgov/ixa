@@ -12,6 +12,11 @@ authors.workspace = true
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = ["logging", "profiling"]
+logging = ["ixa/logging"]
+profiling = ["ixa/profiling"]
+
 [dependencies]
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -20,7 +25,7 @@ js-sys = "^0.3.77"
 console_error_panic_hook = "0.1.7"
 
 # Explicitly use the Ixa in this same project.
-ixa = { path = "../../", default-features = false, features = ["logging", "profiling"] }
+ixa = { path = "../../", default-features = false }
 rand_distr.workspace = true
 serde.workspace = true
 
