@@ -75,9 +75,13 @@ pub fn run_simulation() -> Promise {
 pub fn run_query_profiling() -> usize {
     let mut context = Context::new();
     people::init(&mut context);
-    let count = context
-        .query_result_iterator(with!(people::Person, people::InfectionStatus::S))
-        .count();
+    increment_named_count("wasm_query_profiling");
+    let count = {
+        let _span = open_span("wasm_query_profiling");
+        context
+            .query_result_iterator(with!(people::Person, people::InfectionStatus::S))
+            .count()
+    };
     context.print_execution_statistics(true);
     count
 }

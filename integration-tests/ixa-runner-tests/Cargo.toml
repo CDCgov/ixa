@@ -40,3 +40,8 @@ bench = false
 name = "runner_merged_args"
 path = "bin/runner_merged_args.rs"
 bench = false
+
+[[bin]]
+name = "runner_log_statistics"
+path = "bin/runner_log_statistics.rs"
+bench = false
