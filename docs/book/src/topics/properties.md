@@ -267,14 +267,25 @@ define_property!(
 );
 ```
 
-For these forms, `define_property!` creates the type, makes it public, adds the
-standard derives, and then calls `impl_property!` for you. By default, the
-standard derives are `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`,
-`serde::Serialize`, and `serde::Deserialize`. The default includes `Eq` and
-`Hash` so the property can be indexed or used as a hash-map key without more
-boilerplate, but ordinary unindexed properties do not require those two traits.
-Use the `impl_eq_hash = ...` argument when the default `Eq`/`Hash` derives are
-not possible or not wanted.
+For these forms, `define_property!` creates the type, makes it and its fields
+public, adds the standard derives, and then calls `impl_property!` for you. Pass
+`private = true` as the first optional argument to make the type and all of its
+fields module-private instead:
+
+```rust
+define_property!(struct InternalRiskScore(u8), Person, private = true);
+```
+
+The macro controls visibility for the whole declaration, so omit visibility
+modifiers on tuple and named fields. To select the public default, omit the
+option; `private = false` is not supported.
+
+By default, the standard derives are `Debug`, `PartialEq`, `Eq`, `Hash`,
+`Clone`, `Copy`, `serde::Serialize`, and `serde::Deserialize`. The default
+includes `Eq` and `Hash` so the property can be indexed or used as a hash-map
+key without more boilerplate, but ordinary unindexed properties do not require
+those two traits. Use the `impl_eq_hash = ...` argument after `private = true`,
+when present, if the default `Eq`/`Hash` derives are not possible or not wanted.
 
 Use `impl_property!` when the type already exists or when the type declaration
 needs syntax that `define_property!` does not support. The common reasons are:
@@ -325,8 +336,8 @@ well if this property will be indexed or used as a key in a hash map.
 
 `define_property!` intentionally supports a small set of common type
 declarations. If the declaration needs field attributes, variant attributes,
-generics, non-public fields, or other syntax outside those forms, write the type
-directly.
+generics, mixed field visibility, or other syntax outside those forms, write
+the type directly.
 
 For example, `define_property!` cannot attach a field-level serde attribute:
 
@@ -458,7 +469,8 @@ The same trait rule applies to derived properties: all derived properties need
 `Copy`, `Clone`, `Debug`, and `PartialEq`; derived properties that are indexed
 also need `Eq` and `Hash`. The `define_derived_property!` macro includes
 `Eq` and `Hash` in its default derives, just like `define_property!`, unless
-you pass `impl_eq_hash = ...`.
+you pass `impl_eq_hash = ...`. It also accepts `private = true` in the same
+position and with the same visibility behavior as `define_property!`.
 
 ## Floating Point Types and Implementing `Eq` and `Hash`
 
