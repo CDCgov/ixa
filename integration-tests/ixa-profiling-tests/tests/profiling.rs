@@ -74,4 +74,40 @@ mod tests {
         assert_eq!(computed["it_prof_stat"]["description"], "Total test events");
         assert_eq!(computed["it_prof_stat"]["value"], 3);
     }
+
+    #[test]
+    fn runner_statistics_respect_no_stats_with_verbose_logging() {
+        let temp_dir = tempfile::tempdir().expect("failed to create tempdir");
+        let output_dir = temp_dir.path();
+
+        let default_output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_profiling")
+            .args([
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--force-overwrite",
+            ])
+            .output()
+            .unwrap();
+        let default_stdout = String::from_utf8(default_output.stdout).unwrap();
+        assert!(default_stdout.contains("Execution Summary"));
+        assert!(default_stdout.contains("Span Label"));
+        assert!(default_stdout.contains("Event Label"));
+        assert!(default_stdout.contains("Query"));
+
+        let no_stats_output = assert_cmd::cargo::cargo_bin_cmd!("runner_test_profiling")
+            .args([
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--force-overwrite",
+                "--no-stats",
+                "-v",
+            ])
+            .output()
+            .unwrap();
+        let no_stats_stdout = String::from_utf8(no_stats_output.stdout).unwrap();
+        assert!(!no_stats_stdout.contains("Execution Summary"));
+        assert!(!no_stats_stdout.contains("Span Label"));
+        assert!(!no_stats_stdout.contains("Event Label"));
+        assert!(!no_stats_stdout.contains("Query"));
+    }
 }

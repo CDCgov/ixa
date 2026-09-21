@@ -102,6 +102,53 @@ Run runner_test_custom_args --help -v to see more options
     }
 
     #[test]
+    fn execution_statistics_respect_no_stats_with_verbose_logging() {
+        let default_output = assert_cmd::cargo::cargo_bin_cmd!("runner_generic")
+            .output()
+            .unwrap();
+        let default_stdout = String::from_utf8(default_output.stdout).unwrap();
+        assert!(default_stdout.contains("━━━━ Execution Summary ━━━━"));
+        assert!(default_stdout.contains("Wall time:"));
+
+        let no_stats_output = assert_cmd::cargo::cargo_bin_cmd!("runner_generic")
+            .arg("--no-stats")
+            .output()
+            .unwrap();
+        let no_stats_stdout = String::from_utf8(no_stats_output.stdout).unwrap();
+        assert!(!no_stats_stdout.contains("Execution Summary"));
+        assert!(!no_stats_stdout.contains("Wall time:"));
+
+        let verbose_output = assert_cmd::cargo::cargo_bin_cmd!("runner_generic")
+            .args(["--no-stats", "-v"])
+            .output()
+            .unwrap();
+        let verbose_stdout = String::from_utf8(verbose_output.stdout).unwrap();
+        assert!(verbose_stdout.contains("An INFO message"));
+        assert!(!verbose_stdout.contains("Execution Summary"));
+        assert!(!verbose_stdout.contains("Wall time:"));
+    }
+
+    #[test]
+    fn explicit_execution_statistics_logging_remains_filtered() {
+        let filtered_output = assert_cmd::cargo::cargo_bin_cmd!("runner_log_statistics")
+            .arg("--no-stats")
+            .output()
+            .unwrap();
+        let filtered_stdout = String::from_utf8(filtered_output.stdout).unwrap();
+        assert!(!filtered_stdout.contains("Execution complete."));
+        assert!(!filtered_stdout.contains("Wall time: 1s"));
+
+        let info_output = assert_cmd::cargo::cargo_bin_cmd!("runner_log_statistics")
+            .args(["--no-stats", "-v"])
+            .output()
+            .unwrap();
+        let info_stdout = String::from_utf8(info_output.stdout).unwrap();
+        assert!(info_stdout.contains("Execution complete."));
+        assert!(info_stdout.contains("Wall time: 1s"));
+        assert!(!info_stdout.contains("Execution Summary"));
+    }
+
+    #[test]
     fn test_run_with_logging_modules() {
         assert_cmd::Command::new("cargo")
             .args(["build", "--bin", "runner_generic"])

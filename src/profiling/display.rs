@@ -9,6 +9,8 @@ use super::{
     profiling_data, ProfilingData, QueryProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
     QUERY_TIMINGS_HEADERS,
 };
+#[cfg(feature = "profiling")]
+use crate::output;
 
 /// Prints all collected profiling data.
 #[cfg(feature = "profiling")]
@@ -47,7 +49,7 @@ pub fn print_named_counts() {
         ]
     }));
 
-    println!();
+    output!();
     print_formatted_table(&formatted_rows);
 }
 
@@ -83,7 +85,7 @@ pub fn print_named_spans() {
             }),
     );
 
-    println!();
+    output!();
     print_formatted_table(&formatted_rows);
 }
 
@@ -114,7 +116,7 @@ pub(crate) fn print_query_timings(rows: &[(&'static str, QueryProfilingData)]) {
         ]
     }));
 
-    println!();
+    output!();
     print_formatted_table(&formatted_rows);
 }
 
@@ -136,7 +138,7 @@ pub fn print_computed_statistics() {
         container.computed_statistics[idx] = Some(statistic);
     }
 
-    println!();
+    output!();
 
     for statistic in &container.computed_statistics {
         let statistic = statistic.as_ref().unwrap();
@@ -173,10 +175,7 @@ pub fn print_formatted_table(rows: &[Vec<String>]) {
     // Print separator
     let total_width: usize = col_widths.iter().map(|w| *w + 2).sum();
     let separator = "-".repeat(total_width);
-    #[cfg(target_arch = "wasm32")]
-    web_sys::console::log_1(&separator.into());
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{separator}");
+    output!("{separator}");
 
     // Print data rows
     for row in &rows[1..] {
@@ -194,10 +193,7 @@ fn print_formatted_row(row: &[String], col_widths: &[usize]) {
             write!(&mut line, "{:>width$} ", cell, width = col_widths[i] + 1).unwrap();
         }
     }
-    #[cfg(target_arch = "wasm32")]
-    web_sys::console::log_1(&line.into());
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{line}");
+    output!("{line}");
 }
 
 /// Formats an integer with thousands separator.

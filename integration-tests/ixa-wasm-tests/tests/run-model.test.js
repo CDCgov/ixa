@@ -69,7 +69,11 @@ test('query profiling prints in the browser and a web worker', async ({ page }) 
     const profilingOutput = [];
     page.on('console', message => {
         const text = message.text();
-        if (!(text.includes('Query') && text.includes('Count')) &&
+        if (!text.includes('Execution Summary') &&
+            !text.includes('Span Label') &&
+            !text.includes('Event Label') &&
+            !(text.includes('Query') && text.includes('Count')) &&
+            !text.includes('wasm_query_profiling') &&
             !text.includes('Person: (InfectionStatus)')) {
             return;
         }
@@ -107,10 +111,12 @@ test('query profiling prints in the browser and a web worker', async ({ page }) 
 
     expect(browserResult).toBe(100);
     expect(workerResult).toBe(100);
-    const headers = profilingOutput.filter(line => line.includes('Query') && line.includes('Count'));
-    const rows = profilingOutput.filter(line => line.includes('Person: (InfectionStatus)'));
-    expect(headers).toHaveLength(2);
-    expect(rows).toHaveLength(2);
+    expect(profilingOutput.filter(line => line.includes('Execution Summary'))).toHaveLength(2);
+    expect(profilingOutput.filter(line => line.includes('Span Label'))).toHaveLength(2);
+    expect(profilingOutput.filter(line => line.includes('Event Label'))).toHaveLength(2);
+    expect(profilingOutput.filter(line => line.includes('Query') && line.includes('Count'))).toHaveLength(2);
+    expect(profilingOutput.filter(line => line.includes('wasm_query_profiling'))).toHaveLength(4);
+    expect(profilingOutput.filter(line => line.includes('Person: (InfectionStatus)'))).toHaveLength(2);
 });
 
 test('real wasm panic emits console error', async ({ page }) => {
