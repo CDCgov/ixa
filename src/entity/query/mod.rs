@@ -256,7 +256,7 @@ mod tests {
     #[cfg(feature = "profiling")]
     use super::{EntityId, EntityPropertyTuple, EntitySet};
     #[cfg(feature = "profiling")]
-    use crate::entity::multi_property::query_identity_label;
+    use crate::entity::multi_property::{query_identity_label, QueryIdentityId};
     use crate::prelude::*;
     use crate::{
         define_derived_property, define_entity, define_multi_property, define_property, Context,
@@ -401,6 +401,10 @@ mod tests {
         let reversed = <(County, Age) as QueryInternal<Person>>::resolved_query(&reversed_query);
         assert_eq!(resolved.identity, reversed.identity);
         assert_eq!(resolved.index_property_id, reversed.index_property_id);
+        assert_eq!(
+            QueryIdentityId::from_raw(<(Age, County) as Property<Person>>::query_identity_id()),
+            resolved.identity
+        );
     }
 
     #[cfg(feature = "profiling")]

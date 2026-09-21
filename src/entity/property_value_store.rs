@@ -17,6 +17,8 @@ use crate::entity::events::{
 use crate::entity::index::{IndexCountResult, IndexSetResult};
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 use crate::entity::{Entity, EntityId};
 use crate::Context;
 
@@ -41,6 +43,9 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn should_create_partial_change(&self, context: &Context) -> bool;
 
     // Index-related methods. Anything beyond these requires the `PropertyValueStoreCore<E, P>`.
+
+    #[cfg(feature = "profiling")]
+    fn index_type(&self) -> PropertyIndexType;
 
     fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E>;
 
@@ -80,6 +85,11 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         context.has_event_handlers::<PropertyChangeEvent<E, P>>()
             || !self.value_change_counters.is_empty()
             || self.index.is_some()
+    }
+
+    #[cfg(feature = "profiling")]
+    fn index_type(&self) -> PropertyIndexType {
+        PropertyValueStoreCore::index_type(self)
     }
 
     fn get_index_set_for_query_parts(&self, parts: &[&dyn Any]) -> IndexSetResult<'_, E> {

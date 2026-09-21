@@ -26,9 +26,10 @@
 //! schedule_next_forecasted_infection    1286  22ms 329us 102ns      8.44%
 //! Total Measured                        1385  23ms 897us 146ns      9.03%
 //!
-//! Query                    Count        Total          Min          Max
-//! --------------------------------------------------------------------
-//! Person: (Age, County)      150   12ms 340us   10us 120ns  250us 450ns
+//! Query                    Index Type  Count        Total          Min          Max
+//! --------------------------------------------------------------------------------
+//! Person: (Age, County)    full_index    150   12ms 340us   10us 120ns  250us 450ns
+//! Person: (Risk)           full_index      0           0s            -            -
 //!
 //! Event Label                     Count  Rate (per sec)
 //! -----------------------------------------------------
@@ -175,8 +176,19 @@ pub use display::*;
 use file::write_profiling_data_to_file;
 pub use reporting::*;
 
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 pub use crate::execution_stats::ProfilingInstant;
 use crate::{error, Context, ContextReportExt};
+
+#[cfg(feature = "profiling")]
+const fn index_type_label(index_type: PropertyIndexType) -> &'static str {
+    match index_type {
+        PropertyIndexType::Unindexed => "unindexed",
+        PropertyIndexType::FullIndex => "full_index",
+        PropertyIndexType::ValueCountIndex => "value_count_index",
+    }
+}
 
 #[cfg(all(test, feature = "profiling"))]
 /// Publicly expose access to profiling data only for testing.
@@ -193,7 +205,7 @@ const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% run
 #[cfg(feature = "profiling")]
 const NAMED_COUNTS_HEADERS: &[&str] = &["Event Label", "Count", "Rate (per sec)"];
 #[cfg(feature = "profiling")]
-const QUERY_TIMINGS_HEADERS: &[&str] = &["Query", "Count", "Total", "Min", "Max"];
+const QUERY_TIMINGS_HEADERS: &[&str] = &["Query", "Index Type", "Count", "Total", "Min", "Max"];
 
 pub struct Span {
     #[cfg(feature = "profiling")]
