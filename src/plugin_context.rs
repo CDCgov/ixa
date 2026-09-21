@@ -1,7 +1,7 @@
 use crate::context::{Context, ContextBase};
 use crate::{
-    ContextEntitiesExt, ContextGlobalPropertiesExt, ContextNetworkExt, ContextRandomExt,
-    ContextReportExt,
+    ContextCalendarExt, ContextEntitiesExt, ContextGlobalPropertiesExt, ContextNetworkExt,
+    ContextRandomExt, ContextReportExt,
 };
 
 /// A supertrait that exposes useful methods from [`Context`]
@@ -21,6 +21,7 @@ use crate::{
 /// }
 pub trait PluginContext:
     ContextBase
+    + ContextCalendarExt
     + ContextRandomExt
     + ContextReportExt
     + ContextNetworkExt
