@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1](https://github.com/CDCgov/ixa/compare/ixa-v3.1.0...ixa-v3.1.1) - 2026-09-21
+
+### Other
+
+- bump release-plz/action from 0.5.131 to 0.5.134 ([#1055](https://github.com/CDCgov/ixa/pull/1055))
+- bump rust-toolchain from 1.97.1 to 1.98.0 ([#1053](https://github.com/CDCgov/ixa/pull/1053))
+
 ## [3.1.0](https://github.com/CDCgov/ixa/compare/ixa-v3.0.0...ixa-v3.1.0) - 2026-08-24
 
 ### Added
