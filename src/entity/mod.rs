@@ -41,6 +41,7 @@ pub mod multi_property;
 pub mod property;
 pub mod property_list;
 pub mod property_store;
+pub mod property_store_core;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;

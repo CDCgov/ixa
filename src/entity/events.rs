@@ -154,12 +154,18 @@ impl<E: Entity> Copy for EntityCreatedEvent<E> {}
 
 impl<E: Entity> IxaEvent for EntityCreatedEvent<E> {
     fn on_subscribe(context: &mut Context) {
-        context.entity_store.items[E::id()].entity_created_event_subscribed = true;
+        context
+            .entity_store
+            .get_property_store_mut::<E>()
+            .entity_created_event_subscribed = true;
     }
 
     fn on_unsubscribe(context: &mut Context) {
         if !context.has_event_handlers::<Self>() {
-            context.entity_store.items[E::id()].entity_created_event_subscribed = false;
+            context
+                .entity_store
+                .get_property_store_mut::<E>()
+                .entity_created_event_subscribed = false;
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::entity::multi_property::type_ids_to_multi_property_id;
 #[cfg(feature = "profiling")]
 use crate::entity::multi_property::{intern_query_identity, QueryIdentityId};
 use crate::entity::property_list::{PropertyInitializationList, PropertyList};
-use crate::entity::property_store::PropertyStore;
+use crate::entity::property_store_core::PropertyStoreCore;
 use crate::entity::Entity;
 use crate::hashing::HashMap;
 use crate::prelude::EntityId;
@@ -123,7 +123,7 @@ impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
+        property_store: &mut PropertyStoreCore<E>,
     ) {
         let tuple = *self;
         tuple
