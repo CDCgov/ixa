@@ -22,9 +22,6 @@ use crate::Context;
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub(crate) trait PropertyValueStore<E: Entity>: Any {
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-    fn as_any(&self) -> &dyn Any;
-
     // Methods related to updating a value of a dependency
     /// Fetches the existing value of the property for the given `entity_id` and returns a
     /// `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
@@ -48,14 +45,6 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn create_partial_property_change(
         &self,
         entity_id: EntityId<E>,

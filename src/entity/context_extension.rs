@@ -101,8 +101,8 @@ fn handle_periodic_value_change_count_event<E, PL, P, F>(
     };
 
     {
-        let counter = counter
-            .as_any_mut()
+        let counter_any: &mut dyn std::any::Any = counter.as_mut();
+        let counter = counter_any
             .downcast_mut::<StratifiedValueChangeCounter<E, PL, P>>()
             .unwrap_or_else(|| {
                 panic!(
