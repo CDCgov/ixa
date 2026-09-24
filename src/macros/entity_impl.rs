@@ -37,6 +37,7 @@ macro_rules! impl_entity {
         }
 
         impl $crate::entity::Entity for $entity_name {
+            #[inline]
             fn id() -> usize {
                 // This static must be initialized with a compile-time constant expression.
                 // We use `usize::MAX` as a sentinel to mean "uninitialized". This
@@ -50,8 +51,8 @@ macro_rules! impl_entity {
                     return index;
                 }
 
-                // Slow path: initialize it.
-                $crate::entity::entity_store::initialize_entity_index(&INDEX)
+                // Slow path: install the complete registration before publishing the ID.
+                $crate::entity::schema_registry::ensure_entity_registered::<Self>(&INDEX)
             }
 
             fn all_query_identity() -> usize {
@@ -80,7 +81,7 @@ macro_rules! impl_entity {
             $crate::ctor::declarative::ctor!{
                 #[ctor(unsafe)]
                 fn [<_register_entity_$entity_name:snake>]() {
-                    $crate::entity::entity_store::add_to_entity_registry::<$entity_name>();
+                    $crate::entity::schema_registry::add_to_entity_registry::<$entity_name>();
                 }
             }
         }

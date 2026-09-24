@@ -31,7 +31,7 @@ use std::any::TypeId;
 use std::sync::{LazyLock, Mutex};
 
 #[cfg(feature = "profiling")]
-use crate::entity::property_store::registered_property_name;
+use crate::entity::schema_registry::SCHEMA_REGISTRY;
 use crate::entity::Entity;
 use crate::hashing::{one_shot_128, HashMap, HashValueType};
 use crate::warn;
@@ -173,7 +173,7 @@ fn build_query_identity_label<E: Entity>(type_ids: &[TypeId]) -> String {
 
     let mut names = type_ids
         .iter()
-        .map(|&type_id| registered_property_name(E::id(), type_id))
+        .map(|&type_id| SCHEMA_REGISTRY.registered_property_name(E::id(), type_id))
         .collect::<Vec<_>>();
     names.sort_unstable();
 

@@ -10,33 +10,20 @@ storage (including index) of the property. Storage is only allocated as-needed, 
 instantiation of a `PropertyValueStore` for a property that is never used is negligible.
 There's no need, then, for lazy initialization of the `PropertyValueStore`s themselves.
 
-This module also implements the initialization of "static" data associated with a property,
-that is, data that is the same across all [`crate::context::Context`] instances, which is computed before `main()`
-using `ctor` magic. (Each property implements a ctor that calls [`add_to_property_registry()`].)
-For simplicity, a property's ctor implementation, supplied by a macro, just calls
-`add_to_property_registry<E: Entity, P: Property<E>>()`, which does all the work. The
-`add_to_property_registry` function adds the following metadata to global metadata stores:
-
-Metadata stored on `PROPERTY_METADATA`, which for each property stores:
-- a list of dependent (derived) properties, and
-- a constructor function to create a new `PropertyValueStore` instance for the property.
-
-Metadata stored on `ENTITY_METADATA`, which for each entity stores:
-- a list of properties associated with the entity, and
-- a list of _required_ properties for the entity. These are properties for
-  which values must be supplied to `add_entity` when creating a new entity.
+Property schema shared by every [`crate::context::Context`] is registered before `main()` using
+`ctor` functions. Generated ctors call
+[`add_to_property_registry()`](crate::entity::schema_registry::add_to_property_registry), which
+delegates to the property's cached ID. On a cache miss the ID slow path prepares the complete
+property descriptor and dependency list, then installs them together in the schema registry. The
+first runtime schema read freezes registration into immutable dense slices.
 
 */
 
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
-use crate::entity::entity_store::register_property_with_entity;
 use crate::entity::events::PartialPropertyChangeEventBox;
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
 use crate::entity::property::{IndexableProperty, Property};
@@ -44,6 +31,7 @@ use crate::entity::property_list::PropertyList;
 use crate::entity::property_store::PropertyStore;
 use crate::entity::property_value_store::PropertyValueStore;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+use crate::entity::schema_registry::{PropertyRegistration, SCHEMA_REGISTRY};
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::EntityId;
 use crate::{Context, ContextEntitiesExt};
@@ -68,207 +56,6 @@ where
     index.add_entity(&value, entity_id);
 }
 
-/// A map from Entity ID to a count of the properties already associated with the entity. The value for the key is
-/// equivalent to the next property ID that will be assigned to the next property that requests an ID. Each `Entity`
-/// type has its own series of increasing property IDs.
-///
-/// Note: The mechanism to assign property IDs needs to be distinct from the rest of property registration, because
-/// properties often need to have an ID assigned _before_ its registration proper so that it can be recorded as a
-/// dependency of some other property.
-static NEXT_PROPERTY_ID: LazyLock<Mutex<HashMap<usize, usize>>> =
-    LazyLock::new(|| Mutex::new(HashMap::default()));
-
-/// Entity-scoped names for logical property identities, used to construct
-/// query-profiling labels without query-specific name collection.
-#[cfg(feature = "profiling")]
-static PROPERTY_NAMES: LazyLock<Mutex<HashMap<(usize, TypeId), &'static str>>> =
-    LazyLock::new(|| Mutex::new(HashMap::default()));
-
-#[cfg(feature = "profiling")]
-pub(crate) fn registered_property_name(entity_id: usize, property_type_id: TypeId) -> &'static str {
-    PROPERTY_NAMES
-        .lock()
-        .unwrap()
-        .get(&(entity_id, property_type_id))
-        .unwrap_or_else(|| {
-            panic!(
-                "No registered property name for entity ID {entity_id} and logical property type ID {property_type_id:?}"
-            )
-        })
-}
-
-/// A container struct to hold the (global) metadata for a single property.
-///
-/// At program startup (before `main()`, using ctors) we compute metadata for all properties
-/// that are linked into the binary, and this data remains unchanged for the life of the program.
-#[derive(Default)]
-pub(super) struct PropertyMetadata<E: Entity> {
-    /// The (derived) properties that depend on this property, as represented by their
-    /// `Property::id` value. This list is used to update the index (if applicable)
-    /// and emit change events for these properties when this property changes.
-    pub dependents: Vec<usize>,
-    /// A function that constructs a new `PropertyValueStoreCore<E, P>` instance in a type-erased
-    /// way, used in the constructor of `PropertyStoreCore`. This is an `Option` because this
-    /// function pointer is recorded possibly out-of-order from when the `PropertyMetadata`
-    /// instance for this property needs to exist (when its dependents are recorded).
-    #[allow(clippy::type_complexity)]
-    pub value_store_constructor: Option<fn() -> Box<dyn PropertyValueStore<E>>>,
-}
-
-/// This maps `(entity_type_id, property_type_index)` to `PropertyMetadata<E>`, which holds a vector of dependents (as IDs)
-/// and a function pointer to the constructor that constucts a `PropertyValueStoreCore<E, P>` type erased as
-/// a `Box<dyn PropertyValueStore<E>>`. This data is actually written by the property `ctor`s with a call to [`crate::entity::entity_store::register_property_with_entity`()].
-#[allow(clippy::type_complexity)]
-static PROPERTY_METADATA_BUILDER: LazyLock<
-    Mutex<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>>,
-> = LazyLock::new(|| Mutex::new(HashMap::default()));
-
-/// The frozen property metadata registry, created exactly once on first read.
-///
-/// This is derived from `PROPERTY_METADATA_BUILDER` by moving the builder `HashMap` out. After this point,
-/// registration is no longer allowed.
-static PROPERTY_METADATA: OnceLock<HashMap<(usize, usize), Box<dyn Any + Send + Sync>>> =
-    OnceLock::new();
-
-/// Private helper to fetch or initialize the frozen metadata.
-fn property_metadata() -> &'static HashMap<(usize, usize), Box<dyn Any + Send + Sync>> {
-    PROPERTY_METADATA.get_or_init(|| {
-        let mut builder = PROPERTY_METADATA_BUILDER.lock().unwrap();
-        std::mem::take(&mut *builder)
-    })
-}
-
-/// The public getter for the dependents of a property with index `property_index` (as stored in
-/// `PROPERTY_METADATA`). The `Property<E: Entity>::dependents()` method defers to this.
-///
-/// This function should only be called once `main()` starts, that is, not in `ctors` constructors,
-/// as it assumes `PROPERTY_METADATA` has been correctly initialized. Hence, the "static" suffix.
-#[must_use]
-pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -> &'static [usize] {
-    let map = property_metadata();
-    let property_metadata = map
-        .get(&(E::id(), property_index))
-                               .unwrap_or_else(|| panic!("No registered property found with index = {property_index:?}. You must use the `define_property!` macro to create a registered property."));
-    let property_metadata: &PropertyMetadata<E> = property_metadata.downcast_ref().unwrap_or_else(
-        || panic!(
-            "Property type at index {:?} does not match registered property type. You must use the `define_property!` macro to create a registered property.",
-            property_index
-        )
-    );
-
-    property_metadata.dependents.as_slice()
-}
-
-/// Adds a new item to the registry. The job of this method is to create whatever "singleton"
-/// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
-/// our use case, this method is called in the `ctor` function of each `Property<E>` type.
-pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
-    // Ensure the ID of the property type is initialized.
-    let property_index = P::id();
-
-    #[cfg(feature = "profiling")]
-    {
-        let key = (E::id(), P::type_id());
-        let mut names = PROPERTY_NAMES.lock().unwrap();
-        if let Some(existing) = names.insert(key, P::name()) {
-            assert_eq!(
-                existing,
-                P::name(),
-                "conflicting names for one logical property identity"
-            );
-        }
-    }
-
-    // Registers the property with the entity type.
-    register_property_with_entity(
-        <E as Entity>::type_id(),
-        <P as Property<E>>::type_id(),
-        P::is_required(),
-    );
-
-    let mut property_metadata = PROPERTY_METADATA_BUILDER.lock().unwrap();
-    if PROPERTY_METADATA.get().is_some() {
-        panic!(
-            "`add_to_property_registry()` called after property metadata was frozen; registration must occur during startup/ctors."
-        );
-    }
-
-    // Register the `PropertyValueStoreCore<E, P>` constructor.
-    {
-        let metadata = property_metadata
-            .entry((E::id(), property_index))
-            .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
-        let metadata: &mut PropertyMetadata<E> = metadata
-            .downcast_mut()
-            .expect("Ixa internal error: property metadata has the wrong entity type");
-        metadata
-            .value_store_constructor
-            .get_or_insert(PropertyValueStoreCore::<E, P>::new_boxed);
-    }
-
-    // Construct the dependency graph
-    for dependency in P::non_derived_dependencies() {
-        // Add `property_index` as a dependent of the dependency
-        let dependency_meta = property_metadata
-            .entry((E::id(), dependency))
-            .or_insert_with(|| Box::new(PropertyMetadata::<E>::default()));
-        let dependency_meta: &mut PropertyMetadata<E> = dependency_meta
-            .downcast_mut()
-            .expect("Ixa internal error: dependency metadata has the wrong entity type");
-        dependency_meta.dependents.push(property_index);
-    }
-}
-
-/// A convenience getter for `NEXT_ENTITY_INDEX`.
-pub fn get_registered_property_count<E: Entity>() -> usize {
-    let map = NEXT_PROPERTY_ID.lock().unwrap();
-    *map.get(&E::id()).unwrap_or(&0)
-}
-
-/// Encapsulates the synchronization logic for initializing an item's index.
-///
-/// Acquires a global lock on the next available property ID, but only increments
-/// it if we successfully initialize the provided ID. The ID of a property is
-/// assigned at runtime but only once per type. It's possible for a single
-/// type to attempt to initialize its index multiple times from different threads,
-/// which is why all this synchronization is required. However, the overhead
-/// is negligible, as this initialization only happens once upon first access.
-///
-/// In fact, for our use case we know we are calling this function
-/// once for each type in each `Property`'s `ctor` function, which
-/// should be the only time this method is ever called for the type.
-pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
-    // Acquire a global lock.
-    let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
-    let candidate = guard.entry(E::id()).or_insert_with(|| 0);
-
-    // The property may have been initialized while this call waited for the lock.
-    let existing = property_id.load(Ordering::Acquire);
-    if existing != usize::MAX {
-        return existing;
-    }
-
-    // Try to claim the candidate index. Here we guard against the potential race condition that
-    // another instance of this plugin in another thread just initialized the index prior to us
-    // obtaining the lock. If the index has been initialized beneath us, we do not update
-    // NEXT_PROPERTY_INDEX, we just return the value `index` was initialized to.
-    // For a justification of the data ordering, see:
-    //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
-    match property_id.compare_exchange(usize::MAX, *candidate, Ordering::AcqRel, Ordering::Acquire)
-    {
-        Ok(_) => {
-            // We won the race — increment the global next plugin index and return the new index
-            *candidate += 1;
-            *candidate - 1
-        }
-        Err(existing) => {
-            // Another thread beat us — don’t increment the global next plugin index,
-            // just return existing
-            existing
-        }
-    }
-}
-
 /// A wrapper around a vector of property value stores.
 pub struct PropertyStoreCore<E: Entity> {
     /// The total count of all entities of this type (i.e., the next index to assign).
@@ -282,6 +69,9 @@ pub struct PropertyStoreCore<E: Entity> {
 
     /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn PropertyValueStore<E>>`
     items: Vec<Box<dyn PropertyValueStore<E>>>,
+
+    /// Immutable, dense metadata for the property slots in `items`.
+    property_registrations: &'static [PropertyRegistration],
 
     /// Set of properties that currently have `PropertyInitializedEvent` subscribers.
     ///
@@ -305,37 +95,27 @@ impl<E: Entity> PropertyStoreCore<E> {
     /// Creates a new [`PropertyStoreCore`].
     #[must_use]
     pub fn new() -> Self {
-        let num_items = get_registered_property_count::<E>();
-        // The constructors for each `PropertyValueStoreCore<E, P>` are stored in the `PROPERTY_METADATA` global.
-        let property_metadata = property_metadata();
+        let property_registrations = SCHEMA_REGISTRY
+            .entity_registration::<E>()
+            .properties
+            .as_ref();
 
-        // We construct the correct concrete `PropertyValueStoreCore<E, P>` value for each ID.
-        let items = (0..num_items)
-            .map(|idx| {
-                let metadata = property_metadata
-                    .get(&(E::id(), idx))
-                    .unwrap_or_else(|| {
-                        panic!("Ixa internal error: no property metadata entry for index {idx}")
-                    })
-                    .downcast_ref::<PropertyMetadata<E>>()
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Ixa internal error: property metadata entry for index {idx} does not \
-                             match the expected type"
-                        )
-                    });
-                let constructor = metadata.value_store_constructor.unwrap_or_else(|| {
-                    panic!("Ixa internal error: no PropertyValueStore constructor for index {idx}")
-                });
-                constructor()
-            })
-            .collect();
+        // The frozen schema has been fully published before installers are invoked. No schema lock
+        // or OnceLock initialization closure is active here.
+        let mut items: Vec<Box<dyn PropertyValueStore<E>>> =
+            Vec::with_capacity(property_registrations.len());
+        for registration in property_registrations {
+            (registration.value_store_installer)(&mut items);
+        }
+        assert_eq!(items.len(), property_registrations.len());
+        let num_items = property_registrations.len();
 
         Self {
             entity_count: 0,
             entity_created_event_subscribed: false,
             entity: OnceCell::new(),
             items,
+            property_registrations,
             property_initialized_event_subscriptions: BitSet::new(num_items),
             index_new_entity_fns: Vec::new(),
         }
@@ -343,6 +123,12 @@ impl<E: Entity> PropertyStoreCore<E> {
 
     pub(crate) fn new_boxed() -> Box<dyn PropertyStore> {
         Box::new(Self::new())
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn dependent_property_ids(&self, property_id: usize) -> &[usize] {
+        &self.property_registrations[property_id].dependent_property_ids
     }
 
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
@@ -587,15 +373,6 @@ mod tests {
             PanickingDerived(dependency.0)
         }
     );
-
-    #[test]
-    fn property_store_default_matches_new() {
-        let property_store = PropertyStoreCore::<Person>::default();
-        assert_eq!(
-            property_store.items.len(),
-            get_registered_property_count::<Person>()
-        );
-    }
 
     #[test]
     fn erased_property_store_downcasts_and_reports_count() {

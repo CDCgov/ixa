@@ -22,12 +22,11 @@ context.set_property(my_entity_id, some_property_value);
 context.set_property::<MyProperty>(my_entity_id, some_property_value);
 ```
 
-This implementation of entities relies heavily on the "registry pattern" for efficient
-lookup of entities and properties. The idea is that concrete types implementing `Entity` (and
-separately, `Property<Entity>`) have a `ctor` that initializes a global (per concrete type)
-static variable `index`. Each concrete `Entity` type is thus assigned a unique index ranging from
-`0` to `ENTITY_COUNT - 1`. Then instances of container types like `EntityStore` (respectively
-`PropertyStore`) use this index to look up the corresponding instances in a vector it owns.
+This implementation relies on dense process-local entity and property IDs for efficient lookup.
+Generated startup constructors ensure each type has a complete entry in one schema registry. The
+first runtime schema read freezes registration into immutable slices; context-owned entity and
+property stores then use the cached IDs as vector indices without consulting the registry in their
+ordinary access paths.
 
 */
 
@@ -45,6 +44,8 @@ pub mod property_store_core;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;
+#[doc(hidden)]
+pub mod schema_registry;
 pub(crate) mod value_change_counter;
 
 // Flatten the module hierarchy.

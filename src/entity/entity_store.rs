@@ -11,174 +11,16 @@ for all registered types so that only valid (existing) `EntityId<E>` values are 
 
 */
 
-use std::any::{Any, TypeId};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex, OnceLock};
+use std::any::Any;
 
 use crate::entity::property_store::PropertyStore;
 use crate::entity::property_store_core::PropertyStoreCore;
+use crate::entity::schema_registry::SCHEMA_REGISTRY;
 use crate::entity::{Entity, EntityId, PopulationIterator};
-use crate::HashMap;
 
-/// Global entity index counter; keeps track of the index that will be assigned to the next entity that
-/// requests an index. Equivalently, holds a *count* of the number of entities currently registered.
-static NEXT_ENTITY_INDEX: Mutex<usize> = Mutex::new(0);
-
-type PropertyStoreConstructor = fn() -> Box<dyn PropertyStore>;
-
-#[derive(Clone, Copy)]
-struct EntityRegistration {
-    entity_type_id: TypeId,
-    property_store_constructor: PropertyStoreConstructor,
-}
-
-/// Constructors for the concrete property store at each entity index.
-static ENTITY_REGISTRATIONS: Mutex<Vec<Option<EntityRegistration>>> = Mutex::new(Vec::new());
-
-/// For each entity we keep track of the properties associated with it. This maps
-/// `entity_type_id` to `(vec_of_all_property_type_ids, vec_of_required_property_type_ids)`.
-/// This data is actually written by the property ctors with a call to
-/// [`register_property_with_entity()`].
-#[allow(clippy::type_complexity)]
-static ENTITY_METADATA_BUILDER: LazyLock<Mutex<HashMap<TypeId, (Vec<TypeId>, Vec<TypeId>)>>> =
-    LazyLock::new(|| Mutex::new(HashMap::default()));
-
-/// The frozen entity->property registry, created exactly once on first read.
-///
-/// This is derived from `ENTITY_METADATA_BUILDER` by moving the builder `HashMap` out and
-/// converting the `Vec`s to boxed slices to prevent further mutation.
-#[allow(clippy::type_complexity)]
-static ENTITY_METADATA: OnceLock<HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)>> = OnceLock::new();
-
-/// Private helper to fetch or initialize the frozen metadata.
-#[allow(clippy::type_complexity)]
-fn entity_metadata() -> &'static HashMap<TypeId, (Box<[TypeId]>, Box<[TypeId]>)> {
-    ENTITY_METADATA.get_or_init(|| {
-        let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
-        let builder = std::mem::take(&mut *builder);
-        builder
-            .into_iter()
-            .map(|(entity_type_id, (props, reqs))| {
-                (
-                    entity_type_id,
-                    (props.into_boxed_slice(), reqs.into_boxed_slice()),
-                )
-            })
-            .collect()
-    })
-}
-
-/// The public setter interface to `ENTITY_METADATA`.
-pub fn register_property_with_entity(
-    entity_type_id: TypeId,
-    property_type_id: TypeId,
-    required: bool,
-) {
-    let mut builder = ENTITY_METADATA_BUILDER.lock().unwrap();
-    if ENTITY_METADATA.get().is_some() {
-        panic!(
-            "`register_property_with_entity()` called after entity metadata was frozen; registration must occur during startup/ctors."
-        );
-    }
-
-    let (property_type_ids, required_property_type_ids) = builder
-        .entry(entity_type_id)
-        .or_insert_with(|| (Vec::new(), Vec::new()));
-    property_type_ids.push(property_type_id);
-    if required {
-        required_property_type_ids.push(property_type_id);
-    }
-}
-
-/// Returns the pre-computed, frozen metadata for an entity type.
-///
-/// This registry is built during startup by property ctors calling
-/// [`register_property_with_entity()`], then frozen exactly once on first read.
-#[must_use]
-pub fn get_entity_metadata_static(
-    entity_type_id: TypeId,
-) -> (&'static [TypeId], &'static [TypeId]) {
-    match entity_metadata().get(&entity_type_id) {
-        Some((props, reqs)) => (props.as_ref(), reqs.as_ref()),
-        None => (&[], &[]),
-    }
-}
-
-/// Adds a new entity to the registry. The job of this method is to create whatever
-/// "singleton" data/metadata is associated with the [`Entity`] if it doesn't already
-/// exist: the value of `Entity::id()` and the constructor for its concrete property store.
-///
-/// In our use case, this method is called in the `ctor` function of each `Entity`
-/// type. The constructor is invoked later by `EntityStore::new`, after all startup ctors have
-/// completed, so every property's metadata is available when `PropertyStoreCore<E>` is built.
-pub fn add_to_entity_registry<R: Entity>() {
-    let index = R::id();
-    let mut registrations = ENTITY_REGISTRATIONS.lock().unwrap();
-    if registrations.len() <= index {
-        registrations.resize(index + 1, None);
-    }
-    let registration = EntityRegistration {
-        entity_type_id: <R as Entity>::type_id(),
-        property_store_constructor: PropertyStoreCore::<R>::new_boxed,
-    };
-    if let Some(existing) = registrations[index] {
-        assert_eq!(
-            existing.entity_type_id, registration.entity_type_id,
-            "Ixa internal error: multiple entity types registered at index {index}"
-        );
-    } else {
-        registrations[index] = Some(registration);
-    }
-}
-
-/// A convenience getter for `NEXT_ENTITY_INDEX`.
-pub fn get_registered_entity_count() -> usize {
-    *NEXT_ENTITY_INDEX.lock().unwrap()
-}
-
-/// Encapsulates the synchronization logic for initializing an entity's index.
-///
-/// Acquires a global lock on the next available item index, but only increments
-/// it if we successfully initialize the provided index. The `index` of a registered
-/// item is assigned at runtime but only once per type. It's possible for a single
-/// type to attempt to initialize its index multiple times from different threads,
-/// which is why all this synchronization is required. However, the overhead
-/// is negligible, as this initialization only happens once upon first access.
-///
-/// In fact, for our use case we know we are calling this function
-/// once for each type in each `Entity`'s `ctor` function, which
-/// should be the only time this method is ever called for the type.
-pub fn initialize_entity_index(plugin_index: &AtomicUsize) -> usize {
-    initialize_entity_index_with_counter(plugin_index, &NEXT_ENTITY_INDEX)
-}
-
-fn initialize_entity_index_with_counter(
-    plugin_index: &AtomicUsize,
-    next_entity_index: &Mutex<usize>,
-) -> usize {
-    // Acquire the supplied index counter lock.
-    let mut guard = next_entity_index.lock().unwrap();
-    let candidate = *guard;
-
-    // Try to claim the candidate index. Here we guard against the potential race condition that
-    // another instance of this plugin in another thread just initialized the index prior to us
-    // obtaining the lock. If the index has been initialized beneath us, we do not update
-    // [`NEXT_ITEM_INDEX`], we just return the value `plugin_index` was initialized to.
-    // For a justification of the data ordering, see:
-    //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
-    match plugin_index.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire)
-    {
-        Ok(_) => {
-            // We won the race — increment the next entity index and return the claimed index.
-            *guard += 1;
-            candidate
-        }
-        Err(existing) => {
-            // Another thread beat us — don't increment the next entity index,
-            // just return existing
-            existing
-        }
-    }
+/// Returns the number of registered entity types.
+pub(crate) fn get_registered_entity_count() -> usize {
+    SCHEMA_REGISTRY.entity_registrations().len()
 }
 
 /// A wrapper around a vector of entities.
@@ -202,30 +44,13 @@ impl EntityStore {
     /// though, in their correctness by supplying a correct implementation via a macro.
     #[must_use]
     pub fn new() -> Self {
-        let num_items = get_registered_entity_count();
-        let registrations = ENTITY_REGISTRATIONS.lock().unwrap();
-        assert_eq!(
-            registrations.len(),
-            num_items,
-            "Ixa internal error: entity property-store constructor registry is incomplete"
-        );
-        let constructors: Vec<PropertyStoreConstructor> = registrations
-            .iter()
-            .enumerate()
-            .map(|(index, registration)| {
-                registration
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Ixa internal error: no PropertyStore constructor for entity index {index}"
-                        )
-                    })
-                    .property_store_constructor
-            })
-            .collect();
+        let registrations = SCHEMA_REGISTRY.entity_registrations();
+        // `entity_registrations()` returns only after freeze has completed, so no builder lock or
+        // OnceLock initialization closure is active while constructors execute.
         Self {
-            items: constructors
-                .into_iter()
-                .map(|constructor| constructor())
+            items: registrations
+                .iter()
+                .map(|registration| (registration.property_store_constructor)())
                 .collect(),
         }
     }
@@ -315,15 +140,11 @@ impl EntityStore {
 #[cfg(test)]
 mod tests {
     use std::any::Any;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Barrier, Mutex};
-    use std::thread;
 
-    use crate::entity::entity_store::{
-        add_to_entity_registry, initialize_entity_index_with_counter, EntityStore,
-    };
+    use crate::entity::entity_store::EntityStore;
+    use crate::entity::schema_registry::add_to_entity_registry;
     use crate::entity::Entity;
-    use crate::{impl_entity, with, Context, ContextEntitiesExt, HashMap};
+    use crate::{impl_entity, with, Context, ContextEntitiesExt};
     // Test item types
     #[derive(Debug, Clone, PartialEq)]
     pub struct TestItem1 {
@@ -363,170 +184,6 @@ mod tests {
     impl_entity!(TestItem1);
     impl_entity!(TestItem2);
     impl_entity!(TestItem3);
-
-    // Test the internal synchronization mechanism against a private counter so this test cannot
-    // create entity IDs without matching property-store constructors in the process registry.
-    #[test]
-    fn test_initialize_item_index_concurrent() {
-        let next_entity_index = Arc::new(Mutex::new(0));
-
-        // Test 1: Try to initialize a single index from multiple threads simultaneously.
-        let initial_registered_items_count = *next_entity_index.lock().unwrap();
-
-        const NUM_THREADS: usize = 100;
-        let index = Arc::new(AtomicUsize::new(usize::MAX));
-        let barrier = Arc::new(Barrier::new(NUM_THREADS));
-
-        let handles: Vec<_> = (0..NUM_THREADS)
-            .map(|_| {
-                let index_clone = Arc::clone(&index);
-                let barrier_clone = Arc::clone(&barrier);
-                let next_entity_index = Arc::clone(&next_entity_index);
-
-                thread::spawn(move || {
-                    // Wait for all threads to be ready
-                    barrier_clone.wait();
-                    // All threads try to initialize at once
-                    initialize_entity_index_with_counter(&index_clone, &next_entity_index)
-                })
-            })
-            .collect();
-
-        let results: Vec<usize> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-
-        let first = results[0];
-
-        // The index should be initialized
-        assert_ne!(first, usize::MAX);
-        // All threads should get the same index
-        assert!(results.iter().all(|&r| r == first));
-        // And that index should be what was originally the next available index
-        assert_eq!(first, initial_registered_items_count);
-
-        // Test 2: Try to initialize multiple indices from multiple threads simultaneously.
-        //
-        // Creates 5 different entities (each with their own atomic). Initializes
-        // each from a separate thread. Verifies they receive sequential,
-        // unique indices. Confirms the global counter matches the entity count.
-
-        // W
-        let initial_registered_items_count = *next_entity_index.lock().unwrap();
-
-        // Create multiple different entities (each with their own atomic)
-        const NUM_ENTITIES: usize = 5;
-        let entities: Vec<_> = (0..NUM_ENTITIES)
-            .map(|_| Arc::new(AtomicUsize::new(usize::MAX)))
-            .collect();
-
-        let mut handles = vec![];
-
-        // Initialize each entity from a different thread
-        for entity in entities.iter() {
-            let entity_clone = Arc::clone(entity);
-            let next_entity_index = Arc::clone(&next_entity_index);
-            let handle = thread::spawn(move || {
-                initialize_entity_index_with_counter(&entity_clone, &next_entity_index)
-            });
-            handles.push(handle);
-        }
-
-        // Collect results
-        let mut results = vec![];
-        for handle in handles {
-            results.push(handle.join().unwrap());
-        }
-
-        // Each entity should get a unique, sequential index starting with `initial_registered_items_count`.
-        results.sort();
-        for (i, &result) in results.iter().enumerate() {
-            assert_eq!(
-                result,
-                i + initial_registered_items_count,
-                "Entity should have index {}, got {}",
-                i,
-                result
-            );
-        }
-
-        // Test 3: Try to initialize multiple entities from multiple threads multiple times.
-
-        // We account for the fact that some entities have been initialized
-        // in their `ctors`, so the indices we create don't start with 0.
-        let initial_registered_items_count = *next_entity_index.lock().unwrap();
-
-        // Create 3 entities
-        let entity1 = Arc::new(AtomicUsize::new(usize::MAX));
-        let entity2 = Arc::new(AtomicUsize::new(usize::MAX));
-        let entity3 = Arc::new(AtomicUsize::new(usize::MAX));
-
-        let mut handles = vec![];
-
-        // Multiple threads racing on each of entity1, entity2, entity3
-        for _ in 0..5 {
-            let e1 = Arc::clone(&entity1);
-            let counter1 = Arc::clone(&next_entity_index);
-            handles.push(thread::spawn(move || {
-                initialize_entity_index_with_counter(&e1, &counter1)
-            }));
-
-            let e2 = Arc::clone(&entity2);
-            let counter2 = Arc::clone(&next_entity_index);
-            handles.push(thread::spawn(move || {
-                initialize_entity_index_with_counter(&e2, &counter2)
-            }));
-
-            let e3 = Arc::clone(&entity3);
-            let counter3 = Arc::clone(&next_entity_index);
-            handles.push(thread::spawn(move || {
-                initialize_entity_index_with_counter(&e3, &counter3)
-            }));
-        }
-
-        // Collect all results
-        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-
-        // Count occurrences of each index
-        let mut counts = HashMap::default();
-        for &result in &results {
-            *counts.entry(result).or_insert(0) += 1;
-        }
-
-        // Should have exactly 3 unique indices
-        assert_eq!(counts.len(), 3, "Should have 3 unique indices");
-
-        // Each index should appear exactly 5 times (one entity, 5 threads)
-        for (&idx, &count) in &counts {
-            assert_eq!(
-                count, 5,
-                "Index {} should appear 5 times, appeared {} times",
-                idx, count
-            );
-        }
-
-        // The private counter should have advanced by 3.
-        assert_eq!(
-            *next_entity_index.lock().unwrap() - initial_registered_items_count,
-            3
-        );
-
-        // Each entity should have one of the indices
-        let indices: Vec<_> = vec![
-            entity1.load(Ordering::Acquire),
-            entity2.load(Ordering::Acquire),
-            entity3.load(Ordering::Acquire),
-        ];
-
-        let mut sorted_indices = indices.clone();
-        sorted_indices.sort_unstable();
-        // As before, we account for the fact that some entities have been
-        // initialized in their `ctors`, so the indices we created don't start at 0.
-        let expected_indices = vec![
-            initial_registered_items_count,
-            1 + initial_registered_items_count,
-            2 + initial_registered_items_count,
-        ];
-        assert_eq!(sorted_indices, expected_indices);
-    }
 
     // Registering items is idempotent
     #[test]
