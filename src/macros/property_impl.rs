@@ -570,7 +570,7 @@ macro_rules! impl_property {
 
             // ctor_registration
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
-                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+                $crate::entity::schema_registry::add_to_property_registry::<$entity, $property>();
             }),
         );
     };
@@ -687,7 +687,7 @@ macro_rules! impl_property {
             $crate::impl_property!(@unwrap_or $($display_impl)?, |v| format!("{v:?}")),
             $crate::impl_property!(@unwrap_or $($collect_deps_fn)?, |_| {/* Do nothing */}),
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
-                $crate::entity::property_store::add_to_property_registry::<$entity, $property>();
+                $crate::entity::schema_registry::add_to_property_registry::<$entity, $property>();
             }),
         );
     };
@@ -785,6 +785,7 @@ macro_rules! impl_property {
                 ($display_impl)(self)
             }
 
+            #[inline]
             fn id() -> usize {
                 // This static must be initialized with a compile-time constant expression.
                 // We use `usize::MAX` as a sentinel to mean "uninitialized". This
@@ -798,8 +799,8 @@ macro_rules! impl_property {
                     return index;
                 }
 
-                // Slow path: initialize it.
-                $crate::entity::property_store::initialize_property_id::<$entity>(&INDEX)
+                // Slow path: install the complete registration before publishing the ID.
+                $crate::entity::schema_registry::ensure_property_registered::<$entity, Self>(&INDEX)
             }
 
             fn query_identity_id() -> usize {
@@ -1281,6 +1282,11 @@ macro_rules! define_multi_property {
                     },
 
                     ctor_registration = {
+                        $crate::entity::schema_registry::add_to_property_registry::<$entity, [<$($dependency)*>]>();
+
+                        // Schema registration has completed, and no schema lock is held while the
+                        // separate query-shape registry is updated. The following entity/property
+                        // ID calls therefore take their initialized fast paths.
                         let mut type_ids = [$( <$dependency as $crate::entity::property::Property<$entity>>::type_id() ),+];
                         type_ids.sort_unstable();
                         if let Some((_, existing_name)) =
@@ -1298,7 +1304,6 @@ macro_rules! define_multi_property {
                                 <[<$($dependency)*>] as $crate::entity::property::Property<$entity>>::name(),
                             ));
                         }
-                        $crate::entity::property_store::add_to_property_registry::<$entity, [<$($dependency)*>]>();
                     }
                 );
 
@@ -1717,7 +1722,10 @@ mod tests {
             ProfileWAN::id(),
         ];
         expected_dependents.sort_unstable();
-        assert_eq!(Age::dependents(), expected_dependents);
+        let property_store = context.entity_store.get_property_store::<Person>();
+        let mut actual_dependents = property_store.dependent_property_ids(Age::id()).to_vec();
+        actual_dependents.sort_unstable();
+        assert_eq!(actual_dependents, expected_dependents);
     }
 
     #[test]

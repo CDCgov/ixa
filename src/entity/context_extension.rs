@@ -441,20 +441,21 @@ impl ContextEntitiesExt for Context {
         // Immutable: Collect the previous value to create partial property change events
         {
             let property_store = self.entity_store.get_property_store::<E>();
+            let property_id = P::id();
 
             // Create the partial property change for this value.
-            if property_store.should_create_partial_property_change(P::id(), self) {
+            if property_store.should_create_partial_property_change(property_id, self) {
                 dependents.push(property_store.create_partial_property_change(
-                    P::id(),
+                    property_id,
                     entity_id,
                     self,
                 ));
             }
             // Now create partial property change events for each dependent.
-            for dependent_idx in P::dependents() {
-                if property_store.should_create_partial_property_change(*dependent_idx, self) {
+            for &dependent_id in property_store.dependent_property_ids(property_id) {
+                if property_store.should_create_partial_property_change(dependent_id, self) {
                     dependents.push(property_store.create_partial_property_change(
-                        *dependent_idx,
+                        dependent_id,
                         entity_id,
                         self,
                     ));

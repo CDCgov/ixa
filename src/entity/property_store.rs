@@ -11,11 +11,6 @@ type, including whole-store traversal.
 
 use std::any::Any;
 
-pub(super) use super::property_store_core::get_property_dependents_static;
-#[cfg(feature = "profiling")]
-pub(crate) use super::property_store_core::registered_property_name;
-pub use super::property_store_core::{add_to_property_registry, initialize_property_id};
-
 /// The entity-erased interface implemented by every concrete property store.
 pub trait PropertyStore: Any {
     /// Allocates the next entity ID and reports whether entity-created events have subscribers.
