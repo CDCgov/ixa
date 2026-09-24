@@ -303,7 +303,6 @@ impl EntityStore {
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};
     use std::thread;
@@ -661,13 +660,6 @@ mod tests {
             {
                 87000 // An invalid index
             }
-
-            fn as_any(&self) -> &dyn Any {
-                self
-            }
-            fn as_any_mut(&mut self) -> &mut dyn Any {
-                self
-            }
         }
 
         // Create items container with insufficient capacity
@@ -694,18 +686,6 @@ mod tests {
 
         let boxed3 = TestItem3::new_boxed();
         assert_eq!(boxed3.data, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_box_dyn_registered_item_type_alias() {
-        let item = TestItem1::new_boxed();
-        assert_eq!(
-            (item as Box<dyn Any>)
-                .downcast_ref::<TestItem1>()
-                .unwrap()
-                .value,
-            42
-        );
     }
 
     #[test]

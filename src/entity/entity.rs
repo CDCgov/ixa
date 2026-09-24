@@ -18,7 +18,7 @@ Right now an `Entity` type is just a zero-sized marker type. The static data ass
 
 */
 
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -83,7 +83,7 @@ impl<E: Entity> EntityId<E> {
 }
 
 /// All entities must implement this trait using the `define_entity!` macro.
-pub trait Entity: Any + Default {
+pub trait Entity: Default + 'static {
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
@@ -130,13 +130,7 @@ pub trait Entity: Any + Default {
     fn new_boxed() -> Box<Self> {
         Box::default()
     }
-
-    /// Standard pattern for downcasting to concrete types.
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
-
-pub type BxEntity = Box<dyn Entity>;
 
 /// An iterator over the total population of `EntityId<E>`s at the time of iterator creation.
 ///
@@ -226,12 +220,8 @@ mod tests {
     }
 
     #[test]
-    fn define_entity_helpers_create_and_downcast() {
+    fn define_entity_helper_creates() {
         assert_eq!(DummyEntity::new(), DummyEntity);
-
-        let mut entity = DummyEntity::new();
-        assert!(entity.as_any().downcast_ref::<DummyEntity>().is_some());
-        assert!(entity.as_any_mut().downcast_mut::<DummyEntity>().is_some());
     }
 
     #[test]
