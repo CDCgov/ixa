@@ -61,13 +61,6 @@ macro_rules! impl_entity {
                     $crate::entity::multi_property::intern_query_identity_raw::<Self>(&[])
                 })
             }
-
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-            fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-                self
-            }
         }
 
         // Using `ctor` to initialize entities at program start-up means we know how many entities
