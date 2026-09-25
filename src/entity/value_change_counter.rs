@@ -7,9 +7,8 @@ use crate::entity::property_list::PropertyList;
 use crate::entity::{Entity, EntityId};
 use crate::{Context, HashMap};
 
-pub trait ValueChangeCounter<E: Entity, P: Property<E>>: 'static {
+pub trait ValueChangeCounter<E: Entity, P: Property<E>>: Any {
     fn update(&mut self, entity_id: EntityId<E>, new_property_value: P, context: &Context);
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 pub struct StratifiedValueChangeCounter<E: Entity, PL: PropertyList<E>, P: Property<E>> {
@@ -63,9 +62,5 @@ where
         let key = (stratum, new_property_value);
         let count = self.counts.entry(key).or_insert(0);
         *count += 1;
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
     }
 }

@@ -25,7 +25,7 @@ use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 
-use super::entity_store::get_entity_metadata_static;
+use super::schema_registry::SCHEMA_REGISTRY;
 
 /// A type that can be named and used (copied, cloned) but not created outside of this crate.
 /// In the `define_entity!` macro we define the alias `pub type MyEntityId = EntityId<MyEntity>`.
@@ -96,18 +96,22 @@ pub trait Entity: Any + Default {
         TypeId::of::<Self>()
     }
 
-    /// Get a list of all properties this `Entity` has. This list is static, computed in with `ctor` magic.
+    /// Returns the frozen property type IDs registered for this entity.
     #[must_use]
     fn property_ids() -> &'static [TypeId] {
-        let (property_ids, _) = get_entity_metadata_static(<Self as Entity>::type_id());
-        property_ids
+        SCHEMA_REGISTRY
+            .entity_registration::<Self>()
+            .property_type_ids
+            .as_ref()
     }
 
-    /// Get a list of all properties of this `Entity` that _must_ be supplied when a new entity is created.
+    /// Returns the frozen property type IDs that must be supplied when creating this entity.
     #[must_use]
     fn required_property_ids() -> &'static [TypeId] {
-        let (_, required_property_ids) = get_entity_metadata_static(<Self as Entity>::type_id());
-        required_property_ids
+        SCHEMA_REGISTRY
+            .entity_registration::<Self>()
+            .required_property_type_ids
+            .as_ref()
     }
 
     /// The index of this item in the owner, which is initialized globally per type

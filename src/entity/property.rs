@@ -12,7 +12,6 @@ use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use crate::entity::property_store::get_property_dependents_static;
 use crate::entity::{Entity, EntityId};
 use crate::{Context, HashSet};
 
@@ -125,7 +124,7 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
         TypeId::of::<Self>()
     }
 
-    /// For implementing the registry pattern
+    /// Returns the entity-local process ID assigned to this property type.
     #[must_use]
     fn id() -> usize;
 
@@ -140,10 +139,6 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
 
     /// Returns a vector of transitive non-derived dependencies. If the property is not derived, the
     /// Vec will be empty. The dependencies are represented by their `Property<E>::id()` value.
-    ///
-    /// This function is only used to construct the static dependency graph
-    /// within property `ctor`s, after which time the dependents of a property
-    /// are accessible through `Property<E>::dependents()` as a `&'static [usize]`.
     #[must_use]
     fn non_derived_dependencies() -> Vec<usize> {
         let mut result = HashSet::default();
@@ -153,13 +148,6 @@ pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
 
     /// An auxiliary helper for `non_derived_dependencies` above.
     fn collect_non_derived_dependencies(result: &mut HashSet<usize>);
-
-    /// Get a list of derived properties that depend on this property. The properties are
-    /// represented by their `Property::id()`. The list is pre-computed in `ctor`s.
-    #[must_use]
-    fn dependents() -> &'static [usize] {
-        get_property_dependents_static::<E>(Self::id())
-    }
 }
 
 /// Marker trait for properties that can be keyed in property indexes.

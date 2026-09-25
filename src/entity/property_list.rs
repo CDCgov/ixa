@@ -26,7 +26,7 @@ use seq_macro::seq;
 use super::entity::{Entity, EntityId};
 use super::events::PropertyInitializedEvent;
 use super::property::{Property, PropertyInitializationKind};
-use super::property_store::PropertyStore;
+use super::property_store_core::PropertyStoreCore;
 use crate::data_structures::bit_set::BitSet;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
@@ -50,7 +50,7 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
+        property_store: &mut PropertyStoreCore<E>,
     );
 
     /// Emits initialization events for the explicitly supplied property values.
@@ -81,7 +81,7 @@ impl<E: Entity> PropertyList<E> for () {
     fn set_values_for_new_entity(
         &self,
         _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+        _property_store: &mut PropertyStoreCore<E>,
     ) {
         // No values to assign.
     }
@@ -109,7 +109,7 @@ impl<E: Entity + Copy> PropertyList<E> for E {
     fn set_values_for_new_entity(
         &self,
         _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+        _property_store: &mut PropertyStoreCore<E>,
     ) {
         // No values to assign.
     }
@@ -158,7 +158,7 @@ where
 //         property_type_ids.len() == 0
 //             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
 //     }
-//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>) {
+//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStoreCore<E>) {
 //         let property_value_store = property_store.get_mut::<P>();
 //         property_value_store.set(entity_id, *self);
 //     }
@@ -177,7 +177,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
+        property_store: &mut PropertyStoreCore<E>,
     ) {
         let property_value_store = property_store.get_mut::<P>();
         property_value_store.set(entity_id, self.0);
@@ -228,7 +228,7 @@ macro_rules! impl_property_list {
                     property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
                 }
 
-                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>){
+                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStoreCore<E>){
                     #({
                         let property_value_store = property_store.get_mut::<P~N>();
                         property_value_store.set(entity_id, self.N);
