@@ -24,7 +24,7 @@ pub(crate) fn get_registered_entity_count() -> usize {
 }
 
 /// A wrapper around a vector of entities.
-pub struct EntityStore {
+pub(crate) struct EntityStore {
     items: Vec<Box<dyn PropertyStore>>,
 }
 
@@ -43,7 +43,7 @@ impl EntityStore {
     /// implementing `Entity` followed the rules. We can have at least some confidence,
     /// though, in their correctness by supplying a correct implementation via a macro.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let registrations = SCHEMA_REGISTRY.entity_registrations();
         // `entity_registrations()` returns only after freeze has completed, so no builder lock or
         // OnceLock initialization closure is active while constructors execute.
@@ -58,7 +58,8 @@ impl EntityStore {
     /// Fetches an immutable reference to the entity `E` from the registry. This
     /// implementation lazily instantiates the item if it has not yet been instantiated.
     #[must_use]
-    pub fn get<E: Entity>(&self) -> &E {
+    #[allow(dead_code)]
+    pub(crate) fn get<E: Entity>(&self) -> &E {
         self.get_property_store::<E>()
             .entity
             .get_or_init(E::new_boxed)
@@ -68,7 +69,8 @@ impl EntityStore {
     /// Fetches a mutable reference to the item `E` from the registry. This
     /// implementation lazily instantiates the item if it has not yet been instantiated.
     #[must_use]
-    pub fn get_mut<E: Entity>(&mut self) -> &mut E {
+    #[allow(dead_code)]
+    pub(crate) fn get_mut<E: Entity>(&mut self) -> &mut E {
         let property_store = self.get_property_store_mut::<E>();
 
         // Initialize if needed
@@ -93,19 +95,13 @@ impl EntityStore {
 
     /// Returns a total count of all created entities of type `E`.
     #[must_use]
-    pub fn get_entity_count<E: Entity>(&self) -> usize {
+    pub(crate) fn get_entity_count<E: Entity>(&self) -> usize {
         self.items[E::id()].entity_count()
-    }
-
-    /// Returns a total count of all created entities of type `E`.
-    #[must_use]
-    pub fn get_entity_count_by_id(&self, id: usize) -> usize {
-        self.items[id].entity_count()
     }
 
     /// Returns an iterator over all valid `EntityId<E>`s
     #[must_use]
-    pub fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
+    pub(crate) fn get_entity_iterator<E: Entity>(&self) -> PopulationIterator<E> {
         let count = self.get_entity_count::<E>();
         PopulationIterator::new(count)
     }

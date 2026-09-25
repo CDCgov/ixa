@@ -33,14 +33,14 @@ ordinary access paths.
 pub mod context_extension;
 mod entity;
 pub mod entity_set;
-pub mod entity_store;
+pub(crate) mod entity_store;
 pub mod events;
 pub(crate) mod index;
 pub mod multi_property;
 pub mod property;
 pub mod property_list;
-pub mod property_store;
-pub mod property_store_core;
+pub(crate) mod property_store;
+pub(crate) mod property_store_core;
 pub(crate) mod property_value_store;
 pub(crate) mod property_value_store_core;
 pub mod query;

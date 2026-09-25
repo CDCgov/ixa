@@ -19,7 +19,7 @@ use crate::entity::value_change_counter::ValueChangeCounter;
 /// The underlying storage type for property values.
 pub(crate) type RawPropertyValueVec<P> = Vec<P>;
 
-pub struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
+pub(crate) struct PropertyValueStoreCore<E: Entity, P: Property<E>> {
     /// The backing storage vector for the property. Always empty if the property is derived.
     pub(super) data: RawPropertyValueVec<P>,
     /// An index mapping `property_value` to `set_of_entities`, when indexing is enabled.
@@ -48,15 +48,6 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: RawPropertyValueVec::with_capacity(capacity),
-            index: None,
-            value_change_counters: Vec::new(),
-        }
-    }
-
-    #[must_use]
     pub(crate) fn index_type(&self) -> PropertyIndexType {
         self.index
             .as_deref()
@@ -74,14 +65,9 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
         counter_id
     }
 
-    /// Ensures capacity for at least `additional` more elements
-    pub fn reserve(&mut self, additional: usize) {
-        self.data.reserve(additional);
-    }
-
     /// Returns the property value for the given entity.
     #[must_use]
-    pub fn get(&self, entity_id: EntityId<E>) -> P {
+    pub(crate) fn get(&self, entity_id: EntityId<E>) -> P {
         debug_assert!(
             !P::is_derived(),
             "Ixa internal error: tried to get a derived property value from property value store",
@@ -94,7 +80,7 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
     }
 
     /// Sets the value for `entity_id` to `value`.
-    pub fn set(&mut self, entity_id: EntityId<E>, value: P) {
+    pub(crate) fn set(&mut self, entity_id: EntityId<E>, value: P) {
         debug_assert!(
             !P::is_derived(),
             "Ixa internal error: tried to set a derived property value in property value store",
@@ -139,53 +125,6 @@ impl<E: Entity, P: Property<E>> PropertyValueStoreCore<E, P> {
             );
         }
     }
-
-    /// Sets the value for `entity_id` to `value`, returning the previous value.
-    #[must_use]
-    pub fn replace(&mut self, entity_id: EntityId<E>, value: P) -> P {
-        debug_assert!(
-            !P::is_derived(),
-            "Ixa internal error: tried to replace a derived property value in property value store",
-        );
-        let index = entity_id.0;
-        let len = self.data.len();
-
-        if index < len {
-            // The index is in bounds, so we can just set the value directly.
-            return std::mem::replace(&mut self.data[index], value);
-        }
-
-        // The index is out of bounds.
-
-        if P::initialization_kind() == PropertyInitializationKind::Constant {
-            // When a default constant value exists, we implement the optimization that we don't have to store those
-            // default values.
-            let default_value = P::default_const();
-
-            // If we are trying to set the same value as the default, don't bother doing anything.
-            if value == default_value {
-                return default_value;
-            }
-
-            // Pre-reserve exact capacity to avoid reallocations
-            self.data.reserve(index + 1 - len);
-
-            // Fill any missing slots up to (but not including) `index`
-            self.data.resize(index, default_value);
-            // ...and finally push the provided value
-            self.data.push(value);
-
-            // The "existing value" is the default.
-            default_value
-        } else {
-            // No default property value, and we are trying to set a value for an index past the end of the vector.
-            // This is an internal error, as we enforce the invariant that every property must have a value.
-            unreachable!(
-                "Ixa internal error: property storage state is inconsistent: one or more \
-                 properties do not have values",
-            );
-        }
-    }
 }
 
 #[cfg(test)]
@@ -196,62 +135,11 @@ mod tests {
 
     define_entity!(StoreCorePerson);
     define_property!(struct RequiredScore(u8), StoreCorePerson);
-    define_property!(struct DefaultScore(u8), StoreCorePerson, default_const = DefaultScore(0));
-
-    #[test]
-    fn capacity_and_reserve_helpers() {
-        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::with_capacity(4);
-
-        assert!(store.data.capacity() >= 4);
-        assert_eq!(store.index_type(), PropertyIndexType::Unindexed);
-        assert!(store.value_change_counters.is_empty());
-
-        store.reserve(16);
-        assert!(store.data.capacity() >= 16);
-    }
-
-    #[test]
-    fn replace_existing_required_value() {
-        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
-        let entity_id = EntityId::new(0);
-
-        store.set(entity_id, RequiredScore(10));
-
-        assert_eq!(
-            store.replace(entity_id, RequiredScore(20)),
-            RequiredScore(10)
-        );
-        assert_eq!(store.get(entity_id), RequiredScore(20));
-    }
-
-    #[test]
-    fn replace_constant_default_value_paths() {
-        let mut store = PropertyValueStoreCore::<StoreCorePerson, DefaultScore>::new();
-        let entity_id = EntityId::new(2);
-
-        assert_eq!(store.replace(entity_id, DefaultScore(0)), DefaultScore(0));
-        assert!(store.data.is_empty());
-
-        assert_eq!(store.replace(entity_id, DefaultScore(7)), DefaultScore(0));
-        assert_eq!(store.data.len(), 3);
-        assert_eq!(store.get(EntityId::new(0)), DefaultScore(0));
-        assert_eq!(store.get(EntityId::new(1)), DefaultScore(0));
-        assert_eq!(store.get(entity_id), DefaultScore(7));
-    }
-
     #[test]
     #[should_panic(expected = "Ixa internal error: property storage state is inconsistent")]
     fn set_required_property_skipping_entity_id_panics() {
         let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
 
         store.set(EntityId::new(1), RequiredScore(10));
-    }
-
-    #[test]
-    #[should_panic(expected = "Ixa internal error: property storage state is inconsistent")]
-    fn replace_required_property_skipping_entity_id_panics() {
-        let mut store = PropertyValueStoreCore::<StoreCorePerson, RequiredScore>::new();
-
-        let _ = store.replace(EntityId::new(1), RequiredScore(10));
     }
 }

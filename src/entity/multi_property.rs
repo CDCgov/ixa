@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Utilities for managing and querying multi-properties.
 //!
 //! A multi-property is a derived property composed of a tuple of other properties. They are

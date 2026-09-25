@@ -9,7 +9,9 @@ use crate::entity::entity_set::{EntitySet, EntitySetIterator};
 use crate::entity::multi_property::type_ids_to_multi_property_id;
 #[cfg(feature = "profiling")]
 use crate::entity::multi_property::{intern_query_identity, QueryIdentityId};
-use crate::entity::property_list::{PropertyInitializationList, PropertyList};
+use crate::entity::property_list::{
+    PropertyInitializationList, PropertyList, PropertyListInternal,
+};
 use crate::entity::property_store_core::PropertyStoreCore;
 use crate::entity::Entity;
 use crate::hashing::HashMap;
@@ -111,7 +113,7 @@ impl<E: Entity, T: QueryInternal<E>> QueryInternal<E> for EntityPropertyTuple<E,
     }
 }
 
-impl<E: Entity, T: PropertyList<E>> PropertyList<E> for EntityPropertyTuple<E, T> {
+impl<E: Entity, T: PropertyList<E>> PropertyListInternal<E> for EntityPropertyTuple<E, T> {
     fn validate() -> Result<(), IxaError> {
         T::validate()
     }
@@ -1250,7 +1252,7 @@ mod tests {
     #[test]
     fn entity_property_tuple_as_property_list() {
         use super::EntityPropertyTuple;
-        use crate::entity::property_list::PropertyList;
+        use crate::entity::property_list::PropertyListInternal;
 
         // Test validate
         assert!(EntityPropertyTuple::<Person, (Age,)>::validate().is_ok());

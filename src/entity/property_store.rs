@@ -12,7 +12,7 @@ type, including whole-store traversal.
 use std::any::Any;
 
 /// The entity-erased interface implemented by every concrete property store.
-pub trait PropertyStore: Any {
+pub(crate) trait PropertyStore: Any {
     /// Allocates the next entity ID and reports whether entity-created events have subscribers.
     fn allocate_entity_id(&mut self) -> (usize, bool);
 

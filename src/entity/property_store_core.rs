@@ -57,7 +57,7 @@ where
 }
 
 /// A wrapper around a vector of property value stores.
-pub struct PropertyStoreCore<E: Entity> {
+pub(crate) struct PropertyStoreCore<E: Entity> {
     /// The total count of all entities of this type (i.e., the next index to assign).
     pub(crate) entity_count: usize,
 
@@ -65,6 +65,7 @@ pub struct PropertyStoreCore<E: Entity> {
     pub(in crate::entity) entity_created_event_subscribed: bool,
 
     /// Lazily initialized entity instance.
+    #[allow(dead_code)]
     pub(crate) entity: OnceCell<Box<E>>,
 
     /// A vector of `Box<PropertyValueStoreCore<E, P>>`, type-erased to `Box<dyn PropertyValueStore<E>>`
@@ -94,7 +95,7 @@ impl<E: Entity> Default for PropertyStoreCore<E> {
 impl<E: Entity> PropertyStoreCore<E> {
     /// Creates a new [`PropertyStoreCore`].
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let property_registrations = SCHEMA_REGISTRY
             .entity_registration::<E>()
             .properties
@@ -133,7 +134,7 @@ impl<E: Entity> PropertyStoreCore<E> {
 
     /// Fetches an immutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
-    pub fn get<P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
+    pub(crate) fn get<P: Property<E>>(&self) -> &PropertyValueStoreCore<E, P> {
         let index = P::id();
         let property_value_store =
             self.items
@@ -163,7 +164,7 @@ impl<E: Entity> PropertyStoreCore<E> {
 
     /// Fetches a mutable reference to the `PropertyValueStoreCore<E, P>`.
     #[must_use]
-    pub fn get_mut<P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
+    pub(crate) fn get_mut<P: Property<E>>(&mut self) -> &mut PropertyValueStoreCore<E, P> {
         let index = P::id();
         let property_value_store =
             self.items
@@ -230,7 +231,7 @@ impl<E: Entity> PropertyStoreCore<E> {
     ///
     #[cfg(test)]
     #[must_use]
-    pub fn is_property_indexed<P: Property<E>>(&self) -> bool {
+    pub(crate) fn is_property_indexed<P: Property<E>>(&self) -> bool {
         self.get::<P>().index.is_some()
     }
 
@@ -291,7 +292,7 @@ impl<E: Entity> PropertyStoreCore<E> {
     ///
     /// Returns the counter ID.
     #[must_use]
-    pub fn create_value_change_counter<PL, P>(&mut self) -> usize
+    pub(crate) fn create_value_change_counter<PL, P>(&mut self) -> usize
     where
         PL: PropertyList<E> + Eq + std::hash::Hash,
         P: Property<E> + Eq + std::hash::Hash,
@@ -305,7 +306,7 @@ impl<E: Entity> PropertyStoreCore<E> {
     }
 
     #[must_use]
-    pub fn get_index_set_for_query_parts(
+    pub(crate) fn get_index_set_for_query_parts(
         &self,
         property_id: usize,
         query_parts: &[&dyn Any],
@@ -314,7 +315,7 @@ impl<E: Entity> PropertyStoreCore<E> {
     }
 
     #[must_use]
-    pub fn get_index_count_for_query_parts(
+    pub(crate) fn get_index_count_for_query_parts(
         &self,
         property_id: usize,
         query_parts: &[&dyn Any],
