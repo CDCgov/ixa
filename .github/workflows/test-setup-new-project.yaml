@@ -17,8 +17,13 @@ jobs:
         include:
           - flow_name: default
             ixa_branch: ""
-          - flow_name: release
+            template: ""
+          - flow_name: parameters
+            ixa_branch: ""
+            template: parameters
+          - flow_name: release-blank
             ixa_branch: release
+            template: blank
 
     steps:
       - uses: actions/checkout@v7
@@ -36,16 +41,71 @@ jobs:
           echo "PROJECT_DIR=$project_dir" >> "$GITHUB_ENV"
           cd "$project_dir"
 
-          if [ -z "${{ matrix.ixa_branch }}" ]; then
-            curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh
-          else
-            curl -s -f -L https://raw.githubusercontent.com/CDCgov/ixa/main/scripts/setup_new_ixa_project.sh | sh -s "${{ matrix.ixa_branch }}"
+          setup_args=()
+          if [ -n "${{ matrix.ixa_branch }}" ]; then
+            setup_args+=("${{ matrix.ixa_branch }}")
           fi
+          if [ -n "${{ matrix.template }}" ]; then
+            setup_args+=(--template "${{ matrix.template }}")
+          fi
+
+          IXA_SETUP_ASSET_BASE_URL="file://$GITHUB_WORKSPACE" \
+            sh "$GITHUB_WORKSPACE/scripts/setup_new_ixa_project.sh" "${setup_args[@]}"
+          test -f rust-toolchain.toml
+
+      - name: cargo fmt
+        run: cargo fmt --check
+        working-directory: ${{ env.PROJECT_DIR }}
+
+      - name: cargo test
+        run: cargo test
+        working-directory: ${{ env.PROJECT_DIR }}
 
       - name: cargo run
         run: cargo run
         working-directory: ${{ env.PROJECT_DIR }}
 
       - name: cargo clippy
-        run: cargo clippy
+        run: cargo clippy -- -D warnings
         working-directory: ${{ env.PROJECT_DIR }}
+
+  invalid-arguments:
+    name: invalid setup arguments
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reject invalid template arguments before project creation
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_dir="$(mktemp -d)"
+          script="$GITHUB_WORKSPACE/scripts/setup_new_ixa_project.sh"
+          cd "$project_dir"
+
+          assert_rejected() {
+            local name="$1"
+            local expected="$2"
+            shift 2
+
+            if sh "$script" "$@" > "$name.log" 2>&1; then
+              echo "$name unexpectedly succeeded"
+              exit 1
+            fi
+            grep -F "$expected" "$name.log"
+            test ! -e Cargo.toml
+          }
+
+          assert_rejected unknown-template \
+            "Unknown template 'unknown'" --template unknown
+          assert_rejected missing-template \
+            "Missing value for --template" --template
+          assert_rejected unknown-option \
+            "Unknown option: --unknown" --unknown
+          assert_rejected multiple-branches \
+            "Only one Ixa branch may be specified" main release
+
+          sh "$script" --help > help.log
+          grep -F -- "--template <name>" help.log
+          test ! -e Cargo.toml
