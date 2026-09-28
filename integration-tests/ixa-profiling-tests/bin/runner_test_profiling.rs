@@ -4,15 +4,39 @@ use ixa::profiling::{
     add_computed_statistic, increment_named_count, open_span, ProfilingContextExt,
 };
 use ixa::runner::run_with_args;
-use ixa::{define_entity, define_property, with, ContextEntitiesExt};
+use ixa::{define_entity, define_multi_property, define_property, with, ContextEntitiesExt};
 
 define_entity!(ProfilingPerson);
 define_property!(struct ProfilingAge(u8), ProfilingPerson);
 define_property!(struct ProfilingCounty(u8), ProfilingPerson);
+define_property!(
+    struct ProfilingUnusedSingle(u8),
+    ProfilingPerson,
+    default_const = ProfilingUnusedSingle(0)
+);
+define_property!(
+    struct ProfilingUnusedRegion(u8),
+    ProfilingPerson,
+    default_const = ProfilingUnusedRegion(0)
+);
+define_property!(
+    struct ProfilingUnusedCategory(u8),
+    ProfilingPerson,
+    default_const = ProfilingUnusedCategory(0)
+);
+define_multi_property!(
+    ProfilingPerson,
+    (ProfilingUnusedRegion, ProfilingUnusedCategory)
+);
 
 fn main() {
     let mut context = run_with_args(|context, _args, _| {
         context.add_plan(0.0, |context| {
+            context.index_property_counts::<ProfilingPerson, ProfilingUnusedSingle>();
+            context.index_property::<
+                ProfilingPerson,
+                (ProfilingUnusedRegion, ProfilingUnusedCategory),
+            >();
             context
                 .add_entity(with!(ProfilingPerson, ProfilingAge(42), ProfilingCounty(1)))
                 .unwrap();

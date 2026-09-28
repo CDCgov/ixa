@@ -1,8 +1,6 @@
 #[cfg(feature = "profiling")]
 use std::cell::RefCell;
 #[cfg(feature = "profiling")]
-use std::collections::hash_map::Entry;
-#[cfg(feature = "profiling")]
 use std::ptr::eq;
 #[cfg(feature = "profiling")]
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -19,6 +17,8 @@ use super::{
 };
 #[cfg(feature = "profiling")]
 use crate::entity::multi_property::{query_identity_label, QueryIdentityId};
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 use crate::HashMap;
 
 #[cfg(feature = "profiling")]
@@ -59,33 +59,24 @@ pub struct ProfilingData {
 
 /// Aggregate profiling data for all committed executions of one query shape.
 ///
-/// [`QueryProfiler`] stores one value per query identity and updates it
-/// whenever a completed query execution is recorded.
+/// [`QueryProfiler`] stores one value per query identity and configured index
+/// type and updates it whenever a completed query execution is recorded.
 #[cfg(feature = "profiling")]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct QueryProfilingData {
     pub(crate) count: usize,
     pub(crate) total: Duration,
-    pub(crate) min: Duration,
-    pub(crate) max: Duration,
+    pub(crate) min: Option<Duration>,
+    pub(crate) max: Option<Duration>,
 }
 
 #[cfg(feature = "profiling")]
 impl QueryProfilingData {
-    fn new(elapsed: Duration) -> Self {
-        Self {
-            count: 1,
-            total: elapsed,
-            min: elapsed,
-            max: elapsed,
-        }
-    }
-
     fn record(&mut self, elapsed: Duration) {
         self.count += 1;
         self.total += elapsed;
-        self.min = self.min.min(elapsed);
-        self.max = self.max.max(elapsed);
+        self.min = Some(self.min.map_or(elapsed, |current| current.min(elapsed)));
+        self.max = Some(self.max.map_or(elapsed, |current| current.max(elapsed)));
     }
 }
 
@@ -97,36 +88,50 @@ impl QueryProfilingData {
 #[cfg(feature = "profiling")]
 #[derive(Default)]
 pub(crate) struct QueryProfiler {
-    timings: RefCell<HashMap<QueryIdentityId, QueryProfilingData>>,
+    timings: RefCell<HashMap<(QueryIdentityId, PropertyIndexType), QueryProfilingData>>,
 }
 
 #[cfg(feature = "profiling")]
 impl QueryProfiler {
-    fn record(&self, identity: QueryIdentityId, elapsed: Duration) {
-        let mut timings = self.timings.borrow_mut();
-        match timings.entry(identity) {
-            Entry::Occupied(mut entry) => entry.get_mut().record(elapsed),
-            Entry::Vacant(entry) => {
-                entry.insert(QueryProfilingData::new(elapsed));
-            }
-        }
+    pub(crate) fn seed(&self, identity: QueryIdentityId, index_type: PropertyIndexType) {
+        self.timings
+            .borrow_mut()
+            .entry((identity, index_type))
+            .or_default();
     }
 
-    /// Returns `(query label, aggregate profiling data)` pairs sorted by
-    /// descending total duration and then ascending query label.
-    pub(crate) fn snapshot(&self) -> Vec<(&'static str, QueryProfilingData)> {
+    fn record(&self, identity: QueryIdentityId, index_type: PropertyIndexType, elapsed: Duration) {
+        self.timings
+            .borrow_mut()
+            .entry((identity, index_type))
+            .or_default()
+            .record(elapsed);
+    }
+
+    /// Returns `(query label, index type, aggregate profiling data)` tuples
+    /// sorted by descending total duration, query label, and index type.
+    pub(crate) fn snapshot(&self) -> Vec<(&'static str, PropertyIndexType, QueryProfilingData)> {
         let timings = self.timings.borrow();
         let mut rows = timings
             .iter()
-            .map(|(&identity, &data)| (query_identity_label(identity), data))
+            .map(|(&(identity, index_type), &data)| {
+                (query_identity_label(identity), index_type, data)
+            })
             .collect::<Vec<_>>();
 
-        rows.sort_by(|(left_query, left_data), (right_query, right_data)| {
-            right_data
-                .total
-                .cmp(&left_data.total)
-                .then_with(|| left_query.cmp(right_query))
-        });
+        rows.sort_by(
+            |(left_query, left_index_type, left_data),
+             (right_query, right_index_type, right_data)| {
+                right_data
+                    .total
+                    .cmp(&left_data.total)
+                    .then_with(|| left_query.cmp(right_query))
+                    .then_with(|| {
+                        super::index_type_label(*left_index_type)
+                            .cmp(super::index_type_label(*right_index_type))
+                    })
+            },
+        );
         rows
     }
 
@@ -134,8 +139,9 @@ impl QueryProfiler {
     pub(crate) fn query_profiling_data(
         &self,
         identity: QueryIdentityId,
+        index_type: PropertyIndexType,
     ) -> Option<QueryProfilingData> {
-        self.timings.borrow().get(&identity).copied()
+        self.timings.borrow().get(&(identity, index_type)).copied()
     }
 }
 
@@ -149,16 +155,26 @@ impl QueryProfiler {
 pub(crate) struct QueryProfileHandle<'a> {
     profiler: &'a QueryProfiler,
     identity: QueryIdentityId,
+    index_type: PropertyIndexType,
 }
 
 #[cfg(feature = "profiling")]
 impl<'a> QueryProfileHandle<'a> {
-    pub(crate) fn new(profiler: &'a QueryProfiler, identity: QueryIdentityId) -> Self {
-        Self { profiler, identity }
+    pub(crate) fn new(
+        profiler: &'a QueryProfiler,
+        identity: QueryIdentityId,
+        index_type: PropertyIndexType,
+    ) -> Self {
+        Self {
+            profiler,
+            identity,
+            index_type,
+        }
     }
 
     fn record(self, elapsed: Duration) {
-        self.profiler.record(self.identity, elapsed);
+        self.profiler
+            .record(self.identity, self.index_type, elapsed);
     }
 
     #[must_use]
@@ -177,7 +193,9 @@ impl<'a> QueryProfileHandle<'a> {
 #[cfg(feature = "profiling")]
 impl PartialEq for QueryProfileHandle<'_> {
     fn eq(&self, other: &Self) -> bool {
-        eq(self.profiler, other.profiler) && self.identity == other.identity
+        eq(self.profiler, other.profiler)
+            && self.identity == other.identity
+            && self.index_type == other.index_type
     }
 }
 
@@ -427,6 +445,24 @@ mod tests {
     use crate::entity::multi_property::test_query_identity;
     use crate::profiling::{get_profiling_data, increment_named_count};
 
+    fn unindexed_handle<'a>(
+        profiler: &'a QueryProfiler,
+        identity: QueryIdentityId,
+    ) -> QueryProfileHandle<'a> {
+        QueryProfileHandle::new(profiler, identity, PropertyIndexType::Unindexed)
+    }
+
+    fn unindexed_data(
+        profiler: &QueryProfiler,
+        identity: QueryIdentityId,
+    ) -> Option<QueryProfilingData> {
+        profiler.query_profiling_data(identity, PropertyIndexType::Unindexed)
+    }
+
+    fn record_unindexed(profiler: &QueryProfiler, identity: QueryIdentityId, elapsed: Duration) {
+        profiler.record(identity, PropertyIndexType::Unindexed, elapsed);
+    }
+
     #[test]
     fn test_span_basic() {
         {
@@ -609,81 +645,130 @@ mod tests {
     fn query_profiler_first_observation_initializes_record() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryTimingInit: (Age)");
-        profiler.record(identity, Duration::from_micros(10));
+        record_unindexed(&profiler, identity, Duration::from_micros(10));
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
         assert_eq!(data.total, Duration::from_micros(10));
-        assert_eq!(data.min, Duration::from_micros(10));
-        assert_eq!(data.max, Duration::from_micros(10));
+        assert_eq!(data.min, Some(Duration::from_micros(10)));
+        assert_eq!(data.max, Some(Duration::from_micros(10)));
     }
 
     #[test]
     fn query_profiler_later_observations_update_aggregate() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryTimingUpdate: (Age)");
-        profiler.record(identity, Duration::from_micros(10));
-        profiler.record(identity, Duration::from_micros(30));
-        profiler.record(identity, Duration::from_micros(5));
+        record_unindexed(&profiler, identity, Duration::from_micros(10));
+        record_unindexed(&profiler, identity, Duration::from_micros(30));
+        record_unindexed(&profiler, identity, Duration::from_micros(5));
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 3);
         assert_eq!(data.total, Duration::from_micros(45));
-        assert_eq!(data.min, Duration::from_micros(5));
-        assert_eq!(data.max, Duration::from_micros(30));
+        assert_eq!(data.min, Some(Duration::from_micros(5)));
+        assert_eq!(data.max, Some(Duration::from_micros(30)));
+    }
+
+    #[test]
+    fn query_profiler_seeds_and_splits_configured_index_types() {
+        let profiler = QueryProfiler::default();
+        let identity = test_query_identity("QueryTimingIndexTypes: (Age)");
+        profiler.seed(identity, PropertyIndexType::ValueCountIndex);
+
+        let seeded = profiler
+            .query_profiling_data(identity, PropertyIndexType::ValueCountIndex)
+            .unwrap();
+        assert_eq!(seeded.count, 0);
+        assert_eq!(seeded.total, Duration::ZERO);
+        assert_eq!(seeded.min, None);
+        assert_eq!(seeded.max, None);
+
+        profiler.record(
+            identity,
+            PropertyIndexType::ValueCountIndex,
+            Duration::from_micros(10),
+        );
+        profiler.record(
+            identity,
+            PropertyIndexType::FullIndex,
+            Duration::from_micros(20),
+        );
+
+        let value_count = profiler
+            .query_profiling_data(identity, PropertyIndexType::ValueCountIndex)
+            .unwrap();
+        let full = profiler
+            .query_profiling_data(identity, PropertyIndexType::FullIndex)
+            .unwrap();
+        assert_eq!(value_count.count, 1);
+        assert_eq!(value_count.min, Some(Duration::from_micros(10)));
+        assert_eq!(full.count, 1);
+        assert_eq!(full.min, Some(Duration::from_micros(20)));
+        assert_eq!(profiler.snapshot().len(), 2);
     }
 
     #[test]
     fn query_profiler_snapshot_includes_count_total_min_and_max() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryTimingTable: (Age)");
-        profiler.record(identity, Duration::from_millis(10));
-        profiler.record(identity, Duration::from_millis(30));
+        record_unindexed(&profiler, identity, Duration::from_millis(10));
+        record_unindexed(&profiler, identity, Duration::from_millis(30));
 
         let snapshot = profiler.snapshot();
-        let (_, data) = snapshot
+        let (_, _, data) = snapshot
             .iter()
-            .find(|(query, _)| *query == "QueryTimingTable: (Age)")
+            .find(|(query, _, _)| *query == "QueryTimingTable: (Age)")
             .unwrap();
 
         assert_eq!(data.count, 2);
         assert_eq!(data.total, Duration::from_millis(40));
-        assert_eq!(data.min, Duration::from_millis(10));
-        assert_eq!(data.max, Duration::from_millis(30));
+        assert_eq!(data.min, Some(Duration::from_millis(10)));
+        assert_eq!(data.max, Some(Duration::from_millis(30)));
     }
 
     #[test]
     fn query_profiler_same_identity_aggregates_into_one_row() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryTimingSame: (Age)");
-        profiler.record(identity, Duration::from_micros(10));
-        profiler.record(identity, Duration::from_micros(30));
-        profiler.record(identity, Duration::from_micros(5));
+        record_unindexed(&profiler, identity, Duration::from_micros(10));
+        record_unindexed(&profiler, identity, Duration::from_micros(30));
+        record_unindexed(&profiler, identity, Duration::from_micros(5));
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 3);
         assert_eq!(data.total, Duration::from_micros(45));
     }
 
     #[test]
-    fn query_profiler_snapshot_sorts_by_total_then_label() {
+    fn query_profiler_snapshot_sorts_by_total_then_label_then_index_type() {
         let profiler = QueryProfiler::default();
         let b = test_query_identity("QueryTimingSort: B");
         let c = test_query_identity("QueryTimingSort: C");
         let a = test_query_identity("QueryTimingSort: A");
-        profiler.record(b, Duration::from_micros(20));
-        profiler.record(c, Duration::from_micros(10));
-        profiler.record(a, Duration::from_micros(20));
+        record_unindexed(&profiler, b, Duration::from_micros(20));
+        record_unindexed(&profiler, c, Duration::from_micros(10));
+        record_unindexed(&profiler, a, Duration::from_micros(20));
+        profiler.record(a, PropertyIndexType::FullIndex, Duration::from_micros(20));
+        profiler.record(
+            a,
+            PropertyIndexType::ValueCountIndex,
+            Duration::from_micros(20),
+        );
 
         let snapshot = profiler.snapshot();
-        let labels = snapshot.iter().map(|(query, _)| *query).collect::<Vec<_>>();
+        let keys = snapshot
+            .iter()
+            .map(|(query, index_type, _)| (*query, *index_type))
+            .collect::<Vec<_>>();
 
         assert_eq!(
-            labels,
+            keys,
             vec![
-                "QueryTimingSort: A",
-                "QueryTimingSort: B",
-                "QueryTimingSort: C"
+                ("QueryTimingSort: A", PropertyIndexType::FullIndex),
+                ("QueryTimingSort: A", PropertyIndexType::Unindexed),
+                ("QueryTimingSort: A", PropertyIndexType::ValueCountIndex),
+                ("QueryTimingSort: B", PropertyIndexType::Unindexed),
+                ("QueryTimingSort: C", PropertyIndexType::Unindexed),
             ]
         );
     }
@@ -693,10 +778,10 @@ mod tests {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryProfileScope: (Age)");
         {
-            let _scope = QueryProfileHandle::new(&profiler, identity).scope();
+            let _scope = unindexed_handle(&profiler, identity).scope();
         }
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
@@ -709,14 +794,20 @@ mod tests {
         let first_identity = test_query_identity("QueryHandleEquality: A");
         let second_identity = test_query_identity("QueryHandleEquality: B");
 
-        let first = QueryProfileHandle::new(&first_profiler, first_identity);
-        let same = QueryProfileHandle::new(&first_profiler, first_identity);
-        let different_identity = QueryProfileHandle::new(&first_profiler, second_identity);
-        let different_profiler = QueryProfileHandle::new(&second_profiler, first_identity);
+        let first = unindexed_handle(&first_profiler, first_identity);
+        let same = unindexed_handle(&first_profiler, first_identity);
+        let different_identity = unindexed_handle(&first_profiler, second_identity);
+        let different_profiler = unindexed_handle(&second_profiler, first_identity);
+        let different_index_type = QueryProfileHandle::new(
+            &first_profiler,
+            first_identity,
+            PropertyIndexType::FullIndex,
+        );
 
         assert!(first == same);
         assert!(first != different_identity);
         assert!(first != different_profiler);
+        assert!(first != different_index_type);
         requires_eq(first);
     }
 
@@ -725,12 +816,12 @@ mod tests {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryExecutionScopes: (Age)");
         {
-            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
+            let mut execution = unindexed_handle(&profiler, identity).execution();
             drop(execution.scope());
             drop(execution.scope());
         }
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
@@ -738,9 +829,9 @@ mod tests {
     fn unused_query_execution_records_nothing() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("UnusedQueryExecution: (Age)");
-        drop(QueryProfileHandle::new(&profiler, identity).execution());
+        drop(unindexed_handle(&profiler, identity).execution());
 
-        assert!(profiler.query_profiling_data(identity).is_none());
+        assert!(unindexed_data(&profiler, identity).is_none());
     }
 
     #[test]
@@ -748,12 +839,12 @@ mod tests {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("FinishedQueryExecution: (Age)");
         {
-            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
+            let mut execution = unindexed_handle(&profiler, identity).execution();
             drop(execution.scope());
             execution.finish();
         }
 
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
@@ -761,13 +852,13 @@ mod tests {
     fn finished_query_execution_cannot_open_another_scope() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("NoScopeAfterFinish: (Age)");
-        let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
+        let mut execution = unindexed_handle(&profiler, identity).execution();
         drop(execution.scope());
         execution.finish();
 
         assert!(execution.scope().is_none());
         drop(execution);
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
     }
 
@@ -778,13 +869,13 @@ mod tests {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("PanickingQueryExecution: (Age)");
         let result = catch_unwind(AssertUnwindSafe(|| {
-            let mut execution = QueryProfileHandle::new(&profiler, identity).execution();
+            let mut execution = unindexed_handle(&profiler, identity).execution();
             let _scope = execution.scope();
             panic!("end the measured work slice");
         }));
 
         assert!(result.is_err());
-        let data = profiler.query_profiling_data(identity).unwrap();
+        let data = unindexed_data(&profiler, identity).unwrap();
         assert_eq!(data.count, 1);
     }
 }

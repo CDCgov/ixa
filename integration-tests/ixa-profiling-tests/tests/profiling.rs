@@ -57,6 +57,7 @@ mod tests {
             .find(|q| q["query"] == "ProfilingPerson: (ProfilingAge)")
             .expect("ProfilingPerson age query not found in query_timings");
         assert_eq!(profiling_age_query["count"], 1);
+        assert_eq!(profiling_age_query["index_type"], "unindexed");
         assert!(profiling_age_query["total"].as_f64().is_some());
         assert!(profiling_age_query["min"].as_f64().is_some());
         assert!(profiling_age_query["max"].as_f64().is_some());
@@ -66,9 +67,32 @@ mod tests {
             .find(|q| q["query"] == "ProfilingPerson: (ProfilingAge, ProfilingCounty)")
             .expect("ProfilingPerson age/county query not found in query_timings");
         assert_eq!(profiling_age_county_query["count"], 3);
+        assert_eq!(profiling_age_county_query["index_type"], "unindexed");
         assert!(profiling_age_county_query["total"].as_f64().is_some());
         assert!(profiling_age_county_query["min"].as_f64().is_some());
         assert!(profiling_age_county_query["max"].as_f64().is_some());
+
+        let unused_single = query_timings
+            .iter()
+            .find(|q| q["query"] == "ProfilingPerson: (ProfilingUnusedSingle)")
+            .expect("unused single-property index not found in query_timings");
+        assert_eq!(unused_single["index_type"], "value_count_index");
+        assert_eq!(unused_single["count"], 0);
+        assert_eq!(unused_single["total"], 0.0);
+        assert!(unused_single["min"].is_null());
+        assert!(unused_single["max"].is_null());
+
+        let unused_multi = query_timings
+            .iter()
+            .find(|q| {
+                q["query"] == "ProfilingPerson: (ProfilingUnusedCategory, ProfilingUnusedRegion)"
+            })
+            .expect("unused multi-property index not found in query_timings");
+        assert_eq!(unused_multi["index_type"], "full_index");
+        assert_eq!(unused_multi["count"], 0);
+        assert_eq!(unused_multi["total"], 0.0);
+        assert!(unused_multi["min"].is_null());
+        assert!(unused_multi["max"].is_null());
 
         let computed = &json["computed_statistics"];
         assert_eq!(computed["it_prof_stat"]["description"], "Total test events");

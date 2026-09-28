@@ -126,6 +126,17 @@ entity type and its unordered property names; property values do not affect the
 identity. For example, queries for `Age(10), Alive(true)` and
 `Alive(false), Age(20)` share one timing row.
 
+The `Index Type` column reports the exact query-shape index configured when the
+execution began: `unindexed`, `full_index`, or `value_count_index`. It describes
+configuration, not whether a particular query API used an index fast path. For
+example, indexing `Age` does not mark an `(Age, County)` query as indexed unless
+that exact multi-property is also indexed.
+
+Because indexes can change at runtime, one query shape can have separate rows
+for different index types. Creating an index also registers a zero-count row,
+so the output includes indexes that were never queried. These rows have zero
+total duration and no minimum or maximum duration.
+
 The `Count` column reports consumed query executions. Each eager query method or
 `EntitySet` terminal operation counts once. An iterator counts once when it
 performs query work, whether it is consumed through `next`, `count`, `for_each`,
@@ -152,8 +163,9 @@ prefix, overwrite). The JSON includes:
 - `execution_statistics`
 - `named_counts`
 - `named_spans`
-- `query_timings`, with query label, observation count, total duration,
-  minimum duration, and maximum duration
+- `query_timings`, with query label, configured index type, observation count,
+  total duration, minimum duration, and maximum duration; unused indexes have
+  `null` minimum and maximum durations
 - `computed_statistics`
 
 Example:
@@ -202,7 +214,8 @@ The supported computed value types are `usize`, `i64`, and `f64`.
 API (simplified):
 
 ```rust,ignore
-pub type CustomStatisticComputer<T> = Box<dyn (Fn(&ProfilingData) -> Option<T>) + Send + Sync>;
+pub type CustomStatisticComputer<T> =
+    Box<dyn (Fn(&ProfilingData) -> Option<T>) + Send + Sync>;
 pub type CustomStatisticPrinter<T> = Box<dyn Fn(T) + Send + Sync>;
 
 pub fn add_computed_statistic<T: ComputableType>(
