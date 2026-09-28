@@ -19,6 +19,21 @@ pub enum IxaError {
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
 
+    #[error("failed to encode population data for {item}: {source}")]
+    PopulationEncodeError {
+        item: String,
+        #[source]
+        source: bincode_next::error::EncodeError,
+    },
+    #[error("failed to decode population data for {item}: {source}")]
+    PopulationDecodeError {
+        item: String,
+        #[source]
+        source: bincode_next::error::DecodeError,
+    },
+    #[error("invalid population artifact: {message}")]
+    InvalidPopulation { message: String },
+
     #[error("duplicate property {name}")]
     DuplicateProperty { name: String },
     #[error("entry already exists")]

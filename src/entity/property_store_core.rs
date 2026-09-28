@@ -21,9 +21,11 @@ first runtime schema read freezes registration into immutable dense slices.
 
 use std::any::{Any, TypeId};
 use std::cell::OnceCell;
+use std::io::{Read, Write};
 
 use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
+use crate::entity::entity_store::EntityManifest;
 use crate::entity::events::PartialPropertyChangeEventBox;
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
 use crate::entity::property::{IndexableProperty, Property};
@@ -34,7 +36,7 @@ use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::schema_registry::{PropertyRegistration, SCHEMA_REGISTRY};
 use crate::entity::value_change_counter::StratifiedValueChangeCounter;
 use crate::entity::EntityId;
-use crate::{Context, ContextEntitiesExt};
+use crate::{Context, ContextEntitiesExt, IxaError};
 
 pub(in crate::entity) type IndexNewEntityFn<E> = fn(&mut Context, EntityId<E>);
 
@@ -334,12 +336,97 @@ impl<E: Entity> PropertyStore for PropertyStoreCore<E> {
     fn entity_count(&self) -> usize {
         self.entity_count
     }
+
+    fn entity_type_name(&self) -> &'static str {
+        std::any::type_name::<E>()
+    }
+
+    fn population_manifest(&self) -> EntityManifest {
+        EntityManifest {
+            entity_type_name: std::any::type_name::<E>().to_owned(),
+            entity_count: self.entity_count,
+            property_type_names: self
+                .items
+                .iter()
+                .filter(|property| !property.is_derived())
+                .map(|property| property.property_type_name().to_owned())
+                .collect(),
+        }
+    }
+
+    fn encode_properties(
+        &self,
+        writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
+    ) -> Result<(), IxaError> {
+        for property in self.items.iter().filter(|property| !property.is_derived()) {
+            property.encode(self.entity_count, writer)?;
+        }
+        Ok(())
+    }
+
+    fn decode_properties(
+        &mut self,
+        manifest: &EntityManifest,
+        reader: &mut dyn Read,
+    ) -> Result<(), IxaError> {
+        debug_assert_eq!(manifest.entity_type_name, std::any::type_name::<E>());
+        debug_assert_eq!(self.entity_count, 0);
+
+        let persistent_property_count = self
+            .items
+            .iter()
+            .filter(|property| !property.is_derived())
+            .count();
+        if manifest.property_type_names.len() != persistent_property_count {
+            return Err(IxaError::InvalidPopulation {
+                message: format!(
+                    "entity {} contains {} persisted properties, but this build contains {}",
+                    manifest.entity_type_name,
+                    manifest.property_type_names.len(),
+                    persistent_property_count
+                ),
+            });
+        }
+
+        // We track which properties we've already processed, indexed by `Property::id()`, as
+        // a consistency check.
+        let mut seen = vec![false; self.items.len()];
+        for property_type_name in &manifest.property_type_names {
+            let property_id = self
+                .items
+                .iter()
+                .position(|property| {
+                    !property.is_derived()
+                        && property.property_type_name() == property_type_name.as_str()
+                })
+                .ok_or_else(|| IxaError::InvalidPopulation {
+                    message: format!(
+                        "unexpected property type {property_type_name} for entity {}",
+                        manifest.entity_type_name
+                    ),
+                })?;
+            if seen[property_id] {
+                return Err(IxaError::InvalidPopulation {
+                    message: format!(
+                        "duplicate property type {property_type_name} for entity {}",
+                        manifest.entity_type_name
+                    ),
+                });
+            }
+            seen[property_id] = true;
+            self.items[property_id].decode(manifest.entity_count, reader)?;
+        }
+
+        self.entity_count = manifest.entity_count;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]
     use std::any::Any;
+    use std::io::Cursor;
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use super::*;
@@ -374,6 +461,55 @@ mod tests {
             PanickingDerived(dependency.0)
         }
     );
+
+    #[test]
+    fn population_properties_decode_in_manifest_order() {
+        let manifest = EntityManifest {
+            entity_type_name: std::any::type_name::<Person>().to_owned(),
+            entity_count: 1,
+            property_type_names: vec![
+                std::any::type_name::<Vaccinated>().to_owned(),
+                std::any::type_name::<Age>().to_owned(),
+                std::any::type_name::<PanicDependency>().to_owned(),
+                std::any::type_name::<InfectionStatus>().to_owned(),
+            ],
+        };
+        let mut bodies = Vec::new();
+        {
+            let mut writer = bincode_next::IoWriter::new(&mut bodies);
+            let config = bincode_next::config::standard();
+            bincode_next::serde::encode_into_writer(vec![Vaccinated(true)], &mut writer, config)
+                .unwrap();
+            bincode_next::serde::encode_into_writer(vec![Age(42)], &mut writer, config).unwrap();
+            bincode_next::serde::encode_into_writer(vec![PanicDependency(7)], &mut writer, config)
+                .unwrap();
+            bincode_next::serde::encode_into_writer(
+                vec![InfectionStatus::Infected],
+                &mut writer,
+                config,
+            )
+            .unwrap();
+            writer.flush().unwrap();
+        }
+
+        let mut store = PropertyStoreCore::<Person>::new();
+        store
+            .decode_properties(&manifest, &mut Cursor::new(bodies))
+            .unwrap();
+
+        let entity = EntityId::new(0);
+        assert_eq!(store.entity_count, 1);
+        assert_eq!(store.get::<Age>().get(entity), Age(42));
+        assert_eq!(
+            store.get::<InfectionStatus>().get(entity),
+            InfectionStatus::Infected
+        );
+        assert_eq!(store.get::<Vaccinated>().get(entity), Vaccinated(true));
+        assert_eq!(
+            store.get::<PanicDependency>().get(entity),
+            PanicDependency(7)
+        );
+    }
 
     #[test]
     fn erased_property_store_downcasts_and_reports_count() {

@@ -40,15 +40,13 @@ log4rs = { version = "^1.3.0", default-features = false, features = [
 ] }
 xxhash-rust = { version = "^0.8.15", features = ["const_xxh3", "xxh3"] }
 rustc-hash = "^2.1.1"
-tempfile = "^3.15.0"
+tempfile = "^3.27.0"
 assert_cmd = "^2.0.16"
 criterion = "^0.8.2"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.28.0", features = ["derive"] }
 quote = "^1.0.38"
 syn = { version = "^3.0.3" }
-proc-macro2 = "1.0.93"
-proc-macro-crate = "3.3.0"
 delegate = "^0.13.3"
 web-sys = "^0.3.77"
 fern = "^0.7.1"
@@ -57,6 +55,7 @@ anyhow = "^1.0.28"
 sysinfo = "^0.38.4"
 humantime = "^2.2.0"
 bytesize = "^2.0.1"
+bincode-next = { version = "3.1.1", features = ["serde"] }
 ouroboros = "^0.18.5"
 thiserror = "^2.0.11"
 smallbox = "^0.8.8"
@@ -66,7 +65,7 @@ rkyv = "^0.8.15"
 [package]
 name = "ixa"
 version = "3.1.0"
-rust-version = "1.88.0"
+rust-version = "1.90.0"
 description = "A framework for building agent-based models"
 repository.workspace = true
 license.workspace = true
@@ -107,6 +106,8 @@ thiserror.workspace = true
 smallvec.workspace = true
 smallbox.workspace = true
 rkyv.workspace = true
+tempfile.workspace = true
+bincode-next.workspace = true
 
 # Building docs
 clap-markdown = { workspace = true, optional = true }
@@ -130,7 +131,6 @@ assert_approx_eq.workspace = true
 assert_cmd.workspace = true
 criterion.workspace = true
 rand_distr.workspace = true
-tempfile.workspace = true
 
 # Example Libraries
 ixa_example_basic_infection = { path = "examples/basic-infection" }

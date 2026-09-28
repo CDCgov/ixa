@@ -25,6 +25,7 @@ pub(in crate::entity) type PropertyValueStoreInstaller = fn(&mut dyn Any);
 #[derive(Clone, Copy)]
 struct EntityDescriptor {
     concrete_entity_type_id: TypeId,
+    entity_type_name: &'static str,
     property_store_constructor: PropertyStoreConstructor,
 }
 
@@ -33,6 +34,8 @@ struct PropertyDescriptor {
     concrete_entity_type_id: TypeId,
     concrete_property_type_id: TypeId,
     property_type_id: TypeId,
+    property_type_name: &'static str,
+    #[cfg(feature = "profiling")]
     name: &'static str,
     required: bool,
     value_store_installer: PropertyValueStoreInstaller,
@@ -40,6 +43,7 @@ struct PropertyDescriptor {
 
 struct EntityRegistrationBuilder {
     concrete_entity_type_id: TypeId,
+    entity_type_name: &'static str,
     property_store_constructor: PropertyStoreConstructor,
     properties: Vec<PropertyRegistrationBuilder>,
 }
@@ -47,6 +51,8 @@ struct EntityRegistrationBuilder {
 struct PropertyRegistrationBuilder {
     concrete_property_type_id: TypeId,
     property_type_id: TypeId,
+    property_type_name: &'static str,
+    #[cfg(feature = "profiling")]
     name: &'static str,
     required: bool,
     value_store_installer: PropertyValueStoreInstaller,
@@ -122,9 +128,19 @@ impl SchemaRegistry {
             return existing_id;
         }
 
+        assert!(
+            !builder
+                .entities
+                .iter()
+                .any(|entry| entry.entity_type_name == descriptor.entity_type_name),
+            "Ixa internal error: duplicate entity type name {}",
+            descriptor.entity_type_name
+        );
+
         let id = builder.entities.len();
         builder.entities.push(EntityRegistrationBuilder {
             concrete_entity_type_id: descriptor.concrete_entity_type_id,
+            entity_type_name: descriptor.entity_type_name,
             property_store_constructor: descriptor.property_store_constructor,
             properties: Vec::new(),
         });
@@ -146,6 +162,10 @@ impl SchemaRegistry {
         assert_eq!(
             registration.concrete_entity_type_id, descriptor.concrete_entity_type_id,
             "Ixa internal error: multiple entity types registered at index {entity_id}"
+        );
+        assert_eq!(
+            registration.entity_type_name, descriptor.entity_type_name,
+            "Ixa internal error: conflicting entity type names for one registration"
         );
     }
 
@@ -191,6 +211,16 @@ impl SchemaRegistry {
             return existing_id;
         }
 
+        assert!(
+            !entity
+                .properties
+                .iter()
+                .any(|entry| entry.property_type_name == descriptor.property_type_name),
+            "Ixa internal error: duplicate property type name {} for entity {}",
+            descriptor.property_type_name,
+            entity.entity_type_name
+        );
+
         // Dependency discovery is generic over this entity type, so the prepared IDs belong to
         // this entity's namespace. Bare entity-local IDs retain no additional provenance here; the
         // locked mutation can validate only bounds and uniqueness.
@@ -209,6 +239,8 @@ impl SchemaRegistry {
         entity.properties.push(PropertyRegistrationBuilder {
             concrete_property_type_id: descriptor.concrete_property_type_id,
             property_type_id: descriptor.property_type_id,
+            property_type_name: descriptor.property_type_name,
+            #[cfg(feature = "profiling")]
             name: descriptor.name,
             required: descriptor.required,
             value_store_installer: descriptor.value_store_installer,
@@ -242,6 +274,11 @@ impl SchemaRegistry {
             registration.property_type_id, descriptor.property_type_id,
             "Ixa internal error: conflicting property TypeIds for one registration"
         );
+        assert_eq!(
+            registration.property_type_name, descriptor.property_type_name,
+            "Ixa internal error: conflicting property type names for one registration"
+        );
+        #[cfg(feature = "profiling")]
         assert_eq!(
             registration.name, descriptor.name,
             "Ixa internal error: conflicting property names for one registration"
@@ -389,6 +426,7 @@ pub fn add_to_entity_registry<E: Entity>() {
 pub fn ensure_entity_registered<E: Entity>(entity_index: &AtomicUsize) -> usize {
     let descriptor = EntityDescriptor {
         concrete_entity_type_id: TypeId::of::<E>(),
+        entity_type_name: std::any::type_name::<E>(),
         property_store_constructor: PropertyStoreCore::<E>::new_boxed,
     };
     SCHEMA_REGISTRY.register_entity(entity_index, descriptor)
@@ -434,6 +472,8 @@ where
         concrete_entity_type_id: TypeId::of::<E>(),
         concrete_property_type_id: TypeId::of::<P>(),
         property_type_id: P::type_id(),
+        property_type_name: std::any::type_name::<P>(),
+        #[cfg(feature = "profiling")]
         name: P::name(),
         required: P::is_required(),
         value_store_installer: install_property_value_store::<E, P>,
@@ -464,6 +504,33 @@ mod tests {
         fn entity_count(&self) -> usize {
             0
         }
+
+        fn entity_type_name(&self) -> &'static str {
+            std::any::type_name::<Self>()
+        }
+
+        fn population_manifest(&self) -> crate::entity::entity_store::EntityManifest {
+            crate::entity::entity_store::EntityManifest {
+                entity_type_name: std::any::type_name::<Self>().to_owned(),
+                entity_count: 0,
+                property_type_names: Vec::new(),
+            }
+        }
+
+        fn encode_properties(
+            &self,
+            _writer: &mut bincode_next::IoWriter<'_, &mut dyn std::io::Write>,
+        ) -> Result<(), crate::IxaError> {
+            unreachable!()
+        }
+
+        fn decode_properties(
+            &mut self,
+            _manifest: &crate::entity::entity_store::EntityManifest,
+            _reader: &mut dyn std::io::Read,
+        ) -> Result<(), crate::IxaError> {
+            unreachable!()
+        }
     }
 
     fn new_dummy_store() -> Box<dyn PropertyStore> {
@@ -482,6 +549,7 @@ mod tests {
     fn entity_descriptor<T: 'static>() -> EntityDescriptor {
         EntityDescriptor {
             concrete_entity_type_id: TypeId::of::<T>(),
+            entity_type_name: std::any::type_name::<T>(),
             property_store_constructor: new_dummy_store,
         }
     }
@@ -494,6 +562,8 @@ mod tests {
             concrete_entity_type_id: TypeId::of::<E>(),
             concrete_property_type_id: TypeId::of::<P>(),
             property_type_id: TypeId::of::<P>(),
+            property_type_name: name,
+            #[cfg(feature = "profiling")]
             name,
             required,
             value_store_installer: ignore_installer as PropertyValueStoreInstaller,

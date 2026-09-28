@@ -12,6 +12,9 @@ use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
 use crate::entity::{Entity, EntityId};
 use crate::{Context, HashSet};
 
@@ -55,7 +58,9 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
 /// Property values must be copyable and comparable for equality so storage and unindexed
 /// query scans can operate on them. Indexed properties must additionally implement
 /// [`IndexableProperty`].
-pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
+pub trait Property<E: Entity>:
+    Copy + Debug + PartialEq + Serialize + DeserializeOwned + 'static
+{
     /// Allocation-free representation of the query parts contributed by a property value.
     type QueryParts<'a>: AsRef<[&'a dyn Any]>
     where

@@ -10,18 +10,36 @@ Responsibilities:
 */
 
 use std::any::Any;
+use std::io::{Read, Write};
 
 use crate::entity::events::{
     PartialPropertyChangeEventBox, PartialPropertyChangeEventCore, PropertyChangeEvent,
 };
 use crate::entity::index::{IndexCountResult, IndexSetResult};
-use crate::entity::property::Property;
+use crate::entity::property::{Property, PropertyInitializationKind};
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{Entity, EntityId};
-use crate::Context;
+use crate::{Context, IxaError};
 
 /// The `PropertyValueStore` trait defines the type-erased interface to the concrete property value storage.
 pub(crate) trait PropertyValueStore<E: Entity>: Any {
+    /// Used to resolve serialized property data to the concrete `PropertyValueStoreCore<E, P>`
+    /// it should be deserialized into.
+    fn property_type_name(&self) -> &'static str;
+
+    /// Used to filter which properties are serialized and validate deserialized data.
+    fn is_derived(&self) -> bool;
+
+    /// Persists the storage.
+    fn encode(
+        &self,
+        entity_count: usize,
+        writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
+    ) -> Result<(), IxaError>;
+
+    /// Restores persisted storage.
+    fn decode(&mut self, entity_count: usize, reader: &mut dyn Read) -> Result<(), IxaError>;
+
     // Methods related to updating a value of a dependency
     /// Fetches the existing value of the property for the given `entity_id` and returns a
     /// `PartialPropertyChangeEvent` object wrapping the previous value and `entity_id`.
@@ -45,6 +63,61 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
 }
 
 impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore<E, P> {
+    fn property_type_name(&self) -> &'static str {
+        std::any::type_name::<P>()
+    }
+
+    fn is_derived(&self) -> bool {
+        P::is_derived()
+    }
+
+    fn encode(
+        &self,
+        entity_count: usize,
+        writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
+    ) -> Result<(), IxaError> {
+        debug_assert!(!P::is_derived());
+        validate_length::<E, P>(entity_count, self.data.len())?;
+
+        bincode_next::serde::encode_into_writer(
+            &self.data,
+            writer,
+            bincode_next::config::standard(),
+        )
+        .map_err(|source| IxaError::PopulationEncodeError {
+            item: format!(
+                "property {} for entity {}",
+                std::any::type_name::<P>(),
+                std::any::type_name::<E>()
+            ),
+            source,
+        })
+    }
+
+    fn decode(&mut self, entity_count: usize, reader: &mut dyn Read) -> Result<(), IxaError> {
+        debug_assert!(!P::is_derived());
+        debug_assert!(self.data.is_empty());
+        debug_assert!(self.index.is_none());
+        debug_assert!(self.value_change_counters.is_empty());
+
+        let mut reader = reader;
+        let data: Vec<P> = bincode_next::serde::decode_from_std_read(
+            &mut reader,
+            bincode_next::config::standard(),
+        )
+        .map_err(|source| IxaError::PopulationDecodeError {
+            item: format!(
+                "property {} for entity {}",
+                std::any::type_name::<P>(),
+                std::any::type_name::<E>()
+            ),
+            source,
+        })?;
+        validate_length::<E, P>(entity_count, data.len())?;
+        self.data = data;
+        Ok(())
+    }
+
     fn create_partial_property_change(
         &self,
         entity_id: EntityId<E>,
@@ -93,5 +166,30 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
                 }),
             None => IndexCountResult::Unsupported,
         }
+    }
+}
+
+/// This function verifies the length invariant of the property's backing storage vector against
+/// the entity count according to its `PropertyInitializationKind`. We validate on export as
+/// a sanity check and on import to validate serialized data.
+fn validate_length<E: Entity, P: Property<E>>(
+    entity_count: usize,
+    length: usize,
+) -> Result<(), IxaError> {
+    let valid = match P::initialization_kind() {
+        PropertyInitializationKind::Explicit => length == entity_count,
+        PropertyInitializationKind::Constant => length <= entity_count,
+        PropertyInitializationKind::Derived => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(IxaError::InvalidPopulation {
+            message: format!(
+                "invalid length {length} for property {} of entity {} with population {entity_count}",
+                std::any::type_name::<P>(),
+                std::any::type_name::<E>()
+            ),
+        })
     }
 }

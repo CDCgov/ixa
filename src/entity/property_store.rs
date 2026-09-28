@@ -10,6 +10,10 @@ type, including whole-store traversal.
 */
 
 use std::any::Any;
+use std::io::{Read, Write};
+
+use super::entity_store::EntityManifest;
+use crate::IxaError;
 
 /// The entity-erased interface implemented by every concrete property store.
 pub(crate) trait PropertyStore: Any {
@@ -18,4 +22,24 @@ pub(crate) trait PropertyStore: Any {
 
     /// Returns the number of entity instances owned by this store.
     fn entity_count(&self) -> usize;
+
+    /// Used to resolve serialized property data to the concrete `PropertyValueStoreCore<E, P>`
+    /// it should be deserialized into.
+    fn entity_type_name(&self) -> &'static str;
+
+    /// Creates a manifest entry for this entity for population persistence.
+    fn population_manifest(&self) -> EntityManifest;
+
+    /// Write out all persistable properties for this entity.
+    fn encode_properties(
+        &self,
+        writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
+    ) -> Result<(), IxaError>;
+
+    /// Restore all persisted properties for this entity.
+    fn decode_properties(
+        &mut self,
+        manifest: &EntityManifest,
+        reader: &mut dyn Read,
+    ) -> Result<(), IxaError>;
 }

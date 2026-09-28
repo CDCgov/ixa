@@ -10,7 +10,7 @@ define_entity!(Person);
 define_property!(struct IndependentValue(u64), Person, default_const = IndependentValue(0));
 define_property!(struct BaseValue(u64), Person, default_const = BaseValue(0));
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
 struct MixedBaseValue(u64);
 
 impl_property!(MixedBaseValue, Person, default_const = MixedBaseValue(0));
@@ -59,7 +59,7 @@ define_derived_property!(
     }
 );
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Hash)]
 struct MixedDerivedCounted(u8);
 
 impl_derived_property!(MixedDerivedCounted, Person, [MixedBaseValue], [], |base| {
