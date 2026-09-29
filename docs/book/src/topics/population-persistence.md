@@ -1,7 +1,7 @@
 # Population Persistence
 
-Ixa can separate population generation from model execution by saving all entity
-counts and non-derived property values to a binary artifact:
+Ixa can separate population generation in order to reuse a constructed population
+for multiple model runs by saving all entity counts and non-derived property values to a binary artifact:
 
 ```rust
 context.save_population("population.bin")?;
