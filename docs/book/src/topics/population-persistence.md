@@ -39,5 +39,4 @@ an existing destination only after encoding and flushing succeed. Loading likewi
 streams property vectors from disk; it does not construct a second encoded copy of
 the population in memory.
 
-See `examples/population-persistence` for a complete population-generation and
-model-execution workflow.
+See `examples/population-persistence` for a complete example.
