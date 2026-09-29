@@ -23,6 +23,15 @@ Demonstrates how to load simulation parameters from a JSON file using
 cargo run --example parameter-loading
 ```
 
+### `population-persistence`
+
+Generates a small population, saves all entity counts and non-derived property
+values, then loads the population into a fresh context and runs a toy model.
+
+```sh
+cargo run --example population-persistence
+```
+
 ### `profiling`
 
 Demonstrates the profiling module: counting events, opening spans, computing

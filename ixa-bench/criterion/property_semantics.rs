@@ -4,7 +4,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ixa::hashing::one_shot_128;
 use ixa::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 define_entity!(Person);
 
@@ -24,12 +24,12 @@ define_multi_property!(Person, (MultiHashByte, MultiHashFloat));
 
 define_property!(struct FloatQueryValue(f64), Person, impl_eq_hash = both, default_const = FloatQueryValue(0.0));
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 struct CounterBucket(pub u8);
 
 impl_property!(CounterBucket, Person, default_const = CounterBucket(0));
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct FloatCounterValue(pub f64);
 
 impl PartialEq for FloatCounterValue {

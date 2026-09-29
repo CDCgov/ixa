@@ -878,11 +878,11 @@ mod tests {
         ProfilingComposedPerson
     );
 
-    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
     struct CounterValue(u8);
     impl_property!(CounterValue, Person, default_const = CounterValue(0));
 
-    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
     struct CounterStratum(bool);
     impl_property!(
         CounterStratum,

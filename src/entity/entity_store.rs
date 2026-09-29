@@ -12,15 +12,29 @@ for all registered types so that only valid (existing) `EntityId<E>` values are 
 */
 
 use std::any::Any;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 use crate::entity::property_store::PropertyStore;
 use crate::entity::property_store_core::PropertyStoreCore;
 use crate::entity::schema_registry::SCHEMA_REGISTRY;
 use crate::entity::{Entity, EntityId, PopulationIterator};
+use crate::IxaError;
 
 /// Returns the number of registered entity types.
 pub(crate) fn get_registered_entity_count() -> usize {
     SCHEMA_REGISTRY.entity_registrations().len()
+}
+
+/// This type encodes the entity-level metadata for whole-population persistence.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct EntityManifest {
+    pub(crate) entity_type_name: String,
+    pub(crate) entity_count: usize,
+    pub(crate) property_type_names: Vec<String>,
 }
 
 /// A wrapper around a vector of entities.
@@ -53,6 +67,130 @@ impl EntityStore {
                 .map(|registration| (registration.property_store_constructor)())
                 .collect(),
         }
+    }
+
+    /// Writes the complete persisted population to `path`.
+    ///
+    /// Encoding takes place in a temporary sibling file. The destination is replaced only after
+    /// the artifact has been encoded and flushed successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary file cannot be created, the population cannot be
+    /// encoded, or the completed temporary file cannot be persisted at `path`.
+    pub(crate) fn save_population(&self, path: &Path) -> Result<(), IxaError> {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+
+        {
+            let mut writer = BufWriter::new(temporary.as_file_mut());
+            self.encode_population(&mut writer)?;
+            writer.flush()?;
+        }
+
+        temporary
+            .persist(path)
+            .map_err(|error| IxaError::IoError(error.error))?;
+        Ok(())
+    }
+
+    /// Loads the persisted population at `path` into this newly constructed store.
+    ///
+    /// Entity and property type names are matched against the current schema as their bodies are
+    /// decoded. This method is called only for the fresh store created by
+    /// [`Context::from_population`](crate::Context::from_population).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the artifact cannot be read or decoded, does not match the current
+    /// schema, or contains invalid property lengths or trailing data.
+    pub(crate) fn load_population(&mut self, path: &Path) -> Result<(), IxaError> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let manifest: Vec<EntityManifest> = bincode_next::serde::decode_from_std_read(
+            &mut reader,
+            bincode_next::config::standard(),
+        )
+        .map_err(|source| IxaError::PopulationDecodeError {
+            item: "population manifest".to_owned(),
+            source,
+        })?;
+
+        if manifest.len() != self.items.len() {
+            return Err(IxaError::InvalidPopulation {
+                message: format!(
+                    "file contains {} entity types, but this build contains {}",
+                    manifest.len(),
+                    self.items.len()
+                ),
+            });
+        }
+
+        // We track which entities we've already processed, indexed by `Entity::id()`.
+        let mut seen = vec![false; self.items.len()];
+        for entity in &manifest {
+            let entity_id = self
+                .items
+                .iter()
+                .position(|store| store.entity_type_name() == entity.entity_type_name)
+                .ok_or_else(|| IxaError::InvalidPopulation {
+                    message: format!("unexpected entity type {}", entity.entity_type_name),
+                })?;
+            if seen[entity_id] {
+                return Err(IxaError::InvalidPopulation {
+                    message: format!("duplicate entity type {}", entity.entity_type_name),
+                });
+            }
+            seen[entity_id] = true;
+            self.items[entity_id].decode_properties(entity, &mut reader)?;
+        }
+
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing)? != 0 {
+            return Err(IxaError::InvalidPopulation {
+                message: "unexpected trailing bytes".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Encodes the manifest followed by each persistent property vector into `writer`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a storage invariant is violated or the manifest or a property vector
+    /// cannot be encoded or written.
+    fn encode_population(&self, writer: &mut dyn Write) -> Result<(), IxaError> {
+        let manifest: Vec<_> = self
+            .items
+            .iter()
+            .map(|store| store.population_manifest())
+            .collect();
+
+        let mut output = writer;
+        let mut writer = bincode_next::IoWriter::new(&mut output);
+        bincode_next::serde::encode_into_writer(
+            &manifest,
+            &mut writer,
+            bincode_next::config::standard(),
+        )
+        .map_err(|source| IxaError::PopulationEncodeError {
+            item: "population manifest".to_owned(),
+            source,
+        })?;
+
+        for store in &self.items {
+            store.encode_properties(&mut writer)?;
+        }
+        writer
+            .flush()
+            .map_err(|source| IxaError::PopulationEncodeError {
+                item: "population artifact".to_owned(),
+                source,
+            })
     }
 
     /// Fetches an immutable reference to the entity `E` from the registry. This
@@ -417,5 +555,376 @@ mod tests {
         assert_eq!(context.get_entity_count::<TestItem1>(), 6);
         assert_eq!(snapshot_iter.count(), 5); // Still sees original population
         assert_eq!(context.get_entity_iterator::<TestItem1>().count(), 6); // New iterator sees 6
+    }
+
+    #[cfg(test)]
+    mod population_persistence {
+        use std::io::{Cursor, Write as _};
+
+        use super::super::EntityManifest;
+        use crate::prelude::*;
+        use crate::{
+            define_derived_property, define_entity, define_property, impl_property, with, IxaError,
+        };
+
+        define_entity!(PersistencePerson);
+        define_entity!(PersistenceHousehold);
+        define_entity!(PersistenceEmpty);
+
+        define_property!(struct PersistenceAge(u8), PersistencePerson);
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+        struct SharedValue(u8);
+
+        impl_property!(
+            SharedValue,
+            PersistencePerson,
+            default_const = SharedValue(0)
+        );
+        impl_property!(
+            SharedValue,
+            PersistenceHousehold,
+            default_const = SharedValue(1)
+        );
+
+        define_property!(
+            struct Friend(Option<PersistencePersonId>),
+            PersistencePerson,
+            default_const = Friend(None)
+        );
+
+        define_property!(
+            struct HouseholdRef(Option<PersistenceHouseholdId>),
+            PersistencePerson,
+            default_const = HouseholdRef(None)
+        );
+
+        define_property!(
+            enum InfectionStatus {
+                Susceptible,
+                Infected,
+                Recovered,
+            },
+            PersistencePerson,
+            default_const = InfectionStatus::Susceptible
+        );
+
+        define_property!(
+            struct Vaccinated(bool),
+            PersistencePerson,
+            default_const = Vaccinated(false)
+        );
+
+        define_derived_property!(
+            struct IsAdult(bool),
+            PersistencePerson,
+            [PersistenceAge],
+            |age| IsAdult(age.0 >= 18)
+        );
+
+        define_entity!(FailingEntity);
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Deserialize)]
+        struct FailingProperty(u8);
+
+        impl serde::Serialize for FailingProperty {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                if self.0 == 1 {
+                    Err(serde::ser::Error::custom("intentional encoding failure"))
+                } else {
+                    serializer.serialize_u8(self.0)
+                }
+            }
+        }
+
+        impl_property!(FailingProperty, FailingEntity);
+
+        fn rewrite_manifest(path: &std::path::Path, edit: impl FnOnce(&mut Vec<EntityManifest>)) {
+            let artifact = std::fs::read(path).unwrap();
+            let mut reader = Cursor::new(&artifact);
+            let mut manifest: Vec<EntityManifest> = bincode_next::serde::decode_from_std_read(
+                &mut reader,
+                bincode_next::config::standard(),
+            )
+            .unwrap();
+            let body_offset = reader.position() as usize;
+            edit(&mut manifest);
+
+            let mut rewritten =
+                bincode_next::serde::encode_to_vec(&manifest, bincode_next::config::standard())
+                    .unwrap();
+            rewritten.extend_from_slice(&artifact[body_offset..]);
+            std::fs::write(path, rewritten).unwrap();
+        }
+
+        #[test]
+        fn population_round_trip_restores_values_and_resets_runtime_state() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            let household = context
+                .add_entity(with!(PersistenceHousehold, SharedValue(7)))
+                .unwrap();
+            let first = context
+                .add_entity(with!(
+                    PersistencePerson,
+                    PersistenceAge(12),
+                    InfectionStatus::Infected,
+                    HouseholdRef(Some(household)),
+                    SharedValue(11)
+                ))
+                .unwrap();
+            let second = context
+                .add_entity(with!(
+                    PersistencePerson,
+                    PersistenceAge(42),
+                    Friend(Some(first))
+                ))
+                .unwrap();
+            context.set_property(second, Vaccinated(true));
+            context.index_property::<PersistencePerson, PersistenceAge>();
+            context.add_plan(5.0, move |context| {
+                context.set_property(second, PersistenceAge(99));
+            });
+
+            context.save_population(&path).unwrap();
+            let mut loaded = Context::from_population(&path).unwrap();
+
+            assert_eq!(loaded.get_entity_count::<PersistencePerson>(), 2);
+            assert_eq!(loaded.get_entity_count::<PersistenceHousehold>(), 1);
+            assert_eq!(
+                loaded.get_property::<PersistenceHousehold, SharedValue>(household),
+                SharedValue(7)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, SharedValue>(first),
+                SharedValue(11)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, SharedValue>(second),
+                SharedValue(0)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, PersistenceAge>(first),
+                PersistenceAge(12)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, PersistenceAge>(second),
+                PersistenceAge(42)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, InfectionStatus>(first),
+                InfectionStatus::Infected
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, InfectionStatus>(second),
+                InfectionStatus::Susceptible
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, Vaccinated>(first),
+                Vaccinated(false)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, Vaccinated>(second),
+                Vaccinated(true)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, Friend>(second),
+                Friend(Some(first))
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, HouseholdRef>(first),
+                HouseholdRef(Some(household))
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, IsAdult>(first),
+                IsAdult(false)
+            );
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, IsAdult>(second),
+                IsAdult(true)
+            );
+            assert!(!loaded
+                .entity_store
+                .get_property_store::<PersistencePerson>()
+                .is_property_indexed::<PersistenceAge>());
+            assert!(loaded
+                .entity_store
+                .get_property_store::<PersistencePerson>()
+                .entity
+                .get()
+                .is_none());
+
+            loaded.execute();
+            assert_eq!(loaded.get_current_time(), 0.0);
+            assert_eq!(
+                loaded.get_property::<PersistencePerson, PersistenceAge>(second),
+                PersistenceAge(42)
+            );
+
+            loaded.index_property::<PersistencePerson, PersistenceAge>();
+            assert_eq!(
+                loaded.query_entity_count(with!(PersistencePerson, PersistenceAge(42))),
+                1
+            );
+        }
+
+        #[test]
+        fn save_population_replaces_an_existing_artifact() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            context
+                .add_entity(with!(PersistencePerson, PersistenceAge(10)))
+                .unwrap();
+            context.save_population(&path).unwrap();
+
+            context
+                .add_entity(with!(PersistencePerson, PersistenceAge(20)))
+                .unwrap();
+            context.save_population(&path).unwrap();
+
+            let loaded = Context::from_population(&path).unwrap();
+            assert_eq!(loaded.get_entity_count::<PersistencePerson>(), 2);
+        }
+
+        #[test]
+        fn propertyless_entity_round_trip_preserves_its_count() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            context.add_entity(with!(PersistenceEmpty)).unwrap();
+            context.add_entity(with!(PersistenceEmpty)).unwrap();
+
+            context.save_population(&path).unwrap();
+            let loaded = Context::from_population(&path).unwrap();
+
+            assert_eq!(loaded.get_entity_count::<PersistenceEmpty>(), 2);
+            assert_eq!(loaded.get_entity_count::<PersistencePerson>(), 0);
+        }
+
+        #[test]
+        fn failed_save_preserves_the_existing_artifact() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut original = Context::new();
+            let entity = original
+                .add_entity(with!(FailingEntity, FailingProperty(0)))
+                .unwrap();
+            original.save_population(&path).unwrap();
+
+            original.set_property(entity, FailingProperty(1));
+            assert!(matches!(
+                original.save_population(&path),
+                Err(IxaError::PopulationEncodeError { .. })
+            ));
+
+            let loaded = Context::from_population(&path).unwrap();
+            assert_eq!(
+                loaded.get_property::<FailingEntity, FailingProperty>(entity),
+                FailingProperty(0)
+            );
+        }
+
+        #[test]
+        fn from_population_rejects_trailing_data() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            Context::new().save_population(&path).unwrap();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(&[1])
+                .unwrap();
+
+            assert!(matches!(
+                Context::from_population(&path),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
+        }
+
+        #[test]
+        fn from_population_rejects_truncated_data() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            context
+                .add_entity(with!(PersistencePerson, PersistenceAge(10)))
+                .unwrap();
+            context.save_population(&path).unwrap();
+
+            let mut bytes = std::fs::read(&path).unwrap();
+            bytes.pop();
+            std::fs::write(&path, bytes).unwrap();
+
+            assert!(Context::from_population(&path).is_err());
+        }
+
+        #[test]
+        fn from_population_rejects_an_omitted_required_property() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            Context::new().save_population(&path).unwrap();
+
+            rewrite_manifest(&path, |manifest| {
+                let entity = manifest
+                    .iter_mut()
+                    .find(|entity| {
+                        entity.entity_type_name == std::any::type_name::<PersistencePerson>()
+                    })
+                    .unwrap();
+                let property_id = entity
+                    .property_type_names
+                    .iter()
+                    .position(|name| name == std::any::type_name::<PersistenceAge>())
+                    .unwrap();
+                entity.property_type_names.remove(property_id);
+            });
+
+            assert!(matches!(
+                Context::from_population(&path),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
+        }
+
+        #[test]
+        fn from_population_rejects_an_unknown_entity() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            Context::new().save_population(&path).unwrap();
+
+            rewrite_manifest(&path, |manifest| {
+                manifest[0].entity_type_name = "unknown::Entity".to_owned();
+            });
+
+            assert!(matches!(
+                Context::from_population(&path),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
+        }
+
+        #[test]
+        fn from_population_rejects_a_duplicate_property() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            Context::new().save_population(&path).unwrap();
+
+            rewrite_manifest(&path, |manifest| {
+                let entity = manifest
+                    .iter_mut()
+                    .find(|entity| entity.property_type_names.len() >= 2)
+                    .unwrap();
+                entity.property_type_names[1] = entity.property_type_names[0].clone();
+            });
+
+            assert!(matches!(
+                Context::from_population(&path),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
+        }
     }
 }

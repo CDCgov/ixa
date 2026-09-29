@@ -7,6 +7,7 @@ use std::cell::OnceCell;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
+use std::path::Path;
 use std::rc::Rc;
 
 use crate::data_plugin::DataPlugin;
@@ -26,7 +27,7 @@ use crate::plan_queue::{PlanId, PlanQueue};
 use crate::profiling::{
     print_profiling_data, print_query_timings, QueryProfileHandle, QueryProfilingData,
 };
-use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt};
+use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt, IxaError};
 
 /// The common callback used by multiple [`Context`] methods for future events
 type Callback = dyn FnOnce(&mut Context);
@@ -188,6 +189,39 @@ impl Context {
             execution_profiler: ExecutionProfilingCollector::new(),
             print_execution_statistics: false,
         }
+    }
+
+    /// Saves all entity counts and non-derived property values to `path`.
+    ///
+    /// The resulting artifact may be loaded only by the same build artifact. This is population
+    /// persistence, not simulation checkpointing: indexes, event handlers, global properties,
+    /// simulation time, plans, RNG state, networks, plugins, and profiling state are not saved.
+    /// An existing file is atomically replaced where the platform supports that operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written or the population cannot be encoded.
+    pub fn save_population(&self, path: impl AsRef<Path>) -> Result<(), IxaError> {
+        self.entity_store.save_population(path.as_ref())
+    }
+
+    /// Creates a fresh context containing the population saved at `path`.
+    ///
+    /// The artifact must have been written by the same build artifact. Loading does not emit
+    /// entity or property events. All state other than entity counts and non-derived property
+    /// values retains its normal fresh-context value; callers may install indexes and configure
+    /// other model state after loading. Population artifacts are trusted application data rather
+    /// than a hardened interchange format. Importing data from another build is unspecified
+    /// behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read, decoded, or matched exactly to this build's
+    /// registered entity and property schema.
+    pub fn from_population(path: impl AsRef<Path>) -> Result<Self, IxaError> {
+        let mut context = Self::new();
+        context.entity_store.load_population(path.as_ref())?;
+        Ok(context)
     }
 
     #[cfg(feature = "profiling")]

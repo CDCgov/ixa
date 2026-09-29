@@ -45,8 +45,8 @@ You can implement [`Property`][crate::entity::property::Property] for existing t
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care
 of the `#[derive(..)]` boilerplate, so you have to remember to derive or implement the traits
 required by [`Property`][crate::entity::property::Property] for your type: `Copy`, `Clone`,
-`Debug`, and `PartialEq`. If you want to index the property, it must also implement `Eq` and
-`Hash`.
+`Debug`, `PartialEq`, `serde::Serialize`, and `serde::Deserialize`. If you want to index the
+property, it must also implement `Eq` and `Hash`.
 
 If the type cannot derive `PartialEq` / `Eq` or `Hash`, for example because it contains `f32` or
 `f64`, use [`impl_property_eq!`][macro@crate::impl_property_eq],
@@ -64,14 +64,16 @@ define_entity!(Person);
 // we want to restrict the visibility of our `Property` type, we can use the `impl_property!` macro
 // instead. The only catch is, we have to remember to derive or implement the traits required by
 // `Property`. We also derive `Eq` and `Hash` here so the property can be indexed.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 struct Age(pub u8);
 impl_property!(Age, Person);
 
 // Here we derive `Default`, which also requires an attribute on one
 // of the variants. (`Property` has its own independent mechanism for
 // assigning default values for entities unrelated to the `Default` trait.)
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 enum InfectionStatus {
     #[default]
     Susceptible,
@@ -83,7 +85,7 @@ impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Suscept
 
 // Exactly equivalent to
 //    `define_property!(struct Vaccinated(pub bool), Person, default_const = Vaccinated(false));`
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 
@@ -458,7 +460,17 @@ macro_rules! impl_property_eq_hash {
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy)]
+/// #[derive(
+///     Default,
+///     Debug,
+///     PartialEq,
+///     Eq,
+///     Hash,
+///     Clone,
+///     Copy,
+///     serde::Serialize,
+///     serde::Deserialize,
+/// )]
 /// pub enum InfectionStatus {
 ///     #[default]
 ///     Susceptible,
@@ -1395,7 +1407,17 @@ mod tests {
             None => "custom:none".to_string(),
         }
     );
-    define_property!(struct Name(&'static str), Person, default_const = Name(""));
+    define_property!(
+        enum Name {
+            Empty,
+            John,
+            Jane,
+            Bob,
+            Alice,
+        },
+        Person,
+        default_const = Name::Empty
+    );
     define_property!(struct Age(u8), Person, default_const = Age(0));
     define_property!(struct Weight(f64), Person, impl_eq_hash = both, default_const = Weight(0.0));
 
@@ -1483,7 +1505,7 @@ mod tests {
         impl_eq_hash = both
     );
 
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
     struct NonIndexableFloat(f64);
     impl_property!(
         NonIndexableFloat,
@@ -1492,7 +1514,7 @@ mod tests {
     );
 
     // A property type for two distinct entities.
-    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
     pub enum InfectionKind {
         Respiratory,
         Genetic,
@@ -1518,9 +1540,15 @@ mod tests {
 
     define_entity!(SingleProfilePerson);
     define_property!(
-        struct SingleName(&'static str),
+        enum SingleName {
+            Empty,
+            John,
+            Jane,
+            Bob,
+            Alice,
+        },
         SingleProfilePerson,
-        default_const = SingleName("")
+        default_const = SingleName::Empty
     );
     define_property!(
         struct SingleAge(u8),
@@ -1537,9 +1565,9 @@ mod tests {
 
     #[test]
     fn test_multi_property_ordering() {
-        let a = (Name("Jane"), Age(22), Weight(180.5));
-        let b = (Age(22), Weight(180.5), Name("Jane"));
-        let c = (Weight(180.5), Age(22), Name("Jane"));
+        let a = (Name::Jane, Age(22), Weight(180.5));
+        let b = (Age(22), Weight(180.5), Name::Jane);
+        let c = (Weight(180.5), Age(22), Name::Jane);
 
         // Equivalent multi-properties keep distinct storage and type identities.
         // Query routing equivalence is handled by the multi-property registry.
@@ -1600,7 +1628,7 @@ mod tests {
         context
             .add_entity(with!(
                 SingleProfilePerson,
-                SingleName("John"),
+                SingleName::John,
                 SingleAge(42),
                 SingleWeight(220)
             ))
@@ -1608,7 +1636,7 @@ mod tests {
         context
             .add_entity(with!(
                 SingleProfilePerson,
-                SingleName("Jane"),
+                SingleName::Jane,
                 SingleAge(22),
                 SingleWeight(180)
             ))
@@ -1616,7 +1644,7 @@ mod tests {
         context
             .add_entity(with!(
                 SingleProfilePerson,
-                SingleName("Bob"),
+                SingleName::Bob,
                 SingleAge(32),
                 SingleWeight(190)
             ))
@@ -1624,7 +1652,7 @@ mod tests {
         context
             .add_entity(with!(
                 SingleProfilePerson,
-                SingleName("Alice"),
+                SingleName::Alice,
                 SingleAge(22),
                 SingleWeight(170)
             ))
@@ -1632,7 +1660,7 @@ mod tests {
 
         context.index_property::<SingleProfilePerson, SingleProfile>();
 
-        let example_query = (SingleName("Alice"), SingleAge(22), SingleWeight(170));
+        let example_query = (SingleName::Alice, SingleAge(22), SingleWeight(170));
         assert_eq!(
             <SingleProfile as QueryInternal<SingleProfilePerson>>::multi_property_id(
                 &example_query
@@ -1642,13 +1670,13 @@ mod tests {
         let query_parts = QueryInternal::query_parts(&example_query);
         assert_eq!(
             SingleProfile::value_from_query_parts(query_parts.as_ref()),
-            Some((SingleName("Alice"), SingleAge(22), SingleWeight(170)))
+            Some((SingleName::Alice, SingleAge(22), SingleWeight(170)))
         );
 
         context.with_query_results(
             with!(
                 SingleProfilePerson,
-                (SingleName("John"), SingleAge(42), SingleWeight(220))
+                (SingleName::John, SingleAge(42), SingleWeight(220))
             ),
             &mut |results| {
                 assert_eq!(results.into_iter().count(), 1);
@@ -1658,7 +1686,7 @@ mod tests {
 
     #[test]
     fn test_equivalent_multi_property_query_routing() {
-        let example_query = (Name("Alice"), Age(22), Weight(170.5));
+        let example_query = (Name::Alice, Age(22), Weight(170.5));
         let query_multi_property_id =
             <(Name, Age, Weight) as QueryInternal<Person>>::multi_property_id(&example_query);
 
@@ -1670,15 +1698,15 @@ mod tests {
         let query_parts = QueryInternal::query_parts(&example_query);
         assert_eq!(
             ProfileNAW::value_from_query_parts(query_parts.as_ref()),
-            Some((Name("Alice"), Age(22), Weight(170.5)))
+            Some((Name::Alice, Age(22), Weight(170.5)))
         );
         assert_eq!(
             ProfileAWN::value_from_query_parts(query_parts.as_ref()),
-            Some((Age(22), Weight(170.5), Name("Alice")))
+            Some((Age(22), Weight(170.5), Name::Alice))
         );
         assert_eq!(
             ProfileWAN::value_from_query_parts(query_parts.as_ref()),
-            Some((Weight(170.5), Age(22), Name("Alice")))
+            Some((Weight(170.5), Age(22), Name::Alice))
         );
     }
 

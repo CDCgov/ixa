@@ -60,7 +60,7 @@ variant:
 ```rust
 // The downside is, we have to make sure the property type implements all the
 // traits a property needs.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InfectionStatus {
     Susceptible,
     Infected,
