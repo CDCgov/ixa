@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use super::{Direction, TriggerCriterion, TriggerMode};
-use crate::entity::events::{EntityCreatedEvent, PropertyChangeEvent};
+use crate::entity::events::{PropertyChangeEvent, PropertyInitializedEvent};
 use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, EntityPropertyTuple};
@@ -11,7 +11,7 @@ use crate::{Context, EntityPropertyTuple};
 /// Trigger criterion for the count of entities with a particular property value.
 ///
 /// [`PropertyValueCountTrigger`] observes
-/// [`EntityCreatedEvent`](crate::entity::events::EntityCreatedEvent) and
+/// [`PropertyInitializedEvent`](crate::entity::events::PropertyInitializedEvent) and
 /// [`PropertyChangeEvent`](crate::entity::events::PropertyChangeEvent) for a specific
 /// entity/property pair and emits when the count of entities with a configured property value
 /// crosses a configured threshold.
@@ -30,8 +30,8 @@ use crate::{Context, EntityPropertyTuple};
 ///
 /// The observation data passed to
 /// [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
-/// [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose creation or property write
-/// caused the crossing, the tracked property value, the new count, the observed
+/// [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose property initialization or
+/// write caused the crossing, the tracked property value, the new count, the observed
 /// [`Direction`](super::Direction), the configured direction filter as `Option<Direction>`, and the
 /// selected [`TriggerMode`](super::TriggerMode):
 ///
@@ -65,10 +65,11 @@ use crate::{Context, EntityPropertyTuple};
 /// [`PropertyValueCountTrigger::once`] to emit only for the first crossing, or
 /// [`PropertyValueCountTrigger::repeating`] to return to the default repeating behavior.
 ///
-/// Entity creation can cause a crossing if the new entity has the tracked value. Property writes
-/// can cause a crossing when they move an entity into or out of the tracked value. A no-op write
-/// where `previous == current` still emits a property-change event at the entity layer, but it does
-/// not change this trigger's tracked count and therefore cannot by itself cross the threshold.
+/// Property initialization from entity creation can cause a crossing if the initialized property
+/// has the tracked value. Property writes can cause a crossing when they move an entity into or out
+/// of the tracked value. A no-op write where `previous == current` still emits a property-change
+/// event at the entity layer, but it does not change this trigger's tracked count and therefore
+/// cannot by itself cross the threshold.
 ///
 /// ## Example
 ///
@@ -213,9 +214,8 @@ where
                 context.subscribe_to_event({
                     let state = Rc::clone(&state);
                     let on_match = Rc::clone(&on_match);
-                    move |context, event: EntityCreatedEvent<E>| {
-                        let current = context.get_property::<E, P>(event.entity_id);
-                        if current == self.value {
+                    move |context, event: PropertyInitializedEvent<E, P>| {
+                        if event.value == self.value {
                             let mut state_value = state.get();
                             if !state_value.active {
                                 return;
@@ -304,9 +304,8 @@ where
                 context.subscribe_to_event({
                     let count = Rc::clone(&count);
                     let on_match = Rc::clone(&on_match);
-                    move |context, event: EntityCreatedEvent<E>| {
-                        let current = context.get_property::<E, P>(event.entity_id);
-                        if current == self.value {
+                    move |context, event: PropertyInitializedEvent<E, P>| {
+                        if event.value == self.value {
                             let previous_count = count.get();
                             let current_count = previous_count + 1;
                             count.set(current_count);
