@@ -59,6 +59,10 @@ pub fn get_registered_edge_type_count<E: Entity>() -> usize {
 /// Adds a new edge type to the registry. The job of this method is to create whatever
 /// "singleton" data/metadata is associated with the [`EdgeType`] if it doesn't already
 /// exist, which in this case is only the value of `EdgeType::id()`.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn add_to_edge_type_to_registry<E: Entity, ET: EdgeType<E>>() {
     let _ = ET::id();
 }
@@ -76,6 +80,10 @@ pub fn add_to_edge_type_to_registry<E: Entity, ET: EdgeType<E>>() {
 /// In fact, for our use case we know we are calling this function
 /// once for each type in each `EdgeType<E>`'s `ctor` function, which
 /// should be the only time this method is ever called for the type.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[must_use]
 pub fn initialize_edge_type_id<E: Entity>(edge_type_id: &AtomicUsize) -> usize {
     // Acquire a global lock.

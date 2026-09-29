@@ -29,12 +29,19 @@ pub type HashValueType = u128;
 pub(crate) type DeterministicHasher = Xxh3Default;
 
 /// A `rkyv` writer that streams serialized bytes directly into a `Hasher`.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub struct HasherWriter<'a, H> {
     hasher: &'a mut H,
     pos: usize,
 }
 
 impl<'a, H> HasherWriter<'a, H> {
+    /// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+    /// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+    #[doc(hidden)]
     #[must_use]
     pub fn new(hasher: &'a mut H) -> Self {
         Self { hasher, pos: 0 }
@@ -56,13 +63,20 @@ impl<H: Hasher> rkyv::ser::Writer<rkyv::rancor::Error> for HasherWriter<'_, H> {
 }
 
 /// A fixed-size `rkyv` writer used by macro-generated equality implementations.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
 #[derive(Debug, Clone, Copy)]
+#[doc(hidden)]
 pub struct EqualityBufferWriter<const N: usize> {
     buf: [u8; N],
     pos: usize,
 }
 
 impl<const N: usize> EqualityBufferWriter<N> {
+    /// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+    /// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+    #[doc(hidden)]
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -71,6 +85,9 @@ impl<const N: usize> EqualityBufferWriter<N> {
         }
     }
 
+    /// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+    /// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+    #[doc(hidden)]
     #[must_use]
     pub fn as_written(&self) -> &[u8] {
         &self.buf[..self.pos]

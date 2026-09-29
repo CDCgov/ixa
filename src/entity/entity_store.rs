@@ -102,6 +102,10 @@ pub fn get_entity_metadata_static(
 /// construct in the constructor of `EntityStore`, so that we never have to mutate
 /// `EntityStore` itself when an `Entity` is accessed for the first time. (The
 /// `OnceCell`s handle the interior mutability required for initialization.)
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn add_to_entity_registry<R: Entity>() {
     let _ = R::id();
 }
@@ -123,6 +127,10 @@ pub fn get_registered_entity_count() -> usize {
 /// In fact, for our use case we know we are calling this function
 /// once for each type in each `Entity`'s `ctor` function, which
 /// should be the only time this method is ever called for the type.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn initialize_entity_index(plugin_index: &AtomicUsize) -> usize {
     // Acquire a global lock.
     let mut guard = NEXT_ENTITY_INDEX.lock().unwrap();

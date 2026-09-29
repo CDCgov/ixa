@@ -98,9 +98,15 @@ pub use log::{
 pub mod hashing;
 pub mod numeric;
 
-// Re-export for macros
+// Re-exported for supported public APIs.
 pub use csv;
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub use ctor;
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub use paste;
 pub use rand;
 pub use rkyv;

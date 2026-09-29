@@ -9,6 +9,9 @@ use crate::{HashSet, PluginContext};
 static DATA_PLUGINS: LazyLock<Mutex<RefCell<HashSet<TypeId>>>> =
     LazyLock::new(|| Mutex::new(RefCell::new(HashSet::default())));
 
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn add_data_plugin_to_registry<T: DataPlugin>() {
     DATA_PLUGINS
         .lock()
@@ -43,7 +46,11 @@ pub fn get_data_plugin_count() -> usize {
 static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
 
 /// Acquires a global lock on the next available plugin index, but only increments it if we
-/// successfully initialize the provided index. (Must be `pub`, as it's called from within a macro.)
+/// successfully initialize the provided index.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[must_use]
 pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
     // Acquire a global lock.

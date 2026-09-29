@@ -134,6 +134,10 @@ pub(crate) fn multi_property_id_for_property_type_id(
 ///
 /// Returns `None` if `id` became the representative. Returns the existing representative ID and
 /// name if an equivalent multi-property had already been registered.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn register_type_ids_to_multi_property_id(
     entity_id: usize,
     type_ids: &[TypeId],
@@ -209,8 +213,10 @@ pub(crate) fn intern_query_identity<E: Entity>(type_ids: &[TypeId]) -> QueryIden
 
 /// Returns the raw process-local profiling identity for an entity-scoped query shape.
 ///
-/// This function exists for Ixa's exported entity and property macros. The returned value is an
-/// implementation detail and is not stable across processes.
+/// The returned value is not stable across processes.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
 #[doc(hidden)]
 pub fn intern_query_identity_raw<E: Entity>(type_ids: &[TypeId]) -> usize {
     #[cfg(feature = "profiling")]
@@ -239,6 +245,8 @@ pub(crate) fn test_query_identity(label: &'static str) -> QueryIdentityId {
     identity
 }
 
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
 #[doc(hidden)]
 pub fn record_pre_main_warning(message: String) {
     PRE_MAIN_DIAGNOSTICS
@@ -276,6 +284,10 @@ const fn make_indices<const N: usize>() -> [usize; N] {
 ///
 /// "Static" in the name refers to the fact that it takes and returns an array of statically
 /// known size, avoiding `Vec` allocations.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[must_use]
 pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N] {
     let mut indices = make_indices::<N>();
@@ -289,6 +301,10 @@ pub fn static_sorted_indices<T: Ord, const N: usize>(keys: &[T; N]) -> [usize; N
 ///
 /// "Static" in the name refers to the fact that it takes and returns an array of statically
 /// known size, avoiding `Vec` allocations.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn static_apply_reordering<T: Copy, const N: usize>(values: &mut [T; N], indices: &[usize; N]) {
     let tmp_values: [T; N] = *values;
     for (old_index, new_index) in indices.iter().enumerate() {
@@ -300,6 +316,10 @@ pub fn static_apply_reordering<T: Copy, const N: usize>(values: &mut [T; N], ind
 ///
 /// If `indices[sorted_position] == original_position`, the returned array maps
 /// `original_position` back to `sorted_position`.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[must_use]
 pub fn static_inverse_indices<const N: usize>(indices: &[usize; N]) -> [usize; N] {
     let mut inverse = [0; N];
@@ -313,6 +333,10 @@ pub fn static_inverse_indices<const N: usize>(indices: &[usize; N]) -> [usize; N
 ///
 /// Both slices must have the same length. "Static" in the name refers to the fact that it
 /// takes and returns an array of statically known size, avoiding `Vec` allocations.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn static_reorder_by_keys<T: Ord + Copy, U: Copy, const N: usize>(
     keys: &[T; N],
     values: &mut [U; N],

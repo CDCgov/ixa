@@ -1,4 +1,6 @@
-/// Helper for `define_data_plugin`
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __define_data_plugin {
     ($data_plugin:ident, $data_container:ty, |$ctx:ident| $body:expr) => {

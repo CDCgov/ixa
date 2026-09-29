@@ -60,6 +60,10 @@ pub fn get_global_property_count() -> usize {
 /// Acquires a global lock on the next available global property ID, but only
 /// increments it if we successfully initialize the provided ID. The ID of a
 /// global property is assigned at runtime but only once per type.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 #[must_use]
 pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize {
     let mut guard = NEXT_GLOBAL_PROPERTY_ID.lock().unwrap();
@@ -79,6 +83,9 @@ pub fn initialize_global_property_id(global_property_id: &AtomicUsize) -> usize 
     }
 }
 
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn add_global_property<T: GlobalProperty>(name: &str)
 where
     for<'de> <T as GlobalProperty>::Value: serde::Deserialize<'de>,

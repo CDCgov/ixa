@@ -160,6 +160,10 @@ pub(super) fn get_property_dependents_static<E: Entity>(property_index: usize) -
 /// Adds a new item to the registry. The job of this method is to create whatever "singleton"
 /// data/metadata is associated with the [`crate::entity::property::Property`] if it doesn't already exist. In
 /// our use case, this method is called in the `ctor` function of each `Property<E>` type.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn add_to_property_registry<E: Entity, P: Property<E>>() {
     // Ensure the ID of the property type is initialized.
     let property_index = P::id();
@@ -235,6 +239,10 @@ pub fn get_registered_property_count<E: Entity>() -> usize {
 /// In fact, for our use case we know we are calling this function
 /// once for each type in each `Property`'s `ctor` function, which
 /// should be the only time this method is ever called for the type.
+///
+/// **Warning:** This item is public only so Ixa's exported macros can expand in downstream
+/// crates. It is an implementation detail, is not a supported API, and must not be called directly.
+#[doc(hidden)]
 pub fn initialize_property_id<E: Entity>(property_id: &AtomicUsize) -> usize {
     // Acquire a global lock.
     let mut guard = NEXT_PROPERTY_ID.lock().unwrap();
