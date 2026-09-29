@@ -53,7 +53,7 @@ fn main() {
             "example_profiling:stat",
             "Total example events",
             Box::new(|data| data.counts.get("example_profiling:event").copied()),
-            Box::new(|value| println!("Computed stat example_profiling:stat = {value}")),
+            Box::new(|value| output!("Computed stat example_profiling:stat = {value}")),
         );
 
         context.shutdown();

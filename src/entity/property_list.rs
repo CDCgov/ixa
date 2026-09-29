@@ -26,12 +26,20 @@ use seq_macro::seq;
 use super::entity::{Entity, EntityId};
 use super::events::PropertyInitializedEvent;
 use super::property::{Property, PropertyInitializationKind};
-use super::property_store::PropertyStore;
+use super::property_store_core::PropertyStoreCore;
 use crate::data_structures::bit_set::BitSet;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
 
-pub trait PropertyList<E: Entity>: Copy + 'static {
+/// Internal operations required by [`PropertyList`] implementations.
+///
+/// Downstream code only needs [`PropertyList`] as a bound; the operations on a property list are
+/// implementation details used within Ixa. Keeping those operations here prevents internal types
+/// such as [`PropertyStoreCore`] from leaking into the public API and seals `PropertyList` so its
+/// supported implementations remain under Ixa's control.
+pub(in crate::entity) trait PropertyListInternal<E: Entity>:
+    Copy + 'static
+{
     /// Validates that the properties are distinct. If not, returns an error describing the problematic properties.
     fn validate() -> Result<(), IxaError>;
 
@@ -45,16 +53,15 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
         Self::contains_properties(E::required_property_ids())
     }
 
-    /// Assigns the given entity the property values in `self` in the `property_store`.
-    /// This method does NOT emit property change events, as it is called upon entity creation.
+    /// Assigns the given entity the property values in `self` without emitting property change
+    /// events.
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
+        property_store: &mut PropertyStoreCore<E>,
     );
 
     /// Emits initialization events for the explicitly supplied property values.
-    #[doc(hidden)]
     fn emit_initialized_events(
         &self,
         context: &mut Context,
@@ -67,21 +74,28 @@ pub trait PropertyList<E: Entity>: Copy + 'static {
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
 }
 
+/// A supported list of properties belonging to entity type `E`.
+#[allow(private_bounds)]
+pub trait PropertyList<E: Entity>: PropertyListInternal<E> {}
+
+impl<E: Entity, T: PropertyListInternal<E>> PropertyList<E> for T {}
+
 /// Values accepted by [`ContextEntitiesExt::add_entity`].
 pub trait PropertyInitializationList<E: Entity>: PropertyList<E> {}
 
 // The empty tuple is an empty `PropertyList<E>` for every `E: Entity`.
-impl<E: Entity> PropertyList<E> for () {
+impl<E: Entity> PropertyListInternal<E> for () {
     fn validate() -> Result<(), IxaError> {
         Ok(())
     }
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
+
     fn set_values_for_new_entity(
         &self,
         _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+        _property_store: &mut PropertyStoreCore<E>,
     ) {
         // No values to assign.
     }
@@ -99,17 +113,18 @@ impl<E: Entity> PropertyList<E> for () {
 
 // An Entity ZST itself is an empty `PropertyList` for that entity.
 // This allows `context.add_entity(Person)` instead of `context.add_entity(())`.
-impl<E: Entity + Copy> PropertyList<E> for E {
+impl<E: Entity + Copy> PropertyListInternal<E> for E {
     fn validate() -> Result<(), IxaError> {
         Ok(())
     }
     fn contains_properties(property_type_ids: &[TypeId]) -> bool {
         property_type_ids.is_empty()
     }
+
     fn set_values_for_new_entity(
         &self,
         _entity_id: EntityId<E>,
-        _property_store: &mut PropertyStore<E>,
+        _property_store: &mut PropertyStoreCore<E>,
     ) {
         // No values to assign.
     }
@@ -158,7 +173,7 @@ where
 //         property_type_ids.len() == 0
 //             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
 //     }
-//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>) {
+//     fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStoreCore<E>) {
 //         let property_value_store = property_store.get_mut::<P>();
 //         property_value_store.set(entity_id, *self);
 //     }
@@ -166,7 +181,7 @@ where
 
 // A single `Property` tuple is a `PropertyList` of length 1. This supports internal tuple
 // machinery, but naked tuples are not accepted directly by `add_entity`.
-impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
+impl<E: Entity, P: Property<E>> PropertyListInternal<E> for (P,) {
     fn validate() -> Result<(), IxaError> {
         Ok(())
     }
@@ -174,10 +189,11 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
         property_type_ids.is_empty()
             || property_type_ids.len() == 1 && property_type_ids[0] == P::type_id()
     }
+
     fn set_values_for_new_entity(
         &self,
         entity_id: EntityId<E>,
-        property_store: &mut PropertyStore<E>,
+        property_store: &mut PropertyStoreCore<E>,
     ) {
         let property_value_store = property_store.get_mut::<P>();
         property_value_store.set(entity_id, self.0);
@@ -203,7 +219,7 @@ impl<E: Entity, P: Property<E>> PropertyList<E> for (P,) {
 macro_rules! impl_property_list {
     ($ct:literal) => {
         seq!(N in 0..$ct {
-            impl<E: Entity, #( P~N: Property<E>,)*> PropertyList<E> for (#(P~N, )*){
+            impl<E: Entity, #( P~N: Property<E>,)*> PropertyListInternal<E> for (#(P~N, )*){
                 fn validate() -> Result<(), IxaError> {
                     // For `Property` distinctness check
                     let property_type_ids: [TypeId; $ct] = [#(<P~N as $crate::entity::property::Property<E>>::type_id(),)*];
@@ -228,7 +244,7 @@ macro_rules! impl_property_list {
                     property_type_ids.len() <= $ct && property_type_ids.iter().all(|id| self_property_type_ids.contains(id))
                 }
 
-                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStore<E>){
+                fn set_values_for_new_entity(&self, entity_id: EntityId<E>, property_store: &mut PropertyStoreCore<E>){
                     #({
                         let property_value_store = property_store.get_mut::<P~N>();
                         property_value_store.set(entity_id, self.N);

@@ -8,8 +8,9 @@ use serde_derive::Serialize;
 #[cfg(feature = "profiling")]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{JsCast, JsValue};
+use web_sys::wasm_bindgen::JsCast;
 
+use crate::output;
 #[cfg(feature = "profiling")]
 use crate::profiling::QueryProfiler;
 
@@ -32,14 +33,22 @@ pub struct ProfilingInstant(f64);
 impl ProfilingInstant {
     #[must_use]
     pub fn now() -> Self {
-        use web_sys::js_sys::Reflect;
+        use web_sys::js_sys::{Function, Reflect};
 
         let global = web_sys::js_sys::global();
-        let performance = Reflect::get(&global, &"performance".into())
+        let now = Reflect::get(&global, &"performance".into())
             .ok()
-            .and_then(|value: JsValue| value.dyn_into::<web_sys::Performance>().ok());
+            .and_then(|performance| {
+                Reflect::get(&performance, &"now".into())
+                    .ok()?
+                    .dyn_into::<Function>()
+                    .ok()?
+                    .call0(&performance)
+                    .ok()?
+                    .as_f64()
+            });
 
-        Self(performance.map_or(0.0, |performance| performance.now()))
+        Self(now.unwrap_or(0.0))
     }
 
     #[must_use]
@@ -240,31 +249,32 @@ impl ExecutionProfilingCollector {
 ///
 /// Use `ExecutionProfilingCollector::compute_final_statistics()` to construct [`ExecutionStatistics`].
 pub fn print_execution_statistics(summary: &ExecutionStatistics) {
-    println!("━━━━ Execution Summary ━━━━");
+    output!("━━━━ Execution Summary ━━━━");
     #[cfg(feature = "profiling")]
     {
         if cfg!(target_family = "wasm") {
-            println!("Memory and CPU statistics are not available on your platform.");
+            output!("Memory and CPU statistics are not available on your platform.");
         } else {
-            println!(
+            output!(
                 "{:<25}{}",
                 "Max memory usage:",
                 bytesize::ByteSize::b(summary.max_memory_usage)
             );
-            println!(
+            output!(
                 "{:<25}{}",
-                "Max plans in flight:", summary.max_plans_in_flight
+                "Max plans in flight:",
+                summary.max_plans_in_flight
             );
-            println!(
+            output!(
                 "{:<25}{}",
                 "Max plan queue memory:",
                 bytesize::ByteSize::b(summary.max_plan_queue_memory_in_use)
             );
-            println!("{:<25}{}", "CPU time:", format_duration(summary.cpu_time));
+            output!("{:<25}{}", "CPU time:", format_duration(summary.cpu_time));
         }
     }
 
-    println!("{:<25}{}", "Wall time:", format_duration(summary.wall_time));
+    output!("{:<25}{}", "Wall time:", format_duration(summary.wall_time));
 }
 
 /// Logs execution statistics with the logging system.

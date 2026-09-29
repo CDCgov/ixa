@@ -199,6 +199,10 @@ the JSON under `computed_statistics` (label, description, value).
 
 The supported computed value types are `usize`, `i64`, and `f64`.
 
+Use `ixa::output!` in printer callbacks for output that works on native and Wasm
+targets. This output bypasses logging configuration; `info!` and
+`log_execution_statistics` remain filterable diagnostic output.
+
 API (simplified):
 
 ```rust,ignore
@@ -216,6 +220,7 @@ pub fn add_computed_statistic<T: ComputableType>(
 Example:
 
 ```rust
+use ixa::output;
 use ixa::profiling::{add_computed_statistic, increment_named_count};
 
 increment_named_count("my_model:event");
@@ -225,6 +230,6 @@ add_computed_statistic::<usize>(
     "my_model:event_count",
     "Total example events",
     Box::new(|data| data.counts.get("my_model:event").copied()),
-    Box::new(|value| println!("Computed my_model:event_count = {value}")),
+    Box::new(|value| output!("Computed my_model:event_count = {value}")),
 );
 ```

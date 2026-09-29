@@ -18,8 +18,7 @@ use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::Entity;
 use crate::execution_stats::{
-    log_execution_statistics, print_execution_statistics, ExecutionProfilingCollector,
-    ExecutionStatistics,
+    print_execution_statistics, ExecutionProfilingCollector, ExecutionStatistics,
 };
 use crate::global_properties::get_global_property_count;
 use crate::plan_queue::{PlanId, PlanQueue};
@@ -747,8 +746,6 @@ impl Context {
                 print_profiling_data();
                 print_query_timings(&self.query_profiling_snapshot());
             }
-        } else {
-            log_execution_statistics(&stats);
         }
     }
 
