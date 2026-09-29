@@ -28,6 +28,119 @@ mod tests {
 
     define_entity!(Person);
 
+    mod private_property_definitions {
+        use ixa::prelude::*;
+
+        define_entity!(PrivatePerson);
+
+        define_property!(
+            struct PrivateOption(Option<u8>),
+            PrivatePerson,
+            private = true,
+            default_const = PrivateOption(None)
+        );
+        define_property!(
+            struct PrivateTuple(f64),
+            PrivatePerson,
+            private = true,
+            impl_eq_hash = both,
+            default_const = PrivateTuple(1.0)
+        );
+        define_property!(
+            struct PrivateNamed {
+                value: u8,
+            },
+            PrivatePerson,
+            private = true,
+            default_const = PrivateNamed { value: 2 },
+            display_impl = |value: &PrivateNamed| value.value.to_string()
+        );
+        define_property!(
+            enum PrivateEnum {
+                Low,
+                High,
+            },
+            PrivatePerson,
+            private = true,
+            default_const = PrivateEnum::Low
+        );
+
+        define_derived_property!(
+            struct PrivateDerivedOption(Option<u8>),
+            PrivatePerson,
+            [PrivateNamed],
+            |value| PrivateDerivedOption(Some(value.value)),
+            private = true
+        );
+        define_derived_property!(
+            struct PrivateDerivedTuple(f64),
+            PrivatePerson,
+            [PrivateTuple],
+            |value| PrivateDerivedTuple(value.0 * 2.0),
+            private = true,
+            impl_eq_hash = both
+        );
+        define_derived_property!(
+            struct PrivateDerivedNamed {
+                value: u8,
+            },
+            PrivatePerson,
+            [PrivateNamed],
+            |value| PrivateDerivedNamed {
+                value: value.value * 2,
+            },
+            private = true,
+            display_impl = |value: &PrivateDerivedNamed| value.value.to_string()
+        );
+        define_derived_property!(
+            enum PrivateDerivedEnum {
+                Low,
+                High,
+            },
+            PrivatePerson,
+            [PrivateEnum],
+            |value| match value {
+                PrivateEnum::Low => PrivateDerivedEnum::Low,
+                PrivateEnum::High => PrivateDerivedEnum::High,
+            },
+            private = true
+        );
+
+        pub(super) fn instantiate_private_properties() {
+            let _ = (
+                PrivateOption(None),
+                PrivateTuple(1.0),
+                PrivateNamed { value: 2 },
+                PrivateEnum::Low,
+                PrivateDerivedOption(Some(2)),
+                PrivateDerivedTuple(2.0),
+                PrivateDerivedNamed { value: 4 },
+                PrivateDerivedEnum::Low,
+            );
+        }
+    }
+
+    mod public_property_definitions {
+        use ixa::prelude::*;
+
+        define_entity!(PublicPerson);
+        define_property!(
+            struct PublicProperty(u8),
+            PublicPerson,
+            default_const = PublicProperty(1)
+        );
+        define_derived_property!(
+            struct PublicDerivedProperty {
+                value: u8,
+            },
+            PublicPerson,
+            [PublicProperty],
+            |value| PublicDerivedProperty { value: value.0 + 1 },
+            impl_eq_hash = both,
+            display_impl = |value: &PublicDerivedProperty| value.value.to_string()
+        );
+    }
+
     // Test entity property / derived / multi-property macros
     define_property!(struct TestPropU32(u32), Person);
     define_property!(struct TestPropU32b(u32), Person);
@@ -234,6 +347,17 @@ mod tests {
     fn prelude_exports_cancellation_ids() {
         let _: Option<PlanId> = None;
         let _: Option<EventListenerId<PreludeTestEvent>> = None;
+    }
+
+    #[test]
+    fn property_definitions_are_private_only_when_requested() {
+        private_property_definitions::instantiate_private_properties();
+
+        let public_property = public_property_definitions::PublicProperty(1);
+        assert_eq!(public_property.0, 1);
+
+        let public_derived = public_property_definitions::PublicDerivedProperty { value: 2 };
+        assert_eq!(public_derived.value, 2);
     }
 
     fn as_context(context: &mut Context) -> &mut Context {
