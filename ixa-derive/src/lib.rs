@@ -1,8 +1,16 @@
 extern crate proc_macro;
 
+mod calendar;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, parse_quote, DeriveInput};
+
+/// Marks a struct's calendar day fields; see `ixa::calendar`.
+#[proc_macro_attribute]
+pub fn calendar(args: TokenStream, item: TokenStream) -> TokenStream {
+    calendar::calendar(args, item)
+}
 
 #[proc_macro_derive(IxaEvent)]
 pub fn derive_ixa_event(input: TokenStream) -> TokenStream {
