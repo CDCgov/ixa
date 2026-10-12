@@ -7,16 +7,15 @@ use syn::{
     Type,
 };
 
-/// How a field takes part in the calendar.
 enum Mark {
-    /// A plain field, copied as is.
     None,
-    /// `#[day]` or `#[day(through)]`: an `f64` or `Option<f64>` of days.
-    Day { through: bool },
-    /// `#[days]`: a type that implements `Calendar` (a struct, or a `Vec`
-    /// or `Option` of one).
+    /// `#[day]` or `#[day(through)]` on an `f64` or `Option<f64>`.
+    Day {
+        through: bool,
+    },
+    /// `#[days]` on a type that implements `Calendar`.
     Days,
-    /// `#[reference]`: the start date, on the root struct only.
+    /// `#[reference]`: the root's start date.
     Reference,
 }
 
@@ -60,7 +59,31 @@ fn mark_of(attrs: &mut Vec<Attribute>) -> Result<Mark> {
     Ok(mark)
 }
 
-/// Whether `ty` is written `Option<..>`.
+/// The keys of a `#[serde(..)]` attribute, with whether each has a value;
+/// empty for any other attribute.
+fn serde_keys(attr: &Attribute) -> Result<Vec<(String, bool)>> {
+    let mut keys = Vec::new();
+    if attr.path().is_ident("serde") {
+        attr.parse_nested_meta(|meta| {
+            let key = meta
+                .path
+                .get_ident()
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            let has_value = meta.input.peek(syn::Token![=]);
+            if has_value {
+                meta.value()?.parse::<proc_macro2::TokenTree>()?;
+            } else if meta.input.peek(syn::token::Paren) {
+                meta.input.parse::<proc_macro2::TokenTree>()?;
+            }
+            keys.push((key, has_value));
+            Ok(())
+        })?;
+    }
+    Ok(keys)
+}
+
+/// Whether `ty` is written `Option<..>` (by its last path segment).
 fn is_option(ty: &Type) -> bool {
     match ty {
         Type::Path(path) => path
@@ -89,6 +112,12 @@ pub fn calendar(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
+    if !input.generics.params.is_empty() || input.generics.where_clause.is_some() {
+        return Err(Error::new_spanned(
+            &input.generics,
+            "`#[calendar]` does not support generics",
+        ));
+    }
     let fields = match &mut input.data {
         Data::Struct(data) => match &mut data.fields {
             Fields::Named(named) => &mut named.named,
@@ -106,6 +135,17 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
             ))
         }
     };
+
+    for attr in &input.attrs {
+        for (key, _) in serde_keys(attr)? {
+            if ["try_from", "from", "into", "remote"].contains(&key.as_str()) {
+                return Err(Error::new_spanned(
+                    attr,
+                    format!("`#[calendar]` generates the wire form, so serde `{key}` cannot be used; implement `Calendar` by hand instead"),
+                ));
+            }
+        }
+    }
 
     let name = input.ident.clone();
     let wire = format_ident!("Calendar{}", name);
@@ -140,6 +180,19 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 to_wire.push(quote! { #ident: ::std::clone::Clone::clone(&self.#ident) });
             }
             Mark::Day { through } => {
+                for attr in attrs {
+                    for (key, has_value) in serde_keys(attr)? {
+                        let custom = ["with", "deserialize_with", "serialize_with"]
+                            .contains(&key.as_str())
+                            || (key == "default" && has_value);
+                        if custom {
+                            return Err(Error::new_spanned(
+                                attr,
+                                format!("a `#[day]` field is read as `Day`, so serde `{key}` cannot be used on it"),
+                            ));
+                        }
+                    }
+                }
                 if is_option(ty) {
                     wire_fields.push(quote! {
                         #(#attrs)* #field_vis #ident: ::std::option::Option<::ixa::calendar::Day>
@@ -179,9 +232,13 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
     }
 
-    // The twin carries the struct's attributes (derives, serde) as they
-    // were written, before the root's `try_from` is added below.
-    let twin_attrs = input.attrs.clone();
+    // Taken before the root's `try_from` is added; the twin gets its own doc.
+    let twin_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| !attr.path().is_ident("doc"))
+        .cloned()
+        .collect();
     let root = reference.map(|start_date| {
         let wire_name = wire.to_string();
         input
@@ -199,7 +256,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
             }
 
             impl #name {
-                /// The wire form with whole days as dates, on this start date.
+                /// The twin with whole days as dates.
                 #[must_use]
                 pub fn dated(&self) -> #wire {
                     let start: ::std::option::Option<::ixa::calendar::Date> =
@@ -210,10 +267,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
     });
 
-    let doc = format!(
-        "The wire form of [`{name}`]: the same with [`Day`](::ixa::calendar::Day) for \
-         each calendar day field. Generated by `#[calendar]`."
-    );
+    let doc = format!("[`{name}`] with days or dates, generated by `#[calendar]`.");
     Ok(quote! {
         #input
 

@@ -1,8 +1,6 @@
-//! Calendar dates for parameters. A model's times are days from day 0;
-//! with a start date, a parameters document may write a day field as a
-//! `YYYY-MM-DD` date instead. The `#[calendar]` attribute (`ixa::calendar`,
-//! the macro that shares this module's name) marks which fields are days on
-//! that calendar:
+//! Calendar dates for parameters. Model times are `f64` days from day 0;
+//! given a start date, a document may write a day field as a `YYYY-MM-DD`
+//! date instead. The `#[calendar]` attribute marks those fields:
 //!
 //! ```
 //! use ixa::calendar;
@@ -17,7 +15,7 @@
 //!     pub start: f64,
 //!     #[day]
 //!     pub end: Option<f64>,
-//!     /// Days after the start: a duration, so not marked.
+//!     /// A duration, not marked.
 //!     pub delay: f64,
 //! }
 //!
@@ -40,23 +38,28 @@
 //! }"#).unwrap();
 //! assert_eq!(p.policies[0].start, 18.0);
 //! assert_eq!(p.policies[0].end, Some(48.0));
-//! assert_eq!(p.max_time, 84.0); // a date runs through its day
+//! assert_eq!(p.max_time, 84.0);
 //!
-//! // Written back as days, or as dates with `dated()`.
 //! assert!(serde_json::to_string(&p).unwrap().contains(r#""start":18.0"#));
 //! assert!(serde_json::to_string(&p.dated()).unwrap().contains(r#""start":"2026-06-01""#));
 //! ```
 //!
-//! The attribute generates a twin of the struct, `CalendarPolicy` for
-//! `Policy`, with [`Day`] in place of each `#[day]` field and the twin of
-//! each `#[days]` field's type (a struct, a `Vec` or an `Option` of one),
-//! and implements [`Calendar`] to convert between the two given the date
-//! of day 0. The struct with the `#[reference]` field, the start date
-//! (`Date` or `Option<Date>`), is the root: it deserializes through its
-//! twin (`#[serde(try_from)]`), serializes as days, and gets `dated()`
-//! for the twin with dates. `#[day(through)]` is for a day a date runs
-//! through, such as the end of a run, so that `"2026-08-05"` covers that
-//! whole day. Everything else in days is a duration, left unmarked.
+//! `#[calendar]` generates a twin struct (`CalendarPolicy` for `Policy`)
+//! with [`Day`] in each `#[day]` field and the twin of each `#[days]`
+//! field's type, and implements [`Calendar`] between the two. The struct
+//! with the `#[reference]` start date (`Date` or `Option<Date>`) is the
+//! root: it deserializes through its twin, serializes days, and has
+//! `dated()`. `#[day(through)]` marks a day a date runs through, such as
+//! the end of a run. Durations are left unmarked.
+//!
+//! The twin derives what the struct derives and copies its serde
+//! attributes, so a calendar struct derives `Clone`, `Debug`, `PartialEq`,
+//! `Serialize` and `Deserialize` (`Copy` and `Default` if wanted; not
+//! `Eq`, `Hash` or `Ord`, which [`Day`] lacks) and cannot use serde's
+//! `try_from`, `from`, `into` or `remote`, nor `with`, `deserialize_with`,
+//! `serialize_with` or `default = ".."` on a `#[day]` field. Generics are
+//! not supported. A struct with its own wire shape implements [`Calendar`]
+//! by hand instead.
 
 use std::fmt;
 use std::str::FromStr;
@@ -68,17 +71,22 @@ use thiserror::Error;
 /// A calendar date, written and read as `YYYY-MM-DD`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Date {
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
+    year: i32,
+    month: u32,
+    day: u32,
 }
 
 impl Date {
-    /// A date, if `month` and `day` are in range.
+    /// A checked date, with a four-digit year.
     ///
     /// # Errors
-    /// When the month is not 1 to 12 or the day is not one of that month.
+    /// When the year, month or day is out of range.
     pub fn new(year: i32, month: u32, day: u32) -> Result<Self, CalendarError> {
+        if !(0..=9999).contains(&year) {
+            return Err(CalendarError::InvalidDate(format!(
+                "year {year} is not 0 to 9999"
+            )));
+        }
         let days_in_month = match month {
             1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
             4 | 6 | 9 | 11 => 30,
@@ -131,7 +139,23 @@ impl Date {
         }
     }
 
-    /// The date `days` after this one (before it if negative).
+    #[must_use]
+    pub fn year(self) -> i32 {
+        self.year
+    }
+
+    #[must_use]
+    pub fn month(self) -> u32 {
+        self.month
+    }
+
+    #[must_use]
+    pub fn day(self) -> u32 {
+        self.day
+    }
+
+    /// The date `days` after this one (before it if negative); past year
+    /// 9999 or before year 0 it no longer prints as `YYYY-MM-DD`.
     #[must_use]
     pub fn plus_days(self, days: i64) -> Self {
         Self::from_days_since_epoch(self.days_since_epoch() + days)
@@ -153,7 +177,7 @@ impl FromStr for Date {
         let mut next = |len: usize| {
             parts
                 .next()
-                .filter(|p| p.len() == len)
+                .filter(|p| p.len() == len && p.bytes().all(|b| b.is_ascii_digit()))
                 .and_then(|p| p.parse::<u32>().ok())
                 .ok_or_else(invalid)
         };
@@ -179,11 +203,10 @@ impl Serialize for Date {
     }
 }
 
-/// The key the `toml` crate gives a native TOML date when a document is
-/// read through a self-describing format (`serde_json::Value`, say).
+/// The key of the map the `toml` crate hands over for a native TOML date.
 const TOML_DATETIME: &str = "$__toml_private_datetime";
 
-/// A date as a document writes it: `YYYY-MM-DD`, or a native TOML date.
+/// `YYYY-MM-DD`, or a native TOML date.
 struct DateVisitor;
 
 impl<'de> Visitor<'de> for DateVisitor {
@@ -216,20 +239,19 @@ impl<'de> Deserialize<'de> for Date {
     }
 }
 
-/// What went wrong turning a document's days and dates into days.
+/// An error reading a date or converting one to days.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum CalendarError {
     #[error("{0}")]
     InvalidDate(String),
     #[error("{0} is a date, but there is no start date")]
     NoStartDate(Date),
-    /// A conversion of a `#[days]` field's own making.
+    /// From a hand-written [`Calendar`] impl.
     #[error("{0}")]
     Custom(String),
 }
 
-/// A day field as a document writes it: days from day 0, or a date on the
-/// calendar.
+/// A day field as a document writes it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Day {
     DaysFromStart(f64),
@@ -243,9 +265,8 @@ impl Default for Day {
 }
 
 impl Day {
-    /// Days from day 0, given `start`, the date of day 0. A date runs
-    /// `through` its day when the field is the end of a span, so that it
-    /// covers the whole day.
+    /// Days from `start`, the date of day 0; with `through`, a date
+    /// covers its whole day.
     ///
     /// # Errors
     /// A date with no start date.
@@ -260,15 +281,18 @@ impl Day {
         }
     }
 
-    /// `days` as a date when there is a start date and it is a whole day,
-    /// else as days.
+    /// A date when there is a start date and `days` is a whole day with a
+    /// four-digit year, else days.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn from_days(days: f64, start: Option<Date>, through: bool) -> Self {
         if let Some(start) = start {
             let d = days - f64::from(through);
-            if d.fract() == 0.0 && d.abs() < 1e15 {
-                return Self::CalendarDate(start.plus_days(d as i64));
+            if d.fract() == 0.0 && d.abs() < 1e7 {
+                let date = start.plus_days(d as i64);
+                if (0..=9999).contains(&date.year) {
+                    return Self::CalendarDate(date);
+                }
             }
         }
         Self::DaysFromStart(days)
@@ -322,21 +346,17 @@ impl<'de> Deserialize<'de> for Day {
     }
 }
 
-/// A type with calendar day fields: in the model days from day 0, on the
-/// wire ([`Calendar::Wire`]) days or dates. `#[calendar]` implements it for
-/// a struct; a `Vec` or `Option` of one converts element by element.
+/// A type with day fields and a wire form that may hold dates.
+/// `#[calendar]` implements it for a struct.
 pub trait Calendar: Sized {
-    /// The same type with [`Day`] for each calendar day field.
+    /// The same type with [`Day`] for each day field.
     type Wire;
 
-    /// The model form of `wire`, given `start`, the date of day 0.
-    ///
     /// # Errors
-    /// A date with no start date, or whatever a field's own conversion
-    /// reports.
+    /// A date with no start date, or a field's own conversion error.
     fn from_calendar(wire: Self::Wire, start: Option<Date>) -> Result<Self, CalendarError>;
 
-    /// The wire form: whole days as dates when there is a start date.
+    /// Whole days as dates when there is a start date.
     fn to_calendar(&self, start: Option<Date>) -> Self::Wire;
 }
 
@@ -380,7 +400,7 @@ mod tests {
         assert_eq!(date.plus_days(-38).to_string(), "2026-04-06");
         assert_eq!(date.days_until("2026-10-06".parse().unwrap()), 145);
         assert_eq!(Date::new(1970, 1, 1).unwrap().days_since_epoch(), 0);
-        assert_eq!(Date::new(2000, 2, 29).unwrap().plus_days(1).month, 3);
+        assert_eq!(Date::new(2000, 2, 29).unwrap().plus_days(1).month(), 3);
         for days in [-1_000_000, -1, 0, 1, 59, 60, 365, 1_000_000] {
             let d = Date::from_days_since_epoch(days);
             assert_eq!(d.days_since_epoch(), days, "{d}");
@@ -396,11 +416,15 @@ mod tests {
             "26-05-14",
             "2026-05-14T00:00",
             "May 14",
+            "2026-+5-14",
+            "+999-05-14",
         ] {
             assert!(text.parse::<Date>().is_err(), "{text}");
         }
         assert!(Date::new(2024, 2, 29).is_ok());
         assert!(Date::new(2023, 2, 29).is_err());
+        assert!(Date::new(-1, 1, 1).is_err());
+        assert!(Date::new(10000, 1, 1).is_err());
         let err = "2026-02-30".parse::<Date>().unwrap_err().to_string();
         assert!(err.contains("day 30 is not 1 to 28"), "{err}");
     }
@@ -429,6 +453,14 @@ mod tests {
         assert_eq!(Day::from_days(19.0, Some(start), true), date);
         assert_eq!(Day::from_days(2.5, Some(start), false), days);
         assert_eq!(Day::from_days(18.0, None, false), Day::DaysFromStart(18.0));
+        assert_eq!(
+            Day::from_days(1e12, Some(start), false),
+            Day::DaysFromStart(1e12)
+        );
+        assert_eq!(
+            Day::from_days(3e6, Some(start), false),
+            Day::DaysFromStart(3e6)
+        );
         assert_eq!(serde_json::to_value(date).unwrap(), json!("2026-06-01"));
         assert_eq!(serde_json::to_value(days).unwrap(), json!(2.5));
     }

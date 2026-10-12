@@ -45,6 +45,7 @@ assert_cmd = "^2.0.16"
 criterion = "^0.8.2"
 assert_approx_eq = "^1.1.0"
 strum = { version = "^0.28.0", features = ["derive"] }
+proc-macro2 = "^1.0.95"
 quote = "^1.0.38"
 syn = { version = "^3.0.3" }
 delegate = "^0.13.3"

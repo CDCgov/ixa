@@ -32,7 +32,7 @@ struct EndRunConditions {
     max_infections: Option<u64>,
 }
 
-/// A struct that converts by hand, as one with a custom wire shape would.
+/// Converts by hand, as a type with a custom wire shape does.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Importation {
     day: f64,
@@ -152,8 +152,7 @@ fn a_date_needs_a_start_date_and_a_bad_date_says_why() {
     .unwrap_err()
     .to_string();
     assert!(err.contains("day 30 is not 1 to 28"), "{err}");
-    // Without dates nothing needs a start date, and a plain struct still
-    // reads and writes days on its own.
+    // A plain struct reads and writes days on its own.
     let p: Policy = serde_json::from_value(json!({"start": 5, "end": 9})).unwrap();
     assert_eq!(p.end, Some(9.0));
     assert_eq!(
@@ -169,8 +168,7 @@ fn a_date_needs_a_start_date_and_a_bad_date_says_why() {
     assert_eq!(end.max_time, Day::DaysFromStart(3.0));
 }
 
-/// The expansion names everything by full path: a model imports only the
-/// attribute and whatever it uses itself.
+/// Only the attribute is imported: the expansion uses full paths.
 mod bare {
     use ixa::calendar;
     use serde::{Deserialize, Serialize};
