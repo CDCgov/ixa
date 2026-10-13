@@ -59,14 +59,13 @@ pub fn list_groups() -> Vec<&'static str> {
 
 pub fn list_benches(group: &str) -> Result<Vec<&'static str>> {
     // Take what we need under the lock, but don't format errors yet
-    if let Some(benches) = {
-        BENCH_REGISTRY
-            .lock()
-            .unwrap()
-            .borrow()
-            .get(group)
-            .map(|g| g.bench_names.clone())
-    } {
+    let benches = BENCH_REGISTRY
+        .lock()
+        .unwrap()
+        .borrow()
+        .get(group)
+        .map(|g| g.bench_names.clone());
+    if let Some(benches) = benches {
         return Ok(benches);
     }
     // Lock is dropped here before we call list_groups
