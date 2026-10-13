@@ -1,10 +1,11 @@
 //! The `#[calendar]` attribute: see `ixa::calendar`.
 
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, quote_spanned};
+use syn::ext::IdentExt;
+use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, parse_quote, Attribute, Data, DeriveInput, Error, Fields, Ident, Result,
-    Type,
+    parse_macro_input, Attribute, Data, DataStruct, DeriveInput, Error, Fields, Ident, Result, Type,
 };
 
 enum Mark {
@@ -118,23 +119,29 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
             "`#[calendar]` does not support generics",
         ));
     }
-    let fields = match &mut input.data {
-        Data::Struct(data) => match &mut data.fields {
-            Fields::Named(named) => &mut named.named,
-            _ => {
-                return Err(Error::new_spanned(
-                    &input.ident,
-                    "`#[calendar]` needs a struct with named fields",
-                ))
-            }
-        },
-        _ => {
-            return Err(Error::new_spanned(
-                &input.ident,
-                "`#[calendar]` needs a struct with named fields",
-            ))
-        }
+    let Data::Struct(DataStruct {
+        fields: Fields::Named(named),
+        ..
+    }) = &mut input.data
+    else {
+        return Err(Error::new_spanned(
+            &input.ident,
+            "`#[calendar]` needs a struct with named fields",
+        ));
     };
+    let fields = &mut named.named;
+    // An attribute macro sees only the attributes below it, and the twin
+    // needs the derives.
+    if !input
+        .attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("derive"))
+    {
+        return Err(Error::new_spanned(
+            &input.ident,
+            "`#[calendar]` copies the struct's derives onto its twin, so it goes above `#[derive(..)]`",
+        ));
+    }
 
     for attr in &input.attrs {
         for (key, _) in serde_keys(attr)? {
@@ -157,24 +164,21 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
 
     for field in fields.iter_mut() {
         let ident = field.ident.clone().expect("named field");
+        let field_name = ident.unraw().to_string();
         let mark = mark_of(&mut field.attrs)?;
         let attrs = &field.attrs;
         let field_vis = &field.vis;
         let ty = &field.ty;
         match mark {
-            Mark::None => {
-                wire_fields.push(quote! { #(#attrs)* #field_vis #ident: #ty });
-                from_wire.push(quote! { #ident: wire.#ident });
-                to_wire.push(quote! { #ident: ::std::clone::Clone::clone(&self.#ident) });
-            }
-            Mark::Reference => {
-                if reference.is_some() {
-                    return Err(Error::new_spanned(
-                        ident,
-                        "`#[reference]` goes on one field only",
-                    ));
+            Mark::None | Mark::Reference => {
+                if let Mark::Reference = mark {
+                    if reference.replace(ident.clone()).is_some() {
+                        return Err(Error::new_spanned(
+                            ident,
+                            "`#[reference]` goes on one field only",
+                        ));
+                    }
                 }
-                reference = Some(ident.clone());
                 wire_fields.push(quote! { #(#attrs)* #field_vis #ident: #ty });
                 from_wire.push(quote! { #ident: wire.#ident });
                 to_wire.push(quote! { #ident: ::std::clone::Clone::clone(&self.#ident) });
@@ -193,16 +197,20 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                         }
                     }
                 }
+                // Spanned on the type, so a field that is not `f64` or
+                // `Option<f64>` is reported there.
+                let span = ty.span();
                 if is_option(ty) {
                     wire_fields.push(quote! {
                         #(#attrs)* #field_vis #ident: ::std::option::Option<::ixa::calendar::Day>
                     });
-                    from_wire.push(quote! {
+                    from_wire.push(quote_spanned! {span=>
                         #ident: wire.#ident
                             .map(|day| ::ixa::calendar::Day::resolve(day, start, #through))
-                            .transpose()?
+                            .transpose()
+                            .map_err(|e| ::ixa::calendar::CalendarError::at(e, #field_name))?
                     });
-                    to_wire.push(quote! {
+                    to_wire.push(quote_spanned! {span=>
                         #ident: self.#ident
                             .map(|days| ::ixa::calendar::Day::from_days(days, start, #through))
                     });
@@ -210,10 +218,11 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                     wire_fields.push(quote! {
                         #(#attrs)* #field_vis #ident: ::ixa::calendar::Day
                     });
-                    from_wire.push(quote! {
-                        #ident: ::ixa::calendar::Day::resolve(wire.#ident, start, #through)?
+                    from_wire.push(quote_spanned! {span=>
+                        #ident: ::ixa::calendar::Day::resolve(wire.#ident, start, #through)
+                            .map_err(|e| ::ixa::calendar::CalendarError::at(e, #field_name))?
                     });
-                    to_wire.push(quote! {
+                    to_wire.push(quote_spanned! {span=>
                         #ident: ::ixa::calendar::Day::from_days(self.#ident, start, #through)
                     });
                 }
@@ -223,7 +232,8 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                     #(#attrs)* #field_vis #ident: <#ty as ::ixa::calendar::Calendar>::Wire
                 });
                 from_wire.push(quote! {
-                    #ident: <#ty as ::ixa::calendar::Calendar>::from_calendar(wire.#ident, start)?
+                    #ident: <#ty as ::ixa::calendar::Calendar>::from_calendar(wire.#ident, start)
+                        .map_err(|e| ::ixa::calendar::CalendarError::at(e, #field_name))?
                 });
                 to_wire.push(quote! {
                     #ident: ::ixa::calendar::Calendar::to_calendar(&self.#ident, start)
@@ -239,19 +249,32 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         .filter(|attr| !attr.path().is_ident("doc"))
         .cloned()
         .collect();
-    let root = reference.map(|start_date| {
+    // A root uses its own start date, falling back to an enclosing root's.
+    let own_start = |from: proc_macro2::TokenStream| {
+        reference.as_ref().map(|start_date| {
+            quote! {
+                let start = ::std::option::Option::or(
+                    ::std::convert::Into::<::std::option::Option<::ixa::calendar::Date>>::into(
+                        ::std::clone::Clone::clone(&#from.#start_date),
+                    ),
+                    start,
+                );
+            }
+        })
+    };
+    let wire_start = own_start(quote!(wire));
+    let self_start = own_start(quote!(self));
+    let root = reference.is_some().then(|| {
         let wire_name = wire.to_string();
         input
             .attrs
-            .push(parse_quote!(#[serde(try_from = #wire_name)]));
+            .push(syn::parse_quote!(#[serde(try_from = #wire_name)]));
         quote! {
             impl ::std::convert::TryFrom<#wire> for #name {
                 type Error = ::ixa::calendar::CalendarError;
 
                 fn try_from(wire: #wire) -> ::std::result::Result<Self, Self::Error> {
-                    let start: ::std::option::Option<::ixa::calendar::Date> =
-                        ::std::clone::Clone::clone(&wire.#start_date).into();
-                    <Self as ::ixa::calendar::Calendar>::from_calendar(wire, start)
+                    <Self as ::ixa::calendar::Calendar>::from_calendar(wire, ::std::option::Option::None)
                 }
             }
 
@@ -259,9 +282,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 /// The twin with whole days as dates.
                 #[must_use]
                 pub fn dated(&self) -> #wire {
-                    let start: ::std::option::Option<::ixa::calendar::Date> =
-                        ::std::clone::Clone::clone(&self.#start_date).into();
-                    <Self as ::ixa::calendar::Calendar>::to_calendar(self, start)
+                    <Self as ::ixa::calendar::Calendar>::to_calendar(self, ::std::option::Option::None)
                 }
             }
         }
@@ -284,10 +305,12 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 wire: #wire,
                 start: ::std::option::Option<::ixa::calendar::Date>,
             ) -> ::std::result::Result<Self, ::ixa::calendar::CalendarError> {
+                #wire_start
                 ::std::result::Result::Ok(Self { #(#from_wire,)* })
             }
 
             fn to_calendar(&self, start: ::std::option::Option<::ixa::calendar::Date>) -> #wire {
+                #self_start
                 #wire { #(#to_wire,)* }
             }
         }

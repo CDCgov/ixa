@@ -140,7 +140,7 @@ fn a_date_needs_a_start_date_and_a_bad_date_says_why() {
     .unwrap_err()
     .to_string();
     assert!(
-        err.contains("2026-05-01 is a date, but there is no start date"),
+        err.contains("importations[0]: 2026-05-01 is a date, but there is no start date"),
         "{err}"
     );
     let err = serde_json::from_value::<Parameters>(json!({
@@ -203,5 +203,86 @@ mod bare {
         assert_eq!(s.current, None);
         let dated = serde_json::to_value(s.dated()).unwrap();
         assert_eq!(dated["windows"][0]["to"], "2026-05-16");
+    }
+}
+
+#[test]
+fn native_toml_dates_and_quoted_dates_both_read() {
+    let p: Parameters = toml::from_str(
+        r#"
+        startDate = 2026-05-14
+        seed = 7
+        importations = [{ day = 2026-05-01 }, { day = 4 }]
+        endRunConditions = { maxTime = "2026-08-05" }
+
+        [[policies]]
+        name = "Dated"
+        start = 2026-06-01
+        end = 48
+        "#,
+    )
+    .unwrap();
+    assert_eq!(p.start_date, start());
+    assert_eq!((p.policies[0].start, p.policies[0].end), (18.0, Some(48.0)));
+    assert_eq!(p.importations[0].day, -13.0);
+    assert_eq!(p.end_run_conditions.max_time, 84.0);
+
+    let err = toml::from_str::<Parameters>(
+        "startDate = 2026-05-14T00:00:00\nseed = 7\nimportations = []\nendRunConditions = { maxTime = 1 }",
+    )
+    .unwrap_err();
+    assert!(err.message().contains("is not a date"), "{err}");
+}
+
+mod nested {
+    use super::*;
+
+    #[calendar]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct Region {
+        #[reference]
+        start: Option<Date>,
+        #[day]
+        x: f64,
+    }
+
+    #[calendar]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct Outer {
+        #[reference]
+        start: Option<Date>,
+        #[days]
+        regions: Vec<Region>,
+    }
+
+    #[test]
+    fn a_nested_root_uses_its_own_start_date_or_the_outer_one() {
+        let o: Outer = serde_json::from_value(json!({
+            "start": "2026-01-01",
+            "regions": [
+                {"start": "2026-06-01", "x": "2026-06-02"},
+                {"start": null, "x": "2026-01-03"},
+            ]
+        }))
+        .unwrap();
+        assert_eq!(o.regions[0].x, 1.0);
+        assert_eq!(o.regions[1].x, 2.0);
+        let dated = serde_json::to_value(o.dated()).unwrap();
+        assert_eq!(dated["regions"][0]["x"], "2026-06-02");
+        assert_eq!(dated["regions"][1]["x"], "2026-01-03");
+    }
+
+    #[test]
+    fn errors_name_the_field() {
+        let err = serde_json::from_value::<Outer>(json!({
+            "start": null,
+            "regions": [{"start": null, "x": 3}, {"start": null, "x": "2026-01-03"}]
+        }))
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.starts_with("regions[1].x: 2026-01-03 is a date, but there is no start date"),
+            "{err}"
+        );
     }
 }
