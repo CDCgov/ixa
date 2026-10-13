@@ -53,6 +53,7 @@ pub use context::{Context, ContextBase, EventListenerId, ExecutionPhase, IxaEven
 pub use ixa_derive::IxaEvent;
 
 pub mod calendar;
+pub use calendar::ContextCalendarExt;
 pub use ixa_derive::calendar;
 
 mod plugin_context;

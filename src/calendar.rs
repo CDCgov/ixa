@@ -49,17 +49,24 @@
 //! field's type, and implements [`Calendar`] between the two. The struct
 //! with the `#[reference]` start date (`Date` or `Option<Date>`) is the
 //! root: it deserializes through its twin, serializes days, and has
-//! `dated()`. `#[day(through)]` marks a day a date runs through, such as
-//! the end of a run. Durations are left unmarked.
+//! `dated()`. A root nested in another uses its own start date, or the
+//! outer one when it has none. `#[day(through)]` marks a day a date runs
+//! through, such as the end of a run. Durations are left unmarked.
 //!
 //! The twin derives what the struct derives and copies its serde
-//! attributes, so a calendar struct derives `Clone`, `Debug`, `PartialEq`,
+//! attributes, so `#[calendar]` goes above `#[derive(..)]`, and a calendar
+//! struct derives `Clone`, `Debug`, `PartialEq`,
 //! `Serialize` and `Deserialize` (`Copy` and `Default` if wanted; not
 //! `Eq`, `Hash` or `Ord`, which [`Day`] lacks) and cannot use serde's
 //! `try_from`, `from`, `into` or `remote`, nor `with`, `deserialize_with`,
 //! `serialize_with` or `default = ".."` on a `#[day]` field. Generics are
 //! not supported. A struct with its own wire shape implements [`Calendar`]
 //! by hand instead.
+//!
+//! To write dates in reports, store the start date on the context with
+//! [`ContextCalendarExt::set_start_date`] and read the date of the current
+//! time with [`ContextCalendarExt::get_current_date`]; [`Date`] serializes
+//! as `YYYY-MM-DD`.
 
 use std::fmt;
 use std::str::FromStr;
@@ -67,6 +74,12 @@ use std::str::FromStr;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
+
+use crate::{define_data_plugin, Context, ContextBase};
+
+/// Days since 1970-01-01 of 0000-01-01 and 9999-12-31.
+const MIN_DAYS: i64 = -719_528;
+const MAX_DAYS: i64 = 2_932_896;
 
 /// A calendar date, written and read as `YYYY-MM-DD`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -154,11 +167,25 @@ impl Date {
         self.day
     }
 
-    /// The date `days` after this one (before it if negative); past year
-    /// 9999 or before year 0 it no longer prints as `YYYY-MM-DD`.
+    /// The date `days` after this one (before it if negative), or `None`
+    /// outside years 0 to 9999.
     #[must_use]
-    pub fn plus_days(self, days: i64) -> Self {
-        Self::from_days_since_epoch(self.days_since_epoch() + days)
+    pub fn checked_plus_days(self, days: i64) -> Option<Self> {
+        self.days_since_epoch()
+            .checked_add(days)
+            .filter(|d| (MIN_DAYS..=MAX_DAYS).contains(d))
+            .map(Self::from_days_since_epoch)
+    }
+
+    /// The date that `time` falls on, with this date as day 0, or `None`
+    /// outside years 0 to 9999.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn date_at(self, time: f64) -> Option<Self> {
+        if !time.is_finite() {
+            return None;
+        }
+        self.checked_plus_days(time.floor() as i64)
     }
 
     /// Days from this date to `other`, negative if `other` is earlier.
@@ -235,7 +262,11 @@ impl<'de> Visitor<'de> for DateVisitor {
 
 impl<'de> Deserialize<'de> for Date {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(DateVisitor)
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(DateVisitor)
+        } else {
+            deserializer.deserialize_str(DateVisitor)
+        }
     }
 }
 
@@ -249,6 +280,32 @@ pub enum CalendarError {
     /// From a hand-written [`Calendar`] impl.
     #[error("{0}")]
     Custom(String),
+    /// An error in a field, such as `policies[0].start`.
+    #[error("{path}: {error}")]
+    At {
+        path: String,
+        error: Box<CalendarError>,
+    },
+}
+
+impl CalendarError {
+    /// The error inside field `segment` (or index `[i]`) of a struct.
+    #[must_use]
+    pub fn at(self, segment: &str) -> Self {
+        match self {
+            Self::At { path, error } => {
+                let dot = if path.starts_with('[') { "" } else { "." };
+                Self::At {
+                    path: format!("{segment}{dot}{path}"),
+                    error,
+                }
+            }
+            error => Self::At {
+                path: segment.to_owned(),
+                error: Box::new(error),
+            },
+        }
+    }
 }
 
 /// A day field as a document writes it.
@@ -286,22 +343,27 @@ impl Day {
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn from_days(days: f64, start: Option<Date>, through: bool) -> Self {
-        if let Some(start) = start {
-            let d = days - f64::from(through);
-            if d.fract() == 0.0 && d.abs() < 1e7 {
-                let date = start.plus_days(d as i64);
-                if (0..=9999).contains(&date.year) {
-                    return Self::CalendarDate(date);
-                }
-            }
-        }
-        Self::DaysFromStart(days)
+        let d = days - f64::from(through);
+        start
+            .filter(|_| d.fract() == 0.0)
+            .and_then(|start| start.checked_plus_days(d as i64))
+            .map_or(Self::DaysFromStart(days), Self::CalendarDate)
     }
+}
+
+/// The tagged form of [`Day`] for binary formats, which cannot tell a
+/// number from a string on their own.
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Day")]
+enum BinaryDay {
+    DaysFromStart(f64),
+    CalendarDate(Date),
 }
 
 impl Serialize for Day {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
+            _ if !serializer.is_human_readable() => BinaryDay::serialize(self, serializer),
             Self::DaysFromStart(days) => serializer.serialize_f64(*days),
             Self::CalendarDate(date) => date.serialize(serializer),
         }
@@ -342,7 +404,11 @@ impl<'de> Visitor<'de> for DayVisitor {
 
 impl<'de> Deserialize<'de> for Day {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(DayVisitor)
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(DayVisitor)
+        } else {
+            BinaryDay::deserialize(deserializer)
+        }
     }
 }
 
@@ -352,6 +418,9 @@ pub trait Calendar: Sized {
     /// The same type with [`Day`] for each day field.
     type Wire;
 
+    /// `start` is the enclosing root's start date; a struct with its own
+    /// `#[reference]` uses that instead when it has one.
+    ///
     /// # Errors
     /// A date with no start date, or a field's own conversion error.
     fn from_calendar(wire: Self::Wire, start: Option<Date>) -> Result<Self, CalendarError>;
@@ -365,7 +434,8 @@ impl<T: Calendar> Calendar for Vec<T> {
 
     fn from_calendar(wire: Self::Wire, start: Option<Date>) -> Result<Self, CalendarError> {
         wire.into_iter()
-            .map(|w| T::from_calendar(w, start))
+            .enumerate()
+            .map(|(i, w)| T::from_calendar(w, start).map_err(|e| e.at(&format!("[{i}]"))))
             .collect()
     }
 
@@ -386,6 +456,27 @@ impl<T: Calendar> Calendar for Option<T> {
     }
 }
 
+define_data_plugin!(StartDatePlugin, Option<Date>, None);
+
+/// The date of day 0 on a [`Context`], for writing dates in reports.
+pub trait ContextCalendarExt: ContextBase {
+    /// Sets the date of day 0; takes a `Date` or a parameters' `Option<Date>`.
+    fn set_start_date(&mut self, start: impl Into<Option<Date>>) {
+        *self.get_data_mut(StartDatePlugin) = start.into();
+    }
+
+    fn get_start_date(&self) -> Option<Date> {
+        *self.get_data(StartDatePlugin)
+    }
+
+    /// The date of the current time, if there is a start date.
+    fn get_current_date(&self) -> Option<Date> {
+        self.get_start_date()?.date_at(self.get_current_time())
+    }
+}
+
+impl ContextCalendarExt for Context {}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -396,15 +487,96 @@ mod tests {
     fn dates_round_trip_through_days() {
         let date: Date = "2026-05-14".parse().unwrap();
         assert_eq!(date.to_string(), "2026-05-14");
-        assert_eq!(date.plus_days(83).to_string(), "2026-08-05");
-        assert_eq!(date.plus_days(-38).to_string(), "2026-04-06");
+        assert_eq!(
+            date.checked_plus_days(83).unwrap().to_string(),
+            "2026-08-05"
+        );
+        assert_eq!(
+            date.checked_plus_days(-38).unwrap().to_string(),
+            "2026-04-06"
+        );
         assert_eq!(date.days_until("2026-10-06".parse().unwrap()), 145);
         assert_eq!(Date::new(1970, 1, 1).unwrap().days_since_epoch(), 0);
-        assert_eq!(Date::new(2000, 2, 29).unwrap().plus_days(1).month(), 3);
-        for days in [-1_000_000, -1, 0, 1, 59, 60, 365, 1_000_000] {
-            let d = Date::from_days_since_epoch(days);
-            assert_eq!(d.days_since_epoch(), days, "{d}");
+        let leap = Date::new(2000, 2, 29).unwrap();
+        assert_eq!(leap.checked_plus_days(1).unwrap().month(), 3);
+    }
+
+    /// Each day maps to a valid date later than the day before's and back.
+    /// There are as many days as valid dates, so none is skipped.
+    #[test]
+    fn every_day_in_range_is_the_next_valid_date() {
+        let mut previous = Date::new(0, 1, 1).unwrap();
+        assert_eq!(previous.days_since_epoch(), MIN_DAYS);
+        for days in MIN_DAYS + 1..=MAX_DAYS {
+            let date = Date::from_days_since_epoch(days);
+            assert_eq!(Date::new(date.year, date.month, date.day), Ok(date));
+            assert!(previous < date, "{previous} {date}");
+            assert_eq!(date.days_since_epoch(), days, "{date}");
+            previous = date;
         }
+        assert_eq!(previous, Date::new(9999, 12, 31).unwrap());
+    }
+
+    #[test]
+    fn dates_stay_in_four_digit_years() {
+        let (min, max) = (
+            Date::new(0, 1, 1).unwrap(),
+            Date::new(9999, 12, 31).unwrap(),
+        );
+        assert_eq!(min.checked_plus_days(-1), None);
+        assert_eq!(max.checked_plus_days(1), None);
+        assert_eq!(min.checked_plus_days(MAX_DAYS - MIN_DAYS), Some(max));
+        assert_eq!(min.checked_plus_days(i64::MAX), None);
+        assert_eq!(max.checked_plus_days(i64::MIN), None);
+    }
+
+    #[test]
+    fn a_time_falls_on_the_date_of_its_whole_day() {
+        let start: Date = "2026-05-14".parse().unwrap();
+        let date = |t: f64| start.date_at(t).map(|d| d.to_string());
+        assert_eq!(date(0.0).as_deref(), Some("2026-05-14"));
+        assert_eq!(date(18.99).as_deref(), Some("2026-06-01"));
+        assert_eq!(date(-0.5).as_deref(), Some("2026-05-13"));
+        assert_eq!(date(1e7), None);
+        assert_eq!(date(f64::NAN), None);
+        assert_eq!(date(f64::NEG_INFINITY), None);
+    }
+
+    #[test]
+    fn the_context_gives_the_date_of_the_current_time() {
+        let mut context = Context::new();
+        assert_eq!(context.get_current_date(), None);
+        context.set_start_date(Some("2026-05-14".parse().unwrap()));
+        context.add_plan(18.5, |context| {
+            assert_eq!(
+                context.get_current_date().unwrap().to_string(),
+                "2026-06-01"
+            );
+            context.set_start_date(None);
+            assert_eq!(context.get_current_date(), None);
+        });
+        context.execute();
+
+        // As a report column.
+        let mut csv = csv::Writer::from_writer(Vec::new());
+        csv.serialize(("2026-06-01".parse::<Date>().unwrap(), 3))
+            .unwrap();
+        assert_eq!(csv.into_inner().unwrap(), b"2026-06-01,3\n");
+    }
+
+    #[test]
+    fn dates_and_days_round_trip_through_bincode() {
+        let config = bincode_next::config::standard();
+        let date: Date = "2026-05-14".parse().unwrap();
+        for day in [Day::DaysFromStart(2.5), Day::CalendarDate(date)] {
+            let bytes = bincode_next::serde::encode_to_vec(day, config).unwrap();
+            let (back, _): (Day, _) =
+                bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+            assert_eq!(back, day);
+        }
+        let bytes = bincode_next::serde::encode_to_vec(date, config).unwrap();
+        let (back, _): (Date, _) = bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+        assert_eq!(back, date);
     }
 
     #[test]
@@ -418,11 +590,19 @@ mod tests {
             "May 14",
             "2026-+5-14",
             "+999-05-14",
+            "+2026-05-14",
+            "20260514",
+            " 2026-05-14",
+            "2026-05-14\n",
+            "10000-01-01",
+            "",
         ] {
             assert!(text.parse::<Date>().is_err(), "{text}");
         }
         assert!(Date::new(2024, 2, 29).is_ok());
         assert!(Date::new(2023, 2, 29).is_err());
+        assert!(Date::new(1900, 2, 29).is_err());
+        assert!(Date::new(0, 2, 29).is_ok());
         assert!(Date::new(-1, 1, 1).is_err());
         assert!(Date::new(10000, 1, 1).is_err());
         let err = "2026-02-30".parse::<Date>().unwrap_err().to_string();
@@ -461,6 +641,10 @@ mod tests {
             Day::from_days(3e6, Some(start), false),
             Day::DaysFromStart(3e6)
         );
+        assert!(matches!(
+            Day::from_days(f64::NAN, Some(start), false),
+            Day::DaysFromStart(d) if d.is_nan()
+        ));
         assert_eq!(serde_json::to_value(date).unwrap(), json!("2026-06-01"));
         assert_eq!(serde_json::to_value(days).unwrap(), json!(2.5));
     }

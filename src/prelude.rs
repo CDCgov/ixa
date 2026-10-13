@@ -1,3 +1,4 @@
+pub use crate::calendar::ContextCalendarExt;
 pub use crate::context::{Context, EventListenerId};
 pub use crate::entity::events::{
     EntityCreatedEvent, PropertyChangeEvent, PropertyInitializedEvent,
