@@ -23,7 +23,7 @@ struct Policy {
 }
 
 #[calendar]
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EndRunConditions {
     #[day(inclusive)]

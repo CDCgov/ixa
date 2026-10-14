@@ -52,8 +52,7 @@
 //!
 //! The twin copies the struct's derives and serde attributes, so
 //! `#[calendar]` goes above `#[derive(..)]`. Limits: derive `Clone`,
-//! `Debug`, `PartialEq`, `Serialize` and `Deserialize`, and not
-//! `PartialOrd` (which [`Day`] lacks); no generics; no serde `try_from`, `from`, `into` or `remote`,
+//! `Debug`, `PartialEq`, `Serialize` and `Deserialize`; no generics; no serde `try_from`, `from`, `into` or `remote`,
 //! and no `with`, `deserialize_with`, `serialize_with` or `default = ".."`
 //! on a `#[day]` field. A struct with its own wire shape implements
 //! [`Calendar`] by hand.
@@ -339,6 +338,18 @@ pub enum Day {
 impl Default for Day {
     fn default() -> Self {
         Self::DaysFromStart(0.0)
+    }
+}
+
+/// Days compare with days and dates with dates; a day and a date are
+/// incomparable without a start date.
+impl PartialOrd for Day {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Self::DaysFromStart(a), Self::DaysFromStart(b)) => a.partial_cmp(b),
+            (Self::CalendarDate(a), Self::CalendarDate(b)) => a.partial_cmp(b),
+            _ => None,
+        }
     }
 }
 
@@ -680,5 +691,9 @@ mod tests {
         ));
         assert_eq!(serde_json::to_value(date).unwrap(), json!("2026-06-01"));
         assert_eq!(serde_json::to_value(days).unwrap(), json!(2.5));
+
+        assert!(days < Day::DaysFromStart(3.0));
+        assert!(date < Day::CalendarDate(start.checked_plus_days(19).unwrap()));
+        assert_eq!(days.partial_cmp(&date), None);
     }
 }
