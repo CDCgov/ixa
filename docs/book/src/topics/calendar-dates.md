@@ -204,7 +204,7 @@ The twin copies the struct's derives and serde attributes, so `#[calendar]`
 must sit above `#[derive(..)]`. A calendar struct:
 
 - derives `Clone`, `Debug`, `PartialEq`, `Serialize` and `Deserialize`, and
-  may derive `Copy` and `Default`, but not `Eq`, `Hash` or `Ord`;
+  may derive anything else its fields allow, except `PartialOrd`;
 - has no generic parameters;
 - cannot use serde's `try_from`, `from`, `into` or `remote` on the struct;
 - cannot use serde's `with`, `deserialize_with`, `serialize_with` or
