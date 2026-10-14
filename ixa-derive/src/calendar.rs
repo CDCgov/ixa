@@ -130,8 +130,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         ));
     };
     let fields = &mut named.named;
-    // An attribute macro sees only the attributes below it, and the twin
-    // needs the derives.
+    // The twin copies the derives, which must sit below this attribute.
     if !input
         .attrs
         .iter()
@@ -197,8 +196,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                         }
                     }
                 }
-                // Spanned on the type, so a field that is not `f64` or
-                // `Option<f64>` is reported there.
+                // Spanned on the type so a non-`f64` field is reported there.
                 let span = ty.span();
                 if is_option(ty) {
                     wire_fields.push(quote! {

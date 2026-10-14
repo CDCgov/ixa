@@ -9,7 +9,6 @@
 //!
 //! #[calendar]
 //! #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-//! #[serde(rename_all = "camelCase")]
 //! pub struct Policy {
 //!     #[day]
 //!     pub start: f64,
@@ -21,7 +20,6 @@
 //!
 //! #[calendar]
 //! #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-//! #[serde(rename_all = "camelCase")]
 //! pub struct Parameters {
 //!     #[reference]
 //!     pub start_date: Option<Date>,
@@ -32,9 +30,9 @@
 //! }
 //!
 //! let p: Parameters = serde_json::from_str(r#"{
-//!     "startDate": "2026-05-14",
+//!     "start_date": "2026-05-14",
 //!     "policies": [{"start": "2026-06-01", "end": 48, "delay": 3}],
-//!     "maxTime": "2026-08-05"
+//!     "max_time": "2026-08-05"
 //! }"#).unwrap();
 //! assert_eq!(p.policies[0].start, 18.0);
 //! assert_eq!(p.policies[0].end, Some(48.0));
@@ -46,27 +44,22 @@
 //!
 //! `#[calendar]` generates a twin struct (`CalendarPolicy` for `Policy`)
 //! with [`Day`] in each `#[day]` field and the twin of each `#[days]`
-//! field's type, and implements [`Calendar`] between the two. The struct
-//! with the `#[reference]` start date (`Date` or `Option<Date>`) is the
-//! root: it deserializes through its twin, serializes days, and has
-//! `dated()`. A root nested in another uses its own start date, or the
-//! outer one when it has none. `#[day(through)]` marks a day a date runs
-//! through, such as the end of a run. Durations are left unmarked.
+//! type, and implements [`Calendar`] between the two. The struct with the
+//! `#[reference]` start date (`Date` or `Option<Date>`) is the root: it
+//! deserializes through its twin, serializes days, and has `dated()`. A
+//! nested root falls back to the outer start date. `#[day(through)]` marks
+//! a day a date runs through, such as the end of a run.
 //!
-//! The twin derives what the struct derives and copies its serde
-//! attributes, so `#[calendar]` goes above `#[derive(..)]`, and a calendar
-//! struct derives `Clone`, `Debug`, `PartialEq`,
-//! `Serialize` and `Deserialize` (`Copy` and `Default` if wanted; not
-//! `Eq`, `Hash` or `Ord`, which [`Day`] lacks) and cannot use serde's
-//! `try_from`, `from`, `into` or `remote`, nor `with`, `deserialize_with`,
-//! `serialize_with` or `default = ".."` on a `#[day]` field. Generics are
-//! not supported. A struct with its own wire shape implements [`Calendar`]
-//! by hand instead.
+//! The twin copies the struct's derives and serde attributes, so
+//! `#[calendar]` goes above `#[derive(..)]`. Limits: derive `Clone`,
+//! `Debug`, `PartialEq`, `Serialize` and `Deserialize` (not `Eq`, `Hash`
+//! or `Ord`); no generics; no serde `try_from`, `from`, `into` or `remote`,
+//! and no `with`, `deserialize_with`, `serialize_with` or `default = ".."`
+//! on a `#[day]` field. A struct with its own wire shape implements
+//! [`Calendar`] by hand.
 //!
-//! To write dates in reports, store the start date on the context with
-//! [`ContextCalendarExt::set_start_date`] and read the date of the current
-//! time with [`ContextCalendarExt::get_current_date`]; [`Date`] serializes
-//! as `YYYY-MM-DD`.
+//! [`ContextCalendarExt`] stores the start date on the context so reports
+//! can write the current date; [`Date`] serializes as `YYYY-MM-DD`.
 
 use std::fmt;
 use std::str::FromStr;
@@ -338,8 +331,8 @@ impl Day {
         }
     }
 
-    /// A date when there is a start date and `days` is a whole day with a
-    /// four-digit year, else days.
+    /// A date if there is a start date and `days` is a whole day in range,
+    /// else days.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn from_days(days: f64, start: Option<Date>, through: bool) -> Self {
@@ -351,8 +344,7 @@ impl Day {
     }
 }
 
-/// The tagged form of [`Day`] for binary formats, which cannot tell a
-/// number from a string on their own.
+/// Tagged form of [`Day`] for binary formats.
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Day")]
 enum BinaryDay {
@@ -501,8 +493,7 @@ mod tests {
         assert_eq!(leap.checked_plus_days(1).unwrap().month(), 3);
     }
 
-    /// Each day maps to a valid date later than the day before's and back.
-    /// There are as many days as valid dates, so none is skipped.
+    /// Every day in range maps to the next valid date and back.
     #[test]
     fn every_day_in_range_is_the_next_valid_date() {
         let mut previous = Date::new(0, 1, 1).unwrap();
