@@ -26,7 +26,7 @@ struct Policy {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EndRunConditions {
-    #[day(through)]
+    #[day(inclusive)]
     max_time: f64,
     #[serde(default)]
     max_infections: Option<u64>,
@@ -114,7 +114,7 @@ fn dates_become_days_from_the_start_date_and_back() {
     assert_eq!(days["importations"][0]["day"], -13.0);
     assert_eq!(days["endRunConditions"]["maxTime"], 84.0);
     assert_eq!(days["startDate"], "2026-05-14");
-    // And as dates with `dated()`: whole days only, through the end.
+    // And as dates with `dated()`: whole days only, inclusive ends.
     let mut p = p;
     p.policies[1].start = 2.5;
     let dated = serde_json::to_value(p.dated()).unwrap();
@@ -178,7 +178,7 @@ mod bare {
     struct Window {
         #[day]
         from: f64,
-        #[day(through)]
+        #[day(inclusive)]
         to: Option<f64>,
     }
 

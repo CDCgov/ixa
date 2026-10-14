@@ -25,7 +25,7 @@
 //!     pub start_date: Option<Date>,
 //!     #[days]
 //!     pub policies: Vec<Policy>,
-//!     #[day(through)]
+//!     #[day(inclusive)]
 //!     pub max_time: f64,
 //! }
 //!
@@ -47,8 +47,8 @@
 //! type, and implements [`Calendar`] between the two. The struct with the
 //! `#[reference]` start date (`Date` or `Option<Date>`) is the root: it
 //! deserializes through its twin, serializes days, and has `dated()`. A
-//! nested root falls back to the outer start date. `#[day(through)]` marks
-//! a day a date runs through, such as the end of a run.
+//! nested root falls back to the outer start date. `#[day(inclusive)]` marks
+//! a day a date includes, such as the end of a run.
 //!
 //! The twin copies the struct's derives and serde attributes, so
 //! `#[calendar]` goes above `#[derive(..)]`. Limits: derive `Clone`,
@@ -315,18 +315,18 @@ impl Default for Day {
 }
 
 impl Day {
-    /// Days from `start`, the date of day 0; with `through`, a date
+    /// Days from `start`, the date of day 0; with `inclusive`, a date
     /// covers its whole day.
     ///
     /// # Errors
     /// A date with no start date.
-    pub fn resolve(self, start: Option<Date>, through: bool) -> Result<f64, CalendarError> {
+    pub fn resolve(self, start: Option<Date>, inclusive: bool) -> Result<f64, CalendarError> {
         match self {
             Self::DaysFromStart(days) => Ok(days),
             Self::CalendarDate(date) => {
                 let start = start.ok_or(CalendarError::NoStartDate(date))?;
                 #[allow(clippy::cast_precision_loss)]
-                Ok(start.days_until(date) as f64 + f64::from(through))
+                Ok(start.days_until(date) as f64 + f64::from(inclusive))
             }
         }
     }
@@ -335,8 +335,8 @@ impl Day {
     /// else days.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn from_days(days: f64, start: Option<Date>, through: bool) -> Self {
-        let d = days - f64::from(through);
+    pub fn from_days(days: f64, start: Option<Date>, inclusive: bool) -> Self {
+        let d = days - f64::from(inclusive);
         start
             .filter(|_| d.fract() == 0.0)
             .and_then(|start| start.checked_plus_days(d as i64))
