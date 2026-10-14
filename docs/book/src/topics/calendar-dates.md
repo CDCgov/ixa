@@ -61,7 +61,7 @@ Deserializing this gives `policies[0].start == 18.0`, `end == Some(48.0)` and
 
 Durations and anything else that is not a point in time stay unmarked.
 
-## What the attribute generates
+## Generated `Calendar` structs
 
 For `Policy`, `#[calendar]` generates a twin struct `CalendarPolicy` with the
 same fields, except that each `#[day]` field holds a `Day` (either days or a
