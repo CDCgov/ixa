@@ -10,9 +10,9 @@ use syn::{
 
 enum Mark {
     None,
-    /// `#[day]` or `#[day(through)]` on an `f64` or `Option<f64>`.
+    /// `#[day]` or `#[day(inclusive)]` on an `f64` or `Option<f64>`.
     Day {
-        through: bool,
+        inclusive: bool,
     },
     /// `#[days]` on a type that implements `Calendar`.
     Days,
@@ -26,18 +26,18 @@ fn mark_of(attrs: &mut Vec<Attribute>) -> Result<Mark> {
     for attr in attrs.drain(..) {
         let path = attr.path();
         let found = if path.is_ident("day") {
-            let mut through = false;
+            let mut inclusive = false;
             if let syn::Meta::List(_) = &attr.meta {
                 attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("through") {
-                        through = true;
+                    if meta.path.is_ident("inclusive") {
+                        inclusive = true;
                         Ok(())
                     } else {
-                        Err(meta.error("expected `#[day]` or `#[day(through)]`"))
+                        Err(meta.error("expected `#[day]` or `#[day(inclusive)]`"))
                     }
                 })?;
             }
-            Some(Mark::Day { through })
+            Some(Mark::Day { inclusive })
         } else if path.is_ident("days") {
             Some(Mark::Days)
         } else if path.is_ident("reference") {
@@ -182,7 +182,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 from_wire.push(quote! { #ident: wire.#ident });
                 to_wire.push(quote! { #ident: ::std::clone::Clone::clone(&self.#ident) });
             }
-            Mark::Day { through } => {
+            Mark::Day { inclusive } => {
                 for attr in attrs {
                     for (key, has_value) in serde_keys(attr)? {
                         let custom = ["with", "deserialize_with", "serialize_with"]
@@ -204,24 +204,24 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                     });
                     from_wire.push(quote_spanned! {span=>
                         #ident: wire.#ident
-                            .map(|day| ::ixa::calendar::Day::resolve(day, start, #through))
+                            .map(|day| ::ixa::calendar::Day::resolve(day, start, #inclusive))
                             .transpose()
                             .map_err(|e| ::ixa::calendar::CalendarError::at(e, #field_name))?
                     });
                     to_wire.push(quote_spanned! {span=>
                         #ident: self.#ident
-                            .map(|days| ::ixa::calendar::Day::from_days(days, start, #through))
+                            .map(|days| ::ixa::calendar::Day::from_days(days, start, #inclusive))
                     });
                 } else {
                     wire_fields.push(quote! {
                         #(#attrs)* #field_vis #ident: ::ixa::calendar::Day
                     });
                     from_wire.push(quote_spanned! {span=>
-                        #ident: ::ixa::calendar::Day::resolve(wire.#ident, start, #through)
+                        #ident: ::ixa::calendar::Day::resolve(wire.#ident, start, #inclusive)
                             .map_err(|e| ::ixa::calendar::CalendarError::at(e, #field_name))?
                     });
                     to_wire.push(quote_spanned! {span=>
-                        #ident: ::ixa::calendar::Day::from_days(self.#ident, start, #through)
+                        #ident: ::ixa::calendar::Day::from_days(self.#ident, start, #inclusive)
                     });
                 }
             }

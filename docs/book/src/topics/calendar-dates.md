@@ -27,7 +27,7 @@ pub struct Parameters {
     pub start_date: Option<Date>,
     #[days]
     pub policies: Vec<Policy>,
-    #[day(through)]
+    #[day(inclusive)]
     pub max_time: f64,
 }
 ```
@@ -53,7 +53,7 @@ Deserializing this gives `policies[0].start == 18.0`, `end == Some(48.0)` and
   directly from a document.
 - `#[day]` goes on an `f64`, or an optional one, that is a point in time. A
   date resolves to the number of days from the start date.
-- `#[day(through)]` is for a day a date runs *through*, such as the end of a
+- `#[day(inclusive)]` is for a day a date *includes*, such as the end of a
   run. `"2026-08-05"` resolves to the start of the next day, so the whole of
   August 5 is included.
 - `#[days]` goes on a field whose type is another calendar struct, or a `Vec`
