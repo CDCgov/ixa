@@ -58,8 +58,10 @@
 //! on a `#[day]` field. A struct with its own wire shape implements
 //! [`Calendar`] by hand.
 //!
-//! [`ContextCalendarExt`] stores the start date on the context so reports
-//! can write the current date; [`Date`] serializes as `YYYY-MM-DD`.
+//! In code, [`Date::start_of`] and [`Date::end_of`] turn a date string into
+//! days from a start date. [`ContextCalendarExt`] stores the start date on
+//! the context so reports can write the current date; [`Date`] serializes
+//! as `YYYY-MM-DD`.
 
 use std::fmt;
 use std::str::FromStr;
@@ -185,6 +187,32 @@ impl Date {
     #[must_use]
     pub fn days_until(self, other: Date) -> i64 {
         other.days_since_epoch() - self.days_since_epoch()
+    }
+
+    /// The start of the date in `s`, in days from this date, for dates
+    /// written in code: `start.start_of("2026-06-01")`.
+    ///
+    /// # Panics
+    /// When `s` is not a valid `YYYY-MM-DD` date.
+    #[must_use]
+    #[track_caller]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn start_of(self, s: &str) -> f64 {
+        match s.parse::<Date>() {
+            Ok(date) => self.days_until(date) as f64,
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// The end of the date in `s`, [`Date::start_of`] plus one, for an
+    /// inclusive bound such as the end of a run.
+    ///
+    /// # Panics
+    /// When `s` is not a valid `YYYY-MM-DD` date.
+    #[must_use]
+    #[track_caller]
+    pub fn end_of(self, s: &str) -> f64 {
+        self.start_of(s) + 1.0
     }
 }
 
@@ -506,6 +534,20 @@ mod tests {
             previous = date;
         }
         assert_eq!(previous, Date::new(9999, 12, 31).unwrap());
+    }
+
+    #[test]
+    fn a_date_string_in_code_gives_days_from_a_start() {
+        let start: Date = "2026-05-14".parse().unwrap();
+        assert_eq!(start.start_of("2026-06-01"), 18.0);
+        assert_eq!(start.start_of("2026-05-01"), -13.0);
+        assert_eq!(start.end_of("2026-08-05"), 84.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "day 30 is not 1 to 28")]
+    fn a_bad_date_string_in_code_panics_with_the_reason() {
+        let _ = Date::new(2026, 5, 14).unwrap().start_of("2026-02-30");
     }
 
     #[test]
