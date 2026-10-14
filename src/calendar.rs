@@ -52,8 +52,8 @@
 //!
 //! The twin copies the struct's derives and serde attributes, so
 //! `#[calendar]` goes above `#[derive(..)]`. Limits: derive `Clone`,
-//! `Debug`, `PartialEq`, `Serialize` and `Deserialize` (not `Eq`, `Hash`
-//! or `Ord`); no generics; no serde `try_from`, `from`, `into` or `remote`,
+//! `Debug`, `PartialEq`, `Serialize` and `Deserialize`, and not
+//! `PartialOrd` (which [`Day`] lacks); no generics; no serde `try_from`, `from`, `into` or `remote`,
 //! and no `with`, `deserialize_with`, `serialize_with` or `default = ".."`
 //! on a `#[day]` field. A struct with its own wire shape implements
 //! [`Calendar`] by hand.
