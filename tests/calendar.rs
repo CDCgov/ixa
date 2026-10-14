@@ -87,6 +87,36 @@ fn start() -> Option<Date> {
 }
 
 #[test]
+fn parameters_can_be_written_in_code_with_dates() {
+    let start = Date::new(2026, 5, 14).unwrap();
+    let p = Parameters {
+        start_date: Some(start),
+        policies: vec![Policy {
+            name: "Dated".into(),
+            start: start.start_of("2026-06-01"),
+            end: Some(start.start_of("2026-07-01")),
+            delay: 3.0,
+        }],
+        importations: vec![],
+        end_run_conditions: EndRunConditions {
+            max_time: start.end_of("2026-08-05"),
+            max_infections: None,
+        },
+        regions: None,
+        seed: 7,
+    };
+    let from_json: Parameters = serde_json::from_value(json!({
+        "startDate": "2026-05-14",
+        "policies": [{"name": "Dated", "start": "2026-06-01", "end": "2026-07-01", "delay": 3}],
+        "importations": [],
+        "endRunConditions": {"maxTime": "2026-08-05"},
+        "seed": 7
+    }))
+    .unwrap();
+    assert_eq!(p, from_json);
+}
+
+#[test]
 fn dates_become_days_from_the_start_date_and_back() {
     let p: Parameters = serde_json::from_value(json!({
         "startDate": "2026-05-14",

@@ -114,6 +114,33 @@ end = 48
 A date-time such as `2026-05-14T00:00:00` is rejected. Only whole dates are
 accepted.
 
+## Dates in code
+
+Parameters built in code, for instance in a test, can use dates too. A
+`Date` is the start date, and `start_of` and `end_of` give the day of a date
+string counted from it. `end_of` is the inclusive form, matching
+`#[day(inclusive)]`:
+
+```rust
+let start = Date::new(2026, 5, 14)?;
+
+let p = Parameters {
+    start_date: Some(start),
+    policies: vec![Policy {
+        start: start.start_of("2026-06-01"),       // 18.0
+        end: Some(start.start_of("2026-07-01")),   // 48.0
+        delay: 3.0,
+    }],
+    max_time: start.end_of("2026-08-05"),        // 84.0
+};
+```
+
+Both panic on a malformed string, since the string is a literal in the
+source. A date from input goes through `parse` instead, which returns the
+error. The twin struct is also available, with a `Day` in each marked field,
+and `Parameters::try_from(wire)` converts it exactly as reading a document
+does.
+
 ## Writing dates in reports
 
 Reports write whatever the row struct serializes, and `Date` serializes as
