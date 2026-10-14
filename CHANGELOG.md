@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0](https://github.com/CDCgov/ixa/compare/ixa-v3.1.0...ixa-v4.0.0) - 2026-10-05
+
+### Added
+
+- Whole population persistence ([#1065](https://github.com/CDCgov/ixa/pull/1065))
+- add cross-platform output macro ([#1056](https://github.com/CDCgov/ixa/pull/1056))
+
+### Other
+
+- remove obsolete Entity type erasure ([#1063](https://github.com/CDCgov/ixa/pull/1063))
+- Refactor entity/property storage hierarchy and registration ([#1062](https://github.com/CDCgov/ixa/pull/1062))
+- bump release-plz/action from 0.5.137 to 0.5.139 ([#1064](https://github.com/CDCgov/ixa/pull/1064))
+- bump release-plz/action from 0.5.134 to 0.5.137 ([#1057](https://github.com/CDCgov/ixa/pull/1057))
+- bump release-plz/action from 0.5.131 to 0.5.134 ([#1055](https://github.com/CDCgov/ixa/pull/1055))
+- bump rust-toolchain from 1.97.1 to 1.98.0 ([#1053](https://github.com/CDCgov/ixa/pull/1053))
+
 ## [3.1.0](https://github.com/CDCgov/ixa/compare/ixa-v3.0.0...ixa-v3.1.0) - 2026-08-24
 
 ### Added
