@@ -1,9 +1,12 @@
 const { test, expect } = require('@playwright/test');
 
+// A blank page, so nothing runs until a test loads a package.
+const TEST_PAGE = 'http://localhost:8080/test-harness.html';
+
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(async () => {
-        window.setupWasm = async () => {
-            const wasm = await import('/pkg/ixa_wasm_tests.js');
+        window.setupWasm = async (packagePath = '/pkg/ixa_wasm_tests.js') => {
+            const wasm = await import(packagePath);
             await wasm.default();
             wasm.setup_error_hook();
             return wasm;
@@ -12,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('simulation completes successfully', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         let wasm = await window.setupWasm();
@@ -22,8 +25,44 @@ test('simulation completes successfully', async ({ page }) => {
     expect(result).toContain('Simulation complete');
 });
 
+test('logging works with only the logging feature enabled', async ({ page }) => {
+    const output = [];
+    page.on('console', message => output.push(message.text()));
+    await page.goto(TEST_PAGE);
+
+    const result = await page.evaluate(async () => {
+        const wasm = await window.setupWasm('/pkg/logging/ixa_wasm_tests.js');
+        return wasm.run_simulation();
+    });
+
+    expect(result).toContain('Simulation complete');
+    await expect.poll(() => output).toEqual(expect.arrayContaining([
+        expect.stringContaining('This is a debug message.'),
+        expect.stringContaining('This is an info message.'),
+        expect.stringContaining('This is a warning message.'),
+        expect.stringContaining('This is an error message.'),
+    ]));
+});
+
+test('profiling works with only the profiling feature enabled', async ({ page }) => {
+    const output = [];
+    page.on('console', message => output.push(message.text()));
+    await page.goto(TEST_PAGE);
+
+    const result = await page.evaluate(async () => {
+        const wasm = await window.setupWasm('/pkg/profiling/ixa_wasm_tests.js');
+        return wasm.run_query_profiling();
+    });
+
+    expect(result).toBe(100);
+    await expect.poll(() => output).toEqual(expect.arrayContaining([
+        expect.stringContaining('Execution Summary'),
+        expect.stringContaining('Person: (InfectionStatus)'),
+    ]));
+});
+
 test('simulation error (simulated panic) as expected', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         let wasm = await window.setupWasm();
@@ -41,7 +80,7 @@ test('simulation error (simulated panic) as expected', async ({ page }) => {
 });
 
 test('simulation completes successfully in a web worker', async ({ page }) => {
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const result = await page.evaluate(async () => {
         return new Promise((resolve, reject) => {
@@ -83,7 +122,7 @@ test('query profiling prints in the browser and a web worker', async ({ page }) 
         console.log(text);
     });
 
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     const browserResult = await page.evaluate(async () => {
         const wasm = await window.setupWasm();
@@ -125,7 +164,7 @@ test('real wasm panic emits console error', async ({ page }) => {
     const pageErrors = [];
     page.on('pageerror', err => pageErrors.push(err.message));
 
-    await page.goto('http://localhost:8080');
+    await page.goto(TEST_PAGE);
 
     // Trigger the panic synchronously (not awaited) so the panic hook
     // can output to console before the promise rejection is handled.
