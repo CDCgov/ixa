@@ -13,7 +13,7 @@ use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
 use super::profiling_data;
 #[cfg(feature = "profiling")]
-use super::QueryProfilingData;
+use super::QueryTimingRow;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
 
@@ -74,10 +74,11 @@ struct CountRecord {
 #[derive(Serialize)]
 struct QueryTimingRecord {
     query: String,
+    index_type: &'static str,
     count: usize,
     total: SerializableDuration,
-    min: SerializableDuration,
-    max: SerializableDuration,
+    min: Option<SerializableDuration>,
+    max: Option<SerializableDuration>,
 }
 
 #[cfg(feature = "profiling")]
@@ -102,7 +103,7 @@ struct ComputedStatisticRecord {
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
-    query_timings: &[(&'static str, QueryProfilingData)],
+    query_timings: &[QueryTimingRow],
 ) -> std::io::Result<()> {
     let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
@@ -126,12 +127,13 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         .collect();
     let query_timings_data = query_timings
         .iter()
-        .map(|(query, data)| QueryTimingRecord {
-            query: (*query).to_string(),
-            count: data.count,
-            total: SerializableDuration(data.total),
-            min: SerializableDuration(data.min),
-            max: SerializableDuration(data.max),
+        .map(|row| QueryTimingRecord {
+            query: row.query.to_string(),
+            index_type: row.index_type.label(),
+            count: row.data.count,
+            total: SerializableDuration(row.data.total),
+            min: row.data.min.map(SerializableDuration),
+            max: row.data.max.map(SerializableDuration),
         })
         .collect();
 
@@ -193,7 +195,10 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::profiling::{add_computed_statistic, increment_named_count, open_span};
+    use crate::entity::PropertyIndexType;
+    use crate::profiling::{
+        add_computed_statistic, increment_named_count, open_span, QueryProfilingData,
+    };
 
     #[test]
     fn test_write_profiling_data_to_file() {
@@ -267,15 +272,16 @@ mod tests {
 
     #[test]
     fn test_write_profiling_data_includes_query_timings() {
-        let rows = vec![(
-            "FileQueryTiming: (Age)",
-            QueryProfilingData {
+        let rows = vec![QueryTimingRow {
+            query: "FileQueryTiming: (Age)",
+            index_type: PropertyIndexType::FullIndex,
+            data: QueryProfilingData {
                 count: 2,
                 total: Duration::from_micros(40),
-                min: Duration::from_micros(10),
-                max: Duration::from_micros(30),
+                min: Some(Duration::from_micros(10)),
+                max: Some(Duration::from_micros(30)),
             },
-        )];
+        }];
 
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("query_timing_test.json");
@@ -299,12 +305,42 @@ mod tests {
             .expect("FileQueryTiming: (Age) not found");
 
         assert_eq!(timing["count"], 2);
+        assert_eq!(timing["index_type"], "full_index");
         assert!((timing["total"].as_f64().unwrap() - 0.00004).abs() < 0.000001);
         assert!((timing["min"].as_f64().unwrap() - 0.00001).abs() < 0.000001);
         assert!((timing["max"].as_f64().unwrap() - 0.00003).abs() < 0.000001);
         assert!(timing.get("indexed").is_none());
         assert!(timing.get("mean").is_none());
         assert!(timing.get("percent_runtime").is_none());
+    }
+
+    #[test]
+    fn test_write_profiling_data_serializes_unused_index_timings() {
+        let rows = vec![QueryTimingRow {
+            query: "FileQueryTiming: (Unused)",
+            index_type: PropertyIndexType::ValueCountIndex,
+            data: QueryProfilingData::default(),
+        }];
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("unused_query_timing_test.json");
+        let exec_stats = ExecutionStatistics {
+            max_memory_usage: 0,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
+            cpu_time: Duration::ZERO,
+            wall_time: Duration::ZERO,
+        };
+
+        write_profiling_data_to_file(&file_path, exec_stats, &rows).expect("Failed to write file");
+
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        let json: Value = from_str(&content).expect("Invalid JSON");
+        let timing = &json["query_timings"][0];
+        assert_eq!(timing["index_type"], "value_count_index");
+        assert_eq!(timing["count"], 0);
+        assert_eq!(timing["total"], 0.0);
+        assert!(timing["min"].is_null());
+        assert!(timing["max"].is_null());
     }
 
     #[test]

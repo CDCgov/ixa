@@ -28,7 +28,7 @@ pub enum IndexCountResult {
     Count(usize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PropertyIndexType {
     Unindexed,
     FullIndex,
@@ -36,6 +36,15 @@ pub enum PropertyIndexType {
 }
 
 impl PropertyIndexType {
+    #[cfg(feature = "profiling")]
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            PropertyIndexType::Unindexed => "unindexed",
+            PropertyIndexType::FullIndex => "full_index",
+            PropertyIndexType::ValueCountIndex => "value_count_index",
+        }
+    }
+
     /// Constructs an unattached empty index of this type. Returns `None` only for `Unindexed`.
     pub(crate) fn new_property_index<E, P>(self) -> Option<Box<dyn PropertyIndex<E, P>>>
     where

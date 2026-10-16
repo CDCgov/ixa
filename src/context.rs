@@ -17,15 +17,21 @@ use crate::entity::multi_property::emit_pre_main_diagnostics;
 use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
+#[cfg(feature = "profiling")]
+use crate::entity::query::ResolvedQuery;
 use crate::entity::Entity;
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 use crate::execution_stats::{
     print_execution_statistics, ExecutionProfilingCollector, ExecutionStatistics,
 };
 use crate::global_properties::get_global_property_count;
 use crate::plan_queue::{PlanId, PlanQueue};
+#[cfg(all(test, feature = "profiling"))]
+use crate::profiling::QueryProfilingData;
 #[cfg(feature = "profiling")]
 use crate::profiling::{
-    print_profiling_data, print_query_timings, QueryProfileHandle, QueryProfilingData,
+    print_profiling_data, print_query_timings, QueryProfileHandle, QueryTimingRow,
 };
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt, IxaError};
 
@@ -225,12 +231,41 @@ impl Context {
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profile_handle(&self, identity: QueryIdentityId) -> QueryProfileHandle<'_> {
-        QueryProfileHandle::new(&self.execution_profiler.query_profiler, identity)
+    pub(crate) fn query_profile_handle<E: Entity>(
+        &self,
+        resolved: ResolvedQuery,
+    ) -> QueryProfileHandle<'_> {
+        let index_type =
+            resolved
+                .index_property_id
+                .map_or(PropertyIndexType::Unindexed, |property_id| {
+                    self.entity_store
+                        .get_property_store::<E>()
+                        .property_index_type(property_id)
+                });
+        QueryProfileHandle::new(
+            &self.execution_profiler.query_profiler,
+            resolved.identity,
+            index_type,
+        )
+    }
+
+    /// Registers a row for a configured index so it is reported even if never queried, replacing
+    /// the `previous` index type's row if that one was never queried.
+    #[cfg(feature = "profiling")]
+    pub(crate) fn seed_query_profile(
+        &self,
+        identity: QueryIdentityId,
+        previous: PropertyIndexType,
+        index_type: PropertyIndexType,
+    ) {
+        let profiler = &self.execution_profiler.query_profiler;
+        profiler.remove_unused(identity, previous);
+        profiler.seed(identity, index_type);
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profiling_snapshot(&self) -> Vec<(&'static str, QueryProfilingData)> {
+    pub(crate) fn query_profiling_snapshot(&self) -> Vec<QueryTimingRow> {
         self.execution_profiler.query_profiler.snapshot()
     }
 
@@ -238,10 +273,11 @@ impl Context {
     pub(crate) fn query_profiling_data(
         &self,
         identity: QueryIdentityId,
+        index_type: PropertyIndexType,
     ) -> Option<QueryProfilingData> {
         self.execution_profiler
             .query_profiler
-            .query_profiling_data(identity)
+            .query_profiling_data(identity, index_type)
     }
 
     #[inline]

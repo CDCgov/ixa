@@ -27,6 +27,8 @@ use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::EntityManifest;
 use crate::entity::events::PartialPropertyChangeEventBox;
+#[cfg(feature = "profiling")]
+use crate::entity::index::PropertyIndexType;
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
 use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::PropertyList;
@@ -314,6 +316,12 @@ impl<E: Entity> PropertyStoreCore<E> {
         query_parts: &[&dyn Any],
     ) -> IndexSetResult<'_, E> {
         self.items[property_id].get_index_set_for_query_parts(query_parts)
+    }
+
+    #[must_use]
+    #[cfg(feature = "profiling")]
+    pub(crate) fn property_index_type(&self, property_id: usize) -> PropertyIndexType {
+        self.items[property_id].index_type()
     }
 
     #[must_use]
