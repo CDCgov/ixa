@@ -11,9 +11,13 @@ use serde::{Serialize, Serializer};
 
 use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
+use super::index_type_label;
+#[cfg(feature = "profiling")]
 use super::profiling_data;
 #[cfg(feature = "profiling")]
 use super::QueryProfilingData;
+#[cfg(feature = "profiling")]
+use crate::entity::PropertyIndexType;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
 
@@ -74,10 +78,11 @@ struct CountRecord {
 #[derive(Serialize)]
 struct QueryTimingRecord {
     query: String,
+    index_type: &'static str,
     count: usize,
     total: SerializableDuration,
-    min: SerializableDuration,
-    max: SerializableDuration,
+    min: Option<SerializableDuration>,
+    max: Option<SerializableDuration>,
 }
 
 #[cfg(feature = "profiling")]
@@ -102,7 +107,7 @@ struct ComputedStatisticRecord {
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
-    query_timings: &[(&'static str, QueryProfilingData)],
+    query_timings: &[(&'static str, PropertyIndexType, QueryProfilingData)],
 ) -> std::io::Result<()> {
     let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
@@ -126,12 +131,13 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         .collect();
     let query_timings_data = query_timings
         .iter()
-        .map(|(query, data)| QueryTimingRecord {
+        .map(|(query, index_type, data)| QueryTimingRecord {
             query: (*query).to_string(),
+            index_type: index_type_label(*index_type),
             count: data.count,
             total: SerializableDuration(data.total),
-            min: SerializableDuration(data.min),
-            max: SerializableDuration(data.max),
+            min: data.min.map(SerializableDuration),
+            max: data.max.map(SerializableDuration),
         })
         .collect();
 
@@ -269,11 +275,12 @@ mod tests {
     fn test_write_profiling_data_includes_query_timings() {
         let rows = vec![(
             "FileQueryTiming: (Age)",
+            PropertyIndexType::FullIndex,
             QueryProfilingData {
                 count: 2,
                 total: Duration::from_micros(40),
-                min: Duration::from_micros(10),
-                max: Duration::from_micros(30),
+                min: Some(Duration::from_micros(10)),
+                max: Some(Duration::from_micros(30)),
             },
         )];
 
@@ -299,12 +306,42 @@ mod tests {
             .expect("FileQueryTiming: (Age) not found");
 
         assert_eq!(timing["count"], 2);
+        assert_eq!(timing["index_type"], "full_index");
         assert!((timing["total"].as_f64().unwrap() - 0.00004).abs() < 0.000001);
         assert!((timing["min"].as_f64().unwrap() - 0.00001).abs() < 0.000001);
         assert!((timing["max"].as_f64().unwrap() - 0.00003).abs() < 0.000001);
         assert!(timing.get("indexed").is_none());
         assert!(timing.get("mean").is_none());
         assert!(timing.get("percent_runtime").is_none());
+    }
+
+    #[test]
+    fn test_write_profiling_data_serializes_unused_index_timings() {
+        let rows = vec![(
+            "FileQueryTiming: (Unused)",
+            PropertyIndexType::ValueCountIndex,
+            QueryProfilingData::default(),
+        )];
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("unused_query_timing_test.json");
+        let exec_stats = ExecutionStatistics {
+            max_memory_usage: 0,
+            max_plans_in_flight: 0,
+            max_plan_queue_memory_in_use: 0,
+            cpu_time: Duration::ZERO,
+            wall_time: Duration::ZERO,
+        };
+
+        write_profiling_data_to_file(&file_path, exec_stats, &rows).expect("Failed to write file");
+
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        let json: Value = from_str(&content).expect("Invalid JSON");
+        let timing = &json["query_timings"][0];
+        assert_eq!(timing["index_type"], "value_count_index");
+        assert_eq!(timing["count"], 0);
+        assert_eq!(timing["total"], 0.0);
+        assert!(timing["min"].is_null());
+        assert!(timing["max"].is_null());
     }
 
     #[test]

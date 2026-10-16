@@ -28,7 +28,7 @@ pub enum IndexCountResult {
     Count(usize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PropertyIndexType {
     Unindexed,
     FullIndex,
