@@ -1,16 +1,16 @@
 #[cfg(feature = "profiling")]
 use std::fmt::Write;
+#[cfg(feature = "profiling")]
+use std::time::Duration;
 
 #[cfg(feature = "profiling")]
 use humantime::format_duration;
 
 #[cfg(feature = "profiling")]
 use super::{
-    index_type_label, profiling_data, ProfilingData, QueryProfilingData, NAMED_COUNTS_HEADERS,
-    NAMED_SPANS_HEADERS, QUERY_TIMINGS_HEADERS,
+    profiling_data, ProfilingData, QueryTimingRow, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
+    QUERY_TIMINGS_HEADERS,
 };
-#[cfg(feature = "profiling")]
-use crate::entity::PropertyIndexType;
 #[cfg(feature = "profiling")]
 use crate::output;
 
@@ -95,7 +95,7 @@ pub fn print_named_spans() {
 pub fn print_named_spans() {}
 
 #[cfg(feature = "profiling")]
-pub(crate) fn print_query_timings(rows: &[(&'static str, PropertyIndexType, QueryProfilingData)]) {
+pub(crate) fn print_query_timings(rows: &[QueryTimingRow]) {
     if rows.is_empty() {
         return;
     }
@@ -108,20 +108,21 @@ pub(crate) fn print_query_timings(rows: &[(&'static str, PropertyIndexType, Quer
             .collect(),
     ];
 
-    formatted_rows.extend(rows.iter().map(|(query, index_type, data)| {
+    let format_optional = |value: Option<Duration>| {
+        value.map_or_else(
+            || "-".to_string(),
+            |value| format_duration(value).to_string(),
+        )
+    };
+
+    formatted_rows.extend(rows.iter().map(|row| {
         vec![
-            (*query).to_string(),
-            index_type_label(*index_type).to_string(),
-            format_with_commas(data.count),
-            format_duration(data.total).to_string(),
-            data.min.map_or_else(
-                || "-".to_string(),
-                |value| format_duration(value).to_string(),
-            ),
-            data.max.map_or_else(
-                || "-".to_string(),
-                |value| format_duration(value).to_string(),
-            ),
+            row.query.to_string(),
+            row.index_type.label().to_string(),
+            format_with_commas(row.data.count),
+            format_duration(row.data.total).to_string(),
+            format_optional(row.data.min),
+            format_optional(row.data.max),
         ]
     }));
 
@@ -267,6 +268,7 @@ pub fn format_with_commas_f64(value: f64) -> String {
 mod tests {
     use std::time::Duration;
 
+    use crate::entity::PropertyIndexType;
     use crate::profiling::display::{
         format_with_commas, format_with_commas_f64, print_named_counts, print_named_spans,
         print_query_timings,
@@ -428,31 +430,31 @@ mod tests {
     #[test]
     fn print_query_timings_outputs_expected_format() {
         let rows = vec![
-            (
-                "DisplayQueryTimings: (Age)",
-                PropertyIndexType::FullIndex,
-                QueryProfilingData {
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (Age)",
+                index_type: PropertyIndexType::FullIndex,
+                data: QueryProfilingData {
                     count: 2,
                     total: Duration::from_micros(40),
                     min: Some(Duration::from_micros(10)),
                     max: Some(Duration::from_micros(30)),
                 },
-            ),
-            (
-                "DisplayQueryTimings: (County)",
-                PropertyIndexType::Unindexed,
-                QueryProfilingData {
+            },
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (County)",
+                index_type: PropertyIndexType::Unindexed,
+                data: QueryProfilingData {
                     count: 1,
                     total: Duration::from_micros(20),
                     min: Some(Duration::from_micros(20)),
                     max: Some(Duration::from_micros(20)),
                 },
-            ),
-            (
-                "DisplayQueryTimings: (Unused)",
-                PropertyIndexType::ValueCountIndex,
-                QueryProfilingData::default(),
-            ),
+            },
+            QueryTimingRow {
+                query: "DisplayQueryTimings: (Unused)",
+                index_type: PropertyIndexType::ValueCountIndex,
+                data: QueryProfilingData::default(),
+            },
         ];
 
         print_query_timings(&rows);

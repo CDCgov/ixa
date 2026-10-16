@@ -11,13 +11,9 @@ use serde::{Serialize, Serializer};
 
 use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
-use super::index_type_label;
-#[cfg(feature = "profiling")]
 use super::profiling_data;
 #[cfg(feature = "profiling")]
-use super::QueryProfilingData;
-#[cfg(feature = "profiling")]
-use crate::entity::PropertyIndexType;
+use super::QueryTimingRow;
 use crate::execution_stats::ExecutionStatistics;
 use crate::HashMap;
 
@@ -107,7 +103,7 @@ struct ComputedStatisticRecord {
 pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
-    query_timings: &[(&'static str, PropertyIndexType, QueryProfilingData)],
+    query_timings: &[QueryTimingRow],
 ) -> std::io::Result<()> {
     let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
@@ -131,13 +127,13 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         .collect();
     let query_timings_data = query_timings
         .iter()
-        .map(|(query, index_type, data)| QueryTimingRecord {
-            query: (*query).to_string(),
-            index_type: index_type_label(*index_type),
-            count: data.count,
-            total: SerializableDuration(data.total),
-            min: data.min.map(SerializableDuration),
-            max: data.max.map(SerializableDuration),
+        .map(|row| QueryTimingRecord {
+            query: row.query.to_string(),
+            index_type: row.index_type.label(),
+            count: row.data.count,
+            total: SerializableDuration(row.data.total),
+            min: row.data.min.map(SerializableDuration),
+            max: row.data.max.map(SerializableDuration),
         })
         .collect();
 
@@ -199,7 +195,10 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::profiling::{add_computed_statistic, increment_named_count, open_span};
+    use crate::entity::PropertyIndexType;
+    use crate::profiling::{
+        add_computed_statistic, increment_named_count, open_span, QueryProfilingData,
+    };
 
     #[test]
     fn test_write_profiling_data_to_file() {
@@ -273,16 +272,16 @@ mod tests {
 
     #[test]
     fn test_write_profiling_data_includes_query_timings() {
-        let rows = vec![(
-            "FileQueryTiming: (Age)",
-            PropertyIndexType::FullIndex,
-            QueryProfilingData {
+        let rows = vec![QueryTimingRow {
+            query: "FileQueryTiming: (Age)",
+            index_type: PropertyIndexType::FullIndex,
+            data: QueryProfilingData {
                 count: 2,
                 total: Duration::from_micros(40),
                 min: Some(Duration::from_micros(10)),
                 max: Some(Duration::from_micros(30)),
             },
-        )];
+        }];
 
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("query_timing_test.json");
@@ -317,11 +316,11 @@ mod tests {
 
     #[test]
     fn test_write_profiling_data_serializes_unused_index_timings() {
-        let rows = vec![(
-            "FileQueryTiming: (Unused)",
-            PropertyIndexType::ValueCountIndex,
-            QueryProfilingData::default(),
-        )];
+        let rows = vec![QueryTimingRow {
+            query: "FileQueryTiming: (Unused)",
+            index_type: PropertyIndexType::ValueCountIndex,
+            data: QueryProfilingData::default(),
+        }];
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("unused_query_timing_test.json");
         let exec_stats = ExecutionStatistics {

@@ -53,7 +53,11 @@ where
 
     if current_satisfies_request {
         #[cfg(feature = "profiling")]
-        context.seed_query_profile(QueryIdentityId::from_raw(P::query_identity_id()), current);
+        context.seed_query_profile(
+            QueryIdentityId::from_raw(P::query_identity_id()),
+            current,
+            current,
+        );
         return;
     }
 
@@ -74,7 +78,11 @@ where
         .install_property_index::<P>(Some(new_index));
 
     #[cfg(feature = "profiling")]
-    context.seed_query_profile(QueryIdentityId::from_raw(P::query_identity_id()), requested);
+    context.seed_query_profile(
+        QueryIdentityId::from_raw(P::query_identity_id()),
+        current,
+        requested,
+    );
 }
 
 fn handle_periodic_value_change_count_event<E, PL, P, F>(
@@ -2250,6 +2258,28 @@ mod tests {
         assert_eq!(multi.count, 0);
         assert_eq!(multi.min, None);
         assert_eq!(multi.max, None);
+    }
+
+    #[cfg(feature = "profiling")]
+    #[test]
+    fn upgrading_an_unused_index_replaces_its_profile() {
+        let mut context = Context::new();
+        context.index_property_counts::<ProfilingIndexedCountPerson, ProfilingIndexedCountAge>();
+        context.index_property::<ProfilingIndexedCountPerson, ProfilingIndexedCountAge>();
+        let identity = with!(ProfilingIndexedCountPerson, ProfilingIndexedCountAge(0))
+            .resolved_query()
+            .identity;
+
+        assert!(context
+            .query_profiling_data(identity, PropertyIndexType::ValueCountIndex)
+            .is_none());
+        assert_eq!(
+            context
+                .query_profiling_data(identity, PropertyIndexType::FullIndex)
+                .unwrap()
+                .count,
+            0
+        );
     }
 
     #[cfg(feature = "profiling")]

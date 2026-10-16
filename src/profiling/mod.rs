@@ -176,19 +176,8 @@ pub use display::*;
 use file::write_profiling_data_to_file;
 pub use reporting::*;
 
-#[cfg(feature = "profiling")]
-use crate::entity::PropertyIndexType;
 pub use crate::execution_stats::ProfilingInstant;
 use crate::{error, Context, ContextReportExt};
-
-#[cfg(feature = "profiling")]
-const fn index_type_label(index_type: PropertyIndexType) -> &'static str {
-    match index_type {
-        PropertyIndexType::Unindexed => "unindexed",
-        PropertyIndexType::FullIndex => "full_index",
-        PropertyIndexType::ValueCountIndex => "value_count_index",
-    }
-}
 
 #[cfg(all(test, feature = "profiling"))]
 /// Publicly expose access to profiling data only for testing.

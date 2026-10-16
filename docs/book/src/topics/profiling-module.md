@@ -135,7 +135,8 @@ that exact multi-property is also indexed.
 Because indexes can change at runtime, one query shape can have separate rows
 for different index types. Creating an index also registers a zero-count row,
 so the output includes indexes that were never queried. These rows have zero
-total duration and no minimum or maximum duration.
+total duration and no minimum or maximum duration. Upgrading an index that was
+never queried replaces its zero-count row rather than keeping both.
 
 The `Count` column reports consumed query executions. Each eager query method or
 `EntitySet` terminal operation counts once. An iterator counts once when it

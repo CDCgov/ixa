@@ -27,9 +27,11 @@ use crate::execution_stats::{
 };
 use crate::global_properties::get_global_property_count;
 use crate::plan_queue::{PlanId, PlanQueue};
+#[cfg(all(test, feature = "profiling"))]
+use crate::profiling::QueryProfilingData;
 #[cfg(feature = "profiling")]
 use crate::profiling::{
-    print_profiling_data, print_query_timings, QueryProfileHandle, QueryProfilingData,
+    print_profiling_data, print_query_timings, QueryProfileHandle, QueryTimingRow,
 };
 use crate::{get_data_plugin_count, trace, warn, HashMap, HashMapExt, IxaError};
 
@@ -248,21 +250,22 @@ impl Context {
         )
     }
 
+    /// Registers a row for a configured index so it is reported even if never queried, replacing
+    /// the `previous` index type's row if that one was never queried.
     #[cfg(feature = "profiling")]
     pub(crate) fn seed_query_profile(
         &self,
         identity: QueryIdentityId,
+        previous: PropertyIndexType,
         index_type: PropertyIndexType,
     ) {
-        self.execution_profiler
-            .query_profiler
-            .seed(identity, index_type);
+        let profiler = &self.execution_profiler.query_profiler;
+        profiler.remove_unused(identity, previous);
+        profiler.seed(identity, index_type);
     }
 
     #[cfg(feature = "profiling")]
-    pub(crate) fn query_profiling_snapshot(
-        &self,
-    ) -> Vec<(&'static str, PropertyIndexType, QueryProfilingData)> {
+    pub(crate) fn query_profiling_snapshot(&self) -> Vec<QueryTimingRow> {
         self.execution_profiler.query_profiler.snapshot()
     }
 

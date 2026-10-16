@@ -80,6 +80,15 @@ impl QueryProfilingData {
     }
 }
 
+/// One reported row: a query shape under one configured index type.
+#[cfg(feature = "profiling")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct QueryTimingRow {
+    pub(crate) query: &'static str,
+    pub(crate) index_type: PropertyIndexType,
+    pub(crate) data: QueryProfilingData,
+}
+
 /// Context-owned storage for aggregate query-profiling data.
 ///
 /// Recording handles submit completed query identities and elapsed durations to
@@ -100,6 +109,17 @@ impl QueryProfiler {
             .or_default();
     }
 
+    /// Removes the row for `index_type` if no query has been recorded against it.
+    pub(crate) fn remove_unused(&self, identity: QueryIdentityId, index_type: PropertyIndexType) {
+        let mut timings = self.timings.borrow_mut();
+        if timings
+            .get(&(identity, index_type))
+            .is_some_and(|data| data.count == 0)
+        {
+            timings.remove(&(identity, index_type));
+        }
+    }
+
     fn record(&self, identity: QueryIdentityId, index_type: PropertyIndexType, elapsed: Duration) {
         self.timings
             .borrow_mut()
@@ -108,30 +128,26 @@ impl QueryProfiler {
             .record(elapsed);
     }
 
-    /// Returns `(query label, index type, aggregate profiling data)` tuples
-    /// sorted by descending total duration, query label, and index type.
-    pub(crate) fn snapshot(&self) -> Vec<(&'static str, PropertyIndexType, QueryProfilingData)> {
+    /// Returns rows sorted by descending total duration, query label, and index type.
+    pub(crate) fn snapshot(&self) -> Vec<QueryTimingRow> {
         let timings = self.timings.borrow();
         let mut rows = timings
             .iter()
-            .map(|(&(identity, index_type), &data)| {
-                (query_identity_label(identity), index_type, data)
+            .map(|(&(identity, index_type), &data)| QueryTimingRow {
+                query: query_identity_label(identity),
+                index_type,
+                data,
             })
             .collect::<Vec<_>>();
 
-        rows.sort_by(
-            |(left_query, left_index_type, left_data),
-             (right_query, right_index_type, right_data)| {
-                right_data
-                    .total
-                    .cmp(&left_data.total)
-                    .then_with(|| left_query.cmp(right_query))
-                    .then_with(|| {
-                        super::index_type_label(*left_index_type)
-                            .cmp(super::index_type_label(*right_index_type))
-                    })
-            },
-        );
+        rows.sort_by(|left, right| {
+            right
+                .data
+                .total
+                .cmp(&left.data.total)
+                .then_with(|| left.query.cmp(right.query))
+                .then_with(|| left.index_type.cmp(&right.index_type))
+        });
         rows
     }
 
@@ -708,6 +724,33 @@ mod tests {
     }
 
     #[test]
+    fn query_profiler_remove_unused_keeps_recorded_rows() {
+        let profiler = QueryProfiler::default();
+        let identity = test_query_identity("QueryTimingRemoveUnused: (Age)");
+        profiler.seed(identity, PropertyIndexType::ValueCountIndex);
+        profiler.seed(identity, PropertyIndexType::FullIndex);
+        profiler.record(
+            identity,
+            PropertyIndexType::FullIndex,
+            Duration::from_micros(10),
+        );
+
+        profiler.remove_unused(identity, PropertyIndexType::ValueCountIndex);
+        profiler.remove_unused(identity, PropertyIndexType::FullIndex);
+
+        assert!(profiler
+            .query_profiling_data(identity, PropertyIndexType::ValueCountIndex)
+            .is_none());
+        assert_eq!(
+            profiler
+                .query_profiling_data(identity, PropertyIndexType::FullIndex)
+                .unwrap()
+                .count,
+            1
+        );
+    }
+
+    #[test]
     fn query_profiler_snapshot_includes_count_total_min_and_max() {
         let profiler = QueryProfiler::default();
         let identity = test_query_identity("QueryTimingTable: (Age)");
@@ -715,10 +758,11 @@ mod tests {
         record_unindexed(&profiler, identity, Duration::from_millis(30));
 
         let snapshot = profiler.snapshot();
-        let (_, _, data) = snapshot
+        let data = snapshot
             .iter()
-            .find(|(query, _, _)| *query == "QueryTimingTable: (Age)")
-            .unwrap();
+            .find(|row| row.query == "QueryTimingTable: (Age)")
+            .unwrap()
+            .data;
 
         assert_eq!(data.count, 2);
         assert_eq!(data.total, Duration::from_millis(40));
@@ -758,14 +802,14 @@ mod tests {
         let snapshot = profiler.snapshot();
         let keys = snapshot
             .iter()
-            .map(|(query, index_type, _)| (*query, *index_type))
+            .map(|row| (row.query, row.index_type))
             .collect::<Vec<_>>();
 
         assert_eq!(
             keys,
             vec![
-                ("QueryTimingSort: A", PropertyIndexType::FullIndex),
                 ("QueryTimingSort: A", PropertyIndexType::Unindexed),
+                ("QueryTimingSort: A", PropertyIndexType::FullIndex),
                 ("QueryTimingSort: A", PropertyIndexType::ValueCountIndex),
                 ("QueryTimingSort: B", PropertyIndexType::Unindexed),
                 ("QueryTimingSort: C", PropertyIndexType::Unindexed),
