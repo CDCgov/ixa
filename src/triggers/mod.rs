@@ -204,13 +204,37 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::entity::events::{
+        EntityCreatedEvent, PropertyChangeEvent, PropertyInitializedEvent,
+    };
     use crate::entity::EntityId;
     use crate::{
-        define_entity, define_property, with, Context, ContextEntitiesExt, ExecutionPhase, IxaEvent,
+        define_derived_property, define_entity, define_property, with, Context, ContextEntitiesExt,
+        ExecutionPhase, IxaEvent,
     };
 
     define_entity!(Person);
     define_entity!(Case);
+
+    define_property!(struct Age(u8), Person, default_const = Age(0));
+
+    define_derived_property!(
+        enum AgeGroup {
+            Child,
+            Adult,
+        },
+        Person,
+        [Age],
+        [],
+        |age| {
+            let age: Age = age;
+            if age.0 < 18 {
+                AgeGroup::Child
+            } else {
+                AgeGroup::Adult
+            }
+        }
+    );
 
     define_property!(
         enum InfectionStatus {
@@ -881,6 +905,223 @@ mod tests {
         context.execute();
 
         assert_eq!(*observed.borrow(), vec![(0, Direction::Decreasing)]);
+    }
+
+    #[derive(IxaEvent)]
+    struct CountObserved {
+        entity_id: EntityId<Person>,
+        value: InfectionStatus,
+        count: usize,
+        direction: Direction,
+    }
+
+    type ObservedCounts = Rc<RefCell<Vec<(EntityId<Person>, InfectionStatus, usize, Direction)>>>;
+
+    fn observe_counts(context: &mut Context) -> ObservedCounts {
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event(move |_context, event: CountObserved| {
+            observed_clone.borrow_mut().push((
+                event.entity_id,
+                event.value,
+                event.count,
+                event.direction,
+            ));
+        });
+        observed
+    }
+
+    fn register_count_trigger(
+        context: &mut Context,
+        trigger: PropertyValueCountTrigger<Person, InfectionStatus>,
+    ) {
+        context.register_trigger(trigger.emit_with(|event| CountObserved {
+            entity_id: event.entity_id,
+            value: event.value,
+            count: event.count,
+            direction: event.direction,
+        }));
+    }
+
+    #[test]
+    fn property_value_count_tracks_entities_created_with_default_value() {
+        let mut context = Context::new();
+        let observed = observe_counts(&mut context);
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::changes_to(InfectionStatus::Susceptible, 2),
+        );
+
+        context.add_entity(Person).unwrap();
+        let second = context
+            .add_entity(with!(Person, InfectionStatus::Susceptible))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![(
+                second,
+                InfectionStatus::Susceptible,
+                2,
+                Direction::Increasing
+            )]
+        );
+    }
+
+    #[test]
+    fn property_value_count_ignores_events_queued_before_registration() {
+        let mut context = Context::new();
+        let observed = observe_counts(&mut context);
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::changes_to(InfectionStatus::Recovered, 1),
+        );
+
+        context
+            .add_entity(with!(Person, InfectionStatus::Infectious))
+            .unwrap();
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::increases_to(InfectionStatus::Infectious, 2),
+        );
+        let second = context
+            .add_entity(with!(Person, InfectionStatus::Infectious))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![(
+                second,
+                InfectionStatus::Infectious,
+                2,
+                Direction::Increasing
+            )]
+        );
+    }
+
+    #[test]
+    fn property_value_count_triggers_on_one_property_fire_independently() {
+        let mut context = Context::new();
+        let observed = observe_counts(&mut context);
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::increases_to(InfectionStatus::Infectious, 1),
+        );
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::decreases_to(InfectionStatus::Susceptible, 1),
+        );
+
+        let first = context.add_entity(Person).unwrap();
+        let second = context.add_entity(Person).unwrap();
+        context.set_property(first, InfectionStatus::Infectious);
+        context.set_property(second, InfectionStatus::Infectious);
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![
+                (first, InfectionStatus::Infectious, 1, Direction::Increasing),
+                (
+                    first,
+                    InfectionStatus::Susceptible,
+                    1,
+                    Direction::Decreasing
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn property_value_count_once_unsubscribes_after_firing() {
+        let mut context = Context::new();
+        let observed = observe_counts(&mut context);
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::increases_to(InfectionStatus::Infectious, 1).once(),
+        );
+
+        let first = context
+            .add_entity(with!(Person, InfectionStatus::Infectious))
+            .unwrap();
+        context.execute();
+        assert!(!context.has_event_handlers::<PropertyChangeEvent<Person, InfectionStatus>>());
+        assert!(!context.has_event_handlers::<PropertyInitializedEvent<Person, InfectionStatus>>());
+        // The trigger never subscribes to creation events.
+        assert!(!context.has_event_handlers::<EntityCreatedEvent<Person>>());
+
+        context.set_property(first, InfectionStatus::Recovered);
+        register_count_trigger(
+            &mut context,
+            PropertyValueCountTrigger::increases_to(InfectionStatus::Infectious, 1).once(),
+        );
+        let second = context
+            .add_entity(with!(Person, InfectionStatus::Infectious))
+            .unwrap();
+        context.execute();
+
+        assert_eq!(
+            *observed.borrow(),
+            vec![
+                (first, InfectionStatus::Infectious, 1, Direction::Increasing),
+                (
+                    second,
+                    InfectionStatus::Infectious,
+                    1,
+                    Direction::Increasing
+                ),
+            ]
+        );
+    }
+
+    #[derive(IxaEvent)]
+    struct AgeGroupCountObserved {
+        value: AgeGroup,
+        count: usize,
+        direction: Direction,
+    }
+
+    fn observe_age_group_counts(
+        context: &mut Context,
+        trigger: PropertyValueCountTrigger<Person, AgeGroup>,
+    ) -> Rc<RefCell<Vec<(AgeGroup, usize, Direction)>>> {
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event(move |_context, event: AgeGroupCountObserved| {
+            observed_clone
+                .borrow_mut()
+                .push((event.value, event.count, event.direction));
+        });
+        context.register_trigger(trigger.emit_with(|event| AgeGroupCountObserved {
+            value: event.value,
+            count: event.count,
+            direction: event.direction,
+        }));
+        observed
+    }
+
+    #[test]
+    fn property_value_count_derived_counts_creation_value_once() {
+        let mut context = Context::new();
+        let observed = observe_age_group_counts(
+            &mut context,
+            PropertyValueCountTrigger::changes_to(AgeGroup::Adult, 2),
+        );
+
+        let person = context.add_entity(Person).unwrap();
+        // Same tick as creation: counted as Child at creation, then Child -> Adult once.
+        context.set_property(person, Age(30));
+        context.execute();
+        assert!(observed.borrow().is_empty());
+
+        context.add_entity(with!(Person, Age(40))).unwrap();
+        context.execute();
+        assert_eq!(
+            *observed.borrow(),
+            vec![(AgeGroup::Adult, 2, Direction::Increasing)]
+        );
     }
 
     #[test]

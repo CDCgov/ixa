@@ -310,7 +310,7 @@ impl Context {
                 return false;
             };
 
-            handler_vec.swap_remove(index);
+            handler_vec.remove(index);
         }
 
         E::on_unsubscribe(self);
@@ -1432,12 +1432,16 @@ mod tests {
         context.subscribe_to_event::<Event1>(move |_, event| {
             observed_clone.borrow_mut().push(event.data + 20);
         });
+        let observed_clone = Rc::clone(&observed);
+        context.subscribe_to_event::<Event1>(move |_, event| {
+            observed_clone.borrow_mut().push(event.data + 30);
+        });
 
         assert!(context.unsubscribe_from_event(&listener_to_unsubscribe));
 
         context.emit_event(Event1 { data: 1 });
         context.execute();
-        assert_eq!(*observed.borrow(), vec![1, 21]);
+        assert_eq!(*observed.borrow(), vec![1, 21, 31]);
     }
 
     #[test]
