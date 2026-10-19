@@ -23,10 +23,9 @@ use std::any::{Any, TypeId};
 use std::cell::OnceCell;
 use std::io::{Read, Write};
 
-use crate::data_structures::bit_set::BitSet;
 use crate::entity::entity::Entity;
 use crate::entity::entity_store::EntityManifest;
-use crate::entity::events::PartialPropertyChangeEventBox;
+use crate::entity::events::{PartialPropertyChangeEventBox, PropertyInitializedEvent};
 use crate::entity::index::{IndexCountResult, IndexSetResult, PropertyIndex};
 use crate::entity::property::{IndexableProperty, Property};
 use crate::entity::property_list::PropertyList;
@@ -39,6 +38,21 @@ use crate::entity::EntityId;
 use crate::{Context, ContextEntitiesExt, IxaError};
 
 pub(in crate::entity) type IndexNewEntityFn<E> = fn(&mut Context, EntityId<E>);
+
+/// Emits `PropertyInitializedEvent<E, P>` for a new entity, type-erased so `add_entity` can
+/// dispatch it from the list of subscribed properties.
+pub(in crate::entity) type EmitInitializedEventFn<E> = fn(&mut Context, EntityId<E>);
+
+fn emit_initialized_event<E, P>(context: &mut Context, entity_id: EntityId<E>)
+where
+    E: Entity,
+    P: Property<E>,
+{
+    // Read, rather than taken from the initialization list, so default and derived values are
+    // reported the same way as supplied ones.
+    let value: P = context.get_property(entity_id);
+    context.emit_event(PropertyInitializedEvent::new(entity_id, value));
+}
 
 fn index_new_entity<E, P>(context: &mut Context, entity_id: EntityId<E>)
 where
@@ -76,12 +90,10 @@ pub(crate) struct PropertyStoreCore<E: Entity> {
     /// Immutable, dense metadata for the property slots in `items`.
     property_registrations: &'static [PropertyRegistration],
 
-    /// Set of properties that currently have `PropertyInitializedEvent` subscribers.
-    ///
-    /// `PropertyList::emit_initialized_events` reads this in the hot path to skip
-    /// per-property initialization-event work unless a handler is registered as a performance
-    /// optimization.
-    pub(in crate::entity) property_initialized_event_subscriptions: BitSet,
+    /// One entry for every property that currently has `PropertyInitializedEvent` subscribers,
+    /// so `add_entity` emits only the events somebody listens for. Keyed by property ID like
+    /// `index_new_entity_fns`.
+    pub(in crate::entity) initialized_event_fns: Vec<(usize, EmitInitializedEventFn<E>)>,
 
     /// One entry for every property whose `PropertyValueStoreCore` currently has an index.
     /// The property ID supports removal without relying on deduplicable function addresses.
@@ -111,7 +123,6 @@ impl<E: Entity> PropertyStoreCore<E> {
             (registration.value_store_installer)(&mut items);
         }
         assert_eq!(items.len(), property_registrations.len());
-        let num_items = property_registrations.len();
 
         Self {
             entity_count: 0,
@@ -119,7 +130,7 @@ impl<E: Entity> PropertyStoreCore<E> {
             entity: OnceCell::new(),
             items,
             property_registrations,
-            property_initialized_event_subscriptions: BitSet::new(num_items),
+            initialized_event_fns: Vec::new(),
             index_new_entity_fns: Vec::new(),
         }
     }
@@ -287,6 +298,40 @@ impl<E: Entity> PropertyStoreCore<E> {
                     .swap_remove(dispatcher_position.unwrap());
             }
             _ => {}
+        }
+    }
+
+    /// Whether `add_entity` emits `PropertyInitializedEvent<E, P>`.
+    #[cfg(test)]
+    pub(in crate::entity) fn emits_initialized_event<P: Property<E>>(&self) -> bool {
+        self.initialized_event_fns
+            .iter()
+            .any(|(id, _)| *id == P::id())
+    }
+
+    /// Starts emitting `PropertyInitializedEvent<E, P>` from `add_entity`. Idempotent.
+    pub(in crate::entity) fn subscribe_initialized_event<P: Property<E>>(&mut self) {
+        if !self
+            .initialized_event_fns
+            .iter()
+            .any(|(id, _)| *id == P::id())
+        {
+            self.initialized_event_fns.push((
+                P::id(),
+                emit_initialized_event::<E, P> as EmitInitializedEventFn<E>,
+            ));
+        }
+    }
+
+    /// Stops emitting `PropertyInitializedEvent<E, P>` from `add_entity`.
+    pub(in crate::entity) fn unsubscribe_initialized_event<P: Property<E>>(&mut self) {
+        if let Some(position) = self
+            .initialized_event_fns
+            .iter()
+            .position(|(id, _)| *id == P::id())
+        {
+            // `remove` keeps subscription order, so emission order is stable across unsubscribes.
+            self.initialized_event_fns.remove(position);
         }
     }
 

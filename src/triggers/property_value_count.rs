@@ -1,4 +1,5 @@
-use std::cell::Cell;
+use std::any::{Any, TypeId};
+use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -6,7 +7,7 @@ use super::{Direction, TriggerCriterion, TriggerMode};
 use crate::entity::events::{PropertyChangeEvent, PropertyInitializedEvent};
 use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
-use crate::{Context, EntityPropertyTuple};
+use crate::{define_data_plugin, Context, EntityPropertyTuple, EventListenerId, HashMap};
 
 /// Trigger criterion for the count of entities with a particular property value.
 ///
@@ -30,8 +31,8 @@ use crate::{Context, EntityPropertyTuple};
 ///
 /// The observation data passed to
 /// [`TriggerCriterion::emit_with`](super::TriggerCriterion::emit_with) is
-/// [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose property initialization or
-/// write caused the crossing, the tracked property value, the new count, the observed
+/// [`PropertyValueCountTriggerEvent`]. It contains the entity ID whose creation or property write
+/// caused the crossing, the tracked property value, the new count, the observed
 /// [`Direction`](super::Direction), the configured direction filter as `Option<Direction>`, and the
 /// selected [`TriggerMode`](super::TriggerMode):
 ///
@@ -63,10 +64,13 @@ use crate::{Context, EntityPropertyTuple};
 /// By default, the criterion uses [`TriggerMode::Repeating`](super::TriggerMode::Repeating) and
 /// emits every time the count crosses the threshold and passes the configured direction filter. Call
 /// [`PropertyValueCountTrigger::once`] to emit only for the first crossing, or
-/// [`PropertyValueCountTrigger::repeating`] to return to the default repeating behavior.
+/// [`PropertyValueCountTrigger::repeating`] to return to the default repeating behavior. A `once`
+/// criterion stops observing events after it emits.
 ///
-/// Property initialization from entity creation can cause a crossing if the initialized property
-/// has the tracked value. Property writes can cause a crossing when they move an entity into or out
+/// Entity creation can cause a crossing if the new entity's initial value is the tracked value.
+/// The initial value is the one at creation (supplied, default, or computed for a derived
+/// property), even if it is changed before the initialization event is handled. Property writes
+/// can cause a crossing when they move an entity into or out
 /// of the tracked value. A no-op write where `previous == current` still emits a property-change
 /// event at the entity layer, but it does not change this trigger's tracked count and therefore
 /// cannot by itself cross the threshold.
@@ -202,185 +206,203 @@ where
     where
         F: Fn(&mut Context, Self::Observation) + 'static,
     {
-        match self.mode {
-            TriggerMode::Once => {
-                let state = Rc::new(Cell::new(CountTriggerState {
-                    active: true,
-                    count: context
-                        .query_entity_count(EntityPropertyTuple::<E, _>::new((self.value,))),
-                }));
-                let on_match = Rc::new(on_match);
-
-                context.subscribe_to_event({
-                    let state = Rc::clone(&state);
-                    let on_match = Rc::clone(&on_match);
-                    move |context, event: PropertyInitializedEvent<E, P>| {
-                        if event.value == self.value {
-                            let mut state_value = state.get();
-                            if !state_value.active {
-                                return;
-                            }
-                            let previous_count = state_value.count;
-                            state_value.count += 1;
-                            let direction = Direction::Increasing;
-                            if self.direction_filter != Some(Direction::Decreasing) {
-                                let threshold_crossed = state_value.count == self.threshold
-                                    && previous_count != state_value.count
-                                    && self
-                                        .direction_filter
-                                        .is_none_or(|filter| filter == direction);
-                                if threshold_crossed {
-                                    on_match(
-                                        context,
-                                        PropertyValueCountTriggerEvent {
-                                            entity_id: event.entity_id,
-                                            value: self.value,
-                                            count: state_value.count,
-                                            direction_filter: self.direction_filter,
-                                            direction,
-                                            mode: self.mode,
-                                        },
-                                    );
-                                    state_value.active = false;
-                                }
-                            }
-                            state.set(state_value);
-                        }
-                    }
-                });
-
-                context.subscribe_to_event({
-                    let state = Rc::clone(&state);
-                    let on_match = Rc::clone(&on_match);
-                    move |context, event: PropertyChangeEvent<E, P>| {
-                        let mut state_value = state.get();
-                        if !state_value.active {
-                            return;
-                        }
-                        let previous_count = state_value.count;
-                        state_value.count =
-                            match (event.previous == self.value, event.current == self.value) {
-                                (false, true) => state_value.count + 1,
-                                (true, false) => state_value.count - 1,
-                                _ => state_value.count,
-                            };
-                        let direction = if state_value.count > previous_count {
-                            Some(Direction::Increasing)
-                        } else if state_value.count < previous_count {
-                            Some(Direction::Decreasing)
-                        } else {
-                            None
-                        };
-                        if let Some(direction) = direction {
-                            let threshold_crossed = state_value.count == self.threshold
-                                && self
-                                    .direction_filter
-                                    .is_none_or(|filter| filter == direction);
-                            if threshold_crossed {
-                                on_match(
-                                    context,
-                                    PropertyValueCountTriggerEvent {
-                                        entity_id: event.entity_id,
-                                        value: self.value,
-                                        count: state_value.count,
-                                        direction_filter: self.direction_filter,
-                                        direction,
-                                        mode: self.mode,
-                                    },
-                                );
-                                state_value.active = false;
-                            }
-                        }
-                        state.set(state_value);
-                    }
-                });
-            }
-            TriggerMode::Repeating => {
-                let count = Rc::new(Cell::new(
-                    context.query_entity_count(EntityPropertyTuple::<E, _>::new((self.value,))),
-                ));
-                let on_match = Rc::new(on_match);
-
-                context.subscribe_to_event({
-                    let count = Rc::clone(&count);
-                    let on_match = Rc::clone(&on_match);
-                    move |context, event: PropertyInitializedEvent<E, P>| {
-                        if event.value == self.value {
-                            let previous_count = count.get();
-                            let current_count = previous_count + 1;
-                            count.set(current_count);
-                            let direction = Direction::Increasing;
-                            if self.direction_filter != Some(Direction::Decreasing) {
-                                let threshold_crossed = current_count == self.threshold
-                                    && previous_count != current_count
-                                    && self
-                                        .direction_filter
-                                        .is_none_or(|filter| filter == direction);
-                                if threshold_crossed {
-                                    on_match(
-                                        context,
-                                        PropertyValueCountTriggerEvent {
-                                            entity_id: event.entity_id,
-                                            value: self.value,
-                                            count: current_count,
-                                            direction_filter: self.direction_filter,
-                                            direction,
-                                            mode: self.mode,
-                                        },
-                                    );
-                                }
-                            }
-                        }
-                    }
-                });
-
-                context.subscribe_to_event({
-                    let count = Rc::clone(&count);
-                    let on_match = Rc::clone(&on_match);
-                    move |context, event: PropertyChangeEvent<E, P>| {
-                        let previous_count = count.get();
-                        let current_count =
-                            match (event.previous == self.value, event.current == self.value) {
-                                (false, true) => previous_count + 1,
-                                (true, false) => previous_count - 1,
-                                _ => previous_count,
-                            };
-                        count.set(current_count);
-                        let direction = if current_count > previous_count {
-                            Some(Direction::Increasing)
-                        } else if current_count < previous_count {
-                            Some(Direction::Decreasing)
-                        } else {
-                            None
-                        };
-                        if let Some(direction) = direction {
-                            let threshold_crossed = current_count == self.threshold
-                                && self
-                                    .direction_filter
-                                    .is_none_or(|filter| filter == direction);
-                            if threshold_crossed {
-                                on_match(
-                                    context,
-                                    PropertyValueCountTriggerEvent {
-                                        entity_id: event.entity_id,
-                                        value: self.value,
-                                        count: current_count,
-                                        direction_filter: self.direction_filter,
-                                        direction,
-                                        mode: self.mode,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                });
-            }
+        let count = context.query_entity_count(EntityPropertyTuple::<E, _>::new((self.value,)));
+        let (dispatcher, is_new) = Dispatcher::<E, P>::get_or_subscribe(context);
+        let slot = Rc::new(Slot {
+            value: self.value,
+            threshold: self.threshold,
+            direction_filter: self.direction_filter,
+            mode: self.mode,
+            count: Cell::new(count),
+            state: Cell::new(if is_new {
+                SlotState::Active
+            } else {
+                SlotState::Pending
+            }),
+            on_match: Box::new(on_match),
+        });
+        if !is_new {
+            // Events already queued were emitted before `count` was measured, so the slot must
+            // skip them. They are all ahead of this callback in the FIFO queue.
+            let slot = Rc::clone(&slot);
+            context.queue_callback(move |_context| {
+                if slot.state.get() == SlotState::Pending {
+                    slot.state.set(SlotState::Active);
+                }
+            });
         }
+        dispatcher.slots.borrow_mut().push(slot);
     }
 }
 
-#[derive(Clone, Copy)]
-struct CountTriggerState {
-    active: bool,
-    count: usize,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SlotState {
+    Pending,
+    Active,
+    Retired,
+}
+
+type OnMatch<E, P> = Box<dyn Fn(&mut Context, PropertyValueCountTriggerEvent<E, P>)>;
+
+struct Slot<E: Entity, P: Property<E>> {
+    value: P,
+    threshold: usize,
+    direction_filter: Option<Direction>,
+    mode: TriggerMode,
+    count: Cell<usize>,
+    state: Cell<SlotState>,
+    on_match: OnMatch<E, P>,
+}
+
+impl<E: Entity, P: Property<E>> Slot<E, P> {
+    /// Applies one entity's transition and returns whether the slot retired.
+    fn observe(
+        &self,
+        context: &mut Context,
+        entity_id: EntityId<E>,
+        previous: Option<P>,
+        current: P,
+    ) -> bool {
+        if self.state.get() != SlotState::Active {
+            return false;
+        }
+        let previous_count = self.count.get();
+        let (current_count, direction) = match (previous == Some(self.value), current == self.value)
+        {
+            (false, true) => (previous_count + 1, Direction::Increasing),
+            (true, false) => {
+                debug_assert!(
+                    previous_count > 0,
+                    "Ixa internal error: property value count trigger observed a decrease below zero"
+                );
+                (previous_count.saturating_sub(1), Direction::Decreasing)
+            }
+            _ => return false,
+        };
+        self.count.set(current_count);
+        if current_count != self.threshold
+            || !self
+                .direction_filter
+                .is_none_or(|filter| filter == direction)
+        {
+            return false;
+        }
+        (self.on_match)(
+            context,
+            PropertyValueCountTriggerEvent {
+                entity_id,
+                value: self.value,
+                count: current_count,
+                direction_filter: self.direction_filter,
+                direction,
+                mode: self.mode,
+            },
+        );
+        if self.mode == TriggerMode::Once {
+            self.state.set(SlotState::Retired);
+            return true;
+        }
+        false
+    }
+}
+
+struct Listeners<E: Entity, P: Property<E>> {
+    initialized: EventListenerId<PropertyInitializedEvent<E, P>>,
+    changed: EventListenerId<PropertyChangeEvent<E, P>>,
+}
+
+/// Shared event subscriptions for every `PropertyValueCountTrigger<E, P>`, so each event costs
+/// one callback rather than one per trigger.
+struct Dispatcher<E: Entity, P: Property<E>> {
+    slots: RefCell<Vec<Rc<Slot<E, P>>>>,
+    listeners: RefCell<Option<Listeners<E, P>>>,
+}
+
+define_data_plugin!(
+    DispatcherPlugin,
+    HashMap<TypeId, Rc<dyn Any>>,
+    HashMap::default()
+);
+
+impl<E: Entity, P: Property<E>> Dispatcher<E, P> {
+    fn get_or_subscribe(context: &mut Context) -> (Rc<Self>, bool) {
+        let key = TypeId::of::<Self>();
+        if let Some(existing) = context.get_data(DispatcherPlugin).get(&key) {
+            let existing = Rc::clone(existing)
+                .downcast::<Self>()
+                .expect("Ixa internal error: trigger dispatcher type mismatch");
+            return (existing, false);
+        }
+
+        let dispatcher = Rc::new(Self {
+            slots: RefCell::new(Vec::new()),
+            listeners: RefCell::new(None),
+        });
+        let initialized = context.subscribe_to_event({
+            let dispatcher = Rc::clone(&dispatcher);
+            move |context, event: PropertyInitializedEvent<E, P>| {
+                dispatcher.dispatch(context, event.entity_id, None, event.value);
+            }
+        });
+        let changed = context.subscribe_to_event({
+            let dispatcher = Rc::clone(&dispatcher);
+            move |context, event: PropertyChangeEvent<E, P>| {
+                dispatcher.dispatch(
+                    context,
+                    event.entity_id,
+                    Some(event.previous),
+                    event.current,
+                );
+            }
+        });
+        *dispatcher.listeners.borrow_mut() = Some(Listeners {
+            initialized,
+            changed,
+        });
+        context
+            .get_data_mut(DispatcherPlugin)
+            .insert(key, Rc::clone(&dispatcher) as Rc<dyn Any>);
+        (dispatcher, true)
+    }
+
+    fn dispatch(
+        &self,
+        context: &mut Context,
+        entity_id: EntityId<E>,
+        previous: Option<P>,
+        current: P,
+    ) {
+        // Slots registered while dispatching are pending, so the length can be fixed up front.
+        // The vector is not borrowed across `on_match`, which may register more triggers.
+        let len = self.slots.borrow().len();
+        let mut retired = false;
+        for index in 0..len {
+            let slot = Rc::clone(&self.slots.borrow()[index]);
+            retired |= slot.observe(context, entity_id, previous, current);
+        }
+        if retired {
+            self.remove_retired(context);
+        }
+    }
+
+    fn remove_retired(&self, context: &mut Context) {
+        let is_empty = {
+            let mut slots = self.slots.borrow_mut();
+            slots.retain(|slot| slot.state.get() != SlotState::Retired);
+            slots.is_empty()
+        };
+        if !is_empty {
+            return;
+        }
+        // Callbacks already queued still hold this dispatcher, but it has no slots left. A later
+        // trigger registration creates a fresh dispatcher.
+        let listeners = self.listeners.borrow_mut().take();
+        if let Some(listeners) = listeners {
+            context.unsubscribe_from_event(&listeners.initialized);
+            context.unsubscribe_from_event(&listeners.changed);
+            context
+                .get_data_mut(DispatcherPlugin)
+                .remove(&TypeId::of::<Self>());
+        }
+    }
 }

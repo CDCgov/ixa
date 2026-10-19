@@ -129,7 +129,7 @@ run = [
   "wasm-pack build --target web --out-dir pkg/logging --no-default-features --features logging",
   "wasm-pack build --target web --out-dir pkg/profiling --no-default-features --features profiling",
 ]
-sources = ["src/*.rs", "Cargo.toml"]
+sources = ["src/*.rs", "Cargo.toml", "../../src/**/*.rs", "../../Cargo.toml"]
 outputs = ["pkg/ixa_wasm_tests.js", "pkg/logging/ixa_wasm_tests.js", "pkg/profiling/ixa_wasm_tests.js"]
 
 [tasks.'wasm:check-features']

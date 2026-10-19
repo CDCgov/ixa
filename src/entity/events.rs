@@ -1,10 +1,10 @@
 /*!
 
-Entity events report creation, explicitly supplied initial values, and later property changes:
+Entity events report creation, initial property values, and later property changes:
 
 - [`EntityCreatedEvent`] is emitted when an entity has been created.
-- [`PropertyInitializedEvent`] is emitted for each non-default, non-derived property value
-  explicitly supplied during creation.
+- [`PropertyInitializedEvent`] is emitted for each property that has subscribers, carrying the
+  entity's initial value: supplied, default, or computed for a derived property.
 - [`PropertyChangeEvent`] is emitted when a property is subsequently updated.
 
 Client code can subscribe to these events with the `Context::subscribe_to_event<IxaEvent>(handler)` method:
@@ -20,7 +20,7 @@ fn handle_infection_status_change(context: &mut Context, event: InfectionStatusE
 // We do so by subscribing to this event.
 context.subscribe_to_event::<InfectionStatusEvent>(handle_infection_status_change);
 
-// Observe a non-default value explicitly supplied when a person is created.
+// Observe the initial value of a property when a person is created.
 context.subscribe_to_event(
     |_context, event: PropertyInitializedEvent<Person, InfectionStatus>| {
         // ... use event.entity_id and event.value ...
@@ -40,7 +40,7 @@ because a non-derived p
 use smallbox::space::S4;
 use smallbox::SmallBox;
 
-use crate::entity::property::{Property, PropertyInitializationKind};
+use crate::entity::property::Property;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::{Context, IxaEvent};
 
@@ -177,11 +177,15 @@ impl<E: Entity> EntityCreatedEvent<E> {
     }
 }
 
-/// Emitted for a non-default, non-derived property value supplied when an entity is created.
+/// Emitted when an entity is created, carrying the initial value of `P`.
+///
+/// Only emitted while the event has subscribers. The value is read at creation, so a derived
+/// property reports the value computed from the supplied dependencies, and a constant property
+/// its default when no value was supplied.
 pub struct PropertyInitializedEvent<E: Entity, P: Property<E>> {
     /// The newly created entity.
     pub entity_id: EntityId<E>,
-    /// The initial property value supplied by the caller.
+    /// The property's value at creation.
     pub value: P,
 }
 
@@ -196,32 +200,18 @@ impl<E: Entity, P: Property<E>> Copy for PropertyInitializedEvent<E, P> {}
 
 impl<E: Entity, P: Property<E>> IxaEvent for PropertyInitializedEvent<E, P> {
     fn on_subscribe(context: &mut Context) {
-        match P::initialization_kind() {
-            PropertyInitializationKind::Explicit | PropertyInitializationKind::Constant => {
-                context
-                    .entity_store
-                    .get_property_store_mut::<E>()
-                    .property_initialized_event_subscriptions
-                    .set(P::id());
-            }
-            PropertyInitializationKind::Derived => {}
-        }
+        context
+            .entity_store
+            .get_property_store_mut::<E>()
+            .subscribe_initialized_event::<P>();
     }
 
     fn on_unsubscribe(context: &mut Context) {
-        match P::initialization_kind() {
-            PropertyInitializationKind::Explicit | PropertyInitializationKind::Constant
-                if !context.has_event_handlers::<Self>() =>
-            {
-                context
-                    .entity_store
-                    .get_property_store_mut::<E>()
-                    .property_initialized_event_subscriptions
-                    .reset(P::id());
-            }
-            PropertyInitializationKind::Explicit
-            | PropertyInitializationKind::Constant
-            | PropertyInitializationKind::Derived => {}
+        if !context.has_event_handlers::<Self>() {
+            context
+                .entity_store
+                .get_property_store_mut::<E>()
+                .unsubscribe_initialized_event::<P>();
         }
     }
 }
@@ -371,30 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn explicit_constant_default_does_not_emit_initialization_event() {
+    fn omitted_constant_default_emits_initialization_event() {
         let mut context = Context::new();
+        let received = Rc::new(RefCell::new(None));
+        let received_clone = received.clone();
         context.subscribe_to_event(
-            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
-                panic!("the explicit default must not emit");
-            },
-        );
-
-        context
-            .add_entity(with!(
-                InitializationPerson,
-                InitConstant(0),
-                InitRequired(1)
-            ))
-            .unwrap();
-        context.execute();
-    }
-
-    #[test]
-    fn omitted_constant_default_does_not_emit_initialization_event() {
-        let mut context = Context::new();
-        context.subscribe_to_event(
-            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
-                panic!("an omitted property must not emit");
+            move |_context, event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {
+                *received_clone.borrow_mut() = Some(event.value);
             },
         );
 
@@ -402,25 +375,33 @@ mod tests {
             .add_entity(with!(InitializationPerson, InitRequired(1)))
             .unwrap();
         context.execute();
+
+        assert_eq!(*received.borrow(), Some(InitConstant(0)));
     }
 
     #[test]
-    fn derived_property_does_not_emit_initialization_event() {
+    fn derived_property_emits_value_computed_at_creation() {
         let mut context = Context::new();
+        let received = Rc::new(RefCell::new(None));
+        let received_clone = received.clone();
         context.subscribe_to_event(
-            |_context, _event: PropertyInitializedEvent<InitializationPerson, InitDerived>| {
-                panic!("a dependent derived property must not emit");
+            move |_context, event: PropertyInitializedEvent<InitializationPerson, InitDerived>| {
+                *received_clone.borrow_mut() = Some(event.value);
             },
         );
 
-        context
+        let entity_id = context
             .add_entity(with!(
                 InitializationPerson,
                 InitConstant(9),
                 InitRequired(1)
             ))
             .unwrap();
+        // Changed before the event is handled, so the event must carry the creation value.
+        context.set_property(entity_id, InitConstant(20));
         context.execute();
+
+        assert_eq!(*received.borrow(), Some(InitDerived(10)));
     }
 
     #[test]
@@ -486,36 +467,30 @@ mod tests {
         assert!(order[..3].contains(&"required"));
     }
 
+    fn emits_initialized_event<E: Entity, P: Property<E>>(context: &Context) -> bool {
+        context
+            .entity_store
+            .get_property_store::<E>()
+            .emits_initialized_event::<P>()
+    }
+
     #[test]
     fn property_initialized_subscription_cache_tracks_listener_lifecycle() {
         let mut context = Context::new();
-        let property_id = <InitConstant as Property<InitializationPerson>>::id();
 
         let first = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
-        assert!(context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .get(property_id));
+        assert!(emits_initialized_event::<InitializationPerson, InitConstant>(&context));
 
         let second = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
         assert!(context.unsubscribe_from_event(&first));
-        assert!(context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .get(property_id));
+        assert!(emits_initialized_event::<InitializationPerson, InitConstant>(&context));
 
         assert!(context.unsubscribe_from_event(&second));
-        assert!(!context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .get(property_id));
+        assert!(!emits_initialized_event::<InitializationPerson, InitConstant>(&context));
     }
 
     #[test]
@@ -524,29 +499,20 @@ mod tests {
         let listener = context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
-        let property_id = <InitConstant as Property<InitializationPerson>>::id();
 
         assert!(context.unsubscribe_from_event(&listener));
         assert!(!context.unsubscribe_from_event(&listener));
-        assert!(!context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .get(property_id));
+        assert!(!emits_initialized_event::<InitializationPerson, InitConstant>(&context));
     }
 
     #[test]
-    fn property_initialized_subscription_cache_ignores_derived_property() {
+    fn property_initialized_subscription_cache_tracks_derived_property() {
         let mut context = Context::new();
         context.subscribe_to_event(
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitDerived>| {},
         );
 
-        assert!(context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .is_empty());
+        assert!(emits_initialized_event::<InitializationPerson, InitDerived>(&context));
     }
 
     #[test]
@@ -559,12 +525,9 @@ mod tests {
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitRequired>| {},
         );
 
-        let subscriptions = &context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions;
-        assert!(subscriptions.get(<InitConstant as Property<InitializationPerson>>::id()));
-        assert!(subscriptions.get(InitRequired::id()));
+        assert!(emits_initialized_event::<InitializationPerson, InitConstant>(&context));
+        assert!(emits_initialized_event::<InitializationPerson, InitRequired>(&context));
+        assert!(!emits_initialized_event::<InitializationPerson, InitSecond>(&context));
     }
 
     #[test]
@@ -574,16 +537,11 @@ mod tests {
             |_context, _event: PropertyInitializedEvent<InitializationPerson, InitConstant>| {},
         );
 
-        assert!(!context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .is_empty());
-        assert!(context
-            .entity_store
-            .get_property_store::<OtherInitializationPerson>()
-            .property_initialized_event_subscriptions
-            .is_empty());
+        assert!(emits_initialized_event::<InitializationPerson, InitConstant>(&context));
+        assert!(!emits_initialized_event::<
+            OtherInitializationPerson,
+            InitConstant,
+        >(&context));
     }
 
     #[test]
@@ -591,11 +549,8 @@ mod tests {
         let mut context = Context::new();
         context.subscribe_to_event(|_context, _event: EntityCreatedEvent<InitializationPerson>| {});
 
-        assert!(context
-            .entity_store
-            .get_property_store::<InitializationPerson>()
-            .property_initialized_event_subscriptions
-            .is_empty());
+        assert!(!emits_initialized_event::<InitializationPerson, InitConstant>(&context));
+        assert!(!emits_initialized_event::<InitializationPerson, InitRequired>(&context));
     }
 
     #[test]

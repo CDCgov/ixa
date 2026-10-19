@@ -24,10 +24,8 @@ use std::any::TypeId;
 use seq_macro::seq;
 
 use super::entity::{Entity, EntityId};
-use super::events::PropertyInitializedEvent;
-use super::property::{Property, PropertyInitializationKind};
+use super::property::Property;
 use super::property_store_core::PropertyStoreCore;
-use crate::data_structures::bit_set::BitSet;
 use crate::entity::ContextEntitiesExt;
 use crate::{Context, IxaError};
 
@@ -61,14 +59,6 @@ pub(in crate::entity) trait PropertyListInternal<E: Entity>:
         property_store: &mut PropertyStoreCore<E>,
     );
 
-    /// Emits initialization events for the explicitly supplied property values.
-    fn emit_initialized_events(
-        &self,
-        context: &mut Context,
-        entity_id: EntityId<E>,
-        subscriptions: &BitSet,
-    );
-
     /// Gets the tuple of property values for the given entity.
     #[must_use]
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self;
@@ -100,14 +90,6 @@ impl<E: Entity> PropertyListInternal<E> for () {
         // No values to assign.
     }
 
-    fn emit_initialized_events(
-        &self,
-        _context: &mut Context,
-        _entity_id: EntityId<E>,
-        _subscriptions: &BitSet,
-    ) {
-    }
-
     fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> Self {}
 }
 
@@ -129,37 +111,12 @@ impl<E: Entity + Copy> PropertyListInternal<E> for E {
         // No values to assign.
     }
 
-    fn emit_initialized_events(
-        &self,
-        _context: &mut Context,
-        _entity_id: EntityId<E>,
-        _subscriptions: &BitSet,
-    ) {
-    }
-
     fn get_values_for_entity(_context: &Context, _entity_id: EntityId<E>) -> E {
         E::default()
     }
 }
 
 impl<E: Entity + Copy> PropertyInitializationList<E> for E {}
-
-fn emit_initialized_event<E, P>(context: &mut Context, entity_id: EntityId<E>, value: P)
-where
-    E: Entity,
-    P: Property<E>,
-{
-    match P::initialization_kind() {
-        PropertyInitializationKind::Derived => {}
-        PropertyInitializationKind::Explicit => {
-            context.emit_event(PropertyInitializedEvent::new(entity_id, value));
-        }
-        PropertyInitializationKind::Constant if value != P::default_const() => {
-            context.emit_event(PropertyInitializedEvent::new(entity_id, value));
-        }
-        PropertyInitializationKind::Constant => {}
-    }
-}
 
 // ToDo(RobertJacobsonCDC): The following is a fundamental limitation in Rust. If downstream code *can* implement a
 //     trait impl that will cause conflicting implementations with some blanket impl, it disallows it, regardless of
@@ -197,17 +154,6 @@ impl<E: Entity, P: Property<E>> PropertyListInternal<E> for (P,) {
     ) {
         let property_value_store = property_store.get_mut::<P>();
         property_value_store.set(entity_id, self.0);
-    }
-
-    fn emit_initialized_events(
-        &self,
-        context: &mut Context,
-        entity_id: EntityId<E>,
-        subscriptions: &BitSet,
-    ) {
-        if subscriptions.get(P::id()) {
-            emit_initialized_event(context, entity_id, self.0);
-        }
     }
 
     fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
@@ -249,19 +195,6 @@ macro_rules! impl_property_list {
                         let property_value_store = property_store.get_mut::<P~N>();
                         property_value_store.set(entity_id, self.N);
                     })*
-                }
-
-                fn emit_initialized_events(
-                    &self,
-                    context: &mut Context,
-                    entity_id: EntityId<E>,
-                    subscriptions: &BitSet,
-                ) {
-                    #(
-                        if subscriptions.get(P~N::id()) {
-                            emit_initialized_event(context, entity_id, self.N);
-                        }
-                    )*
                 }
 
                 fn get_values_for_entity(context: &Context, entity_id: EntityId<E>) -> Self {
