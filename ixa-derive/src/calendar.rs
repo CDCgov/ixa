@@ -3,9 +3,11 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::ext::IdentExt;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, Attribute, Data, DataStruct, DeriveInput, Error, Fields, Ident, Result, Type,
+    parse_macro_input, Attribute, Data, DataStruct, DeriveInput, Error, Fields, Ident, Path,
+    Result, Token, Type,
 };
 
 enum Mark {
@@ -84,6 +86,54 @@ fn serde_keys(attr: &Attribute) -> Result<Vec<(String, bool)>> {
     Ok(keys)
 }
 
+/// Removes `Deserialize` from the `#[derive(..)]` attributes. Returns whether it was there
+/// and whether a `Serialize` derive remains to own the `#[serde(..)]` attributes.
+fn strip_derive_deserialize(attrs: &mut Vec<Attribute>) -> Result<(bool, bool)> {
+    let mut found = false;
+    let mut has_serialize = false;
+    let mut rest = Vec::with_capacity(attrs.len());
+    for attr in attrs.drain(..) {
+        if !attr.path().is_ident("derive") {
+            rest.push(attr);
+            continue;
+        }
+        let paths = attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated)?;
+        let kept: Vec<Path> = paths
+            .into_iter()
+            .filter(|path| {
+                let last = path.segments.last().map(|segment| &segment.ident);
+                let is_deserialize = last.is_some_and(|ident| ident == "Deserialize");
+                found |= is_deserialize;
+                has_serialize |= last.is_some_and(|ident| ident == "Serialize");
+                !is_deserialize
+            })
+            .collect();
+        if !kept.is_empty() {
+            let span = attr.span();
+            rest.push(syn::parse_quote_spanned!(span => #[derive(#(#kept),*)]));
+        }
+    }
+    *attrs = rest;
+    Ok((found, has_serialize))
+}
+
+/// Rejects serde attributes that would type a twin field as the model type.
+fn reject_custom_serde(attrs: &[Attribute], reason: &str) -> Result<()> {
+    for attr in attrs {
+        for (key, has_value) in serde_keys(attr)? {
+            let custom = ["with", "deserialize_with", "serialize_with"].contains(&key.as_str())
+                || (key == "default" && has_value);
+            if custom {
+                return Err(Error::new_spanned(
+                    attr,
+                    format!("{reason}, so serde `{key}` cannot be used on it"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Whether `ty` is written `Option<..>` (by its last path segment).
 fn is_option(ty: &Type) -> bool {
     match ty {
@@ -160,6 +210,8 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
     let mut wire_fields = Vec::new();
     let mut from_wire = Vec::new();
     let mut to_wire = Vec::new();
+    let mut field_idents = Vec::new();
+    let mut days_fields = Vec::new();
 
     for field in fields.iter_mut() {
         let ident = field.ident.clone().expect("named field");
@@ -168,6 +220,8 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         let attrs = &field.attrs;
         let field_vis = &field.vis;
         let ty = &field.ty;
+        field_idents.push(ident.clone());
+        days_fields.push(quote! { #(#attrs)* #ident: #ty });
         match mark {
             Mark::None | Mark::Reference => {
                 if let Mark::Reference = mark {
@@ -183,19 +237,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 to_wire.push(quote! { #ident: ::std::clone::Clone::clone(&self.#ident) });
             }
             Mark::Day { inclusive } => {
-                for attr in attrs {
-                    for (key, has_value) in serde_keys(attr)? {
-                        let custom = ["with", "deserialize_with", "serialize_with"]
-                            .contains(&key.as_str())
-                            || (key == "default" && has_value);
-                        if custom {
-                            return Err(Error::new_spanned(
-                                attr,
-                                format!("a `#[day]` field is read as `Day`, so serde `{key}` cannot be used on it"),
-                            ));
-                        }
-                    }
-                }
+                reject_custom_serde(attrs, "a `#[day]` field is read as `Day`")?;
                 // Spanned on the type so a non-`f64` field is reported there.
                 let span = ty.span();
                 if is_option(ty) {
@@ -226,6 +268,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                 }
             }
             Mark::Days => {
+                reject_custom_serde(attrs, "a `#[days]` field is read as its twin")?;
                 wire_fields.push(quote! {
                     #(#attrs)* #field_vis #ident: <#ty as ::ixa::calendar::Calendar>::Wire
                 });
@@ -240,7 +283,7 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
     }
 
-    // Taken before the root's `try_from` is added; the twin gets its own doc.
+    // The twin gets its own doc and keeps `Deserialize` when the root drops it.
     let twin_attrs: Vec<_> = input
         .attrs
         .iter()
@@ -263,10 +306,6 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
     let wire_start = own_start(quote!(wire));
     let self_start = own_start(quote!(self));
     let root = reference.is_some().then(|| {
-        let wire_name = wire.to_string();
-        input
-            .attrs
-            .push(syn::parse_quote!(#[serde(try_from = #wire_name)]));
         quote! {
             impl ::std::convert::TryFrom<#wire> for #name {
                 type Error = ::ixa::calendar::CalendarError;
@@ -283,6 +322,49 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
                     <Self as ::ixa::calendar::Calendar>::to_calendar(self, ::std::option::Option::None)
                 }
             }
+        }
+    });
+    // A root reads its twin in human-readable formats and its own layout, days only, in
+    // binary ones, so the bytes match what the derived `Serialize` writes.
+    let root_deserialize = if reference.is_some() {
+        let (found, has_serialize) = strip_derive_deserialize(&mut input.attrs)?;
+        if found && !has_serialize {
+            // No serde derive is left to own the root's serde attributes; the twin and the
+            // days struct already carry their copies.
+            input.attrs.retain(|attr| !attr.path().is_ident("serde"));
+            for field in fields.iter_mut() {
+                field.attrs.retain(|attr| !attr.path().is_ident("serde"));
+            }
+        }
+        found
+    } else {
+        false
+    };
+    let root_deserialize = root_deserialize.then(|| {
+        let days = format_ident!("Days{}", name);
+        quote! {
+            const _: () = {
+                #[allow(dead_code)]
+                #(#twin_attrs)*
+                struct #days {
+                    #(#days_fields,)*
+                }
+
+                impl<'de> ::ixa::__private::serde::Deserialize<'de> for #name {
+                    fn deserialize<D: ::ixa::__private::serde::Deserializer<'de>>(
+                        deserializer: D,
+                    ) -> ::std::result::Result<Self, D::Error> {
+                        if ::ixa::__private::serde::Deserializer::is_human_readable(&deserializer) {
+                            let wire = <#wire as ::ixa::__private::serde::Deserialize>::deserialize(deserializer)?;
+                            <Self as ::std::convert::TryFrom<#wire>>::try_from(wire)
+                                .map_err(::ixa::__private::serde::de::Error::custom)
+                        } else {
+                            let days = <#days as ::ixa::__private::serde::Deserialize>::deserialize(deserializer)?;
+                            ::std::result::Result::Ok(Self { #(#field_idents: days.#field_idents,)* })
+                        }
+                    }
+                }
+            };
         }
     });
 
@@ -314,5 +396,6 @@ fn expand(mut input: DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
 
         #root
+        #root_deserialize
     })
 }

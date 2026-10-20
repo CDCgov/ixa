@@ -48,14 +48,20 @@
 //! `#[reference]` start date (`Date` or `Option<Date>`) is the root: it
 //! deserializes through its twin, serializes days, and has `dated()`. A
 //! nested root falls back to the outer start date. `#[day(inclusive)]` marks
-//! a day a date includes, such as the end of a run.
+//! a day a date includes, such as the end of a run. Dates are for
+//! human-readable formats; a format that is not (by serde's
+//! `is_human_readable`) reads and writes the struct as written, days only,
+//! so the root round trips through any serde format. Every field type must
+//! then be `Deserialize`, including types that implement [`Calendar`] by hand.
 //!
 //! The twin copies the struct's derives and serde attributes, so
 //! `#[calendar]` goes above `#[derive(..)]`. Limits: derive `Clone`,
 //! `Debug`, `PartialEq`, `Serialize` and `Deserialize`; no generics; no serde `try_from`, `from`, `into` or `remote`,
 //! and no `with`, `deserialize_with`, `serialize_with` or `default = ".."`
-//! on a `#[day]` field. A struct with its own wire shape implements
-//! [`Calendar`] by hand.
+//! on a `#[day]` or `#[days]` field. A struct with its own wire shape
+//! implements [`Calendar`] by hand; a root without a `Deserialize` derive
+//! keeps its own implementation. To validate a document, wrap the root in a
+//! type whose `Deserialize` reads it and checks the result.
 //!
 //! In code, [`Date::start_of`] and [`Date::end_of`] turn a date string into
 //! days from a start date. [`ContextCalendarExt`] stores the start date on
