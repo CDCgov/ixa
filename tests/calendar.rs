@@ -316,3 +316,52 @@ mod nested {
         );
     }
 }
+
+#[test]
+fn a_root_round_trips_through_a_binary_format() {
+    let config = bincode_next::config::standard();
+    let p: Parameters = serde_json::from_value(json!({
+        "startDate": "2026-05-14",
+        "policies": [{"start": "2026-06-01", "end": "2026-07-02"}, {"start": 2.5}],
+        "importations": [{"day": 3.0}],
+        "endRunConditions": {"maxTime": "2026-08-06"},
+        "regions": {"name": "north", "start": 1.0},
+        "seed": 7
+    }))
+    .unwrap();
+
+    let bytes = bincode_next::serde::encode_to_vec(&p, config).unwrap();
+    let (back, _): (Parameters, _) =
+        bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+    assert_eq!(back, p);
+
+    let bytes = bincode_next::serde::encode_to_vec(p.dated(), config).unwrap();
+    let (dated, _): (CalendarParameters, _) =
+        bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+    assert_eq!(Parameters::try_from(dated).unwrap(), p);
+}
+
+#[calendar]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadOnly {
+    #[reference]
+    start_date: Option<Date>,
+    #[day]
+    #[serde(default)]
+    max_time: f64,
+}
+
+#[test]
+fn a_root_may_derive_deserialize_without_serialize() {
+    let p: ReadOnly =
+        serde_json::from_value(json!({"startDate": "2026-01-01", "maxTime": "2026-01-03"}))
+            .unwrap();
+    assert_eq!(p.max_time, 2.0);
+    assert_eq!(
+        serde_json::from_value::<ReadOnly>(json!({}))
+            .unwrap()
+            .max_time,
+        0.0
+    );
+}

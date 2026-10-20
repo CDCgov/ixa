@@ -87,6 +87,14 @@ root nested inside another root, for instance a region with its own start
 date, uses its own start date and falls back to the enclosing one when it
 has none.
 
+Dates are for human-readable formats. A format that reports itself as not
+human-readable through serde's `is_human_readable`, such as bincode,
+MessagePack or postcard, reads and writes the struct as written, days only,
+so a root round trips through any serde format and other tools see plain
+numbers. Reading that path needs every field's own type to be
+`Deserialize`, which the generated structs are; a type that implements
+`Calendar` by hand must derive it as well.
+
 ## Errors
 
 A date in a document with no start date is an error, as is an invalid date.
@@ -208,11 +216,48 @@ must sit above `#[derive(..)]`. A calendar struct:
 - has no generic parameters;
 - cannot use serde's `try_from`, `from`, `into` or `remote` on the struct;
 - cannot use serde's `with`, `deserialize_with`, `serialize_with` or
-  `default = "..."` on a `#[day]` field.
+  `default = "..."` on a `#[day]` or `#[days]` field, since the twin holds
+  a `Day` or a twin there rather than the model type.
+
+Unmarked fields take any serde attribute, and container attributes such as
+`rename_all`, `deny_unknown_fields` and `default` apply as usual.
+
+### Custom deserialization
+
+To validate or post-process a parameters document, keep the `#[calendar]`
+struct as the wire form and wrap it: an outer type with a hand-written
+`Deserialize` reads `Parameters`, which resolves the dates, and then checks
+or transforms the result.
+
+```rust
+use serde::de::{Deserializer, Error};
+
+#[derive(Debug)]
+struct ValidatedParameters { parameters: Parameters, first_start: f64 }
+
+impl<'de> Deserialize<'de> for ValidatedParameters {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let parameters = Parameters::deserialize(d)?;
+        if parameters.policies.iter().any(|p| p.start < 0.0) {
+            return Err(Error::custom("a policy starts before the start date"));
+        }
+        let first_start = parameters.policies.iter().map(|p| p.start).fold(f64::INFINITY, f64::min);
+        Ok(Self { parameters, first_start })
+    }
+}
+```
+
+A root that does not derive `Deserialize` keeps whatever implementation it
+is given, so a hand-written one on the root itself also works, but then no
+twin is read and dates are not resolved. To sort or filter a `#[days]` list
+during deserialization, do it after the wrapper has read the struct, since
+`deserialize_with` on that field is rejected.
 
 A struct whose wire form does not fit this shape can implement `Calendar` by
 hand and still be used as a `#[days]` field. Its twin holds `Day` in the day
-fields and converts with `Day::resolve` and `Day::from_days`:
+fields and converts with `Day::resolve` and `Day::from_days`. Both the
+struct and its twin derive `Serialize` and `Deserialize`, since a root reads
+the struct itself in binary formats and the twin in text formats:
 
 ```rust
 use ixa::calendar::{Calendar, CalendarError, Date, Day};
