@@ -1,16 +1,52 @@
 name: Benchmark Pull Requests
+run-name: Benchmark ${{ github.ref_name }}
 
+# Run from the PR's branch so caches stay scoped to that branch, not the default branch
 on:
-  pull_request:
+  workflow_dispatch:
 
 env:
   BENCH_HISTORY_BRANCH: benchmarks-history
   BENCH_HISTORY_DIR: tmp-bench-history
 
 jobs:
+  resolve-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
+      base_ref: ${{ steps.pr.outputs.base_ref }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      head_ref: ${{ steps.pr.outputs.head_ref }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+    steps:
+      - name: Look up pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
+            echo "::error::Run this workflow from a PR branch, not ${DEFAULT_BRANCH}."
+            exit 1
+          fi
+          pr="$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" \
+            --json number,state,baseRefName,baseRefOid,headRefName,isCrossRepository)"
+          if [ "$(jq -r '.state' <<<"$pr")" != "OPEN" ] || [ "$(jq -r '.isCrossRepository' <<<"$pr")" != "false" ] || [ "$(jq -r '.headRefName' <<<"$pr")" != "$BRANCH" ]; then
+            echo "::error::No open pull request found with head branch ${BRANCH} in this repository."
+            exit 1
+          fi
+          jq -r '"number=\(.number)\nbase_ref=\(.baseRefName)\nbase_sha=\(.baseRefOid)\nhead_ref=\(.headRefName)"' <<<"$pr" | tee -a "$GITHUB_OUTPUT"
+          echo "head_sha=${GITHUB_SHA}" | tee -a "$GITHUB_OUTPUT"
+
   bench-group:
     name: Benchmark Group (${{ matrix.group }})
     runs-on: ubuntu-latest
+    needs: resolve-pr
     permissions:
       contents: read
     strategy:
@@ -42,6 +78,11 @@ jobs:
 
       - name: Run criterion benchmarks for group
         id: bench
+        env:
+          BASE_REF: ${{ needs.resolve-pr.outputs.base_ref }}
+          BASE_SHA: ${{ needs.resolve-pr.outputs.base_sha }}
+          HEAD_REF: ${{ needs.resolve-pr.outputs.head_ref }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
         run: |
           set -uo pipefail
 
@@ -53,7 +94,7 @@ jobs:
           compare_status=0
           regress_status=0
 
-          git checkout --force "origin/${{ github.event.pull_request.base.ref }}"
+          git checkout --force "origin/${BASE_REF}"
           if cargo bench -p ixa-bench --bench "$target" -- --save-baseline base 2>&1 | tee "criterion-base-${group}.txt"; then
             base_status=0
           else
@@ -65,7 +106,7 @@ jobs:
             fi
           fi
 
-          git checkout --force "${{ github.event.pull_request.head.sha }}"
+          git checkout --force "${HEAD_SHA}"
           if cargo bench -p ixa-bench --bench "$target" -- --baseline-lenient base 2>&1 | tee "criterion-compare-${group}.txt"; then
             cargo run -q -p ixa-bench --bin check_criterion_regressions -- --baseline base 2>&1 | tee "criterion-regressions-${group}.txt" || regress_status=$?
           else
@@ -80,10 +121,10 @@ jobs:
             echo "base_missing_target=${base_missing_target}"
             echo "compare_status=${compare_status}"
             echo "regress_status=${regress_status}"
-            echo "base_ref=${{ github.event.pull_request.base.ref }}"
-            echo "base_sha=${{ github.event.pull_request.base.sha }}"
-            echo "head_ref=${{ github.event.pull_request.head.ref }}"
-            echo "head_sha=${{ github.event.pull_request.head.sha }}"
+            printf 'base_ref=%q\n' "${BASE_REF}"
+            printf 'base_sha=%q\n' "${BASE_SHA}"
+            printf 'head_ref=%q\n' "${HEAD_REF}"
+            printf 'head_sha=%q\n' "${HEAD_SHA}"
           } > "status-${group}.env"
 
           if [ "$base_status" -ne 0 ] || [ "$compare_status" -ne 0 ] || [ "$regress_status" -ne 0 ]; then
@@ -92,6 +133,11 @@ jobs:
 
       - name: Format group markdown
         if: ${{ always() }}
+        env:
+          BASE_REF: ${{ needs.resolve-pr.outputs.base_ref }}
+          BASE_SHA: ${{ needs.resolve-pr.outputs.base_sha }}
+          HEAD_REF: ${{ needs.resolve-pr.outputs.head_ref }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
         run: |
           set -euo pipefail
 
@@ -105,10 +151,10 @@ jobs:
             base_missing_target="unknown"
             compare_status="unknown"
             regress_status="unknown"
-            base_ref="${{ github.event.pull_request.base.ref }}"
-            base_sha="${{ github.event.pull_request.base.sha }}"
-            head_ref="${{ github.event.pull_request.head.ref }}"
-            head_sha="${{ github.event.pull_request.head.sha }}"
+            base_ref="${BASE_REF}"
+            base_sha="${BASE_SHA}"
+            head_ref="${HEAD_REF}"
+            head_sha="${HEAD_SHA}"
           fi
 
           {
@@ -149,6 +195,7 @@ jobs:
 
   hyperfine:
     runs-on: ubuntu-latest
+    needs: resolve-pr
     permissions:
       contents: read
     steps:
@@ -175,9 +222,10 @@ jobs:
   aggregate-results:
     runs-on: ubuntu-latest
     needs:
+      - resolve-pr
       - bench-group
       - hyperfine
-    if: ${{ always() }}
+    if: ${{ always() && needs.resolve-pr.result == 'success' }}
     permissions:
       contents: read
     steps:
@@ -234,17 +282,17 @@ jobs:
           path: results.md
 
       - name: Skip bench history JSON (PR not targeting main)
-        if: ${{ github.event.pull_request.base.ref != 'main' }}
+        if: ${{ needs.resolve-pr.outputs.base_ref != 'main' }}
         run: |
           set -euo pipefail
-          echo "PR targets '${{ github.event.pull_request.base.ref }}', not 'main'; skipping bench history JSON steps."
+          echo "PR targets '${{ needs.resolve-pr.outputs.base_ref }}', not 'main'; skipping bench history JSON steps."
           {
             echo "### Bench history"
-            echo "Skipping bench history JSON generation/publish because this PR targets '${{ github.event.pull_request.base.ref }}' (not 'main')."
+            echo "Skipping bench history JSON generation/publish because this PR targets '${{ needs.resolve-pr.outputs.base_ref }}' (not 'main')."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download previous bench history from benchmarks-history branch (best effort)
-        if: ${{ github.event.pull_request.base.ref == 'main' }}
+        if: ${{ needs.resolve-pr.outputs.base_ref == 'main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -263,7 +311,7 @@ jobs:
           fi
 
       - name: Merge criterion group logs
-        if: ${{ github.event.pull_request.base.ref == 'main' }}
+        if: ${{ needs.resolve-pr.outputs.base_ref == 'main' }}
         run: |
           set -euo pipefail
 
@@ -287,14 +335,14 @@ jobs:
           done
 
       - name: Create JSON results
-        if: ${{ github.event.pull_request.base.ref == 'main' }}
+        if: ${{ needs.resolve-pr.outputs.base_ref == 'main' }}
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          RUN_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number || '' }}
+          BASE_REF: ${{ needs.resolve-pr.outputs.base_ref || '' }}
+          BASE_SHA: ${{ needs.resolve-pr.outputs.base_sha || '' }}
+          HEAD_REF: ${{ needs.resolve-pr.outputs.head_ref || github.ref_name }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha || github.sha }}
+          RUN_BRANCH: ${{ needs.resolve-pr.outputs.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           node scripts/bench_results.mjs \
@@ -310,7 +358,7 @@ jobs:
             --history-out bench-history.json
 
       - name: Upload bench history artifact
-        if: ${{ github.event.pull_request.base.ref == 'main' }}
+        if: ${{ needs.resolve-pr.outputs.base_ref == 'main' }}
         uses: actions/upload-artifact@v7
         with:
           name: bench-history
@@ -318,7 +366,9 @@ jobs:
 
   comment-on-pr:
     runs-on: ubuntu-latest
-    needs: aggregate-results
+    needs:
+      - resolve-pr
+      - aggregate-results
     permissions:
       pull-requests: write
     steps:
@@ -329,7 +379,7 @@ jobs:
 
       - name: Add comment to PR
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
+          gh pr comment ${{ needs.resolve-pr.outputs.number }} \
             --repo ${{ github.repository }} \
             --body-file results.md
         env:
@@ -337,8 +387,10 @@ jobs:
 
   publish-bench-history:
     runs-on: ubuntu-latest
-    needs: aggregate-results
-    if: ${{ github.event.pull_request.base.ref == 'main' }}
+    needs:
+      - resolve-pr
+      - aggregate-results
+    if: ${{ needs.resolve-pr.outputs.base_ref == 'main' }}
     permissions:
       contents: write
     steps:
@@ -357,8 +409,8 @@ jobs:
 
       - name: Publish bench-history.json to benchmarks-history branch
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
         run: |
           set -euo pipefail
           cp bench-history.json "${BENCH_HISTORY_DIR}/bench-history.json"
