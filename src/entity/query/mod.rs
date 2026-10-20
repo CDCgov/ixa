@@ -1073,6 +1073,74 @@ mod tests {
     }
 
     #[test]
+    fn filter_entities_for_indexed_query_bitmap_and_hash_paths() {
+        let mut context = Context::new();
+        context.index_property::<Person, (Age, County)>();
+
+        let all: Vec<PersonId> = (0..200)
+            .map(|idx| {
+                context
+                    .add_entity(with!(
+                        Person,
+                        Age(28),
+                        County(idx % 2),
+                        Height(160),
+                        RiskCategory::Low
+                    ))
+                    .unwrap()
+            })
+            .collect();
+
+        // Bitmap path, reversed to check order is preserved.
+        let mut candidates: Vec<PersonId> = all.iter().rev().copied().collect();
+        context.filter_entities(&mut candidates, with!(Person, County(0), Age(28)));
+        let expected: Vec<PersonId> = (0..200)
+            .rev()
+            .filter(|i| i % 2 == 0)
+            .map(PersonId::new)
+            .collect();
+        assert_eq!(candidates, expected);
+
+        // Hash path: more members than candidates.
+        let mut few = vec![PersonId::new(199), PersonId::new(4), PersonId::new(7)];
+        context.filter_entities(&mut few, with!(Person, County(0), Age(28)));
+        assert_eq!(few, vec![PersonId::new(4)]);
+
+        let mut none = all.clone();
+        context.filter_entities(&mut none, with!(Person, County(5), Age(28)));
+        assert!(none.is_empty());
+
+        // Hash path: a sparse set exceeds the bitmap size bound.
+        for _ in 200..2000 {
+            context
+                .add_entity(with!(
+                    Person,
+                    Age(28),
+                    County(3),
+                    Height(160),
+                    RiskCategory::Low
+                ))
+                .unwrap();
+        }
+        let far: Vec<PersonId> = (0..2)
+            .map(|_| {
+                context
+                    .add_entity(with!(
+                        Person,
+                        Age(28),
+                        County(7),
+                        Height(160),
+                        RiskCategory::Low
+                    ))
+                    .unwrap()
+            })
+            .collect();
+        let mut sparse = vec![far[1], PersonId::new(5), far[0]];
+        context.filter_entities(&mut sparse, with!(Person, County(7), Age(28)));
+        assert_eq!(sparse, vec![far[1], far[0]]);
+    }
+
+    #[test]
     fn entity_property_tuple_basic() {
         use super::EntityPropertyTuple;
 

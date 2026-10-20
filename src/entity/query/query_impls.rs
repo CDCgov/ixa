@@ -9,6 +9,7 @@ use crate::entity::multi_property::QueryIdentityId;
 use crate::entity::property::Property;
 use crate::entity::query::{QueryInternal, ResolvedQuery};
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
+use crate::hashing::IndexSet;
 use crate::Context;
 
 impl<E: Entity> QueryInternal<E> for () {
@@ -206,6 +207,38 @@ impl<E: Entity, P1: Property<E>> QueryInternal<E> for (P1,) {
     }
 }
 
+/// Retains the members of `index_set`, using a bitmap when the set is small relative to
+/// the candidates so the hot loop does not depend on the hash lookup being inlined.
+fn retain_in_index_set<E: Entity>(
+    entities: &mut Vec<EntityId<E>>,
+    index_set: &IndexSet<EntityId<E>>,
+) {
+    const WORDS_PER_CANDIDATE: usize = 8;
+
+    if index_set.is_empty() {
+        entities.clear();
+        return;
+    }
+    let words = index_set
+        .iter()
+        .map(|entity_id| entity_id.0 / 64 + 1)
+        .max()
+        .unwrap_or(0);
+    if index_set.len() > entities.len() || words > entities.len() * WORDS_PER_CANDIDATE {
+        entities.retain(|entity_id| index_set.contains(entity_id));
+        return;
+    }
+    let mut members = vec![0u64; words];
+    for entity_id in index_set {
+        members[entity_id.0 / 64] |= 1 << (entity_id.0 % 64);
+    }
+    entities.retain(|entity_id| {
+        members
+            .get(entity_id.0 / 64)
+            .is_some_and(|word| word & (1 << (entity_id.0 % 64)) != 0)
+    });
+}
+
 macro_rules! impl_query {
     ($ct:expr) => {
         seq!(N in 0..$ct {
@@ -341,7 +374,7 @@ macro_rules! impl_query {
                         );
                         match lookup_result {
                             $crate::entity::index::IndexSetResult::Set(entity_set) => {
-                                entities.retain(|entity_id| entity_set.contains(entity_id));
+                                retain_in_index_set(entities, entity_set);
                                 return;
                             }
                             $crate::entity::index::IndexSetResult::Empty => {
