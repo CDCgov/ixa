@@ -41,6 +41,7 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: WASM tests
+        timeout-minutes: 20
         run: mise run test:wasm
         env:
           RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
