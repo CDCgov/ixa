@@ -1,7 +1,9 @@
 //! The `#[calendar]` attribute from a crate that uses ixa.
 
 use ixa::calendar;
-use ixa::calendar::{Calendar, CalendarError, Date, Day};
+use ixa::calendar::{
+    Calendar, CalendarContext, CalendarError, Date, Day, FieldOptions, WeekSystem,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -11,13 +13,13 @@ use serde_json::json;
 struct Policy {
     #[serde(default)]
     name: String,
-    #[day]
+    #[calendar]
     #[serde(default)]
     start: f64,
-    #[day]
+    #[calendar]
     #[serde(default)]
     end: Option<f64>,
-    /// A duration: not marked.
+    #[calendar(duration)]
     #[serde(default)]
     delay: f64,
 }
@@ -26,7 +28,7 @@ struct Policy {
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EndRunConditions {
-    #[day(inclusive)]
+    #[calendar(inclusive)]
     max_time: f64,
     #[serde(default)]
     max_infections: Option<u64>,
@@ -48,17 +50,22 @@ impl Calendar for Importation {
 
     fn from_calendar(
         wire: CalendarImportation,
-        start: Option<Date>,
+        cx: CalendarContext,
+        _field: FieldOptions,
     ) -> Result<Self, CalendarError> {
         Ok(Self {
-            day: wire.day.resolve(start, false)?,
+            day: wire.day.resolve(cx, FieldOptions::default())?,
         })
     }
 
-    fn to_calendar(&self, start: Option<Date>) -> CalendarImportation {
+    fn to_calendar(&self, cx: CalendarContext, _field: FieldOptions) -> CalendarImportation {
         CalendarImportation {
-            day: Day::from_days(self.day, start, false),
+            day: Day::from_days(self.day, cx, FieldOptions::default()),
         }
+    }
+
+    fn shift_days(&mut self, days: f64) {
+        self.day += days;
     }
 }
 
@@ -66,24 +73,27 @@ impl Calendar for Importation {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Parameters {
-    #[reference]
+    #[calendar(reference)]
     #[serde(default)]
     start_date: Option<Date>,
-    #[days]
+    #[calendar]
     #[serde(default)]
     policies: Vec<Policy>,
-    #[days]
+    #[calendar]
     importations: Vec<Importation>,
-    #[days]
+    #[calendar]
     end_run_conditions: EndRunConditions,
-    #[days]
+    #[calendar]
     #[serde(default)]
     regions: Option<Policy>,
     seed: u64,
 }
 
-fn start() -> Option<Date> {
-    Some("2026-05-14".parse().unwrap())
+fn start() -> CalendarContext {
+    CalendarContext {
+        start: Some("2026-05-14".parse().unwrap()),
+        weeks: None,
+    }
 }
 
 #[test]
@@ -190,9 +200,12 @@ fn a_date_needs_a_start_date_and_a_bad_date_says_why() {
         json!({"name": "", "start": 5.0, "end": 9.0, "delay": 0.0})
     );
     // A struct converts on its own, given the start date.
-    let wire = p.to_calendar(start());
+    let wire = p.to_calendar(start(), FieldOptions::default());
     assert_eq!(wire.start, Day::CalendarDate("2026-05-19".parse().unwrap()));
-    assert_eq!(Policy::from_calendar(wire, start()).unwrap(), p);
+    assert_eq!(
+        Policy::from_calendar(wire, start(), FieldOptions::default()).unwrap(),
+        p
+    );
     assert_eq!(CalendarPolicy::default().start, Day::DaysFromStart(0.0));
     let end: CalendarEndRunConditions = serde_json::from_value(json!({"maxTime": 3})).unwrap();
     assert_eq!(end.max_time, Day::DaysFromStart(3.0));
@@ -206,20 +219,20 @@ mod bare {
     #[calendar]
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
     struct Window {
-        #[day]
+        #[calendar]
         from: f64,
-        #[day(inclusive)]
+        #[calendar(inclusive)]
         to: Option<f64>,
     }
 
     #[calendar]
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
     struct Settings {
-        #[reference]
+        #[calendar(reference)]
         start: ixa::calendar::Date,
-        #[days]
+        #[calendar]
         windows: Vec<Window>,
-        #[days]
+        #[calendar]
         current: Option<Window>,
     }
 
@@ -252,7 +265,7 @@ fn native_toml_dates_and_quoted_dates_both_read() {
         "#,
     )
     .unwrap();
-    assert_eq!(p.start_date, start());
+    assert_eq!(p.start_date, start().start);
     assert_eq!((p.policies[0].start, p.policies[0].end), (18.0, Some(48.0)));
     assert_eq!(p.importations[0].day, -13.0);
     assert_eq!(p.end_run_conditions.max_time, 84.0);
@@ -270,18 +283,18 @@ mod nested {
     #[calendar]
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
     struct Region {
-        #[reference]
+        #[calendar(reference)]
         start: Option<Date>,
-        #[day]
+        #[calendar]
         x: f64,
     }
 
     #[calendar]
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
     struct Outer {
-        #[reference]
+        #[calendar(reference)]
         start: Option<Date>,
-        #[days]
+        #[calendar]
         regions: Vec<Region>,
     }
 
@@ -315,6 +328,42 @@ mod nested {
             "{err}"
         );
     }
+
+    #[test]
+    fn moving_day_zero_keeps_every_date_including_nested_roots() {
+        let mut o: Outer = serde_json::from_value(json!({
+            "start": "2026-01-01",
+            "regions": [
+                {"start": "2026-02-01", "x": "2026-03-01"},
+                {"start": null, "x": "2026-01-03"},
+            ]
+        }))
+        .unwrap();
+        let before = serde_json::to_value(o.dated()).unwrap();
+        o.shift_days(30.0);
+        o.shift_start_dates(-30).unwrap();
+        assert_eq!(o.start, Some("2025-12-02".parse().unwrap()));
+        assert_eq!(o.regions[0].start, Some("2026-01-02".parse().unwrap()));
+        assert_eq!(o.regions[1].start, None);
+        let after = serde_json::to_value(o.dated()).unwrap();
+        for i in 0..2 {
+            assert_eq!(after["regions"][i]["x"], before["regions"][i]["x"]);
+        }
+    }
+
+    #[test]
+    fn a_start_date_moved_out_of_range_names_the_field() {
+        let mut o: Outer = serde_json::from_value(json!({
+            "start": "2026-01-01",
+            "regions": [{"start": "0000-01-05", "x": 0}]
+        }))
+        .unwrap();
+        let err = o.shift_start_dates(-30).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            "regions[0].start: 0000-01-05 moved -30 days is outside years 0 to 9999"
+        );
+    }
 }
 
 #[test]
@@ -341,13 +390,40 @@ fn a_root_round_trips_through_a_binary_format() {
     assert_eq!(Parameters::try_from(dated).unwrap(), p);
 }
 
+#[test]
+fn a_struct_without_a_start_date_reads_units_on_its_own() {
+    let p: Policy =
+        serde_json::from_value(json!({"start": "2w", "end": 20, "delay": "1d"})).unwrap();
+    assert_eq!((p.start, p.end, p.delay), (14.0, Some(20.0), 1.0));
+
+    let err = serde_json::from_value::<Policy>(json!({"start": "2026-06-01"}))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.starts_with("start: 2026-06-01 is a date, but there is no start date"),
+        "{err}"
+    );
+    let err = serde_json::from_value::<Policy>(json!({"delay": -1}))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.starts_with("delay: a duration cannot be negative: -1"),
+        "{err}"
+    );
+
+    let config = bincode_next::config::standard();
+    let bytes = bincode_next::serde::encode_to_vec(&p, config).unwrap();
+    let (back, _): (Policy, _) = bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+    assert_eq!(back, p);
+}
+
 #[calendar]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReadOnly {
-    #[reference]
+    #[calendar(reference)]
     start_date: Option<Date>,
-    #[day]
+    #[calendar]
     #[serde(default)]
     max_time: f64,
 }
@@ -364,4 +440,177 @@ fn a_root_may_derive_deserialize_without_serialize() {
             .max_time,
         0.0
     );
+}
+
+mod weeks {
+    use super::*;
+
+    #[calendar]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct Campaign {
+        #[calendar(week)]
+        start: f64,
+        #[calendar(week, inclusive)]
+        end: Option<f64>,
+        #[calendar(duration)]
+        #[serde(default)]
+        ramp: f64,
+        #[calendar(duration, signed)]
+        #[serde(default)]
+        lead: f64,
+        #[calendar]
+        #[serde(default)]
+        report_days: Vec<f64>,
+    }
+
+    #[calendar(weeks = "epi")]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct Parameters {
+        #[calendar(reference)]
+        start_date: Option<Date>,
+        #[calendar]
+        campaigns: Vec<Campaign>,
+        #[calendar(inclusive)]
+        max_time: f64,
+    }
+
+    #[calendar(weeks = "iso")]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct IsoParameters {
+        #[calendar(reference)]
+        start_date: Option<Date>,
+        #[calendar]
+        campaigns: Vec<Campaign>,
+    }
+
+    #[calendar]
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct NoWeeks {
+        #[calendar(reference)]
+        start_date: Option<Date>,
+        #[calendar]
+        campaigns: Vec<Campaign>,
+    }
+
+    fn document() -> serde_json::Value {
+        json!({
+            "start_date": "2026-05-14",
+            "campaigns": [
+                {"start": "2026-W27", "end": "2026-W30", "ramp": "1w 2d", "lead": "-3d",
+                 "report_days": ["2026-06-01", "2026-W28", "10d", 3]},
+                {"start": 2.5, "end": "2026-08-01", "ramp": "36h"},
+            ],
+            "max_time": "26w"
+        })
+    }
+
+    #[test]
+    fn days_read_as_dates_weeks_or_units() {
+        let p: Parameters = serde_json::from_value(document()).unwrap();
+        let c = &p.campaigns[0];
+        assert_eq!((c.start, c.end), (52.0, Some(80.0)));
+        assert_eq!((c.ramp, c.lead), (9.0, -3.0));
+        assert_eq!(c.report_days, vec![18.0, 59.0, 10.0, 3.0]);
+        assert_eq!(p.campaigns[1].end, Some(80.0));
+        assert_eq!(p.campaigns[1].ramp, 1.5);
+        assert_eq!(p.max_time, 182.0);
+        assert_eq!(Parameters::WEEK_SYSTEM, Some(WeekSystem::Epi));
+
+        // The root's week system is passed down.
+        let iso: IsoParameters = serde_json::from_value(document()).unwrap();
+        assert_eq!(
+            (iso.campaigns[0].start, iso.campaigns[0].end),
+            (46.0, Some(74.0))
+        );
+    }
+
+    #[test]
+    fn dated_writes_weeks_where_a_field_asks_for_them() {
+        let p: Parameters = serde_json::from_value(document()).unwrap();
+        let dated = serde_json::to_value(p.dated()).unwrap();
+        let c = &dated["campaigns"][0];
+        assert_eq!(c["start"], "2026-W27");
+        assert_eq!(c["end"], "2026-W30");
+        assert_eq!(c["ramp"], 9.0);
+        assert_eq!(
+            c["report_days"],
+            json!(["2026-06-01", "2026-07-12", "2026-05-24", "2026-05-17"])
+        );
+        // An inclusive end on a week boundary is written as that week.
+        assert_eq!(dated["campaigns"][1]["end"], "2026-W30");
+        assert_eq!(dated["max_time"], "2026-11-11");
+        let back: Parameters = serde_json::from_value(dated).unwrap();
+        assert_eq!(back, p);
+    }
+
+    #[test]
+    fn shift_days_moves_points_but_not_durations() {
+        let mut p: Parameters = serde_json::from_value(document()).unwrap();
+        p.shift_days(7.0);
+        let c = &p.campaigns[0];
+        assert_eq!((c.start, c.end), (59.0, Some(87.0)));
+        assert_eq!((c.ramp, c.lead), (9.0, -3.0));
+        assert_eq!(c.report_days, vec![25.0, 66.0, 17.0, 10.0]);
+        assert_eq!(p.max_time, 189.0);
+        assert_eq!(p.start_date, Some("2026-05-14".parse().unwrap()));
+    }
+
+    #[test]
+    fn errors_say_what_is_wrong_where() {
+        let err = |doc: serde_json::Value| {
+            serde_json::from_value::<Parameters>(doc)
+                .unwrap_err()
+                .to_string()
+        };
+        let mut doc = document();
+        doc["campaigns"][0]["ramp"] = json!("2026-W01");
+        assert!(err(doc).starts_with("campaigns[0].ramp: a duration cannot be the week 2026-W01"));
+        let mut doc = document();
+        doc["campaigns"][1]["ramp"] = json!(-1);
+        assert!(err(doc).starts_with("campaigns[1].ramp: a duration cannot be negative: -1"));
+        let mut doc = document();
+        doc["campaigns"][0]["start"] = json!("2026-W53");
+        assert!(err(doc).starts_with("campaigns[0].start: 2026-W53: 2026 has 52 epi weeks"));
+        let mut doc = document();
+        doc["max_time"] = json!("6 months");
+        assert!(err(doc).contains("months and years have no fixed length"));
+
+        let e = serde_json::from_value::<NoWeeks>(document())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.starts_with("campaigns[0].start: 2026-W27 is a week, but no week system is set"),
+            "{e}"
+        );
+        assert_eq!(NoWeeks::WEEK_SYSTEM, None);
+    }
+
+    #[test]
+    fn toml_reads_weeks_and_units() {
+        let p: Parameters = toml::from_str(
+            r#"
+            start_date = 2026-05-14
+            max_time = "26w"
+
+            [[campaigns]]
+            start = "2026-W27"
+            ramp = "2w"
+            report_days = [2026-06-01, "2026-W28"]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(p.campaigns[0].start, 52.0);
+        assert_eq!(p.campaigns[0].ramp, 14.0);
+        assert_eq!(p.campaigns[0].report_days, vec![18.0, 59.0]);
+    }
+
+    #[test]
+    fn weeks_round_trip_through_a_binary_format() {
+        let config = bincode_next::config::standard();
+        let p: Parameters = serde_json::from_value(document()).unwrap();
+        let bytes = bincode_next::serde::encode_to_vec(p.dated(), config).unwrap();
+        let (dated, _): (CalendarParameters, _) =
+            bincode_next::serde::decode_from_slice(&bytes, config).unwrap();
+        assert_eq!(Parameters::try_from(dated).unwrap(), p);
+    }
 }
