@@ -219,12 +219,17 @@ fn retain_in_index_set<E: Entity>(
         entities.clear();
         return;
     }
+    // Checked before sizing the bitmap, which walks the whole index set.
+    if index_set.len() > entities.len() {
+        entities.retain(|entity_id| index_set.contains(entity_id));
+        return;
+    }
     let words = index_set
         .iter()
         .map(|entity_id| entity_id.0 / 64 + 1)
         .max()
         .unwrap_or(0);
-    if index_set.len() > entities.len() || words > entities.len() * WORDS_PER_CANDIDATE {
+    if words > entities.len() * WORDS_PER_CANDIDATE {
         entities.retain(|entity_id| index_set.contains(entity_id));
         return;
     }
