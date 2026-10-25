@@ -1132,7 +1132,10 @@ macro_rules! impl_derived_property {
                 $(context.get_property::<$entity, $dependency>(entity_id)),*,
                 $(
                     context.get_global_property_value($global_dependency)
-                        .expect(&format!("Global property {} not initialized", stringify!($global_dependency)))
+                        .unwrap_or_else(|| panic!(
+                            "Global property {} not initialized; set it before reading a derived property that depends on it, including creating entities while the derived property has subscribers",
+                            stringify!($global_dependency)
+                        ))
                 ),*
             );
             $derive_fn

@@ -26,7 +26,8 @@ indexing APIs and will be built from the restored values.
 A population artifact may be imported only by the same build artifact that
 exported it. Importing it with another build has unspecified behavior. Fully
 qualified Rust type names are stored for routing and diagnostics, but they are not
-a schema-versioning mechanism.
+a schema-versioning mechanism. Saving fails if two types share a type name, as
+same-named items declared in sibling `const _: () = { .. };` blocks do.
 
 Population artifacts are trusted application outputs, not a hardened interchange
 format. Property values must support `serde::Serialize` and owned

@@ -181,7 +181,8 @@ impl<E: Entity> EntityCreatedEvent<E> {
 ///
 /// Only emitted while the event has subscribers. The value is read at creation, so a derived
 /// property reports the value computed from the supplied dependencies, and a constant property
-/// its default when no value was supplied.
+/// its default when no value was supplied. Global properties a subscribed derived property
+/// depends on must therefore be set before entities are created, or `add_entity` panics.
 pub struct PropertyInitializedEvent<E: Entity, P: Property<E>> {
     /// The newly created entity.
     pub entity_id: EntityId<E>,
@@ -247,7 +248,22 @@ mod tests {
 
     define_property!(struct Age(u8), Person );
 
-    // define_global_property!(Threshold, u8);
+    crate::define_global_property!(Threshold, u8);
+
+    define_entity!(ThresholdPerson);
+
+    define_property!(struct Years(u8), ThresholdPerson);
+
+    define_derived_property!(
+        struct AboveThreshold(bool),
+        ThresholdPerson,
+        [Years],
+        [Threshold],
+        |years, threshold| {
+            let years: Years = years;
+            AboveThreshold(years.0 > *threshold)
+        }
+    );
 
     // An enum
     define_derived_property!(
@@ -896,5 +912,17 @@ mod tests {
         context.subscribe_to_event(|_context, _event: PropertyChangeEvent<Person, AgeGroup>| {
             unreachable!();
         });
+    }
+
+    #[test]
+    #[should_panic(expected = "set it before reading a derived property")]
+    fn initialized_event_panics_on_unset_global_dependency() {
+        let mut context = Context::new();
+        context.subscribe_to_event(
+            |_, _: PropertyInitializedEvent<ThresholdPerson, AboveThreshold>| {},
+        );
+        context
+            .add_entity(with!(ThresholdPerson, Years(50)))
+            .unwrap();
     }
 }

@@ -22,7 +22,7 @@ use crate::entity::property_store::PropertyStore;
 use crate::entity::property_store_core::PropertyStoreCore;
 use crate::entity::schema_registry::SCHEMA_REGISTRY;
 use crate::entity::{Entity, EntityId, PopulationIterator};
-use crate::IxaError;
+use crate::{HashSet, IxaError};
 
 /// Returns the number of registered entity types.
 pub(crate) fn get_registered_entity_count() -> usize {
@@ -83,13 +83,22 @@ impl EntityStore {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut builder = tempfile::Builder::new();
+        // tempfile defaults to 0600; the artifact should follow the umask like any written file.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            builder.permissions(std::fs::Permissions::from_mode(0o666));
+        }
+        let mut temporary = builder.tempfile_in(parent)?;
 
         {
             let mut writer = BufWriter::new(temporary.as_file_mut());
             self.encode_population(&mut writer)?;
             writer.flush()?;
         }
+        temporary.as_file().sync_all()?;
 
         temporary
             .persist(path)
@@ -169,6 +178,7 @@ impl EntityStore {
             .iter()
             .map(|store| store.population_manifest())
             .collect();
+        check_unique_type_names(&manifest)?;
 
         let mut output = writer;
         let mut writer = bincode_next::IoWriter::new(&mut output);
@@ -269,6 +279,29 @@ impl EntityStore {
             .downcast_mut::<PropertyStoreCore<E>>()
             .expect("Entity type does not match the property store registered at its index. You must use the `define_entity!` or `impl_entity!` macro to create an entity.")
     }
+}
+
+/// Persistence matches entity and property types by `type_name`, which is not unique for items
+/// declared in sibling anonymous scopes, such as two `const _: () = { .. };` blocks.
+fn check_unique_type_names(manifest: &[EntityManifest]) -> Result<(), IxaError> {
+    let ambiguous = |name: &str| IxaError::InvalidPopulation {
+        message: format!(
+            "type name {name} is shared by more than one type, so it cannot be persisted"
+        ),
+    };
+    let mut entity_names = HashSet::default();
+    for entity in manifest {
+        if !entity_names.insert(entity.entity_type_name.as_str()) {
+            return Err(ambiguous(&entity.entity_type_name));
+        }
+        let mut property_names = HashSet::default();
+        for name in &entity.property_type_names {
+            if !property_names.insert(name.as_str()) {
+                return Err(ambiguous(name));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -560,8 +593,9 @@ mod tests {
     #[cfg(test)]
     mod population_persistence {
         use std::io::{Cursor, Write as _};
+        use std::path::Path;
 
-        use super::super::EntityManifest;
+        use super::super::{check_unique_type_names, EntityManifest};
         use crate::prelude::*;
         use crate::{
             define_derived_property, define_entity, define_property, impl_property, with, IxaError,
@@ -789,6 +823,36 @@ mod tests {
 
             let loaded = Context::from_population(&path).unwrap();
             assert_eq!(loaded.get_entity_count::<PersistencePerson>(), 2);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn save_population_follows_the_umask() {
+            use std::os::unix::fs::PermissionsExt;
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let reference = directory.path().join("reference.bin");
+            std::fs::write(&reference, b"").unwrap();
+            Context::new().save_population(&path).unwrap();
+            let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&path), mode(&reference));
+        }
+
+        #[test]
+        fn ambiguous_type_names_cannot_be_persisted() {
+            let entity = |name: &str, properties: &[&str]| EntityManifest {
+                entity_type_name: name.to_owned(),
+                entity_count: 0,
+                property_type_names: properties.iter().map(|&p| p.to_owned()).collect(),
+            };
+            assert!(matches!(
+                check_unique_type_names(&[entity("a::_::A", &[]), entity("a::_::A", &[])]),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
+            assert!(matches!(
+                check_unique_type_names(&[entity("a::A", &["a::_::P", "a::_::P"])]),
+                Err(IxaError::InvalidPopulation { .. })
+            ));
         }
 
         #[test]

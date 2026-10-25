@@ -128,15 +128,6 @@ impl SchemaRegistry {
             return existing_id;
         }
 
-        assert!(
-            !builder
-                .entities
-                .iter()
-                .any(|entry| entry.entity_type_name == descriptor.entity_type_name),
-            "Ixa internal error: duplicate entity type name {}",
-            descriptor.entity_type_name
-        );
-
         let id = builder.entities.len();
         builder.entities.push(EntityRegistrationBuilder {
             concrete_entity_type_id: descriptor.concrete_entity_type_id,
@@ -210,16 +201,6 @@ impl SchemaRegistry {
             property_index.store(existing_id, Ordering::Release);
             return existing_id;
         }
-
-        assert!(
-            !entity
-                .properties
-                .iter()
-                .any(|entry| entry.property_type_name == descriptor.property_type_name),
-            "Ixa internal error: duplicate property type name {} for entity {}",
-            descriptor.property_type_name,
-            entity.entity_type_name
-        );
 
         // Dependency discovery is generic over this entity type, so the prepared IDs belong to
         // this entity's namespace. Bare entity-local IDs retain no additional provenance here; the
