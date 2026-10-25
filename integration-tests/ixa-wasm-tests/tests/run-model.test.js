@@ -150,12 +150,24 @@ test('query profiling prints in the browser and a web worker', async ({ page }) 
 
     expect(browserResult).toBe(100);
     expect(workerResult).toBe(100);
-    expect(profilingOutput.filter(line => line.includes('Execution Summary'))).toHaveLength(2);
-    expect(profilingOutput.filter(line => line.includes('Span Label'))).toHaveLength(2);
-    expect(profilingOutput.filter(line => line.includes('Event Label'))).toHaveLength(2);
-    expect(profilingOutput.filter(line => line.includes('Query') && line.includes('Count'))).toHaveLength(2);
-    expect(profilingOutput.filter(line => line.includes('wasm_query_profiling'))).toHaveLength(4);
-    expect(profilingOutput.filter(line => line.includes('Person: (InfectionStatus)'))).toHaveLength(2);
+    // Worker console messages are delivered asynchronously, so they may still
+    // be arriving after the worker has posted its result.
+    const count = predicate => profilingOutput.filter(predicate).length;
+    await expect.poll(() => ({
+        executionSummary: count(line => line.includes('Execution Summary')),
+        spanLabel: count(line => line.includes('Span Label')),
+        eventLabel: count(line => line.includes('Event Label')),
+        queryHeader: count(line => line.includes('Query') && line.includes('Count')),
+        label: count(line => line.includes('wasm_query_profiling')),
+        query: count(line => line.includes('Person: (InfectionStatus)')),
+    })).toEqual({
+        executionSummary: 2,
+        spanLabel: 2,
+        eventLabel: 2,
+        queryHeader: 2,
+        label: 4,
+        query: 2,
+    });
 });
 
 test('real wasm panic emits console error', async ({ page }) => {
