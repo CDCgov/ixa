@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.1...ixa-derive-v2.1.0) - 2026-10-26
+
+### Added
+
+- `#[calendar]` attribute macro for calendar dates, weeks and durations in parameter structs,
+  re-exported as `ixa::calendar`
+
 ## [2.0.1](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0...ixa-derive-v2.0.1) - 2026-08-04
 
 ### Other

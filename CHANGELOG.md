@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0](https://github.com/CDCgov/ixa/compare/ixa-v3.1.0...ixa-v4.0.0) - 2026-10-26
+
+### Migrating from 3.x
+
+Most models need no changes. Check for:
+
+- **`PropertyInitializedEvent` now fires for every subscribed property**, including defaults and
+  derived properties, not just values passed to `add_entity`. If you subscribe to it (or use a
+  `PropertyValueCountTrigger`) on a derived property that reads a global property, set the
+  global before creating entities.
+- **`IxaError` has new population variants**, so an exhaustive `match` on it needs a new arm.
+- **The `web-sys` cargo feature is removed.** Drop it from your `features` list.
+- **Minimum Rust version is 1.90.**
+- **Execution statistics are no longer logged when printing is off** (`--no-stats`, or running
+  a `Context` without the runner).
+- Rarely used internals are no longer public: `Entity::as_any`, `BxEntity`,
+  `Property::dependents`, the `PropertyList` methods, and the `entity_store` / `property_store`
+  modules.
+
+### Added
+
+- Calendar dates in parameters: the `#[calendar]` attribute lets day fields be written as
+  numbers, durations with units (`2w`, `1w 2d`, `36h`), `YYYY-MM-DD` dates or ISO / MMWR
+  `YYYY-Www` weeks (dates and weeks are converted using a start date). `ContextCalendarExt`
+  stores the start date and week system for reports. See the [calendar dates](https://ixa.rs/book/topics/calendar-dates.html)
+  book topic.
+- Whole population persistence with `Context::save_population` and `Context::from_population`
+  ([#1065](https://github.com/CDCgov/ixa/pull/1065)). Properties need serde to be saved; one
+  with a default can opt out with `persist = false` and loads as that default.
+- `output!` macro for user-facing output on native and Wasm targets
+  ([#1056](https://github.com/CDCgov/ixa/pull/1056))
+
+### Changed
+
+- `PropertyInitializedEvent` is emitted for every subscribed property, including defaults and
+  derived properties
+- `PropertyValueCountTrigger` counts from `PropertyInitializedEvent` and
+  `PropertyChangeEvent` instead of reading live values
+- Refactor entity/property storage and registration into a single schema registry
+  ([#1062](https://github.com/CDCgov/ixa/pull/1062))
+- Remove obsolete `Entity` type erasure ([#1063](https://github.com/CDCgov/ixa/pull/1063))
+- Filter indexed queries with a bitmap instead of hashing every candidate
+
+### Fixed
+
+- `PropertyValueCountTrigger` no longer double counts a value changed in the same tick the
+  entity was created
+- Unsubscribing an event handler preserves the order of the remaining handlers
+
+### Other
+
+- bump rust-toolchain from 1.97.1 to 1.98.0 ([#1053](https://github.com/CDCgov/ixa/pull/1053))
+- dependency and CI updates
+  ([#1055](https://github.com/CDCgov/ixa/pull/1055), [#1057](https://github.com/CDCgov/ixa/pull/1057),
+  [#1064](https://github.com/CDCgov/ixa/pull/1064))
+
 ## [3.1.0](https://github.com/CDCgov/ixa/compare/ixa-v3.0.0...ixa-v3.1.0) - 2026-08-24
 
 ### Added
