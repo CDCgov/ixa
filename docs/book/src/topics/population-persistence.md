@@ -10,7 +10,7 @@ let context = Context::from_population("population.bin")?;
 ```
 
 `save_population` includes every registered entity type and every non-derived
-property, including the sparse backing representation of constant-default
+property not declared with `persist = false`, including the sparse backing representation of constant-default
 properties. `from_population` creates a fresh `Context`, validates that the
 artifact has exactly the current entity and property schema, and restores those
 counts and values without emitting entity or property events.
@@ -30,10 +30,29 @@ a schema-versioning mechanism. Saving fails if two types share a type name, as
 same-named items declared in sibling `const _: () = { .. };` blocks do.
 
 Population artifacts are trusted application outputs, not a hardened interchange
-format. Property values must support `serde::Serialize` and owned
+format. Persisted property values must support `serde::Serialize` and owned
 `serde::Deserialize`, and their Serde representation must be compatible with
 `bincode-next`. In particular, representations that require a self-describing
 Serde decoder are not supported.
+
+## Skipping properties
+
+`save_population` returns an error listing every non-derived property without
+Serde, so a forgotten derive is not silently dropped. To skip a property on
+purpose, declare it with `persist = false`:
+
+```rust
+#[derive(Copy, Clone, Debug, PartialEq)]
+struct Nickname(&'static str);
+impl_property!(Nickname, Person, default_const = Nickname(""), persist = false);
+```
+
+`define_property!` accepts `persist = false` too, but it always derives Serde, so
+a property whose field type has no Serde must be declared with `impl_property!`.
+
+After loading, a skipped property holds its `default_const` for every entity.
+A required property (no `default_const`) cannot be skipped: saving fails if its
+entity type has any entities. Entity types with no entities are not checked.
 
 Saving streams binary data to a temporary file beside the destination and replaces
 an existing destination only after encoding and flushing succeed. Loading likewise

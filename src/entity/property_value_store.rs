@@ -16,7 +16,7 @@ use crate::entity::events::{
     PartialPropertyChangeEventBox, PartialPropertyChangeEventCore, PropertyChangeEvent,
 };
 use crate::entity::index::{IndexCountResult, IndexSetResult};
-use crate::entity::property::{Property, PropertyInitializationKind};
+use crate::entity::property::{Property, PropertyInitializationKind, PropertyPersistence};
 use crate::entity::property_value_store_core::PropertyValueStoreCore;
 use crate::entity::{Entity, EntityId};
 use crate::{Context, IxaError};
@@ -28,7 +28,10 @@ pub(crate) trait PropertyValueStore<E: Entity>: Any {
     fn property_type_name(&self) -> &'static str;
 
     /// Used to filter which properties are serialized and validate deserialized data.
-    fn is_derived(&self) -> bool;
+    fn is_persisted(&self) -> bool;
+
+    /// Why this property blocks saving, if it does.
+    fn unsaveable_reason(&self) -> Option<String>;
 
     /// Persists the storage.
     fn encode(
@@ -67,8 +70,29 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         std::any::type_name::<P>()
     }
 
-    fn is_derived(&self) -> bool {
-        P::is_derived()
+    fn is_persisted(&self) -> bool {
+        matches!(P::persistence(), PropertyPersistence::Persisted { .. })
+    }
+
+    fn unsaveable_reason(&self) -> Option<String> {
+        let property = std::any::type_name::<P>();
+        let entity = std::any::type_name::<E>();
+        match (P::persistence(), P::is_required()) {
+            (PropertyPersistence::MissingSerde, true) => Some(format!(
+                "required property {property} of entity {entity} does not implement \
+                 `serde::Serialize` and `serde::Deserialize`; derive them (a required property \
+                 cannot be skipped)"
+            )),
+            (PropertyPersistence::MissingSerde, false) => Some(format!(
+                "property {property} of entity {entity} does not implement `serde::Serialize` \
+                 and `serde::Deserialize`; derive them or declare it with `persist = false`"
+            )),
+            (PropertyPersistence::Skipped, true) => Some(format!(
+                "required property {property} of entity {entity} is declared with \
+                 `persist = false`; give it a `default_const` or persist it"
+            )),
+            _ => None,
+        }
     }
 
     fn encode(
@@ -76,15 +100,12 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
         entity_count: usize,
         writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
     ) -> Result<(), IxaError> {
-        debug_assert!(!P::is_derived());
+        let PropertyPersistence::Persisted { encode, .. } = P::persistence() else {
+            unreachable!("Ixa internal error: encoding a property that is not persisted");
+        };
         validate_length::<E, P>(entity_count, self.data.len())?;
 
-        bincode_next::serde::encode_into_writer(
-            &self.data,
-            writer,
-            bincode_next::config::standard(),
-        )
-        .map_err(|source| IxaError::PopulationEncodeError {
+        encode(&self.data, writer).map_err(|source| IxaError::PopulationEncodeError {
             item: format!(
                 "property {} for entity {}",
                 std::any::type_name::<P>(),
@@ -95,17 +116,14 @@ impl<E: Entity, P: Property<E>> PropertyValueStore<E> for PropertyValueStoreCore
     }
 
     fn decode(&mut self, entity_count: usize, reader: &mut dyn Read) -> Result<(), IxaError> {
-        debug_assert!(!P::is_derived());
+        let PropertyPersistence::Persisted { decode, .. } = P::persistence() else {
+            unreachable!("Ixa internal error: decoding a property that is not persisted");
+        };
         debug_assert!(self.data.is_empty());
         debug_assert!(self.index.is_none());
         debug_assert!(self.value_change_counters.is_empty());
 
-        let mut reader = reader;
-        let data: Vec<P> = bincode_next::serde::decode_from_std_read(
-            &mut reader,
-            bincode_next::config::standard(),
-        )
-        .map_err(|source| IxaError::PopulationDecodeError {
+        let data = decode(reader).map_err(|source| IxaError::PopulationDecodeError {
             item: format!(
                 "property {} for entity {}",
                 std::any::type_name::<P>(),

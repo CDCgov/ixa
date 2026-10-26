@@ -11,6 +11,8 @@ implementation.
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::io::{Read, Write};
+use std::marker::PhantomData;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -53,14 +55,67 @@ pub const fn const_str_eq(a: &str, b: &str) -> bool {
     true
 }
 
+type PopulationWriter<'a, 'w> = bincode_next::IoWriter<'a, &'w mut dyn Write>;
+
+/// How population persistence treats a property.
+#[doc(hidden)]
+pub enum PropertyPersistence<P> {
+    Persisted {
+        encode: fn(&[P], &mut PopulationWriter) -> Result<(), bincode_next::error::EncodeError>,
+        decode: fn(&mut dyn Read) -> Result<Vec<P>, bincode_next::error::DecodeError>,
+    },
+    /// Derived or `persist = false`.
+    Skipped,
+    /// No Serde and not opted out: saving fails.
+    MissingSerde,
+}
+
+/// Autoref-specialization Serde probe; resolves only at a concrete type.
+#[doc(hidden)]
+pub struct SerdeProbe<P>(pub PhantomData<P>);
+
+#[doc(hidden)]
+pub trait HasSerde<P> {
+    fn persistence(&self) -> PropertyPersistence<P>;
+}
+
+impl<P: Serialize + DeserializeOwned> HasSerde<P> for SerdeProbe<P> {
+    fn persistence(&self) -> PropertyPersistence<P> {
+        PropertyPersistence::Persisted {
+            encode: |data, writer| {
+                bincode_next::serde::encode_into_writer(
+                    data,
+                    writer,
+                    bincode_next::config::standard(),
+                )
+            },
+            decode: |mut reader| {
+                bincode_next::serde::decode_from_std_read(
+                    &mut reader,
+                    bincode_next::config::standard(),
+                )
+            },
+        }
+    }
+}
+
+#[doc(hidden)]
+pub trait NoSerde<P> {
+    fn persistence(&self) -> PropertyPersistence<P>;
+}
+
+impl<P> NoSerde<P> for &SerdeProbe<P> {
+    fn persistence(&self) -> PropertyPersistence<P> {
+        PropertyPersistence::MissingSerde
+    }
+}
+
 /// All properties must implement this trait using one of the `define_property` macros.
 ///
 /// Property values must be copyable and comparable for equality so storage and unindexed
 /// query scans can operate on them. Indexed properties must additionally implement
 /// [`IndexableProperty`].
-pub trait Property<E: Entity>:
-    Copy + Debug + PartialEq + Serialize + DeserializeOwned + 'static
-{
+pub trait Property<E: Entity>: Copy + Debug + PartialEq + 'static {
     /// Allocation-free representation of the query parts contributed by a property value.
     type QueryParts<'a>: AsRef<[&'a dyn Any]>
     where
@@ -153,6 +208,12 @@ pub trait Property<E: Entity>:
 
     /// An auxiliary helper for `non_derived_dependencies` above.
     fn collect_non_derived_dependencies(result: &mut HashSet<usize>);
+
+    /// How population persistence treats this property. The property macros override this.
+    #[doc(hidden)]
+    fn persistence() -> PropertyPersistence<Self> {
+        PropertyPersistence::MissingSerde
+    }
 }
 
 /// Marker trait for properties that can be keyed in property indexes.
