@@ -498,6 +498,10 @@ mod tests {
             }
         }
 
+        fn unsaveable_properties(&self) -> Vec<String> {
+            Vec::new()
+        }
+
         fn encode_properties(
             &self,
             _writer: &mut bincode_next::IoWriter<'_, &mut dyn std::io::Write>,

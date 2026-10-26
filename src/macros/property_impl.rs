@@ -45,8 +45,9 @@ You can implement [`Property`][crate::entity::property::Property] for existing t
 [`Property`][crate::entity::property::Property] trait implementation for you but doesn't take care
 of the `#[derive(..)]` boilerplate, so you have to remember to derive or implement the traits
 required by [`Property`][crate::entity::property::Property] for your type: `Copy`, `Clone`,
-`Debug`, `PartialEq`, `serde::Serialize`, and `serde::Deserialize`. If you want to index the
-property, it must also implement `Eq` and `Hash`.
+`Debug`, and `PartialEq`. If you want to index the property, it must also implement `Eq` and
+`Hash`. To be saved by population persistence, a non-derived property must also implement
+`serde::Serialize` and `serde::Deserialize`, or be declared with `persist = false` to skip it.
 
 If the type cannot derive `PartialEq` / `Eq` or `Hash`, for example because it contains `f32` or
 `f64`, use [`impl_property_eq!`][macro@crate::impl_property_eq],
@@ -195,7 +196,8 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, and `Copy`.
+/// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`, and the
+///   Serde traits; for a field type without Serde, use [`impl_property!`][macro@crate::impl_property].
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` as the first optional argument to suppress the default
@@ -484,19 +486,18 @@ macro_rules! impl_property_eq_hash {
 ///
 /// # Parameters
 ///
-/// Parameters must be given in the correct order.
+/// Parameters must be given in the order listed here; each optional one may be omitted.
 ///
 /// * `$property`: The identifier for the type implementing [`Property`][crate::entity::property::Property].
 /// * `$entity`: The entity type this property is associated with.
-/// * Optional parameters (each may be omitted; defaults will be used):
-///   * `compute_derived_fn = <expr>` — Function used to compute derived properties. Use `define_derived_property!` or
-///     `impl_derived_property!` instead of using this option directly.
-///   * `default_const = <expr>` — Constant default value if the property has one; implies a non-derived property.
-///   * `display_impl = <expr>` — Function converting the property value to a string; defaults to `|v| format!("{v:?}")`.
-/// * Optional parameters that should generally be left alone, used internally to implement derived properties and
-///   multi-properties:
-///   * `collect_deps_fn = <expr>` — Function used to collect property dependencies; defaults to an empty implementation.
-///   * `ctor_registration = <expr>` — Code run in the `ctor` for property registration.
+/// * `compute_derived_fn = <expr>` — Function used to compute derived properties. Use `define_derived_property!` or
+///   `impl_derived_property!` instead of using this option directly.
+/// * `default_const = <expr>` — Constant default value if the property has one; implies a non-derived property.
+/// * `persist = false` — Skip in population persistence; otherwise saving fails if the type lacks Serde.
+/// * `collect_deps_fn = <expr>` — Function used to collect property dependencies; defaults to an empty
+///   implementation. Used internally for derived properties and multi-properties.
+/// * `display_impl = <expr>` — Function converting the property value to a string; defaults to `|v| format!("{v:?}")`.
+/// * `ctor_registration = <expr>` — Code run in the `ctor` for property registration. Used internally.
 ///
 /// # Semantics
 /// - If `compute_derived_fn` is provided, the property is derived. In this case, `default_const` must be absent, and
@@ -507,6 +508,18 @@ macro_rules! impl_property_eq_hash {
 /// - If neither is provided, the property is non-derived and required/explicit; both `Property::default_const()` and
 ///   `Property::compute_derived()` panic.
 /// - If both are provided, a compile-time error is emitted.
+///
+/// # Persistence
+///
+/// ```
+/// # use ixa::{impl_property, define_entity};
+/// # define_entity!(Person);
+/// #[derive(Debug, PartialEq, Clone, Copy)]
+/// struct Nickname(&'static str);
+/// impl_property!(Nickname, Person, default_const = Nickname(""), persist = false);
+/// ```
+///
+/// Only `false` is accepted.
 #[macro_export]
 macro_rules! impl_property {
     (
@@ -514,6 +527,7 @@ macro_rules! impl_property {
         $entity:ident
         $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, default_const = $default_const:expr)?
+        $(, persist = $persist:tt)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
@@ -584,6 +598,9 @@ macro_rules! impl_property {
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::schema_registry::add_to_property_registry::<$entity, $property>();
             }),
+
+            // persistence
+            $crate::impl_property!(@select_persistence $($compute_derived_fn)? ; $($persist)?),
         );
     };
 
@@ -593,6 +610,7 @@ macro_rules! impl_property {
         $entity:ident
         $(, compute_derived_fn = $compute_derived_fn:expr)?
         $(, default_const = $default_const:expr)?
+        $(, persist = $persist:tt)?
         $(, collect_deps_fn = $collect_deps_fn:expr)?
         $(, display_impl = $display_impl:expr)?
         $(, ctor_registration = $ctor_registration:expr)?
@@ -602,6 +620,7 @@ macro_rules! impl_property {
             $entity
             $(, compute_derived_fn = $compute_derived_fn)?
             $(, default_const = $default_const)?
+            $(, persist = $persist)?
             $(, collect_deps_fn = $collect_deps_fn)?
             , display_impl = $crate::impl_property!(@unwrap_or $($display_impl)?, |value: &Self| {
                 match value.0 {
@@ -701,6 +720,7 @@ macro_rules! impl_property {
             $crate::impl_property!(@unwrap_or $($ctor_registration)?, {
                 $crate::entity::schema_registry::add_to_property_registry::<$entity, $property>();
             }),
+            $crate::entity::property::PropertyPersistence::Skipped,
         );
     };
 
@@ -734,6 +754,22 @@ macro_rules! impl_property {
         $crate::entity::property::PropertyInitializationKind::Explicit
     };
 
+    // Derived properties are never persisted; otherwise Serde is detected.
+    (@select_persistence $compute_derived_fn:expr ; ) => {
+        $crate::entity::property::PropertyPersistence::Skipped
+    };
+    (@select_persistence ; false) => {
+        $crate::entity::property::PropertyPersistence::Skipped
+    };
+    (@select_persistence ; ) => {{
+        #[allow(unused_imports)]
+        use $crate::entity::property::{HasSerde as _, NoSerde as _};
+        (&$crate::entity::property::SerdeProbe::<Self>(std::marker::PhantomData)).persistence()
+    }};
+    (@select_persistence ; $persist:tt) => {
+        compile_error!("impl_property!: the only accepted value is `persist = false`")
+    };
+
     // Helpers for defaults, a pair per macro parameter type (`expr`, `ty`).
     (@unwrap_or $value:expr, $_default:expr) => { $value };
     (@unwrap_or, $default:expr) => { $default };
@@ -758,6 +794,7 @@ macro_rules! impl_property {
         $display_impl:expr,        // A function that takes a value and returns a string representation of this property
         $collect_deps_fn:expr,     // If the property is derived, the function that computes the value
         $ctor_registration:expr,   // Code that runs in a ctor for property registration
+        $persistence:expr,         // How population persistence treats this property
     ) => {
         impl $crate::entity::property::Property<$entity> for $property {
             type QueryParts<'a> = $query_parts_type where Self: 'a;
@@ -827,6 +864,10 @@ macro_rules! impl_property {
 
             fn collect_non_derived_dependencies(result: &mut $crate::HashSet<usize>) {
                 ($collect_deps_fn)(result)
+            }
+
+            fn persistence() -> $crate::entity::property::PropertyPersistence<Self> {
+                $persistence
             }
         }
 

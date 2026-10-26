@@ -30,6 +30,9 @@ pub(crate) trait PropertyStore: Any {
     /// Creates a manifest entry for this entity for population persistence.
     fn population_manifest(&self) -> EntityManifest;
 
+    /// Why each property, if any, blocks saving this entity type.
+    fn unsaveable_properties(&self) -> Vec<String>;
+
     /// Write out all persistable properties for this entity.
     fn encode_properties(
         &self,

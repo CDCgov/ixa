@@ -393,17 +393,28 @@ impl<E: Entity> PropertyStore for PropertyStoreCore<E> {
             property_type_names: self
                 .items
                 .iter()
-                .filter(|property| !property.is_derived())
+                .filter(|property| property.is_persisted())
                 .map(|property| property.property_type_name().to_owned())
                 .collect(),
         }
+    }
+
+    fn unsaveable_properties(&self) -> Vec<String> {
+        // Nothing is lost for an entity type with no entities.
+        if self.entity_count == 0 {
+            return Vec::new();
+        }
+        self.items
+            .iter()
+            .filter_map(|property| property.unsaveable_reason())
+            .collect()
     }
 
     fn encode_properties(
         &self,
         writer: &mut bincode_next::IoWriter<'_, &mut dyn Write>,
     ) -> Result<(), IxaError> {
-        for property in self.items.iter().filter(|property| !property.is_derived()) {
+        for property in self.items.iter().filter(|property| property.is_persisted()) {
             property.encode(self.entity_count, writer)?;
         }
         Ok(())
@@ -420,7 +431,7 @@ impl<E: Entity> PropertyStore for PropertyStoreCore<E> {
         let persistent_property_count = self
             .items
             .iter()
-            .filter(|property| !property.is_derived())
+            .filter(|property| property.is_persisted())
             .count();
         if manifest.property_type_names.len() != persistent_property_count {
             return Err(IxaError::InvalidPopulation {
@@ -441,7 +452,7 @@ impl<E: Entity> PropertyStore for PropertyStoreCore<E> {
                 .items
                 .iter()
                 .position(|property| {
-                    !property.is_derived()
+                    property.is_persisted()
                         && property.property_type_name() == property_type_name.as_str()
                 })
                 .ok_or_else(|| IxaError::InvalidPopulation {

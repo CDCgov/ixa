@@ -173,6 +173,17 @@ impl EntityStore {
     /// Returns an error if a storage invariant is violated or the manifest or a property vector
     /// cannot be encoded or written.
     fn encode_population(&self, writer: &mut dyn Write) -> Result<(), IxaError> {
+        let problems: Vec<String> = self
+            .items
+            .iter()
+            .flat_map(|store| store.unsaveable_properties())
+            .collect();
+        if !problems.is_empty() {
+            return Err(IxaError::InvalidPopulation {
+                message: format!("cannot save population:\n- {}", problems.join("\n- ")),
+            });
+        }
+
         let manifest: Vec<_> = self
             .items
             .iter()
@@ -676,6 +687,57 @@ mod tests {
 
         impl_property!(FailingProperty, FailingEntity);
 
+        define_entity!(SkippedEntity);
+
+        define_property!(struct SkippedAge(u8), SkippedEntity);
+
+        // No Serde derives.
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        struct SkippedName(&'static str);
+        impl_property!(
+            SkippedName,
+            SkippedEntity,
+            default_const = SkippedName(""),
+            persist = false
+        );
+
+        define_property!(
+            struct SkippedNick(Option<u8>),
+            SkippedEntity,
+            default_const = SkippedNick(None),
+            persist = false
+        );
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        struct SkippedLabel(&'static str);
+        crate::impl_derived_property!(SkippedLabel, SkippedEntity, [SkippedAge], |age| {
+            SkippedLabel(if age.0 >= 18 { "adult" } else { "child" })
+        });
+
+        define_entity!(SkippedRequiredEntity);
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        struct SkippedRequired(&'static str);
+        impl_property!(SkippedRequired, SkippedRequiredEntity, persist = false);
+
+        define_entity!(ForgottenEntity);
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        struct Forgotten(&'static str);
+        impl_property!(Forgotten, ForgottenEntity, default_const = Forgotten(""));
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize)]
+        struct SerializeOnly(u8);
+        impl_property!(
+            SerializeOnly,
+            ForgottenEntity,
+            default_const = SerializeOnly(0)
+        );
+
+        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        struct ForgottenRequired(&'static str);
+        impl_property!(ForgottenRequired, ForgottenEntity);
+
         fn rewrite_manifest(path: &std::path::Path, edit: impl FnOnce(&mut Vec<EntityManifest>)) {
             let artifact = std::fs::read(path).unwrap();
             let mut reader = Cursor::new(&artifact);
@@ -853,6 +915,74 @@ mod tests {
                 check_unique_type_names(&[entity("a::A", &["a::_::P", "a::_::P"])]),
                 Err(IxaError::InvalidPopulation { .. })
             ));
+        }
+
+        #[test]
+        fn unpersisted_property_is_skipped_and_reset_to_its_default() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            let entity = context
+                .add_entity(with!(
+                    SkippedEntity,
+                    SkippedAge(30),
+                    SkippedName("Ada"),
+                    SkippedNick(Some(7))
+                ))
+                .unwrap();
+
+            context.save_population(&path).unwrap();
+            let mut loaded = Context::from_population(&path).unwrap();
+
+            assert_eq!(loaded.get_property::<_, SkippedAge>(entity), SkippedAge(30));
+            assert_eq!(
+                loaded.get_property::<_, SkippedName>(entity),
+                SkippedName("")
+            );
+            assert_eq!(
+                loaded.get_property::<_, SkippedNick>(entity),
+                SkippedNick(None)
+            );
+            assert_eq!(
+                loaded.get_property::<_, SkippedLabel>(entity),
+                SkippedLabel("adult")
+            );
+            loaded.set_property(entity, SkippedName("Grace"));
+            assert_eq!(
+                loaded.get_property::<_, SkippedName>(entity),
+                SkippedName("Grace")
+            );
+        }
+
+        #[test]
+        fn save_lists_every_unsaveable_property() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("population.bin");
+            let mut context = Context::new();
+            context
+                .add_entity(with!(ForgottenEntity, ForgottenRequired("x")))
+                .unwrap();
+            context
+                .add_entity(with!(SkippedRequiredEntity, SkippedRequired("x")))
+                .unwrap();
+
+            let error = context.save_population(&path).unwrap_err();
+            let IxaError::InvalidPopulation { message } = &error else {
+                panic!("{error:?}");
+            };
+            for name in [
+                std::any::type_name::<Forgotten>(),
+                std::any::type_name::<SerializeOnly>(),
+                std::any::type_name::<ForgottenRequired>(),
+                std::any::type_name::<SkippedRequired>(),
+            ] {
+                assert!(
+                    message.contains(&format!("property {name} of entity")),
+                    "{message}"
+                );
+            }
+            assert!(message.contains("cannot be skipped"), "{message}");
+            assert!(!path.exists());
         }
 
         #[test]
