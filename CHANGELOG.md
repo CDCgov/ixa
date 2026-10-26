@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0](https://github.com/CDCgov/ixa/compare/ixa-v3.1.0...ixa-v4.0.0) - 2026-10-26
+
+### Added
+
+- make serde optional for properties, with persist = false opt-out
+- calendar weeks, units, durations and shifting under a single #[calendar] field attribute
+- Emit `PropertyInitializedEvent` in `add_event`. `PropertyValueCountTrigger` now observes `PropertyInitializedEvent`
+- PartialOrd for Day, so calendar structs may derive it
+- start_of and end_of for dates written in code
+- rename #[day(through)] to #[day(inclusive)]
+- checked date arithmetic, field paths in calendar errors, start date on the context
+- calendar dates for parameters with a #[calendar] attribute
+- Whole population persistence ([#1065](https://github.com/CDCgov/ixa/pull/1065))
+- add cross-platform output macro ([#1056](https://github.com/CDCgov/ixa/pull/1056))
+
+### Fixed
+
+- query filter slowdown, duplicate type name abort, and population file mode
+- calendar roots round trip through binary serde formats
+- emit PropertyInitializedEvent for every subscribed property, including defaults and derived
+- validate date digits and years, reject serde attributes the calendar twin cannot carry
+- clippy block_scrutinee in bench registry
+
+### Other
+
+- wait for worker console output in wasm profiling test
+- allow ci type in pull request title check
+- move playwright install timeout from mise task to workflow step
+- upgrade playwright to 1.64.1
+- *(deps)* bump follow-redirects in /integration-tests/ixa-wasm-tests
+- filter indexed queries with a bitmap instead of hashing every candidate
+- publish to crates.io with trusted publishing
+- run PR benchmarks on workflow dispatch instead of every push
+- roll up open dependabot updates
+- add isolated wasm feature runtime coverage
+- rename the generated structs section
+- correct the derive limits of calendar structs
+- calendar dates book topic, trim calendar comments
+- remove obsolete Entity type erasure ([#1063](https://github.com/CDCgov/ixa/pull/1063))
+- Refactor entity/property storage hierarchy and registration ([#1062](https://github.com/CDCgov/ixa/pull/1062))
+- bump release-plz/action from 0.5.137 to 0.5.139 ([#1064](https://github.com/CDCgov/ixa/pull/1064))
+- bump release-plz/action from 0.5.134 to 0.5.137 ([#1057](https://github.com/CDCgov/ixa/pull/1057))
+- bump release-plz/action from 0.5.131 to 0.5.134 ([#1055](https://github.com/CDCgov/ixa/pull/1055))
+- bump rust-toolchain from 1.97.1 to 1.98.0 ([#1053](https://github.com/CDCgov/ixa/pull/1053))
+
 ## [3.1.0](https://github.com/CDCgov/ixa/compare/ixa-v3.0.0...ixa-v3.1.0) - 2026-08-24
 
 ### Added
