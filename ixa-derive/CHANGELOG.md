@@ -11,19 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- calendar weeks, units, durations and shifting under a single #[calendar] field attribute
-- rename #[day(through)] to #[day(inclusive)]
-- checked date arithmetic, field paths in calendar errors, start date on the context
-- calendar dates for parameters with a #[calendar] attribute
-
-### Fixed
-
-- calendar roots round trip through binary serde formats
-- validate date digits and years, reject serde attributes the calendar twin cannot carry
-
-### Other
-
-- calendar dates book topic, trim calendar comments
+- `#[calendar]` attribute macro for calendar dates, weeks and durations in parameter structs,
+  re-exported as `ixa::calendar`
 
 ## [2.0.1](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.0...ixa-derive-v2.0.1) - 2026-08-04
 
