@@ -76,11 +76,13 @@ homepage.workspace = true
 authors.workspace = true
 
 [features]
-default = ["logging"]
+default = ["logging", "core_epi"]
 
 logging = ["log4rs", "fern", "wasm-bindgen"]
 
 profiling = ["dep:sysinfo", "dep:bytesize"]
+
+core_epi = ["dep:rand_distr"]
 
 # Only used to write `cli-usage.md` from clap-generated docs.
 write_cli_usage = ["clap-markdown"]
@@ -102,6 +104,7 @@ delegate.workspace = true
 sysinfo = { workspace = true, optional = true }
 humantime.workspace = true
 bytesize = { workspace = true, optional = true }
+rand_distr = { workspace = true, optional = true }
 xxhash-rust.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
@@ -157,3 +160,8 @@ workspace = true
 # Prevent Cargo from implicitly linking `libtest` for Criterion.rs compatibility.
 # See https://github.com/CDCgov/ixa/issues/217
 bench = false
+
+[[example]]
+name = "core-epi"
+path = "examples/core-epi/main.rs"
+required-features = ["core_epi"]
