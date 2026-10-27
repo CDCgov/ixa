@@ -159,5 +159,7 @@ pub use entity::{ContextEntitiesExt, EntityPropertyTuple};
 pub mod execution_stats;
 pub mod profiling;
 
+#[cfg(feature = "core_epi")]
+pub mod core_epi;
 pub mod data_structures;
 pub mod triggers;
