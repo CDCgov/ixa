@@ -2,13 +2,11 @@
 
 use ixa::core_epi::{
     ConstantRateFn, InfectionManager, InvertibleRate, Person, PersonId, RateAssignment,
-    ScaledRateFn, TransmissionManager,
+    ScaledRateFn, StepFn, TransmissionManager,
 };
 use ixa::prelude::*;
 
 struct Sir;
-
-define_rng!(ContactRng);
 
 const POPULATION: usize = 1000;
 
@@ -18,17 +16,8 @@ impl InfectionManager<Sir> for Context {
     }
 }
 
-impl TransmissionManager<Sir> for Context {
-    // Homogeneous mixing: the default forecast, the intrinsic total.
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
-        let total = InfectionManager::<Sir>::intrinsic_infectiousness(self, person)?;
-        if !TransmissionManager::<Sir>::accept_proposal(self, person, total, forecast) {
-            return None;
-        }
-        let contact = self.sample_entity(ContactRng, Person)?;
-        (contact != person).then_some(contact)
-    }
-}
+// Homogeneous mixing: all defaults.
+impl TransmissionManager<Sir> for Context {}
 
 fn run(r0: f64) -> (Context, usize) {
     let mut context = Context::new();
@@ -96,6 +85,70 @@ fn susceptibility_modifiers_compose_and_persist_across_infection() {
         InfectionManager::<Sir>::susceptibility_multiplier(&context, person),
         0.5
     );
+}
+
+#[test]
+fn function_modifiers_follow_elapsed_time() {
+    struct Antiviral;
+    struct Vaccine;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 10.0).into()],
+    );
+    // Protection that wanes after a day, as a step function.
+    let waning = StepFn::new(0.2).step_at(1.0, 0.5);
+    InfectionManager::<Sir>::set_susceptibility_modifier_fn::<Vaccine>(
+        &mut context,
+        person,
+        move |_, _, t| waning.at(t),
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, person),
+        0.2
+    );
+    context.add_plan(2.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person),
+            0.5
+        );
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        // Treatment effect that ramps in over the first two days of infection,
+        // reading the context to check it is the one passed in.
+        InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Antiviral>(
+            ctx,
+            person,
+            |ctx, p, t| {
+                assert!(InfectionManager::<Sir>::is_infectious(ctx, p));
+                1.0 - 0.25 * t.min(2.0)
+            },
+        );
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(1.0)
+        );
+    });
+    context.add_plan(3.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(0.75)
+        );
+        // Constant and function factors compose.
+        InfectionManager::<Sir>::set_infectiousness_modifier::<Vaccine>(ctx, person, 0.5);
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(0.375)
+        );
+        InfectionManager::<Sir>::remove_infectiousness_modifier::<Antiviral>(ctx, person);
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(0.5)
+        );
+    });
+    context.execute();
+    assert_eq!(context.get_current_time(), 3.0);
 }
 
 #[test]

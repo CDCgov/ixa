@@ -33,6 +33,15 @@ const BOUND_TOLERANCE: f64 = 1e-9;
 /// 3. Attempts become transmissions based on the potential infectee's
 ///    [`susceptibility`](InfectionManager::susceptibility).
 ///
+/// Every method has a default, which together are homogeneous mixing: an
+/// empty impl is a complete model. Override
+/// [`sample_contact`](Self::sample_contact) for a different contact draw at
+/// the intrinsic rate, or [`forecast_total_infectiousness`] and
+/// [`evaluate_forecast`] when contact structure changes the rate too.
+///
+/// [`forecast_total_infectiousness`]: Self::forecast_total_infectiousness
+/// [`evaluate_forecast`]: Self::evaluate_forecast
+///
 /// The loop ends when infectiousness ends for good
 /// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness) is `None`) or
 /// the majorizing rate's integrated infectiousness is exhausted (its inverse
@@ -62,8 +71,25 @@ where
     /// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness)
     /// times the contact multiplier for wherever they are), thin with
     /// [`accept_proposal`](Self::accept_proposal), and return who they contact.
-    /// `None` drops the proposal; the loop continues.
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId>;
+    /// `None` drops the proposal; the loop continues. The default is
+    /// homogeneous mixing: the intrinsic rate is the total, and the contact
+    /// comes from [`sample_contact`](Self::sample_contact).
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let total = self.intrinsic_infectiousness(person)?;
+        if !self.accept_proposal(person, total, forecast) {
+            return None;
+        }
+        self.sample_contact(person)
+    }
+
+    /// Who `person` contacts in an attempt under the default
+    /// [`evaluate_forecast`](Self::evaluate_forecast); `None` if nobody. The
+    /// default is anyone else, uniformly.
+    fn sample_contact(&self, person: PersonId) -> Option<PersonId> {
+        self.sample(TransmissionRng, |rng| {
+            self.query(Person).sample_entity_excluding(rng, person)
+        })
+    }
 
     /// Whether a proposal at `forecast` becomes an attempt at `total`
     /// infectiousness: with probability `total / forecast`, drawing only when

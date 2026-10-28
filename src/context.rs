@@ -912,6 +912,12 @@ pub trait ContextBase: Sized {
     fn get_execution_statistics(&mut self) -> ExecutionStatistics;
     fn abort(&mut self);
 }
+impl AsRef<Context> for Context {
+    fn as_ref(&self) -> &Context {
+        self
+    }
+}
+
 impl ContextBase for Context {
     delegate::delegate! {
         to self {
