@@ -56,14 +56,6 @@ impl TransmissionManager<CoreEpiExample> for Context {
         let contact = self.sample_entity(ContactRng, Person)?;
         (contact != person).then_some(contact)
     }
-
-    fn susceptibility(&self, person: PersonId) -> f64 {
-        // Infection gives permanent immunity.
-        match self.get_property(person) {
-            InfectionStatus::Susceptible => 1.0,
-            InfectionStatus::Infected => 0.0,
-        }
-    }
 }
 
 fn main() {
