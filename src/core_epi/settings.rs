@@ -32,8 +32,9 @@
 //! `ratio * multiplier`, with one group lookup per proposal instead of one
 //! per kind.
 //!
-//! Per attempt that is a store lookup, one membership lookup per kind in the
-//! itinerary for the draw, one for the multiplier (cached per group), and two
+//! Per attempt that is a store lookup, the person's membership records (one
+//! per kind, person-major so they share a cache line) for the draw, one group
+//! record for the multiplier (cached per group) and the contact, and two
 //! uniform draws. Nothing is hashed or allocated; itineraries are small `Copy`
 //! values.
 
@@ -291,6 +292,8 @@ fn multiplier(alpha: f64, n: usize) -> f64 {
 
 /// Position of a member who has left their group but remembers it.
 const NOT_ACTIVE: u32 = u32::MAX;
+/// Group of a person who never had one of that kind.
+const NO_GROUP: u32 = u32::MAX;
 
 #[derive(Clone, Copy)]
 struct Member {
@@ -298,10 +301,16 @@ struct Member {
     position: u32,
 }
 
+impl Member {
+    const NONE: Self = Self {
+        group: NO_GROUP,
+        position: NOT_ACTIVE,
+    };
+}
+
 struct Kind {
     alpha: Option<f64>,
-    membership: EntityMap<Person, Member>,
-    /// A group everyone is in without an entry in `membership`.
+    /// A group everyone is in without an entry in `memberships`.
     population_group: Option<u32>,
     /// Groups created by external key, e.g. a line list's household ids.
     keys: HashMap<u128, u32>,
@@ -341,6 +350,9 @@ impl Group {
 /// [`define_settings!`](crate::define_settings).
 pub struct SettingsStore<S> {
     kinds: Vec<Kind>,
+    /// One `Member` per person per kind, person-major with stride
+    /// `kinds.len()`, so an attempt's lookups across kinds share a cache line.
+    memberships: Vec<Member>,
     groups: Vec<Group>,
     assignment: Option<ItineraryAssignment<S>>,
     /// Per-person overrides of the assignment.
@@ -366,11 +378,11 @@ impl<S: SettingKind> SettingsStore<S> {
                 .iter()
                 .map(|_| Kind {
                     alpha: None,
-                    membership: EntityMap::new(),
                     population_group: None,
                     keys: HashMap::default(),
                 })
                 .collect(),
+            memberships: Vec::new(),
             groups: Vec::new(),
             assignment: None,
             itineraries: EntityMap::new(),
@@ -383,22 +395,43 @@ impl<S: SettingKind> SettingsStore<S> {
             .unwrap_or_else(|| panic!("setting {} is not registered", setting.name()))
     }
 
+    /// `person`'s membership record of `setting`; `Member::NONE` if they never
+    /// had a group of it.
+    fn member(&self, person: PersonId, setting: S) -> Member {
+        self.memberships
+            .get(person.0 * self.kinds.len() + setting.index())
+            .copied()
+            .unwrap_or(Member::NONE)
+    }
+
+    fn member_mut(&mut self, person: PersonId, setting: S) -> &mut Member {
+        let stride = self.kinds.len();
+        let index = person.0 * stride + setting.index();
+        if index >= self.memberships.len() {
+            self.memberships
+                .resize((person.0 + 1) * stride, Member::NONE);
+        }
+        &mut self.memberships[index]
+    }
+
     /// The group `person` is in now, if any.
     fn group_of(&self, person: PersonId, setting: S) -> Option<u32> {
-        let kind = &self.kinds[setting.index()];
-        match kind.membership.get(person) {
-            Some(m) => (m.position != NOT_ACTIVE).then_some(m.group),
-            None => kind.population_group,
+        let m = self.member(person, setting);
+        if m.group == NO_GROUP {
+            self.kinds[setting.index()].population_group
+        } else {
+            (m.position != NOT_ACTIVE).then_some(m.group)
         }
     }
 
     /// The group `person` is in or was removed from, if any.
     fn remembered_group_of(&self, person: PersonId, setting: S) -> Option<u32> {
-        let kind = &self.kinds[setting.index()];
-        kind.membership
-            .get(person)
-            .map(|m| m.group)
-            .or(kind.population_group)
+        let m = self.member(person, setting);
+        if m.group == NO_GROUP {
+            self.kinds[setting.index()].population_group
+        } else {
+            Some(m.group)
+        }
     }
 
     /// `person`'s current and largest-ever multiplier in `setting`, given the
@@ -427,26 +460,19 @@ impl<S: SettingKind> SettingsStore<S> {
     /// Take `person` out of their current list group of `setting`, if any,
     /// remembering the group.
     fn remove(&mut self, person: PersonId, setting: S) {
-        let kind = &mut self.kinds[setting.index()];
-        let Some(entry) = kind.membership.get_mut(person) else {
-            return;
-        };
-        let member = Member {
-            group: entry.group,
-            position: std::mem::replace(&mut entry.position, NOT_ACTIVE),
-        };
-        if member.position == NOT_ACTIVE {
+        let member = self.member(person, setting);
+        if member.group == NO_GROUP || member.position == NOT_ACTIVE {
             return;
         }
+        self.member_mut(person, setting).position = NOT_ACTIVE;
         let group = &mut self.groups[member.group as usize];
         group.members.swap_remove(member.position as usize);
-        if let Some(&moved) = group.members.get(member.position as usize) {
-            kind.membership
-                .get_mut(PersonId::new(moved as usize))
-                .expect("moved member has a membership entry")
+        let moved = group.members.get(member.position as usize).copied();
+        group.resized();
+        if let Some(moved) = moved {
+            self.member_mut(PersonId::new(moved as usize), setting)
                 .position = member.position;
         }
-        group.resized();
     }
 
     fn sample_contact<R: Rng>(
@@ -587,28 +613,24 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     fn add_setting_member<S: SettingKind>(&mut self, group: SettingGroupId<S>, person: PersonId) {
         let store = S::store_mut(self);
         let setting = S::ALL[store.groups[group.index as usize].kind];
-        let kind = &store.kinds[setting.index()];
-        if let Some(m) = kind.membership.get(person) {
-            if m.group == group.index && m.position != NOT_ACTIVE {
-                return;
-            }
+        let m = store.member(person, setting);
+        if m.group == group.index && m.position != NOT_ACTIVE {
+            return;
         }
         store.remove(person, setting);
         if store.kinds[setting.index()].population_group == Some(group.index) {
             return;
         }
         let target = &mut store.groups[group.index as usize];
-        store.kinds[setting.index()].membership.insert(
-            person,
-            Member {
-                group: group.index,
-                position: u32::try_from(target.members.len()).expect("setting group too large"),
-            },
-        );
+        let position = u32::try_from(target.members.len()).expect("setting group too large");
         target
             .members
             .push(u32::try_from(person.0).expect("too many people"));
         target.resized();
+        *store.member_mut(person, setting) = Member {
+            group: group.index,
+            position,
+        };
     }
 
     /// Take `person` out of their group of `setting`, e.g. for an
@@ -621,9 +643,9 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// If that is a population group, which nobody can leave.
     fn remove_setting_member<S: SettingKind>(&mut self, person: PersonId, setting: S) {
         let store = S::store_mut(self);
-        let kind = &store.kinds[setting.index()];
         assert!(
-            kind.membership.contains_key(person) || kind.population_group.is_none(),
+            store.member(person, setting).group != NO_GROUP
+                || store.kinds[setting.index()].population_group.is_none(),
             "cannot remove {person:?} from the population group of setting {}",
             setting.name()
         );
@@ -633,11 +655,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// Put `person` back in the group of `setting` they were removed from.
     /// No-op if they are in it or never had one.
     fn restore_setting_member<S: SettingKind>(&mut self, person: PersonId, setting: S) {
-        let store = S::store(self);
-        let Some(member) = store.kinds[setting.index()].membership.get(person) else {
-            return;
-        };
-        if member.position == NOT_ACTIVE {
+        let member = S::store(self).member(person, setting);
+        if member.group != NO_GROUP && member.position == NOT_ACTIVE {
             self.add_setting_member(SettingGroupId::<S>::new(member.group), person);
         }
     }
