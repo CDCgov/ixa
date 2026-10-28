@@ -19,7 +19,6 @@ use crate::parameters::{Parameters, ParametersExt};
 struct CoreEpiExample;
 
 define_rng!(InfectiousPeriodRng);
-define_rng!(ContactRng);
 
 define_property!(
     enum InfectionStatus {
@@ -45,18 +44,8 @@ impl InfectionManager<CoreEpiExample> for Context {
     }
 }
 
-impl TransmissionManager<CoreEpiExample> for Context {
-    // Homogeneous mixing is the default forecast; the total is the intrinsic
-    // rate and the contact is anyone.
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
-        let total = self.intrinsic_infectiousness(person)?;
-        if !self.accept_proposal(person, total, forecast) {
-            return None;
-        }
-        let contact = self.sample_entity(ContactRng, Person)?;
-        (contact != person).then_some(contact)
-    }
-}
+// Homogeneous mixing is the default: forecast, evaluation and contact.
+impl TransmissionManager<CoreEpiExample> for Context {}
 
 fn main() {
     let mut context = Context::new();

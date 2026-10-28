@@ -42,22 +42,43 @@ struct Assigned {
     infection_time: f64,
 }
 
-/// Active modifiers on one person, keyed by modifier type, with their product
-/// cached for the transmission loop.
+/// A modifier factor computed per read from the context, the person and the
+/// time elapsed (since infection for infectiousness, since it was set for
+/// susceptibility).
+pub type ModifierFn = Box<dyn Fn(&Context, PersonId, f64) -> f64>;
+
+/// One modifier's factor: a constant, or a function of elapsed time.
+enum Factor {
+    Constant(f64),
+    Fn { f: ModifierFn, since: f64 },
+}
+
+/// Active modifiers on one person, keyed by modifier type. The product of the
+/// constant factors is cached, so a read with no function factors is one
+/// lookup; function factors are evaluated per read.
 struct Modifiers {
-    factors: Vec<(TypeId, f64)>,
+    factors: Vec<(TypeId, Factor)>,
     product: f64,
+    fns: usize,
 }
 
 impl Modifiers {
     fn recompute(&mut self) {
-        self.product = self.factors.iter().fold(1.0, |acc, &(_, f)| acc * f);
+        self.product = 1.0;
+        self.fns = 0;
+        for (_, factor) in &self.factors {
+            match factor {
+                Factor::Constant(f) => self.product *= f,
+                Factor::Fn { .. } => self.fns += 1,
+            }
+        }
     }
 
-    fn set(map: &mut EntityMap<Person, Self>, person: PersonId, key: TypeId, factor: f64) {
+    fn set(map: &mut EntityMap<Person, Self>, person: PersonId, key: TypeId, factor: Factor) {
         let modifiers = map.get_or_insert_with(person, || Modifiers {
             factors: Vec::new(),
             product: 1.0,
+            fns: 0,
         });
         match modifiers.factors.iter_mut().find(|(k, _)| *k == key) {
             Some((_, f)) => *f = factor,
@@ -78,8 +99,21 @@ impl Modifiers {
         }
     }
 
-    fn product(map: &EntityMap<Person, Self>, person: PersonId) -> f64 {
-        map.get(person).map_or(1.0, |modifiers| modifiers.product)
+    fn product(map: &EntityMap<Person, Self>, person: PersonId, context: &Context) -> f64 {
+        let Some(modifiers) = map.get(person) else {
+            return 1.0;
+        };
+        if modifiers.fns == 0 {
+            return modifiers.product;
+        }
+        let now = context.get_current_time();
+        modifiers
+            .factors
+            .iter()
+            .fold(modifiers.product, |acc, (_, factor)| match factor {
+                Factor::Constant(_) => acc,
+                Factor::Fn { f, since } => acc * f(context, person, now - since),
+            })
     }
 }
 
@@ -106,7 +140,7 @@ define_data_plugin!(
 /// each infected person a rate function, storing it, and exposing both to the
 /// transmission loop. `M` is the model's marker type (see
 /// [`TransmissionManager`](super::TransmissionManager)).
-pub trait InfectionManager<M: 'static>: ContextBase
+pub trait InfectionManager<M: 'static>: ContextBase + AsRef<Context>
 where
     Context: InfectionManager<M>,
 {
@@ -208,7 +242,7 @@ where
             RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
         };
         let rate = rate_fn.rate(self.get_current_time() - assigned.infection_time);
-        let multiplier = Modifiers::product(&rates.modifiers, person);
+        let multiplier = Modifiers::product(&rates.modifiers, person, self.as_ref());
         Some(multiplier * rate)
     }
 
@@ -216,7 +250,11 @@ where
     /// active infectiousness modifiers on their current infection (`1.0` if
     /// there are none).
     fn infectiousness_multiplier(&self, person: PersonId) -> f64 {
-        Modifiers::product(&self.get_data(InfectiousnessRatePlugin).modifiers, person)
+        Modifiers::product(
+            &self.get_data(InfectiousnessRatePlugin).modifiers,
+            person,
+            self.as_ref(),
+        )
     }
 
     /// Scale `person`'s infectiousness by `factor` until their current infection
@@ -233,7 +271,44 @@ where
         if !rates.assigned.contains_key(person) {
             return;
         }
-        Modifiers::set(&mut rates.modifiers, person, TypeId::of::<K>(), factor);
+        Modifiers::set(
+            &mut rates.modifiers,
+            person,
+            TypeId::of::<K>(),
+            Factor::Constant(factor),
+        );
+    }
+
+    /// As [`set_infectiousness_modifier`](Self::set_infectiousness_modifier),
+    /// with a factor computed at every read from the context, the person and
+    /// the time since infection (a treatment effect that builds up, a factor
+    /// read from a property), so only people with one pay for it. It must
+    /// return values in `[0, 1]`, which is checked in debug builds. No-op if
+    /// `person` was never infected.
+    fn set_infectiousness_modifier_fn<K: 'static>(
+        &mut self,
+        person: PersonId,
+        f: impl Fn(&Context, PersonId, f64) -> f64 + 'static,
+    ) {
+        let rates = self.get_data_mut(InfectiousnessRatePlugin);
+        let Some(assigned) = rates.assigned.get(person) else {
+            return;
+        };
+        let since = assigned.infection_time;
+        let f: ModifierFn = Box::new(move |ctx, person, elapsed| {
+            let v = f(ctx, person, elapsed);
+            debug_assert!(
+                (0.0..=1.0).contains(&v),
+                "infectiousness modifier must return values in [0, 1], got {v}"
+            );
+            v
+        });
+        Modifiers::set(
+            &mut rates.modifiers,
+            person,
+            TypeId::of::<K>(),
+            Factor::Fn { f, since },
+        );
     }
 
     /// Remove modifier `K` from `person`'s current infection, if active.
@@ -302,6 +377,7 @@ where
                 .get_data(InfectiousnessRatePlugin)
                 .susceptibility_modifiers,
             person,
+            self.as_ref(),
         )
     }
 
@@ -321,7 +397,29 @@ where
             &mut rates.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
-            factor,
+            Factor::Constant(factor),
+        );
+    }
+
+    /// As [`set_susceptibility_modifier`](Self::set_susceptibility_modifier),
+    /// with a factor computed at every read from the context, the person and
+    /// the time since it was set (protection that wanes, a factor read from a
+    /// property). It must return finite, non-negative values.
+    fn set_susceptibility_modifier_fn<K: 'static>(
+        &mut self,
+        person: PersonId,
+        f: impl Fn(&Context, PersonId, f64) -> f64 + 'static,
+    ) {
+        let since = self.get_current_time();
+        let rates = self.get_data_mut(InfectiousnessRatePlugin);
+        Modifiers::set(
+            &mut rates.susceptibility_modifiers,
+            person,
+            TypeId::of::<K>(),
+            Factor::Fn {
+                f: Box::new(f),
+                since,
+            },
         );
     }
 

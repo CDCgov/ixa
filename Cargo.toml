@@ -170,3 +170,8 @@ required-features = ["core_epi"]
 name = "core-epi-settings"
 path = "examples/core-epi-settings/main.rs"
 required-features = ["core_epi"]
+
+[[example]]
+name = "core-epi-antiviral"
+path = "examples/core-epi-antiviral/main.rs"
+required-features = ["core_epi"]

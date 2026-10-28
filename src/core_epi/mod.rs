@@ -13,9 +13,12 @@ pub mod infection_manager;
 pub mod person;
 pub mod rate;
 pub mod settings;
+pub mod step_fn;
 pub mod transmission_manager;
 
-pub use infection_manager::{InfectionManager, InfectiousnessAssignedEvent, RateAssignment};
+pub use infection_manager::{
+    InfectionManager, InfectiousnessAssignedEvent, ModifierFn, RateAssignment,
+};
 pub use person::{Person, PersonId};
 pub use rate::{
     AnyInfectionRate, ConstantRateFn, EmpiricalRateFn, InvertibleRate, ScaledRateFn,
@@ -25,4 +28,5 @@ pub use settings::{
     IntoItineraryAssignment, Itinerary, ItineraryAssignment, SettingGroupId, SettingKind,
     SettingsExt, MAX_SETTINGS,
 };
+pub use step_fn::StepFn;
 pub use transmission_manager::TransmissionManager;
