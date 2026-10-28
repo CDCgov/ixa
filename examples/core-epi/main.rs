@@ -1,32 +1,25 @@
-//! A minimal SIR outbreak on the `core_epi` transmission loop: people in
-//! households of random size (see `settings`), each transmission attempt
-//! finding the person at home or in the community at random, a constant
-//! intrinsic infectiousness over an infectious period drawn per person from an
-//! exponential distribution, and a few seeded infections.
-//!
-//! Total infectiousness is the intrinsic infectiousness times the setting's
-//! `(n - 1)^alpha`: with the default exponents, 1 in the community and the
-//! number of other members at home. R0 is roughly `intrinsic_infectiousness *
-//! infectious_period * mean multiplier`; about 2 with the default parameters.
+//! The smallest model on the `core_epi` transmission loop: an SIR outbreak
+//! with homogeneous mixing. Each person gets a constant intrinsic
+//! infectiousness over an infectious period drawn from an exponential
+//! distribution, and every attempt contacts someone uniformly at random. See
+//! `core-epi-settings` for a population with households, schools and
+//! workplaces.
 mod parameters;
-mod settings;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, Person, PersonId, RateAssignment,
-    ScaledRateFn, Transmission,
+    ConstantRateFn, InfectionManager, Person, PersonId, RateAssignment, TransmissionManager,
 };
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
 use rand_distr::Exp;
 
 use crate::parameters::{Parameters, ParametersExt};
-use crate::settings::Setting;
 
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
 
-define_rng!(ContactRng);
 define_rng!(InfectiousPeriodRng);
+define_rng!(ContactRng);
 
 define_property!(
     enum InfectionStatus {
@@ -52,24 +45,16 @@ impl InfectionManager<CoreEpiExample> for Context {
     }
 }
 
-impl Transmission<CoreEpiExample> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        // Households never change, so the larger setting multiplier bounds the run.
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            Setting::max_multiplier(self, person),
-        )
-    }
-
+impl TransmissionManager<CoreEpiExample> for Context {
+    // Homogeneous mixing is the default forecast; the total is the intrinsic
+    // rate and the contact is anyone.
     fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
-        let setting = Setting::draw(self);
-        let total = self.intrinsic_infectiousness(person)? * setting.multiplier(self, person);
-        let attempt =
-            total >= forecast || (total > 0.0 && self.sample_bool(ContactRng, total / forecast));
-        if !attempt {
+        let total = self.intrinsic_infectiousness(person)?;
+        if !self.accept_proposal(person, total, forecast) {
             return None;
         }
-        setting.sample_contact(self, person)
+        let contact = self.sample_entity(ContactRng, Person)?;
+        (contact != person).then_some(contact)
     }
 
     fn susceptibility(&self, person: PersonId) -> f64 {
@@ -86,12 +71,15 @@ fn main() {
     context.set_parameters(Parameters::default());
     let &Parameters {
         seed,
+        population,
         initial_infections,
         ..
     } = context.get_parameters();
 
     context.init_random(seed);
-    settings::create_households(&mut context);
+    for _ in 0..population {
+        context.add_entity(Person).unwrap();
+    }
     context.index_property::<Person, InfectionStatus>();
 
     context.setup_transmission_loop();

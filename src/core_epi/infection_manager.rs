@@ -73,7 +73,7 @@ define_data_plugin!(
 
 /// A person's infectiousness over time: assigning each infected person a rate
 /// function, storing it, and exposing it to the transmission loop. `M` is the
-/// model's marker type (see [`Transmission`](super::Transmission)).
+/// model's marker type (see [`TransmissionManager`](super::TransmissionManager)).
 pub trait InfectionManager<M: 'static>: ContextBase
 where
     Context: InfectionManager<M>,

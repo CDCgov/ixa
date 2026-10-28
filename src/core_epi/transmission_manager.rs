@@ -9,9 +9,13 @@ use crate::prelude::*;
 define_rng!(TransmissionRng);
 define_rng!(InfectionRng);
 
+/// Relative slack when checking a total against its forecast: the two take
+/// different float paths to the same value when the bound is tight.
+const BOUND_TOLERANCE: f64 = 1e-9;
+
 /// Infection loop transmission dynamics.
 ///
-/// Transmission occurs due to a combination of three factors: (potential)
+/// TransmissionManager occurs due to a combination of three factors: (potential)
 /// infector's infectiousness, the contact rate between the infector and
 /// (potential) infectees, and the susceptibility of (potential) infectees.
 ///
@@ -20,12 +24,14 @@ define_rng!(InfectionRng);
 /// and contact rates.
 ///
 /// The loop algorithm is:
-/// 1. Draw attempt proposal times based on majorizing total infectiousness.
-/// 2. Thin proposed attempts to attempts by current over forecast total
+/// 1. Draw attempt proposal times from the model's
+///    [`forecast_total_infectiousness`](Self::forecast_total_infectiousness).
+/// 2. Thin proposals to attempts by current over forecast total
 ///    infectiousness in the model's
 ///    [`evaluate_forecast`](Self::evaluate_forecast), which also
 ///    picks the contact.
-/// 3. Attempts become transmissions based on the potential infectee's susceptibility.
+/// 3. Attempts become transmissions based on the potential infectee's
+///    [`susceptibility`](Self::susceptibility).
 ///
 /// The loop ends when infectiousness ends for good
 /// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness) is `None`) or
@@ -35,26 +41,46 @@ define_rng!(InfectionRng);
 /// `M` is a marker type the model defines, so that it can implement these
 /// traits for `Context` (a model crate owns neither, which the orphan rule
 /// would otherwise forbid). Plans run on `Context` itself, not `Self`, hence
-/// the `Context: Transmission<M>` bound.
-pub trait Transmission<M: 'static>:
+/// the `Context: TransmissionManager<M>` bound.
+pub trait TransmissionManager<M: 'static>:
     InfectionManager<M> + crate::ContextRandomExt + ContextEntitiesExt
 where
-    Context: Transmission<M>,
+    Context: TransmissionManager<M>,
 {
     /// Upper bound on `person`'s total infectiousness, indexed by time from now
     /// (`t = 0` is the current simulation time). Built on
     /// [`majorizing_infectiousness_rate_fn`](InfectionManager::majorizing_infectiousness_rate_fn),
-    /// e.g. scaled by the largest contact rate `person` can have this run.
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate;
+    /// e.g. scaled by the largest contact multiplier `person` can have this
+    /// run. The loop inverts it to propose attempt times. The default is the
+    /// intrinsic bound: homogeneous mixing.
+    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+        self.majorizing_infectiousness_rate_fn(person)
+    }
 
-    /// Evaluate an attempt forecast for `person` at total infectiousness
-    /// `forecast`. Accept it with probability `total / forecast`, where `total`
-    /// is their current
-    /// [`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness)
-    /// times the contact rate for wherever they are right now, and return who
-    /// they contact. `None` means nobody was contacted this time; the attempt is
-    /// dropped and the loop continues.
+    /// Evaluate an attempt proposal for `person` forecast at total
+    /// infectiousness `forecast`: compute their total infectiousness now
+    /// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness)
+    /// times the contact multiplier for wherever they are), thin with
+    /// [`accept_proposal`](Self::accept_proposal), and return who they contact.
+    /// `None` drops the proposal; the loop continues.
     fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId>;
+
+    /// Whether a proposal at `forecast` becomes an attempt at `total`
+    /// infectiousness: with probability `total / forecast`, drawing only when
+    /// the outcome is uncertain.
+    ///
+    /// # Panics
+    ///
+    /// If `total` exceeds `forecast`: the forecast must bound the total until
+    /// the next proposal, or attempts are under-thinned.
+    fn accept_proposal(&self, person: PersonId, total: f64, forecast: f64) -> bool {
+        assert!(
+            total <= forecast * (1.0 + BOUND_TOLERANCE),
+            "total infectiousness {total} of {person:?} exceeds its forecast {forecast}: \
+             the forecast must bound the total until the next proposal"
+        );
+        total > 0.0 && (total >= forecast || self.sample_bool(TransmissionRng, total / forecast))
+    }
 
     /// Probability that a person, subjected to an infection attempt, will be infected.
     fn susceptibility(&self, person: PersonId) -> f64;
@@ -83,7 +109,10 @@ where
     /// started by hand run (e.g. an index case with no cascade).
     fn setup_transmission_loop(&mut self) {
         self.subscribe_to_event(|context, event: InfectiousnessAssignedEvent| {
-            Transmission::<M>::schedule_next_transmission_attempt_proposal(context, event.person);
+            TransmissionManager::<M>::schedule_next_transmission_attempt_proposal(
+                context,
+                event.person,
+            );
         });
     }
 
@@ -104,7 +133,9 @@ where
         if let Some((delay, forecast)) = proposal {
             let t = self.get_current_time() + delay;
             self.add_plan(t, move |ctx| {
-                Transmission::<M>::handle_transmission_attempt_proposal(ctx, infector, forecast);
+                TransmissionManager::<M>::handle_transmission_attempt_proposal(
+                    ctx, infector, forecast,
+                );
             });
         };
     }
@@ -114,22 +145,21 @@ where
     /// then thin attempts to transmissions based on susceptibility.
     fn handle_transmission_attempt_proposal(&mut self, infector: PersonId, forecast: f64) {
         // A `None` infectiousness means it has ended for good: do not
-        // reschedule, so this is the infector's last proposal for this infection
+        // reschedule, so this is the infector's last proposal for this infection.
         if self.intrinsic_infectiousness(infector).is_none() {
             return;
         }
         // A zero forecast (a proposal exactly at the end of the support) can
         // never attempt.
         if forecast > 0.0 {
-            // Thin the attempts to infections based on susceptibility, drawing
-            // only when the outcome is uncertain.
             if let Some(infectee) = self.evaluate_forecast(infector, forecast) {
+                // Draws only when the outcome is uncertain.
                 let p = self.susceptibility(infectee);
                 let infected = p >= 1.0 || (p > 0.0 && self.sample_bool(TransmissionRng, p));
                 if infected {
                     self.transmit(Some(infector), infectee);
-                } // else: infectee non-susceptibility prevented transmission
-            } // else: total infectiousness thinned it out, or nobody to contact
+                }
+            }
         }
         self.schedule_next_transmission_attempt_proposal(infector);
     }
