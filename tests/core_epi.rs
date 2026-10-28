@@ -28,14 +28,6 @@ impl TransmissionManager<Sir> for Context {
         let contact = self.sample_entity(ContactRng, Person)?;
         (contact != person).then_some(contact)
     }
-
-    fn susceptibility(&self, person: PersonId) -> f64 {
-        if InfectionManager::<Sir>::infection_time(self, person).is_some() {
-            0.0
-        } else {
-            1.0
-        }
-    }
 }
 
 fn run(r0: f64) -> (Context, usize) {
@@ -66,6 +58,67 @@ fn outbreak_spreads_and_ends() {
         (700..=900).contains(&infected),
         "unexpected final size {infected}"
     );
+}
+
+#[test]
+fn susceptibility_modifiers_compose_and_persist_across_infection() {
+    struct Vaccine;
+    struct Age;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 5.0).into()],
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, person),
+        1.0
+    );
+    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_susceptibility_modifier::<Age>(&mut context, person, 0.5);
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, person),
+        0.25
+    );
+    InfectionManager::<Sir>::remove_susceptibility_modifier::<Age>(&mut context, person);
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, person),
+        0.5
+    );
+    // Infection zeroes the base, but the modifier outlives it.
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, person),
+        0.0
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility_multiplier(&context, person),
+        0.5
+    );
+}
+
+#[test]
+fn zero_susceptibility_never_transmits() {
+    struct Immune;
+    let mut context = Context::new();
+    context.init_random(42);
+    for _ in 0..POPULATION {
+        let person = context.add_entity(Person).unwrap();
+        InfectionManager::<Sir>::set_susceptibility_modifier::<Immune>(&mut context, person, 0.0);
+    }
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(2.0 / 5.0, 5.0).into()],
+    );
+    TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
+    context.execute();
+    let infected = context
+        .get_entity_iterator::<Person>()
+        .filter(|&p| InfectionManager::<Sir>::infection_time(&context, p).is_some())
+        .count();
+    assert_eq!(infected, 5);
 }
 
 #[test]
@@ -126,10 +179,6 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
             let total = InfectionManager::<Broken>::intrinsic_infectiousness(self, person)?;
             TransmissionManager::<Broken>::accept_proposal(self, person, total, forecast);
             None
-        }
-
-        fn susceptibility(&self, _person: PersonId) -> f64 {
-            1.0
         }
     }
     let mut context = Context::new();

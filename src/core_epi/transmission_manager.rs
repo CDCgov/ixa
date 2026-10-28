@@ -31,7 +31,7 @@ const BOUND_TOLERANCE: f64 = 1e-9;
 ///    [`evaluate_forecast`](Self::evaluate_forecast), which also
 ///    picks the contact.
 /// 3. Attempts become transmissions based on the potential infectee's
-///    [`susceptibility`](Self::susceptibility).
+///    [`susceptibility`](InfectionManager::susceptibility).
 ///
 /// The loop ends when infectiousness ends for good
 /// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness) is `None`) or
@@ -81,9 +81,6 @@ where
         );
         total > 0.0 && (total >= forecast || self.sample_bool(TransmissionRng, total / forecast))
     }
-
-    /// Probability that a person, subjected to an infection attempt, will be infected.
-    fn susceptibility(&self, person: PersonId) -> f64;
 
     /// Infect `infectee`: assign their rate function, which starts their own
     /// loop (see [`setup_transmission_loop`](Self::setup_transmission_loop)),

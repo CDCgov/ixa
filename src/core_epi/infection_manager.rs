@@ -42,8 +42,8 @@ struct Assigned {
     infection_time: f64,
 }
 
-/// Active infectiousness modifiers on one infection, keyed by modifier type,
-/// with their product cached for the transmission loop.
+/// Active modifiers on one person, keyed by modifier type, with their product
+/// cached for the transmission loop.
 struct Modifiers {
     factors: Vec<(TypeId, f64)>,
     product: f64,
@@ -52,6 +52,34 @@ struct Modifiers {
 impl Modifiers {
     fn recompute(&mut self) {
         self.product = self.factors.iter().fold(1.0, |acc, &(_, f)| acc * f);
+    }
+
+    fn set(map: &mut EntityMap<Person, Self>, person: PersonId, key: TypeId, factor: f64) {
+        let modifiers = map.get_or_insert_with(person, || Modifiers {
+            factors: Vec::new(),
+            product: 1.0,
+        });
+        match modifiers.factors.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, f)) => *f = factor,
+            None => modifiers.factors.push((key, factor)),
+        }
+        modifiers.recompute();
+    }
+
+    fn remove(map: &mut EntityMap<Person, Self>, person: PersonId, key: TypeId) {
+        let Some(modifiers) = map.get_mut(person) else {
+            return;
+        };
+        modifiers.factors.retain(|(k, _)| *k != key);
+        if modifiers.factors.is_empty() {
+            let _ = map.remove(person);
+        } else {
+            modifiers.recompute();
+        }
+    }
+
+    fn product(map: &EntityMap<Person, Self>, person: PersonId) -> f64 {
+        map.get(person).map_or(1.0, |modifiers| modifiers.product)
     }
 }
 
@@ -62,6 +90,9 @@ struct InfectiousnessRates {
     /// Kept out of `Assigned` so the per-infection record stays small: most
     /// infections are never modified.
     modifiers: EntityMap<Person, Modifiers>,
+    /// On the person, not the infection: they apply while uninfected and
+    /// survive reinfection.
+    susceptibility_modifiers: EntityMap<Person, Modifiers>,
 }
 
 // Rate functions are indexed by time since infection.
@@ -71,9 +102,10 @@ define_data_plugin!(
     InfectiousnessRates::default()
 );
 
-/// A person's infectiousness over time: assigning each infected person a rate
-/// function, storing it, and exposing it to the transmission loop. `M` is the
-/// model's marker type (see [`TransmissionManager`](super::TransmissionManager)).
+/// A person's infectiousness over time and their susceptibility: assigning
+/// each infected person a rate function, storing it, and exposing both to the
+/// transmission loop. `M` is the model's marker type (see
+/// [`TransmissionManager`](super::TransmissionManager)).
 pub trait InfectionManager<M: 'static>: ContextBase
 where
     Context: InfectionManager<M>,
@@ -176,7 +208,7 @@ where
             RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
         };
         let rate = rate_fn.rate(self.get_current_time() - assigned.infection_time);
-        let multiplier = rates.modifiers.get(person).map_or(1.0, |m| m.product);
+        let multiplier = Modifiers::product(&rates.modifiers, person);
         Some(multiplier * rate)
     }
 
@@ -184,10 +216,7 @@ where
     /// active infectiousness modifiers on their current infection (`1.0` if
     /// there are none).
     fn infectiousness_multiplier(&self, person: PersonId) -> f64 {
-        self.get_data(InfectiousnessRatePlugin)
-            .modifiers
-            .get(person)
-            .map_or(1.0, |modifiers| modifiers.product)
+        Modifiers::product(&self.get_data(InfectiousnessRatePlugin).modifiers, person)
     }
 
     /// Scale `person`'s infectiousness by `factor` until their current infection
@@ -204,31 +233,13 @@ where
         if !rates.assigned.contains_key(person) {
             return;
         }
-        let modifiers = rates.modifiers.get_or_insert_with(person, || Modifiers {
-            factors: Vec::new(),
-            product: 1.0,
-        });
-        let key = TypeId::of::<K>();
-        match modifiers.factors.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, f)) => *f = factor,
-            None => modifiers.factors.push((key, factor)),
-        }
-        modifiers.recompute();
+        Modifiers::set(&mut rates.modifiers, person, TypeId::of::<K>(), factor);
     }
 
     /// Remove modifier `K` from `person`'s current infection, if active.
     fn remove_infectiousness_modifier<K: 'static>(&mut self, person: PersonId) {
         let rates = self.get_data_mut(InfectiousnessRatePlugin);
-        let Some(modifiers) = rates.modifiers.get_mut(person) else {
-            return;
-        };
-        let key = TypeId::of::<K>();
-        modifiers.factors.retain(|(k, _)| *k != key);
-        if modifiers.factors.is_empty() {
-            let _ = rates.modifiers.remove(person);
-        } else {
-            modifiers.recompute();
-        }
+        Modifiers::remove(&mut rates.modifiers, person, TypeId::of::<K>());
     }
 
     /// Set modifier `K` on `person` at time `start` and, if given, remove it at
@@ -259,6 +270,86 @@ where
                 if same_infection(ctx) {
                     InfectionManager::<M>::remove_infectiousness_modifier::<K>(ctx, person);
                 }
+            });
+        }
+    }
+
+    /// Probability that `person`, subjected to an infection attempt, is
+    /// infected, before any modifiers. The default is permanent immunity:
+    /// `1.0` if they were never infected, else `0.0`. Override for waning,
+    /// age-dependent or status-dependent susceptibility.
+    fn base_susceptibility(&self, person: PersonId) -> f64 {
+        if self.infection_time(person).is_none() {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Probability that `person`, subjected to an infection attempt, is
+    /// infected: [`base_susceptibility`](Self::base_susceptibility) times
+    /// [`susceptibility_multiplier`](Self::susceptibility_multiplier). The
+    /// transmission loop treats values of `1.0` or more as certain.
+    fn susceptibility(&self, person: PersonId) -> f64 {
+        self.base_susceptibility(person) * self.susceptibility_multiplier(person)
+    }
+
+    /// Product of the active susceptibility modifiers on `person` (`1.0` if
+    /// there are none).
+    fn susceptibility_multiplier(&self, person: PersonId) -> f64 {
+        Modifiers::product(
+            &self
+                .get_data(InfectiousnessRatePlugin)
+                .susceptibility_modifiers,
+            person,
+        )
+    }
+
+    /// Scale `person`'s susceptibility by `factor` until the modifier is
+    /// removed. Unlike infectiousness modifiers these belong to the person, not
+    /// an infection: they apply while uninfected and survive reinfection. `K`
+    /// identifies the modifier: setting it again replaces its factor, and
+    /// different modifiers compose multiplicatively. `factor` must be finite
+    /// and non-negative; a product above one is as good as one.
+    fn set_susceptibility_modifier<K: 'static>(&mut self, person: PersonId, factor: f64) {
+        assert!(
+            factor.is_finite() && factor >= 0.0,
+            "susceptibility modifier factor must be finite and non-negative, got {factor}"
+        );
+        let rates = self.get_data_mut(InfectiousnessRatePlugin);
+        Modifiers::set(
+            &mut rates.susceptibility_modifiers,
+            person,
+            TypeId::of::<K>(),
+            factor,
+        );
+    }
+
+    /// Remove susceptibility modifier `K` from `person`, if active.
+    fn remove_susceptibility_modifier<K: 'static>(&mut self, person: PersonId) {
+        let rates = self.get_data_mut(InfectiousnessRatePlugin);
+        Modifiers::remove(
+            &mut rates.susceptibility_modifiers,
+            person,
+            TypeId::of::<K>(),
+        );
+    }
+
+    /// Set susceptibility modifier `K` on `person` at time `start` and, if
+    /// given, remove it at `end`.
+    fn schedule_susceptibility_modifier<K: 'static>(
+        &mut self,
+        person: PersonId,
+        factor: f64,
+        start: f64,
+        end: Option<f64>,
+    ) {
+        self.add_plan(start, move |ctx| {
+            InfectionManager::<M>::set_susceptibility_modifier::<K>(ctx, person, factor);
+        });
+        if let Some(end) = end {
+            self.add_plan(end, move |ctx| {
+                InfectionManager::<M>::remove_susceptibility_modifier::<K>(ctx, person);
             });
         }
     }
