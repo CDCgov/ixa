@@ -165,3 +165,8 @@ bench = false
 name = "core-epi"
 path = "examples/core-epi/main.rs"
 required-features = ["core_epi"]
+
+[[example]]
+name = "core-epi-settings"
+path = "examples/core-epi-settings/main.rs"
+required-features = ["core_epi"]

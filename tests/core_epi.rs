@@ -2,7 +2,7 @@
 
 use ixa::core_epi::{
     ConstantRateFn, InfectionManager, InvertibleRate, Person, PersonId, RateAssignment,
-    Transmission,
+    ScaledRateFn, TransmissionManager,
 };
 use ixa::prelude::*;
 
@@ -18,14 +18,13 @@ impl InfectionManager<Sir> for Context {
     }
 }
 
-impl Transmission<Sir> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        // Homogeneous mixing at rate 1: total is intrinsic.
-        self.majorizing_infectiousness_rate_fn(person)
-    }
-
-    fn evaluate_forecast(&self, person: PersonId, _forecast: f64) -> Option<PersonId> {
-        // Constant infectiousness and homogeneous mixing: the forecast is tight.
+impl TransmissionManager<Sir> for Context {
+    // Homogeneous mixing: the default forecast, the intrinsic total.
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let total = InfectionManager::<Sir>::intrinsic_infectiousness(self, person)?;
+        if !TransmissionManager::<Sir>::accept_proposal(self, person, total, forecast) {
+            return None;
+        }
         let contact = self.sample_entity(ContactRng, Person)?;
         (contact != person).then_some(contact)
     }
@@ -49,8 +48,8 @@ fn run(r0: f64) -> (Context, usize) {
         &mut context,
         vec![ConstantRateFn::new(r0 / 5.0, 5.0).into()],
     );
-    Transmission::<Sir>::setup_transmission_loop(&mut context);
-    Transmission::<Sir>::seed_infections(&mut context, Person, 5);
+    TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
     context.execute();
     let infected = context
         .get_entity_iterator::<Person>()
@@ -103,4 +102,46 @@ fn modifier_scales_infectiousness_for_current_infection() {
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
         Some(1.0)
     );
+}
+
+#[test]
+#[should_panic(expected = "exceeds its forecast")]
+fn loop_panics_when_the_forecast_is_not_a_bound() {
+    struct Broken;
+    impl InfectionManager<Broken> for Context {
+        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+            RateAssignment::Library(0)
+        }
+    }
+    impl TransmissionManager<Broken> for Context {
+        fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+            // Half the real rate: not a bound.
+            ScaledRateFn::new(
+                InfectionManager::<Broken>::majorizing_infectiousness_rate_fn(self, person),
+                0.5,
+            )
+        }
+
+        fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+            let total = InfectionManager::<Broken>::intrinsic_infectiousness(self, person)?;
+            TransmissionManager::<Broken>::accept_proposal(self, person, total, forecast);
+            None
+        }
+
+        fn susceptibility(&self, _person: PersonId) -> f64 {
+            1.0
+        }
+    }
+    let mut context = Context::new();
+    context.init_random(3);
+    for _ in 0..10 {
+        context.add_entity(Person).unwrap();
+    }
+    InfectionManager::<Broken>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 5.0).into()],
+    );
+    TransmissionManager::<Broken>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Broken>::seed_infections(&mut context, Person, 1);
+    context.execute();
 }
