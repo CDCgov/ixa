@@ -51,6 +51,7 @@ for &layer in Contact::ALL {
 
 context.get_edge(Contact::Household, p1, p2); // Option<&Edge>
 context.get_degree(Contact::Household, p1);
+context.degree_distribution(Contact::Household); // counts[d] = people with degree d
 ```
 
 Edges come back in insertion order. `remove_edge` swaps the last edge into the

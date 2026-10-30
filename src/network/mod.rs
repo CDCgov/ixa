@@ -49,7 +49,7 @@ use storage::LayerStorage;
 
 use crate::context::Context;
 use crate::entity::entity_store::get_registered_entity_count;
-use crate::entity::{Entity, EntityId};
+use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::error::IxaError;
 use crate::random::{ContextRandomExt, RngId};
 use crate::{define_data_plugin, ContextBase};
@@ -192,15 +192,22 @@ impl NetworkData {
         &self,
         layer: N,
         degree: usize,
+        population: usize,
     ) -> Vec<EntityId<N::Entity>> {
-        self.layer(layer).find_entities_by_degree(degree)
+        self.layer(layer)
+            .find_entities_by_degree(degree, population)
+    }
+
+    #[must_use]
+    pub fn degree_distribution<N: Network>(&self, layer: N, population: usize) -> Vec<usize> {
+        self.layer(layer).degree_distribution(population)
     }
 }
 
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
 
 // Public API.
-pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
+pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// Adds an edge in `layer` from `from` to `to` carrying `data`. The data is stored as
     /// given: a numeric rate is not checked here, only when it is used as a sampling weight.
     ///
@@ -297,17 +304,26 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt {
         self.get_edges(layer, entity).len()
     }
 
-    /// Every entity with exactly `degree` outgoing edges in `layer`. For `degree == 0`
-    /// only entities that have ever had an edge in this layer, or an id below one that
-    /// has, are reported, since the network does not know how many entities exist.
+    /// Every entity with exactly `degree` outgoing edges in `layer`, in id order.
     #[must_use]
     fn find_entities_by_degree<N: Network>(
         &self,
         layer: N,
         degree: usize,
     ) -> Vec<EntityId<N::Entity>> {
+        let population = self.get_entity_count::<N::Entity>();
         self.get_data(NetworkPlugin)
-            .find_entities_by_degree(layer, degree)
+            .find_entities_by_degree(layer, degree, population)
+    }
+
+    /// The out-degree distribution of `layer` over the whole population: `result[d]` is
+    /// the number of entities with exactly `d` outgoing edges, so the result has
+    /// `max degree + 1` entries and sums to the entity count.
+    #[must_use]
+    fn degree_distribution<N: Network>(&self, layer: N) -> Vec<usize> {
+        let population = self.get_entity_count::<N::Entity>();
+        self.get_data(NetworkPlugin)
+            .degree_distribution(layer, population)
     }
 
     /// A uniformly random outgoing edge of `entity` in `layer`, or `None` if it has none.
@@ -469,8 +485,8 @@ mod test_inner {
             .unwrap();
         nd.clear_layer(Layered::School);
         assert_eq!(
-            nd.find_entities_by_degree(Layered::School, 0),
-            vec![PersonId::new(0), PersonId::new(1)]
+            nd.find_entities_by_degree(Layered::School, 0, 3),
+            vec![PersonId::new(0), PersonId::new(1), PersonId::new(2)]
         );
     }
 
@@ -548,12 +564,16 @@ mod test_inner {
         nd.add_edge(Weighted, PersonId::new(3), PersonId::new(2), 0.0)
             .unwrap();
         assert_eq!(
-            nd.find_entities_by_degree(Weighted, 2),
+            nd.find_entities_by_degree(Weighted, 2, 4),
             vec![PersonId::new(1)]
         );
         assert_eq!(
-            nd.find_entities_by_degree(Weighted, 1),
+            nd.find_entities_by_degree(Weighted, 1, 4),
             vec![PersonId::new(2), PersonId::new(3)]
+        );
+        assert_eq!(
+            nd.find_entities_by_degree(Weighted, 0, 4),
+            vec![PersonId::new(0)]
         );
     }
 }
@@ -665,6 +685,42 @@ mod test_api {
             .unwrap();
         let _ =
             context.sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |e| e.data);
+    }
+
+    #[test]
+    fn find_isolates_over_population() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        context
+            .add_edge(Contact::School, person1, person2, 1.0)
+            .unwrap();
+        assert_eq!(
+            context.find_entities_by_degree(Contact::School, 0),
+            vec![person2, person3]
+        );
+        assert_eq!(
+            context.find_entities_by_degree(Contact::Household, 0),
+            vec![person1, person2, person3]
+        );
+    }
+
+    #[test]
+    fn degree_distribution() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        assert_eq!(context.degree_distribution(Contact::School), vec![3]);
+
+        context
+            .add_edge(Contact::School, person1, person2, 1.0)
+            .unwrap();
+        context
+            .add_edge(Contact::School, person1, person3, 1.0)
+            .unwrap();
+        context
+            .add_edge(Contact::School, person2, person3, 1.0)
+            .unwrap();
+        assert_eq!(context.degree_distribution(Contact::School), vec![1, 1, 1]);
+        assert_eq!(context.degree_distribution(Contact::Household), vec![3]);
     }
 
     #[test]

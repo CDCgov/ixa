@@ -62,14 +62,26 @@ impl<E: Entity, D> LayerStorage<E, D> {
         self.lists.get(from.0).map_or(&[], Vec::as_slice)
     }
 
-    /// Entities with exactly `degree` outgoing edges. Entities past the end of the
-    /// storage have degree zero but are not reported.
-    pub fn find_entities_by_degree(&self, degree: usize) -> Vec<EntityId<E>> {
-        self.lists
-            .iter()
-            .enumerate()
-            .filter_map(|(pos, edges)| (edges.len() == degree).then_some(EntityId::new(pos)))
+    /// Entities among ids `0..population` with exactly `degree` outgoing edges.
+    pub fn find_entities_by_degree(&self, degree: usize, population: usize) -> Vec<EntityId<E>> {
+        (0..population)
+            .map(EntityId::new)
+            .filter(|&id| self.get_edges(id).len() == degree)
             .collect()
+    }
+
+    /// Counts of entities by out-degree over ids `0..population`: `result[d]` is the
+    /// number of entities with degree `d`, so the result has `max degree + 1` entries.
+    pub fn degree_distribution(&self, population: usize) -> Vec<usize> {
+        let mut distribution = Vec::new();
+        for id in 0..population {
+            let degree = self.get_edges(EntityId::new(id)).len();
+            if degree >= distribution.len() {
+                distribution.resize(degree + 1, 0);
+            }
+            distribution[degree] += 1;
+        }
+        distribution
     }
 
     /// Removes every edge. Each entity's list keeps its allocation, so re-adding the
