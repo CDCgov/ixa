@@ -8,13 +8,12 @@ pub use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 pub use crate::error::IxaError;
 pub use crate::global_properties::ContextGlobalPropertiesExt;
 pub use crate::log::{debug, error, info, trace, warn};
-pub use crate::network::ContextNetworkExt;
+pub use crate::network::{ContextNetworkExt, Network};
 pub use crate::random::ContextRandomExt;
 pub use crate::report::ContextReportExt;
 pub use crate::{
-    define_data_plugin, define_derived_property, define_edge_type, define_entity,
-    define_global_property, define_multi_property, define_property, define_report, define_rng,
-    impl_edge_type, impl_entity, impl_property, impl_property_eq, impl_property_eq_hash,
-    impl_property_hash, output, schedule_relative, track_periodic_value_change_counts, with,
-    PlanId, PluginContext,
+    define_data_plugin, define_derived_property, define_entity, define_global_property,
+    define_multi_property, define_network, define_property, define_report, define_rng, impl_entity,
+    impl_network, impl_property, impl_property_eq, impl_property_eq_hash, impl_property_hash,
+    output, schedule_relative, track_periodic_value_change_counts, with, PlanId, PluginContext,
 };

@@ -3,6 +3,7 @@
 - [Properties](properties.md)
 - [Calendar Dates](calendar-dates.md)
 - [Indexing](indexing.md)
+- [Networks](networks.md)
 - [Burn-in Periods and Negative Time](burn-in-and-negative-time.md)
 - [Handling Errors](handling-errors.md)
 - [Performance and Profiling](performance.md)

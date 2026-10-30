@@ -74,7 +74,7 @@ pub mod global_properties;
 pub use global_properties::{ContextGlobalPropertiesExt, GlobalProperty};
 
 pub mod network;
-pub use network::{ContextNetworkExt, Edge, EdgeType};
+pub use network::{ContextNetworkExt, Edge, Network};
 
 pub mod macros;
 

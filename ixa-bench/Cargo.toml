@@ -118,3 +118,8 @@ harness = false
 name = "sample_single_excluding"
 path = "criterion/sample_single_excluding.rs"
 harness = false
+
+[[bench]]
+name = "network"
+path = "criterion/network.rs"
+harness = false
