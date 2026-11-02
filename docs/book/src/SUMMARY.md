@@ -15,6 +15,7 @@
   - [Population Persistence](topics/population-persistence.md)
   - [Calendar Dates](topics/calendar-dates.md)
   - [Indexing](topics/indexing.md)
+  - [Networks](topics/networks.md)
   - [Burn-in Periods and Negative Time](topics/burn-in-and-negative-time.md)
   - [Handling Errors](topics/handling-errors.md)
   - [Performance and Profiling](topics/performance.md)

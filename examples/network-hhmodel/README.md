@@ -16,16 +16,17 @@ The simulation runs via:
 
 - `parameters.rs` sets up global properties for the model.
 - `loader.rs` reads in the `Household.csv` file and instantiates the people in it.
-- `network.rs` forms a dense network of household contacts, then reads in the other
-  contact files and instantiates those network edges. The edges are tracked as
-  model entities. This module also selects which individuals have effective contact
-  during each time period.
+- `network.rs` defines a `Contact` network with one layer per setting (`Household`,
+  `AgeUnder5`, `Age5to17`) using `define_network!`, forms a dense household layer, then
+  reads the other contact files into their layers. Each edge carries its relative
+  transmission rate. This module also selects which individuals have effective contact
+  during each time period by walking every layer's edges.
 - `seir.rs` manages transmission, infections, and disease trajectories.
 - `incidence_report.rs` sets up a report with information on who became infected
   by whom during the simulation and saves the information to a csv in an `\output`
   folder.
 
-Note that the relative rate of transmission between households (relative to within households) is a property of the network edges. For technical reasons, ixa properties must implement `Eq`, which Rust floats do not. This example manually implements equality logic; future ixa versions may have other solutions.
+Note that the relative rate of transmission between households (relative to within households) is stored on the network edges as their `data`, so the same pair of people can be connected in more than one layer with different rates.
 
 ## How to run the model
 
