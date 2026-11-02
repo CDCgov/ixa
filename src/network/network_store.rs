@@ -20,6 +20,17 @@ pub(super) struct NetworkStorage<N: Network> {
 
 impl<N: Network> NetworkStorage<N> {
     fn new_boxed() -> Box<dyn Any> {
+        // Catches a hand-written `impl_network!` that repeats or misorders a layer, which
+        // would otherwise make loops over `ALL` visit a layer twice.
+        for (position, &layer) in N::ALL.iter().enumerate() {
+            assert_eq!(
+                layer.layer(),
+                position,
+                "network {}: every layer must appear once in ALL, in layer() order, but {layer:?} \
+                 is at position {position}",
+                N::name(),
+            );
+        }
         let layers = N::ALL.iter().map(|_| LayerStorage::default()).collect();
         Box::new(Self { layers })
     }

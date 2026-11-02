@@ -54,20 +54,20 @@ use crate::error::IxaError;
 use crate::random::{ContextRandomExt, RngId};
 use crate::{define_data_plugin, ContextBase};
 
-pub struct NetworkData {
+/// The two directions removed by `remove_edge_bidi`: `(a -> b, b -> a)`.
+type EdgePair<N> = (
+    Edge<<N as Network>::Entity, <N as Network>::Data>,
+    Edge<<N as Network>::Entity, <N as Network>::Data>,
+);
+
+pub(crate) struct NetworkData {
     /// A `NetworkStore<E>` per `Entity::id()`.
     network_stores: Vec<OnceCell<Box<dyn Any>>>,
 }
 
-impl Default for NetworkData {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
+// The rules are enforced here; `ContextNetworkExt` documents them.
 impl NetworkData {
-    #[must_use]
-    pub fn new() -> Self {
+    fn new() -> Self {
         let network_stores = (0..get_registered_entity_count())
             .map(|_| OnceCell::new())
             .collect();
@@ -104,12 +104,7 @@ impl NetworkData {
             .layer_mut(layer)
     }
 
-    /// Adds an edge in `layer` from `from` to `to`.
-    ///
-    /// # Errors
-    /// `CannotMakeEdgeToSelf` if `from == to`; `EdgeAlreadyExists` if `from` already has
-    /// an edge to `to` in this layer.
-    pub fn add_edge<N: Network>(
+    fn add_edge<N: Network>(
         &mut self,
         layer: N,
         from: EntityId<N::Entity>,
@@ -123,13 +118,7 @@ impl NetworkData {
             .add_edge(from, Edge { neighbor: to, data })
     }
 
-    /// Adds an edge in each direction between `a` and `b`, or neither if either direction
-    /// would fail.
-    ///
-    /// # Errors
-    /// As [`add_edge`](Self::add_edge), checked for both directions before anything is
-    /// inserted.
-    pub fn add_edge_bidi<N: Network>(
+    fn add_edge_bidi<N: Network>(
         &mut self,
         layer: N,
         a: EntityId<N::Entity>,
@@ -140,7 +129,7 @@ impl NetworkData {
             return Err(IxaError::CannotMakeEdgeToSelf);
         }
         let storage = self.layer_mut(layer);
-        if storage.get_edge(a, b).is_some() || storage.get_edge(b, a).is_some() {
+        if storage.position(a, b).is_some() || storage.position(b, a).is_some() {
             return Err(IxaError::EdgeAlreadyExists);
         }
         storage.push_unchecked(
@@ -154,8 +143,7 @@ impl NetworkData {
         Ok(())
     }
 
-    #[must_use = "returns None if there was no edge to remove"]
-    pub fn remove_edge<N: Network>(
+    fn remove_edge<N: Network>(
         &mut self,
         layer: N,
         from: EntityId<N::Entity>,
@@ -164,12 +152,43 @@ impl NetworkData {
         self.layer_mut(layer).remove_edge(from, to)
     }
 
-    pub fn clear_layer<N: Network>(&mut self, layer: N) {
+    fn remove_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+    ) -> Option<EdgePair<N>> {
+        let storage = self.layer_mut(layer);
+        let forward = storage.position(a, b)?;
+        let backward = storage.position(b, a)?;
+        // `a != b` (no self-loops), so removing from one list leaves the other position valid.
+        Some((
+            storage.remove_at(a, forward),
+            storage.remove_at(b, backward),
+        ))
+    }
+
+    fn update_edge<N: Network>(
+        &mut self,
+        layer: N,
+        from: EntityId<N::Entity>,
+        to: EntityId<N::Entity>,
+        f: impl FnOnce(&mut N::Data),
+    ) -> bool {
+        match self.layer_mut(layer).get_edge_mut(from, to) {
+            Some(edge) => {
+                f(&mut edge.data);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn clear_layer<N: Network>(&mut self, layer: N) {
         self.layer_mut(layer).clear();
     }
 
-    #[must_use]
-    pub fn get_edge<N: Network>(
+    fn get_edge<N: Network>(
         &self,
         layer: N,
         from: EntityId<N::Entity>,
@@ -178,8 +197,7 @@ impl NetworkData {
         self.layer(layer).get_edge(from, to)
     }
 
-    #[must_use]
-    pub fn get_edges<N: Network>(
+    fn get_edges<N: Network>(
         &self,
         layer: N,
         entity: EntityId<N::Entity>,
@@ -187,8 +205,7 @@ impl NetworkData {
         self.layer(layer).get_edges(entity)
     }
 
-    #[must_use]
-    pub fn find_entities_by_degree<N: Network>(
+    fn find_entities_by_degree<N: Network>(
         &self,
         layer: N,
         degree: usize,
@@ -198,8 +215,7 @@ impl NetworkData {
             .find_entities_by_degree(degree, population)
     }
 
-    #[must_use]
-    pub fn degree_distribution<N: Network>(&self, layer: N, population: usize) -> Vec<usize> {
+    fn degree_distribution<N: Network>(&self, layer: N, population: usize) -> Vec<usize> {
         self.layer(layer).degree_distribution(population)
     }
 }
@@ -269,6 +285,34 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     ) -> Option<Edge<N::Entity, N::Data>> {
         self.get_data_mut(NetworkPlugin)
             .remove_edge(layer, from, to)
+    }
+
+    /// Removes the edges in both directions between `a` and `b` and returns them as
+    /// `(a -> b, b -> a)`, or removes nothing and returns `None` if either is missing.
+    #[must_use = "returns None if the edges were not both present"]
+    fn remove_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+    ) -> Option<EdgePair<N>> {
+        self.get_data_mut(NetworkPlugin)
+            .remove_edge_bidi(layer, a, b)
+    }
+
+    /// Changes the data of the edge in `layer` from `from` to `to` in place, keeping its
+    /// position among the edges of `from`. Returns `false`, without calling `f`, if there
+    /// is no such edge.
+    #[must_use = "returns false if there is no such edge"]
+    fn update_edge<N: Network>(
+        &mut self,
+        layer: N,
+        from: EntityId<N::Entity>,
+        to: EntityId<N::Entity>,
+        f: impl FnOnce(&mut N::Data),
+    ) -> bool {
+        self.get_data_mut(NetworkPlugin)
+            .update_edge(layer, from, to, f)
     }
 
     /// Removes every edge in `layer`.
@@ -669,6 +713,87 @@ mod test_api {
             context.add_edge_bidi(Contact::Household, person1, person1, 1.0),
             Err(IxaError::CannotMakeEdgeToSelf)
         ));
+    }
+
+    // The repeated layer is the point of the test; the generated `match` has a dead arm.
+    #[allow(unreachable_patterns)]
+    mod repeated {
+        use super::Person;
+
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        pub enum Repeated {
+            A,
+            B,
+        }
+        crate::impl_network!(
+            Repeated,
+            Person,
+            layers = [Repeated::A, Repeated::A, Repeated::B]
+        );
+    }
+    use repeated::Repeated;
+
+    #[test]
+    #[should_panic(expected = "every layer must appear once in ALL")]
+    fn repeated_layer_panics() {
+        let (mut context, person1, person2) = setup();
+        let _ = context.add_edge(Repeated::B, person1, person2, ());
+    }
+
+    #[test]
+    fn remove_edge_bidi() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        context
+            .add_edge_bidi(Contact::Household, person1, person2, 0.5)
+            .unwrap();
+        context
+            .add_edge_bidi(Contact::School, person1, person2, 0.25)
+            .unwrap();
+
+        let (forward, backward) = context
+            .remove_edge_bidi(Contact::Household, person1, person2)
+            .unwrap();
+        assert_eq!((forward.neighbor, forward.data), (person2, 0.5));
+        assert_eq!((backward.neighbor, backward.data), (person1, 0.5));
+        assert_eq!(context.get_degree(Contact::Household, person1), 0);
+        assert_eq!(context.get_degree(Contact::Household, person2), 0);
+        assert_eq!(context.get_degree(Contact::School, person1), 1);
+
+        // Only one direction present: nothing is removed.
+        context
+            .add_edge(Contact::Household, person1, person3, 1.0)
+            .unwrap();
+        assert!(context
+            .remove_edge_bidi(Contact::Household, person1, person3)
+            .is_none());
+        assert!(context
+            .remove_edge_bidi(Contact::Household, person3, person1)
+            .is_none());
+        assert!(context
+            .get_edge(Contact::Household, person1, person3)
+            .is_some());
+    }
+
+    #[test]
+    fn update_edge_in_place() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        context.add_edge(Tagged, person1, person2, 1).unwrap();
+        context.add_edge(Tagged, person1, person3, 2).unwrap();
+
+        assert!(context.update_edge(Tagged, person1, person2, |data| *data += 10));
+        let edges: Vec<_> = context
+            .get_edges(Tagged, person1)
+            .iter()
+            .map(|e| (e.neighbor, e.data))
+            .collect();
+        assert_eq!(edges, vec![(person2, 11), (person3, 2)]);
+
+        let mut called = false;
+        assert!(!context.update_edge(Tagged, person2, person1, |_| called = true));
+        assert!(!called);
+        assert!(context.get_edge(Tagged, person2, person1).is_none());
     }
 
     #[test]

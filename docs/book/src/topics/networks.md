@@ -30,13 +30,21 @@ context.add_edge_bidi(Contact::Household, p1, p2, 1.0)?; // both directions
 context.add_edges(Contact::School, pairs.iter().map(|&(a, b)| (a, b, 0.5)))?;
 
 let removed = context.remove_edge(Contact::School, p1, p2); // Option<Edge>
+let pair = context.remove_edge_bidi(Contact::Household, p1, p2); // Option<(Edge, Edge)>
 context.clear_layer(Contact::School);         // close the schools
+
+// Change an edge's data in place; false if there is no such edge.
+let updated = context.update_edge(Contact::School, p1, p2, |rate| *rate *= 0.5);
 ```
 
 Two rules are enforced: no edge from an entity to itself, and at most one edge
 per (source, neighbor) in a layer. Both return an `IxaError`.
-`add_edge_bidi` checks both directions before inserting either. Edge data is
-stored as given, so validate rates when you load them.
+`add_edge_bidi` checks both directions before inserting either, and
+`remove_edge_bidi` removes both or neither. Edge data is stored as given, so
+validate rates when you load them.
+
+`update_edge` keeps the edge where it is. Removing an edge and adding it back
+moves it, which changes which edge a given seed samples.
 
 ## Reading edges
 

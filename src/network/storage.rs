@@ -25,7 +25,7 @@ impl<E: Entity, D> LayerStorage<E, D> {
     /// Inserts `edge` into the list of `from`, or fails if `from` already has an edge
     /// to the same neighbor.
     pub fn add_edge(&mut self, from: EntityId<E>, edge: Edge<E, D>) -> Result<(), IxaError> {
-        if self.get_edge(from, edge.neighbor).is_some() {
+        if self.position(from, edge.neighbor).is_some() {
             return Err(IxaError::EdgeAlreadyExists);
         }
         self.push_unchecked(from, edge);
@@ -45,16 +45,31 @@ impl<E: Entity, D> LayerStorage<E, D> {
     /// Removes and returns the edge from `from` to `to`, if any. The order of the
     /// remaining edges of `from` is not preserved.
     pub fn remove_edge(&mut self, from: EntityId<E>, to: EntityId<E>) -> Option<Edge<E, D>> {
-        self.lists.get_mut(from.0).and_then(|edges| {
-            edges
-                .iter()
-                .position(|edge| edge.neighbor == to)
-                .map(|pos| edges.swap_remove(pos))
-        })
+        let pos = self.position(from, to)?;
+        Some(self.remove_at(from, pos))
+    }
+
+    /// The index of the edge from `from` to `to` in the list of `from`, if any.
+    pub fn position(&self, from: EntityId<E>, to: EntityId<E>) -> Option<usize> {
+        self.get_edges(from)
+            .iter()
+            .position(|edge| edge.neighbor == to)
+    }
+
+    /// Swap-removes the edge at `pos`, a position from [`position`](Self::position).
+    pub fn remove_at(&mut self, from: EntityId<E>, pos: usize) -> Edge<E, D> {
+        self.lists[from.0].swap_remove(pos)
     }
 
     pub fn get_edge(&self, from: EntityId<E>, to: EntityId<E>) -> Option<&Edge<E, D>> {
         self.get_edges(from).iter().find(|edge| edge.neighbor == to)
+    }
+
+    pub fn get_edge_mut(&mut self, from: EntityId<E>, to: EntityId<E>) -> Option<&mut Edge<E, D>> {
+        self.lists
+            .get_mut(from.0)?
+            .iter_mut()
+            .find(|edge| edge.neighbor == to)
     }
 
     /// The outgoing edges of `from`, empty if it has none.
