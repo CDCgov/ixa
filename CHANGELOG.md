@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0](https://github.com/CDCgov/ixa/compare/ixa-v4.0.0...ixa-v4.1.0) - 2026-11-05
+
+### Added
+
+- re-export log_enabled and Level from the log crate ([#1093](https://github.com/CDCgov/ixa/pull/1093))
+
 ## [4.0.0](https://github.com/CDCgov/ixa/compare/ixa-v3.1.0...ixa-v4.0.0) - 2026-10-26
 
 ### Migrating from 3.x
