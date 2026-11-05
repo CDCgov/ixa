@@ -15,6 +15,19 @@
 //! }
 //! ```
 //!
+//! `log_enabled!(Level::Debug)` reports whether a message at that level would be logged, so
+//! expensive diagnostics can be skipped when nobody is listening:
+//!
+//! ```rust
+//! use ixa::{debug, log_enabled, Level};
+//!
+//! pub fn do_a_thing(population: &[u32]) {
+//!     if log_enabled!(Level::Debug) {
+//!         debug!("population sum: {}", population.iter().sum::<u32>());
+//!     }
+//! }
+//! ```
+//!
 //! Only errors are logged by default. More logging messages can be enabled by passing
 //! the command line option `--log-level <level>`. Log messages can also be controlled
 //! programmatically. Logging can be enabled/disabled from code using the functions:
@@ -51,7 +64,7 @@ mod null_logger;
 use std::collections::hash_map::Entry;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
-pub use log::{debug, error, info, trace, warn, LevelFilter};
+pub use log::{debug, error, info, log_enabled, trace, warn, Level, LevelFilter};
 #[cfg(all(not(target_arch = "wasm32"), feature = "logging"))]
 use log4rs::Handle;
 

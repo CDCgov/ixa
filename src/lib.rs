@@ -100,8 +100,8 @@ pub use runner::{run_with_args, run_with_custom_args, run_with_merged_args, Base
 
 pub mod log;
 pub use log::{
-    debug, disable_logging, enable_logging, error, info, set_log_level, set_module_filter,
-    set_module_filters, trace, warn, LevelFilter,
+    debug, disable_logging, enable_logging, error, info, log_enabled, set_log_level,
+    set_module_filter, set_module_filters, trace, warn, Level, LevelFilter,
 };
 
 pub mod hashing;
