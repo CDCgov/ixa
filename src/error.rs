@@ -74,6 +74,8 @@ pub enum IxaError {
     CannotMakeEdgeToSelf,
     #[error("edge already exists")]
     EdgeAlreadyExists,
+    #[error("invalid edge data {data} in network {network}")]
+    InvalidEdgeData { network: String, data: String },
 
     #[error("initialization list is missing required properties")]
     MissingRequiredInitializationProperties,

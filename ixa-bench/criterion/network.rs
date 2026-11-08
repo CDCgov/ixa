@@ -121,7 +121,7 @@ fn bench_network(c: &mut Criterion) {
             let mut picked = 0;
             for &person in &people {
                 if context
-                    .sample_edge_weighted(BenchRng, Contact::Community, person, |e| e.data)
+                    .sample_edge_weighted(BenchRng, Contact::Community, person, |edge| edge.data)
                     .is_some()
                 {
                     picked += 1;

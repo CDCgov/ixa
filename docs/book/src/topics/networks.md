@@ -20,6 +20,21 @@ define_network!(InfectionTree, Person);
 a unit struct with one layer. `data` is the type stored on every edge and
 defaults to `()`.
 
+Edge data is checked when it is stored. By default `f64` and `f32` data must be
+finite and non-negative, since it is usually a rate or weight, and any other
+type is accepted as given. `validate` replaces the default with your own rule:
+
+```rust
+// Rates relative to a household contact, so nothing above 1 makes sense.
+define_network!(
+    Contact,
+    Person,
+    layers = { Household, School },
+    data = f64,
+    validate = |rate: &f64| (0.0..=1.0).contains(rate)
+);
+```
+
 ## Adding and removing edges
 
 Every method takes the layer first; the entity and data types follow from it.
@@ -33,15 +48,16 @@ let removed = context.remove_edge(Contact::School, p1, p2); // Option<Edge>
 let pair = context.remove_edge_bidi(Contact::Household, p1, p2); // Option<(Edge, Edge)>
 context.clear_layer(Contact::School);         // close the schools
 
-// Change an edge's data in place; false if there is no such edge.
-let updated = context.update_edge(Contact::School, p1, p2, |rate| *rate *= 0.5);
+// Change an edge's data in place; Ok(false) if there is no such edge.
+let updated = context.update_edge(Contact::School, p1, p2, |rate| *rate *= 0.5)?;
 ```
 
-Two rules are enforced: no edge from an entity to itself, and at most one edge
-per (source, neighbor) in a layer. Both return an `IxaError`.
-`add_edge_bidi` checks both directions before inserting either, and
-`remove_edge_bidi` removes both or neither. Edge data is stored as given, so
-validate rates when you load them.
+Three rules are enforced: no edge from an entity to itself, at most one edge
+per (source, neighbor) in a layer, and the data passes the network's
+validation. Each returns an `IxaError`, and a failed call changes nothing: a
+rejected update leaves the edge's previous data in place. `add_edge_bidi`
+checks both directions before inserting either, and `remove_edge_bidi` removes
+both or neither.
 
 `update_edge` keeps the edge where it is. Removing an edge and adding it back
 moves it, which changes which edge a given seed samples.

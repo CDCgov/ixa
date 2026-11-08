@@ -6,11 +6,13 @@ index per entity type, so a `NetworkStore<E>` can be sized when it is created.
 */
 
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::marker::PhantomData;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{LazyLock, Mutex};
 
+use crate::data_plugin::claim_index;
 use crate::entity::Entity;
-use crate::{HashMap, HashMapExt};
+use crate::{HashMap, HashMapExt, IxaError};
 
 /// A network over one entity type, made of one or more layers. Implemented by
 /// [`define_network!`](crate::define_network) and [`impl_network!`](crate::impl_network).
@@ -29,6 +31,19 @@ pub trait Network: Copy + Eq + Debug + 'static {
     /// The position of this layer in [`ALL`](Self::ALL).
     fn layer(self) -> usize;
 
+    /// Checks data before it is stored on an edge, by `add_edge`, `add_edge_bidi`,
+    /// `add_edges` and `update_edge`. The network macros implement it from their
+    /// `validate = ..` option, or without one require `f64` and `f32` data to be finite and
+    /// non-negative and accept any other type as is. This default, used only by a
+    /// hand-written `impl Network`, accepts everything.
+    ///
+    /// # Errors
+    /// [`IxaError::InvalidEdgeData`](crate::IxaError::InvalidEdgeData) if the data is rejected.
+    fn validate(data: &Self::Data) -> Result<(), IxaError> {
+        let _ = data;
+        Ok(())
+    }
+
     #[must_use]
     fn name() -> &'static str {
         let full = std::any::type_name::<Self>();
@@ -38,7 +53,9 @@ pub trait Network: Copy + Eq + Debug + 'static {
 
     /// The index of this network among the networks over `Self::Entity`, assigned on
     /// first access and registered from a `ctor` so the count is known before any
-    /// `NetworkStore<E>` is built.
+    /// `NetworkStore<E>` is built. A hand-written impl must call
+    /// [`register_network`](crate::network::register_network) before the first network
+    /// access instead.
     #[must_use]
     fn id() -> usize;
 }
@@ -62,18 +79,43 @@ pub fn register_network<N: Network>() {
 
 /// Assigns the next id for networks over `E` to `network_id` unless another thread
 /// already initialized it, in which case the existing id is returned and the counter is
-/// left alone. Same protocol as `initialize_data_plugin_index`; for the ordering argument
-/// see <https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872>.
+/// left alone.
 #[must_use]
 pub fn initialize_network_id<E: Entity>(network_id: &AtomicUsize) -> usize {
     let mut guard = NEXT_NETWORK_ID_BY_ENTITY.lock().unwrap();
-    let candidate = guard.entry(E::id()).or_insert_with(|| 0);
+    let next = guard.entry(E::id()).or_insert(0);
+    claim_index(network_id, next)
+}
 
-    match network_id.compare_exchange(usize::MAX, *candidate, Ordering::AcqRel, Ordering::Acquire) {
-        Ok(_) => {
-            *candidate += 1;
-            *candidate - 1
-        }
-        Err(existing) => existing,
+/// Autoref-specialization probe for the default edge data check; resolves only at a
+/// concrete type, so it is used by the network macros and never in generic code.
+#[doc(hidden)]
+pub struct EdgeDataProbe<D>(pub PhantomData<D>);
+
+#[doc(hidden)]
+pub trait FloatEdgeData<D> {
+    fn is_valid_edge_data(&self, data: &D) -> bool;
+}
+
+impl FloatEdgeData<f64> for EdgeDataProbe<f64> {
+    fn is_valid_edge_data(&self, data: &f64) -> bool {
+        data.is_finite() && *data >= 0.0
+    }
+}
+
+impl FloatEdgeData<f32> for EdgeDataProbe<f32> {
+    fn is_valid_edge_data(&self, data: &f32) -> bool {
+        data.is_finite() && *data >= 0.0
+    }
+}
+
+#[doc(hidden)]
+pub trait AnyEdgeData<D> {
+    fn is_valid_edge_data(&self, data: &D) -> bool;
+}
+
+impl<D> AnyEdgeData<D> for &EdgeDataProbe<D> {
+    fn is_valid_edge_data(&self, _data: &D) -> bool {
+        true
     }
 }

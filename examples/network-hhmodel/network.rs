@@ -7,8 +7,15 @@ use crate::{Person, PersonId};
 
 // One layer per setting. The edge data is the transmission rate relative to a
 // household contact, so a pair who share a household and a school has one edge in
-// each layer.
-define_network!(Contact, Person, layers = { Household, AgeUnder5, Age5to17 }, data = f64);
+// each layer. A household contact has rate 1, so anything above 1 would give a
+// transmission probability above 1.
+define_network!(
+    Contact,
+    Person,
+    layers = { Household, AgeUnder5, Age5to17 },
+    data = f64,
+    validate = |rate: &f64| (0.0..=1.0).contains(rate)
+);
 
 define_rng!(NetworkRng);
 
@@ -84,14 +91,10 @@ pub fn get_contacts(context: &Context, person_id: PersonId, duration: f64) -> Ha
     contacts
 }
 
-// `rr`: relative rate of transmission between (vs. within) households
+// `relative_rate`: rate of transmission between (vs. within) households
 pub fn init(context: &mut Context, relative_rate: f64) {
-    // Rates are relative to a household contact, whose rate is 1, so anything above 1
-    // would give a transmission probability above 1.
-    assert!(
-        (0.0..=1.0).contains(&relative_rate),
-        "relative_rate must be in [0, 1]"
-    );
+    // Fail before building anything, and even if the edge lists are empty.
+    Contact::validate(&relative_rate).expect("relative_rate must be in [0, 1]");
     // Create dense household networks
     create_household_networks(context);
     // Add other edges from csv's with lower transmission rate

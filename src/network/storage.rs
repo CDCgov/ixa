@@ -86,9 +86,10 @@ impl<E: Entity, D> LayerStorage<E, D> {
     }
 
     /// Counts of entities by out-degree over ids `0..population`: `result[d]` is the
-    /// number of entities with degree `d`, so the result has `max degree + 1` entries.
+    /// number of entities with degree `d`, so the result has `max degree + 1` entries,
+    /// at least one.
     pub fn degree_distribution(&self, population: usize) -> Vec<usize> {
-        let mut distribution = Vec::new();
+        let mut distribution = vec![0];
         for id in 0..population {
             let degree = self.get_edges(EntityId::new(id)).len();
             if degree >= distribution.len() {

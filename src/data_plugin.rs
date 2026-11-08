@@ -46,28 +46,23 @@ static NEXT_DATA_PLUGIN_INDEX: Mutex<usize> = Mutex::new(0);
 /// successfully initialize the provided index. (Must be `pub`, as it's called from within a macro.)
 #[must_use]
 pub fn initialize_data_plugin_index(plugin_index: &AtomicUsize) -> usize {
-    // Acquire a global lock.
     let mut guard = NEXT_DATA_PLUGIN_INDEX.lock().unwrap();
-    let candidate = *guard;
+    claim_index(plugin_index, &mut guard)
+}
 
-    // Try to claim the candidate index. Here we guard against the potential race condition that
-    // another instance of this plugin in another thread just initialized the index prior to us
-    // obtaining the lock. If the index has been initialized beneath us, we do not update
-    // `NEXT_DATA_PLUGIN_INDEX`, we just return the value `plugin_index` was initialized to.
-    // For a justification of the data ordering, see:
-    //     https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872
-    match plugin_index.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire)
-    {
+/// Stores `*next` into `slot` if the slot is still unclaimed (`usize::MAX`) and advances
+/// `next`. Otherwise another thread initialized `slot` first, so `next` is left alone and
+/// the existing index is returned. The caller holds the lock that guards `next`.
+/// For a justification of the data ordering, see:
+///     <https://github.com/CDCgov/ixa/pull/477#discussion_r2244302872>
+pub(crate) fn claim_index(slot: &AtomicUsize, next: &mut usize) -> usize {
+    let candidate = *next;
+    match slot.compare_exchange(usize::MAX, candidate, Ordering::AcqRel, Ordering::Acquire) {
         Ok(_) => {
-            // We won the race — increment the global next plugin index and return the new index
-            *guard += 1;
+            *next += 1;
             candidate
         }
-        Err(existing) => {
-            // Another thread beat us — don’t increment the global next plugin index,
-            // just return existing
-            existing
-        }
+        Err(existing) => existing,
     }
 }
 
