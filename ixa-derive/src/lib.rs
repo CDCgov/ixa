@@ -1,6 +1,7 @@
 extern crate proc_macro;
 
 mod calendar;
+mod eq_hash;
 
 use proc_macro::TokenStream;
 use quote::quote;
@@ -10,6 +11,16 @@ use syn::{parse_macro_input, parse_quote, DeriveInput};
 #[proc_macro_attribute]
 pub fn calendar(args: TokenStream, item: TokenStream) -> TokenStream {
     calendar::calendar(args, item)
+}
+
+/// Field-by-field `PartialEq`, `Eq` and `Hash` with floats compared by value; documented at
+/// `ixa::EqHash`.
+#[proc_macro_derive(EqHash)]
+pub fn derive_eq_hash(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    eq_hash::derive_eq_hash(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 #[proc_macro_derive(IxaEvent)]

@@ -30,9 +30,9 @@ The primary advantage of using this macro is that it automatically derives the l
 [`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
-If you need the macro to generate `Eq` and/or `Hash` manually instead of deriving them, use the
-optional `impl_eq_hash = ...` argument with one of the following values: `Eq`, `Hash`, `both`, or
-`neither`.
+Every generated type derives [`EqHash`][crate::EqHash] in place of `PartialEq`, `Eq` and
+`Hash`, so a field may hold an `f32` or `f64`: floats compare by value, with `NaN` equal to
+itself, and the property can be indexed like any other.
 
 Notice you need to use the `struct` or `enum` keywords, but you don't need to
 specify the visibility. A `pub` visibility is added automatically to the struct
@@ -49,12 +49,8 @@ required by [`Property`][crate::entity::property::Property] for your type: `Copy
 `Hash`. To be saved by population persistence, a non-derived property must also implement
 `serde::Serialize` and `serde::Deserialize`, or be declared with `persist = false` to skip it.
 
-If the type cannot derive `PartialEq` / `Eq` or `Hash`, for example because it contains `f32` or
-`f64`, use [`impl_property_eq!`][macro@crate::impl_property_eq],
-[`impl_property_hash!`][macro@crate::impl_property_hash], or
-[`impl_property_eq_hash!`][macro@crate::impl_property_eq_hash] to generate those implementations
-for the manually declared type. These macros require `ixa::rkyv::Archive` and `ixa::rkyv::Serialize` derives
-because they compare and hash the type's archived byte representation.
+If the type holds an `f32` or `f64`, derive [`EqHash`][crate::EqHash] instead of `PartialEq`,
+`Eq` and `Hash`.
 
 Some examples:
 
@@ -90,19 +86,9 @@ impl_property!(InfectionStatus, Person, default_const = InfectionStatus::Suscept
 pub struct Vaccinated(pub bool);
 impl_property!(Vaccinated, Person, default_const = Vaccinated(false));
 
-// For manually declared floating-point properties, generate byte-based equality and hashing.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    ixa::rkyv::Archive,
-    ixa::rkyv::Serialize,
-)]
-#[rkyv(crate = ixa::rkyv)]
+// A floating-point property declared by hand: `EqHash` provides `PartialEq`, `Eq` and `Hash`.
+#[derive(Copy, Clone, Debug, ixa::EqHash, serde::Serialize, serde::Deserialize)]
 struct Weight(pub f64);
-impl_property_eq_hash!(Weight);
 impl_property!(Weight, Person, default_const = Weight(0.0));
 ```
 
@@ -143,7 +129,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
+/// #[derive(Debug, Clone, Copy, ixa::EqHash, serde::Serialize, serde::Deserialize)]
 /// pub struct Age(u8);
 /// impl_property!(Age, Person);
 /// ```
@@ -163,7 +149,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
+/// #[derive(Debug, Clone, Copy, ixa::EqHash, serde::Serialize, serde::Deserialize)]
 /// pub struct Coordinates { x: i32, y: i32 }
 /// impl_property!(Coordinates, Person);
 /// ```
@@ -185,7 +171,7 @@ impl_property!(
 /// ```rust
 /// # use ixa::{impl_property, define_entity};
 /// # define_entity!(Person);
-/// #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
+/// #[derive(Debug, Clone, Copy, ixa::EqHash, serde::Serialize, serde::Deserialize)]
 /// pub enum InfectionStatus {
 ///     Susceptible,
 ///     Infectious,
@@ -196,110 +182,40 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - By default, the generated type derives `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`, and the
-///   Serde traits; for a field type without Serde, use [`impl_property!`][macro@crate::impl_property].
+/// - The generated type derives `Debug`, `Clone`, `Copy`, [`EqHash`][crate::EqHash] (which
+///   provides `PartialEq`, `Eq` and `Hash`, with floats compared by value) and the Serde traits;
+///   for a field type without Serde, use [`impl_property!`][macro@crate::impl_property].
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
-/// - Use `impl_eq_hash = Eq`, `Hash`, `both`, or `neither` as the first optional argument to suppress the default
-///   `Eq`/`Hash` derives and switch to generated or user-supplied implementations.
 /// - Remaining optional arguments follow the same ordering as [`impl_property!`][macro@crate::impl_property].
 /// - If you need a more complex type definition (e.g., generics, attributes, or non-`Copy`
 ///   fields), define the type manually and then call [`impl_property!`][macro@crate::impl_property] directly.
 #[macro_export]
 macro_rules! define_property {
-    // Implementation Notes
-    //
-    // To implement the optional `impl_eq_hash` keyword argument, we have the following choices:
-    //
-    // 1. Have a single public match branch per type form with `$(, impl_eq_hash =
-    //    $impl_eq_hash:ident)?`, but explicitly list all the keyword options. This option disallows
-    //    the `$(, $($extra:tt)+)*` pattern for the tail.
-    // 2. Have two branches per type form, one with the `impl_eq_hash = ...` keyword present and one
-    //    with it absent, and use the `$(, $($extra:tt)+)*` pattern for the tail. This duplicates the
-    //    number of public match arms, but it allows us to keep the keyword arguments defined in
-    //    `impl_property!` instead of repeated throughout the code.
-    // 3. Use a proc macro or "TT munching", both of which are more heavy weight.
-    //
-    // We choose the second option. Unfortunately, this doesn't completely eliminate repetition of
-    // the list of keyword arguments. We still have them in the
-    // `impl_derived_property!(@with_option_display_default ...)` and
-    // `impl_property!(@with_option_display_default ...)` subcommands.
-
-    (
-        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
-        $entity:ident,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)*)?
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration $impl_eq_hash,
-            pub struct $name(pub Option<$inner_ty>);,
-            $name
-        );
-        $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
-    };
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident
         $(, $($extra:tt)*)?
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration ,
-            pub struct $name(pub Option<$inner_ty>);,
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name(pub Option<$inner_ty>););
         $crate::impl_property!(@with_option_display_default $name, $entity $(, $($extra)*)?);
     };
 
     (
         struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
-        $entity:ident,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)*)?
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration $impl_eq_hash,
-            pub struct $name($(pub $field_ty),*);,
-            $name
-        );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
-    };
-    (
-        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
         $entity:ident
         $(, $($extra:tt)*)?
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration ,
-            pub struct $name($(pub $field_ty),*);,
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name($(pub $field_ty),*););
         $crate::impl_property!($name, $entity $(, $($extra)*)?);
     };
 
     (
         struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
-        $entity:ident,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)*)?
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration $impl_eq_hash,
-            pub struct $name { $(pub $field_name : $field_ty),* },
-            $name
-        );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
-    };
-    (
-        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
         $entity:ident
         $(, $($extra:tt)*)?
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration ,
-            pub struct $name { $(pub $field_name : $field_ty),* },
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name { $(pub $field_name : $field_ty),* });
         $crate::impl_property!($name, $entity $(, $($extra)*)?);
     };
 
@@ -307,141 +223,50 @@ macro_rules! define_property {
         enum $name:ident {
             $($variant:ident),* $(,)?
         },
-        $entity:ident,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)*)?
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration $impl_eq_hash,
-            pub enum $name { $($variant),* },
-            $name
-        );
-        $crate::impl_property!($name, $entity $(, $($extra)*)?);
-    };
-    (
-        enum $name:ident {
-            $($variant:ident),* $(,)?
-        },
         $entity:ident
         $(, $($extra:tt)*)?
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration ,
-            pub enum $name { $($variant),* },
-            $name
-        );
+        $crate::define_property!(@declare pub enum $name { $($variant),* });
         $crate::impl_property!($name, $entity $(, $($extra)*)?);
     };
 
-    // Both `define_property!` and `define_derived_property!` need to attach derives to a
-    // concrete item, so the mode table lives here as a shared internal subcommand.
-    (@apply_property_decoration , $item:item, $name:ident) => {
-        #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
+    // The derives every property type gets. `EqHash` stands in for `PartialEq`, `Eq` and
+    // `Hash` so that fields may hold floats. Shared with `define_derived_property!`.
+    (@declare $item:item) => {
+        #[derive(Debug, Clone, Copy, $crate::EqHash, serde::Serialize, serde::Deserialize)]
         $item
     };
-    (@apply_property_decoration Eq, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
-        #[rkyv(crate = $crate::rkyv)]
-        $item
-        $crate::impl_property_eq!($name);
-    };
-    (@apply_property_decoration Hash, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
-        #[rkyv(crate = $crate::rkyv)]
-        $item
-        $crate::impl_property_hash!($name);
-    };
-    (@apply_property_decoration both, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, $crate::rkyv::Archive, $crate::rkyv::Serialize)]
-        #[rkyv(crate = $crate::rkyv)]
-        $item
-        $crate::impl_property_eq_hash!($name);
-    };
-    (@apply_property_decoration neither, $item:item, $name:ident) => {
-        #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
-        $item
-    };
-    (@apply_property_decoration $mode:ident, $item:item, $name:ident) => {
-        compile_error!("`impl_eq_hash` must be one of `Eq`, `Hash`, `both`, or `neither`");
-    };
-
 }
 
-/// Implements [`PartialEq`][core::cmp::PartialEq] and [`Eq`][core::cmp::Eq] for a property type
-/// using Ixa's generated byte-based equality behavior.
-///
-/// This macro is useful when declaring a property type manually and then using
-/// [`impl_property!`][macro@crate::impl_property] or
-/// [`impl_derived_property!`][macro@crate::impl_derived_property]. The type must implement
-/// [`rkyv::Archive`][crate::rkyv::Archive] and [`rkyv::Serialize`][crate::rkyv::Serialize], because
-/// equality is computed by serializing the archived representation of each value.
-///
-/// The macro accepts a concrete property type identifier. Generic property types are not supported.
+/// Removed in 5.0; derive [`EqHash`][crate::EqHash] instead. Kept for one major release so the
+/// error names the replacement.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! impl_property_eq {
-    ($name:ident) => {
-        impl core::cmp::PartialEq for $name {
-            fn eq(&self, other: &Self) -> bool {
-                const N: usize = core::mem::size_of::<<$name as $crate::rkyv::Archive>::Archived>();
-
-                let left = $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
-                    self,
-                    $crate::hashing::EqualityBufferWriter::<N>::new(),
-                )
-                .expect("serializing left value for equality comparison failed");
-
-                let right = $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
-                    other,
-                    $crate::hashing::EqualityBufferWriter::<N>::new(),
-                )
-                .expect("serializing right value for equality comparison failed");
-
-                left.as_written() == right.as_written()
-            }
-        }
-
-        impl core::cmp::Eq for $name {}
+    ($($tt:tt)*) => {
+        compile_error!(
+            "`impl_property_eq!` was removed: add `#[derive(ixa::EqHash)]` to the type instead."
+        );
     };
 }
 
-/// Implements [`Hash`][core::hash::Hash] for a property type using Ixa's generated byte-based
-/// hashing behavior.
-///
-/// This macro is useful when declaring a property type manually and then using
-/// [`impl_property!`][macro@crate::impl_property] or
-/// [`impl_derived_property!`][macro@crate::impl_derived_property]. The type must implement
-/// [`rkyv::Archive`][crate::rkyv::Archive] and [`rkyv::Serialize`][crate::rkyv::Serialize], because
-/// hashing is computed by serializing the archived representation into the supplied hasher.
-///
-/// The macro accepts a concrete property type identifier. Generic property types are not supported.
+/// Removed in 5.0; derive [`EqHash`][crate::EqHash] instead.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! impl_property_hash {
-    ($name:ident) => {
-        impl core::hash::Hash for $name {
-            fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-                $crate::rkyv::api::high::to_bytes_in::<_, $crate::rkyv::rancor::Error>(
-                    self,
-                    $crate::hashing::HasherWriter::new(state),
-                )
-                .expect("serialization failed while hashing");
-            }
-        }
+    ($($tt:tt)*) => {
+        compile_error!(
+            "`impl_property_hash!` was removed: add `#[derive(ixa::EqHash)]` to the type instead."
+        );
     };
 }
 
-/// Implements [`PartialEq`][core::cmp::PartialEq], [`Eq`][core::cmp::Eq], and
-/// [`Hash`][core::hash::Hash] for a property type using Ixa's generated byte-based equality and
-/// hashing behavior.
-///
-/// This is a convenience wrapper around [`impl_property_eq!`][macro@crate::impl_property_eq] and
-/// [`impl_property_hash!`][macro@crate::impl_property_hash].
-///
-/// The macro accepts a concrete property type identifier. Generic property types are not supported.
+/// Removed in 5.0; derive [`EqHash`][crate::EqHash] instead.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! impl_property_eq_hash {
-    ($name:ident) => {
-        $crate::impl_property_eq!($name);
-        $crate::impl_property_hash!($name);
+    ($($tt:tt)*) => {
+        compile_error!("`impl_property_eq_hash!` was removed: add `#[derive(ixa::EqHash)]` to the type instead.");
     };
 }
 
@@ -522,6 +347,23 @@ macro_rules! impl_property_eq_hash {
 /// Only `false` is accepted.
 #[macro_export]
 macro_rules! impl_property {
+    // The `impl_eq_hash` option was removed in 5.0; these arms give a clear error instead of
+    // "no rules expected `impl_eq_hash`" and can go in the next major release.
+    (
+        $property:ident,
+        $entity:ident,
+        impl_eq_hash = $mode:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::impl_property!(@removed_impl_eq_hash);
+    };
+    (@removed_impl_eq_hash) => {
+        compile_error!(
+            "`impl_eq_hash` was removed: `define_property!` now derives `EqHash`, which handles \
+             floats. For a type declared by hand, add `#[derive(ixa::EqHash)]`."
+        );
+    };
+
     (
         $property:ident,
         $entity:ident
@@ -602,6 +444,16 @@ macro_rules! impl_property {
             // persistence
             $crate::impl_property!(@select_persistence $($compute_derived_fn)? ; $($persist)?),
         );
+    };
+
+    (
+        @with_option_display_default
+        $property:ident,
+        $entity:ident,
+        impl_eq_hash = $mode:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::impl_property!(@removed_impl_eq_hash);
     };
 
     (
@@ -892,45 +744,12 @@ macro_rules! impl_property {
 /// * `[$($dependency),+]`: A list of person properties the derived property depends on.
 /// * `[$(global_dependency),*]`: A list of global properties the derived property depends on. Can optionally be omitted if empty.
 /// * `$calculate`: A closure that takes the values of each dependency and returns the derived value.
-/// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property],
-///   plus `impl_eq_hash = Eq | Hash | both | neither` to control whether `Eq`/`Hash` are derived or generated
-///   for the declared type, mirroring [`define_property!`][macro@crate::define_property].
+/// * Optional parameters: The same optional parameters accepted by [`impl_property!`][macro@crate::impl_property].
+///
+/// The declared type gets the same derives as with [`define_property!`][macro@crate::define_property].
 #[macro_export]
 macro_rules! define_derived_property {
-    // Implementation Notes
-    //
-    // We reuse `define_property!`'s shared decoration helper, then delegate the derived-property
-    // behavior to `impl_derived_property!`.
-    //
-    // See `derive_property!` implementation notes for why each type form is duplicated.
-
     // Struct (tuple) with single Option<T> field
-    (
-        struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
-        $entity:ident,
-        [$($dependency:ident),*]
-        $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            $impl_eq_hash,
-            pub struct $name(pub Option<$inner_ty>);,
-            $name
-        );
-
-        $crate::impl_derived_property!(
-            @with_option_display_default
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
-        );
-    };
     (
         struct $name:ident ( $visibility:vis Option<$inner_ty:ty> ),
         $entity:ident,
@@ -939,12 +758,7 @@ macro_rules! define_derived_property {
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            ,
-            pub struct $name(pub Option<$inner_ty>);,
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name(pub Option<$inner_ty>););
 
         $crate::impl_derived_property!(
             @with_option_display_default
@@ -963,40 +777,10 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            $impl_eq_hash,
-            pub struct $name( $(pub $field_ty),* );,
-            $name
-        );
-
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
-        );
-    };
-    (
-        struct $name:ident ( $($visibility:vis $field_ty:ty),* $(,)? ),
-        $entity:ident,
-        [$($dependency:ident),*]
-        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            ,
-            pub struct $name( $(pub $field_ty),* );,
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name( $(pub $field_ty),* ););
 
         $crate::impl_derived_property!(
             $name,
@@ -1014,40 +798,10 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            $impl_eq_hash,
-            pub struct $name { $($visibility $field_name : $field_ty),* },
-            $name
-        );
-
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
-        );
-    };
-    (
-        struct $name:ident { $($visibility:vis $field_name:ident : $field_ty:ty),* $(,)? },
-        $entity:ident,
-        [$($dependency:ident),*]
-        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            ,
-            pub struct $name { $($visibility $field_name : $field_ty),* },
-            $name
-        );
+        $crate::define_property!(@declare pub struct $name { $(pub $field_name : $field_ty),* });
 
         $crate::impl_derived_property!(
             $name,
@@ -1067,46 +821,10 @@ macro_rules! define_derived_property {
         $entity:ident,
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
-        |$($param:ident),+| $derive_fn:expr,
-        impl_eq_hash = $impl_eq_hash:ident
-        $(, $($extra:tt)+)*
-    ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            $impl_eq_hash,
-            pub enum $name {
-                $($variant),*
-            },
-            $name
-        );
-
-        $crate::impl_derived_property!(
-            $name,
-            $entity,
-            [$($dependency),*],
-            [$($($global_dependency),*)?],
-            |$($param),+| $derive_fn
-            $(, $($extra)+)*
-        );
-    };
-    (
-        enum $name:ident {
-            $($variant:ident),* $(,)?
-        },
-        $entity:ident,
-        [$($dependency:ident),*]
-        $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
         $(, $($extra:tt)+)*
     ) => {
-        $crate::define_property!(
-            @apply_property_decoration
-            ,
-            pub enum $name {
-                $($variant),*
-            },
-            $name
-        );
+        $crate::define_property!(@declare pub enum $name { $($variant),* });
 
         $crate::impl_derived_property!(
             $name,
@@ -1126,6 +844,19 @@ macro_rules! define_derived_property {
 /// of [`impl_property!`][macro@crate::impl_property]. It calls [`impl_property!`][macro@crate::impl_property] with the appropriate derived property parameters.
 #[macro_export]
 macro_rules! impl_derived_property {
+    (
+        $(@with_option_display_default)?
+        $name:ident,
+        $entity:ident,
+        [$($dependency:ident),*]
+        $(, [$($global_dependency:ident),*])?,
+        |$($param:ident),+| $derive_fn:expr,
+        impl_eq_hash = $mode:ident
+        $(, $($extra:tt)*)?
+    ) => {
+        $crate::impl_property!(@removed_impl_eq_hash);
+    };
+
     (
         $name:ident,
         $entity:ident,
@@ -1439,7 +1170,6 @@ mod tests {
     define_property!(
         struct POFloat(Option<f64>),
         Person,
-        impl_eq_hash = both,
         default_const = POFloat(None)
     );
     define_property!(
@@ -1463,7 +1193,7 @@ mod tests {
         default_const = Name::Empty
     );
     define_property!(struct Age(u8), Person, default_const = Age(0));
-    define_property!(struct Weight(f64), Person, impl_eq_hash = both, default_const = Weight(0.0));
+    define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
 
     // A struct with named fields
     define_property!(
@@ -1472,7 +1202,6 @@ mod tests {
             dose: u8,
         },
         Person,
-        impl_eq_hash = both,
         default_const = Innocculation { time: 0.0, dose: 0 }
     );
 
@@ -1526,8 +1255,7 @@ mod tests {
         struct DerivedMaybeWeight(Option<f64>),
         Person,
         [Age],
-        |age| DerivedMaybeWeight((age.0 != 0).then_some(age.0 as f64)),
-        impl_eq_hash = both
+        |age| DerivedMaybeWeight((age.0 != 0).then_some(age.0 as f64))
     );
 
     define_derived_property!(
@@ -1545,8 +1273,7 @@ mod tests {
         struct DerivedWeight(f64),
         Person,
         [Age],
-        |age| DerivedWeight(age.0 as f64),
-        impl_eq_hash = both
+        |age| DerivedWeight(age.0 as f64)
     );
 
     #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -1933,7 +1660,7 @@ mod tests {
     }
 
     #[test]
-    fn test_define_derived_property_impl_eq_hash() {
+    fn test_define_derived_property_float_is_hashable() {
         let mut values = crate::HashSet::default();
         values.insert(DerivedWeight(3.0));
         assert!(values.contains(&DerivedWeight(3.0)));

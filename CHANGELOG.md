@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Migrating
+
+- **Float properties work without a wrapper.** `define_property!` and
+  `define_derived_property!` now derive `ixa::EqHash`, which implements `PartialEq`, `Eq` and
+  `Hash` with floats compared by value (`NaN` equals itself, `-0.0` equals `0.0`), so
+  `define_property!(struct Weight(f64), Person)` compiles and can be indexed. To migrate:
+  - Remove `impl_eq_hash = ...` arguments, and any hand-written `PartialEq`, `Eq` or `Hash`
+    impls on macro-declared types, which now conflict.
+  - On types you declare yourself, replace `#[derive(PartialEq, Eq, Hash)]` with
+    `#[derive(ixa::EqHash)]` if they hold floats.
+  - If you used `impl_eq_hash = neither` because a field type is only `PartialEq`, give that type
+    `Eq` and `Hash` too (`EqHash` if it holds floats). To keep a property `PartialEq`-only,
+    declare it by hand and use `impl_property!`.
+- **Removed** `impl_property_eq!`, `impl_property_hash!` and `impl_property_eq_hash!` (each now
+  fails with an error pointing at `EqHash`), the `ixa::rkyv` re-export and dependency, and
+  `ixa::hashing::HasherWriter` / `EqualityBufferWriter`.
+
+### Added
+
+- `ixa::EqHash` derive and `ixa::ValueKey` (implemented for floats, primitives, `Option`s, arrays
+  and tuples; the `ixa::value_key` module holds it).
+
 ## [4.1.0](https://github.com/CDCgov/ixa/compare/ixa-v4.0.0...ixa-v4.1.0) - 2026-11-05
 
 ### Added

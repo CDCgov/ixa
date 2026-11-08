@@ -62,7 +62,6 @@ ouroboros = "^0.18.5"
 thiserror = "^2.0.11"
 smallbox = "^0.8.8"
 smallvec = "^1.15.1"
-rkyv = "^0.8.15"
 
 [package]
 name = "ixa"
@@ -107,7 +106,6 @@ rustc-hash.workspace = true
 thiserror.workspace = true
 smallvec.workspace = true
 smallbox.workspace = true
-rkyv.workspace = true
 tempfile.workspace = true
 bincode-next.workspace = true
 

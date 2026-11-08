@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `EqHash` derive: `PartialEq`, `Eq` and `Hash` for property types with floats compared by value.
+
 ## [2.1.0](https://github.com/CDCgov/ixa/compare/ixa-derive-v2.0.1...ixa-derive-v2.1.0) - 2026-10-26
 
 ### Added

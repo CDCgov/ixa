@@ -14,6 +14,8 @@ pub use crate::report::ContextReportExt;
 pub use crate::{
     define_data_plugin, define_derived_property, define_entity, define_global_property,
     define_multi_property, define_network, define_property, define_report, define_rng, impl_entity,
-    impl_network, impl_property, impl_property_eq, impl_property_eq_hash, impl_property_hash,
-    output, schedule_relative, track_periodic_value_change_counts, with, PlanId, PluginContext,
+    impl_network, impl_property, output, schedule_relative, track_periodic_value_change_counts,
+    with, EqHash, PlanId, PluginContext,
 };
+// Removed macros, exported so a 4.x model gets an error naming `EqHash`; drop in the next major.
+pub use crate::{impl_property_eq, impl_property_eq_hash, impl_property_hash};

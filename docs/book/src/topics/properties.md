@@ -159,17 +159,12 @@ as `struct LastVaccination(Option\<f64>)`.
 define_property!(
     struct LastVaccination(Option<f64>),
     Person,
-    impl_eq_hash = neither,
     default_const = LastVaccination(None)
 );
 ```
 
-Notice that we provided a default of `LastVaccination(None)`, which stands for "no value set". Because this example
-contains an `f64` and does not need to be indexed, we also pass `impl_eq_hash = neither` so `define_property!` does not
-try to derive `Eq` and `Hash`. No manual `Eq` or `Hash` implementations are required for unindexed floating-point
-properties.
-See [Floating Point Types and Implementing `Eq` and `Hash`](#floating-point-types-and-implementing-eq-and-hash) for
-the cases where `Eq` and `Hash` are still needed.
+Notice that we provided a default of `LastVaccination(None)`, which stands for "no value set". The `f64` inside
+needs nothing special: see [Floating Point Properties](#floating-point-properties).
 
 This is such a common pattern that Ixa detects the `Option` and provides a custom "display function" for it
 for writing values to reports and diagnostics; see the section on
@@ -268,13 +263,12 @@ define_property!(
 ```
 
 For these forms, `define_property!` creates the type, makes it public, adds the
-standard derives, and then calls `impl_property!` for you. By default, the
-standard derives are `Debug`, `PartialEq`, `Eq`, `Hash`, `Clone`, `Copy`,
-`serde::Serialize`, and `serde::Deserialize`. The default includes `Eq` and
-`Hash` so the property can be indexed or used as a hash-map key without more
-boilerplate, but ordinary unindexed properties do not require those two traits.
-Use the `impl_eq_hash = ...` argument when the default `Eq`/`Hash` derives are
-not possible or not wanted.
+standard derives, and then calls `impl_property!` for you. The standard
+derives are `Debug`, `Clone`, `Copy`, `ixa::EqHash` (which provides
+`PartialEq`, `Eq` and `Hash`, with floats compared by value),
+`serde::Serialize`, and `serde::Deserialize`. Every property therefore gets
+`Eq` and `Hash`, so it can be indexed or used as a hash-map key without more
+boilerplate.
 
 Use `impl_property!` when the type already exists or when the type declaration
 needs syntax that `define_property!` does not support. The common reasons are:
@@ -294,12 +288,9 @@ implement `Eq` and `Hash`. A non-derived property also needs
 [population persistence](population-persistence.md); declare it with
 `persist = false` to skip it instead.
 
-If a manually declared property needs `Eq` or `Hash` and those traits cannot be
-derived, use `impl_property_eq!`, `impl_property_hash!`, or
-`impl_property_eq_hash!` to generate the same byte-based implementations used by
-`define_property!(..., impl_eq_hash = ...)`. This most often comes up for
-indexed properties containing `f32` or `f64`. The type must derive
-`ixa::rkyv::Archive` and `ixa::rkyv::Serialize` for these macros.
+If a manually declared property holds an `f32` or `f64`, derive `ixa::EqHash`
+in place of `PartialEq`, `Eq` and `Hash`; see
+[Floating Point Properties](#floating-point-properties).
 
 ### Example: You require different derives
 
@@ -460,211 +451,64 @@ non-derived property.
 
 The same trait rule applies to derived properties: all derived properties need
 `Copy`, `Clone`, `Debug`, and `PartialEq`; derived properties that are indexed
-also need `Eq` and `Hash`. The `define_derived_property!` macro includes
-`Eq` and `Hash` in its default derives, just like `define_property!`, unless
-you pass `impl_eq_hash = ...`.
+also need `Eq` and `Hash`. The `define_derived_property!` macro derives
+`EqHash` just like `define_property!`.
 
-## Floating Point Types and Implementing `Eq` and `Hash`
+## Floating Point Properties
 
-All properties participate in equality for unindexed query scans, so every property needs `PartialEq`. Indexed
-properties have the additional requirements of `Eq` and `Hash` because property indexes are hash maps keyed by property
-value.
+Rust's `f32` and `f64` implement `PartialEq` but not `Eq` or `Hash`, because `NaN` is not equal
+to itself. Ixa needs `Eq` and `Hash` on a property to index it or use it as a hash-map key, so an ordinary `#[derive(PartialEq, Eq, Hash)]` on a type holding a float does
+not compile.
 
-Plain `f64` and `f32` values implement `PartialEq`, so they can be used in
-ordinary unindexed properties. They do not implement `Eq` or `Hash`, so a
-floating-point property needs special handling only when:
-
-- you use the default `define_property!` or `define_derived_property!` form,
-  which tries to derive `Eq` and `Hash` unless told otherwise;
-- you index the property with `context.index_property` or
-  `context.index_property_counts`;
-- you use the property as part of an indexed multi-property; or
-- you use the property type as a key in a `HashMap` or `HashSet`.
-
-> [!INFO] Implementing `PartialEq` and `Eq` in Rust
->
-> Indexed properties need to implement `Eq`. In practice, this actually means implementing `PartialEq`. In fact, the `Eq` trait
-> is just a marker trait; it has no methods! The `Eq` trait is a guarantee by the author that the implementation of
-> `PartialEq` [is reflexive](https://doc.rust-lang.org/std/cmp/trait.Eq.html). Rust also requires that `PartialEq`
-> is symmetric and transitive.
-
-### Unindexed floating-point properties
-
-If a floating-point property will not be indexed and will not be used as a hash
-map key, pass `impl_eq_hash = neither` to `define_property!` or
-`define_derived_property!`:
+`define_property!` and `define_derived_property!` therefore derive `ixa::EqHash` instead,
+which implements `PartialEq`, `Eq` and `Hash` field by field. A float field is compared and
+hashed by its value, with `-0.0` equal to `0.0` and every `NaN` equal to every other `NaN`;
+any other field goes through its own `Eq` and `Hash`. A float-valued property needs nothing
+special:
 
 ```rust
+define_property!(struct Weight(f64), Person, default_const = Weight(0.0));
 define_property!(
-    struct Weight(f64),
+    struct Dose {
+        amount: f64,
+        count: u8,
+    },
     Person,
-    impl_eq_hash = neither,
-    default_const = Weight(0.0)
+    default_const = Dose { amount: 0.0, count: 0 }
 );
+
+context.index_property::<Person, Weight>();
 ```
 
-That tells the macro not to derive or generate `Eq` and `Hash`. No manual `Eq`
-or `Hash` implementations are required for this unindexed case.
-
-If you define the type yourself and call `impl_property!` or
-`impl_derived_property!`, derive or implement the ordinary property traits:
-`Copy`, `Clone`, `Debug`, and `PartialEq`. Do not add `Eq` and `Hash` unless the
-property needs to be indexed or used as a key. Derived properties are never
-persisted, so they do not need Serde.
-
-### Indexed or hash-keyed floating-point properties
-
-If a floating-point property is indexed, is part of an indexed multi-property,
-or is used as a hash-map key, it must implement `Eq` and `Hash`. There are three
-reasonable ways to do that.
-
-1. [Let Ixa generate equality and hashing for you](#let-ixa-generate-equality-and-hashing).
-2. [Implement equality and hashing yourself](#implement-equality-and-hashing-yourself).
-3. [Use an alternative floating-point type](#use-an-alternative-floating-point-type).
-
-### Let Ixa generate equality and hashing
-
-Ixa can generate byte-based equality and hashing either when it defines the
-property type for you or when you declare the type yourself and register it with
-`impl_property!` or `impl_derived_property!`.
-
-#### Types declared with `define_property!` or `define_derived_property!`
-
-Pass `impl_eq_hash = both` as the first optional argument to
-`define_property!` or `define_derived_property!`:
+A type you declare yourself derives `EqHash` in place of the three traits:
 
 ```rust
-define_property!(
-    struct Weight(f64),
-    Person,
-    impl_eq_hash = both,
-    default_const = Weight(0.0)
-);
-```
-
-This is the shortest option when you define the property with a `define_*`
-macro, want to keep the property as an `f64`, and are comfortable with Ixa's
-generated equality and hashing behavior. It is a good fit for simple measured
-quantities where model code still wants direct access to a floating-point value.
-
-You can also use only `impl_eq_hash = Eq` or only `impl_eq_hash = Hash` when
-one trait can still be derived but the other needs Ixa's generated
-implementation. Floating-point properties usually need `both`.
-
-The generated implementations are reasonably efficient, but they are not optimal.
-If performance is absolutely critical, use either of the other options.
-
-#### Manually declared types registered with `impl_*_property!`
-
-For a type declared manually and registered with `impl_property!` or
-`impl_derived_property!`, use the standalone equality and hashing macros instead
-of the `impl_eq_hash` parameter.
-
-| Macro                    | Purpose                                      |
-|:-------------------------|:---------------------------------------------|
-| `impl_property_eq!`      | Implements `PartialEq` and `Eq`              |
-| `impl_property_hash!`    | Implements `Hash`                            |
-| `impl_property_eq_hash!` | Convenience macro that invokes both macros   |
-
-```rust
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    ixa::rkyv::Archive,
-    ixa::rkyv::Serialize,
-)]
-#[rkyv(crate = ixa::rkyv)]
-struct Weight(f64);
-
-impl_property_eq_hash!(Weight);
+#[derive(Debug, Clone, Copy, ixa::EqHash, serde::Serialize, serde::Deserialize)]
+pub struct Weight(pub f64);
 impl_property!(Weight, Person, default_const = Weight(0.0));
 ```
 
-Use `impl_property_eq!` or `impl_property_hash!` when you only want Ixa to
-generate one of the two implementations. These macros are only needed when the
-property actually needs the corresponding trait, such as when it will be indexed
-or used as a key. Manually declared types using these macros must derive
-`ixa::rkyv::Archive` and `ixa::rkyv::Serialize`, as shown above.
-
-### Implement equality and hashing yourself
-
-Pass `impl_eq_hash = neither` when you want `define_property!` to create the
-type but you want to provide `PartialEq`, `Eq`, and `Hash` yourself:
+`EqHash` works on structs and on enums, including enums whose variants carry data, so the
+hand-declared form also covers shapes `define_property!` does not accept:
 
 ```rust
-use std::hash::{Hash, Hasher};
-
-define_property!(
-    struct Weight(f64),
-    Person,
-    impl_eq_hash = neither,
-    default_const = Weight(0.0)
-);
-
-impl PartialEq for Weight {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.to_bits() == other.0.to_bits()
-    }
+#[derive(Debug, Clone, Copy, ixa::EqHash, serde::Serialize, serde::Deserialize)]
+pub enum Treatment {
+    None,
+    Antiviral { dose_mg: f64 },
 }
-
-impl Eq for Weight {}
-
-impl Hash for Weight {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
-    }
-}
+impl_property!(Treatment, Person, default_const = Treatment::None);
 ```
 
-Choose this option when you want to use `f32` / `f64` instead of `OrderedFloat` or equivalent alternative float type
-and performance is absolutely crucial. It is usually straightforward to implement `PartialEq` and `Hash` for
-floating-point types, but you should ensure that your implementations satisfy the property that equal values have the
-same hash:
+Each field is either a float, an `Option`, array or tuple built only from floats and
+primitives, or a type that is itself `Eq + Hash`, such as another property type. A tuple or
+array cannot mix the two kinds: write `(Weight, f64)` as two fields, or give the float its own
+`EqHash` type. A field type that fits neither kind fails to compile; derive `EqHash` on it
+too, or implement `ixa::ValueKey` for it. A
+property that must stay `PartialEq`-only, with no `Eq` or `Hash` at all, is declared by hand
+and registered with `impl_property!`, which requires only `PartialEq`; it cannot be indexed.
 
-```rust
-if a == b {
-    assert_eq!(hash(a), hash(b));
-}
-```
-
-For sensible equality semantics, equality should also be reflexive, symmetric, and transitive as well.
-
-### Use an alternative floating-point type
-
-Use a wrapper type from a crate such as
-[`decorum`](https://crates.io/crates/decorum) or
-[`ordered-float`](https://crates.io/crates/ordered-float) when you want a type
-that gives floating-point values a total ordering and implements the traits Ixa
-needs:
-
-```rust
-use ordered_float::OrderedFloat;
-
-// A type alias is always a good idea here. It allows you to swap out the underlying
-// type without having to change the rest of your code.
-pub type Float = OrderedFloat<f64>;
-
-define_property!(
-    struct Weight(Float),
-    Person,
-    default_const = Weight(OrderedFloat(0.0))
-);
-```
-
-With these types, `define_property!` can just `derive` the `PartialEq`, `Eq`,
-and `Hash` traits that indexed or hash-keyed properties need, and performance
-of these derived implementations is usually optimal. This option is especially
-attractive when you want to restrict your type only to the real numbers, or only
-to the extended real numbers (infinities but not NaNs), giving you a numeric
-type with exactly the mathematical semantics you want.
-
-The trade-off is that model code works with the wrapper type instead of a bare `f64`, and while these libraries do what
-they can to alleviate friction, having to convert to and from primitive `f64` values is often unavoidable. This is
-really the only downside. The good news is, this conversion is usually only cosmetic: the compiler usually optimizes it
-away.
+The only visible difference from IEEE comparison is that `NaN` equals itself.
 
 ## Multi-Properties
 
@@ -695,35 +539,25 @@ plain `f32` or `f64`.
 
 ## Troubleshooting
 
-### `f64` does not implement `Eq`
+### `f64` does not implement `Eq` or `Hash`
 
-If you define a property containing an `f64` with the default macro form:
-
-```rust
-define_property!(struct Weight(f64), Person);
-```
-
-you may see an error like:
+A hand-declared property type that derives `PartialEq`, `Eq` and `Hash` directly fails with:
 
 ```text
 error[E0277]: the trait bound `f64: std::cmp::Eq` is not satisfied
 ```
 
-or:
+Replace those three derives with `ixa::EqHash`, as described in
+[Floating Point Properties](#floating-point-properties). `define_property!` does this for you.
+
+### `probe_key` exists but its trait bounds were not satisfied
+
+`EqHash` reports a field whose type is neither `Eq + Hash` nor a float, `Option`, array or
+tuple of floats with an error like:
 
 ```text
-the trait `std::cmp::Eq` is not implemented for `f64`
+error[E0599]: the method `probe_key` exists for reference `&ixa::value_key::KeyProbe<Foo>`, but its trait bounds were not satisfied
 ```
 
-This happens because `define_property!` normally derives `Eq` and `Hash`, but
-Rust floating-point types do not implement those traits. See
-[Floating Point Types and Implementing `Eq` and `Hash`](#floating-point-types-and-implementing-eq-and-hash)
-for the full discussion. In short:
-
-- If the property is not indexed and is not used as a hash-map key, pass
-  `impl_eq_hash = neither`. No manual `Eq` or `Hash` implementations are
-  required.
-- If the property is indexed or used as a key, pass `impl_eq_hash = both` to let
-  Ixa generate equality and hashing, provide your own implementations with
-  `impl_eq_hash = neither`, or use a wrapper such as
-  `ordered_float::OrderedFloat\<f64>` or a type from `decorum`.
+Derive `EqHash` on that field's type (the compiler's own suggestion to derive `Eq, Hash,
+PartialEq` is wrong if `Foo` holds a float), or implement `ixa::ValueKey` for it.
