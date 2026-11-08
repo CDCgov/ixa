@@ -72,12 +72,10 @@ pub enum IxaError {
 
     #[error("cannot make edge to self")]
     CannotMakeEdgeToSelf,
-    #[error("invalid weight")]
-    InvalidWeight,
     #[error("edge already exists")]
     EdgeAlreadyExists,
-    #[error("can't sample from empty list")]
-    CannotSampleFromEmptyList,
+    #[error("invalid edge data {data} in network {network}")]
+    InvalidEdgeData { network: String, data: String },
 
     #[error("initialization list is missing required properties")]
     MissingRequiredInitializationProperties,

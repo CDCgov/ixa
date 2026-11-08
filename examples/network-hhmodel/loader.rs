@@ -46,6 +46,10 @@ pub fn open_csv(file_name: &str) -> Reader<File> {
 }
 
 pub fn init(context: &mut Context) {
+    // The network loader looks people up by data id and household, so index both.
+    context.index_property::<Person, Id>();
+    context.index_property::<Person, HouseholdId>();
+
     // Load csv and deserialize records
     let mut reader = open_csv("Households.csv");
 

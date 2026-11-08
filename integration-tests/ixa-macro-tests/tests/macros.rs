@@ -211,8 +211,8 @@ mod tests {
     // Test global property macro
     define_global_property!(TestGlobal, u32);
 
-    // Test edge type macro
-    define_edge_type!(struct TestEdge, Person);
+    // Test network macro
+    define_network!(TestNetwork, Person, layers = { Home, Work }, data = u8);
 
     // Test report macro
     #[derive(Serialize, Deserialize)]
@@ -330,20 +330,20 @@ mod tests {
         let disp = <MultiProp as Property<Person>>::get_display(&multi);
         assert!(disp.contains("10"));
 
-        // Edge type (entity-based network): create two people and add an edge of type TestEdge
+        // Network: create two people and add an edge in one layer of TestNetwork
         let p1 = ctx
             .add_entity(with!(Person, TestPropU32(1u32), TestPropU32b(1u32)))
             .unwrap();
         let p2 = ctx
             .add_entity(with!(Person, TestPropU32(2u32), TestPropU32b(2u32)))
             .unwrap();
-        ctx.add_edge::<Person, TestEdge>(p1, p2, 1.0, TestEdge)
-            .unwrap();
-        let e = ctx.get_edge::<Person, TestEdge>(p1, p2).unwrap();
-        assert_eq!(e.weight, 1.0);
+        ctx.add_edge(TestNetwork::Home, p1, p2, 7u8).unwrap();
+        let e = ctx.get_edge(TestNetwork::Home, p1, p2).unwrap();
+        assert_eq!(e.data, 7);
+        assert!(ctx.get_edge(TestNetwork::Work, p1, p2).is_none());
         // Now remove the edge and ensure it's gone
-        assert!(ctx.remove_edge::<Person, TestEdge>(p1, p2).is_some());
-        assert!(ctx.get_edge::<Person, TestEdge>(p1, p2).is_none());
+        assert!(ctx.remove_edge(TestNetwork::Home, p1, p2).is_some());
+        assert!(ctx.get_edge(TestNetwork::Home, p1, p2).is_none());
 
         // Data plugin access
         let data: &Vec<u8> = ctx.get_data(TestDataPlugin);
