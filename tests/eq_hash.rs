@@ -52,6 +52,14 @@ impl_property!(
     }
 );
 
+// The crate path can be given explicitly, as the property macros do with `$crate`.
+mod reexport {
+    pub use ixa as sim;
+}
+#[derive(Debug, Clone, Copy, EqHash)]
+#[eq_hash(crate = reexport::sim)]
+pub struct ExplicitCratePath(f64);
+
 fn hash_of<T: std::hash::Hash>(value: &T) -> u64 {
     use std::hash::Hasher;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -119,6 +127,28 @@ fn mixed_fields_compare_every_field() {
             weight: Weight(0.0)
         })
     );
+}
+
+#[test]
+fn explicit_crate_path_is_used() {
+    assert_eq!(ExplicitCratePath(-0.0), ExplicitCratePath(0.0));
+}
+
+define_property!(
+    enum Stage {
+        Early,
+        Late,
+    },
+    Person,
+    default_const = Stage::Early
+);
+
+// A `define_property!` enum keeps the std derives, so a constant of it can be a pattern.
+#[test]
+fn macro_declared_enum_constants_are_patterns() {
+    const DEFAULT_STAGE: Stage = Stage::Early;
+    assert!(matches!(Stage::Early, DEFAULT_STAGE));
+    assert!(!matches!(Stage::Late, DEFAULT_STAGE));
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, Member, Type};
+use syn::{Attribute, Data, DeriveInput, Fields, Member, Path, Type};
 
 pub fn derive_eq_hash(input: &DeriveInput) -> syn::Result<TokenStream> {
     if !input.generics.params.is_empty() {
@@ -12,6 +12,7 @@ pub fn derive_eq_hash(input: &DeriveInput) -> syn::Result<TokenStream> {
         ));
     }
     let name = &input.ident;
+    let ixa = crate_path(&input.attrs)?;
 
     // A struct is handled as an enum with one variant whose path is `Self`.
     let variants: Vec<(TokenStream, &Fields)> = match &input.data {
@@ -41,7 +42,7 @@ pub fn derive_eq_hash(input: &DeriveInput) -> syn::Result<TokenStream> {
 
     let arms: Vec<VariantArms> = variants
         .iter()
-        .map(|(path, fields)| variant_arms(path, fields))
+        .map(|(path, fields)| variant_arms(&ixa, path, fields))
         .collect();
     let eq_arms = arms.iter().map(|arms| &arms.eq);
     let hash_arms = arms.iter().map(|arms| &arms.hash);
@@ -52,17 +53,38 @@ pub fn derive_eq_hash(input: &DeriveInput) -> syn::Result<TokenStream> {
         quote! { ::core::hash::Hash::hash(&::core::mem::discriminant(self), state); }
     });
 
-    Ok(quote! {
+    Ok(impls(
+        name,
+        &ixa,
+        &quote! {
+            match (self, other) {
+                #(#eq_arms)*
+                #different_variants
+            }
+        },
+        &quote! {
+            #hash_discriminant
+            match self {
+                #(#hash_arms)*
+            }
+        },
+    ))
+}
+
+fn impls(
+    name: &syn::Ident,
+    ixa: &Path,
+    eq_body: &TokenStream,
+    hash_body: &TokenStream,
+) -> TokenStream {
+    quote! {
         #[automatically_derived]
         impl ::core::cmp::PartialEq for #name {
             #[inline]
             fn eq(&self, other: &Self) -> bool {
                 #[allow(unused_imports)]
-                use ::ixa::value_key::{KeyProbeFallback, KeyProbeValue};
-                match (self, other) {
-                    #(#eq_arms)*
-                    #different_variants
-                }
+                use #ixa::value_key::{KeyProbeFallback, KeyProbeValue};
+                #eq_body
             }
         }
 
@@ -74,14 +96,31 @@ pub fn derive_eq_hash(input: &DeriveInput) -> syn::Result<TokenStream> {
             #[inline]
             fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
                 #[allow(unused_imports)]
-                use ::ixa::value_key::{KeyProbeFallback, KeyProbeValue};
-                #hash_discriminant
-                match self {
-                    #(#hash_arms)*
-                }
+                use #ixa::value_key::{KeyProbeFallback, KeyProbeValue};
+                #hash_body
             }
         }
-    })
+    }
+}
+
+/// The path of the ixa crate: `#[eq_hash(crate = path)]` if given (the property macros pass
+/// `$crate`, so a renamed or re-exported ixa works), otherwise `::ixa`.
+fn crate_path(attrs: &[Attribute]) -> syn::Result<Path> {
+    let mut path = None;
+    for attr in attrs {
+        if !attr.path().is_ident("eq_hash") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("crate") {
+                path = Some(meta.value()?.parse::<Path>()?);
+                Ok(())
+            } else {
+                Err(meta.error("expected `crate = path`"))
+            }
+        })?;
+    }
+    Ok(path.unwrap_or_else(|| syn::parse_quote!(::ixa)))
 }
 
 struct VariantArms {
@@ -91,38 +130,66 @@ struct VariantArms {
     hash: TokenStream,
 }
 
-fn variant_arms(path: &TokenStream, fields: &Fields) -> VariantArms {
-    let mut members = Vec::new();
-    let mut field_types = Vec::new();
-    for (index, field) in fields.iter().enumerate() {
-        members.push(match &field.ident {
-            Some(ident) => Member::Named(ident.clone()),
-            None => Member::Unnamed(index.into()),
-        });
-        field_types.push(&field.ty);
-    }
-    let left_names: Vec<_> = (0..members.len())
-        .map(|index| format_ident!("left_{index}"))
-        .collect();
-    let right_names: Vec<_> = (0..members.len())
-        .map(|index| format_ident!("right_{index}"))
-        .collect();
-    let left_keys: Vec<_> = field_types
-        .iter()
-        .zip(&left_names)
-        .map(|(field_type, name)| key_of(field_type, name))
-        .collect();
-    let right_keys: Vec<_> = field_types
-        .iter()
-        .zip(&right_names)
-        .map(|(field_type, name)| key_of(field_type, name))
-        .collect();
+/// The bindings for one variant's fields: `left_N` and `right_N` are references to field N of
+/// the two values compared, and the keys are what is compared and hashed.
+struct FieldBindings {
+    members: Vec<Member>,
+    left_names: Vec<syn::Ident>,
+    right_names: Vec<syn::Ident>,
+    left_keys: Vec<TokenStream>,
+    right_keys: Vec<TokenStream>,
+}
 
-    let all_equal = if left_keys.is_empty() {
-        quote! { true }
-    } else {
-        quote! { #(#left_keys == #right_keys)&&* }
-    };
+impl FieldBindings {
+    fn new(ixa: &Path, fields: &Fields) -> Self {
+        let mut bindings = FieldBindings {
+            members: Vec::new(),
+            left_names: Vec::new(),
+            right_names: Vec::new(),
+            left_keys: Vec::new(),
+            right_keys: Vec::new(),
+        };
+        for (index, field) in fields.iter().enumerate() {
+            let left_name = format_ident!("left_{index}");
+            let right_name = format_ident!("right_{index}");
+            bindings.members.push(match &field.ident {
+                Some(ident) => Member::Named(ident.clone()),
+                None => Member::Unnamed(index.into()),
+            });
+            bindings.left_keys.push(key_of(ixa, &field.ty, &left_name));
+            bindings
+                .right_keys
+                .push(key_of(ixa, &field.ty, &right_name));
+            bindings.left_names.push(left_name);
+            bindings.right_names.push(right_name);
+        }
+        bindings
+    }
+
+    fn all_equal(&self) -> TokenStream {
+        let FieldBindings {
+            left_keys,
+            right_keys,
+            ..
+        } = self;
+        if left_keys.is_empty() {
+            quote! { true }
+        } else {
+            quote! { #(#left_keys == #right_keys)&&* }
+        }
+    }
+}
+
+fn variant_arms(ixa: &Path, path: &TokenStream, fields: &Fields) -> VariantArms {
+    let bindings = FieldBindings::new(ixa, fields);
+    let FieldBindings {
+        members,
+        left_names,
+        right_names,
+        left_keys,
+        ..
+    } = &bindings;
+    let all_equal = bindings.all_equal();
     // The `Path { member: binding }` pattern form covers named, tuple and unit shapes alike.
     VariantArms {
         eq: quote! {
@@ -142,8 +209,8 @@ fn variant_arms(path: &TokenStream, fields: &Fields) -> VariantArms {
 /// The key of a field, resolved at the expansion site: its `ValueKey` when the field type has
 /// one (floats by canonical bits), otherwise a reference to the value, compared and hashed
 /// through its own `Eq` and `Hash`.
-fn key_of(field_type: &Type, binding: &syn::Ident) -> TokenStream {
+fn key_of(ixa: &Path, field_type: &Type, binding: &syn::Ident) -> TokenStream {
     quote! {
-        (&::ixa::value_key::KeyProbe::<#field_type>::new()).probe_key(#binding)
+        (&#ixa::value_key::KeyProbe::<#field_type>::new()).probe_key(#binding)
     }
 }

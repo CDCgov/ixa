@@ -1,4 +1,4 @@
-//! Equality and hashing of property values.
+//! Equality and hashing of property values: support code for `EqHash`, not public API.
 //!
 //! Property types get `PartialEq`, `Eq` and `Hash` from [`EqHash`](crate::EqHash), which
 //! compares and hashes each field by its [`ValueKey`] when the field type has one (that takes
@@ -13,8 +13,7 @@ use std::marker::PhantomData;
 /// A value compared and hashed through a key rather than through its own `Eq` and `Hash`.
 ///
 /// Implemented for `f32` and `f64`, for the integer, `bool`, `char` and `()` types as the
-/// identity, and for `Option`s, arrays and tuples of up to eight implementors. Implement it
-/// for a field type of your own that cannot implement `Eq` and `Hash` directly.
+/// identity, and for `Option`s, arrays and tuples of up to eight implementors.
 pub trait ValueKey {
     type Key: Eq + Hash;
 
@@ -26,12 +25,12 @@ impl ValueKey for f64 {
 
     #[inline]
     fn value_key(&self) -> u64 {
+        // Adding 0.0 turns -0.0 into 0.0 and changes no other value, without a branch.
+        let bits = (*self + 0.0).to_bits();
         if self.is_nan() {
             f64::NAN.to_bits()
-        } else if *self == 0.0 {
-            0
         } else {
-            self.to_bits()
+            bits
         }
     }
 }
@@ -41,12 +40,12 @@ impl ValueKey for f32 {
 
     #[inline]
     fn value_key(&self) -> u32 {
+        // Adding 0.0 turns -0.0 into 0.0 and changes no other value, without a branch.
+        let bits = (*self + 0.0).to_bits();
         if self.is_nan() {
             f32::NAN.to_bits()
-        } else if *self == 0.0 {
-            0
         } else {
-            self.to_bits()
+            bits
         }
     }
 }
@@ -188,6 +187,35 @@ mod tests {
         assert_ne!(f64::INFINITY.value_key(), f64::NEG_INFINITY.value_key());
         assert_eq!(0.0f32.value_key(), (-0.0f32).value_key());
         assert_eq!(f32::NAN.value_key(), (-f32::NAN).value_key());
+    }
+
+    #[test]
+    fn float_keys_are_the_bits_of_every_other_value() {
+        assert_eq!((-0.0f64).value_key(), 0);
+        assert_eq!((-0.0f32).value_key(), 0);
+        let values = [
+            1.0,
+            -1.0,
+            0.1,
+            f64::MIN_POSITIVE,
+            -f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            -f64::from_bits(1),
+            f64::MAX,
+            f64::MIN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        for value in values {
+            assert_eq!(value.value_key(), value.to_bits());
+        }
+        // A coarse sweep of the f32 bit patterns, subnormals and infinities included.
+        for bits in (0..=u32::MAX).step_by(9973) {
+            let value = f32::from_bits(bits);
+            if !value.is_nan() && value != 0.0 {
+                assert_eq!(value.value_key(), bits);
+            }
+        }
     }
 
     #[test]

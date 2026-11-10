@@ -264,11 +264,11 @@ define_property!(
 
 For these forms, `define_property!` creates the type, makes it public, adds the
 standard derives, and then calls `impl_property!` for you. The standard
-derives are `Debug`, `Clone`, `Copy`, `ixa::EqHash` (which provides
-`PartialEq`, `Eq` and `Hash`, with floats compared by value),
-`serde::Serialize`, and `serde::Deserialize`. Every property therefore gets
-`Eq` and `Hash`, so it can be indexed or used as a hash-map key without more
-boilerplate.
+derives are `Debug`, `Clone`, `Copy`, `serde::Serialize`, `serde::Deserialize`,
+and `PartialEq`, `Eq` and `Hash`. For a struct those last three come from
+`ixa::EqHash`, which compares floats by value; an enum uses the ordinary
+derives. Every property therefore gets `Eq` and `Hash`, so it can be indexed or
+used as a hash-map key without more boilerplate.
 
 Use `impl_property!` when the type already exists or when the type declaration
 needs syntax that `define_property!` does not support. The common reasons are:
@@ -451,8 +451,8 @@ non-derived property.
 
 The same trait rule applies to derived properties: all derived properties need
 `Copy`, `Clone`, `Debug`, and `PartialEq`; derived properties that are indexed
-also need `Eq` and `Hash`. The `define_derived_property!` macro derives
-`EqHash` just like `define_property!`.
+also need `Eq` and `Hash`. The `define_derived_property!` macro adds the same
+derives as `define_property!`.
 
 ## Floating Point Properties
 
@@ -504,8 +504,7 @@ Each field is either a float, an `Option`, array or tuple built only from floats
 primitives, or a type that is itself `Eq + Hash`, such as another property type. A tuple or
 array cannot mix the two kinds: write `(Weight, f64)` as two fields, or give the float its own
 `EqHash` type. A field type that fits neither kind fails to compile; derive `EqHash` on it
-too, or implement `ixa::ValueKey` for it. A
-property that must stay `PartialEq`-only, with no `Eq` or `Hash` at all, is declared by hand
+too. A property that must stay `PartialEq`-only, with no `Eq` or `Hash` at all, is declared by hand
 and registered with `impl_property!`, which requires only `PartialEq`; it cannot be indexed.
 
 The only visible difference from IEEE comparison is that `NaN` equals itself.
@@ -534,8 +533,8 @@ context.index_property::<Person, AgeInfectionStatus>();
 
 For a deeper discussion of when to create multi-property indexes, see [Indexing](indexing.md). Because the components
 of a multi-property are already required to be properties, multi-properties usually "just work". If a multi-property
-will be indexed, each component value must also support `Eq` and `Hash`; this mainly matters for components containing
-plain `f32` or `f64`.
+will be indexed, each component value must also support `Eq` and `Hash`, which every property declared with
+`define_property!` or deriving `ixa::EqHash` does, float-valued ones included.
 
 ## Troubleshooting
 
@@ -560,4 +559,4 @@ error[E0599]: the method `probe_key` exists for reference `&ixa::value_key::KeyP
 ```
 
 Derive `EqHash` on that field's type (the compiler's own suggestion to derive `Eq, Hash,
-PartialEq` is wrong if `Foo` holds a float), or implement `ixa::ValueKey` for it.
+PartialEq` is wrong if `Foo` holds a float).

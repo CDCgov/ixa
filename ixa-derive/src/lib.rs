@@ -15,7 +15,7 @@ pub fn calendar(args: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Field-by-field `PartialEq`, `Eq` and `Hash` with floats compared by value; documented at
 /// `ixa::EqHash`.
-#[proc_macro_derive(EqHash)]
+#[proc_macro_derive(EqHash, attributes(eq_hash))]
 pub fn derive_eq_hash(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     eq_hash::derive_eq_hash(&input)

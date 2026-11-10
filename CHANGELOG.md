@@ -20,14 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - If you used `impl_eq_hash = neither` because a field type is only `PartialEq`, give that type
     `Eq` and `Hash` too (`EqHash` if it holds floats). To keep a property `PartialEq`-only,
     declare it by hand and use `impl_property!`.
+  - If your model depends on the sign of a zero: `-0.0` now equals `0.0`, and Ixa does not store
+    a value that equals the property's default. Setting `Weight(-0.0)` on a property whose
+    default is `Weight(0.0)` can therefore read back as `Weight(0.0)`. With
+    `impl_eq_hash = both` the two were different values and `-0.0` was kept.
+  - A constant of a struct property type can no longer be a `match` pattern, because the type
+    no longer has the std `PartialEq` derive: write `value if value == ADULT` instead of
+    `ADULT`. Enums declared with `define_property!` are unaffected.
 - **Removed** `impl_property_eq!`, `impl_property_hash!` and `impl_property_eq_hash!` (each now
   fails with an error pointing at `EqHash`), the `ixa::rkyv` re-export and dependency, and
   `ixa::hashing::HasherWriter` / `EqualityBufferWriter`.
 
 ### Added
 
-- `ixa::EqHash` derive and `ixa::ValueKey` (implemented for floats, primitives, `Option`s, arrays
-  and tuples; the `ixa::value_key` module holds it).
+- `ixa::EqHash` derive: `PartialEq`, `Eq` and `Hash` for a property type, with floats (and
+  `Option`s, arrays and tuples of them) compared by value.
 
 ## [4.1.0](https://github.com/CDCgov/ixa/compare/ixa-v4.0.0...ixa-v4.1.0) - 2026-11-05
 

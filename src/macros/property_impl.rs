@@ -30,7 +30,7 @@ The primary advantage of using this macro is that it automatically derives the l
 [`Property`][crate::entity::property::Property] needs to derive for you. You don't have to remember them. You also get a cute syntax for
 specifying the default value, but it's not much harder to specify default values using other macros.
 
-Every generated type derives [`EqHash`][crate::EqHash] in place of `PartialEq`, `Eq` and
+A generated struct derives [`EqHash`][crate::EqHash] in place of `PartialEq`, `Eq` and
 `Hash`, so a field may hold an `f32` or `f64`: floats compare by value, with `NaN` equal to
 itself, and the property can be indexed like any other.
 
@@ -182,9 +182,10 @@ impl_property!(
 ///
 /// ### Notes
 ///
-/// - The generated type derives `Debug`, `Clone`, `Copy`, [`EqHash`][crate::EqHash] (which
-///   provides `PartialEq`, `Eq` and `Hash`, with floats compared by value) and the Serde traits;
-///   for a field type without Serde, use [`impl_property!`][macro@crate::impl_property].
+/// - The generated type derives `Debug`, `Clone`, `Copy`, the Serde traits, and `PartialEq`,
+///   `Eq` and `Hash`: through [`EqHash`][crate::EqHash] for a struct, so floats compare by
+///   value, and through the std derives for an enum. For a field type without Serde, use
+///   [`impl_property!`][macro@crate::impl_property].
 /// - Use the optional `default_const = <default_value>` argument to define a compile-time constant
 ///   default for the property.
 /// - Remaining optional arguments follow the same ordering as [`impl_property!`][macro@crate::impl_property].
@@ -226,14 +227,21 @@ macro_rules! define_property {
         $entity:ident
         $(, $($extra:tt)*)?
     ) => {
-        $crate::define_property!(@declare pub enum $name { $($variant),* });
+        $crate::define_property!(@declare_enum pub enum $name { $($variant),* });
         $crate::impl_property!($name, $entity $(, $($extra)*)?);
     };
 
-    // The derives every property type gets. `EqHash` stands in for `PartialEq`, `Eq` and
-    // `Hash` so that fields may hold floats. Shared with `define_derived_property!`.
+    // The derives a struct property gets. `EqHash` stands in for `PartialEq`, `Eq` and `Hash`
+    // so that fields may hold floats. Shared with `define_derived_property!`.
     (@declare $item:item) => {
         #[derive(Debug, Clone, Copy, $crate::EqHash, serde::Serialize, serde::Deserialize)]
+        #[eq_hash(crate = $crate)]
+        $item
+    };
+    // An enum declared here has no fields, so it keeps the std derives and its values stay
+    // usable as constants in `match` patterns.
+    (@declare_enum $item:item) => {
+        #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, serde::Serialize, serde::Deserialize)]
         $item
     };
 }
@@ -756,7 +764,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(@declare pub struct $name(pub Option<$inner_ty>););
 
@@ -767,7 +775,7 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
-            $(, $($extra)+)*
+            $(, $($extra)+)?
         );
     };
 
@@ -778,7 +786,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(@declare pub struct $name( $(pub $field_ty),* ););
 
@@ -788,7 +796,7 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
-            $(, $($extra)+)*
+            $(, $($extra)+)?
         );
     };
 
@@ -799,7 +807,7 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::define_property!(@declare pub struct $name { $(pub $field_name : $field_ty),* });
 
@@ -809,7 +817,7 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
-            $(, $($extra)+)*
+            $(, $($extra)+)?
         );
     };
 
@@ -822,9 +830,9 @@ macro_rules! define_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
-        $crate::define_property!(@declare pub enum $name { $($variant),* });
+        $crate::define_property!(@declare_enum pub enum $name { $($variant),* });
 
         $crate::impl_derived_property!(
             $name,
@@ -832,7 +840,7 @@ macro_rules! define_derived_property {
             [$($dependency),*],
             [$($($global_dependency),*)?],
             |$($param),+| $derive_fn
-            $(, $($extra)+)*
+            $(, $($extra)+)?
         );
     };
 }
@@ -863,7 +871,7 @@ macro_rules! impl_derived_property {
         [$($dependency:ident),*]
         $(, [$($global_dependency:ident),*])?,
         |$($param:ident),+| $derive_fn:expr
-        $(, $($extra:tt)+)*
+        $(, $($extra:tt)+)?
     ) => {
         $crate::impl_property!(
             $name,
@@ -884,7 +892,7 @@ macro_rules! impl_derived_property {
                     }
                 )*
             }
-            $(, $($extra)+)*
+            $(, $($extra)+)?
         );
     };
 
