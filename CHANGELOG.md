@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Migrating
+
+- **Float properties work without a wrapper.** `define_property!` and
+  `define_derived_property!` now derive `ixa::EqHash`, which implements `PartialEq`, `Eq` and
+  `Hash` with floats compared by value (`NaN` equals itself, `-0.0` equals `0.0`), so
+  `define_property!(struct Weight(f64), Person)` compiles and can be indexed. To migrate:
+  - Remove `impl_eq_hash = ...` arguments, and any hand-written `PartialEq`, `Eq` or `Hash`
+    impls on macro-declared types, which now conflict.
+  - On types you declare yourself, replace `#[derive(PartialEq, Eq, Hash)]` with
+    `#[derive(ixa::EqHash)]` if they hold floats.
+  - If you used `impl_eq_hash = neither` because a field type is only `PartialEq`, give that type
+    `Eq` and `Hash` too (`EqHash` if it holds floats). To keep a property `PartialEq`-only,
+    declare it by hand and use `impl_property!`.
+  - If your model depends on the sign of a zero: `-0.0` now equals `0.0`, and Ixa does not store
+    a value that equals the property's default. Setting `Weight(-0.0)` on a property whose
+    default is `Weight(0.0)` can therefore read back as `Weight(0.0)`. With
+    `impl_eq_hash = both` the two were different values and `-0.0` was kept.
+  - A constant of a struct property type can no longer be a `match` pattern, because the type
+    no longer has the std `PartialEq` derive: write `value if value == ADULT` instead of
+    `ADULT`. Enums declared with `define_property!` are unaffected.
+  - The fields of a named-field struct declared with `define_derived_property!` are now always
+    `pub`, as with `define_property!`; a written visibility was kept before.
+- **Removed** `impl_property_eq!`, `impl_property_hash!` and `impl_property_eq_hash!` (each now
+  fails with an error pointing at `EqHash`), the `ixa::rkyv` re-export and dependency, and
+  `ixa::hashing::HasherWriter` / `EqualityBufferWriter`.
+
+### Added
+
+- `ixa::EqHash` derive: `PartialEq`, `Eq` and `Hash` for a property type, with floats (and
+  `Option`s, arrays and tuples of them) compared by value.
+
 ## [4.1.0](https://github.com/CDCgov/ixa/compare/ixa-v4.0.0...ixa-v4.1.0) - 2026-11-05
 
 ### Added

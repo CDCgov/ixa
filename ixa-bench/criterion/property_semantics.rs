@@ -1,4 +1,3 @@
-use std::hash::{Hash, Hasher};
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
@@ -17,34 +16,20 @@ define_property!(
     Person,
     default_const = HashStruct { bucket: 0, code: 0 }
 );
-define_property!(struct HashFloat(f64), Person, impl_eq_hash = both, default_const = HashFloat(0.0));
+define_property!(struct HashFloat(f64), Person, default_const = HashFloat(0.0));
 define_property!(struct MultiHashByte(u8), Person, default_const = MultiHashByte(0));
-define_property!(struct MultiHashFloat(f64), Person, impl_eq_hash = both, default_const = MultiHashFloat(0.0));
+define_property!(struct MultiHashFloat(f64), Person, default_const = MultiHashFloat(0.0));
 define_multi_property!(Person, (MultiHashByte, MultiHashFloat));
 
-define_property!(struct FloatQueryValue(f64), Person, impl_eq_hash = both, default_const = FloatQueryValue(0.0));
+define_property!(struct FloatQueryValue(f64), Person, default_const = FloatQueryValue(0.0));
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 struct CounterBucket(pub u8);
 
 impl_property!(CounterBucket, Person, default_const = CounterBucket(0));
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, EqHash, Serialize, Deserialize)]
 struct FloatCounterValue(pub f64);
-
-impl PartialEq for FloatCounterValue {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.to_bits() == other.0.to_bits()
-    }
-}
-
-impl Eq for FloatCounterValue {}
-
-impl Hash for FloatCounterValue {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
-    }
-}
 
 impl_property!(
     FloatCounterValue,

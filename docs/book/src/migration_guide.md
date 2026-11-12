@@ -77,11 +77,9 @@ impl_property!(
 
 In the ordinary derive path, `define_property!` tacks on the `derive` traits and
 `pub` visibility to the type definition and then calls `impl_property!` as
-above. For property types that cannot derive `PartialEq` / `Eq` or `Hash`,
-`define_property!` can also generate those implementations with
-`impl_eq_hash = ...`; manually declared types can use `impl_property_eq!`,
-`impl_property_hash!`, or `impl_property_eq_hash!` for the same generated
-behavior, or client code can implement these traits itself.
+above. Equality and hashing come from the `ixa::EqHash` derive, which compares
+floats by value, so a property holding an `f64` needs no wrapper type; a
+manually declared type derives `EqHash` itself.
 
 The crucial thing to understand is that the value type _is_ the property type.
 The `impl Property\<Person> for InfectionStatus`, which the macros give you, is
@@ -89,8 +87,8 @@ the thing that ties the `InfectionStatus` type to the `Person` entity.
 
 For details about defining properties, see the `property_impl` module-level docs
 and API docs for the macros `define_property!`, `impl_property!`,
-`impl_property_eq!`, `impl_property_hash!`, `impl_property_eq_hash!`,
-`define_derived_property!`, `impl_derived_property!`, and `define_multi_property!`.
+`define_derived_property!`, `impl_derived_property!`, and `define_multi_property!`,
+and the `EqHash` derive.
 The API docs give multiple examples.
 
 Multi-property definitions now take the entity first and the component
