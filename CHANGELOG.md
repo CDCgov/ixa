@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A constant of a struct property type can no longer be a `match` pattern, because the type
     no longer has the std `PartialEq` derive: write `value if value == ADULT` instead of
     `ADULT`. Enums declared with `define_property!` are unaffected.
+  - The fields of a named-field struct declared with `define_derived_property!` are now always
+    `pub`, as with `define_property!`; a written visibility was kept before.
 - **Removed** `impl_property_eq!`, `impl_property_hash!` and `impl_property_eq_hash!` (each now
   fails with an error pointing at `EqHash`), the `ixa::rkyv` re-export and dependency, and
   `ixa::hashing::HasherWriter` / `EqualityBufferWriter`.

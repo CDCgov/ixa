@@ -124,13 +124,13 @@ fn crate_path(attrs: &[Attribute]) -> syn::Result<Path> {
 }
 
 struct VariantArms {
-    /// `(Path { f: left_0, .. }, Path { f: right_0, .. }) => <all fields equal>,`
+    /// `(Path { f: __left_0, .. }, Path { f: __right_0, .. }) => <all fields equal>,`
     eq: TokenStream,
-    /// `Path { f: left_0, .. } => { <hash each field> }`
+    /// `Path { f: __left_0, .. } => { <hash each field> }`
     hash: TokenStream,
 }
 
-/// The bindings for one variant's fields: `left_N` and `right_N` are references to field N of
+/// The bindings for one variant's fields: `__left_N` and `__right_N` are references to field N of
 /// the two values compared, and the keys are what is compared and hashed.
 struct FieldBindings {
     members: Vec<Member>,
@@ -150,8 +150,8 @@ impl FieldBindings {
             right_keys: Vec::new(),
         };
         for (index, field) in fields.iter().enumerate() {
-            let left_name = format_ident!("left_{index}");
-            let right_name = format_ident!("right_{index}");
+            let left_name = format_ident!("__left_{index}");
+            let right_name = format_ident!("__right_{index}");
             bindings.members.push(match &field.ident {
                 Some(ident) => Member::Named(ident.clone()),
                 None => Member::Unnamed(index.into()),

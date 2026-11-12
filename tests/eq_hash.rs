@@ -129,6 +129,23 @@ fn mixed_fields_compare_every_field() {
     );
 }
 
+// A constant named like a plain binding would turn the derive's patterns into const patterns.
+mod binding_names {
+    #[allow(non_upper_case_globals, dead_code)]
+    const left_0: u8 = 1;
+    #[allow(non_upper_case_globals, dead_code)]
+    const right_0: u8 = 1;
+
+    #[derive(Debug, Clone, Copy, ixa::EqHash)]
+    pub struct Shadowed(pub u8);
+}
+
+#[test]
+fn bindings_do_not_collide_with_constants_in_scope() {
+    assert_eq!(binding_names::Shadowed(2), binding_names::Shadowed(2));
+    assert_ne!(binding_names::Shadowed(2), binding_names::Shadowed(3));
+}
+
 #[test]
 fn explicit_crate_path_is_used() {
     assert_eq!(ExplicitCratePath(-0.0), ExplicitCratePath(0.0));
