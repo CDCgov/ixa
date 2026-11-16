@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/CDCgov/ixa/compare/ixa-v4.1.0...ixa-v5.0.0) - 2026-11-16
+
+### Added
+
+- [**breaking**] derive EqHash for properties so floats need no wrapper type ([#1098](https://github.com/CDCgov/ixa/pull/1098))
+- layered networks with define_network replacing edge types  ([#1089](https://github.com/CDCgov/ixa/pull/1089))
+
 ### Migrating
 
 - **Float properties work without a wrapper.** `define_property!` and
