@@ -376,13 +376,13 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     }
 
     /// An outgoing edge of `entity` in `layer` drawn with probability proportional to
-    /// `weight(edge)`, or `None` if it has none. `weight` is called twice per edge and must
-    /// return the same value both times (no randomness or mutable state), and nothing is
-    /// allocated; store a weight in the edge data if it is expensive to compute.
+    /// `weight(edge)`, or `None` if it has no edges or no edge has a positive weight (no
+    /// random number is drawn then). `weight` is called twice per edge and must return the
+    /// same value both times (no randomness or mutable state), and nothing is allocated;
+    /// store a weight in the edge data if it is expensive to compute.
     ///
     /// # Panics
-    /// If a weight is negative or not finite, the weights overflow when summed, or no
-    /// weight is positive.
+    /// If a weight is negative or not finite, or the weights overflow when summed.
     #[must_use]
     fn sample_edge_weighted<N: Network, R: RngId + 'static>(
         &self,
@@ -408,11 +408,13 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
             );
             total += edge_weight;
         }
-        assert!(total > 0.0, "at least one edge weight must be positive");
         assert!(
             total.is_finite(),
             "edge weights must not overflow when summed"
         );
+        if total == 0.0 {
+            return None;
+        }
 
         let draw: f64 = self.sample_range(rng_id, 0.0..total);
         let mut running_total = 0.0;
@@ -1044,14 +1046,47 @@ mod test_api {
     }
 
     #[test]
-    #[should_panic(expected = "at least one edge weight must be positive")]
-    fn sample_edge_weighted_all_zero_panics() {
+    fn sample_edge_weighted_all_zero_is_none_without_drawing() {
         let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
         context.init_random(42);
         context
             .add_edge(Contact::Household, person1, person2, 0.0)
             .unwrap();
+        context
+            .add_edge(Contact::Household, person1, person3, 0.0)
+            .unwrap();
+        assert!(context
+            .sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |e| e.data)
+            .is_none());
+        let next_draw: u64 = context.sample_range(NetworkTestRng, 0..u64::MAX);
+
+        let mut untouched = Context::new();
+        untouched.init_random(42);
+        let expected_draw: u64 = untouched.sample_range(NetworkTestRng, 0..u64::MAX);
+        assert_eq!(next_draw, expected_draw);
+    }
+
+    #[test]
+    #[should_panic(expected = "edge weights must be nonnegative finite numbers")]
+    fn sample_edge_weighted_negative_panics() {
+        let (mut context, person1, person2) = setup();
+        context.init_random(42);
+        context
+            .add_edge(Contact::Household, person1, person2, 1.0)
+            .unwrap();
+        let _ = context.sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |_| -1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "edge weights must be nonnegative finite numbers")]
+    fn sample_edge_weighted_nan_panics() {
+        let (mut context, person1, person2) = setup();
+        context.init_random(42);
+        context
+            .add_edge(Contact::Household, person1, person2, 1.0)
+            .unwrap();
         let _ =
-            context.sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |e| e.data);
+            context.sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |_| f64::NAN);
     }
 }
