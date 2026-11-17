@@ -32,10 +32,10 @@ pub trait Network: Copy + Eq + Debug + 'static {
     fn layer(self) -> usize;
 
     /// Checks data before it is stored on an edge, by `add_edge`, `add_edge_bidi`,
-    /// `add_edges` and `update_edge`. The network macros implement it from their
-    /// `validate = ..` option, or without one require `f64` and `f32` data to be finite and
-    /// non-negative and accept any other type as is. This default, used only by a
-    /// hand-written `impl Network`, accepts everything.
+    /// `add_edges`, `update_edge` and `add_or_update_edge`. The network macros implement it
+    /// from their `validate = ..` option, or without one require `f64` and `f32` data to be
+    /// finite and non-negative and accept any other type as is. This default, used only by
+    /// a hand-written `impl Network`, accepts everything.
     ///
     /// # Errors
     /// [`IxaError::InvalidEdgeData`](crate::IxaError::InvalidEdgeData) if the data is rejected.

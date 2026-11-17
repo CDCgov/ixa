@@ -200,6 +200,25 @@ impl NetworkData {
         edge.data = data;
         Ok(true)
     }
+
+    fn add_or_update_edge<N: Network>(
+        &mut self,
+        layer: N,
+        from: EntityId<N::Entity>,
+        to: EntityId<N::Entity>,
+        data: N::Data,
+    ) -> Result<Option<N::Data>, IxaError> {
+        if from == to {
+            return Err(IxaError::CannotMakeEdgeToSelf);
+        }
+        N::validate(&data)?;
+        let storage = self.layer_mut(layer);
+        if let Some(edge) = storage.get_edge_mut(from, to) {
+            return Ok(Some(std::mem::replace(&mut edge.data, data)));
+        }
+        storage.push_unchecked(from, Edge { neighbor: to, data });
+        Ok(None)
+    }
 }
 
 define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
@@ -297,6 +316,24 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     ) -> Result<bool, IxaError> {
         self.get_data_mut(NetworkPlugin)
             .update_edge(layer, from, to, update)
+    }
+
+    /// Sets the data of the edge in `layer` from `from` to `to`, adding the edge if there
+    /// is none. Returns the previous data, or `None` if the edge was added. An existing
+    /// edge keeps its position among the edges of `from`.
+    ///
+    /// # Errors
+    /// [`IxaError::CannotMakeEdgeToSelf`] if `from == to`; [`IxaError::InvalidEdgeData`] if
+    /// [`Network::validate`] rejects `data`, leaving any existing edge as it was.
+    fn add_or_update_edge<N: Network>(
+        &mut self,
+        layer: N,
+        from: EntityId<N::Entity>,
+        to: EntityId<N::Entity>,
+        data: N::Data,
+    ) -> Result<Option<N::Data>, IxaError> {
+        self.get_data_mut(NetworkPlugin)
+            .add_or_update_edge(layer, from, to, data)
     }
 
     /// Removes every edge in `layer`.
@@ -901,6 +938,54 @@ mod test_api {
         assert!(context
             .get_edge(Contact::Household, person1, person3)
             .is_some());
+    }
+
+    #[test]
+    fn add_or_update_edge() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+
+        assert_eq!(
+            context
+                .add_or_update_edge(Shared, person1, person2, 0.25)
+                .unwrap(),
+            None
+        );
+        context.add_edge(Shared, person1, person3, 0.5).unwrap();
+
+        // Updating returns the previous data and keeps the edge's position.
+        assert_eq!(
+            context
+                .add_or_update_edge(Shared, person1, person2, 0.75)
+                .unwrap(),
+            Some(0.25)
+        );
+        let edges: Vec<_> = context
+            .get_edges(Shared, person1)
+            .iter()
+            .map(|edge| (edge.neighbor, edge.data))
+            .collect();
+        assert_eq!(edges, vec![(person2, 0.75), (person3, 0.5)]);
+        assert_eq!(context.get_degree(Shared, person2), 0);
+
+        // Rejected data changes nothing, whether or not the edge exists.
+        assert!(matches!(
+            context.add_or_update_edge(Shared, person1, person2, 1.5),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(
+            context.get_edge(Shared, person1, person2).unwrap().data,
+            0.75
+        );
+        assert!(matches!(
+            context.add_or_update_edge(Shared, person2, person1, 1.5),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert!(context.get_edge(Shared, person2, person1).is_none());
+        assert!(matches!(
+            context.add_or_update_edge(Shared, person1, person1, 0.5),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
     }
 
     #[test]
