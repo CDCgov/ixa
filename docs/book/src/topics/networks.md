@@ -50,6 +50,9 @@ context.clear_layer(Contact::School);         // close the schools
 
 // Change an edge's data in place; Ok(false) if there is no such edge.
 let updated = context.update_edge(Contact::School, p1, p2, |rate| *rate *= 0.5)?;
+
+// Set an edge's data, adding the edge if there is none; returns the previous data.
+let previous = context.add_or_update_edge(Contact::School, p1, p2, 0.25)?; // Option<f64>
 ```
 
 Three rules are enforced: no edge from an entity to itself, at most one edge
@@ -59,8 +62,9 @@ rejected update leaves the edge's previous data in place. `add_edge_bidi`
 checks both directions before inserting either, and `remove_edge_bidi` removes
 both or neither.
 
-`update_edge` keeps the edge where it is. Removing an edge and adding it back
-moves it, which changes which edge a given seed samples.
+`update_edge` and `add_or_update_edge` keep an existing edge where it is.
+Removing an edge and adding it back moves it, which changes which edge a given
+seed samples.
 
 ## Reading edges
 
