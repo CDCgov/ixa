@@ -236,8 +236,32 @@ where
     /// the previous one.
     fn assign_infectiousness_rate_fn(&mut self, person: EntityId<Self::Entity>) {
         let rate = self.draw_infectiousness_rate_fn(person);
+        self.set_infectiousness_rate_fn(person, rate);
+    }
+
+    /// As [`assign_infectiousness_rate_fn`](Self::assign_infectiousness_rate_fn)
+    /// with a given rate function instead of a drawn one: for an infection
+    /// whose course is known (an imported case, a test of an intervention).
+    ///
+    /// # Panics
+    ///
+    /// If `rate` is a library index outside the loaded library.
+    fn set_infectiousness_rate_fn(
+        &mut self,
+        person: EntityId<Self::Entity>,
+        rate: impl Into<RateAssignment>,
+    ) {
+        let rate = rate.into();
         let infection_time = self.get_current_time();
         let rates = rates_mut::<Self::Entity, _>(self);
+        if let RateAssignment::Library(index) = rate {
+            assert!(
+                index < rates.library.len(),
+                "rate function {index} is not in the library of {}: load it with \
+                 `load_infectiousness_rate_library` before anyone is infected",
+                rates.library.len()
+            );
+        }
         // A reinfection supersedes the previous infection's pending proposal.
         let forecast_generation = rates
             .assigned
@@ -280,6 +304,13 @@ where
     /// never infected.
     fn infectiousness_end_time(&self, person: EntityId<Self::Entity>) -> Option<f64> {
         Some(self.infection_time(person)? + self.infectiousness_rate_fn(person)?.duration())
+    }
+
+    /// How long `person`'s current infection is infectious for, from
+    /// infection until their rate function runs out; `None` if they were
+    /// never infected.
+    fn infectiousness_duration(&self, person: EntityId<Self::Entity>) -> Option<f64> {
+        Some(self.infectiousness_rate_fn(person)?.duration())
     }
 
     /// Whether `person` has a rate function that has not yet run out.

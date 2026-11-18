@@ -499,3 +499,62 @@ fn reforecast_after_infectiousness_ended_schedules_nothing() {
     // Nothing was scheduled past the reforecast itself.
     assert_eq!(context.get_current_time(), 5.0);
 }
+
+#[test]
+fn infectiousness_duration_is_the_span_of_the_rate_function() {
+    let mut context = Context::new();
+    context.init_random(4);
+    let person = context.add_entity(Person).unwrap();
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_duration(&context, person),
+        None
+    );
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 2.5).into()],
+    );
+    context.add_plan(3.0, move |context| {
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(context, person);
+    });
+    context.execute();
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_duration(&context, person),
+        Some(2.5)
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_end_time(&context, person),
+        Some(5.5)
+    );
+}
+
+#[test]
+fn a_rate_function_can_be_set_directly() {
+    // No library and no draw: the infection's course is given.
+    let mut context = Context::new();
+    context.init_random(4);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::set_infectiousness_rate_fn(
+        &mut context,
+        person,
+        ConstantRateFn::new(0.5, 4.0),
+    );
+    assert!(InfectionManager::<Sir>::is_infectious(&context, person));
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_duration(&context, person),
+        Some(4.0)
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
+        Some(0.5)
+    );
+}
+
+#[test]
+#[should_panic(expected = "is not in the library of 0")]
+fn a_library_index_outside_the_library_panics_at_assignment() {
+    let mut context = Context::new();
+    context.init_random(4);
+    let person = context.add_entity(Person).unwrap();
+    // `Sir` draws library index 0, and no library was loaded.
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+}

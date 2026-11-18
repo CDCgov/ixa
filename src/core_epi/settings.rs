@@ -176,8 +176,11 @@ impl<S> Debug for SettingGroupId<S> {
     }
 }
 
-/// How a person's time is split across setting kinds. Proportions are
-/// normalized, so they need not sum to one. A small `Copy` value.
+/// How a person's time is split across setting kinds: shares of where their
+/// attempts happen, not a scale on how many. Proportions are normalized, so
+/// they need not sum to one; a model whose proportions also carry a scale
+/// multiplies their sum into its total and its forecast. A small `Copy`
+/// value.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Itinerary<S> {
     ratios: [f64; MAX_SETTINGS],
