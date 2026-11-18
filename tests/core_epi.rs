@@ -558,3 +558,103 @@ fn a_library_index_outside_the_library_panics_at_assignment() {
     // `Sir` draws library index 0, and no library was loaded.
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
 }
+
+#[test]
+fn two_models_on_one_population_keep_separate_infections() {
+    use ixa::core_epi::InfectiousnessAssignedEvent;
+
+    struct Flu;
+    struct Cold;
+    impl InfectionManager<Flu> for Context {
+        type Entity = Person;
+
+        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+            RateAssignment::Library(0)
+        }
+    }
+    impl InfectionManager<Cold> for Context {
+        type Entity = Person;
+
+        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+            RateAssignment::Library(0)
+        }
+    }
+    impl TransmissionManager<Flu> for Context {}
+    impl TransmissionManager<Cold> for Context {}
+
+    #[derive(Default)]
+    struct Assigned {
+        flu: usize,
+        cold: usize,
+    }
+    define_data_plugin!(AssignedPlugin, Assigned, Assigned::default());
+
+    let mut context = Context::new();
+    context.init_random(8);
+    let people: Vec<PersonId> = (0..200)
+        .map(|_| context.add_entity(Person).unwrap())
+        .collect();
+    // Each model has its own library.
+    InfectionManager::<Flu>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 3.0).into()],
+    );
+    InfectionManager::<Cold>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(0.0, 7.0).into()],
+    );
+    context.subscribe_to_event(|context, _event: InfectiousnessAssignedEvent<Flu>| {
+        context.get_data_mut(AssignedPlugin).flu += 1;
+    });
+    context.subscribe_to_event(|context, _event: InfectiousnessAssignedEvent<Cold>| {
+        context.get_data_mut(AssignedPlugin).cold += 1;
+    });
+    TransmissionManager::<Flu>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Cold>::setup_transmission_loop(&mut context);
+
+    TransmissionManager::<Flu>::transmit(&mut context, None, people[0]);
+    TransmissionManager::<Cold>::transmit(&mut context, None, people[1]);
+    assert_eq!(
+        InfectionManager::<Flu>::infectiousness_duration(&context, people[0]),
+        Some(3.0)
+    );
+    assert_eq!(
+        InfectionManager::<Cold>::infectiousness_duration(&context, people[0]),
+        None
+    );
+    assert_eq!(
+        InfectionManager::<Cold>::infectiousness_duration(&context, people[1]),
+        Some(7.0)
+    );
+    // Immunity is per model: the cold case is still susceptible to flu.
+    assert_eq!(
+        InfectionManager::<Flu>::susceptibility(&context, people[1]),
+        1.0
+    );
+    InfectionManager::<Flu>::set_susceptibility_modifier::<Flu>(&mut context, people[2], 0.0);
+    assert_eq!(
+        InfectionManager::<Cold>::susceptibility(&context, people[2]),
+        1.0
+    );
+
+    context.execute();
+
+    // Flu (R0 3) spreads; the cold has a rate of zero and stays with its seed.
+    let infected_by = |flu: bool| {
+        people
+            .iter()
+            .filter(|&&person| {
+                if flu {
+                    InfectionManager::<Flu>::infection_time(&context, person).is_some()
+                } else {
+                    InfectionManager::<Cold>::infection_time(&context, person).is_some()
+                }
+            })
+            .count()
+    };
+    assert!(infected_by(true) > 50, "flu infected {}", infected_by(true));
+    assert_eq!(infected_by(false), 1);
+    let assigned = context.get_data(AssignedPlugin);
+    assert_eq!(assigned.flu, infected_by(true));
+    assert_eq!(assigned.cold, 1);
+}

@@ -147,14 +147,12 @@ where
     /// Call once at setup, before anyone is infected. Without it, only loops
     /// started by hand run (e.g. an index case with no cascade).
     fn setup_transmission_loop(&mut self) {
-        self.subscribe_to_event(
-            |context, event: InfectiousnessAssignedEvent<Self::Entity>| {
-                // Supersedes anything already pending: the person may have
-                // been reforecast or infected again since this event was
-                // emitted.
-                TransmissionManager::<M>::reforecast_transmission(context, event.person);
-            },
-        );
+        self.subscribe_to_event(|context, event: InfectiousnessAssignedEvent<M>| {
+            // Supersedes anything already pending: the person may have
+            // been reforecast or infected again since this event was
+            // emitted.
+            TransmissionManager::<M>::reforecast_transmission(context, event.person);
+        });
     }
 
     /// Drop `person`'s pending attempt proposal and forecast again from now.
@@ -166,7 +164,7 @@ where
     /// that ended that way. Redrawing is always statistically valid, so when
     /// in doubt, call it. No-op if `person` was never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
-        if let Some(generation) = advance_forecast_generation(self, person) {
+        if let Some(generation) = advance_forecast_generation::<M, _, _>(self, person) {
             self.schedule_proposal(person, generation);
         }
     }
@@ -206,7 +204,7 @@ where
         infector: EntityId<Self::Entity>,
         forecast: f64,
     ) {
-        if let Some(generation) = forecast_generation(self, infector) {
+        if let Some(generation) = forecast_generation::<M, _, _>(self, infector) {
             self.handle_proposal(infector, forecast, generation);
         }
     }
@@ -219,7 +217,7 @@ where
         generation: u32,
     ) {
         // Superseded by a reforecast or a reinfection, which drew its own.
-        if forecast_generation(self, infector) != Some(generation) {
+        if forecast_generation::<M, _, _>(self, infector) != Some(generation) {
             return;
         }
         // A zero forecast (a proposal exactly at the end of the support) can
@@ -233,7 +231,7 @@ where
                     self.transmit(Some(infector), infectee);
                     // Only a transmission runs model code, which may have
                     // reforecast the infector.
-                    if forecast_generation(self, infector) != Some(generation) {
+                    if forecast_generation::<M, _, _>(self, infector) != Some(generation) {
                         return;
                     }
                 }
