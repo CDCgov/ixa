@@ -45,9 +45,9 @@ use std::marker::PhantomData;
 
 use smallvec::SmallVec;
 
-use crate::core_epi::person::{Person, PersonId};
 use crate::data_structures::entity_map::EntityMap;
 use crate::entity::property::Property;
+use crate::entity::{Entity, EntityId};
 use crate::hashing::one_shot_128;
 use crate::rand::{Rng, RngExt};
 use crate::random::sample_single_excluding;
@@ -60,6 +60,9 @@ pub const MAX_SETTINGS: usize = 8;
 
 /// A kind of setting, as an enum from [`define_settings!`](crate::define_settings).
 pub trait SettingKind: Copy + Eq + Debug + 'static {
+    /// The entity whose members the groups hold, e.g. the model's `Person`.
+    type Entity: Entity;
+
     const ALL: &'static [Self];
 
     /// Position in [`ALL`](Self::ALL).
@@ -74,14 +77,14 @@ pub trait SettingKind: Copy + Eq + Debug + 'static {
     fn store_mut<C: ContextBase>(context: &mut C) -> &mut SettingsStore<Self>;
 }
 
-/// Defines an enum of setting kinds and the storage behind it.
+/// Defines an enum of setting kinds for an entity and the storage behind it.
 ///
 /// ```ignore
-/// define_settings!(pub Setting { Household, Community });
+/// define_settings!(pub Setting for Person { Household, Community });
 /// ```
 #[macro_export]
 macro_rules! define_settings {
-    ($vis:vis $name:ident { $($variant:ident),+ $(,)? }) => {
+    ($vis:vis $name:ident for $entity:ty { $($variant:ident),+ $(,)? }) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         $vis enum $name {
             $($variant),+
@@ -95,6 +98,8 @@ macro_rules! define_settings {
             );
 
             impl $crate::core_epi::settings::SettingKind for $name {
+                type Entity = $entity;
+
                 const ALL: &'static [Self] = &[$(Self::$variant),+];
 
                 fn index(self) -> usize {
@@ -203,13 +208,13 @@ impl<S: SettingKind> Itinerary<S> {
     }
 }
 
-type IndividualFn<S> = Box<dyn Fn(&Context, PersonId) -> Itinerary<S>>;
+type IndividualFn<S> = Box<dyn Fn(&Context, EntityId<<S as SettingKind>::Entity>) -> Itinerary<S>>;
 
 /// Where people's itineraries come from: one for everyone, one per value of a
 /// property, or one computed per person. Resolved on every lookup.
-pub struct ItineraryAssignment<S>(Assign<S>);
+pub struct ItineraryAssignment<S: SettingKind>(Assign<S>);
 
-enum Assign<S> {
+enum Assign<S: SettingKind> {
     Global(Itinerary<S>),
     Individual(IndividualFn<S>),
 }
@@ -223,7 +228,7 @@ impl<S: SettingKind> ItineraryAssignment<S> {
     /// An itinerary per value of property `P`, from the person's current value.
     pub fn by_property<P, F>(f: F) -> Self
     where
-        P: Property<Person>,
+        P: Property<S::Entity>,
         F: Fn(P) -> Itinerary<S> + 'static,
     {
         Self::individual(move |context, person| f(context.get_property(person)))
@@ -232,12 +237,12 @@ impl<S: SettingKind> ItineraryAssignment<S> {
     /// An itinerary per person.
     pub fn individual<F>(f: F) -> Self
     where
-        F: Fn(&Context, PersonId) -> Itinerary<S> + 'static,
+        F: Fn(&Context, EntityId<S::Entity>) -> Itinerary<S> + 'static,
     {
         Self(Assign::Individual(Box::new(f)))
     }
 
-    fn resolve(&self, context: &Context, person: PersonId) -> Itinerary<S> {
+    fn resolve(&self, context: &Context, person: EntityId<S::Entity>) -> Itinerary<S> {
         match &self.0 {
             Assign::Global(itinerary) => *itinerary,
             Assign::Individual(f) => f(context, person),
@@ -247,8 +252,8 @@ impl<S: SettingKind> ItineraryAssignment<S> {
 
 /// Anything [`set_itinerary_assignment`](SettingsExt::set_itinerary_assignment)
 /// accepts: an [`ItineraryAssignment`], a bare [`Itinerary`] (global), or a
-/// closure `Fn(&Context, PersonId) -> Itinerary<S>` (individual).
-pub trait IntoItineraryAssignment<S> {
+/// closure `Fn(&Context, EntityId<S::Entity>) -> Itinerary<S>` (individual).
+pub trait IntoItineraryAssignment<S: SettingKind> {
     fn into_itinerary_assignment(self) -> ItineraryAssignment<S>;
 }
 
@@ -267,7 +272,7 @@ impl<S: SettingKind> IntoItineraryAssignment<S> for Itinerary<S> {
 impl<S, F> IntoItineraryAssignment<S> for F
 where
     S: SettingKind,
-    F: Fn(&Context, PersonId) -> Itinerary<S> + 'static,
+    F: Fn(&Context, EntityId<S::Entity>) -> Itinerary<S> + 'static,
 {
     fn into_itinerary_assignment(self) -> ItineraryAssignment<S> {
         ItineraryAssignment::individual(self)
@@ -348,7 +353,7 @@ impl Group {
 
 /// Storage for one setting kind enum; defined per enum by
 /// [`define_settings!`](crate::define_settings).
-pub struct SettingsStore<S> {
+pub struct SettingsStore<S: SettingKind> {
     kinds: Vec<Kind>,
     /// One `Member` per person per kind, person-major with stride
     /// `kinds.len()`, so an attempt's lookups across kinds share a cache line.
@@ -356,7 +361,7 @@ pub struct SettingsStore<S> {
     groups: Vec<Group>,
     assignment: Option<ItineraryAssignment<S>>,
     /// Per-person overrides of the assignment.
-    itineraries: EntityMap<Person, Itinerary<S>>,
+    itineraries: EntityMap<S::Entity, Itinerary<S>>,
 }
 
 impl<S: SettingKind> Default for SettingsStore<S> {
@@ -397,14 +402,14 @@ impl<S: SettingKind> SettingsStore<S> {
 
     /// `person`'s membership record of `setting`; `Member::NONE` if they never
     /// had a group of it.
-    fn member(&self, person: PersonId, setting: S) -> Member {
+    fn member(&self, person: EntityId<S::Entity>, setting: S) -> Member {
         self.memberships
             .get(person.0 * self.kinds.len() + setting.index())
             .copied()
             .unwrap_or(Member::NONE)
     }
 
-    fn member_mut(&mut self, person: PersonId, setting: S) -> &mut Member {
+    fn member_mut(&mut self, person: EntityId<S::Entity>, setting: S) -> &mut Member {
         let stride = self.kinds.len();
         let index = person.0 * stride + setting.index();
         if index >= self.memberships.len() {
@@ -415,7 +420,7 @@ impl<S: SettingKind> SettingsStore<S> {
     }
 
     /// The group `person` is in now, if any.
-    fn group_of(&self, person: PersonId, setting: S) -> Option<u32> {
+    fn group_of(&self, person: EntityId<S::Entity>, setting: S) -> Option<u32> {
         let m = self.member(person, setting);
         if m.group == NO_GROUP {
             self.kinds[setting.index()].population_group
@@ -425,7 +430,7 @@ impl<S: SettingKind> SettingsStore<S> {
     }
 
     /// The group `person` is in or was removed from, if any.
-    fn remembered_group_of(&self, person: PersonId, setting: S) -> Option<u32> {
+    fn remembered_group_of(&self, person: EntityId<S::Entity>, setting: S) -> Option<u32> {
         let m = self.member(person, setting);
         if m.group == NO_GROUP {
             self.kinds[setting.index()].population_group
@@ -436,7 +441,12 @@ impl<S: SettingKind> SettingsStore<S> {
 
     /// `person`'s current and largest-ever multiplier in `setting`, given the
     /// population size for a population group; `None` without a group.
-    fn multipliers(&self, person: PersonId, setting: S, population: usize) -> Option<(f64, f64)> {
+    fn multipliers(
+        &self,
+        person: EntityId<S::Entity>,
+        setting: S,
+        population: usize,
+    ) -> Option<(f64, f64)> {
         let group = self.group_of(person, setting)?;
         Some(self.group_multipliers(group, setting, population))
     }
@@ -450,7 +460,7 @@ impl<S: SettingKind> SettingsStore<S> {
         }
     }
 
-    fn itinerary(&self, context: &Context, person: PersonId) -> Option<Itinerary<S>> {
+    fn itinerary(&self, context: &Context, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
         self.itineraries
             .get(person)
             .copied()
@@ -459,7 +469,7 @@ impl<S: SettingKind> SettingsStore<S> {
 
     /// Take `person` out of their current list group of `setting`, if any,
     /// remembering the group.
-    fn remove(&mut self, person: PersonId, setting: S) {
+    fn remove(&mut self, person: EntityId<S::Entity>, setting: S) {
         let member = self.member(person, setting);
         if member.group == NO_GROUP || member.position == NOT_ACTIVE {
             return;
@@ -470,7 +480,7 @@ impl<S: SettingKind> SettingsStore<S> {
         let moved = group.members.get(member.position as usize).copied();
         group.resized();
         if let Some(moved) = moved {
-            self.member_mut(PersonId::new(moved as usize), setting)
+            self.member_mut(EntityId::new(moved as usize), setting)
                 .position = member.position;
         }
     }
@@ -479,15 +489,17 @@ impl<S: SettingKind> SettingsStore<S> {
         &self,
         context: &Context,
         rng: &mut R,
-        person: PersonId,
+        person: EntityId<S::Entity>,
         setting: S,
-    ) -> Option<PersonId> {
+    ) -> Option<EntityId<S::Entity>> {
         let group = self.group_of(person, setting)?;
         if self.kinds[setting.index()].population_group == Some(group) {
-            context.query(Person).sample_entity_excluding(rng, person)
+            context
+                .query(S::Entity::default())
+                .sample_entity_excluding(rng, person)
         } else {
             sample_single_excluding(rng, &self.groups[group as usize].members, person.0 as u32)
-                .map(|&i| PersonId::new(i as usize))
+                .map(|&i| EntityId::new(i as usize))
         }
     }
 }
@@ -546,9 +558,10 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// kind; keys are compared by hash.
     ///
     /// ```
-    /// # use ixa::core_epi::{Person, SettingsExt};
+    /// # use ixa::core_epi::SettingsExt;
     /// # use ixa::prelude::*;
-    /// # ixa::define_settings!(Setting { Household });
+    /// # define_entity!(Person);
+    /// # ixa::define_settings!(Setting for Person { Household });
     /// # let mut context = Context::new();
     /// # context.register_setting(Setting::Household, 1.0);
     /// let line_list = "person_id,household_id\n1,HH001\n2,HH001\n3,HH002\n";
@@ -610,7 +623,11 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
 
     /// Add `person` to `group`, leaving their previous group of that kind.
     /// Adding them to a group they are in is a no-op.
-    fn add_setting_member<S: SettingKind>(&mut self, group: SettingGroupId<S>, person: PersonId) {
+    fn add_setting_member<S: SettingKind>(
+        &mut self,
+        group: SettingGroupId<S>,
+        person: EntityId<S::Entity>,
+    ) {
         let store = S::store_mut(self);
         let setting = S::ALL[store.groups[group.index as usize].kind];
         let m = store.member(person, setting);
@@ -641,7 +658,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// # Panics
     ///
     /// If that is a population group, which nobody can leave.
-    fn remove_setting_member<S: SettingKind>(&mut self, person: PersonId, setting: S) {
+    fn remove_setting_member<S: SettingKind>(&mut self, person: EntityId<S::Entity>, setting: S) {
         let store = S::store_mut(self);
         assert!(
             store.member(person, setting).group != NO_GROUP
@@ -654,7 +671,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
 
     /// Put `person` back in the group of `setting` they were removed from.
     /// No-op if they are in it or never had one.
-    fn restore_setting_member<S: SettingKind>(&mut self, person: PersonId, setting: S) {
+    fn restore_setting_member<S: SettingKind>(&mut self, person: EntityId<S::Entity>, setting: S) {
         let member = S::store(self).member(person, setting);
         if member.group != NO_GROUP && member.position == NOT_ACTIVE {
             self.add_setting_member(SettingGroupId::<S>::new(member.group), person);
@@ -664,7 +681,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// `person`'s group of `setting`, if they are in one now.
     fn setting_group<S: SettingKind>(
         &self,
-        person: PersonId,
+        person: EntityId<S::Entity>,
         setting: S,
     ) -> Option<SettingGroupId<S>> {
         S::store(self)
@@ -673,13 +690,13 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// Number of people in `person`'s group of `setting` now; 0 without one.
-    fn setting_group_size<S: SettingKind>(&self, person: PersonId, setting: S) -> usize {
+    fn setting_group_size<S: SettingKind>(&self, person: EntityId<S::Entity>, setting: S) -> usize {
         let store = S::store(self);
         let Some(group) = store.group_of(person, setting) else {
             return 0;
         };
         if store.kinds[setting.index()].population_group == Some(group) {
-            self.get_entity_count::<Person>()
+            self.get_entity_count::<S::Entity>()
         } else {
             store.groups[group as usize].members.len()
         }
@@ -696,18 +713,22 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// `person`'s own itinerary, overriding the assignment.
-    fn set_itinerary<S: SettingKind>(&mut self, person: PersonId, itinerary: Itinerary<S>) {
+    fn set_itinerary<S: SettingKind>(
+        &mut self,
+        person: EntityId<S::Entity>,
+        itinerary: Itinerary<S>,
+    ) {
         S::store_mut(self).itineraries.insert(person, itinerary);
     }
 
     /// `person`'s itinerary: their own, else the assignment's, else `None`.
-    fn itinerary<S: SettingKind>(&self, person: PersonId) -> Option<Itinerary<S>>;
+    fn itinerary<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<Itinerary<S>>;
 
     /// Factor on `person`'s intrinsic infectiousness for an attempt in
     /// `setting`: their group's current multiplier, 0 if they have no group of
     /// it.
-    fn setting_multiplier<S: SettingKind>(&self, person: PersonId, setting: S) -> f64 {
-        let population = self.get_entity_count::<Person>();
+    fn setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>, setting: S) -> f64 {
+        let population = self.get_entity_count::<S::Entity>();
         S::store(self)
             .multipliers(person, setting, population)
             .map_or(0.0, |(current, _)| current)
@@ -718,12 +739,12 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// they are in a group of; 0 without an itinerary or any group. The loop
     /// uses [`setting_multiplier`](Self::setting_multiplier) of the drawn
     /// setting instead, which has this mean.
-    fn current_setting_multiplier<S: SettingKind>(&self, person: PersonId) -> f64 {
+    fn current_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let Some(itinerary) = self.itinerary::<S>(person) else {
             return 0.0;
         };
         let store = S::store(self);
-        let population = self.get_entity_count::<Person>();
+        let population = self.get_entity_count::<S::Entity>();
         let (mut weighted, mut ratio_sum) = (0.0, 0.0);
         for (setting, ratio) in itinerary.entries() {
             if ratio > 0.0 {
@@ -746,12 +767,12 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// including groups they were removed from. Valid as long as their
     /// itinerary does not move time into a kind it gave no time to when this
     /// was called.
-    fn max_setting_multiplier<S: SettingKind>(&self, person: PersonId) -> f64 {
+    fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let Some(itinerary) = self.itinerary::<S>(person) else {
             return 0.0;
         };
         let store = S::store(self);
-        let population = self.get_entity_count::<Person>();
+        let population = self.get_entity_count::<S::Entity>();
         itinerary
             .entries()
             .filter(|&(_, ratio)| ratio > 0.0)
@@ -764,7 +785,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
 
     /// Draw where an attempt by `person` happens: by itinerary ratio over the
     /// kinds they are in a group of. `None` without an itinerary or any group.
-    fn sample_setting<S: SettingKind>(&self, person: PersonId) -> Option<S> {
+    fn sample_setting<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<S> {
         let itinerary = self.itinerary::<S>(person)?;
         let store = S::store(self);
         let mut ratios = [0.0; MAX_SETTINGS];
@@ -780,21 +801,21 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// or `None` if there is nobody.
     fn sample_setting_contact<S: SettingKind>(
         &self,
-        person: PersonId,
+        person: EntityId<S::Entity>,
         setting: S,
-    ) -> Option<PersonId>;
+    ) -> Option<EntityId<S::Entity>>;
 }
 
 impl SettingsExt for Context {
-    fn itinerary<S: SettingKind>(&self, person: PersonId) -> Option<Itinerary<S>> {
+    fn itinerary<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
         S::store(self).itinerary(self, person)
     }
 
     fn sample_setting_contact<S: SettingKind>(
         &self,
-        person: PersonId,
+        person: EntityId<S::Entity>,
         setting: S,
-    ) -> Option<PersonId> {
+    ) -> Option<EntityId<S::Entity>> {
         let store = S::store(self);
         self.sample(SettingsRng, |rng| {
             store.sample_contact(self, rng, person, setting)
@@ -808,8 +829,9 @@ mod tests {
         draw_setting, Itinerary, ItineraryAssignment, SettingGroupId, SettingKind, SettingsExt,
         MAX_SETTINGS,
     };
-    use crate::core_epi::person::{Person, PersonId};
     use crate::prelude::*;
+
+    define_entity!(Person);
 
     define_property!(
         enum AgeGroup {
@@ -820,7 +842,7 @@ mod tests {
         default_const = AgeGroup::Adult
     );
 
-    define_settings!(Setting {
+    define_settings!(Setting for Person {
         Home,
         Work,
         Community

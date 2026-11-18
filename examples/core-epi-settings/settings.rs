@@ -3,13 +3,15 @@
 //! The community is the population group everyone is in.
 use std::path::Path;
 
-use ixa::core_epi::{Itinerary, Person, SettingsExt};
+use ixa::core_epi::{Itinerary, SettingsExt};
 use ixa::define_settings;
 use ixa::prelude::*;
 
 use crate::parameters::ParametersExt;
 
-define_settings!(pub Setting { Household, School, Workplace, Community });
+define_entity!(Person);
+
+define_settings!(pub Setting for Person { Household, School, Workplace, Community });
 
 define_property!(struct Age(u8), Person);
 

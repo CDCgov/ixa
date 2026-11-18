@@ -12,15 +12,15 @@ mod parameters;
 mod settings;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, Person, PersonId, RateAssignment,
-    ScaledRateFn, SettingsExt, TransmissionManager,
+    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, SettingsExt,
+    TransmissionManager,
 };
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
 use rand_distr::Exp;
 
 use crate::parameters::{Parameters, ParametersExt};
-use crate::settings::Setting;
+use crate::settings::{Person, PersonId, Setting};
 
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
@@ -36,6 +36,8 @@ define_property!(
 );
 
 impl InfectionManager<CoreEpiExample> for Context {
+    type Entity = Person;
+
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         let params = self.get_parameters();
         let duration = self.sample_distr(

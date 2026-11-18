@@ -1,16 +1,20 @@
 #![cfg(feature = "core_epi")]
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, Person, PersonId, RateAssignment,
-    ScaledRateFn, StepFn, TransmissionManager,
+    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, StepFn,
+    TransmissionManager,
 };
 use ixa::prelude::*;
+
+define_entity!(Person);
 
 struct Sir;
 
 const POPULATION: usize = 1000;
 
 impl InfectionManager<Sir> for Context {
+    type Entity = Person;
+
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         RateAssignment::Library(0)
     }
@@ -215,6 +219,8 @@ fn modifier_scales_infectiousness_for_current_infection() {
 fn loop_panics_when_the_forecast_is_not_a_bound() {
     struct Broken;
     impl InfectionManager<Broken> for Context {
+        type Entity = Person;
+
         fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
             RateAssignment::Library(0)
         }
@@ -246,4 +252,42 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
     TransmissionManager::<Broken>::setup_transmission_loop(&mut context);
     TransmissionManager::<Broken>::seed_infections(&mut context, Person, 1);
     context.execute();
+}
+
+#[test]
+fn models_on_different_entities_keep_separate_infections() {
+    define_entity!(Animal);
+    struct Zoonosis;
+    impl InfectionManager<Zoonosis> for Context {
+        type Entity = Animal;
+
+        fn draw_infectiousness_rate_fn(&mut self, _animal: AnimalId) -> RateAssignment {
+            ConstantRateFn::new(1.0, 2.0).into()
+        }
+    }
+
+    let mut context = Context::new();
+    context.init_random(1);
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 5.0).into()],
+    );
+    let person = context.add_entity(Person).unwrap();
+    let animal = context.add_entity(Animal).unwrap();
+
+    InfectionManager::<Zoonosis>::assign_infectiousness_rate_fn(&mut context, animal);
+    assert!(InfectionManager::<Zoonosis>::is_infectious(
+        &context, animal
+    ));
+    assert!(!InfectionManager::<Sir>::is_infectious(&context, person));
+
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_end_time(&context, person),
+        Some(5.0)
+    );
+    assert_eq!(
+        InfectionManager::<Zoonosis>::infectiousness_end_time(&context, animal),
+        Some(2.0)
+    );
 }

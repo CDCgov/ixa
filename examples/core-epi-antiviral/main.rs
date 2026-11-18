@@ -5,13 +5,13 @@
 //! and prints both final sizes.
 mod parameters;
 
-use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, Person, PersonId, RateAssignment, TransmissionManager,
-};
+use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
 use ixa::prelude::*;
 use rand_distr::Exp;
 
 use crate::parameters::{Parameters, ParametersExt};
+
+define_entity!(Person);
 
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
@@ -41,6 +41,8 @@ define_property!(
 );
 
 impl InfectionManager<CoreEpiExample> for Context {
+    type Entity = Person;
+
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         let params = self.get_parameters();
         let duration = self.sample_distr(
