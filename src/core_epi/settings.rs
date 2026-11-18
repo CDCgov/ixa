@@ -17,7 +17,8 @@
 //! `alpha = 0` they do not. A person's current multiplier is the itinerary
 //! weighted average over their groups (the itinerary renormalized over the
 //! kinds they have a group in); their bound is the largest multiplier
-//! any of those groups has ever had, so members can be removed and added back
+//! any of their groups has ever had, whatever their itinerary, so members can
+//! be removed and added back and itineraries overridden and cleared
 //! (interventions) without re-forecasting. In
 //! [`TransmissionManager`](super::TransmissionManager), `forecast_total_infectiousness`
 //! scales the intrinsic bound by
@@ -821,25 +822,28 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// Upper bound on [`setting_multiplier`](Self::setting_multiplier) for any
-    /// setting [`sample_setting`](Self::sample_setting) can draw this run: the
-    /// largest multiplier any group in `person`'s itinerary has ever had,
-    /// including groups they were removed from. Valid as long as their
-    /// itinerary does not move time into a kind it gave no time to when this
-    /// was called.
+    /// setting [`sample_setting`](Self::sample_setting) can draw: the largest
+    /// multiplier any of `person`'s groups has ever had, over every kind and
+    /// including groups they were removed from; 0 without an itinerary. It
+    /// does not depend on what the itinerary is, so it holds when an
+    /// itinerary is set, cleared or reassigned after a forecast was made. It
+    /// does not cover a group that later grows past its largest size, or a
+    /// group joined later.
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
-        let Some(itinerary) = self.itinerary::<S>(person) else {
+        if self.itinerary::<S>(person).is_none() {
             return 0.0;
-        };
+        }
         let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
-        itinerary
-            .entries()
-            .filter(|&(_, ratio)| ratio > 0.0)
-            .filter_map(|(setting, _)| {
-                let group = store.remembered_group_of(person, setting)?;
-                Some(store.group_multipliers(group, setting, population).1)
-            })
-            .fold(0.0, f64::max)
+        let mut max_multiplier = 0.0_f64;
+        for index in 0..store.kinds.len() {
+            let setting = S::from_index(index);
+            if let Some(group) = store.remembered_group_of(person, setting) {
+                let (_, largest) = store.group_multipliers(group, setting, population);
+                max_multiplier = max_multiplier.max(largest);
+            }
+        }
+        max_multiplier
     }
 
     /// Draw where an attempt by `person` happens: by itinerary ratio over the
@@ -970,10 +974,8 @@ mod tests {
                 context.current_setting_multiplier::<Setting>(people[0]),
                 expected
             );
-            assert_eq!(
-                context.max_setting_multiplier::<Setting>(people[0]),
-                expected
-            );
+            // The bound covers every kind, whatever the itinerary.
+            assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 3.0);
         }
     }
 
@@ -1168,8 +1170,34 @@ mod tests {
         context.set_itinerary(people[1], Itinerary::new([(HOME, 1.0)]));
         assert_eq!(context.sample_setting(people[0]), Some(COMMUNITY));
         assert_eq!(context.sample_setting(people[1]), Some(HOME));
-        assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 1.0);
+        // Both are members at home, so both bounds allow for it.
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
         assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+    }
+
+    #[test]
+    fn bound_holds_across_an_itinerary_override_and_its_removal() {
+        // Alone at home (multiplier 0), with two others at work (multiplier 2).
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
+        home_for_all(&mut context, &people[..1]);
+        let work = context.create_setting_group(WORK);
+        for &p in &people {
+            context.add_setting_member(work, p);
+        }
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.5), (WORK, 0.5)]));
+
+        // Isolated at home: a bound from the current itinerary alone would be
+        // 0, ending the transmission loop before isolation does.
+        context.set_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        let bound = context.max_setting_multiplier::<Setting>(people[0]);
+        assert_eq!(bound, 2.0);
+
+        context.clear_itinerary::<Setting>(people[0]);
+        for _ in 0..50 {
+            let setting = context.sample_setting::<Setting>(people[0]).unwrap();
+            assert!(context.setting_multiplier(people[0], setting) <= bound);
+        }
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), bound);
     }
 
     #[test]
