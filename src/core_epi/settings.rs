@@ -19,7 +19,10 @@
 //! kinds they have a group in); their bound is the largest multiplier
 //! any of their groups has ever had, whatever their itinerary, so members can
 //! be removed and added back and itineraries overridden and cleared
-//! (interventions) without re-forecasting.
+//! (interventions) without re-forecasting. A group growing past its largest
+//! size, or a person joining a new group, can exceed it: then call
+//! [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
+//! for the infectious people affected.
 //!
 //! A model's [`TransmissionManager`](super::TransmissionManager) can use
 //! them in two ways, which give attempts in each setting at the same rate,
@@ -745,6 +748,24 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         }
     }
 
+    /// The people in `group` now; everyone, for a population group.
+    fn setting_group_members<S: SettingKind>(
+        &self,
+        group: SettingGroupId<S>,
+    ) -> Vec<EntityId<S::Entity>> {
+        let store = S::store(self);
+        let record = &store.groups[group.index as usize];
+        if store.kinds[record.kind].population_group == Some(group.index) {
+            self.get_entity_iterator::<S::Entity>().collect()
+        } else {
+            record
+                .members
+                .iter()
+                .map(|&index| EntityId::new(index as usize))
+                .collect()
+        }
+    }
+
     /// `person`'s group of `setting`, if they are in one now.
     fn setting_group<S: SettingKind>(
         &self,
@@ -844,7 +865,10 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// does not depend on what the itinerary is, so it holds when an
     /// itinerary is set, cleared or reassigned after a forecast was made. It
     /// does not cover a group that later grows past its largest size, or a
-    /// group joined later.
+    /// group joined later: after such a change, call
+    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
+    /// for the infectious people it affects (the newcomer, and the group's
+    /// [`setting_group_members`](Self::setting_group_members)).
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         if self.itinerary::<S>(person).is_none() {
             return 0.0;
@@ -1387,5 +1411,18 @@ mod tests {
             0.0
         );
         assert_eq!(context.sample_setting_by_rate::<Setting>(people[0]), None);
+    }
+
+    #[test]
+    fn group_members_lists_who_is_in_a_group_now() {
+        let (mut context, people) = context_with(4);
+        let home = home_for_all(&mut context, &people[..3]);
+        context.remove_setting_member(people[1], HOME);
+        assert_eq!(
+            context.setting_group_members(home),
+            vec![people[0], people[2]]
+        );
+        let community = context.create_population_setting_group(COMMUNITY);
+        assert_eq!(context.setting_group_members(community), people);
     }
 }

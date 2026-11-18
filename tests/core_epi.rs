@@ -291,3 +291,211 @@ fn models_on_different_entities_keep_separate_infections() {
         Some(2.0)
     );
 }
+
+// A model whose contact rate is a factor the test changes mid-run. It counts
+// attempts instead of infecting anyone.
+struct Boosted;
+
+#[derive(Default)]
+struct Boost {
+    factor: std::cell::Cell<f64>,
+    attempts: std::cell::Cell<usize>,
+    reforecast_on_infected: std::cell::Cell<bool>,
+}
+define_data_plugin!(BoostPlugin, Boost, Boost::default());
+
+const BOOSTED_RATE: f64 = 2.0;
+
+impl InfectionManager<Boosted> for Context {
+    type Entity = Person;
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
+    }
+
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+        if self.get_data(BoostPlugin).reforecast_on_infected.get() {
+            TransmissionManager::<Boosted>::reforecast_transmission(self, infectee);
+        }
+    }
+}
+
+impl TransmissionManager<Boosted> for Context {
+    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+        ScaledRateFn::new(
+            InfectionManager::<Boosted>::majorizing_infectiousness_rate_fn(self, person),
+            self.get_data(BoostPlugin).factor.get(),
+        )
+    }
+
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let boost = self.get_data(BoostPlugin);
+        let total = InfectionManager::<Boosted>::intrinsic_infectiousness(self, person)?
+            * boost.factor.get();
+        if TransmissionManager::<Boosted>::accept_proposal(self, person, total, forecast) {
+            boost.attempts.set(boost.attempts.get() + 1);
+        }
+        None
+    }
+}
+
+/// One infector whose factor is 0 until t = 10, 1 until t = 30, then 3, run
+/// to t = 60; returns the number of attempts.
+fn run_boosted(seed: u64, reforecast: bool) -> usize {
+    let mut context = Context::new();
+    context.init_random(seed);
+    let person = context.add_entity(Person).unwrap();
+    TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+    for (time, factor) in [(10.0, 1.0), (30.0, 3.0)] {
+        context.add_plan(time, move |context| {
+            context.get_data(BoostPlugin).factor.set(factor);
+            if reforecast {
+                TransmissionManager::<Boosted>::reforecast_transmission(context, person);
+            }
+        });
+    }
+    context.add_plan(60.0, Context::shutdown);
+    context.execute();
+    context.get_data(BoostPlugin).attempts.get()
+}
+
+#[test]
+fn reforecast_restarts_an_ended_loop_and_follows_a_rise() {
+    // The loop ends at once on a zero forecast; each reforecast picks the new
+    // rate up. Expected attempts: 2 * 20 + 6 * 30 = 220 per run.
+    let runs = 50;
+    let total: usize = (0..runs).map(|seed| run_boosted(seed, true)).sum();
+    let mean = total as f64 / runs as f64;
+    assert!(
+        (mean - 220.0).abs() < 8.0,
+        "expected about 220 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+fn without_a_reforecast_a_zero_forecast_ends_the_loop() {
+    assert_eq!(run_boosted(1, false), 0);
+}
+
+#[test]
+#[should_panic(expected = "exceeds its forecast")]
+fn a_rise_without_a_reforecast_panics() {
+    let mut context = Context::new();
+    context.init_random(2);
+    let person = context.add_entity(Person).unwrap();
+    context.get_data(BoostPlugin).factor.set(1.0);
+    TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+    context.add_plan(10.0, |context| {
+        context.get_data(BoostPlugin).factor.set(3.0);
+    });
+    context.add_plan(60.0, Context::shutdown);
+    context.execute();
+}
+
+#[test]
+fn reinfection_and_reforecast_leave_one_loop_running() {
+    // Fifty reinfections and fifty reforecasts at t = 0 must not leave a
+    // hundred loops: expected attempts stay 2 * 10 = 20 per run.
+    let runs = 50;
+    let mut total = 0;
+    for seed in 0..runs {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        context.get_data(BoostPlugin).factor.set(1.0);
+        TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+        for _ in 0..50 {
+            TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+        }
+        context.add_plan(0.0, move |context| {
+            for _ in 0..50 {
+                TransmissionManager::<Boosted>::reforecast_transmission(context, person);
+            }
+        });
+        context.add_plan(10.0, Context::shutdown);
+        context.execute();
+        total += context.get_data(BoostPlugin).attempts.get();
+    }
+    let mean = total as f64 / runs as f64;
+    assert!(
+        (mean - 20.0).abs() < 3.0,
+        "expected about 20 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+fn reforecast_is_a_no_op_for_someone_never_infected() {
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    TransmissionManager::<Boosted>::reforecast_transmission(&mut context, person);
+    context.execute();
+    assert_eq!(context.get_data(BoostPlugin).attempts.get(), 0);
+}
+
+/// Mean attempts per run over ten time units at factor 1 (expected 20), after
+/// `infect` has infected the one person at time zero.
+fn mean_boosted_attempts(infect: impl Fn(&mut Context, PersonId)) -> f64 {
+    let runs = 50;
+    let mut total = 0;
+    for seed in 0..runs {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        context.get_data(BoostPlugin).factor.set(1.0);
+        TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+        infect(&mut context, person);
+        context.add_plan(10.0, Context::shutdown);
+        context.execute();
+        total += context.get_data(BoostPlugin).attempts.get();
+    }
+    total as f64 / runs as f64
+}
+
+#[test]
+fn repeated_infection_before_the_loop_starts_leaves_one_loop_running() {
+    let mean = mean_boosted_attempts(|context, person| {
+        for _ in 0..50 {
+            TransmissionManager::<Boosted>::transmit(context, None, person);
+        }
+    });
+    assert!(
+        (mean - 20.0).abs() < 3.0,
+        "expected about 20 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+fn reforecast_in_on_infected_leaves_one_loop_running() {
+    let mean = mean_boosted_attempts(|context, person| {
+        context
+            .get_data(BoostPlugin)
+            .reforecast_on_infected
+            .set(true);
+        TransmissionManager::<Boosted>::transmit(context, None, person);
+    });
+    assert!(
+        (mean - 20.0).abs() < 3.0,
+        "expected about 20 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+fn reforecast_after_infectiousness_ended_schedules_nothing() {
+    let mut context = Context::new();
+    context.init_random(4);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 2.0).into()],
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    context.add_plan(5.0, move |context| {
+        TransmissionManager::<Sir>::reforecast_transmission(context, person);
+    });
+    context.execute();
+    // Nothing was scheduled past the reforecast itself.
+    assert_eq!(context.get_current_time(), 5.0);
+}

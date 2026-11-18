@@ -48,6 +48,9 @@ impl<E: Entity> std::fmt::Debug for InfectiousnessAssignedEvent<E> {
 struct Assigned {
     rate: RateAssignment,
     infection_time: f64,
+    /// Which forecast of the person's transmission loop is live: a pending
+    /// proposal made under an earlier one is dropped when it fires.
+    forecast_generation: u32,
 }
 
 /// A modifier factor computed per read from the context, the person and the
@@ -174,6 +177,31 @@ fn rates_mut<E: Entity, C: ContextBase>(context: &mut C) -> &mut InfectiousnessR
         .expect("rate store has the wrong type")
 }
 
+/// The live forecast of `person`'s transmission loop; `None` if they were
+/// never infected.
+pub(super) fn forecast_generation<E: Entity, C: ContextBase>(
+    context: &C,
+    person: EntityId<E>,
+) -> Option<u32> {
+    Some(
+        rates::<E, _>(context)?
+            .assigned
+            .get(person)?
+            .forecast_generation,
+    )
+}
+
+/// Supersede `person`'s pending proposal, returning the new live forecast;
+/// `None` if they were never infected.
+pub(super) fn advance_forecast_generation<E: Entity, C: ContextBase>(
+    context: &mut C,
+    person: EntityId<E>,
+) -> Option<u32> {
+    let assigned = rates_mut::<E, _>(context).assigned.get_mut(person)?;
+    assigned.forecast_generation = assigned.forecast_generation.wrapping_add(1);
+    Some(assigned.forecast_generation)
+}
+
 // Rate functions are indexed by time since infection.
 
 /// A person's infectiousness over time and their susceptibility: assigning
@@ -210,11 +238,17 @@ where
         let rate = self.draw_infectiousness_rate_fn(person);
         let infection_time = self.get_current_time();
         let rates = rates_mut::<Self::Entity, _>(self);
+        // A reinfection supersedes the previous infection's pending proposal.
+        let forecast_generation = rates
+            .assigned
+            .get(person)
+            .map_or(0, |assigned| assigned.forecast_generation.wrapping_add(1));
         rates.assigned.insert(
             person,
             Assigned {
                 rate,
                 infection_time,
+                forecast_generation,
             },
         );
         let _ = rates.modifiers.remove(person);

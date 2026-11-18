@@ -1,6 +1,8 @@
 use rand_distr::Exp;
 
-use crate::core_epi::infection_manager::{InfectionManager, InfectiousnessAssignedEvent};
+use crate::core_epi::infection_manager::{
+    advance_forecast_generation, forecast_generation, InfectionManager, InfectiousnessAssignedEvent,
+};
 use crate::core_epi::rate::InvertibleRate;
 use crate::entity::query::Query;
 use crate::entity::EntityId;
@@ -42,10 +44,13 @@ const BOUND_TOLERANCE: f64 = 1e-9;
 /// [`forecast_total_infectiousness`]: Self::forecast_total_infectiousness
 /// [`evaluate_forecast`]: Self::evaluate_forecast
 ///
-/// The loop ends when infectiousness ends for good
-/// ([`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness) is `None`) or
-/// the majorizing rate's integrated infectiousness is exhausted (its inverse
-/// cumulative returns `None`, so no further proposal is scheduled).
+/// A forecast must bound the total until the next proposal. When something
+/// raises a person's total above it, call
+/// [`reforecast_transmission`](Self::reforecast_transmission).
+///
+/// The loop ends when the forecast's integrated infectiousness is exhausted
+/// (its inverse cumulative returns `None`, so no further proposal is
+/// scheduled).
 ///
 /// `M` is a marker type the model defines, so that it can implement these
 /// traits for `Context` (a model crate owns neither, which the orphan rule
@@ -144,18 +149,37 @@ where
     fn setup_transmission_loop(&mut self) {
         self.subscribe_to_event(
             |context, event: InfectiousnessAssignedEvent<Self::Entity>| {
-                TransmissionManager::<M>::schedule_next_transmission_attempt_proposal(
-                    context,
-                    event.person,
-                );
+                // Supersedes anything already pending: the person may have
+                // been reforecast or infected again since this event was
+                // emitted.
+                TransmissionManager::<M>::reforecast_transmission(context, event.person);
             },
         );
     }
 
-    /// Schedule the next attempt proposal.
-    ///
-    /// This function begins the transmission loop for an infector.
+    /// Drop `person`'s pending attempt proposal and forecast again from now.
+    /// Call after anything that can raise their total infectiousness above
+    /// what [`forecast_total_infectiousness`](Self::forecast_total_infectiousness)
+    /// returned when the pending proposal was drawn, e.g. their group growing
+    /// or a contact restriction ending: the loop panics if a total exceeds its
+    /// forecast, and a forecast of zero ends the loop. It also restarts a loop
+    /// that ended that way. Redrawing is always statistically valid, so when
+    /// in doubt, call it. No-op if `person` was never infected.
+    fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
+        if let Some(generation) = advance_forecast_generation(self, person) {
+            self.schedule_proposal(person, generation);
+        }
+    }
+
+    /// Begin the transmission loop for an infector. As
+    /// [`reforecast_transmission`](Self::reforecast_transmission): a loop
+    /// already running for them is superseded, never doubled.
     fn schedule_next_transmission_attempt_proposal(&mut self, infector: EntityId<Self::Entity>) {
+        self.reforecast_transmission(infector);
+    }
+
+    #[doc(hidden)]
+    fn schedule_proposal(&mut self, infector: EntityId<Self::Entity>, generation: u32) {
         // Determine if & when the next attempt proposal will occur. The majorizing
         // rate function is indexed by time from now, so inverting an Exp(1) draw
         // gives the delay to the proposal. If `e` is beyond the support of the
@@ -169,9 +193,7 @@ where
         if let Some((delay, forecast)) = proposal {
             let t = self.get_current_time() + delay;
             self.add_plan(t, move |ctx| {
-                TransmissionManager::<M>::handle_transmission_attempt_proposal(
-                    ctx, infector, forecast,
-                );
+                TransmissionManager::<M>::handle_proposal(ctx, infector, forecast, generation);
             });
         };
     }
@@ -184,9 +206,20 @@ where
         infector: EntityId<Self::Entity>,
         forecast: f64,
     ) {
-        // A `None` infectiousness means it has ended for good: do not
-        // reschedule, so this is the infector's last proposal for this infection.
-        if self.intrinsic_infectiousness(infector).is_none() {
+        if let Some(generation) = forecast_generation(self, infector) {
+            self.handle_proposal(infector, forecast, generation);
+        }
+    }
+
+    #[doc(hidden)]
+    fn handle_proposal(
+        &mut self,
+        infector: EntityId<Self::Entity>,
+        forecast: f64,
+        generation: u32,
+    ) {
+        // Superseded by a reforecast or a reinfection, which drew its own.
+        if forecast_generation(self, infector) != Some(generation) {
             return;
         }
         // A zero forecast (a proposal exactly at the end of the support) can
@@ -198,9 +231,14 @@ where
                 let infected = p >= 1.0 || (p > 0.0 && self.sample_bool(CoreEpiTransmissionRng, p));
                 if infected {
                     self.transmit(Some(infector), infectee);
+                    // Only a transmission runs model code, which may have
+                    // reforecast the infector.
+                    if forecast_generation(self, infector) != Some(generation) {
+                        return;
+                    }
                 }
             }
         }
-        self.schedule_next_transmission_attempt_proposal(infector);
+        self.schedule_proposal(infector, generation);
     }
 }
