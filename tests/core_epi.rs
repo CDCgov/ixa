@@ -1,8 +1,8 @@
 #![cfg(feature = "core_epi")]
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, StepFn,
-    TransmissionManager,
+    ConstantRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment, ScaledRateFn,
+    SettingKind, SettingsExt, StepFn, TransmissionManager,
 };
 use ixa::prelude::*;
 
@@ -657,4 +657,222 @@ fn two_models_on_one_population_keep_separate_infections() {
     let assigned = context.get_data(AssignedPlugin);
     assert_eq!(assigned.flu, infected_by(true));
     assert_eq!(assigned.cold, 1);
+}
+
+// A model whose every attempt infects the other person, and whose
+// `on_infected` reforecasts the infector from inside their own proposal.
+struct Chained;
+
+#[derive(Default)]
+struct Chain {
+    infector: std::cell::Cell<Option<PersonId>>,
+    contact: std::cell::Cell<Option<PersonId>>,
+    attempts: std::cell::Cell<usize>,
+}
+define_data_plugin!(ChainPlugin, Chain, Chain::default());
+
+impl InfectionManager<Chained> for Context {
+    type Entity = Person;
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
+    }
+
+    fn base_susceptibility(&self, _person: PersonId) -> f64 {
+        1.0
+    }
+
+    fn on_infected(&mut self, infector: Option<PersonId>, _infectee: PersonId) {
+        if let Some(infector) = infector {
+            TransmissionManager::<Chained>::reforecast_transmission(self, infector);
+        }
+    }
+}
+
+impl TransmissionManager<Chained> for Context {
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let chain = self.get_data(ChainPlugin);
+        // Only the first infector attempts; the contact's own loop is idle.
+        if chain.infector.get() != Some(person) {
+            return None;
+        }
+        let total = InfectionManager::<Chained>::intrinsic_infectiousness(self, person)?;
+        if !TransmissionManager::<Chained>::accept_proposal(self, person, total, forecast) {
+            return None;
+        }
+        chain.attempts.set(chain.attempts.get() + 1);
+        chain.contact.get()
+    }
+}
+
+#[test]
+fn reforecasting_the_infector_from_on_infected_leaves_one_loop_running() {
+    // Expected attempts: 2 * 10 = 20 per run, each one a transmission.
+    let runs = 50;
+    let mut total = 0;
+    for seed in 0..runs {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let infector = context.add_entity(Person).unwrap();
+        let contact = context.add_entity(Person).unwrap();
+        let chain = context.get_data(ChainPlugin);
+        chain.infector.set(Some(infector));
+        chain.contact.set(Some(contact));
+        TransmissionManager::<Chained>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Chained>::transmit(&mut context, None, infector);
+        context.add_plan(10.0, Context::shutdown);
+        context.execute();
+        total += context.get_data(ChainPlugin).attempts.get();
+    }
+    let mean = total as f64 / runs as f64;
+    assert!(
+        (mean - 20.0).abs() < 3.0,
+        "expected about 20 attempts per run, got {mean}"
+    );
+}
+
+// Settings through the loop: one infector, counting attempts per setting on
+// the setting-first path and on the exact path.
+ixa::define_settings!(Place for Person);
+
+const PLACE_RATE: f64 = 0.5;
+const PLACE_DURATION: f64 = 2000.0;
+
+#[derive(Default)]
+struct PlaceAttempts(std::cell::RefCell<Vec<usize>>);
+define_data_plugin!(PlaceAttemptsPlugin, PlaceAttempts, PlaceAttempts::default());
+
+fn count_place_attempt(context: &Context, person: PersonId, place: Place) {
+    if context.sample_setting_contact(person, place).is_some() {
+        let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow_mut();
+        if attempts.len() <= place.index() {
+            attempts.resize(place.index() + 1, 0);
+        }
+        attempts[place.index()] += 1;
+    }
+}
+
+struct SettingFirst;
+struct Exact;
+
+impl InfectionManager<SettingFirst> for Context {
+    type Entity = Person;
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
+    }
+}
+
+impl TransmissionManager<SettingFirst> for Context {
+    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+        ScaledRateFn::new(
+            InfectionManager::<SettingFirst>::majorizing_infectiousness_rate_fn(self, person),
+            self.max_setting_multiplier::<Place>(person),
+        )
+    }
+
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let place = self.sample_setting::<Place>(person)?;
+        let total = InfectionManager::<SettingFirst>::intrinsic_infectiousness(self, person)?
+            * self.setting_multiplier(person, place);
+        if TransmissionManager::<SettingFirst>::accept_proposal(self, person, total, forecast) {
+            count_place_attempt(self, person, place);
+        }
+        None
+    }
+}
+
+impl InfectionManager<Exact> for Context {
+    type Entity = Person;
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
+    }
+}
+
+impl TransmissionManager<Exact> for Context {
+    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+        ScaledRateFn::new(
+            InfectionManager::<Exact>::majorizing_infectiousness_rate_fn(self, person),
+            self.current_setting_multiplier::<Place>(person),
+        )
+    }
+
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        let total = InfectionManager::<Exact>::intrinsic_infectiousness(self, person)?
+            * self.current_setting_multiplier::<Place>(person);
+        if TransmissionManager::<Exact>::accept_proposal(self, person, total, forecast) {
+            let place = self.sample_setting_by_rate::<Place>(person)?;
+            count_place_attempt(self, person, place);
+        }
+        None
+    }
+}
+
+/// Thirty people; the infector is at home with 3 others (multiplier 3), at
+/// work with 16 others (alpha 0.5, multiplier 4), in the community
+/// (multiplier 1) and has no school. Returns the infector.
+fn place_population(context: &mut Context) -> PersonId {
+    let home = context.add_setting_kind::<Place>("home", 1.0);
+    let school = context.add_setting_kind::<Place>("school", 1.0);
+    let work = context.add_setting_kind::<Place>("work", 0.5);
+    let community = context.add_setting_kind::<Place>("community", 0.0);
+    let people: Vec<PersonId> = (0..30)
+        .map(|_| context.add_entity(Person).unwrap())
+        .collect();
+    let household = context.create_setting_group(home);
+    for &person in &people[..4] {
+        context.add_setting_member(household, person);
+    }
+    let workplace = context.create_setting_group(work);
+    for &person in &people[..17] {
+        context.add_setting_member(workplace, person);
+    }
+    let class = context.create_setting_group(school);
+    for &person in &people[10..20] {
+        context.add_setting_member(class, person);
+    }
+    context.create_population_setting_group(community);
+    context.set_itinerary_assignment(Itinerary::new([
+        (home, 0.4),
+        (school, 0.2),
+        (work, 0.3),
+        (community, 0.1),
+    ]));
+    people[0]
+}
+
+#[test]
+fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
+    // The itinerary renormalizes over home, work and community: 0.5, 0.375,
+    // 0.125. Expected attempts are rate * ratio * multiplier * duration.
+    let per_unit = PLACE_RATE * PLACE_DURATION;
+    let expected = [
+        per_unit * 0.5 * 3.0,
+        0.0,
+        per_unit * 0.375 * 4.0,
+        per_unit * 0.125,
+    ];
+    for exact in [false, true] {
+        let mut context = Context::new();
+        context.init_random(11);
+        let infector = place_population(&mut context);
+        if exact {
+            TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
+            TransmissionManager::<Exact>::transmit(&mut context, None, infector);
+        } else {
+            TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
+            TransmissionManager::<SettingFirst>::transmit(&mut context, None, infector);
+        }
+        context.execute();
+        let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow().clone();
+        attempts.resize(expected.len(), 0);
+        for (place, &expected) in expected.iter().enumerate() {
+            let observed = attempts[place] as f64;
+            assert!(
+                (observed - expected).abs() <= 4.0 * expected.sqrt(),
+                "exact path {exact}, kind {place}: {observed} attempts, expected {expected}"
+            );
+        }
+    }
 }

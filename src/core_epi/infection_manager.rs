@@ -218,8 +218,6 @@ pub(super) fn advance_forecast_generation<M: 'static, E: Entity, C: ContextBase>
     Some(assigned.forecast_generation)
 }
 
-// Rate functions are indexed by time since infection.
-
 /// A person's infectiousness over time and their susceptibility: assigning
 /// each infected person a rate function, storing it, and exposing both to the
 /// transmission loop. `M` is the model's marker type (see
@@ -344,19 +342,27 @@ where
         &self,
         person: EntityId<Self::Entity>,
     ) -> TransformedInvertibleRateFn<'_, AnyInfectionRate> {
+        // One record lookup: this runs once per transmission attempt proposal.
+        let rates = rates::<M, Self::Entity, _>(self).expect("person was never infected");
+        let assigned = rates
+            .assigned
+            .get(person)
+            .expect("person was never infected");
+        let rate_fn = match &assigned.rate {
+            RateAssignment::Library(idx) => &rates.library[*idx],
+            RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
+        };
         TransformedInvertibleRateFn::new(
-            self.infectiousness_rate_fn(person)
-                .expect("no rate fn assigned to person"),
+            rate_fn,
             1.0,
-            self.time_since_infection(person)
-                .expect("person was never infected"),
+            self.get_current_time() - assigned.infection_time,
         )
     }
 
     /// Current intrinsic infectiousness, before any contact structure: the
     /// stored rate function now, times [`Self::infectiousness_multiplier`].
-    /// Bounded by the majorizing rate at time zero.
-    /// `None` signals that it is zero and will continue to be zero.
+    /// Bounded by the majorizing rate at time zero. `None` if they were never
+    /// infected; 0 once their rate function has run out.
     fn intrinsic_infectiousness(&self, person: EntityId<Self::Entity>) -> Option<f64> {
         // One record lookup: this runs once per transmission attempt proposal.
         let rates = rates::<M, Self::Entity, _>(self)?;
@@ -421,19 +427,19 @@ where
             return;
         };
         let since = assigned.infection_time;
-        let f: ModifierFn<Self::Entity> = Box::new(move |ctx, person, elapsed| {
-            let v = f(ctx, person, elapsed);
+        let checked: ModifierFn<Self::Entity> = Box::new(move |ctx, person, elapsed| {
+            let factor = f(ctx, person, elapsed);
             debug_assert!(
-                (0.0..=1.0).contains(&v),
-                "infectiousness modifier must return values in [0, 1], got {v}"
+                (0.0..=1.0).contains(&factor),
+                "infectiousness modifier must return values in [0, 1], got {factor}"
             );
-            v
+            factor
         });
         Modifiers::set(
             &mut rates.modifiers,
             person,
             TypeId::of::<K>(),
-            Factor::Fn { f, since },
+            Factor::Fn { f: checked, since },
         );
     }
 

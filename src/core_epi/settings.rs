@@ -20,7 +20,8 @@
 //! any of their groups has ever had, whatever their itinerary, so members can
 //! be removed and added back and itineraries overridden and cleared
 //! (interventions) without re-forecasting. A group growing past its largest
-//! size, or a person joining a new group, can exceed it: then call
+//! size (for a population group with `alpha > 0`, any new person), or a
+//! person joining a new group, can exceed it: then call
 //! [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
 //! for the infectious people affected.
 //!
@@ -36,24 +37,24 @@
 //!   thins by that setting's
 //!   [`setting_multiplier`](SettingsExt::setting_multiplier), and samples a
 //!   contact there with
-//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact). One
-//!   group lookup per proposal, but proposals are rejected wherever a
-//!   setting's multiplier is below the person's largest.
+//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact).
+//!   Proposals are rejected wherever a setting's multiplier is below the
+//!   person's largest over every kind, including kinds their itinerary
+//!   gives no time to.
 //! - Exact, when nothing changes while a person is infectious: forecast on
 //!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier)
 //!   itself, thin by the same value (so every proposal is an attempt), then
 //!   draw the setting with
 //!   [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
-//!   ratio times multiplier) and the contact as above. One group lookup per
-//!   kind, no rejected proposals. Thinning by the current multiplier against
+//!   ratio times multiplier) and the contact as above. No rejected
+//!   proposals. Thinning by the current multiplier against
 //!   the `max_setting_multiplier` bound is the same path made safe for
 //!   changes.
 //!
-//! Per setting-first attempt that is a store lookup, the person's membership records (one
-//! per kind, person-major so they share a cache line) for the draw, one group
-//! record for the multiplier (cached per group) and the contact, and two
-//! uniform draws. Nothing is hashed or allocated; itineraries are small `Copy`
-//! values.
+//! Either way a proposal reads the person's membership records (one per
+//! kind, person-major so they share a cache line) and a group record per
+//! kind for the multipliers, which are cached per group. Nothing is hashed
+//! or allocated; itineraries are small `Copy` values.
 
 use std::cell::Cell;
 use std::fmt::Debug;
@@ -72,7 +73,7 @@ use crate::{define_rng, Context, ContextBase, ContextEntitiesExt, ContextRandomE
 
 define_rng!(CoreEpiSettingsRng);
 
-/// The most kinds one enum may have.
+/// The most kinds one setting type may have.
 pub const MAX_SETTINGS: usize = 8;
 
 /// A kind of setting (household, school, ...): a value of the type made by
@@ -301,10 +302,10 @@ where
     }
 }
 
-/// `(n - 1)^alpha` for a group of `n`, 0 for an empty one. The common
-/// exponents skip the `powf`.
-fn multiplier(alpha: f64, n: usize) -> f64 {
-    if n == 0 {
+/// `(n - 1)^alpha` for a group of `n`; 0 for an empty group or a person
+/// alone, whatever `alpha`. The common exponents skip the `powf`.
+fn density_multiplier(alpha: f64, n: usize) -> f64 {
+    if n <= 1 {
         return 0.0;
     }
     let others = (n - 1) as f64;
@@ -335,6 +336,13 @@ impl Member {
     };
 }
 
+/// A group's `(n - 1)^alpha` at its current and at its largest ever size.
+#[derive(Clone, Copy)]
+struct Multipliers {
+    current: f64,
+    largest: f64,
+}
+
 struct Kind {
     name: String,
     alpha: f64,
@@ -350,31 +358,31 @@ struct Group {
     members: SmallVec<[u32; 4]>,
     /// The most members the group has ever had.
     max_size: usize,
-    /// `(n - 1)^alpha` for the current and the largest ever size, computed on
-    /// the first read after a membership change so that bulk loading pays no
-    /// `powf` per member.
-    multipliers: Cell<Option<(f64, f64)>>,
+    /// Computed on the first read after a membership change, so that bulk
+    /// loading pays no `powf` per member.
+    cached_multipliers: Cell<Option<Multipliers>>,
 }
 
 impl Group {
     fn resized(&mut self) {
         self.max_size = self.max_size.max(self.members.len());
-        self.multipliers.set(None);
+        self.cached_multipliers.set(None);
     }
 
-    fn multipliers(&self, alpha: f64) -> (f64, f64) {
-        self.multipliers.get().unwrap_or_else(|| {
-            let m = (
-                multiplier(alpha, self.members.len()),
-                multiplier(alpha, self.max_size),
-            );
-            self.multipliers.set(Some(m));
-            m
-        })
+    fn multipliers(&self, alpha: f64) -> Multipliers {
+        if let Some(cached) = self.cached_multipliers.get() {
+            return cached;
+        }
+        let multipliers = Multipliers {
+            current: density_multiplier(alpha, self.members.len()),
+            largest: density_multiplier(alpha, self.max_size),
+        };
+        self.cached_multipliers.set(Some(multipliers));
+        multipliers
     }
 }
 
-/// Storage for one setting kind enum; defined per enum by
+/// Storage for one setting type; defined per type by
 /// [`define_settings!`](crate::define_settings).
 pub struct SettingsStore<S: SettingKind> {
     kinds: Vec<Kind>,
@@ -442,6 +450,7 @@ impl<S: SettingKind> SettingsStore<S> {
     /// `person`'s membership record of `setting`; `Member::NONE` if they never
     /// had a group of it.
     fn member(&self, person: EntityId<S::Entity>, setting: S) -> Member {
+        debug_assert!(setting.index() < self.kinds.len(), "unknown setting kind");
         self.memberships
             .get(person.0 * self.kinds.len() + setting.index())
             .copied()
@@ -450,6 +459,7 @@ impl<S: SettingKind> SettingsStore<S> {
 
     fn member_mut(&mut self, person: EntityId<S::Entity>, setting: S) -> &mut Member {
         let stride = self.kinds.len();
+        debug_assert!(setting.index() < stride, "unknown setting kind");
         let index = person.0 * stride + setting.index();
         if index >= self.memberships.len() {
             self.memberships
@@ -460,40 +470,45 @@ impl<S: SettingKind> SettingsStore<S> {
 
     /// The group `person` is in now, if any.
     fn group_of(&self, person: EntityId<S::Entity>, setting: S) -> Option<u32> {
-        let m = self.member(person, setting);
-        if m.group == NO_GROUP {
+        let member = self.member(person, setting);
+        if member.group == NO_GROUP {
             self.kinds[setting.index()].population_group
         } else {
-            (m.position != NOT_ACTIVE).then_some(m.group)
+            (member.position != NOT_ACTIVE).then_some(member.group)
         }
     }
 
     /// The group `person` is in or was removed from, if any.
     fn remembered_group_of(&self, person: EntityId<S::Entity>, setting: S) -> Option<u32> {
-        let m = self.member(person, setting);
-        if m.group == NO_GROUP {
+        let member = self.member(person, setting);
+        if member.group == NO_GROUP {
             self.kinds[setting.index()].population_group
         } else {
-            Some(m.group)
+            Some(member.group)
         }
     }
 
-    /// `person`'s current and largest-ever multiplier in `setting`, given the
+    /// The current multiplier of the group `person` is in now, given the
     /// population size for a population group; `None` without a group.
-    fn multipliers(
+    fn current_multiplier(
         &self,
         person: EntityId<S::Entity>,
         setting: S,
         population: usize,
-    ) -> Option<(f64, f64)> {
+    ) -> Option<f64> {
         let group = self.group_of(person, setting)?;
-        Some(self.group_multipliers(group, setting, population))
+        Some(self.group_multipliers(group, setting, population).current)
     }
 
-    fn group_multipliers(&self, group: u32, setting: S, population: usize) -> (f64, f64) {
+    fn group_multipliers(&self, group: u32, setting: S, population: usize) -> Multipliers {
         if self.kinds[setting.index()].population_group == Some(group) {
-            let m = multiplier(self.alpha(setting), population);
-            (m, m)
+            // A population group has no largest-ever size: see
+            // `max_setting_multiplier`.
+            let multiplier = density_multiplier(self.alpha(setting), population);
+            Multipliers {
+                current: multiplier,
+                largest: multiplier,
+            }
         } else {
             self.groups[group as usize].multipliers(self.alpha(setting))
         }
@@ -565,7 +580,9 @@ fn draw_setting<S: SettingKind>(weights: &[f64; MAX_SETTINGS], u: f64) -> Option
 }
 
 /// Setting membership, itineraries and the quantities the transmission loop
-/// needs from them. `S` is inferred from the arguments.
+/// needs from them. `S` is inferred from a setting or group argument;
+/// methods without one take it as a type parameter
+/// (`context.sample_setting::<Setting>(person)`).
 pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// Add a kind of setting called `name` with density exponent `alpha`.
     /// Kinds can be added at any time, up to [`MAX_SETTINGS`].
@@ -622,7 +639,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
             kind: setting.index(),
             members: SmallVec::new(),
             max_size: 0,
-            multipliers: Cell::new(None),
+            cached_multipliers: Cell::new(None),
         });
         SettingGroupId::new(u32::try_from(store.groups.len() - 1).expect("too many setting groups"))
     }
@@ -704,12 +721,16 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     ) {
         let store = S::store_mut(self);
         let setting = S::from_index(store.groups[group.index as usize].kind);
-        let m = store.member(person, setting);
-        if m.group == group.index && m.position != NOT_ACTIVE {
+        let member = store.member(person, setting);
+        if member.group == group.index && member.position != NOT_ACTIVE {
             return;
         }
         store.remove(person, setting);
         if store.kinds[setting.index()].population_group == Some(group.index) {
+            // Forget the list group they left, or it would shadow this one.
+            if member.group != NO_GROUP {
+                *store.member_mut(person, setting) = Member::NONE;
+            }
             return;
         }
         let target = &mut store.groups[group.index as usize];
@@ -826,8 +847,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     fn setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>, setting: S) -> f64 {
         let population = self.get_entity_count::<S::Entity>();
         S::store(self)
-            .multipliers(person, setting, population)
-            .map_or(0.0, |(current, _)| current)
+            .current_multiplier(person, setting, population)
+            .unwrap_or(0.0)
     }
 
     /// Factor on `person`'s intrinsic infectiousness now, over all their
@@ -847,11 +868,9 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         let population = self.get_entity_count::<S::Entity>();
         let (mut weighted, mut ratio_sum) = (0.0, 0.0);
         for (setting, ratio) in itinerary.entries() {
-            if ratio > 0.0 {
-                if let Some((current, _)) = store.multipliers(person, setting, population) {
-                    weighted += ratio * current;
-                    ratio_sum += ratio;
-                }
+            if let Some(current) = store.current_multiplier(person, setting, population) {
+                weighted += ratio * current;
+                ratio_sum += ratio;
             }
         }
         if ratio_sum > 0.0 {
@@ -861,28 +880,29 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         }
     }
 
-    /// Upper bound on [`setting_multiplier`](Self::setting_multiplier) for any
-    /// setting [`sample_setting`](Self::sample_setting) can draw: the largest
-    /// multiplier any of `person`'s groups has ever had, over every kind and
-    /// including groups they were removed from; 0 without an itinerary. It
-    /// does not depend on what the itinerary is, so it holds when an
-    /// itinerary is set, cleared or reassigned after a forecast was made. It
-    /// does not cover a group that later grows past its largest size, or a
-    /// group joined later: after such a change, call
+    /// Upper bound on `person`'s
+    /// [`setting_multiplier`](Self::setting_multiplier) in any setting, and
+    /// so on their
+    /// [`current_setting_multiplier`](Self::current_setting_multiplier): the
+    /// largest multiplier any of their groups has ever had, over every kind
+    /// and including groups they were removed from. It does not depend on
+    /// their itinerary, so it holds when one is set, cleared or reassigned
+    /// after a forecast was made; the price is that a kind their itinerary
+    /// gives no time to still counts. It does not cover a list group that
+    /// later grows past its largest size, a population group with
+    /// `alpha > 0` that anyone is added to, or a group joined later: after
+    /// such a change, call
     /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
     /// for the infectious people it affects (the newcomer, and the group's
     /// [`setting_group_members`](Self::setting_group_members)).
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
-        if self.itinerary::<S>(person).is_none() {
-            return 0.0;
-        }
         let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
         let mut max_multiplier = 0.0_f64;
         for index in 0..store.kinds.len() {
             let setting = S::from_index(index);
             if let Some(group) = store.remembered_group_of(person, setting) {
-                let (_, largest) = store.group_multipliers(group, setting, population);
+                let largest = store.group_multipliers(group, setting, population).largest;
                 max_multiplier = max_multiplier.max(largest);
             }
         }
@@ -896,7 +916,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         let store = S::store(self);
         let mut ratios = [0.0; MAX_SETTINGS];
         for (setting, ratio) in itinerary.entries() {
-            if ratio > 0.0 && store.group_of(person, setting).is_some() {
+            if store.group_of(person, setting).is_some() {
                 ratios[setting.index()] = ratio;
             }
         }
@@ -918,7 +938,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         let population = self.get_entity_count::<S::Entity>();
         let mut rates = [0.0; MAX_SETTINGS];
         for (setting, ratio) in itinerary.entries() {
-            if let Some((current, _)) = store.multipliers(person, setting, population) {
+            if let Some(current) = store.current_multiplier(person, setting, population) {
                 rates[setting.index()] = ratio * current;
             }
         }
@@ -1227,7 +1247,8 @@ mod tests {
         home_for_all(&mut context, &people);
         context.create_population_setting_group(COMMUNITY);
         assert_eq!(context.sample_setting::<Setting>(people[0]), None);
-        assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 0.0);
+        // The bound does not wait for an itinerary.
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
 
         context.set_itinerary_assignment(Itinerary::new([(COMMUNITY, 1.0)]));
         context.set_itinerary(people[1], Itinerary::new([(HOME, 1.0)]));
@@ -1328,8 +1349,15 @@ mod tests {
 
     #[test]
     fn a_kind_added_after_members_exist_widens_their_records() {
-        let (mut context, people) = context_with(4);
+        // Memberships in all three kinds before the records are widened.
+        let (mut context, people) = context_with_work_alpha(4, 1.0);
         let home = home_for_all(&mut context, &people[..3]);
+        let work = context.create_setting_group(WORK);
+        for &person in &people[1..] {
+            context.add_setting_member(work, person);
+        }
+        context.create_population_setting_group(COMMUNITY);
+        context.remove_setting_member(people[2], WORK);
 
         let school = context.add_setting_kind::<Setting>("School", 0.0);
         let class = context.create_setting_group(school);
@@ -1341,12 +1369,27 @@ mod tests {
             assert_eq!(context.setting_multiplier(person, HOME), 2.0);
         }
         assert_eq!(context.setting_group(people[3], HOME), None);
+        assert_eq!(context.setting_group(people[0], WORK), None);
+        assert_eq!(context.setting_group(people[1], WORK), Some(work));
+        assert_eq!(context.setting_group(people[2], WORK), None);
+        assert_eq!(context.setting_group_size(people[0], COMMUNITY), 4);
         assert_eq!(context.setting_group(people[1], school), None);
         assert_eq!(context.setting_group_size(people[3], school), 2);
         assert_eq!(
             context.sample_setting_contact(people[3], school),
             Some(people[0])
         );
+
+        // Positions still line up: swap-remove, then restore, after widening.
+        context.remove_setting_member(people[1], WORK);
+        assert_eq!(context.setting_group_members(work), vec![people[3]]);
+        context.restore_setting_member(people[2], WORK);
+        context.restore_setting_member(people[1], WORK);
+        assert_eq!(
+            context.setting_group_members(work),
+            vec![people[3], people[2], people[1]]
+        );
+        assert_eq!(context.setting_multiplier(people[1], WORK), 2.0);
     }
 
     #[test]
@@ -1427,5 +1470,32 @@ mod tests {
         );
         let community = context.create_population_setting_group(COMMUNITY);
         assert_eq!(context.setting_group_members(community), people);
+    }
+
+    #[test]
+    fn moving_back_to_the_population_group_forgets_the_list_group() {
+        let (mut context, people) = context_with(3);
+        let everyone = context.create_population_setting_group(COMMUNITY);
+        let bubble = context.create_setting_group(COMMUNITY);
+        context.add_setting_member(bubble, people[0]);
+        assert_eq!(context.setting_group(people[0], COMMUNITY), Some(bubble));
+
+        context.add_setting_member(everyone, people[0]);
+        assert_eq!(context.setting_group(people[0], COMMUNITY), Some(everyone));
+        assert_eq!(context.setting_group_size(people[0], COMMUNITY), 3);
+        assert!(context.setting_group_members(bubble).is_empty());
+        // Nothing left to restore them to.
+        context.restore_setting_member(people[0], COMMUNITY);
+        assert_eq!(context.setting_group(people[0], COMMUNITY), Some(everyone));
+    }
+
+    #[test]
+    fn someone_alone_in_a_group_has_no_multiplier_whatever_alpha() {
+        let (mut context, people) = context_with(1);
+        let alone = context.create_setting_group(COMMUNITY);
+        context.add_setting_member(alone, people[0]);
+        assert_eq!(context.setting_multiplier(people[0], COMMUNITY), 0.0);
+        home_for_all(&mut context, &people);
+        assert_eq!(context.setting_multiplier(people[0], HOME), 0.0);
     }
 }

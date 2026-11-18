@@ -17,7 +17,7 @@ const BOUND_TOLERANCE: f64 = 1e-9;
 
 /// Infection loop transmission dynamics.
 ///
-/// TransmissionManager occurs due to a combination of three factors: (potential)
+/// Transmission occurs due to a combination of three factors: (potential)
 /// infector's infectiousness, the contact rate between the infector and
 /// (potential) infectees, and the susceptibility of (potential) infectees.
 ///
@@ -121,8 +121,8 @@ where
     }
 
     /// Infect `infectee`: assign their rate function, which starts their own
-    /// loop (see [`setup_transmission_loop`](Self::setup_transmission_loop)),
-    /// then call [`on_infected`](InfectionManager::on_infected). `infector` is
+    /// loop once [`setup_transmission_loop`](Self::setup_transmission_loop)
+    /// has been called, then call [`on_infected`](InfectionManager::on_infected). `infector` is
     /// `None` for an infection with no source in the population, e.g. an
     /// initial seed.
     fn transmit(
@@ -162,18 +162,13 @@ where
     /// or a contact restriction ending: the loop panics if a total exceeds its
     /// forecast, and a forecast of zero ends the loop. It also restarts a loop
     /// that ended that way. Redrawing is always statistically valid, so when
-    /// in doubt, call it. No-op if `person` was never infected.
+    /// in doubt, call it. It also begins the loop of someone infected without
+    /// [`setup_transmission_loop`](Self::setup_transmission_loop). No-op if
+    /// `person` was never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
         if let Some(generation) = advance_forecast_generation::<M, _, _>(self, person) {
             schedule_proposal::<M, Self>(self, person, generation);
         }
-    }
-
-    /// Begin the transmission loop for an infector. As
-    /// [`reforecast_transmission`](Self::reforecast_transmission): a loop
-    /// already running for them is superseded, never doubled.
-    fn schedule_next_transmission_attempt_proposal(&mut self, infector: EntityId<Self::Entity>) {
-        self.reforecast_transmission(infector);
     }
 }
 
@@ -192,17 +187,19 @@ fn schedule_proposal<M, C>(
 {
     // Determine if & when the next attempt proposal will occur. The majorizing
     // rate function is indexed by time from now, so inverting an Exp(1) draw
-    // gives the delay to the proposal. If `e` is beyond the support of the
-    // inverse cumulative there is no next event and the loop ends.
-    let e = context.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
+    // gives the delay to the proposal. If the draw is beyond the support of
+    // the inverse cumulative there is no next event and the loop ends.
+    let exp_draw = context.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
     let proposal = {
-        let f = context.forecast_total_infectiousness(infector);
-        f.inverse_cum_rate(e).map(|delay| (delay, f.rate(delay)))
+        let forecast_fn = context.forecast_total_infectiousness(infector);
+        forecast_fn
+            .inverse_cum_rate(exp_draw)
+            .map(|delay| (delay, forecast_fn.rate(delay)))
     };
 
     if let Some((delay, forecast)) = proposal {
-        let t = context.get_current_time() + delay;
-        context.add_plan(t, move |ctx| {
+        let proposal_time = context.get_current_time() + delay;
+        context.add_plan(proposal_time, move |ctx| {
             handle_proposal::<M, Context>(ctx, infector, forecast, generation);
         });
     };
@@ -231,12 +228,15 @@ fn handle_proposal<M, C>(
     if forecast > 0.0 {
         if let Some(infectee) = context.evaluate_forecast(infector, forecast) {
             // Draws only when the outcome is uncertain.
-            let p = context.susceptibility(infectee);
-            let infected = p >= 1.0 || (p > 0.0 && context.sample_bool(CoreEpiTransmissionRng, p));
+            let susceptibility = context.susceptibility(infectee);
+            let infected = susceptibility >= 1.0
+                || (susceptibility > 0.0
+                    && context.sample_bool(CoreEpiTransmissionRng, susceptibility));
             if infected {
                 context.transmit(Some(infector), infectee);
                 // Only a transmission runs model code, which may have
-                // reforecast the infector.
+                // reforecast the infector: then the next proposal is already
+                // drawn, and one drawn here would be dropped when it fired.
                 if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
                     return;
                 }
