@@ -29,14 +29,18 @@
 //! them in two ways, which give attempts in each setting at the same rate,
 //! `intrinsic * ratio * multiplier`:
 //!
-//! - Exact, when nothing changes while a person is infectious (or every
-//!   change is followed by a reforecast): `contact_multiplier` and
-//!   `max_contact_multiplier` are both
+//! - Exact: `contact_multiplier` is
 //!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier),
-//!   so every proposal is an attempt, and `sample_contact` draws the setting
-//!   with [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
+//!   and `sample_contact` draws the setting with
+//!   [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
 //!   ratio times multiplier) and a contact there with
-//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact).
+//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact). With
+//!   the default `max_contact_multiplier` every proposal is an attempt, which
+//!   is valid when nothing changes while a person is infectious or every
+//!   change is followed by a reforecast. With
+//!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier) as the
+//!   bound it is safe for changing memberships and itineraries, at the cost
+//!   of rejected proposals.
 //! - Setting first, for populations whose memberships or itineraries change:
 //!   `max_contact_multiplier` is
 //!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier), and

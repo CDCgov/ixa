@@ -12,8 +12,7 @@ mod parameters;
 mod settings;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, SettingKind,
-    SettingsExt, TransmissionManager,
+    ConstantRateFn, InfectionManager, RateAssignment, SettingKind, SettingsExt, TransmissionManager,
 };
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
@@ -76,11 +75,8 @@ impl InfectionManager<CoreEpiExample> for Context {
 }
 
 impl TransmissionManager<CoreEpiExample> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            self.max_setting_multiplier::<Setting>(person),
-        )
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.max_setting_multiplier::<Setting>(person)
     }
 
     fn evaluate_forecast(

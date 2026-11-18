@@ -12,6 +12,8 @@ use crate::{ContextBase, IxaEvent};
 /// at a per-person infectious period).
 #[derive(Clone, Debug)]
 pub enum RateAssignment {
+    /// Index into the library loaded with
+    /// [`load_infectiousness_rate_library`](InfectionManager::load_infectiousness_rate_library).
     Library(usize),
     /// Boxed so a record stays small: the inline enum would be sized for an
     /// empirical curve even though own rate fns are typically constant.
@@ -77,18 +79,19 @@ enum Factor<E: Entity> {
 /// lookup; function factors are evaluated per read.
 struct Modifiers<E: Entity> {
     factors: Vec<(TypeId, Factor<E>)>,
-    product: f64,
-    fns: usize,
+    /// Product of the constant factors.
+    constant_product: f64,
+    function_count: usize,
 }
 
 impl<E: Entity> Modifiers<E> {
     fn recompute(&mut self) {
-        self.product = 1.0;
-        self.fns = 0;
+        self.constant_product = 1.0;
+        self.function_count = 0;
         for (_, factor) in &self.factors {
             match factor {
-                Factor::Constant(f) => self.product *= f,
-                Factor::Fn { .. } => self.fns += 1,
+                Factor::Constant(value) => self.constant_product *= value,
+                Factor::Fn { .. } => self.function_count += 1,
             }
         }
     }
@@ -96,11 +99,15 @@ impl<E: Entity> Modifiers<E> {
     fn set(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: TypeId, factor: Factor<E>) {
         let modifiers = map.get_or_insert_with(person, || Modifiers {
             factors: Vec::new(),
-            product: 1.0,
-            fns: 0,
+            constant_product: 1.0,
+            function_count: 0,
         });
-        match modifiers.factors.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, f)) => *f = factor,
+        match modifiers
+            .factors
+            .iter_mut()
+            .find(|(existing_key, _)| *existing_key == key)
+        {
+            Some((_, existing)) => *existing = factor,
             None => modifiers.factors.push((key, factor)),
         }
         modifiers.recompute();
@@ -110,7 +117,9 @@ impl<E: Entity> Modifiers<E> {
         let Some(modifiers) = map.get_mut(person) else {
             return;
         };
-        modifiers.factors.retain(|(k, _)| *k != key);
+        modifiers
+            .factors
+            .retain(|(existing_key, _)| *existing_key != key);
         if modifiers.factors.is_empty() {
             let _ = map.remove(person);
         } else {
@@ -122,21 +131,22 @@ impl<E: Entity> Modifiers<E> {
         let Some(modifiers) = map.get(person) else {
             return 1.0;
         };
-        if modifiers.fns == 0 {
-            return modifiers.product;
+        let mut product = modifiers.constant_product;
+        if modifiers.function_count > 0 {
+            let now = context.get_current_time();
+            for (_, factor) in &modifiers.factors {
+                if let Factor::Fn { f, since } = factor {
+                    product *= f(context, person, now - since);
+                }
+            }
         }
-        let now = context.get_current_time();
-        modifiers
-            .factors
-            .iter()
-            .fold(modifiers.product, |acc, (_, factor)| match factor {
-                Factor::Constant(_) => acc,
-                Factor::Fn { f, since } => acc * f(context, person, now - since),
-            })
+        product
     }
 }
 
-struct InfectiousnessRates<E: Entity> {
+/// Everything `core_epi` keeps for one model: its rate library, who is
+/// infected with what, and the modifiers on them.
+struct InfectionState<E: Entity> {
     library: Vec<AnyInfectionRate>,
     assigned: EntityMap<E, Assigned>,
     /// Kept out of `Assigned` so the per-infection record stays small: most
@@ -147,7 +157,7 @@ struct InfectiousnessRates<E: Entity> {
     susceptibility_modifiers: EntityMap<E, Modifiers<E>>,
 }
 
-impl<E: Entity> Default for InfectiousnessRates<E> {
+impl<E: Entity> Default for InfectionState<E> {
     fn default() -> Self {
         Self {
             library: Vec::new(),
@@ -158,39 +168,51 @@ impl<E: Entity> Default for InfectiousnessRates<E> {
     }
 }
 
-// One `InfectiousnessRates<E>` per model marker `M`, so two pathogens on one
+impl<E: Entity> InfectionState<E> {
+    /// The rate function `assigned` points at.
+    fn rate_fn<'a>(&'a self, assigned: &'a Assigned) -> &'a AnyInfectionRate {
+        match &assigned.rate {
+            RateAssignment::Library(index) => &self.library[*index],
+            RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
+        }
+    }
+}
+
+// One `InfectionState<E>` per model marker `M`, so two pathogens on one
 // population keep separate infections. A data plugin cannot be generic, so
 // the stores are type-erased; there are only ever a few, so a scan beats a
 // hash.
 define_data_plugin!(
-    InfectiousnessRatePlugin,
+    InfectionStatePlugin,
     Vec<(TypeId, Box<dyn Any>)>,
     Vec::new()
 );
 
-fn rates<M: 'static, E: Entity, C: ContextBase>(context: &C) -> Option<&InfectiousnessRates<E>> {
+fn state<M: 'static, E: Entity, C: ContextBase>(context: &C) -> Option<&InfectionState<E>> {
     let model = TypeId::of::<M>();
-    let stores = context.get_data(InfectiousnessRatePlugin);
+    let stores = context.get_data(InfectionStatePlugin);
     let (_, store) = stores.iter().find(|(id, _)| *id == model)?;
-    Some(store.downcast_ref().expect("rate store has the wrong type"))
+    Some(
+        store
+            .downcast_ref()
+            .expect("infection state has the wrong type"),
+    )
 }
 
-fn rates_mut<M: 'static, E: Entity, C: ContextBase>(
-    context: &mut C,
-) -> &mut InfectiousnessRates<E> {
+fn state_mut<M: 'static, E: Entity, C: ContextBase>(context: &mut C) -> &mut InfectionState<E> {
     let model = TypeId::of::<M>();
-    let stores = context.get_data_mut(InfectiousnessRatePlugin);
+    let stores = context.get_data_mut(InfectionStatePlugin);
     let index = match stores.iter().position(|(id, _)| *id == model) {
         Some(index) => index,
         None => {
-            stores.push((model, Box::new(InfectiousnessRates::<E>::default())));
+            stores.push((model, Box::new(InfectionState::<E>::default())));
             stores.len() - 1
         }
     };
     stores[index]
         .1
         .downcast_mut()
-        .expect("rate store has the wrong type")
+        .expect("infection state has the wrong type")
 }
 
 /// The live forecast of `person`'s transmission loop; `None` if they were
@@ -200,7 +222,7 @@ pub(super) fn forecast_generation<M: 'static, E: Entity, C: ContextBase>(
     person: EntityId<E>,
 ) -> Option<u32> {
     Some(
-        rates::<M, E, _>(context)?
+        state::<M, E, _>(context)?
             .assigned
             .get(person)?
             .forecast_generation,
@@ -213,7 +235,7 @@ pub(super) fn advance_forecast_generation<M: 'static, E: Entity, C: ContextBase>
     context: &mut C,
     person: EntityId<E>,
 ) -> Option<u32> {
-    let assigned = rates_mut::<M, E, _>(context).assigned.get_mut(person)?;
+    let assigned = state_mut::<M, E, _>(context).assigned.get_mut(person)?;
     assigned.forecast_generation = assigned.forecast_generation.wrapping_add(1);
     Some(assigned.forecast_generation)
 }
@@ -242,12 +264,12 @@ where
     /// Load the shared rate functions that [`RateAssignment::Library`] indexes
     /// into. Call once at setup, before anyone is infected.
     fn load_infectiousness_rate_library(&mut self, rate_fns: Vec<AnyInfectionRate>) {
-        rates_mut::<M, Self::Entity, _>(self).library = rate_fns;
+        state_mut::<M, Self::Entity, _>(self).library = rate_fns;
     }
 
     /// Number of rate functions in the loaded library.
     fn infectiousness_rate_library_len(&self) -> usize {
-        rates::<M, Self::Entity, _>(self).map_or(0, |rates| rates.library.len())
+        state::<M, Self::Entity, _>(self).map_or(0, |state| state.library.len())
     }
 
     /// Draw and store `person`'s rate function, starting now, and emit
@@ -262,6 +284,8 @@ where
     /// As [`assign_infectiousness_rate_fn`](Self::assign_infectiousness_rate_fn)
     /// with a given rate function instead of a drawn one: for an infection
     /// whose course is known (an imported case, a test of an intervention).
+    /// Like it, this does not call [`on_infected`](Self::on_infected): the
+    /// caller does whatever bookkeeping the model does there.
     ///
     /// # Panics
     ///
@@ -273,21 +297,21 @@ where
     ) {
         let rate = rate.into();
         let infection_time = self.get_current_time();
-        let rates = rates_mut::<M, Self::Entity, _>(self);
+        let state = state_mut::<M, Self::Entity, _>(self);
         if let RateAssignment::Library(index) = rate {
             assert!(
-                index < rates.library.len(),
+                index < state.library.len(),
                 "rate function {index} is not in the library of {}: load it with \
                  `load_infectiousness_rate_library` before anyone is infected",
-                rates.library.len()
+                state.library.len()
             );
         }
         // A reinfection supersedes the previous infection's pending proposal.
-        let forecast_generation = rates
+        let forecast_generation = state
             .assigned
             .get(person)
             .map_or(0, |assigned| assigned.forecast_generation.wrapping_add(1));
-        rates.assigned.insert(
+        state.assigned.insert(
             person,
             Assigned {
                 rate,
@@ -295,7 +319,7 @@ where
                 forecast_generation,
             },
         );
-        let _ = rates.modifiers.remove(person);
+        let _ = state.modifiers.remove(person);
         self.emit_event(InfectiousnessAssignedEvent::<M> {
             person,
             model: PhantomData,
@@ -305,16 +329,13 @@ where
     /// `person`'s rate function, indexed by time since infection; `None` if
     /// they were never assigned one.
     fn infectiousness_rate_fn(&self, person: EntityId<Self::Entity>) -> Option<&AnyInfectionRate> {
-        let rates = rates::<M, Self::Entity, _>(self)?;
-        match &rates.assigned.get(person)?.rate {
-            RateAssignment::Library(idx) => Some(&rates.library[*idx]),
-            RateAssignment::Own(rate_fn) => Some(rate_fn.as_ref()),
-        }
+        let state = state::<M, Self::Entity, _>(self)?;
+        Some(state.rate_fn(state.assigned.get(person)?))
     }
 
     /// When `person`'s current infection began; `None` if they were never infected.
     fn infection_time(&self, person: EntityId<Self::Entity>) -> Option<f64> {
-        let assigned = rates::<M, Self::Entity, _>(self)?.assigned.get(person)?;
+        let assigned = state::<M, Self::Entity, _>(self)?.assigned.get(person)?;
         Some(assigned.infection_time)
     }
 
@@ -344,22 +365,22 @@ where
 
     /// Majorizing infectiousness of `person`, indexed by time from now: the
     /// stored rate function shifted by the time since infection.
+    ///
+    /// # Panics
+    ///
+    /// If `person` was never infected.
     fn majorizing_infectiousness_rate_fn(
         &self,
         person: EntityId<Self::Entity>,
     ) -> TransformedInvertibleRateFn<'_, AnyInfectionRate> {
         // One record lookup: this runs once per transmission attempt proposal.
-        let rates = rates::<M, Self::Entity, _>(self).expect("person was never infected");
-        let assigned = rates
+        let state = state::<M, Self::Entity, _>(self).expect("person was never infected");
+        let assigned = state
             .assigned
             .get(person)
             .expect("person was never infected");
-        let rate_fn = match &assigned.rate {
-            RateAssignment::Library(idx) => &rates.library[*idx],
-            RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
-        };
         TransformedInvertibleRateFn::new(
-            rate_fn,
+            state.rate_fn(assigned),
             1.0,
             self.get_current_time() - assigned.infection_time,
         )
@@ -371,14 +392,12 @@ where
     /// infected; 0 once their rate function has run out.
     fn intrinsic_infectiousness(&self, person: EntityId<Self::Entity>) -> Option<f64> {
         // One record lookup: this runs once per transmission attempt proposal.
-        let rates = rates::<M, Self::Entity, _>(self)?;
-        let assigned = rates.assigned.get(person)?;
-        let rate_fn = match &assigned.rate {
-            RateAssignment::Library(idx) => &rates.library[*idx],
-            RateAssignment::Own(rate_fn) => rate_fn.as_ref(),
-        };
-        let rate = rate_fn.rate(self.get_current_time() - assigned.infection_time);
-        let multiplier = Modifiers::product(&rates.modifiers, person, self.as_ref());
+        let state = state::<M, Self::Entity, _>(self)?;
+        let assigned = state.assigned.get(person)?;
+        let rate = state
+            .rate_fn(assigned)
+            .rate(self.get_current_time() - assigned.infection_time);
+        let multiplier = Modifiers::product(&state.modifiers, person, self.as_ref());
         Some(multiplier * rate)
     }
 
@@ -386,8 +405,8 @@ where
     /// active infectiousness modifiers on their current infection (`1.0` if
     /// there are none).
     fn infectiousness_multiplier(&self, person: EntityId<Self::Entity>) -> f64 {
-        rates::<M, Self::Entity, _>(self).map_or(1.0, |rates| {
-            Modifiers::product(&rates.modifiers, person, self.as_ref())
+        state::<M, Self::Entity, _>(self).map_or(1.0, |state| {
+            Modifiers::product(&state.modifiers, person, self.as_ref())
         })
     }
 
@@ -405,12 +424,12 @@ where
             (0.0..=1.0).contains(&factor),
             "infectiousness modifier factor must be in [0, 1], got {factor}"
         );
-        let rates = rates_mut::<M, Self::Entity, _>(self);
-        if !rates.assigned.contains_key(person) {
+        let state = state_mut::<M, Self::Entity, _>(self);
+        if !state.assigned.contains_key(person) {
             return;
         }
         Modifiers::set(
-            &mut rates.modifiers,
+            &mut state.modifiers,
             person,
             TypeId::of::<K>(),
             Factor::Constant(factor),
@@ -428,8 +447,8 @@ where
         person: EntityId<Self::Entity>,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
     ) {
-        let rates = rates_mut::<M, Self::Entity, _>(self);
-        let Some(assigned) = rates.assigned.get(person) else {
+        let state = state_mut::<M, Self::Entity, _>(self);
+        let Some(assigned) = state.assigned.get(person) else {
             return;
         };
         let since = assigned.infection_time;
@@ -442,7 +461,7 @@ where
             factor
         });
         Modifiers::set(
-            &mut rates.modifiers,
+            &mut state.modifiers,
             person,
             TypeId::of::<K>(),
             Factor::Fn { f: checked, since },
@@ -451,14 +470,14 @@ where
 
     /// Remove modifier `K` from `person`'s current infection, if active.
     fn remove_infectiousness_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
-        let rates = rates_mut::<M, Self::Entity, _>(self);
-        Modifiers::remove(&mut rates.modifiers, person, TypeId::of::<K>());
+        let state = state_mut::<M, Self::Entity, _>(self);
+        Modifiers::remove(&mut state.modifiers, person, TypeId::of::<K>());
     }
 
     /// Set modifier `K` on `person` at time `start` and, if given, remove it at
     /// `end`. Each step applies only if `person` is still infectious with the
     /// infection they had when this was called, so a recovery or reinfection in
-    /// between cancels it.
+    /// between cancels it. No-op if `person` was never infected.
     fn schedule_infectiousness_modifier<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
@@ -466,9 +485,9 @@ where
         start: f64,
         end: Option<f64>,
     ) {
-        let infection_time = self
-            .infection_time(person)
-            .expect("person was never infected");
+        let Some(infection_time) = self.infection_time(person) else {
+            return;
+        };
         let same_infection = move |ctx: &Context| {
             InfectionManager::<M>::infection_time(ctx, person) == Some(infection_time)
                 && InfectionManager::<M>::is_infectious(ctx, person)
@@ -510,8 +529,8 @@ where
     /// Product of the active susceptibility modifiers on `person` (`1.0` if
     /// there are none).
     fn susceptibility_multiplier(&self, person: EntityId<Self::Entity>) -> f64 {
-        rates::<M, Self::Entity, _>(self).map_or(1.0, |rates| {
-            Modifiers::product(&rates.susceptibility_modifiers, person, self.as_ref())
+        state::<M, Self::Entity, _>(self).map_or(1.0, |state| {
+            Modifiers::product(&state.susceptibility_modifiers, person, self.as_ref())
         })
     }
 
@@ -530,9 +549,9 @@ where
             factor.is_finite() && factor >= 0.0,
             "susceptibility modifier factor must be finite and non-negative, got {factor}"
         );
-        let rates = rates_mut::<M, Self::Entity, _>(self);
+        let state = state_mut::<M, Self::Entity, _>(self);
         Modifiers::set(
-            &mut rates.susceptibility_modifiers,
+            &mut state.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
             Factor::Constant(factor),
@@ -542,30 +561,36 @@ where
     /// As [`set_susceptibility_modifier`](Self::set_susceptibility_modifier),
     /// with a factor computed at every read from the context, the person and
     /// the time since it was set (protection that wanes, a factor read from a
-    /// property). It must return finite, non-negative values.
+    /// property). It must return finite, non-negative values, which is checked
+    /// in debug builds.
     fn set_susceptibility_modifier_fn<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
     ) {
         let since = self.get_current_time();
-        let rates = rates_mut::<M, Self::Entity, _>(self);
+        let checked: ModifierFn<Self::Entity> = Box::new(move |ctx, person, elapsed| {
+            let factor = f(ctx, person, elapsed);
+            debug_assert!(
+                factor.is_finite() && factor >= 0.0,
+                "susceptibility modifier must return finite, non-negative values, got {factor}"
+            );
+            factor
+        });
+        let state = state_mut::<M, Self::Entity, _>(self);
         Modifiers::set(
-            &mut rates.susceptibility_modifiers,
+            &mut state.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
-            Factor::Fn {
-                f: Box::new(f),
-                since,
-            },
+            Factor::Fn { f: checked, since },
         );
     }
 
     /// Remove susceptibility modifier `K` from `person`, if active.
     fn remove_susceptibility_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
-        let rates = rates_mut::<M, Self::Entity, _>(self);
+        let state = state_mut::<M, Self::Entity, _>(self);
         Modifiers::remove(
-            &mut rates.susceptibility_modifiers,
+            &mut state.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
         );
@@ -592,8 +617,9 @@ where
 
     /// Called when `infectee` is infected, after their rate function is
     /// assigned. `infector` is `None` for an infection with no source in the
-    /// population, e.g. an initial seed. `exposure` is what the contact draw
-    /// returned for this attempt.
+    /// population, e.g. an initial seed. `exposure` is what
+    /// [`evaluate_forecast`](super::TransmissionManager::evaluate_forecast)
+    /// returned with the contact, or the default value for a seed.
     fn on_infected(
         &mut self,
         _infector: Option<EntityId<Self::Entity>>,

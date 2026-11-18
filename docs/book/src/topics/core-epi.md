@@ -1,8 +1,9 @@
 # Epidemic Models with `core_epi`
 
-The `core_epi` module includes a set of epi features including (so far), including definition of infectiousness rates and related utilties, a standard continuous-time transmission loop, and settings. We intend to expand the feature set over time.
+The `core_epi` module includes a set of epi features: so far, definitions of infectiousness rates and related utilities, a standard continuous-time transmission loop, and settings. We intend to expand the feature set over time.
 
-The module is behind the `core_epi` cargo feature, which is on by default.
+The module is behind the `core_epi` cargo feature, which is on by default. The
+examples on this page also use the `rand_distr` crate to draw durations.
 
 ## A minimal model
 
@@ -82,7 +83,7 @@ Each infected person runs their own loop of attempt _proposals_:
    **susceptibility**.
 
 Then the loop schedules the next proposal. It ends when the forecast runs out,
-which for is the person's infectiousness duration by default.
+which by default is when the person's infectiousness does.
 
 The forecast must be an upper bound. Thinning in step 2 corrects for the
 difference, so anything that lowers infectiousness after the proposal was drawn
@@ -97,7 +98,7 @@ when they are infected and fixed for that infection. `draw_infectiousness_rate_f
 returns a `RateAssignment`, which is one of:
 
 - an individually-assigned rate function, for example a constant rate over a
-  period drawn for them. Any rate function converts with `.into()`.
+  period drawn for them. The built-in rate functions convert with `.into()`.
 - `RateAssignment::Library(index)`, an index into a library of shared curves
   loaded once at setup with `load_infectiousness_rate_library`. Use this when
   many people share a few curves.
@@ -125,7 +126,7 @@ Once someone is infected, the following utilities are available:
 
 All but `is_infectious` return `None` for someone never infected.
 
-`core_epi` has no notion of recovery or of disease states: you must track those yourself. For example, to implement a recovered state, schedule it from `on_infected`:
+`core_epi` has no notion of recovery or of disease states: you must track those yourself. For example, to implement a recovered state (a `Recovered` variant added to the status above), schedule it from `on_infected`:
 
 ```rust
 fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
@@ -144,6 +145,9 @@ directly:
 ```rust
 context.set_infectiousness_rate_fn(person, ConstantRateFn::new(0.5, 4.0));
 ```
+
+This starts their transmission loop but does not call `on_infected`, so do
+whatever the model does there (set a status, schedule recovery) yourself.
 
 ## Susceptibility
 
@@ -212,11 +216,11 @@ antiviral.
 `TransmissionManager` decides who is contacted and how contact structure changes
 the rate. Most models describe it with three methods, each with a default:
 
-| Method                           | Returns                                              | Default            |
-| -------------------------------- | ---------------------------------------------------- | ------------------ |
-| `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now     | 1                  |
-| `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | 1               |
-| `sample_contact(person)`         | who they contact in an attempt, and the exposure     | anyone else, uniformly |
+| Method                           | Returns                                               | Default                |
+| -------------------------------- | ----------------------------------------------------- | ---------------------- |
+| `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now      | 1                      |
+| `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | the multiplier now   |
+| `sample_contact(person)`         | who they contact in an attempt, and the exposure      | anyone else, uniformly |
 
 The loop forecasts on the intrinsic bound times `max_contact_multiplier`, thins by
 `contact_multiplier`, and asks `sample_contact` for each attempt.
@@ -227,15 +231,18 @@ impl TransmissionManager<Flu> for Context {
         /* for example, their number of neighbors in a contact network */
     }
 
-    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
-        /* the most neighbors they can have */
-    }
-
     fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
         /* one of those neighbors */
     }
 }
 ```
+
+The rate is set by `contact_multiplier` alone. `max_contact_multiplier` only says
+how far it can rise before the person's next proposal, and must be finite: leave
+it at its default when the multiplier does not change during an infection, or
+when every rise is followed by a [reforecast](#when-rates-rise). Override it with
+a larger constant when the multiplier can rise without one. A bound larger than
+needed costs rejected proposals; it never raises the rate.
 
 `sample_anyone_else(person)` is the default draw, for a model that falls back to
 the whole population.
@@ -366,15 +373,12 @@ setting at the rate `intrinsic * share * multiplier`.
 
 **Exact.** The person's total over all their settings is their contact
 multiplier, and the setting is drawn in proportion to its part of that total.
-The forecast is the total itself, so no proposal is rejected.
+The forecast defaults to the total itself, so no proposal is rejected on account
+of contact structure.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
     fn contact_multiplier(&self, person: PersonId) -> f64 {
-        self.current_setting_multiplier::<Setting>(person)
-    }
-
-    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
         self.current_setting_multiplier::<Setting>(person)
     }
 
@@ -384,6 +388,16 @@ impl TransmissionManager<Flu> for Context {
         Some((contact, Some(setting)))
     }
 }
+```
+
+That forecast is only valid while the multiplier stays as it was when the
+forecast was made. To keep the same draw when memberships and itineraries do
+change, add the bound that survives those changes:
+
+```rust
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.max_setting_multiplier::<Setting>(person)
+    }
 ```
 
 **Setting first.** Draw where the attempt happens, then thin by that setting's
@@ -414,12 +428,11 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-The exact path is faster, because the setting-first path proposes at the rate of
-the person's largest setting and rejects the difference. But its forecast is only
-valid while the person's memberships and itinerary stay as they were when it was
-made. Use it when they do not change during an infection, or pair every change
-with a reforecast as described next. The setting-first path needs no such care
-for removing and restoring members or changing itineraries.
+The exact path with its default forecast is the fastest, because it proposes at
+the person's actual rate. With `max_setting_multiplier` as the bound, either
+path proposes at the rate of the person's largest setting and rejects the
+difference, and in exchange needs no care when members are removed and restored
+or itineraries change.
 
 `examples/core-epi-settings` loads households, schools and workplaces from a line
 list, runs the setting-first path, and counts infections by the setting they
@@ -441,10 +454,11 @@ was zero.
 
 Changes that need it:
 
-- on the exact settings path, any change to a person's memberships or itinerary;
-- on either path, a group growing past its largest size, or a person joining a
-  group, for the newcomer and for the group's infectious members
-  (`setting_group_members`);
+- on the exact settings path with its default forecast, any change to the
+  person's itinerary or to who is in any of their groups;
+- with `max_setting_multiplier` as the bound, a group growing past its largest
+  size, or a person joining a group, for the newcomer and for the group's
+  infectious members (`setting_group_members`);
 - anything in the model's own forecast that can go up, such as a contact
   restriction ending.
 

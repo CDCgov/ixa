@@ -324,13 +324,10 @@ impl InfectionManager<Boosted> for Context {
     }
 }
 
-// The three-method form: the default forecast and evaluation use these.
+// The forecast defaults to the multiplier now, so each change needs a
+// reforecast.
 impl TransmissionManager<Boosted> for Context {
     fn contact_multiplier(&self, _person: PersonId) -> f64 {
-        self.get_data(BoostPlugin).factor.get()
-    }
-
-    fn max_contact_multiplier(&self, _person: PersonId) -> f64 {
         self.get_data(BoostPlugin).factor.get()
     }
 
@@ -771,11 +768,8 @@ impl InfectionManager<SettingFirst> for Context {
 }
 
 impl TransmissionManager<SettingFirst> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            InfectionManager::<SettingFirst>::majorizing_infectiousness_rate_fn(self, person),
-            self.max_setting_multiplier::<Place>(person),
-        )
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.max_setting_multiplier::<Place>(person)
     }
 
     fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
@@ -798,21 +792,43 @@ impl InfectionManager<Exact> for Context {
     }
 }
 
+// The forecast defaults to the multiplier itself, so no proposal is rejected.
 impl TransmissionManager<Exact> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            InfectionManager::<Exact>::majorizing_infectiousness_rate_fn(self, person),
-            self.current_setting_multiplier::<Place>(person),
-        )
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Place>(person)
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
-        let total = InfectionManager::<Exact>::intrinsic_infectiousness(self, person)?
-            * self.current_setting_multiplier::<Place>(person);
-        if TransmissionManager::<Exact>::accept_proposal(self, person, total, forecast) {
-            let place = self.sample_setting_by_rate::<Place>(person)?;
-            count_place_attempt(self, person, place);
-        }
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
+        let place = self.sample_setting_by_rate::<Place>(person)?;
+        count_place_attempt(self, person, place);
+        None
+    }
+}
+
+/// The exact draw under the bound that survives membership changes.
+struct BoundedExact;
+
+impl InfectionManager<BoundedExact> for Context {
+    type Entity = Person;
+    type Exposure = ();
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
+    }
+}
+
+impl TransmissionManager<BoundedExact> for Context {
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Place>(person)
+    }
+
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.max_setting_multiplier::<Place>(person)
+    }
+
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
+        let place = self.sample_setting_by_rate::<Place>(person)?;
+        count_place_attempt(self, person, place);
         None
     }
 }
@@ -851,7 +867,7 @@ fn place_population(context: &mut Context) -> PersonId {
 }
 
 #[test]
-fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
+fn every_settings_path_attempts_in_each_setting_at_ratio_times_multiplier() {
     // The itinerary renormalizes over home, work and community: 0.5, 0.375,
     // 0.125. Expected attempts are rate * ratio * multiplier * duration.
     let per_unit = PLACE_RATE * PLACE_DURATION;
@@ -861,16 +877,23 @@ fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
         per_unit * 0.375 * 4.0,
         per_unit * 0.125,
     ];
-    for exact in [false, true] {
+    for path in ["setting first", "exact", "bounded exact"] {
         let mut context = Context::new();
         context.init_random(11);
         let infector = place_population(&mut context);
-        if exact {
-            TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
-            TransmissionManager::<Exact>::seed_infection(&mut context, infector);
-        } else {
-            TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
-            TransmissionManager::<SettingFirst>::seed_infection(&mut context, infector);
+        match path {
+            "setting first" => {
+                TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
+                TransmissionManager::<SettingFirst>::seed_infection(&mut context, infector);
+            }
+            "exact" => {
+                TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
+                TransmissionManager::<Exact>::seed_infection(&mut context, infector);
+            }
+            _ => {
+                TransmissionManager::<BoundedExact>::setup_transmission_loop(&mut context);
+                TransmissionManager::<BoundedExact>::seed_infection(&mut context, infector);
+            }
         }
         context.execute();
         let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow().clone();
@@ -879,7 +902,7 @@ fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
             let observed = attempts[place] as f64;
             assert!(
                 (observed - expected).abs() <= 4.0 * expected.sqrt(),
-                "exact path {exact}, kind {place}: {observed} attempts, expected {expected}"
+                "{path}, kind {place}: {observed} attempts, expected {expected}"
             );
         }
     }
@@ -918,10 +941,6 @@ impl TransmissionManager<Traced> for Context {
         self.current_setting_multiplier::<Place>(person)
     }
 
-    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
-        self.current_setting_multiplier::<Place>(person)
-    }
-
     fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Option<Place>)> {
         let place = self.sample_setting_by_rate::<Place>(person)?;
         let contact = self.sample_setting_contact(person, place)?;
@@ -951,4 +970,105 @@ fn on_infected_is_told_the_setting_the_contact_draw_returned() {
         );
         assert!(context.setting_group(infectee, place).is_some());
     }
+}
+
+// A constant bound above a multiplier that changes mid-run.
+struct Bounded;
+
+#[derive(Default)]
+struct BoundedState {
+    multiplier: std::cell::Cell<f64>,
+    bound: std::cell::Cell<f64>,
+    attempts: std::cell::Cell<usize>,
+}
+define_data_plugin!(BoundedPlugin, BoundedState, BoundedState::default());
+
+impl InfectionManager<Bounded> for Context {
+    type Entity = Person;
+    type Exposure = ();
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
+    }
+}
+
+impl TransmissionManager<Bounded> for Context {
+    fn contact_multiplier(&self, _person: PersonId) -> f64 {
+        self.get_data(BoundedPlugin).multiplier.get()
+    }
+
+    fn max_contact_multiplier(&self, _person: PersonId) -> f64 {
+        self.get_data(BoundedPlugin).bound.get()
+    }
+
+    fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
+        let state = self.get_data(BoundedPlugin);
+        state.attempts.set(state.attempts.get() + 1);
+        None
+    }
+}
+
+#[test]
+fn attempts_follow_the_multiplier_under_a_larger_bound() {
+    // Bound 4 throughout; the multiplier is 1 until t = 10 and 3 until
+    // t = 30, with no reforecast. Expected attempts: 2 * (10 + 3 * 20) = 140.
+    let runs = 50;
+    let mut total = 0;
+    for seed in 0..runs {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        let state = context.get_data(BoundedPlugin);
+        state.multiplier.set(1.0);
+        state.bound.set(4.0);
+        TransmissionManager::<Bounded>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Bounded>::seed_infection(&mut context, person);
+        context.add_plan(10.0, |context| {
+            context.get_data(BoundedPlugin).multiplier.set(3.0);
+        });
+        context.add_plan(30.0, Context::shutdown);
+        context.execute();
+        total += context.get_data(BoundedPlugin).attempts.get();
+    }
+    let mean = total as f64 / runs as f64;
+    assert!(
+        (mean - 140.0).abs() < 6.0,
+        "expected about 140 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+#[should_panic(expected = "must be finite and non-negative")]
+fn an_infinite_bound_panics_instead_of_proposing_forever() {
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    let state = context.get_data(BoundedPlugin);
+    state.multiplier.set(1.0);
+    state.bound.set(f64::INFINITY);
+    TransmissionManager::<Bounded>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Bounded>::seed_infection(&mut context, person);
+    context.execute();
+}
+
+#[test]
+fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing() {
+    struct Mask;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
+        &mut context,
+        person,
+        0.5,
+        1.0,
+        Some(2.0),
+    );
+    context.execute();
+    // Nothing was scheduled.
+    assert_eq!(context.get_current_time(), 0.0);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        1.0
+    );
 }

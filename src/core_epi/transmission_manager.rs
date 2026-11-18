@@ -40,10 +40,11 @@ const BOUND_TOLERANCE: f64 = 1e-9;
 /// structure with three methods:
 /// [`contact_multiplier`](Self::contact_multiplier),
 /// [`max_contact_multiplier`](Self::max_contact_multiplier) and
-/// [`sample_contact`](Self::sample_contact). Override
-/// [`forecast_total_infectiousness`] and [`evaluate_forecast`] instead when
-/// the bound is not a constant multiple of the intrinsic one, or when the
-/// total and the contact must come from the same draw.
+/// [`sample_contact`](Self::sample_contact). They are read only by the
+/// default [`forecast_total_infectiousness`] and [`evaluate_forecast`]:
+/// override those instead when the bound is not a constant multiple of the
+/// intrinsic one, or when the total and the contact must come from the same
+/// draw, and then the methods the override replaces have no effect.
 ///
 /// [`forecast_total_infectiousness`]: Self::forecast_total_infectiousness
 /// [`evaluate_forecast`]: Self::evaluate_forecast
@@ -67,22 +68,28 @@ where
         + InfectionManager<M, Entity = <Self as InfectionManager<M>>::Entity>,
 {
     /// Factor on `person`'s intrinsic infectiousness from their contacts now:
-    /// how many people they can reach, how closely. The default is 1.
+    /// how many people they can reach, how closely. The default is 1. Read
+    /// only by the default [`evaluate_forecast`](Self::evaluate_forecast).
     fn contact_multiplier(&self, _person: EntityId<Self::Entity>) -> f64 {
         1.0
     }
 
     /// Upper bound on [`contact_multiplier`](Self::contact_multiplier) for
-    /// `person` until their next proposal. It must hold whatever happens in
-    /// between, or be followed by
+    /// `person` until their next proposal, finite and non-negative. Whatever
+    /// raises the multiplier above it must be followed by
     /// [`reforecast_transmission`](Self::reforecast_transmission). The
-    /// default is 1.
-    fn max_contact_multiplier(&self, _person: EntityId<Self::Entity>) -> f64 {
-        1.0
+    /// default is the multiplier now, which is exact while it does not
+    /// change. A larger bound costs rejected proposals and does not raise the
+    /// rate: that is `contact_multiplier`'s job. Read only by the default
+    /// [`forecast_total_infectiousness`](Self::forecast_total_infectiousness).
+    fn max_contact_multiplier(&self, person: EntityId<Self::Entity>) -> f64 {
+        self.contact_multiplier(person)
     }
 
     /// Who `person` contacts in an attempt, and what to record about the
     /// exposure; `None` if nobody. The default is anyone else, uniformly.
+    /// Called only by the default
+    /// [`evaluate_forecast`](Self::evaluate_forecast).
     fn sample_contact(
         &self,
         person: EntityId<Self::Entity>,
@@ -106,10 +113,21 @@ where
     /// scaled by [`max_contact_multiplier`](Self::max_contact_multiplier).
     /// Override it for a bound that is not a constant multiple of the
     /// intrinsic one, e.g. one that follows a schedule.
+    ///
+    /// # Panics
+    ///
+    /// The default panics if `max_contact_multiplier` is negative or not
+    /// finite: an infinite bound would propose forever at one instant.
     fn forecast_total_infectiousness(&self, person: EntityId<Self::Entity>) -> impl InvertibleRate {
+        let max_multiplier = self.max_contact_multiplier(person);
+        assert!(
+            max_multiplier.is_finite() && max_multiplier >= 0.0,
+            "max_contact_multiplier of {person:?} must be finite and non-negative, \
+             got {max_multiplier}"
+        );
         ScaledRateFn::new(
             self.majorizing_infectiousness_rate_fn(person),
-            self.max_contact_multiplier(person),
+            max_multiplier,
         )
     }
 
@@ -155,9 +173,11 @@ where
 
     /// Infect `infectee`: assign their rate function, which starts their own
     /// loop once [`setup_transmission_loop`](Self::setup_transmission_loop)
-    /// has been called, then call [`on_infected`](InfectionManager::on_infected). `infector` is
-    /// `None` for an infection with no source in the population; for those,
-    /// [`seed_infection`](Self::seed_infection) is shorter.
+    /// has been called, then call
+    /// [`on_infected`](InfectionManager::on_infected) with `infector` and
+    /// `exposure`. `infector` is `None` for an infection with no source in
+    /// the population; for those, [`seed_infection`](Self::seed_infection) is
+    /// shorter.
     fn transmit(
         &mut self,
         infector: Option<EntityId<Self::Entity>>,
@@ -182,9 +202,9 @@ where
     }
 
     /// Start each person's transmission loop when they are assigned a rate
-    /// function.
-    /// Call once at setup, before anyone is infected. Without it, only loops
-    /// started by hand run (e.g. an index case with no cascade).
+    /// function. Call once at setup, before anyone is infected. Without it,
+    /// only loops started by hand with
+    /// [`reforecast_transmission`](Self::reforecast_transmission) run.
     fn setup_transmission_loop(&mut self) {
         self.subscribe_to_event(|context, event: InfectiousnessAssignedEvent<M>| {
             // Supersedes anything already pending: the person may have
@@ -195,13 +215,14 @@ where
     }
 
     /// Drop `person`'s pending attempt proposal and forecast again from now.
-    /// Call after anything that can raise their total infectiousness above
-    /// what [`forecast_total_infectiousness`](Self::forecast_total_infectiousness)
-    /// returned when the pending proposal was drawn, e.g. their group growing
-    /// or a contact restriction ending: the loop panics if a total exceeds its
-    /// forecast, and a forecast of zero ends the loop. It also restarts a loop
-    /// that ended that way. Redrawing is always statistically valid, so when
-    /// in doubt, call it. It also begins the loop of someone infected without
+    /// Call it after anything that can raise their total infectiousness above
+    /// the forecast their pending proposal was drawn from, e.g. their group
+    /// growing or a contact restriction ending: the loop panics if a total
+    /// exceeds its forecast, and a forecast of zero ends the loop.
+    ///
+    /// Redrawing is always statistically valid, so when in doubt, call it. It
+    /// restarts a loop that ended on a zero forecast, and starts the loop of
+    /// someone infected without
     /// [`setup_transmission_loop`](Self::setup_transmission_loop). No-op if
     /// `person` was never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
@@ -241,7 +262,7 @@ fn schedule_proposal<M, C>(
         context.add_plan(proposal_time, move |ctx| {
             handle_proposal::<M, Context>(ctx, infector, forecast, generation);
         });
-    };
+    }
 }
 
 /// Handle a transmission attempt proposal forecast at total infectiousness
