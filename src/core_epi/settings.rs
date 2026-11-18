@@ -2,8 +2,9 @@
 //! group people, with a density exponent per kind and an itinerary per person
 //! saying how their time is split across kinds.
 //!
-//! Define the kinds with [`define_settings!`](crate::define_settings), then at
-//! setup register each kind's `alpha`, create groups and add members (by
+//! Define the kind type with [`define_settings!`](crate::define_settings), then
+//! at setup add each kind with its name and `alpha`
+//! ([`add_setting_kind`](SettingsExt::add_setting_kind)), create groups and add members (by
 //! external key when loading a line list, see
 //! [`setting_group_for_key`](SettingsExt::setting_group_for_key); or make
 //! a kind a population group everyone is in), and assign itineraries: one
@@ -53,22 +54,23 @@ use crate::rand::{Rng, RngExt};
 use crate::random::sample_single_excluding;
 use crate::{define_rng, Context, ContextBase, ContextEntitiesExt, ContextRandomExt, HashMap};
 
-define_rng!(SettingsRng);
+define_rng!(CoreEpiSettingsRng);
 
 /// The most kinds one enum may have.
 pub const MAX_SETTINGS: usize = 8;
 
-/// A kind of setting, as an enum from [`define_settings!`](crate::define_settings).
+/// A kind of setting (household, school, ...): a value of the type made by
+/// [`define_settings!`](crate::define_settings), added at run time with
+/// [`add_setting_kind`](SettingsExt::add_setting_kind).
 pub trait SettingKind: Copy + Eq + Debug + 'static {
     /// The entity whose members the groups hold, e.g. the model's `Person`.
     type Entity: Entity;
 
-    const ALL: &'static [Self];
-
-    /// Position in [`ALL`](Self::ALL).
+    /// Position among the kinds, in the order they were added.
     fn index(self) -> usize;
 
-    fn name(self) -> &'static str;
+    #[doc(hidden)]
+    fn from_index(index: usize) -> Self;
 
     #[doc(hidden)]
     fn store<C: ContextBase>(context: &C) -> &SettingsStore<Self>;
@@ -77,18 +79,19 @@ pub trait SettingKind: Copy + Eq + Debug + 'static {
     fn store_mut<C: ContextBase>(context: &mut C) -> &mut SettingsStore<Self>;
 }
 
-/// Defines an enum of setting kinds for an entity and the storage behind it.
+/// Defines the type of an entity's setting kinds and the storage behind it.
+/// The kinds themselves are added at run time with
+/// [`add_setting_kind`](SettingsExt::add_setting_kind), so they can come from
+/// a parameters file.
 ///
 /// ```ignore
-/// define_settings!(pub Setting for Person { Household, Community });
+/// define_settings!(pub Setting for Person);
 /// ```
 #[macro_export]
 macro_rules! define_settings {
-    ($vis:vis $name:ident for $entity:ty { $($variant:ident),+ $(,)? }) => {
+    ($vis:vis $name:ident for $entity:ty) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        $vis enum $name {
-            $($variant),+
-        }
+        $vis struct $name(u8);
 
         $crate::paste::paste! {
             $crate::define_data_plugin!(
@@ -100,16 +103,12 @@ macro_rules! define_settings {
             impl $crate::core_epi::settings::SettingKind for $name {
                 type Entity = $entity;
 
-                const ALL: &'static [Self] = &[$(Self::$variant),+];
-
                 fn index(self) -> usize {
-                    self as usize
+                    self.0 as usize
                 }
 
-                fn name(self) -> &'static str {
-                    match self {
-                        $(Self::$variant => stringify!($variant)),+
-                    }
+                fn from_index(index: usize) -> Self {
+                    Self(u8::try_from(index).expect("too many setting kinds"))
                 }
 
                 fn store<C: $crate::ContextBase>(
@@ -178,8 +177,7 @@ impl<S: SettingKind> Itinerary<S> {
         for (setting, proportion) in entries {
             assert!(
                 proportion.is_finite() && proportion >= 0.0,
-                "proportion for setting {} must be finite and non-negative, got {proportion}",
-                setting.name()
+                "proportion for setting {setting:?} must be finite and non-negative, got {proportion}"
             );
             ratios[setting.index()] += proportion;
         }
@@ -202,9 +200,14 @@ impl<S: SettingKind> Itinerary<S> {
         self.ratios[setting.index()]
     }
 
-    /// Every kind with its normalized proportion.
+    /// The kinds with a positive proportion, each with its normalized
+    /// proportion.
     pub fn entries(&self) -> impl Iterator<Item = (S, f64)> + '_ {
-        S::ALL.iter().map(move |&s| (s, self.ratios[s.index()]))
+        self.ratios
+            .iter()
+            .enumerate()
+            .filter(|&(_, &ratio)| ratio > 0.0)
+            .map(|(index, &ratio)| (S::from_index(index), ratio))
     }
 }
 
@@ -314,7 +317,8 @@ impl Member {
 }
 
 struct Kind {
-    alpha: Option<f64>,
+    name: String,
+    alpha: f64,
     /// A group everyone is in without an entry in `memberships`.
     population_group: Option<u32>,
     /// Groups created by external key, e.g. a line list's household ids.
@@ -374,19 +378,8 @@ impl<S: SettingKind> SettingsStore<S> {
     #[doc(hidden)]
     #[must_use]
     pub fn new() -> Self {
-        assert!(
-            S::ALL.len() <= MAX_SETTINGS,
-            "at most {MAX_SETTINGS} setting kinds are supported"
-        );
         Self {
-            kinds: S::ALL
-                .iter()
-                .map(|_| Kind {
-                    alpha: None,
-                    population_group: None,
-                    keys: HashMap::default(),
-                })
-                .collect(),
+            kinds: Vec::new(),
             memberships: Vec::new(),
             groups: Vec::new(),
             assignment: None,
@@ -394,10 +387,37 @@ impl<S: SettingKind> SettingsStore<S> {
         }
     }
 
+    /// Add a kind, widening every person's membership records by one.
+    fn add_kind(&mut self, name: String, alpha: f64) -> S {
+        assert!(
+            self.kinds.len() < MAX_SETTINGS,
+            "at most {MAX_SETTINGS} setting kinds are supported"
+        );
+        assert!(
+            self.kinds.iter().all(|kind| kind.name != name),
+            "setting kind {name} already exists"
+        );
+        let old_stride = self.kinds.len();
+        if !self.memberships.is_empty() {
+            let mut widened =
+                Vec::with_capacity(self.memberships.len() / old_stride * (old_stride + 1));
+            for person in self.memberships.chunks(old_stride) {
+                widened.extend_from_slice(person);
+                widened.push(Member::NONE);
+            }
+            self.memberships = widened;
+        }
+        self.kinds.push(Kind {
+            name,
+            alpha,
+            population_group: None,
+            keys: HashMap::default(),
+        });
+        S::from_index(old_stride)
+    }
+
     fn alpha(&self, setting: S) -> f64 {
-        self.kinds[setting.index()]
-            .alpha
-            .unwrap_or_else(|| panic!("setting {} is not registered", setting.name()))
+        self.kinds[setting.index()].alpha
     }
 
     /// `person`'s membership record of `setting`; `Member::NONE` if they never
@@ -513,11 +533,10 @@ fn draw_setting<S: SettingKind>(weights: &[f64; MAX_SETTINGS], u: f64) -> Option
     }
     let mut acc = 0.0;
     let mut last = None;
-    for &setting in S::ALL {
-        let w = weights[setting.index()];
+    for (index, &w) in weights.iter().enumerate() {
         if w > 0.0 {
             acc += w;
-            last = Some(setting);
+            last = Some(S::from_index(index));
             if u * total < acc {
                 return last;
             }
@@ -529,21 +548,57 @@ fn draw_setting<S: SettingKind>(weights: &[f64; MAX_SETTINGS], u: f64) -> Option
 /// Setting membership, itineraries and the quantities the transmission loop
 /// needs from them. `S` is inferred from the arguments.
 pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
-    /// Register `setting` with density exponent `alpha`. Call once per kind at
-    /// setup, before creating its groups.
-    fn register_setting<S: SettingKind>(&mut self, setting: S, alpha: f64) {
+    /// Add a kind of setting called `name` with density exponent `alpha`.
+    /// Kinds can be added at any time, up to [`MAX_SETTINGS`].
+    ///
+    /// ```
+    /// # use ixa::core_epi::SettingsExt;
+    /// # use ixa::prelude::*;
+    /// # define_entity!(Person);
+    /// ixa::define_settings!(Place for Person);
+    /// let mut context = Context::new();
+    /// let household = context.add_setting_kind::<Place>("household", 1.0);
+    /// let person = context.add_entity(Person).unwrap();
+    /// let home = context.create_setting_group(household);
+    /// context.add_setting_member(home, person);
+    /// assert_eq!(context.setting_kind_by_name::<Place>("household"), Some(household));
+    /// assert_eq!(context.setting_name(household), "household");
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// If `alpha` is negative or not finite, the name is taken, or there are
+    /// already [`MAX_SETTINGS`] kinds.
+    fn add_setting_kind<S: SettingKind>(&mut self, name: &str, alpha: f64) -> S {
         assert!(
             alpha.is_finite() && alpha >= 0.0,
-            "alpha for setting {} must be finite and non-negative, got {alpha}",
-            setting.name()
+            "alpha for setting {name} must be finite and non-negative, got {alpha}"
         );
-        S::store_mut(self).kinds[setting.index()].alpha = Some(alpha);
+        S::store_mut(self).add_kind(name.to_string(), alpha)
+    }
+
+    /// The kinds of `S`, in the order they were added.
+    fn setting_kinds<S: SettingKind>(&self) -> Vec<S> {
+        (0..S::store(self).kinds.len()).map(S::from_index).collect()
+    }
+
+    /// The kind called `name`, if one was added.
+    fn setting_kind_by_name<S: SettingKind>(&self, name: &str) -> Option<S> {
+        let index = S::store(self)
+            .kinds
+            .iter()
+            .position(|kind| kind.name == name)?;
+        Some(S::from_index(index))
+    }
+
+    /// The name of `setting`.
+    fn setting_name<S: SettingKind>(&self, setting: S) -> &str {
+        &S::store(self).kinds[setting.index()].name
     }
 
     /// Create an empty group of `setting`.
     fn create_setting_group<S: SettingKind>(&mut self, setting: S) -> SettingGroupId<S> {
         let store = S::store_mut(self);
-        store.alpha(setting);
         store.groups.push(Group {
             kind: setting.index(),
             members: SmallVec::new(),
@@ -561,20 +616,20 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// # use ixa::core_epi::SettingsExt;
     /// # use ixa::prelude::*;
     /// # define_entity!(Person);
-    /// # ixa::define_settings!(Setting for Person { Household });
+    /// # ixa::define_settings!(Setting for Person);
     /// # let mut context = Context::new();
-    /// # context.register_setting(Setting::Household, 1.0);
+    /// # let household_kind = context.add_setting_kind::<Setting>("household", 1.0);
     /// let line_list = "person_id,household_id\n1,HH001\n2,HH001\n3,HH002\n";
     /// let mut people = Vec::new();
     /// for row in csv::Reader::from_reader(line_list.as_bytes()).records() {
     ///     let row = row.unwrap();
     ///     let person = context.add_entity(Person).unwrap();
-    ///     let household = context.setting_group_for_key(Setting::Household, &row[1]);
+    ///     let household = context.setting_group_for_key(household_kind, &row[1]);
     ///     context.add_setting_member(household, person);
     ///     people.push(person);
     /// }
-    /// assert_eq!(context.setting_group_size(people[0], Setting::Household), 2);
-    /// assert_eq!(context.setting_group_size(people[2], Setting::Household), 1);
+    /// assert_eq!(context.setting_group_size(people[0], household_kind), 2);
+    /// assert_eq!(context.setting_group_size(people[2], household_kind), 1);
     /// ```
     fn setting_group_for_key<S: SettingKind>(
         &mut self,
@@ -629,7 +684,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         person: EntityId<S::Entity>,
     ) {
         let store = S::store_mut(self);
-        let setting = S::ALL[store.groups[group.index as usize].kind];
+        let setting = S::from_index(store.groups[group.index as usize].kind);
         let m = store.member(person, setting);
         if m.group == group.index && m.position != NOT_ACTIVE {
             return;
@@ -663,8 +718,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         assert!(
             store.member(person, setting).group != NO_GROUP
                 || store.kinds[setting.index()].population_group.is_none(),
-            "cannot remove {person:?} from the population group of setting {}",
-            setting.name()
+            "cannot remove {person:?} from the population group of setting {setting:?}"
         );
         store.remove(person, setting);
     }
@@ -719,6 +773,11 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         itinerary: Itinerary<S>,
     ) {
         S::store_mut(self).itineraries.insert(person, itinerary);
+    }
+
+    /// Remove `person`'s own itinerary, so the assignment applies again.
+    fn clear_itinerary<S: SettingKind>(&mut self, person: EntityId<S::Entity>) {
+        let _ = S::store_mut(self).itineraries.remove(person);
     }
 
     /// `person`'s itinerary: their own, else the assignment's, else `None`.
@@ -794,7 +853,9 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
                 ratios[setting.index()] = ratio;
             }
         }
-        self.sample(SettingsRng, |rng| draw_setting(&ratios, rng.random()))
+        self.sample(CoreEpiSettingsRng, |rng| {
+            draw_setting(&ratios, rng.random())
+        })
     }
 
     /// A random member of `person`'s group of `setting` other than `person`,
@@ -817,7 +878,7 @@ impl SettingsExt for Context {
         setting: S,
     ) -> Option<EntityId<S::Entity>> {
         let store = S::store(self);
-        self.sample(SettingsRng, |rng| {
+        self.sample(CoreEpiSettingsRng, |rng| {
             store.sample_contact(self, rng, person, setting)
         })
     }
@@ -842,18 +903,29 @@ mod tests {
         default_const = AgeGroup::Adult
     );
 
-    define_settings!(Setting for Person {
-        Home,
-        Work,
-        Community
-    });
+    define_settings!(Setting for Person);
+
+    // The kinds `context_with` adds, in order.
+    const HOME: Setting = Setting(0);
+    const WORK: Setting = Setting(1);
+    const COMMUNITY: Setting = Setting(2);
 
     fn context_with(n: usize) -> (Context, Vec<PersonId>) {
+        context_with_work_alpha(n, 0.5)
+    }
+
+    fn context_with_work_alpha(n: usize, work_alpha: f64) -> (Context, Vec<PersonId>) {
         let mut context = Context::new();
         context.init_random(7);
-        context.register_setting(Setting::Home, 1.0);
-        context.register_setting(Setting::Work, 0.5);
-        context.register_setting(Setting::Community, 0.0);
+        assert_eq!(context.add_setting_kind::<Setting>("Home", 1.0), HOME);
+        assert_eq!(
+            context.add_setting_kind::<Setting>("Work", work_alpha),
+            WORK
+        );
+        assert_eq!(
+            context.add_setting_kind::<Setting>("Community", 0.0),
+            COMMUNITY
+        );
         let people = (0..n)
             .map(|_| context.add_entity(Person).unwrap())
             .collect();
@@ -861,7 +933,7 @@ mod tests {
     }
 
     fn home_for_all(context: &mut Context, people: &[PersonId]) -> SettingGroupId<Setting> {
-        let home = context.create_setting_group(Setting::Home);
+        let home = context.create_setting_group(HOME);
         for &p in people {
             context.add_setting_member(home, p);
         }
@@ -870,33 +942,29 @@ mod tests {
 
     #[test]
     fn kind_index_and_name() {
+        let (context, _) = context_with(0);
         assert_eq!(
-            Setting::ALL,
-            &[Setting::Home, Setting::Work, Setting::Community]
+            context.setting_kinds::<Setting>(),
+            vec![HOME, WORK, COMMUNITY]
         );
-        assert_eq!(Setting::Work.index(), 1);
-        assert_eq!(Setting::Community.name(), "Community");
+        assert_eq!(WORK.index(), 1);
+        assert_eq!(context.setting_kind_by_name::<Setting>("Work"), Some(WORK));
+        assert_eq!(context.setting_kind_by_name::<Setting>("School"), None);
+        assert_eq!(context.setting_name(COMMUNITY), "Community");
     }
 
     #[test]
     fn multiplier_follows_alpha() {
         let (mut context, people) = context_with(4);
         home_for_all(&mut context, &people);
-        let work = context.create_setting_group(Setting::Work);
+        let work = context.create_setting_group(WORK);
         for &p in &people {
             context.add_setting_member(work, p);
         }
-        let community = context.create_population_setting_group(Setting::Community);
-        assert_eq!(
-            context.setting_group(people[0], Setting::Community),
-            Some(community)
-        );
-        assert_eq!(context.setting_group_size(people[0], Setting::Community), 4);
-        for (setting, expected) in [
-            (Setting::Home, 3.0),
-            (Setting::Work, 3f64.sqrt()),
-            (Setting::Community, 1.0),
-        ] {
+        let community = context.create_population_setting_group(COMMUNITY);
+        assert_eq!(context.setting_group(people[0], COMMUNITY), Some(community));
+        assert_eq!(context.setting_group_size(people[0], COMMUNITY), 4);
+        for (setting, expected) in [(HOME, 3.0), (WORK, 3f64.sqrt()), (COMMUNITY, 1.0)] {
             context.set_itinerary(people[0], Itinerary::new([(setting, 1.0)]));
             assert_eq!(
                 context.current_setting_multiplier::<Setting>(people[0]),
@@ -913,11 +981,8 @@ mod tests {
     fn current_multiplier_is_the_itinerary_weighted_average() {
         let (mut context, people) = context_with(3);
         home_for_all(&mut context, &people);
-        context.create_population_setting_group(Setting::Community);
-        context.set_itinerary_assignment(Itinerary::new([
-            (Setting::Home, 0.25),
-            (Setting::Community, 0.75),
-        ]));
+        context.create_population_setting_group(COMMUNITY);
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.25), (COMMUNITY, 0.75)]));
         // 0.25 * 2 + 0.75 * 1
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
@@ -929,44 +994,36 @@ mod tests {
     #[test]
     fn no_group_means_no_contacts() {
         let (mut context, people) = context_with(2);
-        let home = context.create_setting_group(Setting::Home);
+        let home = context.create_setting_group(HOME);
         context.add_setting_member(home, people[0]);
-        context.set_itinerary_assignment(Itinerary::new([(Setting::Home, 1.0)]));
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 1.0)]));
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[1]),
             0.0
         );
         assert_eq!(context.sample_setting::<Setting>(people[1]), None);
-        assert_eq!(
-            context.sample_setting_contact(people[1], Setting::Home),
-            None
-        );
+        assert_eq!(context.sample_setting_contact(people[1], HOME), None);
         // Alone in the group.
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
             0.0
         );
-        assert_eq!(
-            context.sample_setting_contact(people[0], Setting::Home),
-            None
-        );
+        assert_eq!(context.sample_setting_contact(people[0], HOME), None);
     }
 
     #[test]
     fn moving_groups_updates_both_member_lists() {
         let (mut context, people) = context_with(3);
         let a = home_for_all(&mut context, &people);
-        let b = context.create_setting_group(Setting::Home);
+        let b = context.create_setting_group(HOME);
         context.add_setting_member(b, people[2]);
         context.add_setting_member(b, people[2]);
-        assert_eq!(context.setting_group(people[2], Setting::Home), Some(b));
-        assert_eq!(context.setting_group(people[0], Setting::Home), Some(a));
-        assert_eq!(context.setting_group_size(people[0], Setting::Home), 2);
-        assert_eq!(context.setting_group_size(people[2], Setting::Home), 1);
+        assert_eq!(context.setting_group(people[2], HOME), Some(b));
+        assert_eq!(context.setting_group(people[0], HOME), Some(a));
+        assert_eq!(context.setting_group_size(people[0], HOME), 2);
+        assert_eq!(context.setting_group_size(people[2], HOME), 1);
         for _ in 0..20 {
-            let contact = context
-                .sample_setting_contact(people[0], Setting::Home)
-                .unwrap();
+            let contact = context.sample_setting_contact(people[0], HOME).unwrap();
             assert_eq!(contact, people[1]);
         }
     }
@@ -975,18 +1032,18 @@ mod tests {
     fn removing_members_lowers_the_current_but_not_the_bound() {
         let (mut context, people) = context_with(3);
         let home = home_for_all(&mut context, &people);
-        context.set_itinerary_assignment(Itinerary::new([(Setting::Home, 1.0)]));
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 1.0)]));
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
 
-        context.remove_setting_member(people[1], Setting::Home);
-        assert_eq!(context.setting_group(people[1], Setting::Home), None);
+        context.remove_setting_member(people[1], HOME);
+        assert_eq!(context.setting_group(people[1], HOME), None);
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
             1.0
         );
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
         assert_eq!(
-            context.sample_setting_contact(people[0], Setting::Home),
+            context.sample_setting_contact(people[0], HOME),
             Some(people[2])
         );
 
@@ -1000,32 +1057,29 @@ mod tests {
 
     #[test]
     fn restore_puts_a_member_back_in_the_remembered_group() {
-        let (mut context, people) = context_with(3);
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
         let home = home_for_all(&mut context, &people);
-        context.remove_setting_member(people[1], Setting::Home);
-        context.remove_setting_member(people[1], Setting::Home);
-        assert_eq!(context.setting_group(people[1], Setting::Home), None);
-        assert_eq!(context.setting_group_size(people[0], Setting::Home), 2);
-        context.restore_setting_member(people[1], Setting::Home);
-        assert_eq!(context.setting_group(people[1], Setting::Home), Some(home));
-        assert_eq!(context.setting_group_size(people[0], Setting::Home), 3);
+        context.remove_setting_member(people[1], HOME);
+        context.remove_setting_member(people[1], HOME);
+        assert_eq!(context.setting_group(people[1], HOME), None);
+        assert_eq!(context.setting_group_size(people[0], HOME), 2);
+        context.restore_setting_member(people[1], HOME);
+        assert_eq!(context.setting_group(people[1], HOME), Some(home));
+        assert_eq!(context.setting_group_size(people[0], HOME), 3);
         // Never a member: nothing to restore.
-        context.register_setting(Setting::Work, 1.0);
-        context.restore_setting_member(people[1], Setting::Work);
-        assert_eq!(context.setting_group(people[1], Setting::Work), None);
+        context.restore_setting_member(people[1], WORK);
+        assert_eq!(context.setting_group(people[1], WORK), None);
     }
 
     #[test]
     fn itinerary_renormalizes_over_the_kinds_a_person_has() {
-        let (mut context, people) = context_with(3);
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
         home_for_all(&mut context, &people[..2]);
-        context.register_setting(Setting::Work, 1.0);
-        let work = context.create_setting_group(Setting::Work);
+        let work = context.create_setting_group(WORK);
         for &p in &people {
             context.add_setting_member(work, p);
         }
-        context
-            .set_itinerary_assignment(Itinerary::new([(Setting::Home, 0.5), (Setting::Work, 0.5)]));
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.5), (WORK, 0.5)]));
         // Home has 1 other, work 2: average 1.5.
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
@@ -1037,27 +1091,24 @@ mod tests {
             2.0
         );
         // Removed from work: all at home, while the bound keeps the workplace.
-        context.remove_setting_member(people[0], Setting::Work);
+        context.remove_setting_member(people[0], WORK);
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
             1.0
         );
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
         for _ in 0..20 {
-            assert_eq!(
-                context.sample_setting::<Setting>(people[0]),
-                Some(Setting::Home)
-            );
+            assert_eq!(context.sample_setting::<Setting>(people[0]), Some(HOME));
         }
     }
 
     #[test]
     fn population_group_samples_anyone_else() {
         let (mut context, people) = context_with(3);
-        context.create_population_setting_group(Setting::Community);
+        context.create_population_setting_group(COMMUNITY);
         for _ in 0..20 {
             let contact = context
-                .sample_setting_contact(people[0], Setting::Community)
+                .sample_setting_contact(people[0], COMMUNITY)
                 .unwrap();
             assert_ne!(contact, people[0]);
         }
@@ -1067,67 +1118,56 @@ mod tests {
     #[should_panic(expected = "population group")]
     fn cannot_leave_a_population_group() {
         let (mut context, people) = context_with(1);
-        context.create_population_setting_group(Setting::Community);
-        context.remove_setting_member(people[0], Setting::Community);
+        context.create_population_setting_group(COMMUNITY);
+        context.remove_setting_member(people[0], COMMUNITY);
     }
 
     #[test]
     fn itinerary_normalizes() {
-        let itinerary = Itinerary::new([(Setting::Home, 2.0), (Setting::Community, 6.0)]);
-        assert_eq!(itinerary.ratio(Setting::Home), 0.25);
-        assert_eq!(itinerary.ratio(Setting::Work), 0.0);
-        assert_eq!(itinerary.ratio(Setting::Community), 0.75);
+        let itinerary = Itinerary::new([(HOME, 2.0), (COMMUNITY, 6.0)]);
+        assert_eq!(itinerary.ratio(HOME), 0.25);
+        assert_eq!(itinerary.ratio(WORK), 0.0);
+        assert_eq!(itinerary.ratio(COMMUNITY), 0.75);
     }
 
     #[test]
     fn draw_setting_by_weight() {
         let mut weights = [0.0; MAX_SETTINGS];
         assert_eq!(draw_setting::<Setting>(&weights, 0.5), None);
-        weights[Setting::Home.index()] = 1.0;
-        weights[Setting::Community.index()] = 3.0;
-        assert_eq!(draw_setting::<Setting>(&weights, 0.0), Some(Setting::Home));
-        assert_eq!(
-            draw_setting::<Setting>(&weights, 0.2499),
-            Some(Setting::Home)
-        );
-        assert_eq!(
-            draw_setting::<Setting>(&weights, 0.25),
-            Some(Setting::Community)
-        );
-        assert_eq!(
-            draw_setting::<Setting>(&weights, 0.9999),
-            Some(Setting::Community)
-        );
+        weights[HOME.index()] = 1.0;
+        weights[COMMUNITY.index()] = 3.0;
+        assert_eq!(draw_setting::<Setting>(&weights, 0.0), Some(HOME));
+        assert_eq!(draw_setting::<Setting>(&weights, 0.2499), Some(HOME));
+        assert_eq!(draw_setting::<Setting>(&weights, 0.25), Some(COMMUNITY));
+        assert_eq!(draw_setting::<Setting>(&weights, 0.9999), Some(COMMUNITY));
     }
 
     #[test]
     fn sample_setting_draws_by_ratio_over_kinds_with_a_group() {
-        let (mut context, people) = context_with(1);
+        let (mut context, people) = context_with_work_alpha(1, 1.0);
         home_for_all(&mut context, &people);
-        context.register_setting(Setting::Work, 1.0);
-        context
-            .set_itinerary_assignment(Itinerary::new([(Setting::Home, 0.1), (Setting::Work, 0.9)]));
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.1), (WORK, 0.9)]));
         // No workplace, so every attempt is at home, even alone there: the
         // multiplier, not the draw, thins it out.
         for _ in 0..20 {
-            assert_eq!(context.sample_setting(people[0]), Some(Setting::Home));
+            assert_eq!(context.sample_setting(people[0]), Some(HOME));
         }
-        assert_eq!(context.setting_multiplier(people[0], Setting::Home), 0.0);
-        assert_eq!(context.setting_multiplier(people[0], Setting::Work), 0.0);
+        assert_eq!(context.setting_multiplier(people[0], HOME), 0.0);
+        assert_eq!(context.setting_multiplier(people[0], WORK), 0.0);
     }
 
     #[test]
     fn personal_itinerary_overrides_the_assignment() {
         let (mut context, people) = context_with(3);
         home_for_all(&mut context, &people);
-        context.create_population_setting_group(Setting::Community);
+        context.create_population_setting_group(COMMUNITY);
         assert_eq!(context.sample_setting::<Setting>(people[0]), None);
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 0.0);
 
-        context.set_itinerary_assignment(Itinerary::new([(Setting::Community, 1.0)]));
-        context.set_itinerary(people[1], Itinerary::new([(Setting::Home, 1.0)]));
-        assert_eq!(context.sample_setting(people[0]), Some(Setting::Community));
-        assert_eq!(context.sample_setting(people[1]), Some(Setting::Home));
+        context.set_itinerary_assignment(Itinerary::new([(COMMUNITY, 1.0)]));
+        context.set_itinerary(people[1], Itinerary::new([(HOME, 1.0)]));
+        assert_eq!(context.sample_setting(people[0]), Some(COMMUNITY));
+        assert_eq!(context.sample_setting(people[1]), Some(HOME));
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 1.0);
         assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
     }
@@ -1136,9 +1176,9 @@ mod tests {
     fn itinerary_assigned_by_property_follows_the_current_value() {
         let (mut context, people) = context_with(2);
         home_for_all(&mut context, &people);
-        context.create_population_setting_group(Setting::Community);
-        let child = Itinerary::new([(Setting::Home, 1.0)]);
-        let adult = Itinerary::new([(Setting::Community, 1.0)]);
+        context.create_population_setting_group(COMMUNITY);
+        let child = Itinerary::new([(HOME, 1.0)]);
+        let adult = Itinerary::new([(COMMUNITY, 1.0)]);
         context.set_itinerary_assignment(ItineraryAssignment::by_property(move |age: AgeGroup| {
             match age {
                 AgeGroup::Child => child,
@@ -1146,72 +1186,91 @@ mod tests {
             }
         }));
         context.set_property(people[0], AgeGroup::Child);
-        assert_eq!(context.sample_setting(people[0]), Some(Setting::Home));
-        assert_eq!(context.sample_setting(people[1]), Some(Setting::Community));
+        assert_eq!(context.sample_setting(people[0]), Some(HOME));
+        assert_eq!(context.sample_setting(people[1]), Some(COMMUNITY));
         context.set_property(people[0], AgeGroup::Adult);
-        assert_eq!(context.sample_setting(people[0]), Some(Setting::Community));
+        assert_eq!(context.sample_setting(people[0]), Some(COMMUNITY));
     }
 
     #[test]
     fn itinerary_assigned_individually_by_closure() {
         let (mut context, people) = context_with(2);
-        context.create_population_setting_group(Setting::Community);
-        context
-            .set_itinerary_assignment(|_: &Context, _| Itinerary::new([(Setting::Community, 1.0)]));
-        assert_eq!(context.sample_setting(people[1]), Some(Setting::Community));
+        context.create_population_setting_group(COMMUNITY);
+        context.set_itinerary_assignment(|_: &Context, _| Itinerary::new([(COMMUNITY, 1.0)]));
+        assert_eq!(context.sample_setting(people[1]), Some(COMMUNITY));
     }
 
     #[test]
     fn contact_needs_someone_else_in_the_setting() {
-        let (mut context, people) = context_with(3);
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
         home_for_all(&mut context, &people);
-        context.register_setting(Setting::Work, 1.0);
-        let work = context.create_setting_group(Setting::Work);
+        let work = context.create_setting_group(WORK);
         context.add_setting_member(work, people[0]);
-        context
-            .set_itinerary_assignment(Itinerary::new([(Setting::Home, 0.5), (Setting::Work, 0.5)]));
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.5), (WORK, 0.5)]));
         // Alone at work: no contact there, and the multiplier is zero.
-        assert_eq!(context.setting_multiplier(people[0], Setting::Work), 0.0);
-        assert_eq!(
-            context.sample_setting_contact(people[0], Setting::Work),
-            None
-        );
-        assert_eq!(context.setting_multiplier(people[0], Setting::Home), 2.0);
+        assert_eq!(context.setting_multiplier(people[0], WORK), 0.0);
+        assert_eq!(context.sample_setting_contact(people[0], WORK), None);
+        assert_eq!(context.setting_multiplier(people[0], HOME), 2.0);
         for _ in 0..20 {
-            let contact = context
-                .sample_setting_contact(people[0], Setting::Home)
-                .unwrap();
+            let contact = context.sample_setting_contact(people[0], HOME).unwrap();
             assert_ne!(contact, people[0]);
         }
-        context.remove_setting_member(people[0], Setting::Home);
-        assert_eq!(context.sample_setting(people[0]), Some(Setting::Work));
-        assert_eq!(context.setting_multiplier(people[0], Setting::Home), 0.0);
+        context.remove_setting_member(people[0], HOME);
+        assert_eq!(context.sample_setting(people[0]), Some(WORK));
+        assert_eq!(context.setting_multiplier(people[0], HOME), 0.0);
     }
 
     #[test]
     fn groups_by_key_are_created_once_per_kind() {
-        let mut context = Context::new();
-        context.register_setting(Setting::Home, 1.0);
-        context.register_setting(Setting::Work, 1.0);
-        let a = context.setting_group_for_key(Setting::Home, 7u64);
-        let b = context.setting_group_for_key(Setting::Home, 8u64);
+        let (mut context, _) = context_with(0);
+        let a = context.setting_group_for_key(HOME, 7u64);
+        let b = context.setting_group_for_key(HOME, 8u64);
         assert_ne!(a, b);
-        assert_eq!(context.setting_group_for_key(Setting::Home, 7u64), a);
-        assert_ne!(
-            context.setting_group_for_key(Setting::Work, 7u64).index,
-            a.index
-        );
-        assert_eq!(context.setting_group_by_key(Setting::Home, 8u64), Some(b));
-        assert_eq!(context.setting_group_by_key(Setting::Home, 9u64), None);
+        assert_eq!(context.setting_group_for_key(HOME, 7u64), a);
+        assert_ne!(context.setting_group_for_key(WORK, 7u64).index, a.index);
+        assert_eq!(context.setting_group_by_key(HOME, 8u64), Some(b));
+        assert_eq!(context.setting_group_by_key(HOME, 9u64), None);
         // Owned and borrowed strings are the same key.
-        let s = context.setting_group_for_key(Setting::Home, "HH1".to_string());
-        assert_eq!(context.setting_group_by_key(Setting::Home, "HH1"), Some(s));
+        let s = context.setting_group_for_key(HOME, "HH1".to_string());
+        assert_eq!(context.setting_group_by_key(HOME, "HH1"), Some(s));
     }
 
     #[test]
-    #[should_panic(expected = "not registered")]
-    fn unregistered_setting_panics() {
+    fn a_kind_added_after_members_exist_widens_their_records() {
+        let (mut context, people) = context_with(4);
+        let home = home_for_all(&mut context, &people[..3]);
+
+        let school = context.add_setting_kind::<Setting>("School", 0.0);
+        let class = context.create_setting_group(school);
+        context.add_setting_member(class, people[0]);
+        context.add_setting_member(class, people[3]);
+
+        for &person in &people[..3] {
+            assert_eq!(context.setting_group(person, HOME), Some(home));
+            assert_eq!(context.setting_multiplier(person, HOME), 2.0);
+        }
+        assert_eq!(context.setting_group(people[3], HOME), None);
+        assert_eq!(context.setting_group(people[1], school), None);
+        assert_eq!(context.setting_group_size(people[3], school), 2);
+        assert_eq!(
+            context.sample_setting_contact(people[3], school),
+            Some(people[0])
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "already exists")]
+    fn kind_names_are_unique() {
+        let (mut context, _) = context_with(0);
+        context.add_setting_kind::<Setting>("Home", 0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "at most")]
+    fn kinds_are_capped() {
         let mut context = Context::new();
-        context.create_setting_group(Setting::Home);
+        for i in 0..=MAX_SETTINGS {
+            context.add_setting_kind::<Setting>(&format!("kind {i}"), 1.0);
+        }
     }
 }

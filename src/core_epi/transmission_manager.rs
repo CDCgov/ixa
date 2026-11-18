@@ -6,8 +6,8 @@ use crate::entity::query::Query;
 use crate::entity::EntityId;
 use crate::prelude::*;
 
-define_rng!(TransmissionRng);
-define_rng!(InfectionRng);
+define_rng!(CoreEpiTransmissionRng);
+define_rng!(CoreEpiInfectionRng);
 
 /// Relative slack when checking a total against its forecast: the two take
 /// different float paths to the same value when the bound is tight.
@@ -91,7 +91,7 @@ where
     /// [`evaluate_forecast`](Self::evaluate_forecast); `None` if nobody. The
     /// default is anyone else, uniformly.
     fn sample_contact(&self, person: EntityId<Self::Entity>) -> Option<EntityId<Self::Entity>> {
-        self.sample(TransmissionRng, |rng| {
+        self.sample(CoreEpiTransmissionRng, |rng| {
             self.query(Self::Entity::default())
                 .sample_entity_excluding(rng, person)
         })
@@ -111,7 +111,8 @@ where
             "total infectiousness {total} of {person:?} exceeds its forecast {forecast}: \
              the forecast must bound the total until the next proposal"
         );
-        total > 0.0 && (total >= forecast || self.sample_bool(TransmissionRng, total / forecast))
+        total > 0.0
+            && (total >= forecast || self.sample_bool(CoreEpiTransmissionRng, total / forecast))
     }
 
     /// Infect `infectee`: assign their rate function, which starts their own
@@ -131,7 +132,7 @@ where
     /// Infect up to `n` people (fewer if fewer match) sampled uniformly from
     /// those matching `query`, with no infector.
     fn seed_infections<Q: Query<Self::Entity>>(&mut self, query: Q, n: usize) {
-        for person in self.sample_entities(InfectionRng, query, n) {
+        for person in self.sample_entities(CoreEpiInfectionRng, query, n) {
             self.transmit(None, person);
         }
     }
@@ -159,7 +160,7 @@ where
         // rate function is indexed by time from now, so inverting an Exp(1) draw
         // gives the delay to the proposal. If `e` is beyond the support of the
         // inverse cumulative there is no next event and the loop ends.
-        let e = self.sample_distr(TransmissionRng, Exp::new(1.0).unwrap());
+        let e = self.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
         let proposal = {
             let f = self.forecast_total_infectiousness(infector);
             f.inverse_cum_rate(e).map(|delay| (delay, f.rate(delay)))
@@ -194,7 +195,7 @@ where
             if let Some(infectee) = self.evaluate_forecast(infector, forecast) {
                 // Draws only when the outcome is uncertain.
                 let p = self.susceptibility(infectee);
-                let infected = p >= 1.0 || (p > 0.0 && self.sample_bool(TransmissionRng, p));
+                let infected = p >= 1.0 || (p > 0.0 && self.sample_bool(CoreEpiTransmissionRng, p));
                 if infected {
                     self.transmit(Some(infector), infectee);
                 }
