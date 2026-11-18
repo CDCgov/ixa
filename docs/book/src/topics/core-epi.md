@@ -101,8 +101,8 @@ returns a `RateAssignment`, which is one of:
   many people share a few curves.
 
 The built-in rate functions are `ConstantRateFn::new(rate, duration)` and
-`EmpiricalRateFn::new(points, scale)`, a piecewise-linear curve through
-`[time, rate]` points.
+`EmpiricalRateFn::new(points, scale)`, a piecewise-linear curve through points
+given as time and rate pairs.
 
 ```rust
 context.load_infectiousness_rate_library(vec![
@@ -183,7 +183,7 @@ context.set_susceptibility_modifier::<Vaccine>(person, 0.5);
 The two kinds differ in what they belong to:
 
 - An **infectiousness modifier** belongs to the current infection. Its factor
-  must be in `[0, 1]`, so the forecast stays an upper bound, and it is cleared
+  must be between 0 and 1, so the forecast stays an upper bound, and it is cleared
   when the person is infected again. Setting one on someone never infected does
   nothing, and a scheduled one applies only if they are still infectious with
   the same infection when it starts.
