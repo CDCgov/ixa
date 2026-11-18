@@ -19,22 +19,34 @@
 //! kinds they have a group in); their bound is the largest multiplier
 //! any of their groups has ever had, whatever their itinerary, so members can
 //! be removed and added back and itineraries overridden and cleared
-//! (interventions) without re-forecasting. In
-//! [`TransmissionManager`](super::TransmissionManager), `forecast_total_infectiousness`
-//! scales the intrinsic bound by
-//! [`max_setting_multiplier`](SettingsExt::max_setting_multiplier), and
-//! `evaluate_forecast` draws the setting first with
-//! [`sample_setting`](SettingsExt::sample_setting) (by itinerary ratio over
-//! the kinds the person has a group in), thins by that setting's
-//! [`setting_multiplier`](SettingsExt::setting_multiplier), and samples a
-//! contact there with
-//! [`sample_setting_contact`](SettingsExt::sample_setting_contact). Drawing by
-//! ratio and thinning by one multiplier gives attempts in each setting at the
-//! same rate as thinning by the ratio weighted average and then drawing by
-//! `ratio * multiplier`, with one group lookup per proposal instead of one
-//! per kind.
+//! (interventions) without re-forecasting.
 //!
-//! Per attempt that is a store lookup, the person's membership records (one
+//! A model's [`TransmissionManager`](super::TransmissionManager) can use
+//! them in two ways, which give attempts in each setting at the same rate,
+//! `intrinsic * ratio * multiplier`:
+//!
+//! - Setting first, for populations whose memberships or itineraries change:
+//!   `forecast_total_infectiousness` scales the intrinsic bound by
+//!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier), and
+//!   `evaluate_forecast` draws the setting with
+//!   [`sample_setting`](SettingsExt::sample_setting) (by itinerary ratio),
+//!   thins by that setting's
+//!   [`setting_multiplier`](SettingsExt::setting_multiplier), and samples a
+//!   contact there with
+//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact). One
+//!   group lookup per proposal, but proposals are rejected wherever a
+//!   setting's multiplier is below the person's largest.
+//! - Exact, when nothing changes while a person is infectious: forecast on
+//!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier)
+//!   itself, thin by the same value (so every proposal is an attempt), then
+//!   draw the setting with
+//!   [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
+//!   ratio times multiplier) and the contact as above. One group lookup per
+//!   kind, no rejected proposals. Thinning by the current multiplier against
+//!   the `max_setting_multiplier` bound is the same path made safe for
+//!   changes.
+//!
+//! Per setting-first attempt that is a store lookup, the person's membership records (one
 //! per kind, person-major so they share a cache line) for the draw, one group
 //! record for the multiplier (cached per group) and the contact, and two
 //! uniform draws. Nothing is hashed or allocated; itineraries are small `Copy`
@@ -794,11 +806,15 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
             .map_or(0.0, |(current, _)| current)
     }
 
-    /// Expected factor on `person`'s intrinsic infectiousness now: the
-    /// itinerary weighted average of their groups' multipliers, over the kinds
-    /// they are in a group of; 0 without an itinerary or any group. The loop
-    /// uses [`setting_multiplier`](Self::setting_multiplier) of the drawn
-    /// setting instead, which has this mean.
+    /// Factor on `person`'s intrinsic infectiousness now, over all their
+    /// settings: the itinerary weighted average of their groups' multipliers,
+    /// over the kinds they are in a group of; 0 without an itinerary or any
+    /// group. This is the total for the exact path: thin by it, then draw
+    /// where with [`sample_setting_by_rate`](Self::sample_setting_by_rate).
+    /// It is also an exact forecast, with no proposal rejected, for a person
+    /// whose memberships and itinerary do not change while they are
+    /// infectious; otherwise forecast with
+    /// [`max_setting_multiplier`](Self::max_setting_multiplier).
     fn current_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let Some(itinerary) = self.itinerary::<S>(person) else {
             return 0.0;
@@ -860,6 +876,26 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         self.sample(CoreEpiSettingsRng, |rng| {
             draw_setting(&ratios, rng.random())
         })
+    }
+
+    /// Draw where an attempt by `person` happens, given that it happens: by
+    /// itinerary ratio times the group's current multiplier. Use after
+    /// thinning by
+    /// [`current_setting_multiplier`](Self::current_setting_multiplier);
+    /// [`sample_setting`](Self::sample_setting) is for thinning afterwards by
+    /// the drawn setting's multiplier. `None` without an itinerary, or when
+    /// every multiplier is 0.
+    fn sample_setting_by_rate<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<S> {
+        let itinerary = self.itinerary::<S>(person)?;
+        let store = S::store(self);
+        let population = self.get_entity_count::<S::Entity>();
+        let mut rates = [0.0; MAX_SETTINGS];
+        for (setting, ratio) in itinerary.entries() {
+            if let Some((current, _)) = store.multipliers(person, setting, population) {
+                rates[setting.index()] = ratio * current;
+            }
+        }
+        self.sample(CoreEpiSettingsRng, |rng| draw_setting(&rates, rng.random()))
     }
 
     /// A random member of `person`'s group of `setting` other than `person`,
@@ -1300,5 +1336,56 @@ mod tests {
         for i in 0..=MAX_SETTINGS {
             context.add_setting_kind::<Setting>(&format!("kind {i}"), 1.0);
         }
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn sample_setting_by_rate_weights_the_ratio_by_the_multiplier() {
+        // Home: 3 people, alpha 1, multiplier 2. Work: 5 people, alpha 1,
+        // multiplier 4. Ratios 0.6 / 0.4 give rates 1.2 / 1.6.
+        let (mut context, people) = context_with_work_alpha(5, 1.0);
+        home_for_all(&mut context, &people[..3]);
+        let work = context.create_setting_group(WORK);
+        for &p in &people {
+            context.add_setting_member(work, p);
+        }
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.6), (WORK, 0.4)]));
+        let total = context.current_setting_multiplier::<Setting>(people[0]);
+        assert!((total - 2.8).abs() < 1e-12);
+        assert!(total <= context.max_setting_multiplier::<Setting>(people[0]));
+
+        let draws = 20_000;
+        let mut at_home = 0;
+        for _ in 0..draws {
+            if context.sample_setting_by_rate::<Setting>(people[0]) == Some(HOME) {
+                at_home += 1;
+            }
+        }
+        let observed = f64::from(at_home) / f64::from(draws);
+        assert!(
+            (observed - 1.2 / 2.8).abs() < 0.02,
+            "expected about {}, observed {observed}",
+            1.2 / 2.8
+        );
+
+        // Someone with no group at home is always drawn at work.
+        assert_eq!(
+            context.sample_setting_by_rate::<Setting>(people[4]),
+            Some(WORK)
+        );
+    }
+
+    #[test]
+    fn sample_setting_by_rate_is_none_when_no_setting_has_a_rate() {
+        // Alone at home: a ratio but a multiplier of 0.
+        let (mut context, people) = context_with(1);
+        home_for_all(&mut context, &people);
+        assert_eq!(context.sample_setting_by_rate::<Setting>(people[0]), None);
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 1.0)]));
+        assert_eq!(
+            context.current_setting_multiplier::<Setting>(people[0]),
+            0.0
+        );
+        assert_eq!(context.sample_setting_by_rate::<Setting>(people[0]), None);
     }
 }
