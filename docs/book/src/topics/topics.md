@@ -10,3 +10,4 @@
 - [Profiling Module](profiling-module.md)
 - [`random` module](random-module.md)
 - [Reports](reports.md)
+- [Epidemic Models with `core_epi`](core-epi.md)

@@ -22,6 +22,7 @@
   - [Profiling Module](topics/profiling-module.md)
   - [`random` module](topics/random-module.md)
   - [Reports](topics/reports.md)
+  - [Epidemic Models with `core_epi`](topics/core-epi.md)
 - [Examples](examples.md)
 - [Migrating to Ixa 2.0](migration_guide.md)
 - [Appendix: Rust](appendix_rust/appendix-rust.md)
