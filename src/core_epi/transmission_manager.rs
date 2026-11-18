@@ -165,7 +165,7 @@ where
     /// in doubt, call it. No-op if `person` was never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
         if let Some(generation) = advance_forecast_generation::<M, _, _>(self, person) {
-            self.schedule_proposal(person, generation);
+            schedule_proposal::<M, Self>(self, person, generation);
         }
     }
 
@@ -175,68 +175,73 @@ where
     fn schedule_next_transmission_attempt_proposal(&mut self, infector: EntityId<Self::Entity>) {
         self.reforecast_transmission(infector);
     }
+}
 
-    #[doc(hidden)]
-    fn schedule_proposal(&mut self, infector: EntityId<Self::Entity>, generation: u32) {
-        // Determine if & when the next attempt proposal will occur. The majorizing
-        // rate function is indexed by time from now, so inverting an Exp(1) draw
-        // gives the delay to the proposal. If `e` is beyond the support of the
-        // inverse cumulative there is no next event and the loop ends.
-        let e = self.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
-        let proposal = {
-            let f = self.forecast_total_infectiousness(infector);
-            f.inverse_cum_rate(e).map(|delay| (delay, f.rate(delay)))
-        };
+/// Draw `infector`'s next attempt proposal under `generation` and schedule
+/// it. Private, with [`handle_proposal`], so that a proposal only ever runs
+/// under the generation it was drawn with and a person never has two loops.
+fn schedule_proposal<M, C>(
+    context: &mut C,
+    infector: EntityId<<C as InfectionManager<M>>::Entity>,
+    generation: u32,
+) where
+    M: 'static,
+    C: TransmissionManager<M>,
+    Context:
+        TransmissionManager<M> + InfectionManager<M, Entity = <C as InfectionManager<M>>::Entity>,
+{
+    // Determine if & when the next attempt proposal will occur. The majorizing
+    // rate function is indexed by time from now, so inverting an Exp(1) draw
+    // gives the delay to the proposal. If `e` is beyond the support of the
+    // inverse cumulative there is no next event and the loop ends.
+    let e = context.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
+    let proposal = {
+        let f = context.forecast_total_infectiousness(infector);
+        f.inverse_cum_rate(e).map(|delay| (delay, f.rate(delay)))
+    };
 
-        if let Some((delay, forecast)) = proposal {
-            let t = self.get_current_time() + delay;
-            self.add_plan(t, move |ctx| {
-                TransmissionManager::<M>::handle_proposal(ctx, infector, forecast, generation);
-            });
-        };
+    if let Some((delay, forecast)) = proposal {
+        let t = context.get_current_time() + delay;
+        context.add_plan(t, move |ctx| {
+            handle_proposal::<M, Context>(ctx, infector, forecast, generation);
+        });
+    };
+}
+
+/// Handle a transmission attempt proposal forecast at total infectiousness
+/// `forecast`: hand it to `evaluate_forecast`, then thin attempts to
+/// transmissions based on susceptibility.
+fn handle_proposal<M, C>(
+    context: &mut C,
+    infector: EntityId<<C as InfectionManager<M>>::Entity>,
+    forecast: f64,
+    generation: u32,
+) where
+    M: 'static,
+    C: TransmissionManager<M>,
+    Context:
+        TransmissionManager<M> + InfectionManager<M, Entity = <C as InfectionManager<M>>::Entity>,
+{
+    // Superseded by a reforecast or a reinfection, which drew its own.
+    if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
+        return;
     }
-
-    /// Handle a transmission attempt proposal forecast at total infectiousness
-    /// `forecast`: hand it to [`evaluate_forecast`](Self::evaluate_forecast),
-    /// then thin attempts to transmissions based on susceptibility.
-    fn handle_transmission_attempt_proposal(
-        &mut self,
-        infector: EntityId<Self::Entity>,
-        forecast: f64,
-    ) {
-        if let Some(generation) = forecast_generation::<M, _, _>(self, infector) {
-            self.handle_proposal(infector, forecast, generation);
-        }
-    }
-
-    #[doc(hidden)]
-    fn handle_proposal(
-        &mut self,
-        infector: EntityId<Self::Entity>,
-        forecast: f64,
-        generation: u32,
-    ) {
-        // Superseded by a reforecast or a reinfection, which drew its own.
-        if forecast_generation::<M, _, _>(self, infector) != Some(generation) {
-            return;
-        }
-        // A zero forecast (a proposal exactly at the end of the support) can
-        // never attempt.
-        if forecast > 0.0 {
-            if let Some(infectee) = self.evaluate_forecast(infector, forecast) {
-                // Draws only when the outcome is uncertain.
-                let p = self.susceptibility(infectee);
-                let infected = p >= 1.0 || (p > 0.0 && self.sample_bool(CoreEpiTransmissionRng, p));
-                if infected {
-                    self.transmit(Some(infector), infectee);
-                    // Only a transmission runs model code, which may have
-                    // reforecast the infector.
-                    if forecast_generation::<M, _, _>(self, infector) != Some(generation) {
-                        return;
-                    }
+    // A zero forecast (a proposal exactly at the end of the support) can
+    // never attempt.
+    if forecast > 0.0 {
+        if let Some(infectee) = context.evaluate_forecast(infector, forecast) {
+            // Draws only when the outcome is uncertain.
+            let p = context.susceptibility(infectee);
+            let infected = p >= 1.0 || (p > 0.0 && context.sample_bool(CoreEpiTransmissionRng, p));
+            if infected {
+                context.transmit(Some(infector), infectee);
+                // Only a transmission runs model code, which may have
+                // reforecast the infector.
+                if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
+                    return;
                 }
             }
         }
-        self.schedule_proposal(infector, generation);
     }
+    schedule_proposal::<M, C>(context, infector, generation);
 }
