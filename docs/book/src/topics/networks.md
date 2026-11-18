@@ -101,7 +101,9 @@ let contact = context.sample_edge_weighted(
 
 Both return `Option<&Edge>`, `None` when the person has no edges in that
 layer. The weighted form draws in proportion to the closure's value without
-allocating; weights must be finite and non-negative with at least one positive.
+allocating; weights must be finite and non-negative. A weight of 0 excludes a
+neighbor, and if every weight is 0 the result is `None`, with no random number
+drawn.
 
 ## Hierarchy: counties and households
 

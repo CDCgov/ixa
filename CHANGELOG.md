@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ixa::EqHash` derive: `PartialEq`, `Eq` and `Hash` for a property type, with floats (and
   `Option`s, arrays and tuples of them) compared by value.
 
+### Changed
+
+- `sample_edge_weighted` returns `None` when no edge has a positive weight, instead of
+  panicking, and draws no random number in that case. Negative, non-finite and overflowing
+  weights still panic.
+
 ## [4.1.0](https://github.com/CDCgov/ixa/compare/ixa-v4.0.0...ixa-v4.1.0) - 2026-11-05
 
 ### Added
