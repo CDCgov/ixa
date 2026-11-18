@@ -229,6 +229,12 @@ where
 {
     type Entity: Entity;
 
+    /// What the model records about how someone was exposed, passed from the
+    /// contact draw to [`on_infected`](Self::on_infected): for example the
+    /// setting the attempt happened in, as `Option<Setting>`. Use `()` when
+    /// there is nothing to record. A seeded infection gets the default value.
+    type Exposure: Default;
+
     /// Draw the rate function for newly infected `person`. This is where a model
     /// applies its own config (which shape, how the infectious period is drawn).
     fn draw_infectiousness_rate_fn(&mut self, person: EntityId<Self::Entity>) -> RateAssignment;
@@ -586,11 +592,13 @@ where
 
     /// Called when `infectee` is infected, after their rate function is
     /// assigned. `infector` is `None` for an infection with no source in the
-    /// population, e.g. an initial seed.
+    /// population, e.g. an initial seed. `exposure` is what the contact draw
+    /// returned for this attempt.
     fn on_infected(
         &mut self,
         _infector: Option<EntityId<Self::Entity>>,
         _infectee: EntityId<Self::Entity>,
+        _exposure: Self::Exposure,
     ) {
     }
 }

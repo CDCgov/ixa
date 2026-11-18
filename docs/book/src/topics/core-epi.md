@@ -30,6 +30,8 @@ struct Flu;
 
 impl InfectionManager<Flu> for Context {
     type Entity = Person;
+    // Nothing to record about how someone was exposed: see "Contact structure".
+    type Exposure = ();
 
     // How infectious this person is over the course of their infection.
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
@@ -38,7 +40,7 @@ impl InfectionManager<Flu> for Context {
     }
 
     // The model's own bookkeeping.
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
         self.set_property(infectee, InfectionStatus::Infected);
     }
 }
@@ -126,7 +128,7 @@ All but `is_infectious` return `None` for someone never infected.
 `core_epi` has no notion of recovery or of disease states: you must track those yourself. For example, to implement a recovered state, schedule it from `on_infected`:
 
 ```rust
-fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
     self.set_property(infectee, InfectionStatus::Infected);
     let recovery_time = self.infectiousness_end_time(infectee).unwrap();
     self.add_plan(recovery_time, move |context| {
@@ -208,23 +210,65 @@ antiviral.
 ## Contact structure
 
 `TransmissionManager` decides who is contacted and how contact structure changes
-the rate. There are two levels of override.
+the rate. Most models describe it with three methods, each with a default:
 
-To change only _who_ is contacted, at the intrinsic rate, override
-`sample_contact`:
+| Method                           | Returns                                              | Default            |
+| -------------------------------- | ---------------------------------------------------- | ------------------ |
+| `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now     | 1                  |
+| `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | 1               |
+| `sample_contact(person)`         | who they contact in an attempt, and the exposure     | anyone else, uniformly |
+
+The loop forecasts on the intrinsic bound times `max_contact_multiplier`, thins by
+`contact_multiplier`, and asks `sample_contact` for each attempt.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
-    fn sample_contact(&self, person: PersonId) -> Option<PersonId> {
-        /* for example, a neighbor in a contact network */
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        /* for example, their number of neighbors in a contact network */
+    }
+
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        /* the most neighbors they can have */
+    }
+
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
+        /* one of those neighbors */
     }
 }
 ```
 
-When contact structure changes the _rate_ as well, override the forecast and the
-evaluation together. The forecast scales the intrinsic bound by the largest
-contact multiplier the person can have, and the evaluation thins by their
-multiplier now. For example:
+`sample_anyone_else(person)` is the default draw, for a model that falls back to
+the whole population.
+
+### Recording how someone was exposed
+
+`sample_contact` returns the contact together with an _exposure_: whatever the
+model wants to know in `on_infected` about how the infection happened, such as
+the setting it happened in. Its type is `InfectionManager::Exposure`. A model
+with nothing to record uses `()`. A seeded infection (`seed_infection`,
+`seed_infections`) gets the type's default value.
+
+```rust
+impl InfectionManager<Flu> for Context {
+    type Entity = Person;
+    type Exposure = Option<Setting>;
+
+    fn on_infected(&mut self, infector: Option<PersonId>, infectee: PersonId, exposure: Option<Setting>) {
+        /* for example, write a row of a transmission report */
+    }
+}
+```
+
+### Overriding the forecast and the evaluation
+
+The three methods cover a contact multiplier with a constant bound. Two cases
+need the level below them, `forecast_total_infectiousness` and
+`evaluate_forecast`:
+
+- the bound is not a constant multiple of the intrinsic one, for example it
+  follows a schedule of restrictions;
+- the total and the contact must come from the same draw, as on the
+  setting-first path [below](#using-settings-in-the-loop).
 
 ```rust
 use ixa::core_epi::{InvertibleRate, ScaledRateFn};
@@ -233,12 +277,12 @@ impl TransmissionManager<Flu> for Context {
     fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
         ScaledRateFn::new(
             self.majorizing_infectiousness_rate_fn(person),
-            max_contact_multiplier(self, person),
+            self.max_contact_multiplier(person),
         )
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
-        let total = self.intrinsic_infectiousness(person)? * contact_multiplier(self, person);
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
+        let total = self.intrinsic_infectiousness(person)? * self.contact_multiplier(person);
         if !self.accept_proposal(person, total, forecast) {
             return None;
         }
@@ -247,7 +291,7 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-`accept_proposal` does the thinning.
+These are the defaults written out. `accept_proposal` does the thinning.
 
 ## Settings
 
@@ -320,52 +364,52 @@ context.clear_itinerary::<Setting>(person);
 There are two ways to connect settings to the loop. Both give attempts in each
 setting at the rate `intrinsic * share * multiplier`.
 
-**Setting first.** Draw where the attempt happens, then thin by that setting's
-multiplier. The forecast is the largest multiplier any of the person's groups has
-ever had, which stays valid when members are removed and restored and when
-itineraries are overridden and cleared.
+**Exact.** The person's total over all their settings is their contact
+multiplier, and the setting is drawn in proportion to its part of that total.
+The forecast is the total itself, so no proposal is rejected.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            self.max_setting_multiplier::<Setting>(person),
-        )
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Setting>(person)
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Setting>(person)
+    }
+
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Option<Setting>)> {
+        let setting = self.sample_setting_by_rate::<Setting>(person)?;
+        let contact = self.sample_setting_contact(person, setting)?;
+        Some((contact, Some(setting)))
+    }
+}
+```
+
+**Setting first.** Draw where the attempt happens, then thin by that setting's
+multiplier. The forecast is the largest multiplier any of the person's groups has
+ever had, which stays valid when members are removed and restored and when
+itineraries are overridden and cleared. The setting has to be shared between the
+thinning and the contact draw, so this path overrides `evaluate_forecast`.
+
+```rust
+impl TransmissionManager<Flu> for Context {
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.max_setting_multiplier::<Setting>(person)
+    }
+
+    fn evaluate_forecast(
+        &self,
+        person: PersonId,
+        forecast: f64,
+    ) -> Option<(PersonId, Option<Setting>)> {
         let setting = self.sample_setting::<Setting>(person)?;
         let total = self.intrinsic_infectiousness(person)? * self.setting_multiplier(person, setting);
         if !self.accept_proposal(person, total, forecast) {
             return None;
         }
-        self.sample_setting_contact(person, setting)
-    }
-}
-```
-
-**Exact.** Forecast on the person's total over all their settings and thin by the
-same value, so that no proposal is rejected, then draw the setting in proportion
-to its part of the total.
-
-```rust
-impl TransmissionManager<Flu> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            self.current_setting_multiplier::<Setting>(person),
-        )
-    }
-
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
-        let total =
-            self.intrinsic_infectiousness(person)? * self.current_setting_multiplier::<Setting>(person);
-        if !self.accept_proposal(person, total, forecast) {
-            return None;
-        }
-        let setting = self.sample_setting_by_rate::<Setting>(person)?;
-        self.sample_setting_contact(person, setting)
+        let contact = self.sample_setting_contact(person, setting)?;
+        Some((contact, Some(setting)))
     }
 }
 ```
@@ -378,7 +422,8 @@ with a reforecast as described next. The setting-first path needs no such care
 for removing and restoring members or changing itineraries.
 
 `examples/core-epi-settings` loads households, schools and workplaces from a line
-list and runs the setting-first path.
+list, runs the setting-first path, and counts infections by the setting they
+happened in.
 
 ## When rates rise
 

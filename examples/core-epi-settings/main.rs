@@ -12,8 +12,8 @@ mod parameters;
 mod settings;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, SettingsExt,
-    TransmissionManager,
+    ConstantRateFn, InfectionManager, InvertibleRate, RateAssignment, ScaledRateFn, SettingKind,
+    SettingsExt, TransmissionManager,
 };
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
@@ -35,8 +35,19 @@ define_property!(
     default_const = InfectionStatus::Susceptible
 );
 
+/// Transmissions counted by the setting they happened in, by kind index.
+#[derive(Default)]
+struct InfectionsBySetting(Vec<usize>);
+define_data_plugin!(
+    InfectionsBySettingPlugin,
+    InfectionsBySetting,
+    InfectionsBySetting::default()
+);
+
 impl InfectionManager<CoreEpiExample> for Context {
     type Entity = Person;
+    // The setting each transmission happened in; `None` for a seed.
+    type Exposure = Option<Setting>;
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         let params = self.get_parameters();
@@ -47,8 +58,20 @@ impl InfectionManager<CoreEpiExample> for Context {
         ConstantRateFn::new(params.intrinsic_infectiousness, duration).into()
     }
 
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+    fn on_infected(
+        &mut self,
+        _infector: Option<PersonId>,
+        infectee: PersonId,
+        exposure: Option<Setting>,
+    ) {
         self.set_property(infectee, InfectionStatus::Infected);
+        if let Some(setting) = exposure {
+            let infections = &mut self.get_data_mut(InfectionsBySettingPlugin).0;
+            if infections.len() <= setting.index() {
+                infections.resize(setting.index() + 1, 0);
+            }
+            infections[setting.index()] += 1;
+        }
     }
 }
 
@@ -60,7 +83,11 @@ impl TransmissionManager<CoreEpiExample> for Context {
         )
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn evaluate_forecast(
+        &self,
+        person: PersonId,
+        forecast: f64,
+    ) -> Option<(PersonId, Option<Setting>)> {
         // Where the attempt happens decides its rate and who it can reach.
         let setting = self.sample_setting::<Setting>(person)?;
         let total =
@@ -68,7 +95,8 @@ impl TransmissionManager<CoreEpiExample> for Context {
         if !self.accept_proposal(person, total, forecast) {
             return None;
         }
-        self.sample_setting_contact(person, setting)
+        let contact = self.sample_setting_contact(person, setting)?;
+        Some((contact, Some(setting)))
     }
 }
 
@@ -100,4 +128,13 @@ fn main() {
         ExecutionPhase::Last,
     );
     context.execute();
+
+    let infections = &context.get_data(InfectionsBySettingPlugin).0;
+    for setting in context.setting_kinds::<Setting>() {
+        println!(
+            "infected at {}: {}",
+            context.setting_name(setting),
+            infections.get(setting.index()).copied().unwrap_or(0)
+        );
+    }
 }

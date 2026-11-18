@@ -31,6 +31,7 @@ define_property!(
 
 impl InfectionManager<CoreEpiExample> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         let params = self.get_parameters();
@@ -41,7 +42,7 @@ impl InfectionManager<CoreEpiExample> for Context {
         ConstantRateFn::new(params.intrinsic_infectiousness, duration).into()
     }
 
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
         self.set_property(infectee, InfectionStatus::Infected);
     }
 }

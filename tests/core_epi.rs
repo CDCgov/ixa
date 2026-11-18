@@ -14,6 +14,7 @@ const POPULATION: usize = 1000;
 
 impl InfectionManager<Sir> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         RateAssignment::Library(0)
@@ -220,6 +221,7 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
     struct Broken;
     impl InfectionManager<Broken> for Context {
         type Entity = Person;
+        type Exposure = ();
 
         fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
             RateAssignment::Library(0)
@@ -234,7 +236,7 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
             )
         }
 
-        fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+        fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
             let total = InfectionManager::<Broken>::intrinsic_infectiousness(self, person)?;
             TransmissionManager::<Broken>::accept_proposal(self, person, total, forecast);
             None
@@ -260,6 +262,7 @@ fn models_on_different_entities_keep_separate_infections() {
     struct Zoonosis;
     impl InfectionManager<Zoonosis> for Context {
         type Entity = Animal;
+        type Exposure = ();
 
         fn draw_infectiousness_rate_fn(&mut self, _animal: AnimalId) -> RateAssignment {
             ConstantRateFn::new(1.0, 2.0).into()
@@ -308,33 +311,33 @@ const BOOSTED_RATE: f64 = 2.0;
 
 impl InfectionManager<Boosted> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
     }
 
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
         if self.get_data(BoostPlugin).reforecast_on_infected.get() {
             TransmissionManager::<Boosted>::reforecast_transmission(self, infectee);
         }
     }
 }
 
+// The three-method form: the default forecast and evaluation use these.
 impl TransmissionManager<Boosted> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            InfectionManager::<Boosted>::majorizing_infectiousness_rate_fn(self, person),
-            self.get_data(BoostPlugin).factor.get(),
-        )
+    fn contact_multiplier(&self, _person: PersonId) -> f64 {
+        self.get_data(BoostPlugin).factor.get()
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn max_contact_multiplier(&self, _person: PersonId) -> f64 {
+        self.get_data(BoostPlugin).factor.get()
+    }
+
+    // Reached once per accepted proposal, i.e. per attempt.
+    fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
         let boost = self.get_data(BoostPlugin);
-        let total = InfectionManager::<Boosted>::intrinsic_infectiousness(self, person)?
-            * boost.factor.get();
-        if TransmissionManager::<Boosted>::accept_proposal(self, person, total, forecast) {
-            boost.attempts.set(boost.attempts.get() + 1);
-        }
+        boost.attempts.set(boost.attempts.get() + 1);
         None
     }
 }
@@ -346,7 +349,7 @@ fn run_boosted(seed: u64, reforecast: bool) -> usize {
     context.init_random(seed);
     let person = context.add_entity(Person).unwrap();
     TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+    TransmissionManager::<Boosted>::seed_infection(&mut context, person);
     for (time, factor) in [(10.0, 1.0), (30.0, 3.0)] {
         context.add_plan(time, move |context| {
             context.get_data(BoostPlugin).factor.set(factor);
@@ -386,7 +389,7 @@ fn a_rise_without_a_reforecast_panics() {
     let person = context.add_entity(Person).unwrap();
     context.get_data(BoostPlugin).factor.set(1.0);
     TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+    TransmissionManager::<Boosted>::seed_infection(&mut context, person);
     context.add_plan(10.0, |context| {
         context.get_data(BoostPlugin).factor.set(3.0);
     });
@@ -407,7 +410,7 @@ fn reinfection_and_reforecast_leave_one_loop_running() {
         context.get_data(BoostPlugin).factor.set(1.0);
         TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
         for _ in 0..50 {
-            TransmissionManager::<Boosted>::transmit(&mut context, None, person);
+            TransmissionManager::<Boosted>::seed_infection(&mut context, person);
         }
         context.add_plan(0.0, move |context| {
             for _ in 0..50 {
@@ -458,7 +461,7 @@ fn mean_boosted_attempts(infect: impl Fn(&mut Context, PersonId)) -> f64 {
 fn repeated_infection_before_the_loop_starts_leaves_one_loop_running() {
     let mean = mean_boosted_attempts(|context, person| {
         for _ in 0..50 {
-            TransmissionManager::<Boosted>::transmit(context, None, person);
+            TransmissionManager::<Boosted>::seed_infection(context, person);
         }
     });
     assert!(
@@ -474,7 +477,7 @@ fn reforecast_in_on_infected_leaves_one_loop_running() {
             .get_data(BoostPlugin)
             .reforecast_on_infected
             .set(true);
-        TransmissionManager::<Boosted>::transmit(context, None, person);
+        TransmissionManager::<Boosted>::seed_infection(context, person);
     });
     assert!(
         (mean - 20.0).abs() < 3.0,
@@ -567,6 +570,7 @@ fn two_models_on_one_population_keep_separate_infections() {
     struct Cold;
     impl InfectionManager<Flu> for Context {
         type Entity = Person;
+        type Exposure = ();
 
         fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
             RateAssignment::Library(0)
@@ -574,6 +578,7 @@ fn two_models_on_one_population_keep_separate_infections() {
     }
     impl InfectionManager<Cold> for Context {
         type Entity = Person;
+        type Exposure = ();
 
         fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
             RateAssignment::Library(0)
@@ -612,8 +617,8 @@ fn two_models_on_one_population_keep_separate_infections() {
     TransmissionManager::<Flu>::setup_transmission_loop(&mut context);
     TransmissionManager::<Cold>::setup_transmission_loop(&mut context);
 
-    TransmissionManager::<Flu>::transmit(&mut context, None, people[0]);
-    TransmissionManager::<Cold>::transmit(&mut context, None, people[1]);
+    TransmissionManager::<Flu>::seed_infection(&mut context, people[0]);
+    TransmissionManager::<Cold>::seed_infection(&mut context, people[1]);
     assert_eq!(
         InfectionManager::<Flu>::infectiousness_duration(&context, people[0]),
         Some(3.0)
@@ -673,6 +678,7 @@ define_data_plugin!(ChainPlugin, Chain, Chain::default());
 
 impl InfectionManager<Chained> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
@@ -682,7 +688,7 @@ impl InfectionManager<Chained> for Context {
         1.0
     }
 
-    fn on_infected(&mut self, infector: Option<PersonId>, _infectee: PersonId) {
+    fn on_infected(&mut self, infector: Option<PersonId>, _infectee: PersonId, _exposure: ()) {
         if let Some(infector) = infector {
             TransmissionManager::<Chained>::reforecast_transmission(self, infector);
         }
@@ -690,7 +696,7 @@ impl InfectionManager<Chained> for Context {
 }
 
 impl TransmissionManager<Chained> for Context {
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
         let chain = self.get_data(ChainPlugin);
         // Only the first infector attempts; the contact's own loop is idle.
         if chain.infector.get() != Some(person) {
@@ -701,7 +707,7 @@ impl TransmissionManager<Chained> for Context {
             return None;
         }
         chain.attempts.set(chain.attempts.get() + 1);
-        chain.contact.get()
+        chain.contact.get().map(|contact| (contact, ()))
     }
 }
 
@@ -719,7 +725,7 @@ fn reforecasting_the_infector_from_on_infected_leaves_one_loop_running() {
         chain.infector.set(Some(infector));
         chain.contact.set(Some(contact));
         TransmissionManager::<Chained>::setup_transmission_loop(&mut context);
-        TransmissionManager::<Chained>::transmit(&mut context, None, infector);
+        TransmissionManager::<Chained>::seed_infection(&mut context, infector);
         context.add_plan(10.0, Context::shutdown);
         context.execute();
         total += context.get_data(ChainPlugin).attempts.get();
@@ -757,6 +763,7 @@ struct Exact;
 
 impl InfectionManager<SettingFirst> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
@@ -771,7 +778,7 @@ impl TransmissionManager<SettingFirst> for Context {
         )
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
         let place = self.sample_setting::<Place>(person)?;
         let total = InfectionManager::<SettingFirst>::intrinsic_infectiousness(self, person)?
             * self.setting_multiplier(person, place);
@@ -784,6 +791,7 @@ impl TransmissionManager<SettingFirst> for Context {
 
 impl InfectionManager<Exact> for Context {
     type Entity = Person;
+    type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
         ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
@@ -798,7 +806,7 @@ impl TransmissionManager<Exact> for Context {
         )
     }
 
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<PersonId> {
+    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
         let total = InfectionManager::<Exact>::intrinsic_infectiousness(self, person)?
             * self.current_setting_multiplier::<Place>(person);
         if TransmissionManager::<Exact>::accept_proposal(self, person, total, forecast) {
@@ -859,10 +867,10 @@ fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
         let infector = place_population(&mut context);
         if exact {
             TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
-            TransmissionManager::<Exact>::transmit(&mut context, None, infector);
+            TransmissionManager::<Exact>::seed_infection(&mut context, infector);
         } else {
             TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
-            TransmissionManager::<SettingFirst>::transmit(&mut context, None, infector);
+            TransmissionManager::<SettingFirst>::seed_infection(&mut context, infector);
         }
         context.execute();
         let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow().clone();
@@ -874,5 +882,73 @@ fn both_settings_paths_attempt_in_each_setting_at_ratio_times_multiplier() {
                 "exact path {exact}, kind {place}: {observed} attempts, expected {expected}"
             );
         }
+    }
+}
+
+// A model in the three-method form that records where each transmission
+// happened.
+struct Traced;
+
+#[derive(Default)]
+struct Trace(Vec<(Option<PersonId>, PersonId, Option<Place>)>);
+define_data_plugin!(TracePlugin, Trace, Trace::default());
+
+impl InfectionManager<Traced> for Context {
+    type Entity = Person;
+    type Exposure = Option<Place>;
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(0.5, 3.0).into()
+    }
+
+    fn on_infected(
+        &mut self,
+        infector: Option<PersonId>,
+        infectee: PersonId,
+        exposure: Option<Place>,
+    ) {
+        self.get_data_mut(TracePlugin)
+            .0
+            .push((infector, infectee, exposure));
+    }
+}
+
+impl TransmissionManager<Traced> for Context {
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Place>(person)
+    }
+
+    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
+        self.current_setting_multiplier::<Place>(person)
+    }
+
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Option<Place>)> {
+        let place = self.sample_setting_by_rate::<Place>(person)?;
+        let contact = self.sample_setting_contact(person, place)?;
+        Some((contact, Some(place)))
+    }
+}
+
+#[test]
+fn on_infected_is_told_the_setting_the_contact_draw_returned() {
+    let mut context = Context::new();
+    context.init_random(5);
+    let seed = place_population(&mut context);
+    TransmissionManager::<Traced>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Traced>::seed_infection(&mut context, seed);
+    context.execute();
+
+    let trace = context.get_data(TracePlugin).0.clone();
+    assert_eq!(trace[0], (None, seed, None));
+    assert!(trace.len() > 5, "only {} infections", trace.len());
+    for &(infector, infectee, exposure) in &trace[1..] {
+        let infector = infector.expect("a transmission has an infector");
+        let place = exposure.expect("a transmission has a setting");
+        // They share the group the attempt happened in.
+        assert_eq!(
+            context.setting_group(infector, place),
+            context.setting_group(infectee, place)
+        );
+        assert!(context.setting_group(infectee, place).is_some());
     }
 }

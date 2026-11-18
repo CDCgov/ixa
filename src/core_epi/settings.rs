@@ -29,27 +29,27 @@
 //! them in two ways, which give attempts in each setting at the same rate,
 //! `intrinsic * ratio * multiplier`:
 //!
+//! - Exact, when nothing changes while a person is infectious (or every
+//!   change is followed by a reforecast): `contact_multiplier` and
+//!   `max_contact_multiplier` are both
+//!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier),
+//!   so every proposal is an attempt, and `sample_contact` draws the setting
+//!   with [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
+//!   ratio times multiplier) and a contact there with
+//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact).
 //! - Setting first, for populations whose memberships or itineraries change:
-//!   `forecast_total_infectiousness` scales the intrinsic bound by
+//!   `max_contact_multiplier` is
 //!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier), and
 //!   `evaluate_forecast` draws the setting with
 //!   [`sample_setting`](SettingsExt::sample_setting) (by itinerary ratio),
 //!   thins by that setting's
 //!   [`setting_multiplier`](SettingsExt::setting_multiplier), and samples a
-//!   contact there with
-//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact).
-//!   Proposals are rejected wherever a setting's multiplier is below the
-//!   person's largest over every kind, including kinds their itinerary
-//!   gives no time to.
-//! - Exact, when nothing changes while a person is infectious: forecast on
-//!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier)
-//!   itself, thin by the same value (so every proposal is an attempt), then
-//!   draw the setting with
-//!   [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
-//!   ratio times multiplier) and the contact as above. No rejected
-//!   proposals. Thinning by the current multiplier against
-//!   the `max_setting_multiplier` bound is the same path made safe for
-//!   changes.
+//!   contact there. Proposals are rejected wherever a setting's multiplier is
+//!   below the person's largest over every kind, including kinds their
+//!   itinerary gives no time to.
+//!
+//! Either path can return the setting as the exposure, so that `on_infected`
+//! knows where a transmission happened.
 //!
 //! Either way a proposal reads the person's membership records (one per
 //! kind, person-major so they share a cache line) and a group record per
