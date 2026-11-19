@@ -1,6 +1,6 @@
-/// Utility functions for calculating the rate of infection over time
-/// See `TransformedInvertibleRateFn` for the inverse cumulative rate of an interval starting
-/// at a time other than 0.
+/// A rate of infection over time that can be integrated and inverted.
+/// See `TransformedInvertibleRateFn` for an interval starting at a time other
+/// than 0.
 pub trait InvertibleRate {
     /// Returns the rate at time `t`
     fn rate(&self, t: f64) -> f64;
@@ -8,19 +8,12 @@ pub trait InvertibleRate {
     /// Returns the expected number of events in the interval 0 -> t
     fn cum_rate(&self, t: f64) -> f64;
 
-    /// Returns the expected time, starting at 0, at which a number of infection `events` will have
-    /// occurred. Returns `None` if `events` is greater than [`cum_rate`](Self::cum_rate)'s maximum value.
+    /// Returns the time, starting at 0, by which `events` are expected to
+    /// have occurred; `None` if [`cum_rate`](Self::cum_rate) never gets there.
     fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
-
-    /// The maximum cumulative infectiousness this rate function can ever produce —
-    /// `cum_rate(+∞)`, i.e. the total integrated area under `rate`. It is the value at
-    /// which [`inverse_cum_rate`](Self::inverse_cum_rate) saturates to `None` (no more
-    /// events are possible). A time-unbounded rate (e.g. a constant hazard) returns
-    /// `f64::INFINITY`; an empirical curve returns its finite total area.
-    fn max_cum_rate(&self) -> f64;
 }
 
-/// A utility for a rate function that has been scaled or shifted (i.e., affine transformed)
+/// A rate function scaled by `scale` and shifted to start `elapsed` into `base`.
 pub struct TransformedInvertibleRateFn<'a, T>
 where
     T: InvertibleRate + ?Sized,
@@ -70,13 +63,6 @@ impl<F: InvertibleRate> InvertibleRate for ScaledRateFn<F> {
         }
         self.inner.inverse_cum_rate(events / self.factor)
     }
-
-    fn max_cum_rate(&self) -> f64 {
-        if self.factor <= 0.0 {
-            return 0.0;
-        }
-        self.inner.max_cum_rate() * self.factor
-    }
 }
 
 impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<'_, T> {
@@ -101,14 +87,6 @@ impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<
                 - self.elapsed,
         )
     }
-
-    /// Propagates `f64::INFINITY` from an unbounded base.
-    fn max_cum_rate(&self) -> f64 {
-        if self.scale <= 0.0 {
-            return 0.0;
-        }
-        (self.base.max_cum_rate() - self.base.cum_rate(self.elapsed)) * self.scale
-    }
 }
 
 #[cfg(test)]
@@ -117,10 +95,7 @@ mod test {
     use crate::assert_almost_eq;
     use crate::core_epi::rate::{ConstantRateFn, EmpiricalRateFn};
 
-    // A flat empirical curve of height 2.0 on [0, 5] (rate 0 outside that range) — a
-    // finite-support stand-in for a "constant 2.0 for 5 days" profile. Unlike the
-    // reference's capped `ConstantRate`, this repo's `ConstantRate` is unbounded in
-    // time, so the elapsed/exhaustion behavior is exercised here via `EmpiricalRate`.
+    // Rate 2.0 on [0, 5], including the end, and 0 outside.
     fn flat_capped() -> EmpiricalRateFn {
         EmpiricalRateFn::new(vec![[0.0, 2.0], [5.0, 2.0]], 1.0)
     }
@@ -176,34 +151,18 @@ mod test {
         assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
     }
     #[test]
-    fn test_scale_rate_fn_max_cum_rate() {
-        let rate_fn = flat_capped();
-        // Full curve area = 2.0 · 5.0 = 10.0.
-        assert_almost_eq!(rate_fn.max_cum_rate(), 10.0, 0.0);
-        // From elapsed 3.0 onward, the remaining area is 2.0 · 2.0 = 4.0, scaled by 2.0.
-        let scaled_rate_fn = TransformedInvertibleRateFn {
-            base: &rate_fn,
-            scale: 2.0,
-            elapsed: 3.0,
-        };
-        assert_almost_eq!(scaled_rate_fn.max_cum_rate(), 8.0, 0.0);
-    }
-
-    #[test]
     fn zero_scale_transform_is_unreachable() {
         // A zero contact bound (a size-1 household) must not invert to t = inf.
         let rate_fn = ConstantRateFn::new(1.0, 5.0);
         let zero = TransformedInvertibleRateFn::new(&rate_fn, 0.0, 0.0);
         assert_eq!(zero.inverse_cum_rate(1.0), None);
         assert_eq!(zero.inverse_cum_rate(0.0), Some(0.0));
-        assert_eq!(zero.max_cum_rate(), 0.0);
         assert_eq!(zero.rate(3.0), 0.0);
         assert_eq!(zero.cum_rate(3.0), 0.0);
 
         let curve = flat_capped();
         let zero = TransformedInvertibleRateFn::new(&curve, 0.0, 1.0);
         assert_eq!(zero.inverse_cum_rate(0.5), None);
-        assert_eq!(zero.max_cum_rate(), 0.0);
     }
 
     #[test]
@@ -213,9 +172,8 @@ mod test {
         assert_almost_eq!(f.rate(0.0), 12.0, 0.0);
         assert_almost_eq!(f.cum_rate(1.0), 12.0, 0.0);
         assert_eq!(f.inverse_cum_rate(12.0), Some(1.0));
-        assert_eq!(f.max_cum_rate(), 24.0);
+        assert_eq!(f.inverse_cum_rate(24.0 + 1e-9), None);
         let zero = ScaledRateFn::new(TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0), 0.0);
         assert_eq!(zero.inverse_cum_rate(1.0), None);
-        assert_eq!(zero.max_cum_rate(), 0.0);
     }
 }

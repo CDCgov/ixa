@@ -2,63 +2,11 @@
 //! group people, with a density exponent per kind and an itinerary per person
 //! saying how their time is split across kinds.
 //!
-//! Define the kind type with [`define_settings!`](crate::define_settings), then
-//! at setup add each kind with its name and `alpha`
-//! ([`add_setting_kind`](SettingsExt::add_setting_kind)), create groups and add members (by
-//! external key when loading a line list, see
-//! [`setting_group_for_key`](SettingsExt::setting_group_for_key); or make
-//! a kind a population group everyone is in), and assign itineraries: one
-//! [`Itinerary`] for everyone, one per value of a property, or one computed
-//! per person ([`ItineraryAssignment`]), with
-//! [`set_itinerary`](SettingsExt::set_itinerary) overriding for individuals.
-//!
 //! The multiplier on intrinsic infectiousness in a group of `n` people is
-//! `(n - 1)^alpha`: with `alpha = 1` attempts scale with group size, with
-//! `alpha = 0` they do not. A person's current multiplier is the itinerary
-//! weighted average over their groups (the itinerary renormalized over the
-//! kinds they have a group in); their bound is the largest multiplier
-//! any of their groups has ever had, whatever their itinerary, so members can
-//! be removed and added back and itineraries overridden and cleared
-//! (interventions) without re-forecasting. A group growing past its largest
-//! size (for a population group with `alpha > 0`, any new person), or a
-//! person joining a new group, can exceed it: then call
-//! [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
-//! for the infectious people affected.
-//!
-//! A model's [`TransmissionManager`](super::TransmissionManager) can use
-//! them in two ways, which give attempts in each setting at the same rate,
-//! `intrinsic * ratio * multiplier`:
-//!
-//! - Exact: `contact_multiplier` is
-//!   [`current_setting_multiplier`](SettingsExt::current_setting_multiplier),
-//!   and `sample_contact` draws the setting with
-//!   [`sample_setting_by_rate`](SettingsExt::sample_setting_by_rate) (by
-//!   ratio times multiplier) and a contact there with
-//!   [`sample_setting_contact`](SettingsExt::sample_setting_contact). With
-//!   the default `max_contact_multiplier` every proposal is an attempt, which
-//!   is valid when nothing changes while a person is infectious or every
-//!   change is followed by a reforecast. With
-//!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier) as the
-//!   bound it is safe for changing memberships and itineraries, at the cost
-//!   of rejected proposals.
-//! - Setting first, for populations whose memberships or itineraries change:
-//!   `max_contact_multiplier` is
-//!   [`max_setting_multiplier`](SettingsExt::max_setting_multiplier), and
-//!   `evaluate_forecast` draws the setting with
-//!   [`sample_setting`](SettingsExt::sample_setting) (by itinerary ratio),
-//!   thins by that setting's
-//!   [`setting_multiplier`](SettingsExt::setting_multiplier), and samples a
-//!   contact there. Proposals are rejected wherever a setting's multiplier is
-//!   below the person's largest over every kind, including kinds their
-//!   itinerary gives no time to.
-//!
-//! Either path can return the setting as the exposure, so that `on_infected`
-//! knows where a transmission happened.
-//!
-//! Either way a proposal reads the person's membership records (one per
-//! kind, person-major so they share a cache line) and a group record per
-//! kind for the multipliers, which are cached per group. Nothing is hashed
-//! or allocated; itineraries are small `Copy` values.
+//! `(n - 1)^alpha`. Define the kind type with
+//! [`define_settings!`](crate::define_settings); the rest is [`SettingsExt`].
+//! The `core_epi` topic in the book covers the two ways a
+//! [`TransmissionManager`](super::TransmissionManager) can use them.
 
 use std::cell::Cell;
 use std::fmt::Debug;
@@ -149,6 +97,7 @@ macro_rules! define_settings {
 }
 
 /// One instance of a setting kind: a particular household, school, ...
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SettingGroupId<S> {
     index: u32,
     kind: PhantomData<S>,
@@ -163,29 +112,8 @@ impl<S> SettingGroupId<S> {
     }
 }
 
-impl<S> Clone for SettingGroupId<S> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<S> Copy for SettingGroupId<S> {}
-impl<S> PartialEq for SettingGroupId<S> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
-}
-impl<S> Eq for SettingGroupId<S> {}
-impl<S> Debug for SettingGroupId<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SettingGroupId({})", self.index)
-    }
-}
-
 /// How a person's time is split across setting kinds: shares of where their
-/// attempts happen, not a scale on how many. Proportions are normalized, so
-/// they need not sum to one; a model whose proportions also carry a scale
-/// multiplies their sum into its total and its forecast. A small `Copy`
-/// value.
+/// attempts happen, not a scale on how many. Proportions are normalized.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Itinerary<S> {
     ratios: [f64; MAX_SETTINGS],
@@ -451,6 +379,10 @@ impl<S: SettingKind> SettingsStore<S> {
         self.kinds[setting.index()].alpha
     }
 
+    fn is_population_group(&self, setting: S, group: u32) -> bool {
+        self.kinds[setting.index()].population_group == Some(group)
+    }
+
     /// `person`'s membership record of `setting`; `Member::NONE` if they never
     /// had a group of it.
     fn member(&self, person: EntityId<S::Entity>, setting: S) -> Member {
@@ -505,9 +437,8 @@ impl<S: SettingKind> SettingsStore<S> {
     }
 
     fn group_multipliers(&self, group: u32, setting: S, population: usize) -> Multipliers {
-        if self.kinds[setting.index()].population_group == Some(group) {
-            // A population group has no largest-ever size: see
-            // `max_setting_multiplier`.
+        if self.is_population_group(setting, group) {
+            // A population group has no largest-ever size.
             let multiplier = density_multiplier(self.alpha(setting), population);
             Multipliers {
                 current: multiplier,
@@ -551,7 +482,7 @@ impl<S: SettingKind> SettingsStore<S> {
         setting: S,
     ) -> Option<EntityId<S::Entity>> {
         let group = self.group_of(person, setting)?;
-        if self.kinds[setting.index()].population_group == Some(group) {
+        if self.is_population_group(setting, group) {
             context
                 .query(S::Entity::default())
                 .sample_entity_excluding(rng, person)
@@ -584,10 +515,11 @@ fn draw_setting<S: SettingKind>(weights: &[f64; MAX_SETTINGS], u: f64) -> Option
 }
 
 /// Setting membership, itineraries and the quantities the transmission loop
-/// needs from them. `S` is inferred from a setting or group argument;
-/// methods without one take it as a type parameter
-/// (`context.sample_setting::<Setting>(person)`).
-pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
+/// needs from them. Methods with no setting or group argument take `S` as a
+/// type parameter (`context.sample_setting::<Setting>(person)`).
+pub trait SettingsExt:
+    ContextBase + ContextRandomExt + ContextEntitiesExt + AsRef<Context>
+{
     /// Add a kind of setting called `name` with density exponent `alpha`.
     /// Kinds can be added at any time, up to [`MAX_SETTINGS`].
     ///
@@ -648,9 +580,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         SettingGroupId::new(u32::try_from(store.groups.len() - 1).expect("too many setting groups"))
     }
 
-    /// The group of `setting` with external `key`, created on first use: for
-    /// loading a line list whose rows carry setting ids. Use one key type per
-    /// kind; keys are compared by hash.
+    /// The group of `setting` with external `key`, created on first use. Use
+    /// one key type per kind; keys are compared by hash.
     ///
     /// ```
     /// # use ixa::core_epi::SettingsExt;
@@ -707,9 +638,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
             .map(SettingGroupId::new)
     }
 
-    /// Make `setting` a single group that every person is in, now and later,
-    /// without storing a member list; contacts are sampled from the whole
-    /// population. Anyone added to another group of this kind leaves it.
+    /// Make `setting` a single group that every person is in, with no member
+    /// list. Anyone added to another group of this kind leaves it.
     fn create_population_setting_group<S: SettingKind>(&mut self, setting: S) -> SettingGroupId<S> {
         let group = self.create_setting_group(setting);
         S::store_mut(self).kinds[setting.index()].population_group = Some(group.index);
@@ -730,7 +660,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
             return;
         }
         store.remove(person, setting);
-        if store.kinds[setting.index()].population_group == Some(group.index) {
+        if store.is_population_group(setting, group.index) {
             // Forget the list group they left, or it would shadow this one.
             if member.group != NO_GROUP {
                 *store.member_mut(person, setting) = Member::NONE;
@@ -749,10 +679,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         };
     }
 
-    /// Take `person` out of their group of `setting`, e.g. for an
-    /// intervention. The group remembers its largest size, so the bound holds
-    /// when [`restore_setting_member`](Self::restore_setting_member) puts
-    /// them back.
+    /// Take `person` out of their group of `setting`, to be put back with
+    /// [`restore_setting_member`](Self::restore_setting_member).
     ///
     /// # Panics
     ///
@@ -783,7 +711,7 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     ) -> Vec<EntityId<S::Entity>> {
         let store = S::store(self);
         let record = &store.groups[group.index as usize];
-        if store.kinds[record.kind].population_group == Some(group.index) {
+        if store.is_population_group(S::from_index(record.kind), group.index) {
             self.get_entity_iterator::<S::Entity>().collect()
         } else {
             record
@@ -811,16 +739,14 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         let Some(group) = store.group_of(person, setting) else {
             return 0;
         };
-        if store.kinds[setting.index()].population_group == Some(group) {
+        if store.is_population_group(setting, group) {
             self.get_entity_count::<S::Entity>()
         } else {
             store.groups[group as usize].members.len()
         }
     }
 
-    /// Where itineraries come from for everyone without one of their own: an
-    /// [`Itinerary`] for all, or an [`ItineraryAssignment`] by property value
-    /// or per person.
+    /// Where itineraries come from for everyone without one of their own.
     fn set_itinerary_assignment<S: SettingKind>(
         &mut self,
         assignment: impl IntoItineraryAssignment<S>,
@@ -843,11 +769,12 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// `person`'s itinerary: their own, else the assignment's, else `None`.
-    fn itinerary<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<Itinerary<S>>;
+    fn itinerary<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
+        S::store(self).itinerary(self.as_ref(), person)
+    }
 
     /// Factor on `person`'s intrinsic infectiousness for an attempt in
-    /// `setting`: their group's current multiplier, 0 if they have no group of
-    /// it.
+    /// `setting`: their group's current multiplier, 0 without a group.
     fn setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>, setting: S) -> f64 {
         let population = self.get_entity_count::<S::Entity>();
         S::store(self)
@@ -856,14 +783,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// Factor on `person`'s intrinsic infectiousness now, over all their
-    /// settings: the itinerary weighted average of their groups' multipliers,
-    /// over the kinds they are in a group of; 0 without an itinerary or any
-    /// group. This is the total for the exact path: thin by it, then draw
-    /// where with [`sample_setting_by_rate`](Self::sample_setting_by_rate).
-    /// It is also an exact forecast, with no proposal rejected, for a person
-    /// whose memberships and itinerary do not change while they are
-    /// infectious; otherwise forecast with
-    /// [`max_setting_multiplier`](Self::max_setting_multiplier).
+    /// settings: the itinerary weighted average of their groups' multipliers;
+    /// 0 without an itinerary or any group.
     fn current_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let Some(itinerary) = self.itinerary::<S>(person) else {
             return 0.0;
@@ -884,21 +805,11 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         }
     }
 
-    /// Upper bound on `person`'s
-    /// [`setting_multiplier`](Self::setting_multiplier) in any setting, and
-    /// so on their
-    /// [`current_setting_multiplier`](Self::current_setting_multiplier): the
-    /// largest multiplier any of their groups has ever had, over every kind
-    /// and including groups they were removed from. It does not depend on
-    /// their itinerary, so it holds when one is set, cleared or reassigned
-    /// after a forecast was made; the price is that a kind their itinerary
-    /// gives no time to still counts. It does not cover a list group that
-    /// later grows past its largest size, a population group with
-    /// `alpha > 0` that anyone is added to, or a group joined later: after
-    /// such a change, call
-    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
-    /// for the infectious people it affects (the newcomer, and the group's
-    /// [`setting_group_members`](Self::setting_group_members)).
+    /// Upper bound on `person`'s multiplier in any setting: the largest any
+    /// of their groups has ever had, whatever their itinerary and including
+    /// groups they were removed from. A group growing past its largest size
+    /// or a group joined later needs a
+    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission).
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
@@ -930,12 +841,8 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     }
 
     /// Draw where an attempt by `person` happens, given that it happens: by
-    /// itinerary ratio times the group's current multiplier. Use after
-    /// thinning by
-    /// [`current_setting_multiplier`](Self::current_setting_multiplier);
-    /// [`sample_setting`](Self::sample_setting) is for thinning afterwards by
-    /// the drawn setting's multiplier. `None` without an itinerary, or when
-    /// every multiplier is 0.
+    /// itinerary ratio times the group's current multiplier. `None` without
+    /// an itinerary, or when every multiplier is 0.
     fn sample_setting_by_rate<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<S> {
         let itinerary = self.itinerary::<S>(person)?;
         let store = S::store(self);
@@ -955,25 +862,15 @@ pub trait SettingsExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
         &self,
         person: EntityId<S::Entity>,
         setting: S,
-    ) -> Option<EntityId<S::Entity>>;
-}
-
-impl SettingsExt for Context {
-    fn itinerary<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
-        S::store(self).itinerary(self, person)
-    }
-
-    fn sample_setting_contact<S: SettingKind>(
-        &self,
-        person: EntityId<S::Entity>,
-        setting: S,
     ) -> Option<EntityId<S::Entity>> {
         let store = S::store(self);
         self.sample(CoreEpiSettingsRng, |rng| {
-            store.sample_contact(self, rng, person, setting)
+            store.sample_contact(self.as_ref(), rng, person, setting)
         })
     }
 }
+
+impl SettingsExt for Context {}
 
 #[cfg(test)]
 mod tests {

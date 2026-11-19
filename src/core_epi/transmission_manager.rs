@@ -12,85 +12,48 @@ use crate::prelude::*;
 define_rng!(CoreEpiTransmissionRng);
 define_rng!(CoreEpiInfectionRng);
 
-/// Relative slack when checking a total against its forecast: the two take
-/// different float paths to the same value when the bound is tight. Also the
-/// slack on a susceptibility of one.
+/// Relative slack when checking a total against its forecast, since the two
+/// take different float paths. Also the slack on a susceptibility of one.
 const BOUND_TOLERANCE: f64 = 1e-9;
 
-/// Infection loop transmission dynamics.
+/// A Bernoulli draw that uses the RNG only when the outcome is uncertain.
+fn sample_if_uncertain<C: crate::ContextRandomExt>(context: &C, probability: f64) -> bool {
+    probability >= 1.0
+        || (probability > 0.0 && context.sample_bool(CoreEpiTransmissionRng, probability))
+}
+
+/// The transmission loop: proposals drawn from
+/// [`forecast_total_infectiousness`](Self::forecast_total_infectiousness) are
+/// thinned to attempts by [`evaluate_forecast`](Self::evaluate_forecast),
+/// which picks the contact, and attempts to transmissions by the contact's
+/// [`susceptibility`](InfectionManager::susceptibility).
 ///
-/// Transmission occurs due to a combination of three factors: (potential)
-/// infector's infectiousness, the contact rate between the infector and
-/// (potential) infectees, and the susceptibility of (potential) infectees.
-///
-/// A transmission "attempt" is when a transmission would occur if the
-/// potential infectee is susceptible. Attempts account for infectiousness
-/// and contact rates.
-///
-/// The loop algorithm is:
-/// 1. Draw attempt proposal times from the model's
-///    [`forecast_total_infectiousness`](Self::forecast_total_infectiousness).
-/// 2. Thin proposals to attempts by current over forecast total
-///    infectiousness in the model's
-///    [`evaluate_forecast`](Self::evaluate_forecast), which also
-///    picks the contact.
-/// 3. Attempts become transmissions based on the potential infectee's
-///    [`susceptibility`](InfectionManager::susceptibility).
-///
-/// Every method has a default, which together are homogeneous mixing: an
-/// empty impl is a complete model. Most models describe their contact
-/// structure with three methods:
-/// [`contact_multiplier`](Self::contact_multiplier),
-/// [`max_contact_multiplier`](Self::max_contact_multiplier) and
-/// [`sample_contact`](Self::sample_contact). They are read only by the
-/// default [`forecast_total_infectiousness`] and [`evaluate_forecast`]:
-/// override those instead when the bound is not a constant multiple of the
-/// intrinsic one, or when the total and the contact must come from the same
-/// draw, and then the methods the override replaces have no effect.
-///
-/// [`forecast_total_infectiousness`]: Self::forecast_total_infectiousness
-/// [`evaluate_forecast`]: Self::evaluate_forecast
-///
-/// A forecast must bound the total until the next proposal. When something
-/// raises a person's total above it, call
-/// [`reforecast_transmission`](Self::reforecast_transmission).
-///
-/// The loop ends when the forecast's integrated infectiousness is exhausted
-/// (its inverse cumulative returns `None`, so no further proposal is
-/// scheduled).
-///
-/// `M` is a marker type the model defines, so that it can implement these
-/// traits for `Context` (a model crate owns neither, which the orphan rule
-/// would otherwise forbid). Plans run on `Context` itself, not `Self`, hence
-/// the `Context: TransmissionManager<M>` bound.
+/// Every method has a default and together they are homogeneous mixing. `M`
+/// is a marker type the model defines so it can implement the trait for
+/// `Context`. See the `core_epi` topic in the book.
 pub trait TransmissionManager<M: 'static>:
     InfectionManager<M> + crate::ContextRandomExt + ContextEntitiesExt
 where
     Context: TransmissionManager<M>
         + InfectionManager<M, Entity = <Self as InfectionManager<M>>::Entity>,
 {
-    /// Factor on `person`'s intrinsic infectiousness from their contacts now:
-    /// how many people they can reach, how closely. The default is 1. Read
-    /// only by the default [`evaluate_forecast`](Self::evaluate_forecast).
+    /// Factor on `person`'s intrinsic infectiousness from their contacts now;
+    /// 1 by default. Read only by the default
+    /// [`evaluate_forecast`](Self::evaluate_forecast).
     fn contact_multiplier(&self, _person: EntityId<Self::Entity>) -> f64 {
         1.0
     }
 
-    /// Upper bound on [`contact_multiplier`](Self::contact_multiplier) for
-    /// `person` until their next proposal, finite and non-negative. Whatever
-    /// raises the multiplier above it must be followed by
-    /// [`reforecast_transmission`](Self::reforecast_transmission). The
-    /// default is the multiplier now, which is exact while it does not
-    /// change. A larger bound costs rejected proposals and does not raise the
-    /// rate: that is `contact_multiplier`'s job. Read only by the default
+    /// Upper bound on [`contact_multiplier`](Self::contact_multiplier) until
+    /// `person`'s next proposal; by default the multiplier now. Read only by
+    /// the default
     /// [`forecast_total_infectiousness`](Self::forecast_total_infectiousness).
     fn max_contact_multiplier(&self, person: EntityId<Self::Entity>) -> f64 {
         self.contact_multiplier(person)
     }
 
-    /// Who `person` contacts in an attempt, and what to record about the
-    /// exposure; `None` if nobody. The default is anyone else, uniformly.
-    /// Called only by the default
+    /// Who `person` contacts in an attempt, with the exposure to record;
+    /// by default anyone else, uniformly. Called only by the default
     /// [`evaluate_forecast`](Self::evaluate_forecast).
     fn sample_contact(
         &self,
@@ -108,18 +71,14 @@ where
         })
     }
 
-    /// Upper bound on `person`'s total infectiousness, indexed by time from now
-    /// (`t = 0` is the current simulation time). The loop inverts it to
-    /// propose attempt times. The default is
+    /// Upper bound on `person`'s total infectiousness, indexed by time from
+    /// now, which the loop inverts to propose attempt times. The default is
     /// [`majorizing_infectiousness_rate_fn`](InfectionManager::majorizing_infectiousness_rate_fn)
     /// scaled by [`max_contact_multiplier`](Self::max_contact_multiplier).
-    /// Override it for a bound that is not a constant multiple of the
-    /// intrinsic one, e.g. one that follows a schedule.
     ///
     /// # Panics
     ///
-    /// The default panics if `max_contact_multiplier` is negative or not
-    /// finite: an infinite bound would propose forever at one instant.
+    /// The default panics if `max_contact_multiplier` is negative or not finite.
     fn forecast_total_infectiousness(&self, person: EntityId<Self::Entity>) -> impl InvertibleRate {
         let max_multiplier = self.max_contact_multiplier(person);
         assert!(
@@ -133,16 +92,10 @@ where
         )
     }
 
-    /// Evaluate an attempt proposal for `person` forecast at total
-    /// infectiousness `forecast`: compute their total infectiousness now,
-    /// thin with [`accept_proposal`](Self::accept_proposal), and return who
-    /// they contact. `None` drops the proposal; the loop continues. The
-    /// default total is
-    /// [`intrinsic_infectiousness`](InfectionManager::intrinsic_infectiousness)
-    /// times [`contact_multiplier`](Self::contact_multiplier), and the
-    /// contact comes from [`sample_contact`](Self::sample_contact). Override
-    /// it when the total and the contact must come from the same draw, e.g.
-    /// a setting drawn first.
+    /// Evaluate a proposal for `person` forecast at `forecast`: compute
+    /// their total infectiousness now, thin with
+    /// [`accept_proposal`](Self::accept_proposal) and return who they
+    /// contact. `None` drops the proposal and the loop continues.
     fn evaluate_forecast(
         &self,
         person: EntityId<Self::Entity>,
@@ -156,30 +109,22 @@ where
     }
 
     /// Whether a proposal at `forecast` becomes an attempt at `total`
-    /// infectiousness: with probability `total / forecast`, drawing only when
-    /// the outcome is uncertain.
+    /// infectiousness: with probability `total / forecast`.
     ///
     /// # Panics
     ///
-    /// If `total` exceeds `forecast`: the forecast must bound the total until
-    /// the next proposal, or attempts are under-thinned.
+    /// If `total` exceeds `forecast`, which would under-thin attempts.
     fn accept_proposal(&self, person: EntityId<Self::Entity>, total: f64, forecast: f64) -> bool {
         assert!(
             total <= forecast * (1.0 + BOUND_TOLERANCE),
             "total infectiousness {total} of {person:?} exceeds its forecast {forecast}: \
              the forecast must bound the total until the next proposal"
         );
-        total > 0.0
-            && (total >= forecast || self.sample_bool(CoreEpiTransmissionRng, total / forecast))
+        sample_if_uncertain(self, total / forecast)
     }
 
-    /// Infect `infectee`: assign their rate function, which starts their own
-    /// loop once [`setup_transmission_loop`](Self::setup_transmission_loop)
-    /// has been called, then call
-    /// [`on_infected`](InfectionManager::on_infected) with `infector` and
-    /// `exposure`. `infector` is `None` for an infection with no source in
-    /// the population; for those, [`seed_infection`](Self::seed_infection) is
-    /// shorter.
+    /// Infect `infectee`: assign their rate function, then call
+    /// [`on_infected`](InfectionManager::on_infected).
     fn transmit(
         &mut self,
         infector: Option<EntityId<Self::Entity>>,
@@ -204,18 +149,12 @@ where
     }
 
     /// Start each person's transmission loop when they are assigned a rate
-    /// function. Call once at setup, before anyone is infected. Without it,
-    /// only loops started by hand with
-    /// [`reforecast_transmission`](Self::reforecast_transmission) run.
+    /// function. Call once at setup, before anyone is infected.
     fn setup_transmission_loop(&mut self) {
+        // A reforecast, so it supersedes anything already pending.
         self.subscribe_to_event(|context, event: InfectiousnessAssignedEvent<M>| {
-            // Supersedes anything already pending: the person may have
-            // been reforecast or infected again since this event was
-            // emitted.
             TransmissionManager::<M>::reforecast_transmission(context, event.person);
         });
-        // An infectiousness modifier rose past what the pending proposal
-        // was drawn under.
         self.subscribe_to_event(
             |context, event: ModifierBoundRaisedEvent<M, <Self as InfectionManager<M>>::Entity>| {
                 TransmissionManager::<M>::reforecast_transmission(context, event.person);
@@ -223,17 +162,9 @@ where
         );
     }
 
-    /// Drop `person`'s pending attempt proposal and forecast again from now.
-    /// Call it after anything that can raise their total infectiousness above
-    /// the forecast their pending proposal was drawn from, e.g. their group
-    /// growing or a contact restriction ending: the loop panics if a total
-    /// exceeds its forecast, and a forecast of zero ends the loop.
-    ///
-    /// Redrawing is always statistically valid, so when in doubt, call it. It
-    /// restarts a loop that ended on a zero forecast, and starts the loop of
-    /// someone infected without
-    /// [`setup_transmission_loop`](Self::setup_transmission_loop). No-op if
-    /// `person` was never infected.
+    /// Drop `person`'s pending proposal and forecast again from now. Call it
+    /// after anything that can raise their total infectiousness above their
+    /// forecast; redrawing is always valid. No-op if never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
         if let Some(generation) = advance_forecast_generation::<M, _, _>(self, person) {
             schedule_proposal::<M, Self>(self, person, generation);
@@ -241,9 +172,7 @@ where
     }
 }
 
-/// Draw `infector`'s next attempt proposal under `generation` and schedule
-/// it. Private, with [`handle_proposal`], so that a proposal only ever runs
-/// under the generation it was drawn with and a person never has two loops.
+/// Draw `infector`'s next attempt proposal under `generation` and schedule it.
 fn schedule_proposal<M, C>(
     context: &mut C,
     infector: EntityId<<C as InfectionManager<M>>::Entity>,
@@ -254,10 +183,8 @@ fn schedule_proposal<M, C>(
     Context:
         TransmissionManager<M> + InfectionManager<M, Entity = <C as InfectionManager<M>>::Entity>,
 {
-    // Determine if & when the next attempt proposal will occur. The majorizing
-    // rate function is indexed by time from now, so inverting an Exp(1) draw
-    // gives the delay to the proposal. If the draw is beyond the support of
-    // the inverse cumulative there is no next event and the loop ends.
+    // The forecast is indexed by time from now, so inverting an Exp(1) draw
+    // gives the delay. `None` means its infectiousness is exhausted: the loop ends.
     let exp_draw = context.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
     let proposal = {
         let forecast_fn = context.forecast_total_infectiousness(infector);
@@ -269,54 +196,48 @@ fn schedule_proposal<M, C>(
     if let Some((delay, forecast)) = proposal {
         let proposal_time = context.get_current_time() + delay;
         context.add_plan(proposal_time, move |ctx| {
-            handle_proposal::<M, Context>(ctx, infector, forecast, generation);
+            handle_proposal::<M>(ctx, infector, forecast, generation);
         });
     }
 }
 
-/// Handle a transmission attempt proposal forecast at total infectiousness
-/// `forecast`: hand it to `evaluate_forecast`, then thin attempts to
-/// transmissions based on susceptibility.
-fn handle_proposal<M, C>(
-    context: &mut C,
-    infector: EntityId<<C as InfectionManager<M>>::Entity>,
+/// Handle a proposal forecast at total infectiousness `forecast`: thin it to
+/// an attempt, then to a transmission by the contact's susceptibility.
+fn handle_proposal<M>(
+    context: &mut Context,
+    infector: EntityId<<Context as InfectionManager<M>>::Entity>,
     forecast: f64,
     generation: u32,
 ) where
     M: 'static,
-    C: TransmissionManager<M>,
-    Context:
-        TransmissionManager<M> + InfectionManager<M, Entity = <C as InfectionManager<M>>::Entity>,
+    Context: TransmissionManager<M>,
 {
     // Superseded by a reforecast or a reinfection, which drew its own.
     if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
         return;
     }
-    // A zero forecast (a proposal exactly at the end of the support) can
-    // never attempt.
-    if forecast > 0.0 {
-        if let Some((infectee, exposure)) = context.evaluate_forecast(infector, forecast) {
-            let susceptibility = context.susceptibility(infectee);
-            // A value above one would be silently capped, understating that
-            // person's risk relative to everyone else's.
-            assert!(
-                (0.0..=1.0 + BOUND_TOLERANCE).contains(&susceptibility),
-                "susceptibility {susceptibility} of {infectee:?} is not in [0, 1]: scale                  susceptibilities so the largest is 1 and put the scale in the infectiousness rate"
-            );
-            // Draws only when the outcome is uncertain.
-            let infected = susceptibility >= 1.0
-                || (susceptibility > 0.0
-                    && context.sample_bool(CoreEpiTransmissionRng, susceptibility));
-            if infected {
-                context.transmit(Some(infector), infectee, exposure);
-                // Only a transmission runs model code, which may have
-                // reforecast the infector: then the next proposal is already
-                // drawn, and one drawn here would be dropped when it fired.
-                if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
-                    return;
-                }
+    // A proposal exactly at the end of the support has a zero forecast.
+    let attempt = if forecast > 0.0 {
+        context.evaluate_forecast(infector, forecast)
+    } else {
+        None
+    };
+    if let Some((infectee, exposure)) = attempt {
+        let susceptibility = context.susceptibility(infectee);
+        // A silent cap would understate that person's relative risk.
+        assert!(
+            (0.0..=1.0 + BOUND_TOLERANCE).contains(&susceptibility),
+            "susceptibility {susceptibility} of {infectee:?} is not in [0, 1]: scale \
+             susceptibilities so the largest is 1 and put the scale in the infectiousness rate"
+        );
+        if sample_if_uncertain(context, susceptibility) {
+            context.transmit(Some(infector), infectee, exposure);
+            // The model's `on_infected` may have reforecast the infector,
+            // which already drew the next proposal.
+            if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
+                return;
             }
         }
     }
-    schedule_proposal::<M, C>(context, infector, generation);
+    schedule_proposal::<M, Context>(context, infector, generation);
 }

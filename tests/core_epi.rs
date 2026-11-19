@@ -1,8 +1,10 @@
 #![cfg(feature = "core_epi")]
 
+use std::cell::Cell;
+
 use ixa::core_epi::{
     ConstantRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment, ScaledRateFn,
-    SettingKind, SettingsExt, StepFn, TransmissionManager,
+    SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
 };
 use ixa::prelude::*;
 
@@ -24,30 +26,59 @@ impl InfectionManager<Sir> for Context {
 // Homogeneous mixing: all defaults.
 impl TransmissionManager<Sir> for Context {}
 
-fn run(r0: f64) -> (Context, usize) {
+/// A context with `people` people and `Sir`'s library holding one constant
+/// rate function.
+fn sir_context(seed: u64, people: usize, rate: f64, duration: f64) -> (Context, Vec<PersonId>) {
     let mut context = Context::new();
-    context.init_random(42);
-    for _ in 0..POPULATION {
-        context.add_entity(Person).unwrap();
-    }
+    context.init_random(seed);
+    let people = (0..people)
+        .map(|_| context.add_entity(Person).unwrap())
+        .collect();
     InfectionManager::<Sir>::load_infectiousness_rate_library(
         &mut context,
-        vec![ConstantRateFn::new(r0 / 5.0, 5.0).into()],
+        vec![ConstantRateFn::new(rate, duration).into()],
     );
+    (context, people)
+}
+
+fn sir_infected_count(context: &Context) -> usize {
+    context
+        .get_entity_iterator::<Person>()
+        .filter(|&p| InfectionManager::<Sir>::infection_time(context, p).is_some())
+        .count()
+}
+
+/// Final size of an outbreak seeded with five infections.
+fn run(r0: f64) -> usize {
+    let (mut context, _) = sir_context(42, POPULATION, r0 / 5.0, 5.0);
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
     context.execute();
-    let infected = context
-        .get_entity_iterator::<Person>()
-        .filter(|&p| InfectionManager::<Sir>::infection_time(&context, p).is_some())
-        .count();
-    (context, infected)
+    sir_infected_count(&context)
+}
+
+const RUNS: u64 = 50;
+
+/// Mean of `attempts(seed)` over `RUNS` seeds.
+fn mean_attempts(attempts: impl Fn(u64) -> usize) -> f64 {
+    let mut total = 0;
+    for seed in 0..RUNS {
+        total += attempts(seed);
+    }
+    total as f64 / RUNS as f64
+}
+
+fn assert_about(mean: f64, expected: f64, tolerance: f64) {
+    assert!(
+        (mean - expected).abs() < tolerance,
+        "expected about {expected} attempts per run, got {mean}"
+    );
 }
 
 #[test]
 fn outbreak_spreads_and_ends() {
     // Final size for R0 = 2 is ~80%; `execute` returning means every loop ended.
-    let (_, infected) = run(2.0);
+    let infected = run(2.0);
     assert!(
         (700..=900).contains(&infected),
         "unexpected final size {infected}"
@@ -58,13 +89,8 @@ fn outbreak_spreads_and_ends() {
 fn susceptibility_modifiers_compose_and_persist_across_infection() {
     struct Vaccine;
     struct Age;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 5.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, person),
         1.0
@@ -96,13 +122,8 @@ fn susceptibility_modifiers_compose_and_persist_across_infection() {
 fn function_modifiers_follow_elapsed_time() {
     struct Antiviral;
     struct Vaccine;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 10.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
     // Protection that wanes after a day, as a step function.
     let waning = StepFn::new(0.2).step_at(1.0, 0.5);
     InfectionManager::<Sir>::set_susceptibility_modifier_fn::<Vaccine>(
@@ -120,7 +141,8 @@ fn function_modifiers_follow_elapsed_time() {
             0.5
         );
         InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
-        // Treatment effect that ramps in over its first two days, reading the context to check it is the one passed in.
+        // Treatment effect that ramps in over its first two days, reading
+        // the context to check it is the one passed in.
         InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Antiviral>(
             ctx,
             person,
@@ -158,40 +180,24 @@ fn function_modifiers_follow_elapsed_time() {
 #[test]
 fn zero_susceptibility_never_transmits() {
     struct Immune;
-    let mut context = Context::new();
-    context.init_random(42);
-    for _ in 0..POPULATION {
-        let person = context.add_entity(Person).unwrap();
+    let (mut context, people) = sir_context(42, POPULATION, 2.0 / 5.0, 5.0);
+    for person in people {
         InfectionManager::<Sir>::set_susceptibility_modifier::<Immune>(&mut context, person, 0.0);
     }
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(2.0 / 5.0, 5.0).into()],
-    );
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
     context.execute();
-    let infected = context
-        .get_entity_iterator::<Person>()
-        .filter(|&p| InfectionManager::<Sir>::infection_time(&context, p).is_some())
-        .count();
-    assert_eq!(infected, 5);
+    assert_eq!(sir_infected_count(&context), 5);
 }
 
 #[test]
 #[should_panic(expected = "is not in [0, 1]")]
 fn susceptibility_above_one_panics() {
     struct Frail;
-    let mut context = Context::new();
-    context.init_random(42);
-    for _ in 0..10 {
-        let person = context.add_entity(Person).unwrap();
+    let (mut context, people) = sir_context(42, 10, 2.0, 5.0);
+    for person in people {
         InfectionManager::<Sir>::set_susceptibility_modifier::<Frail>(&mut context, person, 1.5);
     }
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(2.0, 5.0).into()],
-    );
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 1);
     context.execute();
@@ -199,20 +205,15 @@ fn susceptibility_above_one_panics() {
 
 #[test]
 fn zero_infectiousness_never_transmits() {
-    let (_, infected) = run(0.0);
+    let infected = run(0.0);
     assert_eq!(infected, 5);
 }
 
 #[test]
 fn infectiousness_modifier_belongs_to_the_person() {
     struct Mask;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 5.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
     assert_eq!(
@@ -249,13 +250,8 @@ fn infectiousness_modifier_belongs_to_the_person() {
 fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
     struct Boost;
     struct Mask;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 5.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
     let bound = |context: &Context| {
         InfectionManager::<Sir>::majorizing_infectiousness_rate_fn(context, person).rate(0.0)
     };
@@ -285,16 +281,8 @@ fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
 
 fn run_with_a_boost(boost_time: Option<f64>) -> usize {
     struct Boost;
-    let mut context = Context::new();
-    context.init_random(42);
-    for _ in 0..POPULATION {
-        context.add_entity(Person).unwrap();
-    }
     // R0 of 0.5 unmodified: the outbreak dies out unless boosted.
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(0.1, 5.0).into()],
-    );
+    let (mut context, _) = sir_context(42, POPULATION, 0.1, 5.0);
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 20);
     if let Some(boost_time) = boost_time {
@@ -308,10 +296,7 @@ fn run_with_a_boost(boost_time: Option<f64>) -> usize {
         });
     }
     context.execute();
-    context
-        .get_entity_iterator::<Person>()
-        .filter(|&p| InfectionManager::<Sir>::infection_time(&context, p).is_some())
-        .count()
+    sir_infected_count(&context)
 }
 
 #[test]
@@ -324,32 +309,6 @@ fn raising_an_infectiousness_modifier_mid_infection_reforecasts() {
     assert!(boosted > 700, "unexpected final size {boosted}");
 }
 
-// One infector at rate 1 whose attempts are counted and never transmit.
-struct Counted;
-
-#[derive(Default)]
-struct CountedState {
-    attempts: std::cell::Cell<usize>,
-}
-define_data_plugin!(CountedPlugin, CountedState, CountedState::default());
-
-impl InfectionManager<Counted> for Context {
-    type Entity = Person;
-    type Exposure = ();
-
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
-        ConstantRateFn::new(1.0, 1000.0).into()
-    }
-}
-
-impl TransmissionManager<Counted> for Context {
-    fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
-        let state = self.get_data(CountedPlugin);
-        state.attempts.set(state.attempts.get() + 1);
-        None
-    }
-}
-
 #[test]
 fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
     struct Boost;
@@ -358,29 +317,27 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
     struct Antiviral;
     struct Wave;
     // The modifier product over each ten days, with the change that starts it.
-    // Expected attempts: 10 * (2 + 1 + 2 + 1 + 1 + 3 + 1 + 1 + 4 + 2 + 4)
-    // + 5 * (1 + 3) = 240.
-    let runs = 50;
-    let mut total = 0;
-    for seed in 0..runs {
+    // Expected attempts at rate 2:
+    // 2 * (10 * (2 + 1 + 2 + 1 + 1 + 3 + 1 + 1 + 4 + 2 + 4) + 5 * (1 + 3)) = 480.
+    let mean = mean_attempts(|seed| {
         let mut context = Context::new();
         context.init_random(seed);
         let person = context.add_entity(Person).unwrap();
-        TransmissionManager::<Counted>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
         // 2: a boost set before infection.
-        InfectionManager::<Counted>::set_infectiousness_modifier::<Boost>(
+        InfectionManager::<Counting>::set_infectiousness_modifier::<Boost>(
             &mut context,
             person,
             2.0,
         );
-        TransmissionManager::<Counted>::seed_infection(&mut context, person);
+        TransmissionManager::<Counting>::seed_infection(&mut context, person);
         // 1: a mask.
         context.add_plan(10.0, move |ctx| {
-            InfectionManager::<Counted>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+            InfectionManager::<Counting>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
         });
         // 2: the mask replaced by a function, which raises the bound.
         context.add_plan(20.0, move |ctx| {
-            InfectionManager::<Counted>::set_infectiousness_modifier_fn::<Mask>(
+            InfectionManager::<Counting>::set_infectiousness_modifier_fn::<Mask>(
                 ctx,
                 person,
                 |_, _, _| 1.0,
@@ -388,11 +345,11 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         });
         // 1: the boost removed.
         context.add_plan(30.0, move |ctx| {
-            InfectionManager::<Counted>::remove_infectiousness_modifier::<Boost>(ctx, person);
+            InfectionManager::<Counting>::remove_infectiousness_modifier::<Boost>(ctx, person);
         });
         // 1, then 3 from day 50 to 60, then 1: a scheduled factor above one.
         context.add_plan(40.0, move |ctx| {
-            InfectionManager::<Counted>::schedule_infectiousness_modifier::<Surge>(
+            InfectionManager::<Counting>::schedule_infectiousness_modifier::<Surge>(
                 ctx,
                 person,
                 3.0,
@@ -402,30 +359,30 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         });
         // 1: a boost of 4 cancelled by a scheduled antiviral.
         context.add_plan(65.0, move |ctx| {
-            InfectionManager::<Counted>::schedule_infectiousness_modifier::<Antiviral>(
+            InfectionManager::<Counting>::schedule_infectiousness_modifier::<Antiviral>(
                 ctx, person, 0.25, 70.0, None,
             );
         });
         context.add_plan(70.0, move |ctx| {
-            InfectionManager::<Counted>::set_infectiousness_modifier::<Boost>(ctx, person, 4.0);
+            InfectionManager::<Counting>::set_infectiousness_modifier::<Boost>(ctx, person, 4.0);
         });
         // 4: reinfection drops the antiviral.
         context.add_plan(80.0, move |ctx| {
-            TransmissionManager::<Counted>::seed_infection(ctx, person);
+            TransmissionManager::<Counting>::seed_infection(ctx, person);
         });
         // 2: a mask again.
         context.add_plan(90.0, move |ctx| {
-            InfectionManager::<Counted>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+            InfectionManager::<Counting>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
         });
         // 4: the mask removed, which raises the bound.
         context.add_plan(100.0, move |ctx| {
-            InfectionManager::<Counted>::remove_infectiousness_modifier::<Mask>(ctx, person);
+            InfectionManager::<Counting>::remove_infectiousness_modifier::<Mask>(ctx, person);
         });
         // 1 for five days then 3: a function that rises under its declared
         // maximum, with nothing to announce the rise.
         context.add_plan(110.0, move |ctx| {
-            InfectionManager::<Counted>::remove_infectiousness_modifier::<Boost>(ctx, person);
-            InfectionManager::<Counted>::set_infectiousness_modifier_fn_with_max::<Wave>(
+            InfectionManager::<Counting>::remove_infectiousness_modifier::<Boost>(ctx, person);
+            InfectionManager::<Counting>::set_infectiousness_modifier_fn_with_max::<Wave>(
                 ctx,
                 person,
                 3.0,
@@ -434,13 +391,9 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         });
         context.add_plan(120.0, Context::shutdown);
         context.execute();
-        total += context.get_data(CountedPlugin).attempts.get();
-    }
-    let mean = total as f64 / runs as f64;
-    assert!(
-        (mean - 240.0).abs() < 8.0,
-        "expected about 240 attempts per run, got {mean}"
-    );
+        context.get_data(CountingPlugin).attempts.get()
+    });
+    assert_about(mean, 480.0, 12.0);
 }
 
 #[test]
@@ -448,12 +401,8 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
 fn infectiousness_modifiers_overflowing_panic() {
     struct First;
     struct Second;
-    let mut context = Context::new();
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 5.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
     InfectionManager::<Sir>::set_infectiousness_modifier::<First>(&mut context, person, 1e200);
     InfectionManager::<Sir>::set_infectiousness_modifier::<Second>(&mut context, person, 1e200);
@@ -471,13 +420,8 @@ fn a_negative_infectiousness_modifier_panics() {
 #[test]
 fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
     struct Mask;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 10.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
     // Set a day before the infection: elapsed time runs from the set.
     context.add_plan(1.0, move |ctx| {
         InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Mask>(ctx, person, |_, _, t| {
@@ -505,13 +449,8 @@ fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
 fn a_scheduled_infectiousness_modifier_ends_with_its_infection() {
     struct Mask;
     struct Antiviral;
-    let mut context = Context::new();
-    context.init_random(1);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 10.0).into()],
-    );
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
@@ -616,46 +555,62 @@ fn models_on_different_entities_keep_separate_infections() {
     );
 }
 
-// A model whose contact rate is a factor the test changes mid-run. It counts
-// attempts instead of infecting anyone.
-struct Boosted;
+// One infector at rate 2 whose attempts are counted and never transmit, with a
+// contact multiplier and an optional bound the test changes mid-run.
+struct Counting;
 
-#[derive(Default)]
-struct Boost {
-    factor: std::cell::Cell<f64>,
-    attempts: std::cell::Cell<usize>,
-    reforecast_on_infected: std::cell::Cell<bool>,
+struct CountingState {
+    multiplier: Cell<f64>,
+    /// `None` leaves the default bound: the multiplier now, so each rise
+    /// needs a reforecast.
+    bound: Cell<Option<f64>>,
+    attempts: Cell<usize>,
+    reforecast_on_infected: Cell<bool>,
 }
-define_data_plugin!(BoostPlugin, Boost, Boost::default());
 
-const BOOSTED_RATE: f64 = 2.0;
+impl Default for CountingState {
+    fn default() -> Self {
+        Self {
+            multiplier: Cell::new(1.0),
+            bound: Cell::new(None),
+            attempts: Cell::new(0),
+            reforecast_on_infected: Cell::new(false),
+        }
+    }
+}
+define_data_plugin!(CountingPlugin, CountingState, CountingState::default());
 
-impl InfectionManager<Boosted> for Context {
+const COUNTING_RATE: f64 = 2.0;
+
+impl InfectionManager<Counting> for Context {
     type Entity = Person;
     type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
-        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
+        ConstantRateFn::new(COUNTING_RATE, 1000.0).into()
     }
 
     fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
-        if self.get_data(BoostPlugin).reforecast_on_infected.get() {
-            TransmissionManager::<Boosted>::reforecast_transmission(self, infectee);
+        if self.get_data(CountingPlugin).reforecast_on_infected.get() {
+            TransmissionManager::<Counting>::reforecast_transmission(self, infectee);
         }
     }
 }
 
-// The forecast defaults to the multiplier now, so each change needs a
-// reforecast.
-impl TransmissionManager<Boosted> for Context {
+impl TransmissionManager<Counting> for Context {
     fn contact_multiplier(&self, _person: PersonId) -> f64 {
-        self.get_data(BoostPlugin).factor.get()
+        self.get_data(CountingPlugin).multiplier.get()
+    }
+
+    fn max_contact_multiplier(&self, _person: PersonId) -> f64 {
+        let state = self.get_data(CountingPlugin);
+        state.bound.get().unwrap_or(state.multiplier.get())
     }
 
     // Reached once per accepted proposal, i.e. per attempt.
     fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
-        let boost = self.get_data(BoostPlugin);
-        boost.attempts.set(boost.attempts.get() + 1);
+        let state = self.get_data(CountingPlugin);
+        state.attempts.set(state.attempts.get() + 1);
         None
     }
 }
@@ -666,32 +621,28 @@ fn run_boosted(seed: u64, reforecast: bool) -> usize {
     let mut context = Context::new();
     context.init_random(seed);
     let person = context.add_entity(Person).unwrap();
-    TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Boosted>::seed_infection(&mut context, person);
+    context.get_data(CountingPlugin).multiplier.set(0.0);
+    TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Counting>::seed_infection(&mut context, person);
     for (time, factor) in [(10.0, 1.0), (30.0, 3.0)] {
         context.add_plan(time, move |context| {
-            context.get_data(BoostPlugin).factor.set(factor);
+            context.get_data(CountingPlugin).multiplier.set(factor);
             if reforecast {
-                TransmissionManager::<Boosted>::reforecast_transmission(context, person);
+                TransmissionManager::<Counting>::reforecast_transmission(context, person);
             }
         });
     }
     context.add_plan(60.0, Context::shutdown);
     context.execute();
-    context.get_data(BoostPlugin).attempts.get()
+    context.get_data(CountingPlugin).attempts.get()
 }
 
 #[test]
 fn reforecast_restarts_an_ended_loop_and_follows_a_rise() {
     // The loop ends at once on a zero forecast; each reforecast picks the new
     // rate up. Expected attempts: 2 * 20 + 6 * 30 = 220 per run.
-    let runs = 50;
-    let total: usize = (0..runs).map(|seed| run_boosted(seed, true)).sum();
-    let mean = total as f64 / runs as f64;
-    assert!(
-        (mean - 220.0).abs() < 8.0,
-        "expected about 220 attempts per run, got {mean}"
-    );
+    let mean = mean_attempts(|seed| run_boosted(seed, true));
+    assert_about(mean, 220.0, 8.0);
 }
 
 #[test]
@@ -705,11 +656,10 @@ fn a_rise_without_a_reforecast_panics() {
     let mut context = Context::new();
     context.init_random(2);
     let person = context.add_entity(Person).unwrap();
-    context.get_data(BoostPlugin).factor.set(1.0);
-    TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Boosted>::seed_infection(&mut context, person);
+    TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Counting>::seed_infection(&mut context, person);
     context.add_plan(10.0, |context| {
-        context.get_data(BoostPlugin).factor.set(3.0);
+        context.get_data(CountingPlugin).multiplier.set(3.0);
     });
     context.add_plan(60.0, Context::shutdown);
     context.execute();
@@ -719,31 +669,24 @@ fn a_rise_without_a_reforecast_panics() {
 fn reinfection_and_reforecast_leave_one_loop_running() {
     // Fifty reinfections and fifty reforecasts at t = 0 must not leave a
     // hundred loops: expected attempts stay 2 * 10 = 20 per run.
-    let runs = 50;
-    let mut total = 0;
-    for seed in 0..runs {
+    let mean = mean_attempts(|seed| {
         let mut context = Context::new();
         context.init_random(seed);
         let person = context.add_entity(Person).unwrap();
-        context.get_data(BoostPlugin).factor.set(1.0);
-        TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
         for _ in 0..50 {
-            TransmissionManager::<Boosted>::seed_infection(&mut context, person);
+            TransmissionManager::<Counting>::seed_infection(&mut context, person);
         }
         context.add_plan(0.0, move |context| {
             for _ in 0..50 {
-                TransmissionManager::<Boosted>::reforecast_transmission(context, person);
+                TransmissionManager::<Counting>::reforecast_transmission(context, person);
             }
         });
         context.add_plan(10.0, Context::shutdown);
         context.execute();
-        total += context.get_data(BoostPlugin).attempts.get();
-    }
-    let mean = total as f64 / runs as f64;
-    assert!(
-        (mean - 20.0).abs() < 3.0,
-        "expected about 20 attempts per run, got {mean}"
-    );
+        context.get_data(CountingPlugin).attempts.get()
+    });
+    assert_about(mean, 20.0, 3.0);
 }
 
 #[test]
@@ -751,67 +694,52 @@ fn reforecast_is_a_no_op_for_someone_never_infected() {
     let mut context = Context::new();
     context.init_random(1);
     let person = context.add_entity(Person).unwrap();
-    TransmissionManager::<Boosted>::reforecast_transmission(&mut context, person);
+    TransmissionManager::<Counting>::reforecast_transmission(&mut context, person);
     context.execute();
-    assert_eq!(context.get_data(BoostPlugin).attempts.get(), 0);
+    assert_eq!(context.get_data(CountingPlugin).attempts.get(), 0);
 }
 
 /// Mean attempts per run over ten time units at factor 1 (expected 20), after
 /// `infect` has infected the one person at time zero.
 fn mean_boosted_attempts(infect: impl Fn(&mut Context, PersonId)) -> f64 {
-    let runs = 50;
-    let mut total = 0;
-    for seed in 0..runs {
+    mean_attempts(|seed| {
         let mut context = Context::new();
         context.init_random(seed);
         let person = context.add_entity(Person).unwrap();
-        context.get_data(BoostPlugin).factor.set(1.0);
-        TransmissionManager::<Boosted>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
         infect(&mut context, person);
         context.add_plan(10.0, Context::shutdown);
         context.execute();
-        total += context.get_data(BoostPlugin).attempts.get();
-    }
-    total as f64 / runs as f64
+        context.get_data(CountingPlugin).attempts.get()
+    })
 }
 
 #[test]
 fn repeated_infection_before_the_loop_starts_leaves_one_loop_running() {
     let mean = mean_boosted_attempts(|context, person| {
         for _ in 0..50 {
-            TransmissionManager::<Boosted>::seed_infection(context, person);
+            TransmissionManager::<Counting>::seed_infection(context, person);
         }
     });
-    assert!(
-        (mean - 20.0).abs() < 3.0,
-        "expected about 20 attempts per run, got {mean}"
-    );
+    assert_about(mean, 20.0, 3.0);
 }
 
 #[test]
 fn reforecast_in_on_infected_leaves_one_loop_running() {
     let mean = mean_boosted_attempts(|context, person| {
         context
-            .get_data(BoostPlugin)
+            .get_data(CountingPlugin)
             .reforecast_on_infected
             .set(true);
-        TransmissionManager::<Boosted>::seed_infection(context, person);
+        TransmissionManager::<Counting>::seed_infection(context, person);
     });
-    assert!(
-        (mean - 20.0).abs() < 3.0,
-        "expected about 20 attempts per run, got {mean}"
-    );
+    assert_about(mean, 20.0, 3.0);
 }
 
 #[test]
 fn reforecast_after_infectiousness_ended_schedules_nothing() {
-    let mut context = Context::new();
-    context.init_random(4);
-    let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::load_infectiousness_rate_library(
-        &mut context,
-        vec![ConstantRateFn::new(1.0, 2.0).into()],
-    );
+    let (mut context, people) = sir_context(4, 1, 1.0, 2.0);
+    let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
     context.add_plan(5.0, move |context| {
         TransmissionManager::<Sir>::reforecast_transmission(context, person);
@@ -963,22 +891,20 @@ fn two_models_on_one_population_keep_separate_infections() {
     context.execute();
 
     // Flu (R0 3) spreads; RSV has a rate of zero and stays with its seed.
-    let infected_by = |flu: bool| {
-        people
-            .iter()
-            .filter(|&&person| {
-                if flu {
-                    InfectionManager::<Flu>::infection_time(&context, person).is_some()
-                } else {
-                    InfectionManager::<Rsv>::infection_time(&context, person).is_some()
-                }
-            })
-            .count()
-    };
-    assert!(infected_by(true) > 50, "flu infected {}", infected_by(true));
-    assert_eq!(infected_by(false), 1);
+    let mut flu_infected = 0;
+    let mut rsv_infected = 0;
+    for &person in &people {
+        if InfectionManager::<Flu>::infection_time(&context, person).is_some() {
+            flu_infected += 1;
+        }
+        if InfectionManager::<Rsv>::infection_time(&context, person).is_some() {
+            rsv_infected += 1;
+        }
+    }
+    assert!(flu_infected > 50, "flu infected {flu_infected}");
+    assert_eq!(rsv_infected, 1);
     let assigned = context.get_data(AssignedPlugin);
-    assert_eq!(assigned.flu, infected_by(true));
+    assert_eq!(assigned.flu, flu_infected);
     assert_eq!(assigned.rsv, 1);
 }
 
@@ -988,9 +914,9 @@ struct Chained;
 
 #[derive(Default)]
 struct Chain {
-    infector: std::cell::Cell<Option<PersonId>>,
-    contact: std::cell::Cell<Option<PersonId>>,
-    attempts: std::cell::Cell<usize>,
+    infector: Cell<Option<PersonId>>,
+    contact: Cell<Option<PersonId>>,
+    attempts: Cell<usize>,
 }
 define_data_plugin!(ChainPlugin, Chain, Chain::default());
 
@@ -999,7 +925,7 @@ impl InfectionManager<Chained> for Context {
     type Exposure = ();
 
     fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
-        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
+        ConstantRateFn::new(COUNTING_RATE, 1000.0).into()
     }
 
     fn base_susceptibility(&self, _person: PersonId) -> f64 {
@@ -1032,9 +958,7 @@ impl TransmissionManager<Chained> for Context {
 #[test]
 fn reforecasting_the_infector_from_on_infected_leaves_one_loop_running() {
     // Expected attempts: 2 * 10 = 20 per run, each one a transmission.
-    let runs = 50;
-    let mut total = 0;
-    for seed in 0..runs {
+    let mean = mean_attempts(|seed| {
         let mut context = Context::new();
         context.init_random(seed);
         let infector = context.add_entity(Person).unwrap();
@@ -1046,13 +970,9 @@ fn reforecasting_the_infector_from_on_infected_leaves_one_loop_running() {
         TransmissionManager::<Chained>::seed_infection(&mut context, infector);
         context.add_plan(10.0, Context::shutdown);
         context.execute();
-        total += context.get_data(ChainPlugin).attempts.get();
-    }
-    let mean = total as f64 / runs as f64;
-    assert!(
-        (mean - 20.0).abs() < 3.0,
-        "expected about 20 attempts per run, got {mean}"
-    );
+        context.get_data(ChainPlugin).attempts.get()
+    });
+    assert_about(mean, 20.0, 3.0);
 }
 
 // Settings through the loop: one infector, counting attempts per setting on
@@ -1063,16 +983,20 @@ const PLACE_RATE: f64 = 0.5;
 const PLACE_DURATION: f64 = 2000.0;
 
 #[derive(Default)]
-struct PlaceAttempts(std::cell::RefCell<Vec<usize>>);
+struct PlaceAttempts {
+    by_kind: Cell<[usize; MAX_SETTINGS]>,
+    /// Whether `Exact` forecasts with the bound that survives membership
+    /// changes instead of the multiplier itself.
+    bounded: Cell<bool>,
+}
 define_data_plugin!(PlaceAttemptsPlugin, PlaceAttempts, PlaceAttempts::default());
 
 fn count_place_attempt(context: &Context, person: PersonId, place: Place) {
     if context.sample_setting_contact(person, place).is_some() {
-        let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow_mut();
-        if attempts.len() <= place.index() {
-            attempts.resize(place.index() + 1, 0);
-        }
-        attempts[place.index()] += 1;
+        let attempts = &context.get_data(PlaceAttemptsPlugin).by_kind;
+        let mut by_kind = attempts.get();
+        by_kind[place.index()] += 1;
+        attempts.set(by_kind);
     }
 }
 
@@ -1113,38 +1037,19 @@ impl InfectionManager<Exact> for Context {
     }
 }
 
-// The forecast defaults to the multiplier itself, so no proposal is rejected.
 impl TransmissionManager<Exact> for Context {
     fn contact_multiplier(&self, person: PersonId) -> f64 {
         self.current_setting_multiplier::<Place>(person)
     }
 
-    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
-        let place = self.sample_setting_by_rate::<Place>(person)?;
-        count_place_attempt(self, person, place);
-        None
-    }
-}
-
-/// The exact draw under the bound that survives membership changes.
-struct BoundedExact;
-
-impl InfectionManager<BoundedExact> for Context {
-    type Entity = Person;
-    type Exposure = ();
-
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
-        ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
-    }
-}
-
-impl TransmissionManager<BoundedExact> for Context {
-    fn contact_multiplier(&self, person: PersonId) -> f64 {
-        self.current_setting_multiplier::<Place>(person)
-    }
-
+    // Unbounded, the forecast is the multiplier itself and no proposal is
+    // rejected.
     fn max_contact_multiplier(&self, person: PersonId) -> f64 {
-        self.max_setting_multiplier::<Place>(person)
+        if self.get_data(PlaceAttemptsPlugin).bounded.get() {
+            self.max_setting_multiplier::<Place>(person)
+        } else {
+            self.current_setting_multiplier::<Place>(person)
+        }
     }
 
     fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
@@ -1202,23 +1107,17 @@ fn every_settings_path_attempts_in_each_setting_at_ratio_times_multiplier() {
         let mut context = Context::new();
         context.init_random(11);
         let infector = place_population(&mut context);
-        match path {
-            "setting first" => {
-                TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
-                TransmissionManager::<SettingFirst>::seed_infection(&mut context, infector);
-            }
-            "exact" => {
-                TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
-                TransmissionManager::<Exact>::seed_infection(&mut context, infector);
-            }
-            _ => {
-                TransmissionManager::<BoundedExact>::setup_transmission_loop(&mut context);
-                TransmissionManager::<BoundedExact>::seed_infection(&mut context, infector);
-            }
+        if path == "setting first" {
+            TransmissionManager::<SettingFirst>::setup_transmission_loop(&mut context);
+            TransmissionManager::<SettingFirst>::seed_infection(&mut context, infector);
+        } else {
+            let bounded = path == "bounded exact";
+            context.get_data(PlaceAttemptsPlugin).bounded.set(bounded);
+            TransmissionManager::<Exact>::setup_transmission_loop(&mut context);
+            TransmissionManager::<Exact>::seed_infection(&mut context, infector);
         }
         context.execute();
-        let mut attempts = context.get_data(PlaceAttemptsPlugin).0.borrow().clone();
-        attempts.resize(expected.len(), 0);
+        let attempts = context.get_data(PlaceAttemptsPlugin).by_kind.get();
         for (place, &expected) in expected.iter().enumerate() {
             let observed = attempts[place] as f64;
             assert!(
@@ -1293,69 +1192,26 @@ fn on_infected_is_told_the_setting_the_contact_draw_returned() {
     }
 }
 
-// A constant bound above a multiplier that changes mid-run.
-struct Bounded;
-
-#[derive(Default)]
-struct BoundedState {
-    multiplier: std::cell::Cell<f64>,
-    bound: std::cell::Cell<f64>,
-    attempts: std::cell::Cell<usize>,
-}
-define_data_plugin!(BoundedPlugin, BoundedState, BoundedState::default());
-
-impl InfectionManager<Bounded> for Context {
-    type Entity = Person;
-    type Exposure = ();
-
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
-        ConstantRateFn::new(BOOSTED_RATE, 1000.0).into()
-    }
-}
-
-impl TransmissionManager<Bounded> for Context {
-    fn contact_multiplier(&self, _person: PersonId) -> f64 {
-        self.get_data(BoundedPlugin).multiplier.get()
-    }
-
-    fn max_contact_multiplier(&self, _person: PersonId) -> f64 {
-        self.get_data(BoundedPlugin).bound.get()
-    }
-
-    fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
-        let state = self.get_data(BoundedPlugin);
-        state.attempts.set(state.attempts.get() + 1);
-        None
-    }
-}
-
 #[test]
 fn attempts_follow_the_multiplier_under_a_larger_bound() {
     // Bound 4 throughout; the multiplier is 1 until t = 10 and 3 until
     // t = 30, with no reforecast. Expected attempts: 2 * (10 + 3 * 20) = 140.
-    let runs = 50;
-    let mut total = 0;
-    for seed in 0..runs {
+    let mean = mean_attempts(|seed| {
         let mut context = Context::new();
         context.init_random(seed);
         let person = context.add_entity(Person).unwrap();
-        let state = context.get_data(BoundedPlugin);
-        state.multiplier.set(1.0);
-        state.bound.set(4.0);
-        TransmissionManager::<Bounded>::setup_transmission_loop(&mut context);
-        TransmissionManager::<Bounded>::seed_infection(&mut context, person);
+        let state = context.get_data(CountingPlugin);
+        state.bound.set(Some(4.0));
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+        TransmissionManager::<Counting>::seed_infection(&mut context, person);
         context.add_plan(10.0, |context| {
-            context.get_data(BoundedPlugin).multiplier.set(3.0);
+            context.get_data(CountingPlugin).multiplier.set(3.0);
         });
         context.add_plan(30.0, Context::shutdown);
         context.execute();
-        total += context.get_data(BoundedPlugin).attempts.get();
-    }
-    let mean = total as f64 / runs as f64;
-    assert!(
-        (mean - 140.0).abs() < 6.0,
-        "expected about 140 attempts per run, got {mean}"
-    );
+        context.get_data(CountingPlugin).attempts.get()
+    });
+    assert_about(mean, 140.0, 6.0);
 }
 
 #[test]
@@ -1364,11 +1220,10 @@ fn an_infinite_bound_panics_instead_of_proposing_forever() {
     let mut context = Context::new();
     context.init_random(1);
     let person = context.add_entity(Person).unwrap();
-    let state = context.get_data(BoundedPlugin);
-    state.multiplier.set(1.0);
-    state.bound.set(f64::INFINITY);
-    TransmissionManager::<Bounded>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Bounded>::seed_infection(&mut context, person);
+    let state = context.get_data(CountingPlugin);
+    state.bound.set(Some(f64::INFINITY));
+    TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Counting>::seed_infection(&mut context, person);
     context.execute();
 }
 

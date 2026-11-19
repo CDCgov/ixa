@@ -12,7 +12,8 @@ mod parameters;
 mod settings;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, RateAssignment, SettingKind, SettingsExt, TransmissionManager,
+    ConstantRateFn, InfectionManager, RateAssignment, SettingKind, SettingsExt,
+    TransmissionManager, MAX_SETTINGS,
 };
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
@@ -36,7 +37,7 @@ define_property!(
 
 /// Transmissions counted by the setting they happened in, by kind index.
 #[derive(Default)]
-struct InfectionsBySetting(Vec<usize>);
+struct InfectionsBySetting([usize; MAX_SETTINGS]);
 define_data_plugin!(
     InfectionsBySettingPlugin,
     InfectionsBySetting,
@@ -65,11 +66,7 @@ impl InfectionManager<CoreEpiExample> for Context {
     ) {
         self.set_property(infectee, InfectionStatus::Infected);
         if let Some(setting) = exposure {
-            let infections = &mut self.get_data_mut(InfectionsBySettingPlugin).0;
-            if infections.len() <= setting.index() {
-                infections.resize(setting.index() + 1, 0);
-            }
-            infections[setting.index()] += 1;
+            self.get_data_mut(InfectionsBySettingPlugin).0[setting.index()] += 1;
         }
     }
 }
@@ -130,7 +127,7 @@ fn main() {
         println!(
             "infected at {}: {}",
             context.setting_name(setting),
-            infections.get(setting.index()).copied().unwrap_or(0)
+            infections[setting.index()]
         );
     }
 }

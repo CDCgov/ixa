@@ -1,10 +1,7 @@
 use super::InvertibleRate;
 
-/// A constant infectiousness rate `value` over `[0, duration)`, zero afterwards.
-///
-/// `duration` is typically one person's own infectious period (drawn by the
-/// model at infection), so the cumulative is finite and `inverse_cum_rate`
-/// returns `None` once it is exhausted.
+/// A constant infectiousness rate `value` over `[0, duration)`, zero
+/// afterwards. `duration` is typically one person's infectious period.
 #[derive(Debug, Clone, Copy)]
 pub struct ConstantRateFn {
     value: f64,
@@ -54,15 +51,6 @@ impl InvertibleRate for ConstantRateFn {
         let t = events / self.value;
         (t <= self.duration).then_some(t)
     }
-
-    #[inline]
-    fn max_cum_rate(&self) -> f64 {
-        if self.value <= 0.0 {
-            0.0
-        } else {
-            self.value * self.duration
-        }
-    }
 }
 
 #[cfg(test)]
@@ -99,7 +87,6 @@ mod test {
     #[test]
     fn inverse_cum_rate_exhausts_at_the_period() {
         let r = ConstantRateFn::new(0.5, 10.0);
-        assert_eq!(r.max_cum_rate(), 5.0);
         assert_eq!(r.inverse_cum_rate(5.0), Some(10.0));
         assert_eq!(r.inverse_cum_rate(5.0 + 1e-9), None);
     }
@@ -107,7 +94,6 @@ mod test {
     #[test]
     fn infinite_duration_is_unbounded() {
         let r = ConstantRateFn::new(0.5, f64::INFINITY);
-        assert_eq!(r.max_cum_rate(), f64::INFINITY);
         assert_eq!(r.inverse_cum_rate(1e9), Some(2e9));
     }
 
@@ -117,7 +103,6 @@ mod test {
         assert_eq!(r.inverse_cum_rate(1.0), None);
         // Zero events is always reachable at t=0.
         assert_eq!(r.inverse_cum_rate(0.0), Some(0.0));
-        assert_eq!(r.max_cum_rate(), 0.0);
     }
 
     #[test]

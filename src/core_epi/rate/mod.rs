@@ -9,8 +9,5 @@ pub mod rate_fn;
 
 pub use any_rate::AnyInfectionRate;
 pub use constant_rate::ConstantRateFn;
-pub use empirical_rate::{
-    empirical_cum_rate, empirical_curve_duration, empirical_inverse_cum_rate,
-    empirical_support_end, EmpiricalRateFn,
-};
+pub use empirical_rate::EmpiricalRateFn;
 pub use rate_fn::{InvertibleRate, ScaledRateFn, TransformedInvertibleRateFn};

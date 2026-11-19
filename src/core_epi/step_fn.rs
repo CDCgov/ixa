@@ -41,17 +41,6 @@ impl StepFn {
             .find(|&&(start, _)| start <= t)
             .map_or(self.initial, |&(_, v)| v)
     }
-
-    /// Every value the function takes.
-    pub fn values(&self) -> impl Iterator<Item = f64> + '_ {
-        std::iter::once(self.initial).chain(self.steps.iter().map(|&(_, v)| v))
-    }
-}
-
-impl From<f64> for StepFn {
-    fn from(constant: f64) -> Self {
-        Self::new(constant)
-    }
 }
 
 #[cfg(test)]
@@ -67,7 +56,6 @@ mod tests {
         assert_eq!(f.at(2.0), 0.5);
         assert_eq!(f.at(3.0), 0.25);
         assert_eq!(f.at(100.0), 0.25);
-        assert_eq!(f.values().collect::<Vec<_>>(), [1.0, 0.5, 0.25]);
     }
 
     #[test]
