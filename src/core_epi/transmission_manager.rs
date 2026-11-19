@@ -12,7 +12,8 @@ define_rng!(CoreEpiTransmissionRng);
 define_rng!(CoreEpiInfectionRng);
 
 /// Relative slack when checking a total against its forecast: the two take
-/// different float paths to the same value when the bound is tight.
+/// different float paths to the same value when the bound is tight. Also the
+/// slack on a susceptibility of one.
 const BOUND_TOLERANCE: f64 = 1e-9;
 
 /// Infection loop transmission dynamics.
@@ -287,8 +288,14 @@ fn handle_proposal<M, C>(
     // never attempt.
     if forecast > 0.0 {
         if let Some((infectee, exposure)) = context.evaluate_forecast(infector, forecast) {
-            // Draws only when the outcome is uncertain.
             let susceptibility = context.susceptibility(infectee);
+            // A value above one would be silently capped, understating that
+            // person's risk relative to everyone else's.
+            assert!(
+                (0.0..=1.0 + BOUND_TOLERANCE).contains(&susceptibility),
+                "susceptibility {susceptibility} of {infectee:?} is not in [0, 1]: scale                  susceptibilities so the largest is 1 and put the scale in the infectiousness rate"
+            );
+            // Draws only when the outcome is uncertain.
             let infected = susceptibility >= 1.0
                 || (susceptibility > 0.0
                     && context.sample_bool(CoreEpiTransmissionRng, susceptibility));

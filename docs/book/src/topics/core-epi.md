@@ -70,26 +70,73 @@ can be infected once. See `examples/core-epi` for a complete working version of 
 
 ## How the loop works
 
-Each infected person runs their own loop of attempt _proposals_:
+Each infected person runs their own loop of attempt _proposals_. One turn of it,
+simplified from the implementation:
 
-1. The loop asks the model for a **forecast**: a rate function, in time from now,
-   that is at least as large as the person's total infectiousness will be. It
-   draws the time of the next proposal from it.
-2. At that time the model **evaluates** the proposal. It computes the person's
-   total infectiousness now and accepts the proposal with probability
-   `total / forecast`. An accepted proposal is an _attempt_, and the model
-   returns who is contacted.
-3. The attempt becomes a transmission with probability equal to the contact's
-   **susceptibility**.
+```rust
+// 1. Forecast: an upper bound on the person's total infectiousness, as a rate
+//    function of time from now. Inverting an Exp(1) draw on it gives the delay
+//    to the next proposal. No delay means the forecast ran out: the loop ends.
+let forecast_fn = context.forecast_total_infectiousness(person);
+let delay = forecast_fn.inverse_cum_rate(exp_draw)?;
+let forecast = forecast_fn.rate(delay);
 
-Then the loop schedules the next proposal. It ends when the forecast runs out,
-which by default is when the person's infectiousness does.
+// ... `delay` later ...
+
+// 2. Evaluate: thin the proposal to an attempt and draw the contact.
+if let Some((contact, exposure)) = context.evaluate_forecast(person, forecast) {
+    // 3. The attempt transmits with the contact's susceptibility.
+    let susceptibility = context.susceptibility(contact);
+    if context.sample_bool(CoreEpiTransmissionRng, susceptibility) {
+        context.transmit(Some(person), contact, exposure);
+    }
+}
+// Back to 1.
+```
+
+Steps 1 and 2 are `TransmissionManager` methods, and step 3 reads an
+`InfectionManager` method. Their defaults are:
+
+```rust
+fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
+    ScaledRateFn::new(
+        // The person's rate function, shifted so that 0 is now. Modifiers are
+        // not applied: they only lower the rate, so this is still a bound.
+        self.majorizing_infectiousness_rate_fn(person),
+        self.max_contact_multiplier(person), // default: contact_multiplier(person)
+    )
+}
+
+fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
+    // The rate function now, times the infectiousness modifiers, times the
+    // contact multiplier (default 1).
+    let total = self.intrinsic_infectiousness(person)? * self.contact_multiplier(person);
+    if !self.accept_proposal(person, total, forecast) {
+        return None;
+    }
+    self.sample_contact(person) // default: anyone else, uniformly
+}
+
+fn accept_proposal(&self, person: PersonId, total: f64, forecast: f64) -> bool {
+    assert!(total <= forecast * (1.0 + BOUND_TOLERANCE));
+    total > 0.0
+        && (total >= forecast || self.sample_bool(CoreEpiTransmissionRng, total / forecast))
+}
+```
+
+So with nothing overridden, a person proposes at the rate of their own rate
+function, a proposal is accepted with probability equal to the product of their
+infectiousness modifiers, and the contact is anyone else in the population. The
+loop ends when the rate function runs out.
+
+A proposal that is not accepted, or an attempt that does not transmit, costs
+nothing but the draw: the loop goes back to step 1 either way.
 
 The forecast must be an upper bound. Thinning in step 2 corrects for the
 difference, so anything that lowers infectiousness after the proposal was drawn
 (a treatment, a mask, a contact restriction) is handled without rescheduling. A
-forecast that is too low is an error, and the loop panics rather
-than under-count attempts. See [When rates rise](#when-rates-rise).
+forecast that is too low is an error, and `accept_proposal` panics rather than
+under-count attempts. See [When rates rise](#when-rates-rise).
 
 ## Infectiousness
 
@@ -151,19 +198,64 @@ whatever the model does there (set a status, schedule recovery) yourself.
 
 ## Susceptibility
 
-`susceptibility(person)` is the probability that an attempt on them succeeds. It
-is `base_susceptibility` times the person's susceptibility modifiers.
+`base_susceptibility` is the probability that an attempt on a person succeeds without any modifiers, and `susceptibility(person)` is the realized probability including any modifiers.
 
 The default `base_susceptibility` is permanent immunity: 1 for someone never
-infected and 0 afterwards. Override it for anything else, for example immunity
-that follows a status the model can reset:
+infected and 0 once they have been infected. If you define [more than one pathogen](#more-than-one-pathogen), immunity to each is separate.
 
 ```rust
 fn base_susceptibility(&self, person: PersonId) -> f64 {
-    if self.get_property::<_, InfectionStatus>(person) == InfectionStatus::Susceptible {
+    if self.infection_time(person).is_none() {
         1.0
     } else {
         0.0
+    }
+}
+```
+
+`susceptibility` is the person's base susceptibilty times the product of the person's susceptibility
+[modifiers](#modifiers) (their `susceptibility_multiplier`):
+
+```rust
+fn susceptibility(&self, person: PersonId) -> f64 {
+    self.base_susceptibility(person) * self.susceptibility_multiplier(person)
+}
+```
+
+Susceptibility is the only check the loop makes on a contact. It does not look at
+whether they are currently infected, so a `base_susceptibility` that is positive
+for someone already infected lets them be infected again: they get a new rate
+function, which replaces the old one.
+
+Susceptibility only decides the last step. The infector's proposal must first be
+accepted as an attempt, and this person must be the contact drawn. A
+susceptibility of 1 means that such an attempt always infects them.
+
+Susceptibility is a probability: the loop panics on a value outside 0 to 1. For
+relative susceptibility, give the most susceptible group 1 and put the scale in
+the infectiousness rate.
+
+Override `base_susceptibility` for anything else, for example children who are
+half as susceptible as adults:
+
+```rust
+define_property!(
+    enum AgeGroup {
+        Child,
+        Adult,
+    },
+    Person,
+    default_const = AgeGroup::Adult
+);
+
+fn base_susceptibility(&self, person: PersonId) -> f64 {
+    // Keep the default's permanent immunity.
+    if self.infection_time(person).is_some() {
+        return 0.0;
+    }
+    match self.get_property::<_, AgeGroup>(person) {
+        AgeGroup::Adult => 1.0,
+        AgeGroup::Child => 0.5,
     }
 }
 ```
@@ -178,28 +270,39 @@ setting a modifier again replaces its factor and different modifiers compose.
 struct Antiviral;
 struct Vaccine;
 
-// Scales this infection's infectiousness to 25% from one day in, until it ends.
-let start = context.get_current_time() + 1.0;
-context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None);
+struct Mask;
+
+// Halves this person's infectiousness until removed.
+context.set_infectiousness_modifier::<Mask>(person, 0.5);
 
 // Halves this person's susceptibility until removed.
 context.set_susceptibility_modifier::<Vaccine>(person, 0.5);
+
+// Scales this infection's infectiousness to 25% from one day in, until it ends.
+let start = context.get_current_time() + 1.0;
+context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None);
 ```
 
-The two kinds differ in what they belong to:
+A modifier set with `set_infectiousness_modifier` or `set_susceptibility_modifier`
+belongs to the person. It can be set before they are ever infected, stays through
+any number of infections, and ends only when the model removes it. The two kinds
+differ in the factors they take:
 
-- An **infectiousness modifier** belongs to the current infection. Its factor
-  must be between 0 and 1, so the forecast stays an upper bound, and it is cleared
-  when the person is infected again. Setting one on someone never infected does
-  nothing, and a scheduled one applies only if they are still infectious with
-  the same infection when it starts.
-- A **susceptibility modifier** belongs to the person. It applies while they are
-  uninfected, survives reinfection, and may be any finite non-negative factor.
+- An **infectiousness modifier** must be between 0 and 1, so the forecast stays
+  an upper bound.
+- A **susceptibility modifier** may be any finite non-negative factor, as long
+  as the person's [susceptibility](#susceptibility) stays at most 1.
 
-Both have `set_`, `remove_` and `schedule_` forms, and a `set_..._fn` form whose
-factor is computed on every read from the context, the person and the time
-elapsed (since infection for infectiousness, since it was set for
-susceptibility). That is for effects that build up or wane:
+`schedule_infectiousness_modifier` is the exception: it is for an effect on one
+infection, such as a treatment. It applies only if the person is still infectious
+with the same infection at the start time, and it is dropped if they are infected
+again. Called for someone never infected, it does nothing.
+`schedule_susceptibility_modifier` has no such tie: it sets a modifier on the
+person at the start time and removes it at the end time.
+
+Both kinds also have a `remove_` form and a `set_..._fn` form, whose factor is
+computed on every read from the context, the person and the time elapsed since
+the modifier was set. That is for effects that build up or wane:
 
 ```rust
 // Protection that wanes linearly over 180 days.
@@ -207,6 +310,10 @@ context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, el
     (0.5 + 0.5 * elapsed / 180.0).min(1.0)
 });
 ```
+
+For a factor that follows the course of the infection instead, read
+`time_since_infection(person)` inside the closure. It is `None` for someone never
+infected.
 
 `examples/core-epi-antiviral` runs the same outbreak with and without an
 antiviral.
@@ -277,28 +384,9 @@ need the level below them, `forecast_total_infectiousness` and
 - the total and the contact must come from the same draw, as on the
   setting-first path [below](#using-settings-in-the-loop).
 
-```rust
-use ixa::core_epi::{InvertibleRate, ScaledRateFn};
-
-impl TransmissionManager<Flu> for Context {
-    fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            self.max_contact_multiplier(person),
-        )
-    }
-
-    fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
-        let total = self.intrinsic_infectiousness(person)? * self.contact_multiplier(person);
-        if !self.accept_proposal(person, total, forecast) {
-            return None;
-        }
-        self.sample_contact(person)
-    }
-}
-```
-
-These are the defaults written out. `accept_proposal` does the thinning.
+Start from the defaults in [How the loop works](#how-the-loop-works), with
+`InvertibleRate` and `ScaledRateFn` imported from `ixa::core_epi`. Keep the call
+to `accept_proposal`: it does the thinning and checks the bound.
 
 ## Settings
 

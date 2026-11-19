@@ -120,8 +120,7 @@ fn function_modifiers_follow_elapsed_time() {
             0.5
         );
         InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
-        // Treatment effect that ramps in over the first two days of infection,
-        // reading the context to check it is the one passed in.
+        // Treatment effect that ramps in over its first two days, reading the context to check it is the one passed in.
         InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Antiviral>(
             ctx,
             person,
@@ -180,13 +179,32 @@ fn zero_susceptibility_never_transmits() {
 }
 
 #[test]
+#[should_panic(expected = "is not in [0, 1]")]
+fn susceptibility_above_one_panics() {
+    struct Frail;
+    let mut context = Context::new();
+    context.init_random(42);
+    for _ in 0..10 {
+        let person = context.add_entity(Person).unwrap();
+        InfectionManager::<Sir>::set_susceptibility_modifier::<Frail>(&mut context, person, 1.5);
+    }
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(2.0, 5.0).into()],
+    );
+    TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Sir>::seed_infections(&mut context, Person, 1);
+    context.execute();
+}
+
+#[test]
 fn zero_infectiousness_never_transmits() {
     let (_, infected) = run(0.0);
     assert_eq!(infected, 5);
 }
 
 #[test]
-fn modifier_scales_infectiousness_for_current_infection() {
+fn infectiousness_modifier_belongs_to_the_person() {
     struct Mask;
     let mut context = Context::new();
     context.init_random(1);
@@ -206,13 +224,93 @@ fn modifier_scales_infectiousness_for_current_infection() {
         InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
         1.0
     );
-    // Reinfection clears modifiers.
+    // It survives reinfection.
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
-        Some(1.0)
+        Some(0.5)
     );
+    // And can be set before someone is ever infected.
+    let other = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, other, 0.25);
+    assert_eq!(
+        InfectionManager::<Sir>::intrinsic_infectiousness(&context, other),
+        None
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, other);
+    assert_eq!(
+        InfectionManager::<Sir>::intrinsic_infectiousness(&context, other),
+        Some(0.25)
+    );
+}
+
+#[test]
+fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
+    struct Mask;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 10.0).into()],
+    );
+    // Set a day before the infection: elapsed time runs from the set.
+    context.add_plan(1.0, move |ctx| {
+        InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Mask>(ctx, person, |_, _, t| {
+            1.0 - 0.25 * t.min(2.0)
+        });
+    });
+    context.add_plan(2.0, move |ctx| {
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(0.75)
+        );
+    });
+    context.add_plan(3.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
+            Some(0.5)
+        );
+    });
+    context.execute();
+    assert_eq!(context.get_current_time(), 3.0);
+}
+
+#[test]
+fn a_scheduled_infectiousness_modifier_ends_with_its_infection() {
+    struct Mask;
+    struct Antiviral;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 10.0).into()],
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        person,
+        0.5,
+        1.0,
+        None,
+    );
+    context.add_plan(2.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            0.25
+        );
+        // Reinfection drops the scheduled modifier and keeps the person's.
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            0.5
+        );
+    });
+    context.execute();
 }
 
 #[test]
