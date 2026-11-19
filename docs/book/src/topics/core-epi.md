@@ -267,11 +267,19 @@ Interventions change infectiousness and susceptibility through modifiers: factor
 that multiply together. Each is identified by a type of the model's choosing, so
 setting a modifier again replaces its factor and different modifiers compose.
 
-```rust
-struct Antiviral;
-struct Vaccine;
+`examples/core-epi-antiviral` runs the same outbreak with and without an
+antiviral.
 
+### Modifiers on a person
+
+`set_infectiousness_modifier` and `set_susceptibility_modifier` put a modifier on
+the person. It can be set before they are ever infected, stays through any number
+of infections, and ends only when the model removes it with the matching
+`remove_` method.
+
+```rust
 struct Mask;
+struct Vaccine;
 
 // Halves this person's infectiousness until removed.
 context.set_infectiousness_modifier::<Mask>(person, 0.5);
@@ -279,33 +287,55 @@ context.set_infectiousness_modifier::<Mask>(person, 0.5);
 // Halves this person's susceptibility until removed.
 context.set_susceptibility_modifier::<Vaccine>(person, 0.5);
 
+context.remove_infectiousness_modifier::<Mask>(person);
+```
+
+A factor is any finite non-negative number, with one limit: the person's
+[susceptibility](#susceptibility) must stay at most 1.
+
+### Modifiers for one infection
+
+`schedule_infectiousness_modifier` is for an effect on a single infection, such
+as a treatment. It sets the modifier at a start time and, if given, removes it at
+an end time.
+
+```rust
+struct Antiviral;
+
 // Scales this infection's infectiousness to 25% from one day in, until it ends.
 let start = context.get_current_time() + 1.0;
 context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None);
 ```
 
-A modifier set with `set_infectiousness_modifier` or `set_susceptibility_modifier`
-belongs to the person. It can be set before they are ever infected, stays through
-any number of infections, and ends only when the model removes it. The two kinds
-differ in the factors they take:
+It applies only if the person is still infectious with the same infection at the
+start time, and it is dropped if they are infected again. Called for someone
+never infected, it does nothing.
 
-- An **infectiousness modifier** may be any finite non-negative factor. A
-  factor above 1 raises the person's rate, and the forecast with it: when a
-  change takes the product of their modifiers above 1, the loop forecasts again
-  by itself.
-- A **susceptibility modifier** may be any finite non-negative factor, as long
-  as the person's [susceptibility](#susceptibility) stays at most 1.
+`schedule_susceptibility_modifier` takes the same arguments but has no such tie:
+it sets a modifier on the person at the start time and removes it at the end
+time.
 
-`schedule_infectiousness_modifier` is the exception: it is for an effect on one
-infection, such as a treatment. It applies only if the person is still infectious
-with the same infection at the start time, and it is dropped if they are infected
-again. Called for someone never infected, it does nothing.
-`schedule_susceptibility_modifier` has no such tie: it sets a modifier on the
-person at the start time and removes it at the end time.
+### Raising infectiousness
 
-Both kinds also have a `remove_` form and a `set_..._fn` form, whose factor is
-computed on every read from the context, the person and the time elapsed since
-the modifier was set. That is for effects that build up or wane:
+An infectiousness factor above 1 raises the person's rate. The forecast has to
+rise with it, so when a change takes the product of a person's modifiers above 1
+the loop forecasts again by itself.
+
+```rust
+struct Coughing;
+
+// Triples this person's infectiousness while they have a cough.
+context.set_infectiousness_modifier::<Coughing>(person, 3.0);
+```
+
+A model that runs its own loop instead of calling `setup_transmission_loop` must
+[reforecast](#when-rates-rise) after such a change.
+
+### Factors that change over time
+
+The `set_..._fn` forms take a function in place of a constant. It is called on
+every read with the context, the person and the time elapsed since the modifier
+was set, for effects that build up or wane:
 
 ```rust
 // Protection that wanes linearly over 180 days.
@@ -314,13 +344,17 @@ context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, el
 });
 ```
 
+For a factor that follows the course of the infection instead, read
+`time_since_infection(person)` inside the closure. It is `None` for someone never
+infected.
+
 An infectiousness function must return values between 0 and 1, because nothing
 tells the loop when a function rises. For one that goes higher, declare its
 maximum:
 
 ```rust
-// A surge that builds to three times the usual rate over two days.
-context.set_infectiousness_modifier_fn_with_max::<Surge>(person, 3.0, |_context, _person, elapsed| {
+// A cough that worsens over two days, to three times the usual rate.
+context.set_infectiousness_modifier_fn_with_max::<Coughing>(person, 3.0, |_context, _person, elapsed| {
     (1.0 + elapsed).min(3.0)
 });
 ```
@@ -329,13 +363,6 @@ The person is then forecast at the maximum throughout and the excess is
 rejected, so a maximum far above the usual value costs proposals. For a factor
 that changes at known times, scheduling plain `set_infectiousness_modifier` calls
 is cheaper: each rise is forecast exactly.
-
-For a factor that follows the course of the infection instead, read
-`time_since_infection(person)` inside the closure. It is `None` for someone never
-infected.
-
-`examples/core-epi-antiviral` runs the same outbreak with and without an
-antiviral.
 
 ## Contact structure
 
@@ -581,12 +608,12 @@ library, infections, modifiers and immunity:
 
 ```rust
 struct Flu;
-struct Cold;
+struct Rsv;
 
 impl InfectionManager<Flu> for Context { /* ... */ }
-impl InfectionManager<Cold> for Context { /* ... */ }
+impl InfectionManager<Rsv> for Context { /* ... */ }
 impl TransmissionManager<Flu> for Context {}
-impl TransmissionManager<Cold> for Context {}
+impl TransmissionManager<Rsv> for Context {}
 ```
 
 Settings belong to the entity, so both pathogens share the same households and
@@ -597,7 +624,7 @@ which is meant. Name the trait and marker:
 
 ```rust
 InfectionManager::<Flu>::infection_time(&context, person);
-TransmissionManager::<Cold>::seed_infections(&mut context, Person, 5);
+TransmissionManager::<Rsv>::seed_infections(&mut context, Person, 5);
 ```
 
 The same form resolves a clash between a `core_epi` method and a method of the

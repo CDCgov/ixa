@@ -885,7 +885,7 @@ fn two_models_on_one_population_keep_separate_infections() {
     use ixa::core_epi::InfectiousnessAssignedEvent;
 
     struct Flu;
-    struct Cold;
+    struct Rsv;
     impl InfectionManager<Flu> for Context {
         type Entity = Person;
         type Exposure = ();
@@ -894,7 +894,7 @@ fn two_models_on_one_population_keep_separate_infections() {
             RateAssignment::Library(0)
         }
     }
-    impl InfectionManager<Cold> for Context {
+    impl InfectionManager<Rsv> for Context {
         type Entity = Person;
         type Exposure = ();
 
@@ -903,12 +903,12 @@ fn two_models_on_one_population_keep_separate_infections() {
         }
     }
     impl TransmissionManager<Flu> for Context {}
-    impl TransmissionManager<Cold> for Context {}
+    impl TransmissionManager<Rsv> for Context {}
 
     #[derive(Default)]
     struct Assigned {
         flu: usize,
-        cold: usize,
+        rsv: usize,
     }
     define_data_plugin!(AssignedPlugin, Assigned, Assigned::default());
 
@@ -922,47 +922,47 @@ fn two_models_on_one_population_keep_separate_infections() {
         &mut context,
         vec![ConstantRateFn::new(1.0, 3.0).into()],
     );
-    InfectionManager::<Cold>::load_infectiousness_rate_library(
+    InfectionManager::<Rsv>::load_infectiousness_rate_library(
         &mut context,
         vec![ConstantRateFn::new(0.0, 7.0).into()],
     );
     context.subscribe_to_event(|context, _event: InfectiousnessAssignedEvent<Flu>| {
         context.get_data_mut(AssignedPlugin).flu += 1;
     });
-    context.subscribe_to_event(|context, _event: InfectiousnessAssignedEvent<Cold>| {
-        context.get_data_mut(AssignedPlugin).cold += 1;
+    context.subscribe_to_event(|context, _event: InfectiousnessAssignedEvent<Rsv>| {
+        context.get_data_mut(AssignedPlugin).rsv += 1;
     });
     TransmissionManager::<Flu>::setup_transmission_loop(&mut context);
-    TransmissionManager::<Cold>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Rsv>::setup_transmission_loop(&mut context);
 
     TransmissionManager::<Flu>::seed_infection(&mut context, people[0]);
-    TransmissionManager::<Cold>::seed_infection(&mut context, people[1]);
+    TransmissionManager::<Rsv>::seed_infection(&mut context, people[1]);
     assert_eq!(
         InfectionManager::<Flu>::infectiousness_duration(&context, people[0]),
         Some(3.0)
     );
     assert_eq!(
-        InfectionManager::<Cold>::infectiousness_duration(&context, people[0]),
+        InfectionManager::<Rsv>::infectiousness_duration(&context, people[0]),
         None
     );
     assert_eq!(
-        InfectionManager::<Cold>::infectiousness_duration(&context, people[1]),
+        InfectionManager::<Rsv>::infectiousness_duration(&context, people[1]),
         Some(7.0)
     );
-    // Immunity is per model: the cold case is still susceptible to flu.
+    // Immunity is per model: the RSV case is still susceptible to flu.
     assert_eq!(
         InfectionManager::<Flu>::susceptibility(&context, people[1]),
         1.0
     );
     InfectionManager::<Flu>::set_susceptibility_modifier::<Flu>(&mut context, people[2], 0.0);
     assert_eq!(
-        InfectionManager::<Cold>::susceptibility(&context, people[2]),
+        InfectionManager::<Rsv>::susceptibility(&context, people[2]),
         1.0
     );
 
     context.execute();
 
-    // Flu (R0 3) spreads; the cold has a rate of zero and stays with its seed.
+    // Flu (R0 3) spreads; RSV has a rate of zero and stays with its seed.
     let infected_by = |flu: bool| {
         people
             .iter()
@@ -970,7 +970,7 @@ fn two_models_on_one_population_keep_separate_infections() {
                 if flu {
                     InfectionManager::<Flu>::infection_time(&context, person).is_some()
                 } else {
-                    InfectionManager::<Cold>::infection_time(&context, person).is_some()
+                    InfectionManager::<Rsv>::infection_time(&context, person).is_some()
                 }
             })
             .count()
@@ -979,7 +979,7 @@ fn two_models_on_one_population_keep_separate_infections() {
     assert_eq!(infected_by(false), 1);
     let assigned = context.get_data(AssignedPlugin);
     assert_eq!(assigned.flu, infected_by(true));
-    assert_eq!(assigned.cold, 1);
+    assert_eq!(assigned.rsv, 1);
 }
 
 // A model whose every attempt infects the other person, and whose
