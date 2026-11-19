@@ -100,8 +100,9 @@ Steps 1 and 2 are `TransmissionManager` methods, and step 3 reads an
 ```rust
 fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
     ScaledRateFn::new(
-        // The person's rate function, shifted so that 0 is now. Modifiers are
-        // not applied: they only lower the rate, so this is still a bound.
+        // The person's rate function, shifted so that 0 is now. Modifiers
+        // that lower the rate are left out, so this is a bound; modifiers that
+        // multiply to more than 1 scale it up.
         self.majorizing_infectiousness_rate_fn(person),
         self.max_contact_multiplier(person), // default: contact_multiplier(person)
     )
@@ -288,8 +289,10 @@ belongs to the person. It can be set before they are ever infected, stays throug
 any number of infections, and ends only when the model removes it. The two kinds
 differ in the factors they take:
 
-- An **infectiousness modifier** must be between 0 and 1, so the forecast stays
-  an upper bound.
+- An **infectiousness modifier** may be any finite non-negative factor. A
+  factor above 1 raises the person's rate, and the forecast with it: when a
+  change takes the product of their modifiers above 1, the loop forecasts again
+  by itself.
 - A **susceptibility modifier** may be any finite non-negative factor, as long
   as the person's [susceptibility](#susceptibility) stays at most 1.
 
@@ -310,6 +313,22 @@ context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, el
     (0.5 + 0.5 * elapsed / 180.0).min(1.0)
 });
 ```
+
+An infectiousness function must return values between 0 and 1, because nothing
+tells the loop when a function rises. For one that goes higher, declare its
+maximum:
+
+```rust
+// A surge that builds to three times the usual rate over two days.
+context.set_infectiousness_modifier_fn_with_max::<Surge>(person, 3.0, |_context, _person, elapsed| {
+    (1.0 + elapsed).min(3.0)
+});
+```
+
+The person is then forecast at the maximum throughout and the excess is
+rejected, so a maximum far above the usual value costs proposals. For a factor
+that changes at known times, scheduling plain `set_infectiousness_modifier` calls
+is cheaper: each rise is forecast exactly.
 
 For a factor that follows the course of the infection instead, read
 `time_since_infection(person)` inside the closure. It is `None` for someone never
@@ -542,6 +561,8 @@ was zero.
 
 Changes that need it:
 
+- an infectiousness modifier rising above 1, but only in a model that does not
+  call `setup_transmission_loop`: with it, the loop does this itself;
 - on the exact settings path with its default forecast, any change to the
   person's itinerary or to who is in any of their groups;
 - with `max_setting_multiplier` as the bound, a group growing past its largest

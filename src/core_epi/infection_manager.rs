@@ -55,9 +55,20 @@ where
     }
 }
 
+/// Emitted when a modifier change raises an infected person's bound, so the
+/// transmission loop can forecast again.
+#[derive(IxaEvent)]
+pub(super) struct ModifierBoundRaisedEvent<M: 'static, E: Entity> {
+    pub(super) person: EntityId<E>,
+    model: PhantomData<fn() -> M>,
+}
+
 struct Assigned {
     rate: RateAssignment,
     infection_time: f64,
+    /// Upper bound on the product of the person's infectiousness modifiers
+    /// until it is next refreshed. Kept here so a forecast reads one record.
+    modifier_bound: f64,
     /// Which forecast of the person's transmission loop is live: a pending
     /// proposal made under an earlier one is dropped when it fires.
     forecast_generation: u32,
@@ -70,7 +81,12 @@ pub type ModifierFn<E> = Box<dyn Fn(&Context, EntityId<E>, f64) -> f64>;
 /// One modifier's factor: a constant, or a function of elapsed time.
 enum Factor<E: Entity> {
     Constant(f64),
-    Fn { f: ModifierFn<E>, since: f64 },
+    Fn {
+        f: ModifierFn<E>,
+        since: f64,
+        /// Declared upper bound on what `f` returns.
+        max: f64,
+    },
 }
 
 /// What a modifier belongs to: the person, or the infection they had when it
@@ -94,17 +110,26 @@ struct Modifiers<E: Entity> {
     factors: Vec<Modifier<E>>,
     /// Product of the constant factors.
     constant_product: f64,
+    /// Product of the constant factors and the function factors' maxima.
+    bound_product: f64,
     function_count: usize,
 }
 
 impl<E: Entity> Modifiers<E> {
     fn recompute(&mut self) {
         self.constant_product = 1.0;
+        self.bound_product = 1.0;
         self.function_count = 0;
         for modifier in &self.factors {
             match &modifier.factor {
-                Factor::Constant(value) => self.constant_product *= value,
-                Factor::Fn { .. } => self.function_count += 1,
+                Factor::Constant(value) => {
+                    self.constant_product *= value;
+                    self.bound_product *= value;
+                }
+                Factor::Fn { max, .. } => {
+                    self.bound_product *= max;
+                    self.function_count += 1;
+                }
             }
         }
     }
@@ -119,6 +144,7 @@ impl<E: Entity> Modifiers<E> {
         let modifiers = map.get_or_insert_with(person, || Modifiers {
             factors: Vec::new(),
             constant_product: 1.0,
+            bound_product: 1.0,
             function_count: 0,
         });
         let modifier = Modifier { key, scope, factor };
@@ -163,6 +189,20 @@ impl<E: Entity> Modifiers<E> {
         }
     }
 
+    /// Upper bound on `person`'s product while their modifiers are unchanged,
+    /// and at least one, so that lowering a factor never needs a reforecast.
+    fn bound(map: &EntityMap<E, Self>, person: EntityId<E>) -> f64 {
+        let Some(modifiers) = map.get(person) else {
+            return 1.0;
+        };
+        let product = modifiers.bound_product;
+        assert!(
+            product.is_finite(),
+            "infectiousness modifiers of {person:?} multiply to {product}"
+        );
+        product.max(1.0)
+    }
+
     fn product(map: &EntityMap<E, Self>, person: EntityId<E>, context: &Context) -> f64 {
         let Some(modifiers) = map.get(person) else {
             return 1.0;
@@ -171,7 +211,7 @@ impl<E: Entity> Modifiers<E> {
         if modifiers.function_count > 0 {
             let now = context.get_current_time();
             for modifier in &modifiers.factors {
-                if let Factor::Fn { f, since } = &modifier.factor {
+                if let Factor::Fn { f, since, .. } = &modifier.factor {
                     product *= f(context, person, now - since);
                 }
             }
@@ -276,6 +316,48 @@ pub(super) fn advance_forecast_generation<M: 'static, E: Entity, C: ContextBase>
     Some(assigned.forecast_generation)
 }
 
+fn assert_valid_infectiousness_factor(factor: f64) {
+    assert!(
+        factor.is_finite() && factor >= 0.0,
+        "infectiousness modifier factor must be finite and non-negative, got {factor}"
+    );
+}
+
+/// Set infectiousness modifier `key` on `person` and refresh their bound.
+fn set_infectiousness_factor<M: 'static, E: Entity, C: ContextBase>(
+    context: &mut C,
+    person: EntityId<E>,
+    key: TypeId,
+    scope: Scope,
+    factor: Factor<E>,
+) {
+    let state = state_mut::<M, E, _>(context);
+    Modifiers::set(&mut state.modifiers, person, key, scope, factor);
+    refresh_modifier_bound::<M, E, _>(context, person);
+}
+
+/// Recompute `person`'s modifier bound after their infectiousness modifiers
+/// changed. A rise makes their pending proposal invalid, so it is announced
+/// for the transmission loop to forecast again.
+fn refresh_modifier_bound<M: 'static, E: Entity, C: ContextBase>(
+    context: &mut C,
+    person: EntityId<E>,
+) {
+    let state = state_mut::<M, E, _>(context);
+    let bound = Modifiers::bound(&state.modifiers, person);
+    let Some(assigned) = state.assigned.get_mut(person) else {
+        return;
+    };
+    let raised = bound > assigned.modifier_bound;
+    assigned.modifier_bound = bound;
+    if raised {
+        context.emit_event(ModifierBoundRaisedEvent::<M, E> {
+            person,
+            model: PhantomData,
+        });
+    }
+}
+
 /// A person's infectiousness over time and their susceptibility: assigning
 /// each infected person a rate function, storing it, and exposing both to the
 /// transmission loop. `M` is the model's marker type (see
@@ -347,15 +429,17 @@ where
             .assigned
             .get(person)
             .map_or(0, |assigned| assigned.forecast_generation.wrapping_add(1));
+        Modifiers::end_infection(&mut state.modifiers, person);
+        let modifier_bound = Modifiers::bound(&state.modifiers, person);
         state.assigned.insert(
             person,
             Assigned {
                 rate,
                 infection_time,
+                modifier_bound,
                 forecast_generation,
             },
         );
-        Modifiers::end_infection(&mut state.modifiers, person);
         self.emit_event(InfectiousnessAssignedEvent::<M> {
             person,
             model: PhantomData,
@@ -400,7 +484,9 @@ where
     }
 
     /// Majorizing infectiousness of `person`, indexed by time from now: the
-    /// stored rate function shifted by the time since infection.
+    /// stored rate function shifted by the time since infection, scaled up
+    /// by their infectiousness modifiers when those multiply to more than
+    /// one.
     ///
     /// # Panics
     ///
@@ -417,7 +503,7 @@ where
             .expect("person was never infected");
         TransformedInvertibleRateFn::new(
             state.rate_fn(assigned),
-            1.0,
+            assigned.modifier_bound,
             self.get_current_time() - assigned.infection_time,
         )
     }
@@ -449,20 +535,18 @@ where
     /// removed. It belongs to the person: it can be set before they are
     /// infected and survives reinfection. `K` identifies the modifier: setting
     /// it again replaces its factor, and different modifiers compose
-    /// multiplicatively. `factor` must be in `[0, 1]` so the majorizing rate
-    /// stays an upper bound.
+    /// multiplicatively. `factor` must be finite and non-negative. A change
+    /// that raises the product above one makes the transmission loop
+    /// forecast again; a model driving its own loop calls
+    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission).
     fn set_infectiousness_modifier<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
         factor: f64,
     ) {
-        assert!(
-            (0.0..=1.0).contains(&factor),
-            "infectiousness modifier factor must be in [0, 1], got {factor}"
-        );
-        let state = state_mut::<M, Self::Entity, _>(self);
-        Modifiers::set(
-            &mut state.modifiers,
+        assert_valid_infectiousness_factor(factor);
+        set_infectiousness_factor::<M, _, _>(
+            self,
             person,
             TypeId::of::<K>(),
             Scope::Person,
@@ -474,28 +558,47 @@ where
     /// with a factor computed at every read from the context, the person and
     /// the time since it was set (a treatment effect that builds up, a factor
     /// read from a property), so only people with one pay for it. It must
-    /// return values in `[0, 1]`, which is checked in debug builds.
+    /// return values in `[0, 1]`; for a function that goes above one, use
+    /// [`set_infectiousness_modifier_fn_with_max`](Self::set_infectiousness_modifier_fn_with_max).
     fn set_infectiousness_modifier_fn<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
     ) {
+        self.set_infectiousness_modifier_fn_with_max::<K>(person, 1.0, f);
+    }
+
+    /// As [`set_infectiousness_modifier_fn`](Self::set_infectiousness_modifier_fn)
+    /// for a function returning values in `[0, max]`, which is checked in
+    /// debug builds. Nothing announces a function's rise, so the person is
+    /// forecast at `max` throughout and the excess is thinned: a `max` far
+    /// above the usual value costs rejected proposals.
+    fn set_infectiousness_modifier_fn_with_max<K: 'static>(
+        &mut self,
+        person: EntityId<Self::Entity>,
+        max: f64,
+        f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
+    ) {
+        assert_valid_infectiousness_factor(max);
         let since = self.get_current_time();
         let checked: ModifierFn<Self::Entity> = Box::new(move |ctx, person, elapsed| {
             let factor = f(ctx, person, elapsed);
             debug_assert!(
-                (0.0..=1.0).contains(&factor),
-                "infectiousness modifier must return values in [0, 1], got {factor}"
+                (0.0..=max).contains(&factor),
+                "infectiousness modifier must return values in [0, {max}], got {factor}"
             );
             factor
         });
-        let state = state_mut::<M, Self::Entity, _>(self);
-        Modifiers::set(
-            &mut state.modifiers,
+        set_infectiousness_factor::<M, _, _>(
+            self,
             person,
             TypeId::of::<K>(),
             Scope::Person,
-            Factor::Fn { f: checked, since },
+            Factor::Fn {
+                f: checked,
+                since,
+                max,
+            },
         );
     }
 
@@ -503,6 +606,7 @@ where
     fn remove_infectiousness_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
         let state = state_mut::<M, Self::Entity, _>(self);
         Modifiers::remove(&mut state.modifiers, person, TypeId::of::<K>());
+        refresh_modifier_bound::<M, Self::Entity, _>(self, person);
     }
 
     /// Set modifier `K` on `person`'s current infection at time `start` and, if
@@ -518,6 +622,7 @@ where
         start: f64,
         end: Option<f64>,
     ) {
+        assert_valid_infectiousness_factor(factor);
         let Some(infection_time) = self.infection_time(person) else {
             return;
         };
@@ -527,8 +632,8 @@ where
         };
         self.add_plan(start, move |ctx| {
             if same_infection(ctx) {
-                Modifiers::set(
-                    &mut state_mut::<M, Self::Entity, _>(ctx).modifiers,
+                set_infectiousness_factor::<M, _, _>(
+                    ctx,
                     person,
                     TypeId::of::<K>(),
                     Scope::Infection,
@@ -625,7 +730,12 @@ where
             person,
             TypeId::of::<K>(),
             Scope::Person,
-            Factor::Fn { f: checked, since },
+            Factor::Fn {
+                f: checked,
+                since,
+                // Unused: susceptibility has no forecast to bound.
+                max: 1.0,
+            },
         );
     }
 

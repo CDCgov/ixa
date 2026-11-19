@@ -1,7 +1,8 @@
 use rand_distr::Exp;
 
 use crate::core_epi::infection_manager::{
-    advance_forecast_generation, forecast_generation, InfectionManager, InfectiousnessAssignedEvent,
+    advance_forecast_generation, forecast_generation, InfectionManager,
+    InfectiousnessAssignedEvent, ModifierBoundRaisedEvent,
 };
 use crate::core_epi::rate::{InvertibleRate, ScaledRateFn};
 use crate::entity::query::Query;
@@ -213,6 +214,13 @@ where
             // emitted.
             TransmissionManager::<M>::reforecast_transmission(context, event.person);
         });
+        // An infectiousness modifier rose past what the pending proposal
+        // was drawn under.
+        self.subscribe_to_event(
+            |context, event: ModifierBoundRaisedEvent<M, <Self as InfectionManager<M>>::Entity>| {
+                TransmissionManager::<M>::reforecast_transmission(context, event.person);
+            },
+        );
     }
 
     /// Drop `person`'s pending attempt proposal and forecast again from now.

@@ -246,6 +246,229 @@ fn infectiousness_modifier_belongs_to_the_person() {
 }
 
 #[test]
+fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
+    struct Boost;
+    struct Mask;
+    let mut context = Context::new();
+    context.init_random(1);
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 5.0).into()],
+    );
+    let bound = |context: &Context| {
+        InfectionManager::<Sir>::majorizing_infectiousness_rate_fn(context, person).rate(0.0)
+    };
+    // Set before infection, it is in the first forecast.
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, 3.0);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    assert_eq!(
+        InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
+        Some(3.0)
+    );
+    assert_eq!(bound(&context), 3.0);
+    // A factor below one lowers the rate; the bound follows the product
+    // down but never below the unmodified rate.
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    assert_eq!(
+        InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
+        Some(1.5)
+    );
+    assert_eq!(bound(&context), 1.5);
+    InfectionManager::<Sir>::remove_infectiousness_modifier::<Boost>(&mut context, person);
+    assert_eq!(bound(&context), 1.0);
+    // Removing the mask alone raises it again.
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, 3.0);
+    InfectionManager::<Sir>::remove_infectiousness_modifier::<Mask>(&mut context, person);
+    assert_eq!(bound(&context), 3.0);
+}
+
+fn run_with_a_boost(boost_time: Option<f64>) -> usize {
+    struct Boost;
+    let mut context = Context::new();
+    context.init_random(42);
+    for _ in 0..POPULATION {
+        context.add_entity(Person).unwrap();
+    }
+    // R0 of 0.5 unmodified: the outbreak dies out unless boosted.
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(0.1, 5.0).into()],
+    );
+    TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Sir>::seed_infections(&mut context, Person, 20);
+    if let Some(boost_time) = boost_time {
+        // Everyone, including the people infectious at the time, whose
+        // pending proposals were drawn at the unmodified rate.
+        context.add_plan(boost_time, |ctx| {
+            let people: Vec<PersonId> = ctx.get_entity_iterator::<Person>().collect();
+            for person in people {
+                InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(ctx, person, 5.0);
+            }
+        });
+    }
+    context.execute();
+    context
+        .get_entity_iterator::<Person>()
+        .filter(|&p| InfectionManager::<Sir>::infection_time(&context, p).is_some())
+        .count()
+}
+
+#[test]
+fn raising_an_infectiousness_modifier_mid_infection_reforecasts() {
+    let unboosted = run_with_a_boost(None);
+    assert!(unboosted < 100, "unexpected final size {unboosted}");
+    // R0 of 2.5 from day 1 on. Without the reforecast the loop panics on
+    // the first proposal drawn before the boost.
+    let boosted = run_with_a_boost(Some(1.0));
+    assert!(boosted > 700, "unexpected final size {boosted}");
+}
+
+// One infector at rate 1 whose attempts are counted and never transmit.
+struct Counted;
+
+#[derive(Default)]
+struct CountedState {
+    attempts: std::cell::Cell<usize>,
+}
+define_data_plugin!(CountedPlugin, CountedState, CountedState::default());
+
+impl InfectionManager<Counted> for Context {
+    type Entity = Person;
+    type Exposure = ();
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        ConstantRateFn::new(1.0, 1000.0).into()
+    }
+}
+
+impl TransmissionManager<Counted> for Context {
+    fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
+        let state = self.get_data(CountedPlugin);
+        state.attempts.set(state.attempts.get() + 1);
+        None
+    }
+}
+
+#[test]
+fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
+    struct Boost;
+    struct Mask;
+    struct Surge;
+    struct Antiviral;
+    struct Wave;
+    // The modifier product over each ten days, with the change that starts it.
+    // Expected attempts: 10 * (2 + 1 + 2 + 1 + 1 + 3 + 1 + 1 + 4 + 2 + 4)
+    // + 5 * (1 + 3) = 240.
+    let runs = 50;
+    let mut total = 0;
+    for seed in 0..runs {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<Counted>::setup_transmission_loop(&mut context);
+        // 2: a boost set before infection.
+        InfectionManager::<Counted>::set_infectiousness_modifier::<Boost>(
+            &mut context,
+            person,
+            2.0,
+        );
+        TransmissionManager::<Counted>::seed_infection(&mut context, person);
+        // 1: a mask.
+        context.add_plan(10.0, move |ctx| {
+            InfectionManager::<Counted>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+        });
+        // 2: the mask replaced by a function, which raises the bound.
+        context.add_plan(20.0, move |ctx| {
+            InfectionManager::<Counted>::set_infectiousness_modifier_fn::<Mask>(
+                ctx,
+                person,
+                |_, _, _| 1.0,
+            );
+        });
+        // 1: the boost removed.
+        context.add_plan(30.0, move |ctx| {
+            InfectionManager::<Counted>::remove_infectiousness_modifier::<Boost>(ctx, person);
+        });
+        // 1, then 3 from day 50 to 60, then 1: a scheduled factor above one.
+        context.add_plan(40.0, move |ctx| {
+            InfectionManager::<Counted>::schedule_infectiousness_modifier::<Surge>(
+                ctx,
+                person,
+                3.0,
+                50.0,
+                Some(60.0),
+            );
+        });
+        // 1: a boost of 4 cancelled by a scheduled antiviral.
+        context.add_plan(65.0, move |ctx| {
+            InfectionManager::<Counted>::schedule_infectiousness_modifier::<Antiviral>(
+                ctx, person, 0.25, 70.0, None,
+            );
+        });
+        context.add_plan(70.0, move |ctx| {
+            InfectionManager::<Counted>::set_infectiousness_modifier::<Boost>(ctx, person, 4.0);
+        });
+        // 4: reinfection drops the antiviral.
+        context.add_plan(80.0, move |ctx| {
+            TransmissionManager::<Counted>::seed_infection(ctx, person);
+        });
+        // 2: a mask again.
+        context.add_plan(90.0, move |ctx| {
+            InfectionManager::<Counted>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+        });
+        // 4: the mask removed, which raises the bound.
+        context.add_plan(100.0, move |ctx| {
+            InfectionManager::<Counted>::remove_infectiousness_modifier::<Mask>(ctx, person);
+        });
+        // 1 for five days then 3: a function that rises under its declared
+        // maximum, with nothing to announce the rise.
+        context.add_plan(110.0, move |ctx| {
+            InfectionManager::<Counted>::remove_infectiousness_modifier::<Boost>(ctx, person);
+            InfectionManager::<Counted>::set_infectiousness_modifier_fn_with_max::<Wave>(
+                ctx,
+                person,
+                3.0,
+                |_, _, elapsed| if elapsed < 5.0 { 1.0 } else { 3.0 },
+            );
+        });
+        context.add_plan(120.0, Context::shutdown);
+        context.execute();
+        total += context.get_data(CountedPlugin).attempts.get();
+    }
+    let mean = total as f64 / runs as f64;
+    assert!(
+        (mean - 240.0).abs() < 8.0,
+        "expected about 240 attempts per run, got {mean}"
+    );
+}
+
+#[test]
+#[should_panic(expected = "multiply to inf")]
+fn infectiousness_modifiers_overflowing_panic() {
+    struct First;
+    struct Second;
+    let mut context = Context::new();
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 5.0).into()],
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::set_infectiousness_modifier::<First>(&mut context, person, 1e200);
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Second>(&mut context, person, 1e200);
+}
+
+#[test]
+#[should_panic(expected = "must be finite and non-negative")]
+fn a_negative_infectiousness_modifier_panics() {
+    struct Boost;
+    let mut context = Context::new();
+    let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, -0.5);
+}
+
+#[test]
 fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
     struct Mask;
     let mut context = Context::new();
