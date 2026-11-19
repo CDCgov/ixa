@@ -64,6 +64,8 @@ pub(super) struct ModifierBoundRaisedEvent<M: 'static, E: Entity> {
 struct Assigned {
     rate: RateAssignment,
     infection_time: f64,
+    /// How many times the person was infected before this infection.
+    infection_count: u32,
     /// Upper bound on the product of the person's infectiousness modifiers
     /// until it is next refreshed. Kept here so a forecast reads one record.
     modifier_bound: f64,
@@ -88,11 +90,22 @@ enum Factor<E: Entity> {
 }
 
 /// What a modifier belongs to: the person, or the infection they had when it
-/// was scheduled, in which case a reinfection drops it.
+/// was scheduled, in which case a reinfection drops it. A person can have one
+/// of each under the same key.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
     Person,
-    Infection,
+    /// `schedule` identifies the call that scheduled it, so that the end of
+    /// an earlier schedule does not remove a later one.
+    Infection {
+        schedule: u32,
+    },
+}
+
+impl Scope {
+    fn is_person(self) -> bool {
+        self == Scope::Person
+    }
 }
 
 impl<E: Entity> Factor<E> {
@@ -174,7 +187,7 @@ impl<E: Entity> Modifiers<E> {
         match modifiers
             .factors
             .iter_mut()
-            .find(|existing| existing.key == key)
+            .find(|existing| existing.key == key && existing.scope.is_person() == scope.is_person())
         {
             Some(existing) => *existing = modifier,
             None => modifiers.factors.push(modifier),
@@ -241,6 +254,8 @@ struct InfectionState<E: Entity> {
     modifiers: EntityMap<E, Modifiers<E>>,
     /// Always on the person.
     susceptibility_modifiers: EntityMap<E, Modifiers<E>>,
+    /// Number of modifiers scheduled so far, which numbers the next one.
+    schedule_count: u32,
 }
 
 impl<E: Entity> Default for InfectionState<E> {
@@ -250,6 +265,7 @@ impl<E: Entity> Default for InfectionState<E> {
             assigned: EntityMap::new(),
             modifiers: EntityMap::new(),
             susceptibility_modifiers: EntityMap::new(),
+            schedule_count: 0,
         }
     }
 }
@@ -346,6 +362,31 @@ fn set_infectiousness_factor<M: 'static, E: Entity, C: ContextBase>(
     refresh_modifier_bound::<M, E, _>(context, person);
 }
 
+/// Keep only the infectiousness modifiers on `person` that `keep` accepts, and
+/// refresh their bound.
+fn retain_infectiousness_factors<M: 'static, E: Entity, C: ContextBase>(
+    context: &mut C,
+    person: EntityId<E>,
+    keep: impl Fn(&Modifier<E>) -> bool,
+) {
+    let state = state_mut::<M, E, _>(context);
+    Modifiers::retain(&mut state.modifiers, person, keep);
+    refresh_modifier_bound::<M, E, _>(context, person);
+}
+
+/// Which of `person`'s infections is current; `None` if never infected.
+fn infection_count<M: 'static, E: Entity, C: ContextBase>(
+    context: &C,
+    person: EntityId<E>,
+) -> Option<u32> {
+    Some(
+        state::<M, E, _>(context)?
+            .assigned
+            .get(person)?
+            .infection_count,
+    )
+}
+
 /// Recompute `person`'s modifier bound after their infectiousness modifiers
 /// changed. A rise makes their pending proposal invalid, so it is announced
 /// for the transmission loop to forecast again.
@@ -421,13 +462,16 @@ where
             );
         }
         // A reinfection supersedes the previous infection's pending proposal.
-        let forecast_generation = state
-            .assigned
-            .get(person)
-            .map_or(0, |assigned| assigned.forecast_generation.wrapping_add(1));
+        let (infection_count, forecast_generation) =
+            state.assigned.get(person).map_or((0, 0), |previous| {
+                (
+                    previous.infection_count.wrapping_add(1),
+                    previous.forecast_generation.wrapping_add(1),
+                )
+            });
         // Modifiers scheduled for the previous infection end with it.
         Modifiers::retain(&mut state.modifiers, person, |modifier| {
-            modifier.scope == Scope::Person
+            modifier.scope.is_person()
         });
         let modifier_bound = Modifiers::bound(&state.modifiers, person);
         state.assigned.insert(
@@ -435,6 +479,7 @@ where
             Assigned {
                 rate,
                 infection_time,
+                infection_count,
                 modifier_bound,
                 forecast_generation,
             },
@@ -573,18 +618,19 @@ where
         );
     }
 
-    /// Remove infectiousness modifier `K` from `person`, if active.
+    /// Remove infectiousness modifier `K` from `person`, if active, whether
+    /// set or scheduled.
     fn remove_infectiousness_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
-        let state = state_mut::<M, Self::Entity, _>(self);
-        Modifiers::retain(&mut state.modifiers, person, |modifier| {
+        retain_infectiousness_factors::<M, _, _>(self, person, |modifier| {
             modifier.key != TypeId::of::<K>()
         });
-        refresh_modifier_bound::<M, Self::Entity, _>(self, person);
     }
 
     /// Set modifier `K` on `person`'s current infection at `start` and, if
     /// given, remove it at `end`. It belongs to this infection: a reinfection
-    /// drops it. No-op if `person` was never infected.
+    /// drops it, a later schedule of `K` replaces it, and it multiplies with
+    /// a modifier `K` set on the person.
+    /// No-op if `person` was never infected.
     fn schedule_infectiousness_modifier<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
@@ -593,29 +639,33 @@ where
         end: Option<f64>,
     ) {
         assert_valid_factor("infectiousness", factor);
-        let Some(infection_time) = self.infection_time(person) else {
+        let Some(scheduled_for) = infection_count::<M, _, _>(self, person) else {
             return;
         };
-        let same_infection = move |ctx: &Context| {
-            InfectionManager::<M>::infection_time(ctx, person) == Some(infection_time)
-                && InfectionManager::<M>::is_infectious(ctx, person)
+        let state = state_mut::<M, Self::Entity, _>(self);
+        let scope = Scope::Infection {
+            schedule: state.schedule_count,
         };
+        state.schedule_count = state.schedule_count.wrapping_add(1);
         self.add_plan(start, move |ctx| {
-            if same_infection(ctx) {
+            if infection_count::<M, _, _>(ctx, person) == Some(scheduled_for)
+                && InfectionManager::<M>::is_infectious(ctx, person)
+            {
                 set_infectiousness_factor::<M, _, _>(
                     ctx,
                     person,
                     TypeId::of::<K>(),
-                    Scope::Infection,
+                    scope,
                     Factor::Constant(factor),
                 );
             }
         });
         if let Some(end) = end {
+            // Gone already if a reinfection or a later schedule replaced it.
             self.add_plan(end, move |ctx| {
-                if same_infection(ctx) {
-                    InfectionManager::<M>::remove_infectiousness_modifier::<K>(ctx, person);
-                }
+                retain_infectiousness_factors::<M, _, _>(ctx, person, |modifier| {
+                    modifier.key != TypeId::of::<K>() || modifier.scope != scope
+                });
             });
         }
     }
@@ -700,6 +750,7 @@ where
         start: f64,
         end: Option<f64>,
     ) {
+        assert_valid_factor("susceptibility", factor);
         self.add_plan(start, move |ctx| {
             InfectionManager::<M>::set_susceptibility_modifier::<K>(ctx, person, factor);
         });

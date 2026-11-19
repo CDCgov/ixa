@@ -57,11 +57,11 @@ impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<
             return (events <= 0.0).then_some(0.0);
         }
         let elapsed_cum_rate = self.base.cum_rate(self.elapsed);
-        Some(
-            self.base
-                .inverse_cum_rate(events / self.scale + elapsed_cum_rate)?
-                - self.elapsed,
-        )
+        let time = self
+            .base
+            .inverse_cum_rate(events / self.scale + elapsed_cum_rate)?;
+        // Rounding can put `time` a float before `elapsed`.
+        Some((time - self.elapsed).max(0.0))
     }
 }
 
@@ -126,6 +126,14 @@ mod test {
         assert_eq!(scaled_rate_fn.inverse_cum_rate(8.0), Some(2.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
     }
+    #[test]
+    fn inverse_is_never_before_now() {
+        // Here `(0.3 * elapsed) / 0.3` rounds to just under `elapsed`.
+        let rate_fn = ConstantRateFn::new(0.3, 1e9);
+        let shifted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 1.685_000_000_000_002_3);
+        assert_eq!(shifted.inverse_cum_rate(1e-300), Some(0.0));
+    }
+
     #[test]
     fn zero_scale_transform_is_unreachable() {
         // A zero contact bound (a size-1 household) must not invert to t = inf.

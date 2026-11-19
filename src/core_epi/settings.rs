@@ -267,6 +267,9 @@ struct Kind {
     alpha: f64,
     /// A group everyone is in without an entry in `memberships`.
     population_group: Option<u32>,
+    /// People with a list group of this kind, current or remembered, who are
+    /// therefore not in the population group.
+    in_list_groups: usize,
     /// Groups created by external key, e.g. a line list's household ids.
     keys: HashMap<u128, u32>,
 }
@@ -357,6 +360,7 @@ impl<S: SettingKind> SettingsStore<S> {
             name,
             alpha,
             population_group: None,
+            in_list_groups: 0,
             keys: HashMap::default(),
         });
         S::from_index(old_stride)
@@ -368,6 +372,12 @@ impl<S: SettingKind> SettingsStore<S> {
 
     fn is_population_group(&self, setting: S, group: u32) -> bool {
         self.kinds[setting.index()].population_group == Some(group)
+    }
+
+    /// Size of the population group of `setting` among `population` people:
+    /// everyone without a list group of that kind.
+    fn population_group_size(&self, setting: S, population: usize) -> usize {
+        population - self.kinds[setting.index()].in_list_groups
     }
 
     /// `person`'s membership record of `setting`; `Member::NONE` if they never
@@ -426,7 +436,8 @@ impl<S: SettingKind> SettingsStore<S> {
     fn group_multipliers(&self, group: u32, setting: S, population: usize) -> Multipliers {
         if self.is_population_group(setting, group) {
             // A population group has no largest-ever size.
-            let multiplier = density_multiplier(self.alpha(setting), population);
+            let size = self.population_group_size(setting, population);
+            let multiplier = density_multiplier(self.alpha(setting), size);
             Multipliers {
                 current: multiplier,
                 largest: multiplier,
@@ -470,9 +481,20 @@ impl<S: SettingKind> SettingsStore<S> {
     ) -> Option<EntityId<S::Entity>> {
         let group = self.group_of(person, setting)?;
         if self.is_population_group(setting, group) {
-            context
-                .query(S::Entity::default())
-                .sample_entity_excluding(rng, person)
+            let population = context.get_entity_count::<S::Entity>();
+            if self.population_group_size(setting, population) <= 1 {
+                return None;
+            }
+            // Redraw anyone who left for a list group. Someone else is in the
+            // population group, so this ends.
+            loop {
+                let contact = context
+                    .query(S::Entity::default())
+                    .sample_entity_excluding(rng, person)?;
+                if self.member(contact, setting).group == NO_GROUP {
+                    return Some(contact);
+                }
+            }
         } else {
             sample_single_excluding(rng, &self.groups[group as usize].members, person.0 as u32)
                 .map(|&i| EntityId::new(i as usize))
@@ -626,7 +648,8 @@ pub trait SettingsExt:
     }
 
     /// Make `setting` a single group that every person is in, with no member
-    /// list. Anyone added to another group of this kind leaves it.
+    /// list. Anyone added to another group of this kind leaves it until they
+    /// are added back.
     fn create_population_setting_group<S: SettingKind>(&mut self, setting: S) -> SettingGroupId<S> {
         let group = self.create_setting_group(setting);
         S::store_mut(self).kinds[setting.index()].population_group = Some(group.index);
@@ -651,6 +674,7 @@ pub trait SettingsExt:
             // Forget the list group they left, or it would shadow this one.
             if member.group != NO_GROUP {
                 *store.member_mut(person, setting) = Member::NONE;
+                store.kinds[setting.index()].in_list_groups -= 1;
             }
             return;
         }
@@ -660,6 +684,9 @@ pub trait SettingsExt:
             .members
             .push(u32::try_from(person.0).expect("too many people"));
         target.resized();
+        if member.group == NO_GROUP {
+            store.kinds[setting.index()].in_list_groups += 1;
+        }
         *store.member_mut(person, setting) = Member {
             group: group.index,
             position,
@@ -691,15 +718,19 @@ pub trait SettingsExt:
         }
     }
 
-    /// The people in `group` now; everyone, for a population group.
+    /// The people in `group` now; for a population group, everyone without
+    /// a list group of that kind.
     fn setting_group_members<S: SettingKind>(
         &self,
         group: SettingGroupId<S>,
     ) -> Vec<EntityId<S::Entity>> {
         let store = S::store(self);
         let record = &store.groups[group.index as usize];
-        if store.is_population_group(S::from_index(record.kind), group.index) {
-            self.get_entity_iterator::<S::Entity>().collect()
+        let setting = S::from_index(record.kind);
+        if store.is_population_group(setting, group.index) {
+            self.get_entity_iterator::<S::Entity>()
+                .filter(|&person| store.member(person, setting).group == NO_GROUP)
+                .collect()
         } else {
             record
                 .members
@@ -727,7 +758,7 @@ pub trait SettingsExt:
             return 0;
         };
         if store.is_population_group(setting, group) {
-            self.get_entity_count::<S::Entity>()
+            store.population_group_size(setting, self.get_entity_count::<S::Entity>())
         } else {
             store.groups[group as usize].members.len()
         }
@@ -1377,6 +1408,46 @@ mod tests {
         // Nothing left to restore them to.
         context.restore_setting_member(people[0], COMMUNITY);
         assert_eq!(context.setting_group(people[0], COMMUNITY), Some(everyone));
+    }
+
+    #[test]
+    fn a_population_group_excludes_people_with_a_list_group() {
+        let (mut context, people) = context_with(4);
+        let everyone = context.create_population_setting_group(COMMUNITY);
+        let bubble = context.create_setting_group(COMMUNITY);
+        context.add_setting_member(bubble, people[0]);
+        context.add_setting_member(bubble, people[1]);
+        // Removed from the bubble, they are still not in the community.
+        context.remove_setting_member(people[1], COMMUNITY);
+
+        assert_eq!(context.setting_group_size(people[2], COMMUNITY), 2);
+        assert_eq!(
+            context.setting_group_members(everyone),
+            vec![people[2], people[3]]
+        );
+        for _ in 0..50 {
+            assert_eq!(
+                context.sample_setting_contact(people[2], COMMUNITY),
+                Some(people[3])
+            );
+        }
+
+        // Alone in the community once the last other person leaves it.
+        context.add_setting_member(bubble, people[3]);
+        assert_eq!(context.setting_group_size(people[2], COMMUNITY), 1);
+        assert_eq!(context.sample_setting_contact(people[2], COMMUNITY), None);
+        assert_eq!(context.setting_multiplier(people[2], COMMUNITY), 0.0);
+
+        // Back in: the bubble forgets them and the community counts them.
+        context.add_setting_member(everyone, people[1]);
+        assert_eq!(context.setting_group_size(people[2], COMMUNITY), 2);
+        assert_eq!(
+            context.sample_setting_contact(people[2], COMMUNITY),
+            Some(people[1])
+        );
+        // Someone new is in the community from the start.
+        context.add_entity(Person).unwrap();
+        assert_eq!(context.setting_group_size(people[2], COMMUNITY), 3);
     }
 
     #[test]

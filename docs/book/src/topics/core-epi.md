@@ -1,4 +1,4 @@
-# Epidemic Models with `core_epi`
+# `core_epi`
 
 The `core_epi` module includes a set of epi features: so far, definitions of infectiousness rates and related utilities, a standard continuous-time transmission loop, and settings. We intend to expand the feature set over time.
 
@@ -307,7 +307,9 @@ context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None)
 
 It applies only if the person is still infectious with the same infection at the
 start time, and it is dropped if they are infected again. Called for someone
-never infected, it does nothing.
+never infected, it does nothing. It is kept apart from a modifier of the same
+type set on the person: the two multiply, and `remove_infectiousness_modifier`
+removes both.
 
 `schedule_susceptibility_modifier` takes the same arguments but has no such tie:
 it sets a modifier on the person at the start time and removes it at the end

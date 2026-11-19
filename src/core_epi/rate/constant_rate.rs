@@ -9,8 +9,19 @@ pub struct ConstantRateFn {
 }
 
 impl ConstantRateFn {
+    /// # Panics
+    ///
+    /// If `value` is negative or not finite, or `duration` is negative or NaN.
     #[must_use]
     pub fn new(value: f64, duration: f64) -> Self {
+        assert!(
+            value.is_finite() && value >= 0.0,
+            "constant rate must be finite and non-negative, got {value}"
+        );
+        assert!(
+            duration >= 0.0,
+            "constant rate duration must be non-negative, got {duration}"
+        );
         Self { value, duration }
     }
 
@@ -56,6 +67,24 @@ impl InvertibleRate for ConstantRateFn {
 #[cfg(test)]
 mod test {
     use super::{ConstantRateFn, InvertibleRate};
+
+    #[test]
+    #[should_panic(expected = "duration must be non-negative")]
+    fn a_negative_duration_panics() {
+        let _ = ConstantRateFn::new(1.0, -1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "duration must be non-negative")]
+    fn a_nan_duration_panics() {
+        let _ = ConstantRateFn::new(1.0, f64::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "rate must be finite and non-negative")]
+    fn a_negative_rate_panics() {
+        let _ = ConstantRateFn::new(-1.0, 1.0);
+    }
 
     #[test]
     fn rate_is_flat_within_the_period() {

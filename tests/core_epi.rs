@@ -3,8 +3,8 @@
 use std::cell::Cell;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment, SettingKind,
-    SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
+    ConstantRateFn, EmpiricalRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment,
+    SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
 };
 use ixa::prelude::*;
 
@@ -1244,4 +1244,162 @@ fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing
         InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
         1.0
     );
+}
+
+#[test]
+fn a_proposal_just_after_a_curve_leaves_zero_stays_under_its_forecast() {
+    // A steep total rising from zero: near the start a float's worth of time
+    // is a large relative change in the rate.
+    struct Steep;
+    impl InfectionManager<Steep> for Context {
+        type Entity = Person;
+        type Exposure = ();
+
+        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+            EmpiricalRateFn::new(vec![[0.0, 0.0], [2.0, 1.0], [6.0, 0.0]], 1.0).into()
+        }
+    }
+    impl TransmissionManager<Steep> for Context {
+        fn contact_multiplier(&self, _person: PersonId) -> f64 {
+            1e12
+        }
+
+        fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
+            None
+        }
+    }
+    for seed in 0..20 {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<Steep>::setup_transmission_loop(&mut context);
+        context.add_plan(100.3, move |ctx| {
+            TransmissionManager::<Steep>::seed_infection(ctx, person);
+        });
+        context.add_plan(100.3 + 1e-5, Context::shutdown);
+        context.execute();
+    }
+}
+
+#[test]
+fn a_reinfection_at_the_same_time_drops_the_scheduled_modifier() {
+    struct Antiviral;
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        person,
+        0.25,
+        1.0,
+        None,
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    context.add_plan(2.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            1.0
+        );
+    });
+    context.execute();
+}
+
+#[test]
+fn a_scheduled_modifier_composes_with_the_persons_own_of_the_same_key() {
+    struct Mask;
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
+        &mut context,
+        person,
+        0.1,
+        1.0,
+        Some(2.0),
+    );
+    for (time, expected) in [(1.5, 0.05), (3.0, 0.5)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected
+            );
+        });
+    }
+    // Removing the modifier removes both.
+    context.add_plan(4.0, move |ctx| {
+        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
+            ctx, person, 0.1, 5.0, None,
+        );
+    });
+    context.add_plan(6.0, move |ctx| {
+        InfectionManager::<Sir>::remove_infectiousness_modifier::<Mask>(ctx, person);
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            1.0
+        );
+    });
+    context.execute();
+    assert_eq!(context.get_current_time(), 6.0);
+}
+
+#[test]
+fn a_scheduled_modifier_is_removed_at_its_end_after_infectiousness_ran_out() {
+    struct Antiviral;
+    let (mut context, people) = sir_context(1, 1, 1.0, 3.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        person,
+        0.25,
+        1.0,
+        Some(5.0),
+    );
+    context.execute();
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        1.0
+    );
+}
+
+#[test]
+#[should_panic(expected = "must be finite and non-negative")]
+fn scheduling_a_negative_susceptibility_modifier_panics_at_the_call() {
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        people[0],
+        -1.0,
+        1.0,
+        None,
+    );
+}
+
+#[test]
+fn a_later_schedule_of_a_modifier_outlives_the_end_of_an_earlier_one() {
+    struct Antiviral;
+    let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    for (factor, start, end) in [(0.5, 1.0, 5.0), (0.2, 3.0, 10.0)] {
+        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+            &mut context,
+            person,
+            factor,
+            start,
+            Some(end),
+        );
+    }
+    for (time, expected) in [(2.0, 0.5), (4.0, 0.2), (7.0, 0.2), (11.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
+    context.execute();
 }

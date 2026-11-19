@@ -16,6 +16,10 @@ define_rng!(CoreEpiInfectionRng);
 /// take different float paths. Also the slack on a susceptibility of one.
 const BOUND_TOLERANCE: f64 = 1e-9;
 
+/// Absolute slack on the same check, for a total next to a zero of its rate
+/// function, where a float's worth of time is a large relative change.
+const BOUND_SLACK: f64 = 1e-12;
+
 /// A Bernoulli draw that uses the RNG only when the outcome is uncertain.
 fn sample_if_uncertain<C: crate::ContextRandomExt>(context: &C, probability: f64) -> bool {
     probability >= 1.0
@@ -114,7 +118,7 @@ where
     /// If `total` exceeds `forecast`, which would under-thin attempts.
     fn accept_proposal(&self, person: EntityId<Self::Entity>, total: f64, forecast: f64) -> bool {
         assert!(
-            total <= forecast * (1.0 + BOUND_TOLERANCE),
+            total <= forecast * (1.0 + BOUND_TOLERANCE) + BOUND_SLACK,
             "total infectiousness {total} of {person:?} exceeds its forecast {forecast}: \
              the forecast must bound the total until the next proposal"
         );
@@ -184,15 +188,18 @@ fn schedule_proposal<M, C>(
     // The forecast is indexed by time from now, so inverting an Exp(1) draw
     // gives the delay. `None` means its infectiousness is exhausted: the loop ends.
     let exp_draw = context.sample_distr(CoreEpiTransmissionRng, Exp::new(1.0).unwrap());
+    let now = context.get_current_time();
     let proposal = {
         let forecast_fn = context.forecast_total_infectiousness(infector);
-        forecast_fn
-            .inverse_cum_rate(exp_draw)
-            .map(|delay| (delay, forecast_fn.rate(delay)))
+        forecast_fn.inverse_cum_rate(exp_draw).map(|delay| {
+            // The forecast at the delay the plan will see once the proposal
+            // time is rounded, so the total is later taken at the same instant.
+            let proposal_time = now + delay;
+            (proposal_time, forecast_fn.rate(proposal_time - now))
+        })
     };
 
-    if let Some((delay, forecast)) = proposal {
-        let proposal_time = context.get_current_time() + delay;
+    if let Some((proposal_time, forecast)) = proposal {
         context.add_plan(proposal_time, move |ctx| {
             handle_proposal::<M>(ctx, infector, forecast, generation);
         });

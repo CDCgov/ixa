@@ -48,8 +48,26 @@ pub struct EmpiricalRateFn {
 }
 
 impl EmpiricalRateFn {
+    /// Two points at one time make a step.
+    ///
+    /// # Panics
+    ///
+    /// If the times decrease, or a time or rate is negative or not finite.
     #[must_use]
     pub fn new(points: Vec<[f64; 2]>, scale: f64) -> Self {
+        let mut previous_time = 0.0;
+        for &[time, rate] in &points {
+            assert!(
+                time.is_finite() && time >= previous_time,
+                "empirical rate times must not decrease or be negative, got {time} after \
+                 {previous_time}"
+            );
+            assert!(
+                rate.is_finite() && rate >= 0.0,
+                "empirical rates must be finite and non-negative, got {rate} at time {time}"
+            );
+            previous_time = time;
+        }
         let cum = build_cum(&points);
         let total = *cum.last().unwrap();
         // The earliest anchor at which the cumulative peaks, so a trailing
@@ -268,6 +286,27 @@ mod test {
     fn duration_of_an_all_zero_or_empty_curve_is_its_start() {
         assert_eq!(unit(vec![[0.0, 0.0], [10.0, 0.0]]).duration(), 0.0);
         assert_eq!(unit(vec![]).duration(), 0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "times must not decrease")]
+    fn unsorted_points_panic() {
+        let _ = unit(vec![[2.0, 1.0], [0.0, 1.0]]);
+    }
+
+    #[test]
+    #[should_panic(expected = "finite and non-negative")]
+    fn a_negative_rate_panics() {
+        let _ = unit(vec![[0.0, 1.0], [2.0, -3.0]]);
+    }
+
+    #[test]
+    fn a_step_is_two_points_at_one_time() {
+        let r = unit(vec![[0.0, 1.0], [2.0, 1.0], [2.0, 3.0], [4.0, 3.0]]);
+        assert_eq!(r.rate(1.0), 1.0);
+        assert_eq!(r.rate(2.0), 3.0);
+        assert_eq!(r.cum_rate(3.0), 5.0);
+        assert_eq!(r.inverse_cum_rate(5.0), Some(3.0));
     }
 
     #[test]
