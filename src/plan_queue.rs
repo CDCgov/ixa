@@ -4,7 +4,6 @@
 //! time-ordered plans and shutdown-time plans, sharing a single `PlanId`
 //! allocator and cancellation map.
 
-use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 use crate::context::{Context, ExecutionPhase};
@@ -69,11 +68,7 @@ impl PlanQueue {
     ) -> PlanId {
         trace!("adding plan at {time}");
         let plan_id = self.next_plan_id;
-        self.queue.push(PlanSchedule {
-            plan_id,
-            time,
-            phase,
-        });
+        self.queue.push(PlanSchedule::new(plan_id, time, phase));
         self.data_map.insert(
             plan_id,
             QueuedPlan {
@@ -101,11 +96,8 @@ impl PlanQueue {
     ) -> PlanId {
         trace!("adding shutdown-time plan");
         let plan_id = self.next_plan_id;
-        self.shutdown_queue.push(PlanSchedule {
-            plan_id,
-            time: 0.0,
-            phase,
-        });
+        self.shutdown_queue
+            .push(PlanSchedule::new(plan_id, 0.0, phase));
         self.data_map.insert(
             plan_id,
             QueuedPlan {
@@ -137,8 +129,8 @@ impl PlanQueue {
     pub(crate) fn next_time(&mut self) -> Option<f64> {
         while let Some(entry) = self.queue.peek() {
             // We only want to report the time if the plan has not been canceled.
-            if self.data_map.contains_key(&entry.plan_id) {
-                return Some(entry.time);
+            if self.data_map.contains_key(&entry.plan_id()) {
+                return Some(entry.time());
             }
             // Trim the canceled plan.
             self.queue.pop();
@@ -178,12 +170,12 @@ impl PlanQueue {
                 .expect("Ixa internal error: plan count was positive but no plan was available");
 
             // Discard any cancelled plans we encounter.
-            if let Some(queued_plan) = self.data_map.remove(&entry.plan_id) {
+            if let Some(queued_plan) = self.data_map.remove(&entry.plan_id()) {
                 if !queued_plan.is_passive {
                     self.regular_plan_count -= 1;
                 }
                 return Some(Plan {
-                    time: entry.time,
+                    time: entry.time(),
                     data: queued_plan.callback,
                 });
             }
@@ -198,17 +190,17 @@ impl PlanQueue {
         loop {
             match self.queue.peek() {
                 // Trim any cancelled plans
-                Some(entry) if !self.data_map.contains_key(&entry.plan_id) => {
+                Some(entry) if !self.data_map.contains_key(&entry.plan_id()) => {
                     self.queue.pop();
                 }
 
                 // Return only if the plan is scheduled for the given time
-                Some(entry) if entry.time == time => {
+                Some(entry) if entry.time() == time => {
                     // The preceding `peek` proves that `pop` will return an entry.
                     let entry = self.queue.pop().unwrap();
                     let queued_plan = self
                         .data_map
-                        .remove(&entry.plan_id)
+                        .remove(&entry.plan_id())
                         .expect("Ixa internal error: live plan has no callback");
                     if !queued_plan.is_passive {
                         self.regular_plan_count -= 1;
@@ -234,12 +226,12 @@ impl PlanQueue {
         std::iter::from_fn(|| self.shutdown_queue.pop()).find_map(|entry| {
             // If there's no `data_map` entry, the plan has been canceled, so discard
             // and pop another plan.
-            let queued_plan = self.data_map.remove(&entry.plan_id)?;
+            let queued_plan = self.data_map.remove(&entry.plan_id())?;
             if !queued_plan.is_passive {
                 self.regular_plan_count -= 1;
             }
             Some(Plan {
-                time: entry.time,
+                time: entry.time(),
                 data: queued_plan.callback,
             })
         })
@@ -278,39 +270,45 @@ impl Default for PlanQueue {
 /// Regular [`PlanSchedule`] objects are sorted in increasing order of time,
 /// phase, and then plan id. Shutdown-time schedules all have the same internal
 /// time and are therefore sorted by phase and then plan id.
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub(crate) struct PlanSchedule {
-    pub plan_id: u64,
-    pub time: f64,
-    pub phase: ExecutionPhase,
+    /// Time, phase and plan id packed so that the earliest plan has the
+    /// largest key: one integer comparison per heap step.
+    key: u128,
 }
 
-impl Eq for PlanSchedule {}
+const PLAN_ID_BITS: u32 = 62;
+const SIGN_BIT: u64 = 1 << 63;
 
-impl PartialOrd for PlanSchedule {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+impl PlanSchedule {
+    fn new(plan_id: u64, time: f64, phase: ExecutionPhase) -> Self {
+        debug_assert!(!time.is_nan(), "Ixa internal error: plan time is NaN");
+        // Adding zero turns -0.0 into 0.0, so the two sort as equal times.
+        let bits = (time + 0.0).to_bits();
+        // Order-preserving map from non-NaN floats to unsigned integers.
+        let ordered_time = if bits & SIGN_BIT == 0 {
+            bits | SIGN_BIT
+        } else {
+            !bits
+        };
+        let ascending = (u128::from(ordered_time) << 64)
+            | ((phase as u128) << PLAN_ID_BITS)
+            | u128::from(plan_id);
+        Self { key: !ascending }
     }
-}
 
-/// Entry objects are ordered in increasing order by time, phase, and then plan id.
-impl Ord for PlanSchedule {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let time_ordering = self
-            .time
-            .partial_cmp(&other.time)
-            .expect("Ixa internal error: plan queue contains a NaN time")
-            .reverse();
-        match time_ordering {
-            Ordering::Equal => {
-                let phase_ordering = self.phase.cmp(&other.phase).reverse();
-                match phase_ordering {
-                    Ordering::Equal => self.plan_id.cmp(&other.plan_id).reverse(),
-                    _ => phase_ordering,
-                }
-            }
-            _ => time_ordering,
-        }
+    fn plan_id(self) -> u64 {
+        (!self.key as u64) & ((1 << PLAN_ID_BITS) - 1)
+    }
+
+    fn time(self) -> f64 {
+        let ordered_time = (!self.key >> 64) as u64;
+        let bits = if ordered_time & SIGN_BIT == 0 {
+            !ordered_time
+        } else {
+            ordered_time & !SIGN_BIT
+        };
+        f64::from_bits(bits)
     }
 }
 
@@ -343,7 +341,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use super::PlanQueue;
+    use super::{PlanQueue, PlanSchedule};
     use crate::context::{Context, ExecutionPhase};
 
     fn callback(value: u32, observed: Rc<RefCell<Vec<u32>>>) -> Box<dyn FnOnce(&mut Context)> {
@@ -660,5 +658,54 @@ mod tests {
         assert_ne!(regular_id, shutdown_id);
         assert_eq!(regular_id.0, 0);
         assert_eq!(shutdown_id.0, 1);
+    }
+    #[test]
+    fn schedule_key_round_trips_time_and_id() {
+        let times = [0.0, 1.5, 1e-300, 1e300, -2.5, -1e-300, f64::MIN, f64::MAX];
+        for time in times {
+            for plan_id in [0, 1, 12_345, (1 << 62) - 1] {
+                let schedule = PlanSchedule::new(plan_id, time, ExecutionPhase::Last);
+                assert_eq!(schedule.time(), time);
+                assert_eq!(schedule.plan_id(), plan_id);
+            }
+        }
+        // Negative zero is the same time as zero.
+        let schedule = PlanSchedule::new(3, -0.0, ExecutionPhase::Normal);
+        assert_eq!(schedule.time().to_bits(), 0.0_f64.to_bits());
+    }
+
+    #[test]
+    fn schedule_key_orders_by_time_then_phase_then_id() {
+        let times = [-3.0, -1e-9, -0.0, 0.0, 1e-9, 1.0, 1.0 + f64::EPSILON, 7.5];
+        let phases = [
+            ExecutionPhase::First,
+            ExecutionPhase::Normal,
+            ExecutionPhase::Last,
+        ];
+        let mut schedules = Vec::new();
+        for (time_index, &time) in times.iter().enumerate() {
+            for &phase in &phases {
+                for plan_id in [time_index as u64, 100 + time_index as u64] {
+                    schedules.push((time, phase, plan_id));
+                }
+            }
+        }
+        for &(time_a, phase_a, id_a) in &schedules {
+            for &(time_b, phase_b, id_b) in &schedules {
+                // The earlier plan is the greater heap entry.
+                let expected = time_b
+                    .partial_cmp(&time_a)
+                    .unwrap()
+                    .then(phase_b.cmp(&phase_a))
+                    .then(id_b.cmp(&id_a));
+                let a = PlanSchedule::new(id_a, time_a, phase_a);
+                let b = PlanSchedule::new(id_b, time_b, phase_b);
+                assert_eq!(
+                    a.cmp(&b),
+                    expected,
+                    "{time_a} {phase_a:?} {id_a} vs {time_b} {phase_b:?} {id_b}"
+                );
+            }
+        }
     }
 }
