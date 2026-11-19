@@ -73,6 +73,38 @@ with different transmission rates by edge type.
 cargo run --example network-hhmodel
 ```
 
+### `core-epi`
+
+The smallest `core_epi` model: homogeneous mixing with every
+`TransmissionManager` default, so the model only supplies an infectiousness
+rate function and what happens on infection.
+
+```sh
+cargo run --example core-epi
+```
+
+### `core-epi-antiviral`
+
+The `core-epi` model plus an antiviral intervention: a share of infected people
+start treatment after a delay, which scales their infectiousness for the rest
+of the infection. Runs the same seed with and without coverage and prints both
+final sizes.
+
+```sh
+cargo run --example core-epi-antiviral
+```
+
+### `core-epi-settings`
+
+Transmission through settings (household, school, workplace and community)
+using `core_epi`'s settings module. Loads a line list from CSV, builds setting
+groups from its ids, and splits each person's contacts across settings with an
+itinerary.
+
+```sh
+cargo run --example core-epi-settings
+```
+
 ## External examples
 
 * [ixa-epi-covid](https://github.com/CDCgov/ixa-epi-isolation)
