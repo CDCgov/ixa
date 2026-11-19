@@ -99,13 +99,11 @@ Steps 1 and 2 are `TransmissionManager` methods, and step 3 reads an
 
 ```rust
 fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
-    ScaledRateFn::new(
-        // The person's rate function, shifted so that 0 is now. Modifiers
-        // that lower the rate are left out, so this is a bound; modifiers that
-        // multiply to more than 1 scale it up.
-        self.majorizing_infectiousness_rate_fn(person),
-        self.max_contact_multiplier(person), // default: contact_multiplier(person)
-    )
+    // The person's rate function, shifted so that 0 is now. Modifiers that
+    // lower the rate are left out, so this is a bound; modifiers that
+    // multiply to more than 1 scale it up.
+    self.majorizing_infectiousness_rate_fn(person)
+        .scaled(self.max_contact_multiplier(person)) // default: contact_multiplier(person)
 }
 
 fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {
@@ -431,7 +429,7 @@ need the level below them, `forecast_total_infectiousness` and
   setting-first path [below](#using-settings-in-the-loop).
 
 Start from the defaults in [How the loop works](#how-the-loop-works), with
-`InvertibleRate` and `ScaledRateFn` imported from `ixa::core_epi`. Keep the call
+`InvertibleRate` imported from `ixa::core_epi`. Keep the call
 to `accept_proposal`: it does the thinning and checks the bound.
 
 ## Settings

@@ -205,32 +205,19 @@ impl<S: SettingKind> ItineraryAssignment<S> {
     }
 }
 
-/// Anything [`set_itinerary_assignment`](SettingsExt::set_itinerary_assignment)
-/// accepts: an [`ItineraryAssignment`], a bare [`Itinerary`] (global), or a
-/// closure `Fn(&Context, EntityId<S::Entity>) -> Itinerary<S>` (individual).
-pub trait IntoItineraryAssignment<S: SettingKind> {
-    fn into_itinerary_assignment(self) -> ItineraryAssignment<S>;
-}
-
-impl<S: SettingKind> IntoItineraryAssignment<S> for ItineraryAssignment<S> {
-    fn into_itinerary_assignment(self) -> ItineraryAssignment<S> {
-        self
+impl<S: SettingKind> From<Itinerary<S>> for ItineraryAssignment<S> {
+    fn from(itinerary: Itinerary<S>) -> Self {
+        Self::global(itinerary)
     }
 }
 
-impl<S: SettingKind> IntoItineraryAssignment<S> for Itinerary<S> {
-    fn into_itinerary_assignment(self) -> ItineraryAssignment<S> {
-        ItineraryAssignment::global(self)
-    }
-}
-
-impl<S, F> IntoItineraryAssignment<S> for F
+impl<S, F> From<F> for ItineraryAssignment<S>
 where
     S: SettingKind,
     F: Fn(&Context, EntityId<S::Entity>) -> Itinerary<S> + 'static,
 {
-    fn into_itinerary_assignment(self) -> ItineraryAssignment<S> {
-        ItineraryAssignment::individual(self)
+    fn from(f: F) -> Self {
+        Self::individual(f)
     }
 }
 
@@ -746,12 +733,14 @@ pub trait SettingsExt:
         }
     }
 
-    /// Where itineraries come from for everyone without one of their own.
+    /// Where itineraries come from for everyone without one of their own: an
+    /// [`Itinerary`] for all, an [`ItineraryAssignment`], or a closure
+    /// `Fn(&Context, EntityId) -> Itinerary` per person.
     fn set_itinerary_assignment<S: SettingKind>(
         &mut self,
-        assignment: impl IntoItineraryAssignment<S>,
+        assignment: impl Into<ItineraryAssignment<S>>,
     ) {
-        S::store_mut(self).assignment = Some(assignment.into_itinerary_assignment());
+        S::store_mut(self).assignment = Some(assignment.into());
     }
 
     /// `person`'s own itinerary, overriding the assignment.

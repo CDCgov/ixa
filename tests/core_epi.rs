@@ -3,8 +3,8 @@
 use std::cell::Cell;
 
 use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment, ScaledRateFn,
-    SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
+    ConstantRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment, SettingKind,
+    SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
 };
 use ixa::prelude::*;
 
@@ -490,10 +490,7 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
     impl TransmissionManager<Broken> for Context {
         fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
             // Half the real rate: not a bound.
-            ScaledRateFn::new(
-                InfectionManager::<Broken>::majorizing_infectiousness_rate_fn(self, person),
-                0.5,
-            )
+            InfectionManager::<Broken>::majorizing_infectiousness_rate_fn(self, person).scaled(0.5)
         }
 
         fn evaluate_forecast(&self, person: PersonId, forecast: f64) -> Option<(PersonId, ())> {

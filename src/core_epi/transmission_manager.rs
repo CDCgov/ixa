@@ -4,7 +4,7 @@ use crate::core_epi::infection_manager::{
     advance_forecast_generation, forecast_generation, InfectionManager,
     InfectiousnessAssignedEvent, ModifierBoundRaisedEvent,
 };
-use crate::core_epi::rate::{InvertibleRate, ScaledRateFn};
+use crate::core_epi::rate::InvertibleRate;
 use crate::entity::query::Query;
 use crate::entity::EntityId;
 use crate::prelude::*;
@@ -86,10 +86,8 @@ where
             "max_contact_multiplier of {person:?} must be finite and non-negative, \
              got {max_multiplier}"
         );
-        ScaledRateFn::new(
-            self.majorizing_infectiousness_rate_fn(person),
-            max_multiplier,
-        )
+        self.majorizing_infectiousness_rate_fn(person)
+            .scaled(max_multiplier)
     }
 
     /// Evaluate a proposal for `person` forecast at `forecast`: compute

@@ -10,4 +10,4 @@ pub mod rate_fn;
 pub use any_rate::AnyInfectionRate;
 pub use constant_rate::ConstantRateFn;
 pub use empirical_rate::EmpiricalRateFn;
-pub use rate_fn::{InvertibleRate, ScaledRateFn, TransformedInvertibleRateFn};
+pub use rate_fn::{InvertibleRate, TransformedInvertibleRateFn};

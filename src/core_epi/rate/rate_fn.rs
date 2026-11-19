@@ -32,36 +32,12 @@ impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
             elapsed,
         }
     }
-}
 
-/// An invertible rate function multiplied by a constant `factor`.
-pub struct ScaledRateFn<F: InvertibleRate> {
-    pub inner: F,
-    pub factor: f64,
-}
-
-impl<F: InvertibleRate> ScaledRateFn<F> {
+    /// The same function with its rate multiplied by `factor`.
     #[must_use]
-    pub fn new(inner: F, factor: f64) -> Self {
-        Self { inner, factor }
-    }
-}
-
-impl<F: InvertibleRate> InvertibleRate for ScaledRateFn<F> {
-    fn rate(&self, t: f64) -> f64 {
-        self.inner.rate(t) * self.factor
-    }
-
-    fn cum_rate(&self, t: f64) -> f64 {
-        self.inner.cum_rate(t) * self.factor
-    }
-
-    /// A non-positive `factor` means no events are ever reached.
-    fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
-        if self.factor <= 0.0 {
-            return (events <= 0.0).then_some(0.0);
-        }
-        self.inner.inverse_cum_rate(events / self.factor)
+    pub fn scaled(mut self, factor: f64) -> Self {
+        self.scale *= factor;
+        self
     }
 }
 
@@ -91,7 +67,7 @@ impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<
 
 #[cfg(test)]
 mod test {
-    use super::{InvertibleRate, ScaledRateFn, TransformedInvertibleRateFn};
+    use super::{InvertibleRate, TransformedInvertibleRateFn};
     use crate::assert_almost_eq;
     use crate::core_epi::rate::{ConstantRateFn, EmpiricalRateFn};
 
@@ -168,12 +144,12 @@ mod test {
     #[test]
     fn scaled_multiplies_the_rate_and_divides_the_inverse() {
         let rate_fn = flat_capped();
-        let f = ScaledRateFn::new(TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0), 3.0);
+        let f = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(3.0);
         assert_almost_eq!(f.rate(0.0), 12.0, 0.0);
         assert_almost_eq!(f.cum_rate(1.0), 12.0, 0.0);
         assert_eq!(f.inverse_cum_rate(12.0), Some(1.0));
         assert_eq!(f.inverse_cum_rate(24.0 + 1e-9), None);
-        let zero = ScaledRateFn::new(TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0), 0.0);
+        let zero = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(0.0);
         assert_eq!(zero.inverse_cum_rate(1.0), None);
     }
 }

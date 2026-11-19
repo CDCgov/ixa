@@ -20,12 +20,10 @@ pub use infection_manager::{
     InfectionManager, InfectiousnessAssignedEvent, ModifierFn, RateAssignment,
 };
 pub use rate::{
-    AnyInfectionRate, ConstantRateFn, EmpiricalRateFn, InvertibleRate, ScaledRateFn,
-    TransformedInvertibleRateFn,
+    AnyInfectionRate, ConstantRateFn, EmpiricalRateFn, InvertibleRate, TransformedInvertibleRateFn,
 };
 pub use settings::{
-    IntoItineraryAssignment, Itinerary, ItineraryAssignment, SettingGroupId, SettingKind,
-    SettingsExt, MAX_SETTINGS,
+    Itinerary, ItineraryAssignment, SettingGroupId, SettingKind, SettingsExt, MAX_SETTINGS,
 };
 pub use step_fn::StepFn;
 pub use transmission_manager::TransmissionManager;
