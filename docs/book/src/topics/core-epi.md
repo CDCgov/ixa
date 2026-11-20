@@ -141,6 +141,76 @@ difference, so anything that lowers infectiousness after the proposal was drawn
 forecast that is too low is an error, and `accept_proposal` panics rather than
 under-count attempts. See [When rates rise](#when-rates-rise).
 
+## Contact structure
+
+`TransmissionManager` decides who is contacted and how contact structure changes
+the rate. Most models describe it with three methods, each with a default:
+
+| Method                           | Returns                                               | Default                |
+| -------------------------------- | ----------------------------------------------------- | ---------------------- |
+| `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now      | 1                      |
+| `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | the multiplier now   |
+| `sample_contact(person)`         | who they contact in an attempt, and the exposure      | anyone else, uniformly |
+
+The loop forecasts on the intrinsic bound times `max_contact_multiplier`, thins by
+`contact_multiplier`, and asks `sample_contact` for each attempt.
+
+```rust
+impl TransmissionManager<Flu> for Context {
+    fn contact_multiplier(&self, person: PersonId) -> f64 {
+        /* for example, their number of neighbors in a contact network */
+    }
+
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
+        /* one of those neighbors */
+    }
+}
+```
+
+The rate is set by `contact_multiplier` alone. `max_contact_multiplier` only says
+how far it can rise before the person's next proposal, and must be finite: leave
+it at its default when the multiplier does not change during an infection, or
+when every rise is followed by a [reforecast](#when-rates-rise). Override it with
+a larger constant when the multiplier can rise without one. A bound larger than
+needed costs rejected proposals; it never raises the rate.
+
+`sample_anyone_else(person)` is the default draw, for a model that falls back to
+the whole population.
+
+### Recording how someone was exposed
+
+`sample_contact` returns the contact together with an _exposure_: whatever the
+model wants to know in `on_infected` about how the infection happened, such as
+the setting it happened in. Its type is `InfectionManager::Exposure`. A model
+with nothing to record uses `()`. A seeded infection (`seed_infection`,
+`seed_infections`) gets the type's default value.
+
+```rust
+impl InfectionManager<Flu> for Context {
+    type Entity = Person;
+    type Exposure = Option<Setting>;
+
+    fn on_infected(&mut self, infector: Option<PersonId>, infectee: PersonId, exposure: Option<Setting>) {
+        /* for example, write a row of a transmission report */
+    }
+}
+```
+
+### Overriding the forecast and the evaluation
+
+The three methods cover a contact multiplier with a constant bound. Two cases
+need the level below them, `forecast_total_infectiousness` and
+`evaluate_forecast`:
+
+- the bound is not a constant multiple of the intrinsic one, for example it
+  follows a schedule of restrictions;
+- the total and the contact must come from the same draw, as on the
+  setting-first path [below](#using-settings-in-the-loop).
+
+Start from the defaults in [How the loop works](#how-the-loop-works), with
+`InvertibleRate` imported from `ixa::core_epi`. Keep the call
+to `accept_proposal`: it does the thinning and checks the bound.
+
 ## Infectiousness
 
 A person's infectiousness is a rate function of time since infection, assigned
@@ -387,76 +457,6 @@ The person is then forecast at the maximum throughout and the excess is
 rejected, so a maximum far above the usual value costs proposals. For a factor
 that changes at known times, scheduling plain `set_infectiousness_modifier` calls
 is cheaper: each rise is forecast exactly.
-
-## Contact structure
-
-`TransmissionManager` decides who is contacted and how contact structure changes
-the rate. Most models describe it with three methods, each with a default:
-
-| Method                           | Returns                                               | Default                |
-| -------------------------------- | ----------------------------------------------------- | ---------------------- |
-| `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now      | 1                      |
-| `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | the multiplier now   |
-| `sample_contact(person)`         | who they contact in an attempt, and the exposure      | anyone else, uniformly |
-
-The loop forecasts on the intrinsic bound times `max_contact_multiplier`, thins by
-`contact_multiplier`, and asks `sample_contact` for each attempt.
-
-```rust
-impl TransmissionManager<Flu> for Context {
-    fn contact_multiplier(&self, person: PersonId) -> f64 {
-        /* for example, their number of neighbors in a contact network */
-    }
-
-    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, ())> {
-        /* one of those neighbors */
-    }
-}
-```
-
-The rate is set by `contact_multiplier` alone. `max_contact_multiplier` only says
-how far it can rise before the person's next proposal, and must be finite: leave
-it at its default when the multiplier does not change during an infection, or
-when every rise is followed by a [reforecast](#when-rates-rise). Override it with
-a larger constant when the multiplier can rise without one. A bound larger than
-needed costs rejected proposals; it never raises the rate.
-
-`sample_anyone_else(person)` is the default draw, for a model that falls back to
-the whole population.
-
-### Recording how someone was exposed
-
-`sample_contact` returns the contact together with an _exposure_: whatever the
-model wants to know in `on_infected` about how the infection happened, such as
-the setting it happened in. Its type is `InfectionManager::Exposure`. A model
-with nothing to record uses `()`. A seeded infection (`seed_infection`,
-`seed_infections`) gets the type's default value.
-
-```rust
-impl InfectionManager<Flu> for Context {
-    type Entity = Person;
-    type Exposure = Option<Setting>;
-
-    fn on_infected(&mut self, infector: Option<PersonId>, infectee: PersonId, exposure: Option<Setting>) {
-        /* for example, write a row of a transmission report */
-    }
-}
-```
-
-### Overriding the forecast and the evaluation
-
-The three methods cover a contact multiplier with a constant bound. Two cases
-need the level below them, `forecast_total_infectiousness` and
-`evaluate_forecast`:
-
-- the bound is not a constant multiple of the intrinsic one, for example it
-  follows a schedule of restrictions;
-- the total and the contact must come from the same draw, as on the
-  setting-first path [below](#using-settings-in-the-loop).
-
-Start from the defaults in [How the loop works](#how-the-loop-works), with
-`InvertibleRate` imported from `ixa::core_epi`. Keep the call
-to `accept_proposal`: it does the thinning and checks the bound.
 
 ## Settings
 
