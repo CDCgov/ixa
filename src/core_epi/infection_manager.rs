@@ -250,6 +250,62 @@ impl<E: Entity, A> Modifiers<E, A> {
     }
 }
 
+/// A factor computed per read from the context, the person and the same
+/// argument `A` as a [`ModifierFn`].
+type PopulationModifierFn<E, A> = Box<dyn Fn(&Context, EntityId<E>, &A) -> f64>;
+
+/// A modifier on everyone.
+struct PopulationModifier<E: Entity, A> {
+    key: TypeId,
+    f: PopulationModifierFn<E, A>,
+    /// Declared upper bound on what `f` returns.
+    max: f64,
+}
+
+impl<E: Entity, A: 'static> PopulationModifier<E, A> {
+    /// A modifier checked in debug builds to return finite values in
+    /// `[0, max]`.
+    fn checked(
+        kind: &'static str,
+        key: TypeId,
+        max: f64,
+        f: impl Fn(&Context, EntityId<E>, &A) -> f64 + 'static,
+    ) -> Self {
+        let checked = move |context: &Context, person: EntityId<E>, argument: &A| {
+            let factor = f(context, person, argument);
+            debug_assert!(
+                factor.is_finite() && (0.0..=max).contains(&factor),
+                "population {kind} modifier must return finite values in [0, {max}], got {factor}"
+            );
+            factor
+        };
+        Self {
+            key,
+            f: Box::new(checked),
+            max,
+        }
+    }
+
+    /// Add `modifier`, replacing one with the same key.
+    fn set(modifiers: &mut Vec<Self>, modifier: Self) {
+        match modifiers
+            .iter_mut()
+            .find(|existing| existing.key == modifier.key)
+        {
+            Some(existing) => *existing = modifier,
+            None => modifiers.push(modifier),
+        }
+    }
+
+    fn product(modifiers: &[Self], context: &Context, person: EntityId<E>, argument: &A) -> f64 {
+        let mut product = 1.0;
+        for modifier in modifiers {
+            product *= (modifier.f)(context, person, argument);
+        }
+        product
+    }
+}
+
 /// Everything `core_epi` keeps for one model: its rate library, who is
 /// infected with what, and the modifiers on them.
 struct InfectionState<E: Entity, D> {
@@ -263,6 +319,11 @@ struct InfectionState<E: Entity, D> {
     susceptibility_modifiers: EntityMap<E, Modifiers<E, D>>,
     /// Number of modifiers scheduled so far, which numbers the next one.
     schedule_count: u32,
+    population_modifiers: Vec<PopulationModifier<E, ()>>,
+    population_susceptibility_modifiers: Vec<PopulationModifier<E, D>>,
+    /// Upper bound on the product of the population infectiousness
+    /// modifiers, and at least one. Every forecast is scaled by it.
+    population_bound: f64,
 }
 
 impl<E: Entity, D> Default for InfectionState<E, D> {
@@ -273,6 +334,9 @@ impl<E: Entity, D> Default for InfectionState<E, D> {
             modifiers: EntityMap::new(),
             susceptibility_modifiers: EntityMap::new(),
             schedule_count: 0,
+            population_modifiers: Vec::new(),
+            population_susceptibility_modifiers: Vec::new(),
+            population_bound: 1.0,
         }
     }
 }
@@ -447,6 +511,40 @@ fn refresh_modifier_bound<M: 'static, E: Entity, D: 'static, C: ContextBase>(
     }
 }
 
+/// Recompute the bound on the population infectiousness modifiers after they
+/// changed. A rise makes every pending proposal invalid, so it is announced
+/// for each person still infectious.
+fn refresh_population_bound<M: 'static, E: Entity, D: 'static, C: ContextBase>(context: &mut C) {
+    let now = context.get_current_time();
+    let state = state_mut::<M, E, D, _>(context);
+    let mut product = 1.0;
+    for modifier in &state.population_modifiers {
+        product *= modifier.max;
+    }
+    assert!(
+        product.is_finite(),
+        "population infectiousness modifiers multiply to {product}"
+    );
+    let bound = product.max(1.0);
+    let raised = bound > state.population_bound;
+    state.population_bound = bound;
+    if !raised {
+        return;
+    }
+    let mut infectious = Vec::new();
+    for (person, assigned) in state.assigned.iter() {
+        if now - assigned.infection_time < state.rate_fn(assigned).duration() {
+            infectious.push(person);
+        }
+    }
+    for person in infectious {
+        context.emit_event(ModifierBoundRaisedEvent::<M, E> {
+            person,
+            model: PhantomData,
+        });
+    }
+}
+
 /// A person's infectiousness over time and their susceptibility. `M` is the
 /// model's marker type (see [`TransmissionManager`](super::TransmissionManager))
 /// and `Entity` the entity that gets infected, e.g. the model's `Person`.
@@ -608,7 +706,7 @@ where
             .expect("person was never infected");
         TransformedInvertibleRateFn::new(
             state.rate_fn(assigned),
-            assigned.modifier_bound,
+            assigned.modifier_bound * state.population_bound,
             self.get_current_time() - assigned.infection_time,
         )
     }
@@ -622,15 +720,64 @@ where
         let rate = state
             .rate_fn(assigned)
             .rate(self.get_current_time() - assigned.infection_time);
-        let multiplier = Modifiers::product(&state.modifiers, person, self.as_ref(), &());
+        let multiplier = Modifiers::product(&state.modifiers, person, self.as_ref(), &())
+            * PopulationModifier::product(&state.population_modifiers, self.as_ref(), person, &());
         Some(multiplier * rate)
     }
 
-    /// Product of `person`'s active infectiousness modifiers (`1.0` if none).
+    /// Product of `person`'s active infectiousness modifiers, their own and
+    /// the population's (`1.0` if none).
     fn infectiousness_multiplier(&self, person: EntityId<Self::Entity>) -> f64 {
         state::<M, Self::Entity, Self::Details, _>(self).map_or(1.0, |state| {
             Modifiers::product(&state.modifiers, person, self.as_ref(), &())
+                * PopulationModifier::product(
+                    &state.population_modifiers,
+                    self.as_ref(),
+                    person,
+                    &(),
+                )
         })
+    }
+
+    /// Scale everyone's infectiousness by a factor in `[0, 1]` computed at
+    /// every read from the context and the person, e.g. from a property,
+    /// until modifier `K` is removed; setting `K` again replaces it. It
+    /// multiplies with each person's own modifiers.
+    fn set_population_infectiousness_modifier<K: 'static>(
+        &mut self,
+        f: impl Fn(&Context, EntityId<Self::Entity>) -> f64 + 'static,
+    ) {
+        self.set_population_infectiousness_modifier_with_max::<K>(1.0, f);
+    }
+
+    /// As [`set_population_infectiousness_modifier`](Self::set_population_infectiousness_modifier)
+    /// for a function returning values in `[0, max]`. Everyone is forecast
+    /// at `max` throughout, so a loose `max` costs rejected proposals.
+    fn set_population_infectiousness_modifier_with_max<K: 'static>(
+        &mut self,
+        max: f64,
+        f: impl Fn(&Context, EntityId<Self::Entity>) -> f64 + 'static,
+    ) {
+        assert_valid_factor("infectiousness", max);
+        let state = state_mut::<M, Self::Entity, Self::Details, _>(self);
+        PopulationModifier::set(
+            &mut state.population_modifiers,
+            PopulationModifier::checked(
+                "infectiousness",
+                TypeId::of::<K>(),
+                max,
+                move |context, person, _| f(context, person),
+            ),
+        );
+        refresh_population_bound::<M, Self::Entity, Self::Details, _>(self);
+    }
+
+    /// Remove population infectiousness modifier `K`, if set.
+    fn remove_population_infectiousness_modifier<K: 'static>(&mut self) {
+        state_mut::<M, Self::Entity, Self::Details, _>(self)
+            .population_modifiers
+            .retain(|modifier| modifier.key != TypeId::of::<K>());
+        refresh_population_bound::<M, Self::Entity, Self::Details, _>(self);
     }
 
     /// Scale `person`'s infectiousness by a finite, non-negative `factor`
@@ -781,8 +928,9 @@ where
             * self.susceptibility_multiplier(person, details)
     }
 
-    /// Product of `person`'s active susceptibility modifiers against an
-    /// attempt carrying `details` (`1.0` if none).
+    /// Product of `person`'s active susceptibility modifiers, their own and
+    /// the population's, against an attempt carrying `details` (`1.0` if
+    /// none).
     fn susceptibility_multiplier(
         &self,
         person: EntityId<Self::Entity>,
@@ -794,8 +942,36 @@ where
                 person,
                 self.as_ref(),
                 details,
+            ) * PopulationModifier::product(
+                &state.population_susceptibility_modifiers,
+                self.as_ref(),
+                person,
+                details,
             )
         })
+    }
+
+    /// Scale everyone's susceptibility by a factor computed at every read
+    /// from the context, the person and the details of the attempt, until
+    /// modifier `K` is removed; setting `K` again replaces it. It multiplies
+    /// with each person's own modifiers.
+    fn set_population_susceptibility_modifier<K: 'static>(
+        &mut self,
+        f: impl Fn(&Context, EntityId<Self::Entity>, &Self::Details) -> f64 + 'static,
+    ) {
+        let state = state_mut::<M, Self::Entity, Self::Details, _>(self);
+        PopulationModifier::set(
+            &mut state.population_susceptibility_modifiers,
+            // No maximum: susceptibility has no forecast to bound.
+            PopulationModifier::checked("susceptibility", TypeId::of::<K>(), f64::INFINITY, f),
+        );
+    }
+
+    /// Remove population susceptibility modifier `K`, if set.
+    fn remove_population_susceptibility_modifier<K: 'static>(&mut self) {
+        state_mut::<M, Self::Entity, Self::Details, _>(self)
+            .population_susceptibility_modifiers
+            .retain(|modifier| modifier.key != TypeId::of::<K>());
     }
 
     /// Scale `person`'s susceptibility by a finite, non-negative `factor`

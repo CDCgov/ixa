@@ -1758,3 +1758,168 @@ fn susceptibility_can_depend_on_the_infector() {
         }
     }
 }
+
+define_property!(struct Masked(bool), Person, default_const = Masked(false));
+
+struct Masking;
+
+/// Half the factor for someone who is `Masked`.
+fn masking(context: &Context, person: PersonId) -> f64 {
+    if context.get_property::<_, Masked>(person).0 {
+        0.5
+    } else {
+        1.0
+    }
+}
+
+#[test]
+fn population_modifiers_apply_to_everyone_and_multiply_with_a_persons_own() {
+    struct Treated;
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 2, 1.0, 100.0);
+    let (masked, unmasked) = (people[0], people[1]);
+    context.set_property(masked, Masked(true));
+    for &person in &people {
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    }
+    let infectiousness = |context: &Context, person| {
+        InfectionManager::<Sir>::intrinsic_infectiousness(context, person)
+    };
+
+    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
+        &mut context,
+        masking,
+    );
+    assert_eq!(infectiousness(&context, masked), Some(0.5));
+    assert_eq!(infectiousness(&context, unmasked), Some(1.0));
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, masked),
+        0.5
+    );
+    // It reads the property at every call.
+    context.set_property(unmasked, Masked(true));
+    assert_eq!(infectiousness(&context, unmasked), Some(0.5));
+
+    InfectionManager::<Sir>::set_infectiousness_modifier::<Treated>(&mut context, masked, 0.5);
+    assert_eq!(infectiousness(&context, masked), Some(0.25));
+
+    // Setting the key again replaces it; removing it restores the rest.
+    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
+        &mut context,
+        |_, _| 0.2,
+    );
+    assert_eq!(infectiousness(&context, masked), Some(0.1));
+    InfectionManager::<Sir>::remove_population_infectiousness_modifier::<Masking>(&mut context);
+    assert_eq!(infectiousness(&context, masked), Some(0.5));
+
+    let never_infected = context.add_entity(Person).unwrap();
+    context.set_property(never_infected, Masked(true));
+    InfectionManager::<Sir>::set_population_susceptibility_modifier::<Masking>(
+        &mut context,
+        |context, person, _details| masking(context, person),
+    );
+    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        never_infected,
+        0.5,
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, never_infected, None, &()),
+        0.25
+    );
+    InfectionManager::<Sir>::remove_population_susceptibility_modifier::<Masking>(&mut context);
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility(&context, never_infected, None, &()),
+        0.5
+    );
+}
+
+#[test]
+fn a_population_susceptibility_modifier_sees_the_details() {
+    let (mut context, people) = strains_context(1, 1);
+    InfectionManager::<Strains>::set_population_susceptibility_modifier::<Masking>(
+        &mut context,
+        |_context, _person, variant| match variant {
+            Variant::Alpha => 0.1,
+            Variant::Beta => 0.8,
+        },
+    );
+    for (variant, expected) in [(Variant::Alpha, 0.1), (Variant::Beta, 0.8)] {
+        assert_eq!(
+            InfectionManager::<Strains>::susceptibility(&context, people[0], None, &variant),
+            expected
+        );
+    }
+}
+
+#[test]
+fn attempts_follow_population_modifiers_through_every_kind_of_change() {
+    struct Surge;
+    // Rate 2. Unmasked to t = 10 (20 attempts), masked to 20 (10), unmasked
+    // to 30 (20), a surge of 3 to 40 (60), then none to 50 (20): 130.
+    let mean = mean_attempts(|seed| {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+        InfectionManager::<Counting>::set_population_infectiousness_modifier::<Masking>(
+            &mut context,
+            masking,
+        );
+        TransmissionManager::<Counting>::seed_infection(&mut context, person);
+        // Within the bound of one, so neither change needs a reforecast.
+        context.add_plan(10.0, move |ctx| ctx.set_property(person, Masked(true)));
+        context.add_plan(20.0, move |ctx| ctx.set_property(person, Masked(false)));
+        // Raises the bound, so the loop reforecasts by itself.
+        context.add_plan(30.0, |ctx| {
+            InfectionManager::<Counting>::set_population_infectiousness_modifier_with_max::<Surge>(
+                ctx,
+                3.0,
+                |_, _| 3.0,
+            );
+        });
+        context.add_plan(40.0, |ctx| {
+            InfectionManager::<Counting>::remove_population_infectiousness_modifier::<Surge>(ctx);
+        });
+        context.add_plan(50.0, Context::shutdown);
+        context.execute();
+        context.get_data(CountingPlugin).attempts.get()
+    });
+    assert_about(mean, 130.0, 6.0);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "population infectiousness modifier must return finite values in [0, 1]")]
+fn a_population_infectiousness_modifier_above_its_maximum_panics() {
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0], ());
+    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
+        &mut context,
+        |_, _| 2.0,
+    );
+    let _ = InfectionManager::<Sir>::intrinsic_infectiousness(&context, people[0]);
+}
+
+#[test]
+fn a_population_modifier_can_follow_simulation_time() {
+    struct Lockdown;
+    // Rate 2, cut to a quarter from t = 10 to t = 20, run to t = 30:
+    // 20 + 5 + 20 = 45 attempts. The steps need no reforecast.
+    let mean = mean_attempts(|seed| {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
+        let contact = StepFn::new(1.0).step_at(10.0, 0.25).step_at(20.0, 1.0);
+        InfectionManager::<Counting>::set_population_infectiousness_modifier::<Lockdown>(
+            &mut context,
+            move |context, _person| contact.at(context.get_current_time()),
+        );
+        TransmissionManager::<Counting>::seed_infection(&mut context, person);
+        context.add_plan(30.0, Context::shutdown);
+        context.execute();
+        context.get_data(CountingPlugin).attempts.get()
+    });
+    assert_about(mean, 45.0, 4.0);
+}

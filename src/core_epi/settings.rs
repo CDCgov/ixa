@@ -316,7 +316,14 @@ pub struct SettingsStore<S: SettingKind> {
     groups: Vec<Group>,
     assignment: Option<ItineraryAssignment<S>>,
     /// Per-person overrides of the assignment.
-    itineraries: EntityMap<S::Entity, Itinerary<S>>,
+    itineraries: EntityMap<S::Entity, ItineraryOverride<S>>,
+}
+
+struct ItineraryOverride<S: SettingKind> {
+    itinerary: Itinerary<S>,
+    /// Bit per kind index: the groups the override took the person out of,
+    /// which clearing it puts them back in.
+    removed: u8,
 }
 
 impl<S: SettingKind> Default for SettingsStore<S> {
@@ -452,7 +459,7 @@ impl<S: SettingKind> SettingsStore<S> {
     fn itinerary(&self, context: &Context, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
         self.itineraries
             .get(person)
-            .copied()
+            .map(|own| own.itinerary)
             .or_else(|| Some(self.assignment.as_ref()?.resolve(context, person)))
     }
 
@@ -786,18 +793,43 @@ pub trait SettingsExt:
         S::store_mut(self).assignment = Some(assignment.into());
     }
 
-    /// `person`'s own itinerary, overriding the assignment.
+    /// `person`'s own itinerary, overriding the assignment. It also takes
+    /// them out of their group of every kind it gives no share, as
+    /// [`remove_setting_member`](Self::remove_setting_member) does, until the
+    /// override is cleared or replaced. A population group is not left.
     fn override_itinerary<S: SettingKind>(
         &mut self,
         person: EntityId<S::Entity>,
         itinerary: Itinerary<S>,
     ) {
-        S::store_mut(self).itineraries.insert(person, itinerary);
+        self.clear_itinerary_override::<S>(person);
+        let store = S::store_mut(self);
+        let mut removed = 0_u8;
+        for index in 0..store.kinds.len() {
+            let setting = S::from_index(index);
+            let member = store.member(person, setting);
+            let in_list_group = member.group != NO_GROUP && member.position != NOT_ACTIVE;
+            if in_list_group && itinerary.ratio(setting) == 0.0 {
+                store.remove(person, setting);
+                removed |= 1 << index;
+            }
+        }
+        store
+            .itineraries
+            .insert(person, ItineraryOverride { itinerary, removed });
     }
 
-    /// Remove `person`'s own itinerary, so the assignment applies again.
+    /// Remove `person`'s own itinerary, so the assignment applies again, and
+    /// put them back in the groups the override took them out of.
     fn clear_itinerary_override<S: SettingKind>(&mut self, person: EntityId<S::Entity>) {
-        let _ = S::store_mut(self).itineraries.remove(person);
+        let Some(own) = S::store_mut(self).itineraries.remove(person) else {
+            return;
+        };
+        for index in 0..MAX_SETTINGS {
+            if own.removed & (1 << index) != 0 {
+                self.restore_setting_member(person, S::from_index(index));
+            }
+        }
     }
 
     /// `person`'s itinerary: their own, else the assignment's, else `None`.
@@ -1192,6 +1224,51 @@ mod tests {
         // Both are members at home, so both bounds allow for it.
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
         assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+    }
+
+    #[test]
+    fn an_itinerary_override_takes_the_person_out_of_the_groups_it_drops() {
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
+        let home = home_for_all(&mut context, &people);
+        let work = context.create_setting_group(WORK);
+        for &p in &people {
+            context.add_setting_member(work, p);
+        }
+        context.set_itinerary_assignment(Itinerary::new([(HOME, 0.5), (WORK, 0.5)]));
+
+        context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        assert_eq!(context.setting_group(people[0], WORK), None);
+        assert_eq!(context.setting_group(people[0], HOME), Some(home));
+        assert_eq!(context.setting_group_size(people[1], WORK), 2);
+        for _ in 0..20 {
+            assert_eq!(
+                context.sample_setting_contact(people[1], WORK),
+                Some(people[2])
+            );
+        }
+
+        // A second override puts back what the first removed.
+        context.override_itinerary(people[0], Itinerary::new([(WORK, 1.0)]));
+        assert_eq!(context.setting_group(people[0], WORK), Some(work));
+        assert_eq!(context.setting_group(people[0], HOME), None);
+
+        context.clear_itinerary_override::<Setting>(people[0]);
+        assert_eq!(context.setting_group(people[0], HOME), Some(home));
+        assert_eq!(context.setting_group_size(people[1], WORK), 3);
+    }
+
+    #[test]
+    fn clearing_an_override_leaves_the_models_own_removals() {
+        let (mut context, people) = context_with_work_alpha(2, 1.0);
+        home_for_all(&mut context, &people);
+        let work = context.create_setting_group(WORK);
+        for &p in &people {
+            context.add_setting_member(work, p);
+        }
+        context.remove_setting_member(people[0], WORK);
+        context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        context.clear_itinerary_override::<Setting>(people[0]);
+        assert_eq!(context.setting_group(people[0], WORK), None);
     }
 
     #[test]

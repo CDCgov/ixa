@@ -438,6 +438,57 @@ The person is forecast at the maximum throughout, so a loose maximum costs
 rejected proposals. For changes at known times, scheduling plain
 `set_infectiousness_modifier` calls is cheaper.
 
+### Modifiers on everyone
+
+A population modifier is registered once and applies to everyone. Its function
+is called on every read with the context and the person, so it can depend on a
+property:
+
+```rust
+struct Masking;
+
+// Anyone wearing a mask is half as infectious.
+context.set_population_infectiousness_modifier::<Masking>(|context, person| {
+    if context.get_property::<_, Masked>(person).0 { 0.5 } else { 1.0 }
+});
+```
+
+Or on the time, for an effect on the whole population:
+
+```rust
+struct Lockdown;
+
+// Contact cut to a quarter from day 20 to day 35.
+let contact = StepFn::new(1.0).step_at(20.0, 0.25).step_at(35.0, 1.0);
+context.set_population_infectiousness_modifier::<Lockdown>(move |context, _person| {
+    contact.at(context.get_current_time())
+});
+```
+
+It multiplies with each person's own modifiers, setting the same type again
+replaces it, and `remove_population_infectiousness_modifier` removes it.
+
+An infectiousness function must stay between 0 and 1, so a property or the
+time can change with no reforecast. For one that goes higher, declare its
+maximum with `set_population_infectiousness_modifier_with_max`: everyone is
+then forecast at the maximum throughout.
+
+`set_population_susceptibility_modifier` is the same for susceptibility, and its
+function also gets the attempt's [details](#infection-details):
+
+```rust
+// Masks protect the wearer less against the escape variant.
+context.set_population_susceptibility_modifier::<Masking>(|context, person, variant| {
+    if !context.get_property::<_, Masked>(person).0 {
+        return 1.0;
+    }
+    match variant {
+        Variant::Original => 0.6,
+        Variant::Escape => 0.8,
+    }
+});
+```
+
 ## Settings
 
 Settings put people in places: _kinds_ of place (household, school), _groups_
@@ -502,6 +553,15 @@ and `clear_itinerary_override` undoes that:
 context.override_itinerary(person, Itinerary::new([(household, 1.0)]));
 context.clear_itinerary_override::<Setting>(person);
 ```
+
+An override also takes the person out of their group of every kind it gives no
+share, so they are not drawn as a contact there and do not count towards its
+size. Clearing it puts them back. A population group is the exception: nobody
+leaves one. An assignment does not do this: a closure that drops a kind for
+someone only moves their own attempts, so pair it with `remove_setting_member`.
+
+Because an override changes group sizes, a model that uses one needs the
+"Changing itineraries or groups" form below.
 
 ### Using settings in the loop
 
