@@ -136,7 +136,7 @@ panic: see [When rates rise](#when-rates-rise).
 
 ## Contact structure
 
-Most models describe contact structure with three `TransmissionManager`
+Most models describe contact structure with these `TransmissionManager`
 methods:
 
 | Method                           | Returns                                               | Default                |
@@ -144,6 +144,7 @@ methods:
 | `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now      | 1                      |
 | `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | the multiplier now   |
 | `sample_contact(person)`         | who they contact in an attempt, and the details       | anyone else, uniformly |
+| `details_from(person)`           | the details of an infection they pass on              | the default details    |
 
 The loop forecasts at the intrinsic bound times `max_contact_multiplier`, thins
 by `contact_multiplier`, and calls `sample_contact` for each attempt.
@@ -182,6 +183,9 @@ none. The details are passed to:
 
 They are stored with the infection: `infection_details(person)` reads those of
 a person's current one.
+
+The default `sample_contact` gets them from `details_from(infector)`, which
+returns the type's default value unless overridden.
 
 ```rust
 impl InfectionManager<Flu> for Context {
@@ -641,16 +645,16 @@ impl InfectionManager<Flu> for Context {
 
 impl TransmissionManager<Flu> for Context {
     // An infection carries its infector's variant.
-    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Variant)> {
-        let variant = *self.infection_details(person)?;
-        Some((self.sample_anyone_else(person)?, variant))
+    fn details_from(&self, infector: PersonId) -> Variant {
+        *self.infection_details(infector).expect("an infector is infected")
     }
 }
 ```
 
-The `sample_contact` override is required: the default returns the default
-details, which would make every transmission the original variant. Mutation
-goes in the same place.
+`details_from` is what passes the variant on: without it every transmission
+carries the default details, here the original variant. Mutation goes in the
+same place. A model that overrides `sample_contact` or `evaluate_forecast`
+builds the details there instead.
 
 Introduce a variant by seeding it:
 

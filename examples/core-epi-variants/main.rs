@@ -87,9 +87,10 @@ impl InfectionManager<CoreEpiExample> for Context {
 
 impl TransmissionManager<CoreEpiExample> for Context {
     // An infection carries its infector's variant.
-    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Variant)> {
-        let variant = *self.infection_details(person)?;
-        Some((self.sample_anyone_else(person)?, variant))
+    fn details_from(&self, infector: PersonId) -> Variant {
+        *self
+            .infection_details(infector)
+            .expect("an infector is infected")
     }
 }
 

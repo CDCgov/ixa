@@ -57,14 +57,22 @@ where
     }
 
     /// Who `person` contacts in an attempt and the details the infection
-    /// would carry; by default anyone else, uniformly, with the default
-    /// details. Called only by the default
+    /// would carry; by default anyone else, uniformly, with
+    /// [`details_from`](Self::details_from). Called only by the default
     /// [`evaluate_forecast`](Self::evaluate_forecast).
     fn sample_contact(
         &self,
         person: EntityId<Self::Entity>,
     ) -> Option<(EntityId<Self::Entity>, Self::Details)> {
-        Some((self.sample_anyone_else(person)?, Self::Details::default()))
+        Some((self.sample_anyone_else(person)?, self.details_from(person)))
+    }
+
+    /// The details of an infection `infector` passes on; by default the
+    /// default details. Override it to pass on something of the infector's,
+    /// such as their variant. Called only by the default
+    /// [`sample_contact`](Self::sample_contact).
+    fn details_from(&self, _infector: EntityId<Self::Entity>) -> Self::Details {
+        Self::Details::default()
     }
 
     /// Someone other than `person`, uniformly from the population; `None` if

@@ -1541,10 +1541,9 @@ impl InfectionManager<Strains> for Context {
 
 impl TransmissionManager<Strains> for Context {
     // An infection carries the infector's variant.
-    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Variant)> {
-        let variant = *InfectionManager::<Strains>::infection_details(self, person)?;
-        let contact = TransmissionManager::<Strains>::sample_anyone_else(self, person)?;
-        Some((contact, variant))
+    fn details_from(&self, infector: PersonId) -> Variant {
+        *InfectionManager::<Strains>::infection_details(self, infector)
+            .expect("an infector is infected")
     }
 }
 
