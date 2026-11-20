@@ -66,7 +66,12 @@ impl InfectionManager<CoreEpiExample> for Context {
     // The latest infection is enough here, because the escape variant
     // protects against both. A model whose immunity depends on every past
     // infection keeps that history in a property of its own.
-    fn base_susceptibility(&self, person: PersonId, variant: &Variant) -> f64 {
+    fn base_susceptibility(
+        &self,
+        person: PersonId,
+        _infector: Option<PersonId>,
+        variant: &Variant,
+    ) -> f64 {
         match (self.infection_details(person), variant) {
             (None, _) => 1.0,
             (Some(Variant::Original), Variant::Escape) => SUSCEPTIBILITY_AFTER_ORIGINAL,

@@ -750,10 +750,16 @@ where
         }
     }
 
-    /// Probability that an attempt carrying `details` infects `person`,
-    /// before modifiers. The default is permanent immunity whatever the
-    /// details: `1.0` if never infected, else `0.0`.
-    fn base_susceptibility(&self, person: EntityId<Self::Entity>, _details: &Self::Details) -> f64 {
+    /// Probability that an attempt by `infector` carrying `details` infects
+    /// `person`, before modifiers. `infector` is `None` when the model asks
+    /// with no particular infector; the loop always passes one. The default
+    /// is permanent immunity: `1.0` if never infected, else `0.0`.
+    fn base_susceptibility(
+        &self,
+        person: EntityId<Self::Entity>,
+        _infector: Option<EntityId<Self::Entity>>,
+        _details: &Self::Details,
+    ) -> f64 {
         if self.infection_time(person).is_none() {
             1.0
         } else {
@@ -761,12 +767,18 @@ where
         }
     }
 
-    /// Probability that an attempt carrying `details` infects `person`:
-    /// [`base_susceptibility`](Self::base_susceptibility) times
+    /// Probability that an attempt by `infector` carrying `details` infects
+    /// `person`: [`base_susceptibility`](Self::base_susceptibility) times
     /// [`susceptibility_multiplier`](Self::susceptibility_multiplier). The
     /// transmission loop panics if it is outside `[0, 1]`.
-    fn susceptibility(&self, person: EntityId<Self::Entity>, details: &Self::Details) -> f64 {
-        self.base_susceptibility(person, details) * self.susceptibility_multiplier(person, details)
+    fn susceptibility(
+        &self,
+        person: EntityId<Self::Entity>,
+        infector: Option<EntityId<Self::Entity>>,
+        details: &Self::Details,
+    ) -> f64 {
+        self.base_susceptibility(person, infector, details)
+            * self.susceptibility_multiplier(person, details)
     }
 
     /// Product of `person`'s active susceptibility modifiers against an

@@ -96,24 +96,24 @@ fn susceptibility_modifiers_compose_and_persist_across_infection() {
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person, &()),
+        InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         1.0
     );
     InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
     InfectionManager::<Sir>::set_susceptibility_modifier::<Age>(&mut context, person, 0.5);
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person, &()),
+        InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.25
     );
     InfectionManager::<Sir>::remove_susceptibility_modifier::<Age>(&mut context, person);
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person, &()),
+        InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.5
     );
     // Infection zeroes the base, but the modifier outlives it.
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person, &()),
+        InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.0
     );
     assert_eq!(
@@ -136,7 +136,7 @@ fn function_modifiers_follow_elapsed_time() {
         move |_, _, t, _| waning.at(t),
     );
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person, &()),
+        InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.2
     );
     context.add_plan(2.0, move |ctx| {
@@ -901,12 +901,12 @@ fn two_models_on_one_population_keep_separate_infections() {
     );
     // Immunity is per model: the RSV case is still susceptible to flu.
     assert_eq!(
-        InfectionManager::<Flu>::susceptibility(&context, people[1], &()),
+        InfectionManager::<Flu>::susceptibility(&context, people[1], None, &()),
         1.0
     );
     InfectionManager::<Flu>::set_susceptibility_modifier::<Flu>(&mut context, people[2], 0.0);
     assert_eq!(
-        InfectionManager::<Rsv>::susceptibility(&context, people[2], &()),
+        InfectionManager::<Rsv>::susceptibility(&context, people[2], None, &()),
         1.0
     );
 
@@ -954,7 +954,12 @@ impl InfectionManager<Chained> for Context {
         ConstantRateFn::new(COUNTING_RATE, 1000.0).into()
     }
 
-    fn base_susceptibility(&self, _person: PersonId, _details: &()) -> f64 {
+    fn base_susceptibility(
+        &self,
+        _person: PersonId,
+        _infector: Option<PersonId>,
+        _details: &(),
+    ) -> f64 {
         1.0
     }
 
@@ -1520,7 +1525,12 @@ impl InfectionManager<Strains> for Context {
         }
     }
 
-    fn base_susceptibility(&self, person: PersonId, variant: &Variant) -> f64 {
+    fn base_susceptibility(
+        &self,
+        person: PersonId,
+        _infector: Option<PersonId>,
+        variant: &Variant,
+    ) -> f64 {
         match InfectionManager::<Strains>::infection_details(self, person) {
             None => 1.0,
             Some(Variant::Alpha) if *variant == Variant::Beta => 1.0,
@@ -1586,7 +1596,7 @@ fn susceptibility_depends_on_the_details_of_the_attempt() {
     TransmissionManager::<Strains>::seed_infection(&mut context, had_alpha);
     for (variant, expected) in [(Variant::Alpha, 0.0), (Variant::Beta, 1.0)] {
         assert_eq!(
-            InfectionManager::<Strains>::susceptibility(&context, had_alpha, &variant),
+            InfectionManager::<Strains>::susceptibility(&context, had_alpha, None, &variant),
             expected
         );
     }
@@ -1602,7 +1612,7 @@ fn susceptibility_depends_on_the_details_of_the_attempt() {
     );
     for (variant, expected) in [(Variant::Alpha, 0.1), (Variant::Beta, 0.8)] {
         assert_eq!(
-            InfectionManager::<Strains>::susceptibility(&context, naive, &variant),
+            InfectionManager::<Strains>::susceptibility(&context, naive, None, &variant),
             expected
         );
         assert_eq!(
@@ -1689,5 +1699,63 @@ fn a_susceptibility_modifier_thins_attempts_by_variant() {
             (share - expected).abs() < 0.07,
             "{variant:?} with protection {protection}: expected {expected}, got {share}"
         );
+    }
+}
+
+define_property!(struct Blocked(bool), Person, default_const = Blocked(false));
+
+/// Susceptibility that depends on the infector: nobody catches it from
+/// someone who is `Blocked`.
+struct BySource;
+
+impl InfectionManager<BySource> for Context {
+    type Entity = Person;
+    type Details = ();
+
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId, _details: &()) -> RateAssignment {
+        ConstantRateFn::new(2.0, 5.0).into()
+    }
+
+    fn base_susceptibility(
+        &self,
+        person: PersonId,
+        infector: Option<PersonId>,
+        _details: &(),
+    ) -> f64 {
+        let blocked = infector.is_some_and(|infector| self.get_property::<_, Blocked>(infector).0);
+        if blocked || InfectionManager::<BySource>::infection_time(self, person).is_some() {
+            0.0
+        } else {
+            1.0
+        }
+    }
+}
+
+impl TransmissionManager<BySource> for Context {}
+
+#[test]
+fn susceptibility_can_depend_on_the_infector() {
+    for (blocked, expected) in [(true, 1), (false, 20)] {
+        let mut context = Context::new();
+        context.init_random(3);
+        let people: Vec<PersonId> = (0..20)
+            .map(|_| context.add_entity(Person).unwrap())
+            .collect();
+        context.set_property(people[0], Blocked(blocked));
+        TransmissionManager::<BySource>::setup_transmission_loop(&mut context);
+        TransmissionManager::<BySource>::seed_infection(&mut context, people[0]);
+        context.execute();
+        let infected = people
+            .iter()
+            .filter(|&&p| InfectionManager::<BySource>::infection_time(&context, p).is_some())
+            .count();
+        assert_eq!(infected, expected, "blocked: {blocked}");
+        // Asked with no infector, a never-infected person is susceptible.
+        if blocked {
+            assert_eq!(
+                InfectionManager::<BySource>::susceptibility(&context, people[1], None, &()),
+                1.0
+            );
+        }
     }
 }

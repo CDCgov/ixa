@@ -246,7 +246,7 @@ fn handle_proposal<M>(
         None
     };
     if let Some((infectee, details)) = attempt {
-        let susceptibility = context.susceptibility(infectee, &details);
+        let susceptibility = context.susceptibility(infectee, Some(infector), &details);
         // A silent cap would understate that person's relative risk.
         assert!(
             (0.0..=1.0 + BOUND_TOLERANCE).contains(&susceptibility),

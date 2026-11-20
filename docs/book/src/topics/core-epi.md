@@ -88,7 +88,7 @@ let forecast = forecast_fn.rate(delay);
 // 2. Evaluate: thin the proposal to an attempt and draw the contact.
 if let Some((contact, details)) = context.evaluate_forecast(person, forecast) {
     // 3. The attempt transmits with the contact's susceptibility.
-    let susceptibility = context.susceptibility(contact, &details);
+    let susceptibility = context.susceptibility(contact, Some(person), &details);
     if context.sample_bool(CoreEpiTransmissionRng, susceptibility) {
         context.transmit(Some(person), contact, details);
     }
@@ -175,7 +175,8 @@ cause: whatever the model tracks besides who and when, such as the setting or
 the [variant](#variants). The type is `InfectionManager::Details`; use `()` for
 none. The details are passed to:
 
-- `susceptibility(contact, &details)`, which decides whether the attempt infects;
+- `susceptibility(contact, Some(infector), &details)`, which decides whether the
+  attempt infects;
 - `draw_infectiousness_rate_fn(contact, &details)`;
 - `on_infected(infector, infectee, details)`.
 
@@ -266,16 +267,17 @@ This starts their loop but does not call `on_infected`.
 
 ## Susceptibility
 
-`susceptibility(person, &details)` is the probability that an attempt infects
-the person: `base_susceptibility` times their susceptibility
-[modifiers](#modifiers). Both take the attempt's
-[details](#infection-details), so they can depend on the
-[variant](#variants); the examples here ignore them.
+`susceptibility(person, infector, &details)` is the probability that an attempt
+infects the person: `base_susceptibility` times their susceptibility
+[modifiers](#modifiers). Both take the infector and the attempt's
+[details](#infection-details), so they can depend on who is infecting and on the
+[variant](#variants); the examples here ignore them. The loop always passes
+`Some(infector)`; pass `None` to ask with no particular infector.
 
 The default `base_susceptibility` is permanent immunity:
 
 ```rust
-fn base_susceptibility(&self, person: PersonId, _details: &()) -> f64 {
+fn base_susceptibility(&self, person: PersonId, _infector: Option<PersonId>, _details: &()) -> f64 {
     if self.infection_time(person).is_none() {
         1.0
     } else {
@@ -305,7 +307,7 @@ define_property!(
     default_const = AgeGroup::Adult
 );
 
-fn base_susceptibility(&self, person: PersonId, _details: &()) -> f64 {
+fn base_susceptibility(&self, person: PersonId, _infector: Option<PersonId>, _details: &()) -> f64 {
     // Keep the default's permanent immunity.
     if self.infection_time(person).is_some() {
         return 0.0;
@@ -628,7 +630,7 @@ impl InfectionManager<Flu> for Context {
 
     // An infection with the original variant protects only partly against
     // the escape variant.
-    fn base_susceptibility(&self, person: PersonId, variant: &Variant) -> f64 {
+    fn base_susceptibility(&self, person: PersonId, _infector: Option<PersonId>, variant: &Variant) -> f64 {
         match (self.infection_details(person), variant) {
             (None, _) => 1.0,
             (Some(Variant::Original), Variant::Escape) => 0.5,
