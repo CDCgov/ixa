@@ -52,9 +52,14 @@ impl EmpiricalRateFn {
     ///
     /// # Panics
     ///
-    /// If the times decrease, or a time or rate is negative or not finite.
+    /// If the times decrease, or a time, a rate or `scale` is negative or not
+    /// finite.
     #[must_use]
     pub fn new(points: Vec<[f64; 2]>, scale: f64) -> Self {
+        assert!(
+            scale.is_finite() && scale >= 0.0,
+            "empirical rate scale must be finite and non-negative, got {scale}"
+        );
         let mut previous_time = 0.0;
         for &[time, rate] in &points {
             assert!(
@@ -139,12 +144,11 @@ impl EmpiricalRateFn {
             let extra = c - self.cum[i];
             let span = tj - ti;
             let slope = (rj - ri) / span;
-            if slope == 0.0 {
-                return Some(ti + extra / ri);
-            }
+            // The root in rationalized form: `(-ri + sqrt(disc)) / slope`
+            // cancels on a segment that is nearly flat.
             let disc = (ri * ri + 2.0 * slope * extra).max(0.0);
-            let u = (-ri + disc.sqrt()) / slope;
-            return Some(ti + u);
+            let u = 2.0 * extra / (ri + disc.sqrt());
+            return Some(ti + u.min(span));
         }
         None
     }
@@ -161,8 +165,8 @@ impl InvertibleRate for EmpiricalRateFn {
         self.scale * self.raw_cum(t)
     }
 
-    /// `None` for a negative `c`, a non-positive or non-finite `scale`, or a
-    /// `c` beyond the curve's total area.
+    /// `None` for a negative `c`, a zero `scale`, or a `c` beyond the curve's
+    /// total area.
     #[inline]
     fn inverse_cum_rate(&self, c: f64) -> Option<f64> {
         if c < 0.0 {
@@ -171,7 +175,7 @@ impl InvertibleRate for EmpiricalRateFn {
         if c == 0.0 {
             return Some(0.0);
         }
-        if !self.scale.is_finite() || self.scale <= 0.0 {
+        if self.scale <= 0.0 {
             return None;
         }
         self.raw_inverse(c / self.scale)
@@ -298,6 +302,27 @@ mod test {
     #[should_panic(expected = "finite and non-negative")]
     fn a_negative_rate_panics() {
         let _ = unit(vec![[0.0, 1.0], [2.0, -3.0]]);
+    }
+
+    #[test]
+    #[should_panic(expected = "scale must be finite and non-negative")]
+    fn a_negative_scale_panics() {
+        let _ = EmpiricalRateFn::new(vec![[0.0, 1.0], [2.0, 1.0]], -1.0);
+    }
+
+    #[test]
+    fn inverse_cum_rate_is_accurate_on_a_nearly_flat_segment() {
+        // Two rates that differ by rounding only, rising and falling.
+        for (start, end) in [(0.3, 0.1 + 0.2), (0.1 + 0.2, 0.3), (1.0, 1.0 + 1e-13)] {
+            let r = unit(vec![[0.0, start], [7.0, end]]);
+            for t in [1.0, 3.0, 5.0, 7.0] {
+                let inverted = r.inverse_cum_rate(start * t).unwrap();
+                assert!(
+                    (inverted - t).abs() < 1e-9,
+                    "{start} to {end}: {inverted} for {t}"
+                );
+            }
+        }
     }
 
     #[test]

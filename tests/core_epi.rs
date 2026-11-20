@@ -1403,3 +1403,45 @@ fn a_later_schedule_of_a_modifier_outlives_the_end_of_an_earlier_one() {
     }
     context.execute();
 }
+
+#[test]
+fn a_later_schedule_that_starts_first_is_not_replaced_by_the_earlier_one() {
+    struct Antiviral;
+    let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    for (factor, start, end) in [(0.5, 10.0, 20.0), (0.2, 5.0, 40.0)] {
+        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+            &mut context,
+            person,
+            factor,
+            start,
+            Some(end),
+        );
+    }
+    for (time, expected) in [(7.0, 0.2), (15.0, 0.2), (25.0, 0.2), (45.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
+    context.execute();
+}
+
+#[test]
+#[should_panic(expected = "is before its start")]
+fn scheduling_a_modifier_that_ends_before_it_starts_panics() {
+    struct Antiviral;
+    let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0]);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        people[0],
+        0.5,
+        5.0,
+        Some(2.0),
+    );
+}

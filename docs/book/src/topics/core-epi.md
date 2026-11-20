@@ -1,13 +1,17 @@
 # `core_epi`
 
-The `core_epi` module includes a set of epi features: so far, definitions of infectiousness rates and related utilities, a standard continuous-time transmission loop, and settings. We intend to expand the feature set over time.
+The `core_epi` module includes a set of epi features: so far, definitions of
+infectiousness rates and related utilities, a standard continuous-time
+transmission loop, and settings. We intend to expand the feature set over time.
 
 The module is behind the `core_epi` cargo feature, which is on by default. The
 examples on this page also use the `rand_distr` crate to draw durations.
 
 ## A minimal model
 
-To use the transmission loop features, a model implements two traits for `Context`. You must supply a marker type (it is also possible to have more than one for multiple pathogens, see [below](#more-than-one-pathogen)).
+To use the transmission loop features, a model implements two traits for
+`Context`. You must supply a marker type (it is also possible to have more than
+one for multiple pathogens, see [below](#more-than-one-pathogen)).
 
 ```rust
 use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
@@ -172,7 +176,9 @@ Once someone is infected, the following utilities are available:
 
 All but `is_infectious` return `None` for someone never infected.
 
-`core_epi` has no notion of recovery or of disease states: you must track those yourself. For example, to implement a recovered state (a `Recovered` variant added to the status above), schedule it from `on_infected`:
+`core_epi` has no notion of recovery or of disease states: you must track those
+yourself. For example, to implement a recovered state (a `Recovered` variant
+added to the status above), schedule it from `on_infected`:
 
 ```rust
 fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
@@ -197,10 +203,13 @@ whatever the model does there (set a status, schedule recovery) yourself.
 
 ## Susceptibility
 
-`base_susceptibility` is the probability that an attempt on a person succeeds without any modifiers, and `susceptibility(person)` is the realized probability including any modifiers.
+`base_susceptibility` is the probability that an attempt on a person succeeds
+without any modifiers, and `susceptibility(person)` is the realized probability
+including any modifiers.
 
 The default `base_susceptibility` is permanent immunity: 1 for someone never
-infected and 0 once they have been infected. If you define [more than one pathogen](#more-than-one-pathogen), immunity to each is separate.
+infected and 0 once they have been infected. If you define
+[more than one pathogen](#more-than-one-pathogen), immunity to each is separate.
 
 ```rust
 fn base_susceptibility(&self, person: PersonId) -> f64 {
@@ -212,8 +221,9 @@ fn base_susceptibility(&self, person: PersonId) -> f64 {
 }
 ```
 
-`susceptibility` is the person's base susceptibilty times the product of the person's susceptibility
-[modifiers](#modifiers) (their `susceptibility_multiplier`):
+`susceptibility` is the person's base susceptibility times the product of the
+person's susceptibility [modifiers](#modifiers) (their
+`susceptibility_multiplier`):
 
 ```rust
 fn susceptibility(&self, person: PersonId) -> f64 {
@@ -307,9 +317,10 @@ context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None)
 
 It applies only if the person is still infectious with the same infection at the
 start time, and it is dropped if they are infected again. Called for someone
-never infected, it does nothing. It is kept apart from a modifier of the same
-type set on the person: the two multiply, and `remove_infectiousness_modifier`
-removes both.
+never infected, it does nothing. Only one scheduled modifier of a type is active
+at a time: where two schedules overlap, the one from the later call applies. It
+is kept apart from a modifier of the same type set on the person: the two
+multiply, and `remove_infectiousness_modifier` removes both.
 
 `schedule_susceptibility_modifier` takes the same arguments but has no such tie:
 it sets a modifier on the person at the start time and removes it at the end
@@ -341,6 +352,19 @@ was set, for effects that build up or wane:
 // Protection that wanes linearly over 180 days.
 context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, elapsed| {
     (0.5 + 0.5 * elapsed / 180.0).min(1.0)
+});
+```
+
+For an effect that changes in steps, `StepFn` holds the values and the closure
+reads it:
+
+```rust
+use ixa::core_epi::StepFn;
+
+// 80% protection for 90 days, then 50%.
+let protection = StepFn::new(0.2).step_at(90.0, 0.5);
+context.set_susceptibility_modifier_fn::<Vaccine>(person, move |_context, _person, elapsed| {
+    protection.at(elapsed)
 });
 ```
 
@@ -595,6 +619,8 @@ Changes that need it:
 - with `max_setting_multiplier` as the bound, a group growing past its largest
   size, or a person joining a group, for the newcomer and for the group's
   infectious members (`setting_group_members`);
+- with the same bound, a population group with a positive `alpha` growing at
+  all, since it does not remember its largest size;
 - anything in the model's own forecast that can go up, such as a contact
   restriction ending.
 

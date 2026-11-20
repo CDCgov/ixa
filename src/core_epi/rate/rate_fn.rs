@@ -18,9 +18,9 @@ pub struct TransformedInvertibleRateFn<'a, T>
 where
     T: InvertibleRate + ?Sized,
 {
-    pub base: &'a T,
-    pub scale: f64,
-    pub elapsed: f64,
+    base: &'a T,
+    scale: f64,
+    elapsed: f64,
 }
 
 impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {

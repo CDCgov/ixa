@@ -56,7 +56,7 @@ impl InvertibleRate for ConstantRateFn {
         if events == 0.0 {
             return Some(0.0);
         }
-        if !events.is_finite() || !self.value.is_finite() || self.value <= 0.0 {
+        if !events.is_finite() || self.value <= 0.0 {
             return None;
         }
         let t = events / self.value;

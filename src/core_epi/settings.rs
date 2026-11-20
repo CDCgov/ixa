@@ -53,8 +53,10 @@ pub trait SettingKind: Copy + Eq + Debug + 'static {
 /// [`add_setting_kind`](SettingsExt::add_setting_kind), so they can come from
 /// a parameters file.
 ///
-/// ```ignore
-/// define_settings!(pub Setting for Person);
+/// ```
+/// use ixa::prelude::*;
+/// define_entity!(Person);
+/// ixa::define_settings!(pub Setting for Person);
 /// ```
 #[macro_export]
 macro_rules! define_settings {
@@ -650,7 +652,17 @@ pub trait SettingsExt:
     /// Make `setting` a single group that every person is in, with no member
     /// list. Anyone added to another group of this kind leaves it until they
     /// are added back.
+    ///
+    /// # Panics
+    ///
+    /// If `setting` already has a population group.
     fn create_population_setting_group<S: SettingKind>(&mut self, setting: S) -> SettingGroupId<S> {
+        assert!(
+            S::store(self).kinds[setting.index()]
+                .population_group
+                .is_none(),
+            "setting {setting:?} already has a population group"
+        );
         let group = self.create_setting_group(setting);
         S::store_mut(self).kinds[setting.index()].population_group = Some(group.index);
         group
@@ -830,6 +842,8 @@ pub trait SettingsExt:
     /// groups they were removed from. A group growing past its largest size
     /// or a group joined later needs a
     /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission).
+    /// A population group has no memory of its largest size, so any growth
+    /// of one with a positive `alpha` needs it too.
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
@@ -1448,6 +1462,14 @@ mod tests {
         // Someone new is in the community from the start.
         context.add_entity(Person).unwrap();
         assert_eq!(context.setting_group_size(people[2], COMMUNITY), 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "already has a population group")]
+    fn a_kind_has_one_population_group() {
+        let (mut context, _) = context_with(1);
+        context.create_population_setting_group(COMMUNITY);
+        context.create_population_setting_group(COMMUNITY);
     }
 
     #[test]

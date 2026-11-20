@@ -76,7 +76,7 @@ struct Assigned {
 
 /// A modifier factor computed per read from the context, the person and the
 /// time elapsed since the modifier was set.
-pub type ModifierFn<E> = Box<dyn Fn(&Context, EntityId<E>, f64) -> f64>;
+type ModifierFn<E> = Box<dyn Fn(&Context, EntityId<E>, f64) -> f64>;
 
 /// One modifier's factor: a constant, or a function of elapsed time.
 enum Factor<E: Entity> {
@@ -374,6 +374,32 @@ fn retain_infectiousness_factors<M: 'static, E: Entity, C: ContextBase>(
     refresh_modifier_bound::<M, E, _>(context, person);
 }
 
+/// Whether `person` has modifier `key` from a schedule made after `schedule`.
+fn has_later_schedule<M: 'static, E: Entity, C: ContextBase>(
+    context: &C,
+    person: EntityId<E>,
+    key: TypeId,
+    schedule: u32,
+) -> bool {
+    let Some(modifiers) = state::<M, E, _>(context).and_then(|state| state.modifiers.get(person))
+    else {
+        return false;
+    };
+    modifiers.factors.iter().any(|modifier| {
+        modifier.key == key
+            && matches!(modifier.scope, Scope::Infection { schedule: other } if other > schedule)
+    })
+}
+
+fn assert_end_not_before_start(start: f64, end: Option<f64>) {
+    if let Some(end) = end {
+        assert!(
+            end >= start,
+            "modifier end {end} is before its start {start}"
+        );
+    }
+}
+
 /// Which of `person`'s infections is current; `None` if never infected.
 fn infection_count<M: 'static, E: Entity, C: ContextBase>(
     context: &C,
@@ -628,9 +654,14 @@ where
 
     /// Set modifier `K` on `person`'s current infection at `start` and, if
     /// given, remove it at `end`. It belongs to this infection: a reinfection
-    /// drops it, a later schedule of `K` replaces it, and it multiplies with
-    /// a modifier `K` set on the person.
+    /// drops it, and it multiplies with a modifier `K` set on the person. One
+    /// scheduled `K` is active at a time: where two overlap, the later call's
+    /// applies and the earlier one does not resume after it.
     /// No-op if `person` was never infected.
+    ///
+    /// # Panics
+    ///
+    /// If `end` is before `start`.
     fn schedule_infectiousness_modifier<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
@@ -639,17 +670,18 @@ where
         end: Option<f64>,
     ) {
         assert_valid_factor("infectiousness", factor);
+        assert_end_not_before_start(start, end);
         let Some(scheduled_for) = infection_count::<M, _, _>(self, person) else {
             return;
         };
         let state = state_mut::<M, Self::Entity, _>(self);
-        let scope = Scope::Infection {
-            schedule: state.schedule_count,
-        };
+        let schedule = state.schedule_count;
+        let scope = Scope::Infection { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
         self.add_plan(start, move |ctx| {
             if infection_count::<M, _, _>(ctx, person) == Some(scheduled_for)
                 && InfectionManager::<M>::is_infectious(ctx, person)
+                && !has_later_schedule::<M, _, _>(ctx, person, TypeId::of::<K>(), schedule)
             {
                 set_infectiousness_factor::<M, _, _>(
                     ctx,
@@ -743,6 +775,10 @@ where
 
     /// Set susceptibility modifier `K` on `person` at time `start` and, if
     /// given, remove it at `end`.
+    ///
+    /// # Panics
+    ///
+    /// If `end` is before `start`.
     fn schedule_susceptibility_modifier<K: 'static>(
         &mut self,
         person: EntityId<Self::Entity>,
@@ -751,6 +787,7 @@ where
         end: Option<f64>,
     ) {
         assert_valid_factor("susceptibility", factor);
+        assert_end_not_before_start(start, end);
         self.add_plan(start, move |ctx| {
             InfectionManager::<M>::set_susceptibility_modifier::<K>(ctx, person, factor);
         });
