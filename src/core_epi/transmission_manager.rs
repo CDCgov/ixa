@@ -56,14 +56,15 @@ where
         self.contact_multiplier(person)
     }
 
-    /// Who `person` contacts in an attempt, with the exposure to record;
-    /// by default anyone else, uniformly. Called only by the default
+    /// Who `person` contacts in an attempt and the details the infection
+    /// would carry; by default anyone else, uniformly, with the default
+    /// details. Called only by the default
     /// [`evaluate_forecast`](Self::evaluate_forecast).
     fn sample_contact(
         &self,
         person: EntityId<Self::Entity>,
-    ) -> Option<(EntityId<Self::Entity>, Self::Exposure)> {
-        Some((self.sample_anyone_else(person)?, Self::Exposure::default()))
+    ) -> Option<(EntityId<Self::Entity>, Self::Details)> {
+        Some((self.sample_anyone_else(person)?, Self::Details::default()))
     }
 
     /// Someone other than `person`, uniformly from the population; `None` if
@@ -102,7 +103,7 @@ where
         &self,
         person: EntityId<Self::Entity>,
         forecast: f64,
-    ) -> Option<(EntityId<Self::Entity>, Self::Exposure)> {
+    ) -> Option<(EntityId<Self::Entity>, Self::Details)> {
         let total = self.intrinsic_infectiousness(person)? * self.contact_multiplier(person);
         if !self.accept_proposal(person, total, forecast) {
             return None;
@@ -131,22 +132,35 @@ where
         &mut self,
         infector: Option<EntityId<Self::Entity>>,
         infectee: EntityId<Self::Entity>,
-        exposure: Self::Exposure,
+        details: Self::Details,
     ) {
-        self.assign_infectiousness_rate_fn(infectee);
-        self.on_infected(infector, infectee, exposure);
+        self.assign_infectiousness_rate_fn(infectee, details.clone());
+        self.on_infected(infector, infectee, details);
     }
 
-    /// Infect `person` with no infector and the default exposure.
+    /// Infect `person` with no infector and the default details.
     fn seed_infection(&mut self, person: EntityId<Self::Entity>) {
-        self.transmit(None, person, Self::Exposure::default());
+        self.transmit(None, person, Self::Details::default());
     }
 
     /// Infect up to `n` people (fewer if fewer match) sampled uniformly from
-    /// those matching `query`, with no infector.
+    /// those matching `query`, with no infector and the default details.
     fn seed_infections<Q: Query<Self::Entity>>(&mut self, query: Q, n: usize) {
         for person in self.sample_entities(CoreEpiInfectionRng, query, n) {
             self.seed_infection(person);
+        }
+    }
+
+    /// As [`seed_infections`](Self::seed_infections) with the given details,
+    /// e.g. to seed a variant.
+    fn seed_infections_with<Q: Query<Self::Entity>>(
+        &mut self,
+        query: Q,
+        n: usize,
+        details: Self::Details,
+    ) {
+        for person in self.sample_entities(CoreEpiInfectionRng, query, n) {
+            self.transmit(None, person, details.clone());
         }
     }
 
@@ -168,7 +182,9 @@ where
     /// after anything that can raise their total infectiousness above their
     /// forecast; redrawing is always valid. No-op if never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
-        if let Some(generation) = advance_forecast_generation::<M, _, _>(self, person) {
+        if let Some(generation) =
+            advance_forecast_generation::<M, _, Self::Details, _>(self, person)
+        {
             schedule_proposal::<M, Self>(self, person, generation);
         }
     }
@@ -218,7 +234,9 @@ fn handle_proposal<M>(
     Context: TransmissionManager<M>,
 {
     // Superseded by a reforecast or a reinfection, which drew its own.
-    if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
+    if forecast_generation::<M, _, <Context as InfectionManager<M>>::Details, _>(context, infector)
+        != Some(generation)
+    {
         return;
     }
     // A proposal exactly at the end of the support has a zero forecast.
@@ -227,8 +245,8 @@ fn handle_proposal<M>(
     } else {
         None
     };
-    if let Some((infectee, exposure)) = attempt {
-        let susceptibility = context.susceptibility(infectee);
+    if let Some((infectee, details)) = attempt {
+        let susceptibility = context.susceptibility(infectee, &details);
         // A silent cap would understate that person's relative risk.
         assert!(
             (0.0..=1.0 + BOUND_TOLERANCE).contains(&susceptibility),
@@ -236,10 +254,13 @@ fn handle_proposal<M>(
              susceptibilities so the largest is 1 and put the scale in the infectiousness rate"
         );
         if sample_if_uncertain(context, susceptibility) {
-            context.transmit(Some(infector), infectee, exposure);
+            context.transmit(Some(infector), infectee, details);
             // The model's `on_infected` may have reforecast the infector,
             // which already drew the next proposal.
-            if forecast_generation::<M, _, _>(context, infector) != Some(generation) {
+            if forecast_generation::<M, _, <Context as InfectionManager<M>>::Details, _>(
+                context, infector,
+            ) != Some(generation)
+            {
                 return;
             }
         }

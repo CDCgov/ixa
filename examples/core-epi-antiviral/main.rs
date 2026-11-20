@@ -42,9 +42,13 @@ define_property!(
 
 impl InfectionManager<CoreEpiExample> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         let params = self.get_parameters();
         let duration = self.sample_distr(
             InfectiousPeriodRng,
@@ -53,7 +57,7 @@ impl InfectionManager<CoreEpiExample> for Context {
         ConstantRateFn::new(params.intrinsic_infectiousness, duration).into()
     }
 
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {
         self.set_property(infectee, InfectionStatus::Infected);
         let &Parameters {
             antiviral_coverage,

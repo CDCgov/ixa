@@ -9,9 +9,8 @@ examples on this page also use the `rand_distr` crate to draw durations.
 
 ## A minimal model
 
-To use the transmission loop features, a model implements two traits for
-`Context`. You must supply a marker type (it is also possible to have more than
-one for multiple pathogens, see [below](#more-than-one-pathogen)).
+A model implements two traits for `Context`, on a marker type it defines. A
+second marker is a [second pathogen](#more-than-one-pathogen).
 
 ```rust
 use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
@@ -35,17 +34,17 @@ struct Flu;
 
 impl InfectionManager<Flu> for Context {
     type Entity = Person;
-    // Nothing to record about how someone was exposed: see "Contact structure".
-    type Exposure = ();
+    // Nothing more to know about an infection: see "Infection details".
+    type Details = ();
 
     // How infectious this person is over the course of their infection.
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId, _details: &()) -> RateAssignment {
         let infectious_period = self.sample_distr(InfectiousPeriodRng, Exp::new(1.0 / 5.0).unwrap());
         ConstantRateFn::new(0.4, infectious_period).into()
     }
 
     // The model's own bookkeeping.
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {
         self.set_property(infectee, InfectionStatus::Infected);
     }
 }
@@ -67,15 +66,14 @@ context.seed_infections(Person, 5);
 context.execute();
 ```
 
-In this example, each infected person makes infection attempts
-at rate 0.4 per day for an exponentially distributed period with mean 5 days
-(R0 of 2), each attempt contacts someone else uniformly at random, and a person
-can be infected once. See `examples/core-epi` for a complete working version of this model.
+Each infected person makes attempts at rate 0.4 per day for an exponential
+period with mean 5 days (R0 of 2), each attempt contacts someone else uniformly
+at random, and a person can be infected once. `examples/core-epi` is the
+complete model.
 
 ## How the loop works
 
-Each infected person runs their own loop of attempt _proposals_. One turn of it,
-simplified from the implementation:
+Each infected person runs a loop of attempt _proposals_. One turn, simplified:
 
 ```rust
 // 1. Forecast: an upper bound on the person's total infectiousness, as a rate
@@ -88,18 +86,17 @@ let forecast = forecast_fn.rate(delay);
 // ... `delay` later ...
 
 // 2. Evaluate: thin the proposal to an attempt and draw the contact.
-if let Some((contact, exposure)) = context.evaluate_forecast(person, forecast) {
+if let Some((contact, details)) = context.evaluate_forecast(person, forecast) {
     // 3. The attempt transmits with the contact's susceptibility.
-    let susceptibility = context.susceptibility(contact);
+    let susceptibility = context.susceptibility(contact, &details);
     if context.sample_bool(CoreEpiTransmissionRng, susceptibility) {
-        context.transmit(Some(person), contact, exposure);
+        context.transmit(Some(person), contact, details);
     }
 }
 // Back to 1.
 ```
 
-Steps 1 and 2 are `TransmissionManager` methods, and step 3 reads an
-`InfectionManager` method. Their defaults are:
+Steps 1 and 2 are `TransmissionManager` methods, with these defaults:
 
 ```rust
 fn forecast_total_infectiousness(&self, person: PersonId) -> impl InvertibleRate {
@@ -127,33 +124,29 @@ fn accept_proposal(&self, person: PersonId, total: f64, forecast: f64) -> bool {
 }
 ```
 
-So with nothing overridden, a person proposes at the rate of their own rate
-function, a proposal is accepted with probability equal to the product of their
-infectiousness modifiers, and the contact is anyone else in the population. The
-loop ends when the rate function runs out.
+With nothing overridden, a person proposes at their rate function's rate, a
+proposal is accepted with the product of their infectiousness modifiers, and the
+contact is anyone else. The loop ends when the rate function runs out. A rejected
+proposal or failed attempt goes back to step 1.
 
-A proposal that is not accepted, or an attempt that does not transmit, costs
-nothing but the draw: the loop goes back to step 1 either way.
-
-The forecast must be an upper bound. Thinning in step 2 corrects for the
-difference, so anything that lowers infectiousness after the proposal was drawn
-(a treatment, a mask, a contact restriction) is handled without rescheduling. A
-forecast that is too low is an error, and `accept_proposal` panics rather than
-under-count attempts. See [When rates rise](#when-rates-rise).
+The forecast must be an upper bound. Step 2 thins away the difference, so
+anything that lowers infectiousness after a proposal was drawn (a treatment, a
+mask) needs no rescheduling. A forecast that is too low makes `accept_proposal`
+panic: see [When rates rise](#when-rates-rise).
 
 ## Contact structure
 
-`TransmissionManager` decides who is contacted and how contact structure changes
-the rate. Most models describe it with three methods, each with a default:
+Most models describe contact structure with three `TransmissionManager`
+methods:
 
 | Method                           | Returns                                               | Default                |
 | -------------------------------- | ----------------------------------------------------- | ---------------------- |
 | `contact_multiplier(person)`     | the factor on their intrinsic infectiousness now      | 1                      |
 | `max_contact_multiplier(person)` | an upper bound on that factor until their next proposal | the multiplier now   |
-| `sample_contact(person)`         | who they contact in an attempt, and the exposure      | anyone else, uniformly |
+| `sample_contact(person)`         | who they contact in an attempt, and the details       | anyone else, uniformly |
 
-The loop forecasts on the intrinsic bound times `max_contact_multiplier`, thins by
-`contact_multiplier`, and asks `sample_contact` for each attempt.
+The loop forecasts at the intrinsic bound times `max_contact_multiplier`, thins
+by `contact_multiplier`, and calls `sample_contact` for each attempt.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
@@ -167,65 +160,68 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-The rate is set by `contact_multiplier` alone. `max_contact_multiplier` only says
-how far it can rise before the person's next proposal, and must be finite: leave
-it at its default when the multiplier does not change during an infection, or
-when every rise is followed by a [reforecast](#when-rates-rise). Override it with
-a larger constant when the multiplier can rise without one. A bound larger than
-needed costs rejected proposals; it never raises the rate.
+`contact_multiplier` alone sets the rate. Leave `max_contact_multiplier` at its
+default when the multiplier is fixed during an infection or every rise is
+followed by a [reforecast](#when-rates-rise); otherwise return a finite constant
+it cannot exceed. A loose bound costs rejected proposals but never changes the
+rate.
 
-`sample_anyone_else(person)` is the default draw, for a model that falls back to
-the whole population.
+`sample_anyone_else(person)` is the default draw.
 
-### Recording how someone was exposed
+### Infection details
 
-`sample_contact` returns the contact together with an _exposure_: whatever the
-model wants to know in `on_infected` about how the infection happened, such as
-the setting it happened in. Its type is `InfectionManager::Exposure`. A model
-with nothing to record uses `()`. A seeded infection (`seed_infection`,
-`seed_infections`) gets the type's default value.
+`sample_contact` also returns the _details_ of the infection the attempt would
+cause: whatever the model tracks besides who and when, such as the setting or
+the [variant](#variants). The type is `InfectionManager::Details`; use `()` for
+none. The details are passed to:
+
+- `susceptibility(contact, &details)`, which decides whether the attempt infects;
+- `draw_infectiousness_rate_fn(contact, &details)`;
+- `on_infected(infector, infectee, details)`.
+
+They are stored with the infection: `infection_details(person)` reads those of
+a person's current one.
 
 ```rust
 impl InfectionManager<Flu> for Context {
     type Entity = Person;
-    type Exposure = Option<Setting>;
+    type Details = Option<Setting>;
 
-    fn on_infected(&mut self, infector: Option<PersonId>, infectee: PersonId, exposure: Option<Setting>) {
+    fn on_infected(&mut self, infector: Option<PersonId>, infectee: PersonId, details: Option<Setting>) {
         /* for example, write a row of a transmission report */
     }
 }
 ```
 
+`seed_infection` and `seed_infections` use the type's default value;
+`seed_infections_with(query, n, details)` takes one.
+
 ### Overriding the forecast and the evaluation
 
-The three methods cover a contact multiplier with a constant bound. Two cases
-need the level below them, `forecast_total_infectiousness` and
-`evaluate_forecast`:
+Override `forecast_total_infectiousness` and `evaluate_forecast` themselves
+when:
 
 - the bound is not a constant multiple of the intrinsic one, for example it
   follows a schedule of restrictions;
-- the total and the contact must come from the same draw, as on the
-  setting-first path [below](#using-settings-in-the-loop).
+- the total and the contact come from the same draw, as on the
+  [changing itineraries or groups](#using-settings-in-the-loop).
 
-Start from the defaults in [How the loop works](#how-the-loop-works), with
-`InvertibleRate` imported from `ixa::core_epi`. Keep the call
-to `accept_proposal`: it does the thinning and checks the bound.
+Start from the defaults in [How the loop works](#how-the-loop-works) and keep the
+call to `accept_proposal`, which thins and checks the bound. `InvertibleRate` is
+in `ixa::core_epi`.
 
 ## Infectiousness
 
-A person's infectiousness is a rate function of time since infection, assigned
-when they are infected and fixed for that infection. `draw_infectiousness_rate_fn`
-returns a `RateAssignment`, which is one of:
+A person's infectiousness is a rate function of time since infection, fixed
+when they are infected. `draw_infectiousness_rate_fn` returns a `RateAssignment`:
 
-- an individually-assigned rate function, for example a constant rate over a
-  period drawn for them. The built-in rate functions convert with `.into()`.
-- `RateAssignment::Library(index)`, an index into a library of shared curves
-  loaded once at setup with `load_infectiousness_rate_library`. Use this when
-  many people share a few curves.
+- a rate function of their own (the built-in ones convert with `.into()`), or
+- `RateAssignment::Library(index)`, an index into shared curves loaded at setup
+  with `load_infectiousness_rate_library`.
 
 The built-in rate functions are `ConstantRateFn::new(rate, duration)` and
-`EmpiricalRateFn::new(points, scale)`, a piecewise-linear curve through points
-given as time and rate pairs.
+`EmpiricalRateFn::new(points, scale)`, piecewise linear through `[time, rate]`
+points.
 
 ```rust
 context.load_infectiousness_rate_library(vec![
@@ -234,7 +230,7 @@ context.load_infectiousness_rate_library(vec![
 ]);
 ```
 
-Once someone is infected, the following utilities are available:
+For someone infected:
 
 | Method                                | Returns                                                  |
 | ------------------------------------- | -------------------------------------------------------- |
@@ -246,12 +242,11 @@ Once someone is infected, the following utilities are available:
 
 All but `is_infectious` return `None` for someone never infected.
 
-`core_epi` has no notion of recovery or of disease states: you must track those
-yourself. For example, to implement a recovered state (a `Recovered` variant
-added to the status above), schedule it from `on_infected`:
+`core_epi` has no disease states or recovery; the model tracks them. For
+example, with a `Recovered` status:
 
 ```rust
-fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
+fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {
     self.set_property(infectee, InfectionStatus::Infected);
     let recovery_time = self.infectiousness_end_time(infectee).unwrap();
     self.add_plan(recovery_time, move |context| {
@@ -260,29 +255,27 @@ fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _expo
 }
 ```
 
-To infect someone with a known course of infection instead of a drawn one (an
-imported case, or in a test), assign the rate function
-directly:
+To infect someone with a given rate function instead of a drawn one (an imported
+case, a test), assign it with the infection's [details](#infection-details):
 
 ```rust
-context.set_infectiousness_rate_fn(person, ConstantRateFn::new(0.5, 4.0));
+context.set_infectiousness_rate_fn(person, ConstantRateFn::new(0.5, 4.0), ());
 ```
 
-This starts their transmission loop but does not call `on_infected`, so do
-whatever the model does there (set a status, schedule recovery) yourself.
+This starts their loop but does not call `on_infected`.
 
 ## Susceptibility
 
-`base_susceptibility` is the probability that an attempt on a person succeeds
-without any modifiers, and `susceptibility(person)` is the realized probability
-including any modifiers.
+`susceptibility(person, &details)` is the probability that an attempt infects
+the person: `base_susceptibility` times their susceptibility
+[modifiers](#modifiers). Both take the attempt's
+[details](#infection-details), so they can depend on the
+[variant](#variants); the examples here ignore them.
 
-The default `base_susceptibility` is permanent immunity: 1 for someone never
-infected and 0 once they have been infected. If you define
-[more than one pathogen](#more-than-one-pathogen), immunity to each is separate.
+The default `base_susceptibility` is permanent immunity:
 
 ```rust
-fn base_susceptibility(&self, person: PersonId) -> f64 {
+fn base_susceptibility(&self, person: PersonId, _details: &()) -> f64 {
     if self.infection_time(person).is_none() {
         1.0
     } else {
@@ -291,31 +284,16 @@ fn base_susceptibility(&self, person: PersonId) -> f64 {
 }
 ```
 
-`susceptibility` is the person's base susceptibility times the product of the
-person's susceptibility [modifiers](#modifiers) (their
-`susceptibility_multiplier`):
+Susceptibility is the only check the loop makes on a contact. If it is positive
+for someone already infected, they are infected again and the new rate function
+replaces the old one.
 
-```rust
-fn susceptibility(&self, person: PersonId) -> f64 {
-    self.base_susceptibility(person) * self.susceptibility_multiplier(person)
-}
-```
+It is a probability: the loop panics outside 0 to 1. For relative
+susceptibility, give the most susceptible group 1 and put the scale in the
+infectiousness rate.
 
-Susceptibility is the only check the loop makes on a contact. It does not look at
-whether they are currently infected, so a `base_susceptibility` that is positive
-for someone already infected lets them be infected again: they get a new rate
-function, which replaces the old one.
-
-Susceptibility only decides the last step. The infector's proposal must first be
-accepted as an attempt, and this person must be the contact drawn. A
-susceptibility of 1 means that such an attempt always infects them.
-
-Susceptibility is a probability: the loop panics on a value outside 0 to 1. For
-relative susceptibility, give the most susceptible group 1 and put the scale in
-the infectiousness rate.
-
-Override `base_susceptibility` for anything else, for example children who are
-half as susceptible as adults:
+Override `base_susceptibility` for anything else, for example children half as
+susceptible as adults:
 
 ```rust
 define_property!(
@@ -327,7 +305,7 @@ define_property!(
     default_const = AgeGroup::Adult
 );
 
-fn base_susceptibility(&self, person: PersonId) -> f64 {
+fn base_susceptibility(&self, person: PersonId, _details: &()) -> f64 {
     // Keep the default's permanent immunity.
     if self.infection_time(person).is_some() {
         return 0.0;
@@ -341,19 +319,15 @@ fn base_susceptibility(&self, person: PersonId) -> f64 {
 
 ## Modifiers
 
-Interventions change infectiousness and susceptibility through modifiers: factors
-that multiply together. Each is identified by a type of the model's choosing, so
-setting a modifier again replaces its factor and different modifiers compose.
+Modifiers are factors on a person's infectiousness or susceptibility. Each is
+keyed by a type the model defines: setting one again replaces it, and different
+ones multiply. `examples/core-epi-antiviral` uses one for an antiviral.
 
-`examples/core-epi-antiviral` runs the same outbreak with and without an
-antiviral.
+### Setting a modifier now
 
-### Modifiers on a person
-
-`set_infectiousness_modifier` and `set_susceptibility_modifier` put a modifier on
-the person. It can be set before they are ever infected, stays through any number
-of infections, and ends only when the model removes it with the matching
-`remove_` method.
+`set_infectiousness_modifier` and `set_susceptibility_modifier` take effect
+immediately and last until the matching `remove_` call, through any number of
+infections. They can be set before the person is ever infected.
 
 ```rust
 struct Mask;
@@ -368,39 +342,43 @@ context.set_susceptibility_modifier::<Vaccine>(person, 0.5);
 context.remove_infectiousness_modifier::<Mask>(person);
 ```
 
-A factor is any finite non-negative number, with one limit: the person's
-[susceptibility](#susceptibility) must stay at most 1.
+A factor is any finite non-negative number, as long as the person's
+[susceptibility](#susceptibility) stays at most 1.
 
-### Modifiers for one infection
+### Scheduling a modifier
 
-`schedule_infectiousness_modifier` is for an effect on a single infection, such
-as a treatment. It sets the modifier at a start time and, if given, removes it at
-an end time.
+The `schedule_` methods set a modifier at a start time and, if given, remove it
+at an end time.
 
 ```rust
 struct Antiviral;
+struct Vaccine;
 
-// Scales this infection's infectiousness to 25% from one day in, until it ends.
-let start = context.get_current_time() + 1.0;
-context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, start, None);
+// Scales infectiousness to 25% from one day in, for the rest of the infection.
+let now = context.get_current_time();
+context.schedule_infectiousness_modifier::<Antiviral>(person, 0.25, now + 1.0, None);
+
+// Halves susceptibility from day 14 to day 194.
+context.schedule_susceptibility_modifier::<Vaccine>(person, 0.5, 14.0, Some(194.0));
 ```
 
-It applies only if the person is still infectious with the same infection at the
-start time, and it is dropped if they are infected again. Called for someone
-never infected, it does nothing. Only one scheduled modifier of a type is active
-at a time: where two schedules overlap, the one from the later call applies. It
-is kept apart from a modifier of the same type set on the person: the two
-multiply, and `remove_infectiousness_modifier` removes both.
+A scheduled infectiousness modifier lasts no longer than the infection the
+person has when it is scheduled, as a treatment would:
 
-`schedule_susceptibility_modifier` takes the same arguments but has no such tie:
-it sets a modifier on the person at the start time and removes it at the end
-time.
+- It starts only if they are still infectious with that infection, and ends if
+  they are infected again.
+- For someone never infected, it does nothing.
+- Where two schedules of one type overlap, the later call's applies.
+- It multiplies with a modifier of the same type set directly;
+  `remove_infectiousness_modifier` removes both.
+
+A scheduled susceptibility modifier is a plain `set_` at the start time and
+`remove_` at the end time.
 
 ### Raising infectiousness
 
-An infectiousness factor above 1 raises the person's rate. The forecast has to
-rise with it, so when a change takes the product of a person's modifiers above 1
-the loop forecasts again by itself.
+An infectiousness factor can be above 1. The loop reforecasts by itself when a
+person's modifiers rise.
 
 ```rust
 struct Coughing;
@@ -409,42 +387,39 @@ struct Coughing;
 context.set_infectiousness_modifier::<Coughing>(person, 3.0);
 ```
 
-A model that runs its own loop instead of calling `setup_transmission_loop` must
-[reforecast](#when-rates-rise) after such a change.
+A model that does not call `setup_transmission_loop` must
+[reforecast](#when-rates-rise) itself.
 
 ### Factors that change over time
 
-The `set_..._fn` forms take a function in place of a constant. It is called on
-every read with the context, the person and the time elapsed since the modifier
-was set, for effects that build up or wane:
+The `set_..._fn` forms take a function, called on every read with the context,
+the person and the time since the modifier was set. A susceptibility function
+also gets the attempt's [details](#infection-details):
 
 ```rust
 // Protection that wanes linearly over 180 days.
-context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, elapsed| {
+context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, elapsed, _details| {
     (0.5 + 0.5 * elapsed / 180.0).min(1.0)
 });
 ```
 
-For an effect that changes in steps, `StepFn` holds the values and the closure
-reads it:
+`StepFn` holds an effect that changes in steps:
 
 ```rust
 use ixa::core_epi::StepFn;
 
 // 80% protection for 90 days, then 50%.
 let protection = StepFn::new(0.2).step_at(90.0, 0.5);
-context.set_susceptibility_modifier_fn::<Vaccine>(person, move |_context, _person, elapsed| {
+context.set_susceptibility_modifier_fn::<Vaccine>(person, move |_context, _person, elapsed, _details| {
     protection.at(elapsed)
 });
 ```
 
-For a factor that follows the course of the infection instead, read
-`time_since_infection(person)` inside the closure. It is `None` for someone never
-infected.
+For a factor that follows the course of the infection, read
+`time_since_infection(person)` in the closure (`None` if never infected).
 
-An infectiousness function must return values between 0 and 1, because nothing
-tells the loop when a function rises. For one that goes higher, declare its
-maximum:
+An infectiousness function must stay between 0 and 1, because the loop cannot
+see it rise. For one that goes higher, declare its maximum:
 
 ```rust
 // A cough that worsens over two days, to three times the usual rate.
@@ -453,19 +428,18 @@ context.set_infectiousness_modifier_fn_with_max::<Coughing>(person, 3.0, |_conte
 });
 ```
 
-The person is then forecast at the maximum throughout and the excess is
-rejected, so a maximum far above the usual value costs proposals. For a factor
-that changes at known times, scheduling plain `set_infectiousness_modifier` calls
-is cheaper: each rise is forecast exactly.
+The person is forecast at the maximum throughout, so a loose maximum costs
+rejected proposals. For changes at known times, scheduling plain
+`set_infectiousness_modifier` calls is cheaper.
 
 ## Settings
 
-Settings group people into places: named _kinds_ of place (household, school,
-workplace), _groups_ that are instances of a kind (one particular household),
-and per person an _itinerary_ saying how their time is split across kinds.
+Settings put people in places: _kinds_ of place (household, school), _groups_
+that are instances of a kind (one household), and per person an _itinerary_
+splitting their time across kinds.
 
-`define_settings!` names the type of an entity's setting kinds. The kinds
-themselves are added at run time, so they can come from a parameters file:
+`define_settings!` names the type of an entity's kinds. The kinds are added at
+run time, so they can come from a parameters file:
 
 ```rust
 use ixa::core_epi::{Itinerary, SettingsExt};
@@ -477,10 +451,10 @@ let household = context.add_setting_kind::<Setting>("household", 1.0);
 let community = context.add_setting_kind::<Setting>("community", 0.0);
 ```
 
-The second argument is `alpha`, the kind's density exponent. In a group of `n`
-people, a member's infectiousness there is multiplied by `(n - 1)^alpha`: with
-`alpha = 1` attempts scale with the size of the group, and with `alpha = 0` they
-do not. A person alone in a group has a multiplier of 0.
+The second argument is `alpha`, the density exponent: in a group of `n` people a
+member's infectiousness is multiplied by `(n - 1)^alpha`. With `alpha = 1`
+attempts scale with group size; with `alpha = 0` they do not. Alone in a group,
+the multiplier is 0.
 
 ### Groups and members
 
@@ -498,9 +472,9 @@ context.add_setting_member(home, person);
 context.create_population_setting_group(community);
 ```
 
-A person is in at most one group of each kind. `remove_setting_member` takes them
-out of their group and `restore_setting_member` puts them back, which is how an
-intervention such as a school closure is expressed.
+A person is in at most one group of each kind. `remove_setting_member` and
+`restore_setting_member` take them out and put them back, for example for a
+school closure.
 
 ### Itineraries
 
@@ -508,31 +482,42 @@ intervention such as a school closure is expressed.
 context.set_itinerary_assignment(Itinerary::new([(household, 0.6), (community, 0.4)]));
 ```
 
-An itinerary's proportions are shares of where a person's attempts happen, not a
-scale on how many: they are normalized, so only their ratios matter. Someone with
-no group of a kind spends that share in their other settings.
+An itinerary says where a person's attempts happen, not how many: the
+proportions are normalized. Someone with no group of a kind spends that share in
+their other settings.
 
 `set_itinerary_assignment` takes one itinerary for everyone, an
-`ItineraryAssignment::by_property` closure from a property value to an itinerary
-(by age group, say), or a closure from the context and a person. An individual
-can be given an itinerary of their own with `set_itinerary`, and
-`clear_itinerary` removes it again:
+`ItineraryAssignment::by_property` closure from a property value, or a closure
+from the context and a person. `override_itinerary` replaces it for one person
+and `clear_itinerary_override` undoes that:
 
 ```rust
 // Isolate at home, then return to the usual itinerary.
-context.set_itinerary(person, Itinerary::new([(household, 1.0)]));
-context.clear_itinerary::<Setting>(person);
+context.override_itinerary(person, Itinerary::new([(household, 1.0)]));
+context.clear_itinerary_override::<Setting>(person);
 ```
 
 ### Using settings in the loop
 
-There are two ways to connect settings to the loop. Both give attempts in each
-setting at the rate `intrinsic * share * multiplier`.
+Either form below gives attempts in each setting at the rate
+`intrinsic * share * multiplier`. Which to use depends on whether itineraries
+and groups change while people are infectious.
 
-**Exact.** The person's total over all their settings is their contact
-multiplier, and the setting is drawn in proportion to its part of that total.
-The forecast defaults to the total itself, so no proposal is rejected on account
-of contact structure.
+**Fixed itineraries and groups.** The contact multiplier is
+`current_setting_multiplier`: the average of the person's group multipliers,
+weighted by their itinerary. The forecast is that multiplier, so no proposals
+are rejected. Each attempt's setting is drawn by its contribution to it.
+
+For example, with the kinds and itinerary above, someone in a household of 4:
+
+| Setting   | Share | Multiplier      | Share x multiplier |
+| --------- | ----- | --------------- | ------------------ |
+| household | 0.6   | `(4 - 1)^1` = 3 | 1.8                |
+| community | 0.4   | `(n - 1)^0` = 1 | 0.4                |
+
+Their `current_setting_multiplier` is 1.8 + 0.4 = 2.2, so they make attempts at
+2.2 times their intrinsic rate. Each attempt happens in the household with
+probability 1.8 / 2.2 and in the community with probability 0.4 / 2.2.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
@@ -548,21 +533,20 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-That forecast is only valid while the multiplier stays as it was when the
-forecast was made. To keep the same draw when memberships and itineraries do
-change, add the bound that survives those changes:
+**Changing itineraries or groups.** When members are removed and restored or
+itineraries are overridden, forecast at `max_setting_multiplier`: the largest
+multiplier any one of the person's groups has had, whatever their itinerary. An
+average of group multipliers cannot exceed the largest of them, so no such
+change takes the person's rate above it.
 
-```rust
-    fn max_contact_multiplier(&self, person: PersonId) -> f64 {
-        self.max_setting_multiplier::<Setting>(person)
-    }
-```
+For the person above it is 3, the household's multiplier. If they isolate at
+home, their itinerary becomes household 1.0 and their rate rises from 2.2 to 3
+times intrinsic, which the forecast already covers.
 
-**Setting first.** Draw where the attempt happens, then thin by that setting's
-multiplier. The forecast is the largest multiplier any of the person's groups has
-ever had, which stays valid when members are removed and restored and when
-itineraries are overridden and cleared. The setting has to be shared between the
-thinning and the contact draw, so this path overrides `evaluate_forecast`.
+Each proposal draws a setting by itinerary share and is thinned by that
+setting's multiplier over the maximum: 3 / 3 for the household, 1 / 3 for the
+community. The thinning and the contact draw share the setting, so this form
+overrides `evaluate_forecast`.
 
 ```rust
 impl TransmissionManager<Flu> for Context {
@@ -586,51 +570,118 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-The exact path with its default forecast is the fastest, because it proposes at
-the person's actual rate. With `max_setting_multiplier` as the bound, either
-path proposes at the rate of the person's largest setting and rejects the
-difference, and in exchange needs no care when members are removed and restored
-or itineraries change.
+This proposes at the rate of the person's largest setting and rejects the
+difference, so it is slower than the fixed form. Returning
+`max_setting_multiplier` from `max_contact_multiplier` in the fixed form has the
+same effect, if you prefer to keep its contact draw.
 
-`examples/core-epi-settings` loads households, schools and workplaces from a line
-list, runs the setting-first path, and counts infections by the setting they
-happened in.
+`examples/core-epi-settings` loads a line list, uses the second form and counts
+infections by setting.
 
 ## When rates rise
 
-A forecast is made when a proposal is scheduled. If something later raises a
-person's total infectiousness above it, tell the loop:
+After a change that can raise a person's rate, reforecast them:
 
 ```rust
 context.reforecast_transmission(person);
 ```
 
-This drops the person's pending proposal and draws a new one from now. Redrawing
-is always statistically valid, so when in doubt, call it. It does nothing for
-someone never infected, and it restarts a loop that ended because its forecast
-was zero.
+It is always safe to call, and does nothing for someone never infected. Call it
+when:
 
-Changes that need it:
+- a contact restriction ends, or anything else in your own
+  `contact_multiplier` or forecast goes up;
+- using settings without `max_setting_multiplier`, a person's itinerary or the
+  membership of one of their groups changes;
+- with `max_setting_multiplier` as the bound, a person joins a group or a group
+  grows past its largest size: reforecast the newcomer and the group's members
+  (`setting_group_members`). A population group with a positive `alpha` needs
+  it whenever it grows.
 
-- an infectiousness modifier rising above 1, but only in a model that does not
-  call `setup_transmission_loop`: with it, the loop does this itself;
-- on the exact settings path with its default forecast, any change to the
-  person's itinerary or to who is in any of their groups;
-- with `max_setting_multiplier` as the bound, a group growing past its largest
-  size, or a person joining a group, for the newcomer and for the group's
-  infectious members (`setting_group_members`);
-- with the same bound, a population group with a positive `alpha` growing at
-  all, since it does not remember its largest size;
-- anything in the model's own forecast that can go up, such as a contact
-  restriction ending.
+Modifiers need no call: `setup_transmission_loop` reforecasts when one rises.
+Changes that only lower a rate never need one.
 
-Changes that only lower a rate never need it.
+## Variants
+
+Variants of one pathogen are one model whose
+[infection details](#infection-details) are the variant:
+
+```rust
+#[derive(Clone, Copy, Default, PartialEq)]
+enum Variant {
+    #[default]
+    Original,
+    Escape,
+}
+
+impl InfectionManager<Flu> for Context {
+    type Entity = Person;
+    type Details = Variant;
+
+    // Each variant has its own course of infection.
+    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId, variant: &Variant) -> RateAssignment {
+        match variant {
+            Variant::Original => ConstantRateFn::new(0.5, 5.0).into(),
+            Variant::Escape => ConstantRateFn::new(0.8, 5.0).into(),
+        }
+    }
+
+    // An infection with the original variant protects only partly against
+    // the escape variant.
+    fn base_susceptibility(&self, person: PersonId, variant: &Variant) -> f64 {
+        match (self.infection_details(person), variant) {
+            (None, _) => 1.0,
+            (Some(Variant::Original), Variant::Escape) => 0.5,
+            (Some(_), _) => 0.0,
+        }
+    }
+}
+
+impl TransmissionManager<Flu> for Context {
+    // An infection carries its infector's variant.
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Variant)> {
+        let variant = *self.infection_details(person)?;
+        Some((self.sample_anyone_else(person)?, variant))
+    }
+}
+```
+
+The `sample_contact` override is required: the default returns the default
+details, which would make every transmission the original variant. Mutation
+goes in the same place.
+
+Introduce a variant by seeding it:
+
+```rust
+context.seed_infections_with(Person, 5, Variant::Escape);
+```
+
+A susceptibility function modifier can depend on the variant:
+
+```rust
+// A vaccine that protects better against the original variant.
+context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, _elapsed, variant| {
+    match variant {
+        Variant::Original => 0.2,
+        Variant::Escape => 0.7,
+    }
+});
+```
+
+For an infectiousness modifier, the infector's variant is
+`infection_details(person)`.
+
+`core_epi` keeps only the current infection's details. That is enough above,
+because the escape variant protects against both; when immunity depends on every
+past infection, record them in a property from `on_infected`.
+
+A variant that spreads faster gets a higher rate function, not a susceptibility
+above 1.
 
 ## More than one pathogen
 
-Infection state is kept per marker type. Implementing the traits for a second
-marker gives a second pathogen on the same population, with its own rate
-library, infections, modifiers and immunity:
+Implementing the traits for a second marker gives a second pathogen on the same
+population, with its own rate library, infections, modifiers and immunity:
 
 ```rust
 struct Flu;
@@ -642,19 +693,18 @@ impl TransmissionManager<Flu> for Context {}
 impl TransmissionManager<Rsv> for Context {}
 ```
 
-Settings belong to the entity, so both pathogens share the same households and
-itineraries.
+Settings belong to the entity, so both pathogens share them.
 
-With more than one model in scope a bare method call is ambiguous, and Rust asks
-which is meant. Name the trait and marker:
+With more than one model in scope a bare method call is ambiguous. Name the
+trait and marker:
 
 ```rust
 InfectionManager::<Flu>::infection_time(&context, person);
 TransmissionManager::<Rsv>::seed_infections(&mut context, Person, 5);
 ```
 
-The same form resolves a clash between a `core_epi` method and a method of the
-same name in one of the model's own extension traits.
+The same form resolves a clash with a method of the same name in one of the
+model's own traits.
 
 ## Examples
 
@@ -662,4 +712,5 @@ same name in one of the model's own extension traits.
 | ----------------------------- | ----------------------------------------------------------- |
 | `examples/core-epi`           | the smallest model: homogeneous mixing with the defaults    |
 | `examples/core-epi-antiviral` | a scheduled infectiousness modifier                         |
-| `examples/core-epi-settings`  | settings loaded from a line list, on the setting-first path |
+| `examples/core-epi-settings`  | settings loaded from a line list, with a school closure     |
+| `examples/core-epi-variants`  | two variants as infection details, with a vaccine           |

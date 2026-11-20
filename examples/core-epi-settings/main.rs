@@ -47,9 +47,13 @@ define_data_plugin!(
 impl InfectionManager<CoreEpiExample> for Context {
     type Entity = Person;
     // The setting each transmission happened in; `None` for a seed.
-    type Exposure = Option<Setting>;
+    type Details = Option<Setting>;
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         let params = self.get_parameters();
         let duration = self.sample_distr(
             InfectiousPeriodRng,
@@ -62,10 +66,10 @@ impl InfectionManager<CoreEpiExample> for Context {
         &mut self,
         _infector: Option<PersonId>,
         infectee: PersonId,
-        exposure: Option<Setting>,
+        details: Option<Setting>,
     ) {
         self.set_property(infectee, InfectionStatus::Infected);
-        if let Some(setting) = exposure {
+        if let Some(setting) = details {
             self.get_data_mut(InfectionsBySettingPlugin).0[setting.index()] += 1;
         }
     }

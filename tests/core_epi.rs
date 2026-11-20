@@ -16,9 +16,13 @@ const POPULATION: usize = 1000;
 
 impl InfectionManager<Sir> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         RateAssignment::Library(0)
     }
 }
@@ -92,28 +96,28 @@ fn susceptibility_modifiers_compose_and_persist_across_infection() {
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person),
+        InfectionManager::<Sir>::susceptibility(&context, person, &()),
         1.0
     );
     InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
     InfectionManager::<Sir>::set_susceptibility_modifier::<Age>(&mut context, person, 0.5);
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person),
+        InfectionManager::<Sir>::susceptibility(&context, person, &()),
         0.25
     );
     InfectionManager::<Sir>::remove_susceptibility_modifier::<Age>(&mut context, person);
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person),
+        InfectionManager::<Sir>::susceptibility(&context, person, &()),
         0.5
     );
     // Infection zeroes the base, but the modifier outlives it.
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person),
+        InfectionManager::<Sir>::susceptibility(&context, person, &()),
         0.0
     );
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility_multiplier(&context, person),
+        InfectionManager::<Sir>::susceptibility_multiplier(&context, person, &()),
         0.5
     );
 }
@@ -129,18 +133,18 @@ fn function_modifiers_follow_elapsed_time() {
     InfectionManager::<Sir>::set_susceptibility_modifier_fn::<Vaccine>(
         &mut context,
         person,
-        move |_, _, t| waning.at(t),
+        move |_, _, t, _| waning.at(t),
     );
     assert_eq!(
-        InfectionManager::<Sir>::susceptibility(&context, person),
+        InfectionManager::<Sir>::susceptibility(&context, person, &()),
         0.2
     );
     context.add_plan(2.0, move |ctx| {
         assert_eq!(
-            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person),
+            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
             0.5
         );
-        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person, ());
         // Treatment effect that ramps in over its first two days, reading
         // the context to check it is the one passed in.
         InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Antiviral>(
@@ -214,7 +218,7 @@ fn infectiousness_modifier_belongs_to_the_person() {
     struct Mask;
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
@@ -227,7 +231,7 @@ fn infectiousness_modifier_belongs_to_the_person() {
     );
     // It survives reinfection.
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
         Some(0.5)
@@ -239,7 +243,7 @@ fn infectiousness_modifier_belongs_to_the_person() {
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, other),
         None
     );
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, other);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, other, ());
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, other),
         Some(0.25)
@@ -257,7 +261,7 @@ fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
     };
     // Set before infection, it is in the first forecast.
     InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, 3.0);
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
         Some(3.0)
@@ -403,7 +407,7 @@ fn infectiousness_modifiers_overflowing_panic() {
     struct Second;
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::set_infectiousness_modifier::<First>(&mut context, person, 1e200);
     InfectionManager::<Sir>::set_infectiousness_modifier::<Second>(&mut context, person, 1e200);
 }
@@ -429,7 +433,7 @@ fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
         });
     });
     context.add_plan(2.0, move |ctx| {
-        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person, ());
         assert_eq!(
             InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
             Some(0.75)
@@ -451,7 +455,7 @@ fn a_scheduled_infectiousness_modifier_ends_with_its_infection() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
         &mut context,
@@ -466,7 +470,7 @@ fn a_scheduled_infectiousness_modifier_ends_with_its_infection() {
             0.25
         );
         // Reinfection drops the scheduled modifier and keeps the person's.
-        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person);
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person, ());
         assert_eq!(
             InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
             0.5
@@ -481,9 +485,13 @@ fn loop_panics_when_the_forecast_is_not_a_bound() {
     struct Broken;
     impl InfectionManager<Broken> for Context {
         type Entity = Person;
-        type Exposure = ();
+        type Details = ();
 
-        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
             RateAssignment::Library(0)
         }
     }
@@ -519,9 +527,13 @@ fn models_on_different_entities_keep_separate_infections() {
     struct Zoonosis;
     impl InfectionManager<Zoonosis> for Context {
         type Entity = Animal;
-        type Exposure = ();
+        type Details = ();
 
-        fn draw_infectiousness_rate_fn(&mut self, _animal: AnimalId) -> RateAssignment {
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _animal: AnimalId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
             ConstantRateFn::new(1.0, 2.0).into()
         }
     }
@@ -535,13 +547,13 @@ fn models_on_different_entities_keep_separate_infections() {
     let person = context.add_entity(Person).unwrap();
     let animal = context.add_entity(Animal).unwrap();
 
-    InfectionManager::<Zoonosis>::assign_infectiousness_rate_fn(&mut context, animal);
+    InfectionManager::<Zoonosis>::assign_infectiousness_rate_fn(&mut context, animal, ());
     assert!(InfectionManager::<Zoonosis>::is_infectious(
         &context, animal
     ));
     assert!(!InfectionManager::<Sir>::is_infectious(&context, person));
 
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
         InfectionManager::<Sir>::infectiousness_end_time(&context, person),
         Some(5.0)
@@ -581,13 +593,17 @@ const COUNTING_RATE: f64 = 2.0;
 
 impl InfectionManager<Counting> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         ConstantRateFn::new(COUNTING_RATE, 1000.0).into()
     }
 
-    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _exposure: ()) {
+    fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {
         if self.get_data(CountingPlugin).reforecast_on_infected.get() {
             TransmissionManager::<Counting>::reforecast_transmission(self, infectee);
         }
@@ -737,7 +753,7 @@ fn reforecast_in_on_infected_leaves_one_loop_running() {
 fn reforecast_after_infectiousness_ended_schedules_nothing() {
     let (mut context, people) = sir_context(4, 1, 1.0, 2.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     context.add_plan(5.0, move |context| {
         TransmissionManager::<Sir>::reforecast_transmission(context, person);
     });
@@ -760,7 +776,7 @@ fn infectiousness_duration_is_the_span_of_the_rate_function() {
         vec![ConstantRateFn::new(1.0, 2.5).into()],
     );
     context.add_plan(3.0, move |context| {
-        InfectionManager::<Sir>::assign_infectiousness_rate_fn(context, person);
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(context, person, ());
     });
     context.execute();
     assert_eq!(
@@ -783,6 +799,7 @@ fn a_rate_function_can_be_set_directly() {
         &mut context,
         person,
         ConstantRateFn::new(0.5, 4.0),
+        (),
     );
     assert!(InfectionManager::<Sir>::is_infectious(&context, person));
     assert_eq!(
@@ -802,7 +819,7 @@ fn a_library_index_outside_the_library_panics_at_assignment() {
     context.init_random(4);
     let person = context.add_entity(Person).unwrap();
     // `Sir` draws library index 0, and no library was loaded.
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
 }
 
 #[test]
@@ -813,17 +830,25 @@ fn two_models_on_one_population_keep_separate_infections() {
     struct Rsv;
     impl InfectionManager<Flu> for Context {
         type Entity = Person;
-        type Exposure = ();
+        type Details = ();
 
-        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
             RateAssignment::Library(0)
         }
     }
     impl InfectionManager<Rsv> for Context {
         type Entity = Person;
-        type Exposure = ();
+        type Details = ();
 
-        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
             RateAssignment::Library(0)
         }
     }
@@ -876,12 +901,12 @@ fn two_models_on_one_population_keep_separate_infections() {
     );
     // Immunity is per model: the RSV case is still susceptible to flu.
     assert_eq!(
-        InfectionManager::<Flu>::susceptibility(&context, people[1]),
+        InfectionManager::<Flu>::susceptibility(&context, people[1], &()),
         1.0
     );
     InfectionManager::<Flu>::set_susceptibility_modifier::<Flu>(&mut context, people[2], 0.0);
     assert_eq!(
-        InfectionManager::<Rsv>::susceptibility(&context, people[2]),
+        InfectionManager::<Rsv>::susceptibility(&context, people[2], &()),
         1.0
     );
 
@@ -919,17 +944,21 @@ define_data_plugin!(ChainPlugin, Chain, Chain::default());
 
 impl InfectionManager<Chained> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         ConstantRateFn::new(COUNTING_RATE, 1000.0).into()
     }
 
-    fn base_susceptibility(&self, _person: PersonId) -> f64 {
+    fn base_susceptibility(&self, _person: PersonId, _details: &()) -> f64 {
         1.0
     }
 
-    fn on_infected(&mut self, infector: Option<PersonId>, _infectee: PersonId, _exposure: ()) {
+    fn on_infected(&mut self, infector: Option<PersonId>, _infectee: PersonId, _details: ()) {
         if let Some(infector) = infector {
             TransmissionManager::<Chained>::reforecast_transmission(self, infector);
         }
@@ -1002,9 +1031,13 @@ struct Exact;
 
 impl InfectionManager<SettingFirst> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
     }
 }
@@ -1027,9 +1060,13 @@ impl TransmissionManager<SettingFirst> for Context {
 
 impl InfectionManager<Exact> for Context {
     type Entity = Person;
-    type Exposure = ();
+    type Details = ();
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         ConstantRateFn::new(PLACE_RATE, PLACE_DURATION).into()
     }
 }
@@ -1135,9 +1172,13 @@ define_data_plugin!(TracePlugin, Trace, Trace::default());
 
 impl InfectionManager<Traced> for Context {
     type Entity = Person;
-    type Exposure = Option<Place>;
+    type Details = Option<Place>;
 
-    fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        _details: &Self::Details,
+    ) -> RateAssignment {
         ConstantRateFn::new(0.5, 3.0).into()
     }
 
@@ -1145,11 +1186,11 @@ impl InfectionManager<Traced> for Context {
         &mut self,
         infector: Option<PersonId>,
         infectee: PersonId,
-        exposure: Option<Place>,
+        details: Option<Place>,
     ) {
         self.get_data_mut(TracePlugin)
             .0
-            .push((infector, infectee, exposure));
+            .push((infector, infectee, details));
     }
 }
 
@@ -1177,9 +1218,9 @@ fn on_infected_is_told_the_setting_the_contact_draw_returned() {
     let trace = context.get_data(TracePlugin).0.clone();
     assert_eq!(trace[0], (None, seed, None));
     assert!(trace.len() > 5, "only {} infections", trace.len());
-    for &(infector, infectee, exposure) in &trace[1..] {
+    for &(infector, infectee, details) in &trace[1..] {
         let infector = infector.expect("a transmission has an infector");
-        let place = exposure.expect("a transmission has a setting");
+        let place = details.expect("a transmission has a setting");
         // They share the group the attempt happened in.
         assert_eq!(
             context.setting_group(infector, place),
@@ -1253,9 +1294,13 @@ fn a_proposal_just_after_a_curve_leaves_zero_stays_under_its_forecast() {
     struct Steep;
     impl InfectionManager<Steep> for Context {
         type Entity = Person;
-        type Exposure = ();
+        type Details = ();
 
-        fn draw_infectiousness_rate_fn(&mut self, _person: PersonId) -> RateAssignment {
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
             EmpiricalRateFn::new(vec![[0.0, 0.0], [2.0, 1.0], [6.0, 0.0]], 1.0).into()
         }
     }
@@ -1286,7 +1331,7 @@ fn a_reinfection_at_the_same_time_drops_the_scheduled_modifier() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
         &mut context,
         person,
@@ -1294,7 +1339,7 @@ fn a_reinfection_at_the_same_time_drops_the_scheduled_modifier() {
         1.0,
         None,
     );
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     context.add_plan(2.0, move |ctx| {
         assert_eq!(
             InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
@@ -1310,7 +1355,7 @@ fn a_scheduled_modifier_composes_with_the_persons_own_of_the_same_key() {
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
     InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
         &mut context,
         person,
@@ -1348,7 +1393,7 @@ fn a_scheduled_modifier_is_removed_at_its_end_after_infectiousness_ran_out() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 3.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
         &mut context,
         person,
@@ -1382,7 +1427,7 @@ fn a_later_schedule_of_a_modifier_outlives_the_end_of_an_earlier_one() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     for (factor, start, end) in [(0.5, 1.0, 5.0), (0.2, 3.0, 10.0)] {
         InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
             &mut context,
@@ -1409,7 +1454,7 @@ fn a_later_schedule_that_starts_first_is_not_replaced_by_the_earlier_one() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     let person = people[0];
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     for (factor, start, end) in [(0.5, 10.0, 20.0), (0.2, 5.0, 40.0)] {
         InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
             &mut context,
@@ -1436,7 +1481,7 @@ fn a_later_schedule_that_starts_first_is_not_replaced_by_the_earlier_one() {
 fn scheduling_a_modifier_that_ends_before_it_starts_panics() {
     struct Antiviral;
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
-    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0]);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0], ());
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
         &mut context,
         people[0],
@@ -1444,4 +1489,205 @@ fn scheduling_a_modifier_that_ends_before_it_starts_panics() {
         5.0,
         Some(2.0),
     );
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+enum Variant {
+    #[default]
+    Alpha,
+    Beta,
+}
+
+/// Two variants as infection details: Beta infects people who had Alpha,
+/// Alpha does not infect people who had Beta.
+struct Strains;
+
+const ALPHA_DURATION: f64 = 5.0;
+const BETA_DURATION: f64 = 4.0;
+
+impl InfectionManager<Strains> for Context {
+    type Entity = Person;
+    type Details = Variant;
+
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        variant: &Variant,
+    ) -> RateAssignment {
+        match variant {
+            Variant::Alpha => ConstantRateFn::new(0.6, ALPHA_DURATION).into(),
+            Variant::Beta => ConstantRateFn::new(0.75, BETA_DURATION).into(),
+        }
+    }
+
+    fn base_susceptibility(&self, person: PersonId, variant: &Variant) -> f64 {
+        match InfectionManager::<Strains>::infection_details(self, person) {
+            None => 1.0,
+            Some(Variant::Alpha) if *variant == Variant::Beta => 1.0,
+            Some(_) => 0.0,
+        }
+    }
+}
+
+impl TransmissionManager<Strains> for Context {
+    // An infection carries the infector's variant.
+    fn sample_contact(&self, person: PersonId) -> Option<(PersonId, Variant)> {
+        let variant = *InfectionManager::<Strains>::infection_details(self, person)?;
+        let contact = TransmissionManager::<Strains>::sample_anyone_else(self, person)?;
+        Some((contact, variant))
+    }
+}
+
+fn strains_context(seed: u64, people: usize) -> (Context, Vec<PersonId>) {
+    let mut context = Context::new();
+    context.init_random(seed);
+    let people = (0..people)
+        .map(|_| context.add_entity(Person).unwrap())
+        .collect();
+    (context, people)
+}
+
+fn count_with_variant(context: &Context, variant: Variant) -> usize {
+    context
+        .get_entity_iterator::<Person>()
+        .filter(|&p| InfectionManager::<Strains>::infection_details(context, p) == Some(&variant))
+        .count()
+}
+
+#[test]
+fn infection_details_are_stored_and_choose_the_rate_function() {
+    let (mut context, people) = strains_context(1, 2);
+    assert_eq!(
+        InfectionManager::<Strains>::infection_details(&context, people[0]),
+        None
+    );
+    TransmissionManager::<Strains>::seed_infection(&mut context, people[0]);
+    TransmissionManager::<Strains>::transmit(&mut context, None, people[1], Variant::Beta);
+    for (person, variant, duration) in [
+        (people[0], Variant::Alpha, ALPHA_DURATION),
+        (people[1], Variant::Beta, BETA_DURATION),
+    ] {
+        assert_eq!(
+            InfectionManager::<Strains>::infection_details(&context, person),
+            Some(&variant)
+        );
+        assert_eq!(
+            InfectionManager::<Strains>::infectiousness_duration(&context, person),
+            Some(duration)
+        );
+    }
+}
+
+#[test]
+fn susceptibility_depends_on_the_details_of_the_attempt() {
+    struct Vaccine;
+    let (mut context, people) = strains_context(1, 2);
+    let (had_alpha, naive) = (people[0], people[1]);
+    TransmissionManager::<Strains>::seed_infection(&mut context, had_alpha);
+    for (variant, expected) in [(Variant::Alpha, 0.0), (Variant::Beta, 1.0)] {
+        assert_eq!(
+            InfectionManager::<Strains>::susceptibility(&context, had_alpha, &variant),
+            expected
+        );
+    }
+
+    // A vaccine that protects better against Alpha than against Beta.
+    InfectionManager::<Strains>::set_susceptibility_modifier_fn::<Vaccine>(
+        &mut context,
+        naive,
+        |_, _, _, variant| match variant {
+            Variant::Alpha => 0.1,
+            Variant::Beta => 0.8,
+        },
+    );
+    for (variant, expected) in [(Variant::Alpha, 0.1), (Variant::Beta, 0.8)] {
+        assert_eq!(
+            InfectionManager::<Strains>::susceptibility(&context, naive, &variant),
+            expected
+        );
+        assert_eq!(
+            InfectionManager::<Strains>::susceptibility_multiplier(&context, naive, &variant),
+            expected
+        );
+    }
+}
+
+/// Run a wave of `first`, then seed `second` once the wave is over. Returns
+/// how many people had been infected before the second seeding, and how many
+/// ended with each variant as their latest infection.
+fn two_waves(first: Variant, second: Variant) -> (usize, usize, usize) {
+    const SEEDS: usize = 5;
+    let (mut context, _) = strains_context(7, 500);
+    TransmissionManager::<Strains>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Strains>::seed_infections_with(&mut context, Person, SEEDS, first);
+    let infected_in_first_wave = std::rc::Rc::new(Cell::new(0));
+    let recorded = infected_in_first_wave.clone();
+    context.add_plan(200.0, move |ctx| {
+        assert_eq!(count_with_variant(ctx, second), 0);
+        recorded.set(count_with_variant(ctx, first));
+        TransmissionManager::<Strains>::seed_infections_with(ctx, Person, SEEDS, second);
+    });
+    context.execute();
+    (
+        infected_in_first_wave.get(),
+        count_with_variant(&context, Variant::Alpha),
+        count_with_variant(&context, Variant::Beta),
+    )
+}
+
+#[test]
+fn a_variant_spreads_through_people_immune_to_another() {
+    let (first_wave, alpha, beta) = two_waves(Variant::Alpha, Variant::Beta);
+    assert!(first_wave > 400, "Alpha wave infected only {first_wave}");
+    // Beta meets no immunity, so it reinfects most of the Alpha wave.
+    assert!(beta > 400, "Beta wave infected only {beta}");
+    assert!(alpha < first_wave);
+}
+
+#[test]
+fn a_variant_does_not_spread_through_people_immune_to_it() {
+    const SEEDS: usize = 5;
+    let (first_wave, alpha, beta) = two_waves(Variant::Beta, Variant::Alpha);
+    assert!(first_wave > 400, "Beta wave infected only {first_wave}");
+    // Only the seeds, who are infected whatever their susceptibility, and
+    // people the Beta wave missed can end with Alpha.
+    assert!(alpha >= SEEDS);
+    assert!(beta >= first_wave - SEEDS);
+    assert!(alpha <= SEEDS + (500 - first_wave));
+}
+
+#[test]
+fn a_susceptibility_modifier_thins_attempts_by_variant() {
+    struct Vaccine;
+    const TRIALS: u64 = 400;
+    // Each variant makes three attempts on average on the one contact, who
+    // is protected against Beta only.
+    for (variant, protection, expected) in [
+        (Variant::Alpha, 1.0, 1.0 - (-3.0f64).exp()),
+        (Variant::Beta, 0.25, 1.0 - (-0.75f64).exp()),
+    ] {
+        let mut infected = 0;
+        for seed in 0..TRIALS {
+            let (mut context, people) = strains_context(seed, 2);
+            TransmissionManager::<Strains>::setup_transmission_loop(&mut context);
+            InfectionManager::<Strains>::set_susceptibility_modifier_fn::<Vaccine>(
+                &mut context,
+                people[1],
+                |_, _, _, variant| match variant {
+                    Variant::Alpha => 1.0,
+                    Variant::Beta => 0.25,
+                },
+            );
+            TransmissionManager::<Strains>::transmit(&mut context, None, people[0], variant);
+            context.execute();
+            if InfectionManager::<Strains>::infection_details(&context, people[1]).is_some() {
+                infected += 1;
+            }
+        }
+        let share = infected as f64 / TRIALS as f64;
+        assert!(
+            (share - expected).abs() < 0.07,
+            "{variant:?} with protection {protection}: expected {expected}, got {share}"
+        );
+    }
 }

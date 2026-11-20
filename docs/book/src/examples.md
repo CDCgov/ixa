@@ -105,6 +105,17 @@ itinerary.
 cargo run --example core-epi-settings
 ```
 
+### `core-epi-variants`
+
+Two variants of one pathogen, carried as `core_epi`'s infection details: the
+variant decides the rate function, how much a past infection protects and how
+well a vaccine works. An escape variant is seeded after the first wave and
+reinfects part of it.
+
+```sh
+cargo run --example core-epi-variants
+```
+
 ## External examples
 
 * [ixa-epi-covid](https://github.com/CDCgov/ixa-epi-isolation)

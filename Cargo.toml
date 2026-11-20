@@ -173,3 +173,8 @@ required-features = ["core_epi"]
 name = "core-epi-antiviral"
 path = "examples/core-epi-antiviral/main.rs"
 required-features = ["core_epi"]
+
+[[example]]
+name = "core-epi-variants"
+path = "examples/core-epi-variants/main.rs"
+required-features = ["core_epi"]

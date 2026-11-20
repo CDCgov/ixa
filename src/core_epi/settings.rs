@@ -787,7 +787,7 @@ pub trait SettingsExt:
     }
 
     /// `person`'s own itinerary, overriding the assignment.
-    fn set_itinerary<S: SettingKind>(
+    fn override_itinerary<S: SettingKind>(
         &mut self,
         person: EntityId<S::Entity>,
         itinerary: Itinerary<S>,
@@ -796,7 +796,7 @@ pub trait SettingsExt:
     }
 
     /// Remove `person`'s own itinerary, so the assignment applies again.
-    fn clear_itinerary<S: SettingKind>(&mut self, person: EntityId<S::Entity>) {
+    fn clear_itinerary_override<S: SettingKind>(&mut self, person: EntityId<S::Entity>) {
         let _ = S::store_mut(self).itineraries.remove(person);
     }
 
@@ -987,7 +987,7 @@ mod tests {
         assert_eq!(context.setting_group(people[0], COMMUNITY), Some(community));
         assert_eq!(context.setting_group_size(people[0], COMMUNITY), 4);
         for (setting, expected) in [(HOME, 3.0), (WORK, 3f64.sqrt()), (COMMUNITY, 1.0)] {
-            context.set_itinerary(people[0], Itinerary::new([(setting, 1.0)]));
+            context.override_itinerary(people[0], Itinerary::new([(setting, 1.0)]));
             assert_eq!(
                 context.current_setting_multiplier::<Setting>(people[0]),
                 expected
@@ -1186,7 +1186,7 @@ mod tests {
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
 
         context.set_itinerary_assignment(Itinerary::new([(COMMUNITY, 1.0)]));
-        context.set_itinerary(people[1], Itinerary::new([(HOME, 1.0)]));
+        context.override_itinerary(people[1], Itinerary::new([(HOME, 1.0)]));
         assert_eq!(context.sample_setting(people[0]), Some(COMMUNITY));
         assert_eq!(context.sample_setting(people[1]), Some(HOME));
         // Both are members at home, so both bounds allow for it.
@@ -1207,11 +1207,11 @@ mod tests {
 
         // Isolated at home: a bound from the current itinerary alone would be
         // 0, ending the transmission loop before isolation does.
-        context.set_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
         let bound = context.max_setting_multiplier::<Setting>(people[0]);
         assert_eq!(bound, 2.0);
 
-        context.clear_itinerary::<Setting>(people[0]);
+        context.clear_itinerary_override::<Setting>(people[0]);
         for _ in 0..50 {
             let setting = context.sample_setting::<Setting>(people[0]).unwrap();
             assert!(context.setting_multiplier(people[0], setting) <= bound);
