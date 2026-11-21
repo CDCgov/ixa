@@ -45,6 +45,15 @@ impl<'a, N: Network> LayerView<'a, N> {
         self.storage.iter()
     }
 
+    /// One direction of every connected pair: the edges from a lower id to a higher one,
+    /// so each edge added with the bidi methods comes up once.
+    #[allow(clippy::type_complexity)]
+    pub fn iter_bidi(
+        &self,
+    ) -> impl Iterator<Item = (EntityId<N::Entity>, &'a Edge<N::Entity, N::Data>)> {
+        self.iter().filter(|(source, edge)| *source < edge.neighbor)
+    }
+
     /// The outgoing edges of `entity`, empty if it has none.
     #[must_use]
     pub fn get_edges(&self, entity: EntityId<N::Entity>) -> &'a [Edge<N::Entity, N::Data>] {

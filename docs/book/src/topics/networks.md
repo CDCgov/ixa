@@ -54,6 +54,10 @@ let updated = context.update_edge(Contact::School, p1, p2, |rate| *rate *= 0.5)?
 
 // Set an edge's data, adding the edge if there is none; returns the previous data.
 let previous = context.add_or_update_edge(Contact::School, p1, p2, 0.25)?; // Option<f64>
+
+// The same for both directions of a pair.
+let updated = context.update_edge_bidi(Contact::School, p1, p2, |rate| *rate *= 0.5)?;
+let previous = context.add_or_update_edge_bidi(Contact::School, p1, p2, 0.25)?; // (p1 -> p2, p2 -> p1)
 ```
 
 Three rules are enforced: no edge from an entity to itself, at most one edge
@@ -61,8 +65,10 @@ per (source, neighbor) in a layer, and the data passes the network's
 validation. Each returns an `IxaError`, and a failed call changes nothing: a
 rejected update leaves the edge's previous data in place. `add_edge_bidi`
 checks both directions before inserting either, and `remove_edge_bidi` removes
-both or neither. `add_edges` and `add_edges_bidi` add every edge they are given
-or none.
+both or neither. `update_edge_bidi` runs its closure once, on the data of the
+first direction, and stores the result on both edges; it changes nothing unless
+both directions exist. `add_or_update_edge_bidi` adds whichever direction is
+missing. `add_edges` and `add_edges_bidi` add every edge they are given or none.
 
 Adding an edge looks through the source's existing edges for one to the same
 neighbor, so building up an entity with thousands of edges one call at a time
@@ -115,14 +121,15 @@ for (source, edge) in partnerships.iter() {
 ```
 
 An edge added with `add_edge_bidi` is stored once in each direction, so it
-appears twice in `iter` and counts twice in `edge_count`. Entity ids are
-ordered, which picks out one direction of each pair:
+appears twice in `iter` and counts twice in `edge_count`. `iter_bidi` gives one
+direction of each pair: the edges from a lower id to a higher one (entity ids
+are ordered, so `a < b` works in a model's own code too).
 
 ```rust
 let ended: Vec<(PersonId, PersonId)> = context
     .get_layer(Contact::Household)
-    .iter()
-    .filter(|(source, edge)| *source < edge.neighbor && edge.data < threshold)
+    .iter_bidi()
+    .filter(|(_, edge)| edge.data < threshold)
     .map(|(source, edge)| (source, edge.neighbor))
     .collect();
 for (a, b) in ended {

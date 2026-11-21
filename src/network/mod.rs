@@ -71,6 +71,10 @@ type EdgePair<N> = (
     Edge<<N as Network>::Entity, <N as Network>::Data>,
 );
 
+/// The data replaced by `add_or_update_edge_bidi`: `(a -> b, b -> a)`, `None` for a
+/// direction that was added.
+type PreviousData<N> = (Option<<N as Network>::Data>, Option<<N as Network>::Data>);
+
 pub(crate) struct NetworkData {
     /// A `NetworkStore<E>` per `Entity::id()`.
     network_stores: Vec<OnceCell<Box<dyn Any>>>,
@@ -251,12 +255,60 @@ impl NetworkData {
             return Err(IxaError::CannotMakeEdgeToSelf);
         }
         N::validate(&data)?;
+        Ok(Self::upsert(self.layer_mut(layer), from, to, data))
+    }
+
+    fn add_or_update_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+        data: N::Data,
+    ) -> Result<PreviousData<N>, IxaError> {
+        if a == b {
+            return Err(IxaError::CannotMakeEdgeToSelf);
+        }
+        N::validate(&data)?;
         let storage = self.layer_mut(layer);
+        let forward = Self::upsert(storage, a, b, data.clone());
+        let backward = Self::upsert(storage, b, a, data);
+        Ok((forward, backward))
+    }
+
+    /// Stores `data` on the edge from `from` to `to`, adding the edge if there is none,
+    /// and returns the data it replaced. The caller has applied the edge rules.
+    fn upsert<E: Entity, D>(
+        storage: &mut LayerStorage<E, D>,
+        from: EntityId<E>,
+        to: EntityId<E>,
+        data: D,
+    ) -> Option<D> {
         if let Some(edge) = storage.get_edge_mut(from, to) {
-            return Ok(Some(std::mem::replace(&mut edge.data, data)));
+            return Some(std::mem::replace(&mut edge.data, data));
         }
         storage.push_unchecked(from, Edge { neighbor: to, data });
-        Ok(None)
+        None
+    }
+
+    fn update_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+        update: impl FnOnce(&mut N::Data),
+    ) -> Result<bool, IxaError> {
+        let storage = self.layer_mut(layer);
+        let (Some(forward), Some(backward)) = (storage.position(a, b), storage.position(b, a))
+        else {
+            return Ok(false);
+        };
+        // Updated on a copy so a rejected value leaves both edges as they were.
+        let mut data = storage.get_edges(a)[forward].data.clone();
+        update(&mut data);
+        N::validate(&data)?;
+        *storage.data_at_mut(a, forward) = data.clone();
+        *storage.data_at_mut(b, backward) = data;
+        Ok(true)
     }
 }
 
@@ -389,6 +441,42 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     ) -> Result<Option<N::Data>, IxaError> {
         self.get_data_mut(NetworkPlugin)
             .add_or_update_edge(layer, from, to, data)
+    }
+
+    /// [`update_edge`](Self::update_edge) for both directions between `a` and `b`:
+    /// `update` runs once, on the data of `a -> b`, and the result is stored on both edges.
+    /// Returns `Ok(false)`, without calling `update`, if either direction is missing.
+    ///
+    /// # Errors
+    /// [`IxaError::InvalidEdgeData`] if [`Network::validate`] rejects the result; both
+    /// edges keep their previous data.
+    #[must_use = "returns Ok(false) if the edges are not both present"]
+    fn update_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+        update: impl FnOnce(&mut N::Data),
+    ) -> Result<bool, IxaError> {
+        self.get_data_mut(NetworkPlugin)
+            .update_edge_bidi(layer, a, b, update)
+    }
+
+    /// Sets the data of the edges in both directions between `a` and `b`, adding whichever
+    /// is missing. Returns the previous data as `(a -> b, b -> a)`, `None` for a direction
+    /// that was added.
+    ///
+    /// # Errors
+    /// As [`add_or_update_edge`](Self::add_or_update_edge); nothing changes.
+    fn add_or_update_edge_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        a: EntityId<N::Entity>,
+        b: EntityId<N::Entity>,
+        data: N::Data,
+    ) -> Result<PreviousData<N>, IxaError> {
+        self.get_data_mut(NetworkPlugin)
+            .add_or_update_edge_bidi(layer, a, b, data)
     }
 
     /// Removes every edge in `layer`.
@@ -1274,6 +1362,107 @@ mod test_api {
     }
 
     #[test]
+    fn update_edge_bidi() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let school = Contact::School;
+        context
+            .add_edge_bidi(school, person1, person2, 0.5)
+            .unwrap();
+        context.add_edge(school, person1, person3, 0.5).unwrap();
+        let data = |context: &Context, from, to| context.get_edge(school, from, to).unwrap().data;
+
+        let mut calls = 0;
+        let updated = context.update_edge_bidi(school, person2, person1, |rate| {
+            calls += 1;
+            *rate *= 0.5;
+        });
+        assert!(updated.unwrap());
+        assert_eq!(calls, 1);
+        assert_eq!(data(&context, person1, person2), 0.25);
+        assert_eq!(data(&context, person2, person1), 0.25);
+
+        // When the directions differ, the result for `a -> b` goes on both.
+        assert!(context
+            .update_edge(school, person1, person2, |rate| *rate = 1.0)
+            .unwrap());
+        assert!(context
+            .update_edge_bidi(school, person1, person2, |rate| *rate += 1.0)
+            .unwrap());
+        assert_eq!(data(&context, person1, person2), 2.0);
+        assert_eq!(data(&context, person2, person1), 2.0);
+
+        // A rejected value changes neither.
+        let result = context.update_edge_bidi(school, person1, person2, |rate| *rate -= 2.5);
+        assert!(matches!(result, Err(IxaError::InvalidEdgeData { .. })));
+        assert_eq!(data(&context, person1, person2), 2.0);
+        assert_eq!(data(&context, person2, person1), 2.0);
+
+        // Without both directions nothing is called or changed.
+        let one_way = context.update_edge_bidi(school, person1, person3, |_| panic!("called"));
+        assert!(!one_way.unwrap());
+        let unconnected = context.update_edge_bidi(school, person2, person3, |_| panic!("called"));
+        assert!(!unconnected.unwrap());
+        assert_eq!(data(&context, person1, person3), 0.5);
+    }
+
+    #[test]
+    fn add_or_update_edge_bidi() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let school = Contact::School;
+        let data = |context: &Context, from, to| context.get_edge(school, from, to).unwrap().data;
+
+        let added = context.add_or_update_edge_bidi(school, person1, person2, 0.5);
+        assert_eq!(added.unwrap(), (None, None));
+        let replaced = context.add_or_update_edge_bidi(school, person2, person1, 0.75);
+        assert_eq!(replaced.unwrap(), (Some(0.5), Some(0.5)));
+        assert_eq!(context.get_edge_count(school), 2);
+
+        // A one-way edge gets its other direction, and both get the new data.
+        context.add_edge(school, person1, person3, 0.1).unwrap();
+        let completed = context.add_or_update_edge_bidi(school, person3, person1, 0.2);
+        assert_eq!(completed.unwrap(), (None, Some(0.1)));
+        assert_eq!(data(&context, person1, person3), 0.2);
+        assert_eq!(data(&context, person3, person1), 0.2);
+        assert_eq!(context.get_edge_count(school), 4);
+
+        assert!(matches!(
+            context.add_or_update_edge_bidi(school, person1, person1, 0.5),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
+        assert!(matches!(
+            context.add_or_update_edge_bidi(school, person1, person2, -1.0),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert!(matches!(
+            context.add_or_update_edge_bidi(school, person2, person3, f64::NAN),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(data(&context, person1, person2), 0.75);
+        assert_eq!(context.get_edge_count(school), 4);
+    }
+
+    #[test]
+    fn clear_layer_then_redraw() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        for day in 0..3 {
+            context.clear_layer(Contact::School);
+            assert_eq!(context.get_edge_count(Contact::School), 0);
+            assert_eq!(context.degree_distribution(Contact::School), vec![3]);
+            let (a, b) = [(person1, person2), (person2, person3), (person3, person1)][day];
+            context.add_edge_bidi(Contact::School, a, b, 1.0).unwrap();
+            context
+                .add_edge_bidi(Contact::Household, a, b, 1.0)
+                .unwrap();
+            assert_eq!(context.get_edge_count(Contact::School), 2);
+        }
+        // Clearing one layer leaves the other alone.
+        assert_eq!(context.get_edge_count(Contact::Household), 6);
+    }
+
+    #[test]
     fn layer_view() {
         let (mut context, person1, person2) = setup();
         let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
@@ -1315,12 +1504,15 @@ mod test_api {
             ]
         );
 
-        // Ids are ordered, so one direction of each pair can be picked out.
-        let lower_to_higher = layer
-            .iter()
-            .filter(|(source, edge)| *source < edge.neighbor)
-            .count();
-        assert_eq!(lower_to_higher, 3);
+        // One direction of each pair: the edges from a lower id to a higher one.
+        let pairs: Vec<(PersonId, PersonId)> = layer
+            .iter_bidi()
+            .map(|(source, edge)| (source, edge.neighbor))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![(person1, person3), (person1, person2), (person2, person3)]
+        );
 
         assert_eq!(context.get_layer(Contact::Household).edge_count(), 0);
         assert_eq!(context.get_layer(Contact::Household).iter().count(), 0);
