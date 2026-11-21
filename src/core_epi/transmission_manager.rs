@@ -127,6 +127,10 @@ where
     /// If `total` exceeds `forecast`, which would under-thin attempts.
     fn accept_proposal(&self, person: EntityId<Self::Entity>, total: f64, forecast: f64) -> bool {
         assert!(
+            total >= 0.0,
+            "total infectiousness {total} of {person:?} must be non-negative"
+        );
+        assert!(
             total <= forecast * (1.0 + BOUND_TOLERANCE) + BOUND_SLACK,
             "total infectiousness {total} of {person:?} exceeds its forecast {forecast}: \
              the forecast must bound the total until the next proposal"

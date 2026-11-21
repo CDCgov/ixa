@@ -75,13 +75,20 @@ impl EmpiricalRateFn {
         }
         let cum = build_cum(&points);
         let total = *cum.last().unwrap();
+        assert!(
+            total.is_finite(),
+            "empirical rate cumulative area must be finite, got {total}"
+        );
         // The earliest anchor at which the cumulative peaks, so a trailing
-        // tail of zeros does not count.
-        let duration = cum
-            .iter()
-            .position(|&c| c == total)
-            .and_then(|index| points.get(index))
-            .map_or(0.0, |point| point[0]);
+        // tail of zeros does not count. An all-zero curve has duration 0.
+        let duration = if total == 0.0 {
+            0.0
+        } else {
+            cum.iter()
+                .position(|&c| c == total)
+                .and_then(|index| points.get(index))
+                .map_or(0.0, |point| point[0])
+        };
         Self {
             points,
             cum,
@@ -101,6 +108,9 @@ impl EmpiricalRateFn {
     /// Integral of the unscaled shape up to `t`.
     #[inline]
     fn raw_cum(&self, t: f64) -> f64 {
+        if t.is_nan() {
+            return f64::NAN;
+        }
         let points = &self.points;
         if t <= 0.0 || points.is_empty() {
             return 0.0;
@@ -121,16 +131,9 @@ impl EmpiricalRateFn {
         *self.cum.last().unwrap()
     }
 
-    /// Solves `raw_cum(t) = c`.
+    /// Solves `raw_cum(t) = c` for `c > 0.0`.
     #[inline]
     fn raw_inverse(&self, c: f64) -> Option<f64> {
-        if c < 0.0 {
-            return None;
-        }
-        // Reachable: a tiny `c` over a large scale underflows to 0.
-        if c == 0.0 {
-            return Some(0.0);
-        }
         let points = &self.points;
         if points.is_empty() {
             return None;
@@ -147,8 +150,13 @@ impl EmpiricalRateFn {
             // The root in rationalized form: `(-ri + sqrt(disc)) / slope`
             // cancels on a segment that is nearly flat.
             let disc = (ri * ri + 2.0 * slope * extra).max(0.0);
-            let u = 2.0 * extra / (ri + disc.sqrt());
-            return Some(ti + u.min(span));
+            let denom = ri + disc.sqrt();
+            let u = if denom > 0.0 {
+                (2.0 * extra / denom).min(span)
+            } else {
+                0.0
+            };
+            return Some(ti + u);
         }
         None
     }
@@ -162,6 +170,9 @@ impl InvertibleRate for EmpiricalRateFn {
 
     #[inline]
     fn cum_rate(&self, t: f64) -> f64 {
+        if self.scale == 0.0 {
+            return 0.0;
+        }
         self.scale * self.raw_cum(t)
     }
 
@@ -175,10 +186,21 @@ impl InvertibleRate for EmpiricalRateFn {
         if c == 0.0 {
             return Some(0.0);
         }
-        if self.scale <= 0.0 {
+        if !c.is_finite() || self.scale <= 0.0 {
             return None;
         }
-        self.raw_inverse(c / self.scale)
+        let target = c / self.scale;
+        if target == 0.0 {
+            // `c / scale` underflowed: return the start of the first positive-area
+            // segment, or `None` if the curve has zero total area.
+            for i in 0..self.points.len().saturating_sub(1) {
+                if self.cum[i + 1] > 0.0 {
+                    return Some(self.points[i][0]);
+                }
+            }
+            return None;
+        }
+        self.raw_inverse(target)
     }
 }
 
@@ -356,5 +378,22 @@ mod test {
         assert_eq!(rate_at_curve(&pts, 1.5), 2.0);
         assert_eq!(rate_at_curve(&[], 1.0), 0.0);
         assert_eq!(rate_at_curve(&pts, f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn nan_underflow_and_zero_area_edge_cases() {
+        let delayed = EmpiricalRateFn::new(vec![[5.0, 1.0], [10.0, 1.0]], 1e200);
+        assert!(delayed.cum_rate(f64::NAN).is_nan());
+        assert_eq!(delayed.inverse_cum_rate(1e-200), Some(5.0));
+
+        let all_zero = EmpiricalRateFn::new(vec![[5.0, 0.0], [10.0, 0.0]], 1e200);
+        assert_eq!(all_zero.duration(), 0.0);
+        assert_eq!(all_zero.inverse_cum_rate(1e-200), None);
+
+        let empty = EmpiricalRateFn::new(vec![], 1e200);
+        assert_eq!(empty.inverse_cum_rate(1e-200), None);
+
+        let ramp = EmpiricalRateFn::new(vec![[0.0, 0.0], [10.0, 1.0]], 1.0);
+        assert_eq!(ramp.inverse_cum_rate(1e-323), Some(0.0));
     }
 }

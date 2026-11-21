@@ -24,8 +24,19 @@ where
 }
 
 impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
+    /// # Panics
+    ///
+    /// If `scale` or `elapsed` is negative or not finite.
     #[must_use]
     pub fn new(base: &'a T, scale: f64, elapsed: f64) -> Self {
+        assert!(
+            scale.is_finite() && scale >= 0.0,
+            "rate scale must be finite and non-negative, got {scale}"
+        );
+        assert!(
+            elapsed.is_finite() && elapsed >= 0.0,
+            "rate elapsed time must be finite and non-negative, got {elapsed}"
+        );
         Self {
             base,
             scale,
@@ -34,8 +45,16 @@ impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
     }
 
     /// The same function with its rate multiplied by `factor`.
+    ///
+    /// # Panics
+    ///
+    /// If `factor` is negative or not finite.
     #[must_use]
     pub fn scaled(mut self, factor: f64) -> Self {
+        assert!(
+            factor.is_finite() && factor >= 0.0,
+            "rate scale factor must be finite and non-negative, got {factor}"
+        );
         self.scale *= factor;
         self
     }
@@ -43,23 +62,39 @@ impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
 
 impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<'_, T> {
     fn rate(&self, t: f64) -> f64 {
+        if t < 0.0 || self.scale == 0.0 {
+            return 0.0;
+        }
         self.base.rate(t + self.elapsed) * self.scale
     }
 
     fn cum_rate(&self, t: f64) -> f64 {
+        if t <= 0.0 || self.scale == 0.0 {
+            return 0.0;
+        }
         (self.base.cum_rate(t + self.elapsed) - self.base.cum_rate(self.elapsed)) * self.scale
     }
 
     /// A non-positive `scale` means no events are ever reached, rather than
     /// `events / 0 = inf`.
     fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
-        if self.scale <= 0.0 {
-            return (events <= 0.0).then_some(0.0);
+        if events.is_nan() || events < 0.0 {
+            return None;
+        }
+        if events == 0.0 {
+            return Some(0.0);
+        }
+        if !events.is_finite() || self.scale <= 0.0 {
+            return None;
         }
         let elapsed_cum_rate = self.base.cum_rate(self.elapsed);
-        let time = self
-            .base
-            .inverse_cum_rate(events / self.scale + elapsed_cum_rate)?;
+        let target = events / self.scale + elapsed_cum_rate;
+        // If `events / scale` was absorbed into `elapsed_cum_rate`, distinguish
+        // an already-exhausted curve from a tiny positive delay.
+        if target == elapsed_cum_rate {
+            return (self.base.cum_rate(f64::INFINITY) > elapsed_cum_rate).then_some(0.0);
+        }
+        let time = self.base.inverse_cum_rate(target)?;
         // Rounding can put `time` a float before `elapsed`.
         Some((time - self.elapsed).max(0.0))
     }
@@ -159,5 +194,26 @@ mod test {
         assert_eq!(f.inverse_cum_rate(24.0 + 1e-9), None);
         let zero = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(0.0);
         assert_eq!(zero.inverse_cum_rate(1.0), None);
+    }
+
+    #[test]
+    fn exhausted_shifted_curve_never_returns_zero_delay() {
+        let rate_fn = ConstantRateFn::new(1.0, 5.0);
+        let exhausted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 5.0);
+        assert_eq!(exhausted.inverse_cum_rate(1e-20), None);
+        assert_eq!(exhausted.inverse_cum_rate(0.0), Some(0.0));
+        let past_end = TransformedInvertibleRateFn::new(&rate_fn, 1e20, 10.0);
+        assert_eq!(past_end.inverse_cum_rate(1.0), None);
+    }
+
+    #[test]
+    fn negative_time_and_events_match_base_conventions() {
+        let rate_fn = ConstantRateFn::new(2.0, 5.0);
+        let shifted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 3.0);
+        assert_eq!(shifted.rate(-1.0), 0.0);
+        assert_eq!(shifted.cum_rate(-1.0), 0.0);
+        assert_eq!(shifted.inverse_cum_rate(-1.0), None);
+        let zero = TransformedInvertibleRateFn::new(&rate_fn, 0.0, 3.0);
+        assert_eq!(zero.inverse_cum_rate(-1.0), None);
     }
 }

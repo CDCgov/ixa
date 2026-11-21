@@ -545,8 +545,8 @@ context.create_population_setting_group(community);
 ```
 
 A person can belong to at most one group of each kind. Use
-`remove_setting_member` and `restore_setting_member` to temporarily remove and
-re-add members (for example, during a school closure).
+`deactivate_setting_member` and `activate_setting_member` to mark a member
+inactive and active again (for example, during a school closure).
 
 ### Itineraries
 
@@ -570,17 +570,18 @@ context.override_itinerary(person, Itinerary::new([(household, 1.0)]));
 context.clear_itinerary_override::<Setting>(person);
 ```
 
-An override also temporarily removes the person from any group whose kind has
-zero share in the override (except population groups, which nobody leaves), so
-they cannot be drawn as a contact there and do not count toward its size.
-Clearing the override restores them. Explicit removals are tracked separately:
-calling `remove_setting_member` during an override keeps the person out after
-the override is cleared, and calling `restore_setting_member` for an excluded
-kind takes effect once the override is cleared.
+An override also marks the person inactive in any list group whose kind has zero
+share in the override (except population groups, where members cannot be
+deactivated), so they cannot be drawn as a contact there and do not count toward
+its size. Clearing the override reactivates them. Explicit deactivations are
+tracked separately: calling `deactivate_setting_member` during an override keeps
+the person inactive after the override is cleared, and calling
+`activate_setting_member` for an excluded kind takes effect once the override is
+cleared.
 
-Unlike overrides, `set_itinerary_assignment` does not modify group membership.
-If an assignment closure omits a kind, it only shifts that person's own
-attempts, so pair it with `remove_setting_member` if they should also leave the
+Unlike overrides, `set_itinerary_assignment` does not change active state. If an
+assignment closure omits a kind, it only shifts that person's own attempts, so
+pair it with `deactivate_setting_member` if they should also be inactive in the
 group.
 
 Because overrides change group sizes, models that use them should use the
@@ -623,12 +624,12 @@ impl TransmissionManager<Flu> for Context {
 }
 ```
 
-**Changing itineraries or groups.** When members are removed and restored or
-itineraries are overridden, forecast at `max_setting_multiplier`: the largest
+**Changing itineraries or groups.** When members are deactivated and reactivated
+or itineraries are overridden, forecast at `max_setting_multiplier`: the largest
 multiplier across all of the person's groups, regardless of itinerary. Because a
 weighted average cannot exceed its maximum term, itinerary changes and member
-removals or restorations stay within this bound. (Groups that gain new members
-are the exception; see [When rates rise](#when-rates-rise).)
+deactivations or reactivations stay within this bound. (Groups that gain new
+members are the exception; see [When rates rise](#when-rates-rise).)
 
 For the person above, `max_setting_multiplier` is 3 (the household multiplier).
 If they isolate at home, their itinerary becomes 100% household and their rate
@@ -688,14 +689,14 @@ This is always safe to call and is a no-op for uninfected people. Call it when:
   - a person joins a group: reforecast that person;
   - a group exceeds its previous maximum size: reforecast its current members
     (`setting_group_members`);
-  - a person returns to a group via `restore_setting_member` or
+  - a person becomes active again in a group via `activate_setting_member` or
     `clear_itinerary_override`: reforecast that person, since the group may have
-    exceeded its previous maximum size while they were absent (and
-    `setting_group_members` excludes absent members).
+    exceeded its previous maximum size while they were inactive (and
+    `setting_group_members` excludes inactive members).
 
   A population group requires reforecasting whenever it grows with `alpha > 0`,
-  or grows from 1 to 2 members with any `alpha`. If groups only lose and regain
-  existing members, none of these calls are needed.
+  or grows from 1 to 2 members with any `alpha`. If groups only deactivate and
+  reactivate existing members, none of these calls are needed.
 
 Modifiers do not require manual reforecasting (`setup_transmission_loop` handles
 increases automatically), and changes that only lower a rate never require

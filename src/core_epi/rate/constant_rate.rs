@@ -45,6 +45,9 @@ impl InvertibleRate for ConstantRateFn {
 
     #[inline]
     fn cum_rate(&self, t: f64) -> f64 {
+        if self.value == 0.0 || t <= 0.0 {
+            return 0.0;
+        }
         self.value * t.clamp(0.0, self.duration)
     }
 
@@ -56,11 +59,11 @@ impl InvertibleRate for ConstantRateFn {
         if events == 0.0 {
             return Some(0.0);
         }
-        if !events.is_finite() || self.value <= 0.0 {
+        if !events.is_finite() || self.value <= 0.0 || self.duration <= 0.0 {
             return None;
         }
         let t = events / self.value;
-        (t <= self.duration).then_some(t)
+        (t.is_finite() && t <= self.duration).then_some(t)
     }
 }
 
@@ -140,5 +143,17 @@ mod test {
         let r = ConstantRateFn::new(0.5, f64::INFINITY);
         assert_eq!(r.inverse_cum_rate(f64::INFINITY), None);
         assert_eq!(r.inverse_cum_rate(f64::NAN), None);
+    }
+
+    #[test]
+    fn overflow_underflow_and_zero_times_inf_are_safe() {
+        let tiny_rate = ConstantRateFn::new(1e-300, f64::INFINITY);
+        assert_eq!(tiny_rate.inverse_cum_rate(1e100), None);
+
+        let zero_dur = ConstantRateFn::new(1e200, 0.0);
+        assert_eq!(zero_dur.inverse_cum_rate(1e-200), None);
+
+        let zero_rate = ConstantRateFn::new(0.0, f64::INFINITY);
+        assert_eq!(zero_rate.cum_rate(f64::INFINITY), 0.0);
     }
 }

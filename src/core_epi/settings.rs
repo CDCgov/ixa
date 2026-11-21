@@ -140,6 +140,10 @@ impl<S: SettingKind> Itinerary<S> {
             total > 0.0,
             "itinerary needs at least one positive proportion"
         );
+        assert!(
+            total.is_finite(),
+            "itinerary proportions sum to a non-finite total: {total}"
+        );
         for ratio in &mut ratios {
             *ratio /= total;
         }
@@ -278,9 +282,11 @@ struct Kind {
 
 struct Group {
     kind: usize,
-    /// Member indices, inline for the small groups most households are.
+    /// Active member indices, inline for the small groups most households are.
     members: SmallVec<[u32; 4]>,
-    /// The most members the group has ever had.
+    /// Total people assigned to this group (active or inactive).
+    assigned: usize,
+    /// Largest `assigned` count the group has ever had.
     max_size: usize,
     /// Computed on the first read after a membership change, so that bulk
     /// loading pays no `powf` per member.
@@ -288,8 +294,13 @@ struct Group {
 }
 
 impl Group {
-    fn resized(&mut self) {
-        self.max_size = self.max_size.max(self.members.len());
+    fn invalidate_cache(&mut self) {
+        self.cached_multipliers.set(None);
+    }
+
+    fn record_assigned(&mut self) {
+        self.assigned += 1;
+        self.max_size = self.max_size.max(self.assigned);
         self.cached_multipliers.set(None);
     }
 
@@ -316,14 +327,10 @@ pub struct SettingsStore<S: SettingKind> {
     groups: Vec<Group>,
     assignment: Option<ItineraryAssignment<S>>,
     /// Per-person overrides of the assignment.
-    itineraries: EntityMap<S::Entity, ItineraryOverride<S>>,
-}
-
-struct ItineraryOverride<S: SettingKind> {
-    itinerary: Itinerary<S>,
-    /// Bit per kind index: the groups the person is out of because of the
-    /// override, which clearing it puts them back in.
-    removed: u8,
+    itineraries: EntityMap<S::Entity, Itinerary<S>>,
+    /// Bit per kind index: kinds the person was explicitly deactivated in via
+    /// [`SettingsExt::deactivate_setting_member`].
+    inactive: EntityMap<S::Entity, u8>,
 }
 
 impl<S: SettingKind> Default for SettingsStore<S> {
@@ -342,6 +349,7 @@ impl<S: SettingKind> SettingsStore<S> {
             groups: Vec::new(),
             assignment: None,
             itineraries: EntityMap::new(),
+            inactive: EntityMap::new(),
         }
     }
 
@@ -459,13 +467,42 @@ impl<S: SettingKind> SettingsStore<S> {
     fn itinerary(&self, context: &Context, person: EntityId<S::Entity>) -> Option<Itinerary<S>> {
         self.itineraries
             .get(person)
-            .map(|own| own.itinerary)
+            .copied()
             .or_else(|| Some(self.assignment.as_ref()?.resolve(context, person)))
     }
 
-    /// Take `person` out of their current list group of `setting`, if any,
-    /// remembering the group.
-    fn remove(&mut self, person: EntityId<S::Entity>, setting: S) {
+    fn is_inactive(&self, person: EntityId<S::Entity>, setting: S) -> bool {
+        self.inactive
+            .get(person)
+            .is_some_and(|&bits| bits & (1 << setting.index()) != 0)
+    }
+
+    fn set_inactive(&mut self, person: EntityId<S::Entity>, setting: S, inactive: bool) {
+        let bit = 1_u8 << setting.index();
+        if inactive {
+            let bits = self.inactive.get_or_insert_with(person, || 0);
+            *bits |= bit;
+        } else if let Some(bits) = self.inactive.get_mut(person) {
+            *bits &= !bit;
+            if *bits == 0 {
+                let _ = self.inactive.remove(person);
+            }
+        }
+    }
+
+    fn should_be_active(&self, person: EntityId<S::Entity>, setting: S) -> bool {
+        let member = self.member(person, setting);
+        member.group != NO_GROUP
+            && !self.is_inactive(person, setting)
+            && self
+                .itineraries
+                .get(person)
+                .is_none_or(|itinerary| itinerary.ratio(setting) > 0.0)
+    }
+
+    /// Take `person` out of their current list group's active `members` list,
+    /// keeping their assigned group remembered.
+    fn deactivate(&mut self, person: EntityId<S::Entity>, setting: S) {
         let member = self.member(person, setting);
         if member.group == NO_GROUP || member.position == NOT_ACTIVE {
             return;
@@ -474,10 +511,33 @@ impl<S: SettingKind> SettingsStore<S> {
         let group = &mut self.groups[member.group as usize];
         group.members.swap_remove(member.position as usize);
         let moved = group.members.get(member.position as usize).copied();
-        group.resized();
+        group.invalidate_cache();
         if let Some(moved) = moved {
             self.member_mut(EntityId::new(moved as usize), setting)
                 .position = member.position;
+        }
+    }
+
+    /// Reconcile whether `person` is in their list group's active `members`
+    /// list with their assigned group, explicit deactivation, and itinerary override.
+    fn sync_active(&mut self, person: EntityId<S::Entity>, setting: S) {
+        let member = self.member(person, setting);
+        let is_active = member.group != NO_GROUP && member.position != NOT_ACTIVE;
+        let should_be_active = self.should_be_active(person, setting);
+        if is_active == should_be_active {
+            return;
+        }
+        if should_be_active {
+            let group_index = member.group;
+            let target = &mut self.groups[group_index as usize];
+            let position = u32::try_from(target.members.len()).expect("setting group too large");
+            target
+                .members
+                .push(u32::try_from(person.0).expect("too many people"));
+            target.invalidate_cache();
+            self.member_mut(person, setting).position = position;
+        } else {
+            self.deactivate(person, setting);
         }
     }
 
@@ -592,6 +652,7 @@ pub trait SettingsExt:
         store.groups.push(Group {
             kind: setting.index(),
             members: SmallVec::new(),
+            assigned: 0,
             max_size: 0,
             cached_multipliers: Cell::new(None),
         });
@@ -676,7 +737,9 @@ pub trait SettingsExt:
     }
 
     /// Add `person` to `group`, leaving their previous group of that kind.
-    /// Adding them to a group they are in is a no-op.
+    /// Adding them to a group they are already active in is a no-op. If an
+    /// active itinerary override gives this kind zero share, the membership is
+    /// recorded and becomes active when the override is cleared or replaced.
     fn add_setting_member<S: SettingKind>(
         &mut self,
         group: SettingGroupId<S>,
@@ -685,70 +748,68 @@ pub trait SettingsExt:
         let store = S::store_mut(self);
         let setting = S::from_index(store.groups[group.index as usize].kind);
         let member = store.member(person, setting);
-        if member.group == group.index && member.position != NOT_ACTIVE {
-            return;
-        }
-        store.remove(person, setting);
         if store.is_population_group(setting, group.index) {
-            // Forget the list group they left, or it would shadow this one.
+            store.set_inactive(person, setting, false);
             if member.group != NO_GROUP {
+                store.deactivate(person, setting);
+                store.groups[member.group as usize].assigned -= 1;
                 *store.member_mut(person, setting) = Member::NONE;
                 store.kinds[setting.index()].in_list_groups -= 1;
             }
             return;
         }
-        let target = &mut store.groups[group.index as usize];
-        let position = u32::try_from(target.members.len()).expect("setting group too large");
-        target
-            .members
-            .push(u32::try_from(person.0).expect("too many people"));
-        target.resized();
-        if member.group == NO_GROUP {
-            store.kinds[setting.index()].in_list_groups += 1;
+        store.set_inactive(person, setting, false);
+        if member.group != group.index {
+            if member.group != NO_GROUP {
+                store.deactivate(person, setting);
+                store.groups[member.group as usize].assigned -= 1;
+            } else {
+                store.kinds[setting.index()].in_list_groups += 1;
+            }
+            store.groups[group.index as usize].record_assigned();
+            *store.member_mut(person, setting) = Member {
+                group: group.index,
+                position: NOT_ACTIVE,
+            };
         }
-        *store.member_mut(person, setting) = Member {
-            group: group.index,
-            position,
-        };
+        store.sync_active(person, setting);
     }
 
-    /// Take `person` out of their group of `setting`, to be put back with
-    /// [`restore_setting_member`](Self::restore_setting_member). If an
-    /// itinerary override already took them out, clearing it no longer puts
-    /// them back.
+    /// Mark `person` inactive in their group of `setting`, so they are not
+    /// drawn as a contact there and do not count toward its size until
+    /// [`activate_setting_member`](Self::activate_setting_member) is called.
+    /// Kept separate from itinerary overrides: deactivating during an override
+    /// keeps them inactive after the override is cleared.
     ///
     /// # Panics
     ///
-    /// If that is a population group, which nobody can leave.
-    fn remove_setting_member<S: SettingKind>(&mut self, person: EntityId<S::Entity>, setting: S) {
-        let store = S::store_mut(self);
-        assert!(
-            store.member(person, setting).group != NO_GROUP
-                || store.kinds[setting.index()].population_group.is_none(),
-            "cannot remove {person:?} from the population group of setting {setting:?}"
-        );
-        store.remove(person, setting);
-        if let Some(own) = store.itineraries.get_mut(person) {
-            own.removed &= !(1 << setting.index());
-        }
-    }
-
-    /// Put `person` back in the group of `setting` they were removed from.
-    /// No-op if they are in it or never had one. While an itinerary override
-    /// gives them no share of `setting`, they return when it is cleared.
-    fn restore_setting_member<S: SettingKind>(&mut self, person: EntityId<S::Entity>, setting: S) {
+    /// If that is a population group, where members cannot be deactivated.
+    fn deactivate_setting_member<S: SettingKind>(
+        &mut self,
+        person: EntityId<S::Entity>,
+        setting: S,
+    ) {
         let store = S::store_mut(self);
         let member = store.member(person, setting);
-        if member.group == NO_GROUP || member.position != NOT_ACTIVE {
+        assert!(
+            member.group != NO_GROUP || store.kinds[setting.index()].population_group.is_none(),
+            "cannot deactivate {person:?} in the population group of setting {setting:?}"
+        );
+        if member.group == NO_GROUP {
             return;
         }
-        if let Some(own) = store.itineraries.get_mut(person) {
-            if own.itinerary.ratio(setting) == 0.0 {
-                own.removed |= 1 << setting.index();
-                return;
-            }
-        }
-        self.add_setting_member(SettingGroupId::<S>::new(member.group), person);
+        store.set_inactive(person, setting, true);
+        store.sync_active(person, setting);
+    }
+
+    /// Mark `person` active again in their group of `setting`. No-op if they
+    /// are already active or have no group of that kind. While an itinerary
+    /// override gives them no share of `setting`, activation takes effect when
+    /// the override is cleared or replaced.
+    fn activate_setting_member<S: SettingKind>(&mut self, person: EntityId<S::Entity>, setting: S) {
+        let store = S::store_mut(self);
+        store.set_inactive(person, setting, false);
+        store.sync_active(person, setting);
     }
 
     /// The people in `group` now; for a population group, everyone without
@@ -807,42 +868,32 @@ pub trait SettingsExt:
         S::store_mut(self).assignment = Some(assignment.into());
     }
 
-    /// `person`'s own itinerary, overriding the assignment. It also takes
-    /// them out of their group of every kind it gives no share, as
-    /// [`remove_setting_member`](Self::remove_setting_member) does, until the
-    /// override is cleared or replaced. A population group is not left.
+    /// `person`'s own itinerary, overriding the assignment. It also marks them
+    /// inactive in every list group whose kind it gives no share, until the
+    /// override is cleared or replaced. A population group is unaffected.
     fn override_itinerary<S: SettingKind>(
         &mut self,
         person: EntityId<S::Entity>,
         itinerary: Itinerary<S>,
     ) {
-        self.clear_itinerary_override::<S>(person);
         let store = S::store_mut(self);
-        let mut removed = 0_u8;
+        store.itineraries.insert(person, itinerary);
         for index in 0..store.kinds.len() {
-            let setting = S::from_index(index);
-            let member = store.member(person, setting);
-            let in_list_group = member.group != NO_GROUP && member.position != NOT_ACTIVE;
-            if in_list_group && itinerary.ratio(setting) == 0.0 {
-                store.remove(person, setting);
-                removed |= 1 << index;
-            }
+            store.sync_active(person, S::from_index(index));
         }
-        store
-            .itineraries
-            .insert(person, ItineraryOverride { itinerary, removed });
     }
 
     /// Remove `person`'s own itinerary, so the assignment applies again, and
-    /// put them back in the groups the override took them out of.
+    /// reactivate them in any groups the override had made inactive (unless
+    /// explicitly deactivated with
+    /// [`deactivate_setting_member`](Self::deactivate_setting_member)).
     fn clear_itinerary_override<S: SettingKind>(&mut self, person: EntityId<S::Entity>) {
-        let Some(own) = S::store_mut(self).itineraries.remove(person) else {
+        let store = S::store_mut(self);
+        if store.itineraries.remove(person).is_none() {
             return;
-        };
-        for index in 0..MAX_SETTINGS {
-            if own.removed & (1 << index) != 0 {
-                self.restore_setting_member(person, S::from_index(index));
-            }
+        }
+        for index in 0..store.kinds.len() {
+            store.sync_active(person, S::from_index(index));
         }
     }
 
@@ -885,9 +936,9 @@ pub trait SettingsExt:
 
     /// Upper bound on `person`'s multiplier in any setting: the largest any
     /// of their groups has ever had, whatever their itinerary and including
-    /// groups they were removed from. A group growing past its largest size,
-    /// a group joined later, or a return to a group that grew while the
-    /// person was out needs a
+    /// groups they are currently inactive in. A group growing past its largest
+    /// size, a group joined later, or becoming active again in a group that
+    /// grew while the person was inactive needs a
     /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission).
     /// A population group has no memory of its largest size, so it needs it
     /// too when it grows with a positive `alpha`, or from one member to two
@@ -1103,7 +1154,7 @@ mod tests {
         context.set_itinerary_assignment(Itinerary::new([(HOME, 1.0)]));
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
 
-        context.remove_setting_member(people[1], HOME);
+        context.deactivate_setting_member(people[1], HOME);
         assert_eq!(context.setting_group(people[1], HOME), None);
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
@@ -1127,15 +1178,15 @@ mod tests {
     fn restore_puts_a_member_back_in_the_remembered_group() {
         let (mut context, people) = context_with_work_alpha(3, 1.0);
         let home = home_for_all(&mut context, &people);
-        context.remove_setting_member(people[1], HOME);
-        context.remove_setting_member(people[1], HOME);
+        context.deactivate_setting_member(people[1], HOME);
+        context.deactivate_setting_member(people[1], HOME);
         assert_eq!(context.setting_group(people[1], HOME), None);
         assert_eq!(context.setting_group_size(people[0], HOME), 2);
-        context.restore_setting_member(people[1], HOME);
+        context.activate_setting_member(people[1], HOME);
         assert_eq!(context.setting_group(people[1], HOME), Some(home));
         assert_eq!(context.setting_group_size(people[0], HOME), 3);
         // Never a member: nothing to restore.
-        context.restore_setting_member(people[1], WORK);
+        context.activate_setting_member(people[1], WORK);
         assert_eq!(context.setting_group(people[1], WORK), None);
     }
 
@@ -1159,7 +1210,7 @@ mod tests {
             2.0
         );
         // Removed from work: all at home, while the bound keeps the workplace.
-        context.remove_setting_member(people[0], WORK);
+        context.deactivate_setting_member(people[0], WORK);
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
             1.0
@@ -1187,7 +1238,7 @@ mod tests {
     fn cannot_leave_a_population_group() {
         let (mut context, people) = context_with(1);
         context.create_population_setting_group(COMMUNITY);
-        context.remove_setting_member(people[0], COMMUNITY);
+        context.deactivate_setting_member(people[0], COMMUNITY);
     }
 
     #[test]
@@ -1281,7 +1332,7 @@ mod tests {
         for &p in &people {
             context.add_setting_member(work, p);
         }
-        context.remove_setting_member(people[0], WORK);
+        context.deactivate_setting_member(people[0], WORK);
         context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
         context.clear_itinerary_override::<Setting>(people[0]);
         assert_eq!(context.setting_group(people[0], WORK), None);
@@ -1298,7 +1349,7 @@ mod tests {
         context.set_itinerary_assignment(Itinerary::new([(HOME, 0.5), (WORK, 0.5)]));
         if closed_first {
             for &p in &people {
-                context.remove_setting_member(p, WORK);
+                context.deactivate_setting_member(p, WORK);
             }
         }
         context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
@@ -1309,12 +1360,12 @@ mod tests {
     fn a_removal_during_an_override_outlasts_it() {
         let (mut context, people) = isolating_at_home(false);
         for &p in &people {
-            context.remove_setting_member(p, WORK);
+            context.deactivate_setting_member(p, WORK);
         }
         context.clear_itinerary_override::<Setting>(people[0]);
         assert_eq!(context.setting_group(people[0], WORK), None);
 
-        context.restore_setting_member(people[0], WORK);
+        context.activate_setting_member(people[0], WORK);
         assert_eq!(context.setting_group_size(people[0], WORK), 1);
     }
 
@@ -1322,7 +1373,7 @@ mod tests {
     fn a_restore_during_an_override_waits_for_it_to_clear() {
         let (mut context, people) = isolating_at_home(true);
         for &p in &people {
-            context.restore_setting_member(p, WORK);
+            context.activate_setting_member(p, WORK);
         }
         assert_eq!(context.setting_group(people[0], WORK), None);
         assert_eq!(context.setting_group_size(people[1], WORK), 2);
@@ -1335,7 +1386,7 @@ mod tests {
     fn a_restore_during_an_override_that_keeps_the_kind_applies_at_once() {
         let (mut context, people) = isolating_at_home(true);
         context.override_itinerary(people[0], Itinerary::new([(WORK, 1.0)]));
-        context.restore_setting_member(people[0], WORK);
+        context.activate_setting_member(people[0], WORK);
         assert_eq!(context.setting_group_size(people[0], WORK), 1);
     }
 
@@ -1407,7 +1458,7 @@ mod tests {
             let contact = context.sample_setting_contact(people[0], HOME).unwrap();
             assert_ne!(contact, people[0]);
         }
-        context.remove_setting_member(people[0], HOME);
+        context.deactivate_setting_member(people[0], HOME);
         assert_eq!(context.sample_setting(people[0]), Some(WORK));
         assert_eq!(context.setting_multiplier(people[0], HOME), 0.0);
     }
@@ -1437,7 +1488,7 @@ mod tests {
             context.add_setting_member(work, person);
         }
         context.create_population_setting_group(COMMUNITY);
-        context.remove_setting_member(people[2], WORK);
+        context.deactivate_setting_member(people[2], WORK);
 
         let school = context.add_setting_kind::<Setting>("School", 0.0);
         let class = context.create_setting_group(school);
@@ -1461,10 +1512,10 @@ mod tests {
         );
 
         // Positions still line up: swap-remove, then restore, after widening.
-        context.remove_setting_member(people[1], WORK);
+        context.deactivate_setting_member(people[1], WORK);
         assert_eq!(context.setting_group_members(work), vec![people[3]]);
-        context.restore_setting_member(people[2], WORK);
-        context.restore_setting_member(people[1], WORK);
+        context.activate_setting_member(people[2], WORK);
+        context.activate_setting_member(people[1], WORK);
         assert_eq!(
             context.setting_group_members(work),
             vec![people[3], people[2], people[1]]
@@ -1543,7 +1594,7 @@ mod tests {
     fn group_members_lists_who_is_in_a_group_now() {
         let (mut context, people) = context_with(4);
         let home = home_for_all(&mut context, &people[..3]);
-        context.remove_setting_member(people[1], HOME);
+        context.deactivate_setting_member(people[1], HOME);
         assert_eq!(
             context.setting_group_members(home),
             vec![people[0], people[2]]
@@ -1565,7 +1616,7 @@ mod tests {
         assert_eq!(context.setting_group_size(people[0], COMMUNITY), 3);
         assert!(context.setting_group_members(bubble).is_empty());
         // Nothing left to restore them to.
-        context.restore_setting_member(people[0], COMMUNITY);
+        context.activate_setting_member(people[0], COMMUNITY);
         assert_eq!(context.setting_group(people[0], COMMUNITY), Some(everyone));
     }
 
@@ -1577,7 +1628,7 @@ mod tests {
         context.add_setting_member(bubble, people[0]);
         context.add_setting_member(bubble, people[1]);
         // Removed from the bubble, they are still not in the community.
-        context.remove_setting_member(people[1], COMMUNITY);
+        context.deactivate_setting_member(people[1], COMMUNITY);
 
         assert_eq!(context.setting_group_size(people[2], COMMUNITY), 2);
         assert_eq!(
@@ -1625,5 +1676,86 @@ mod tests {
         assert_eq!(context.setting_multiplier(people[0], COMMUNITY), 0.0);
         home_for_all(&mut context, &people);
         assert_eq!(context.setting_multiplier(people[0], HOME), 0.0);
+    }
+
+    #[test]
+    fn adding_member_during_excluding_override_defers_activation_and_updates_max_size() {
+        let (mut context, people) = context_with_work_alpha(4, 1.0);
+        let home = home_for_all(&mut context, &people[..2]);
+        let work_a = context.create_setting_group(WORK);
+        let work_b = context.create_setting_group(WORK);
+        context.add_setting_member(work_a, people[0]);
+        context.add_setting_member(work_b, people[1]);
+        context.add_setting_member(work_b, people[2]);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 1.0);
+
+        // Isolate p0 at home (WORK share is 0).
+        context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        assert_eq!(context.setting_group(people[0], HOME), Some(home));
+        assert_eq!(context.setting_group(people[0], WORK), None);
+
+        // Reassign p0 to work_b while isolating: stays inactive in work_b,
+        // but work_b's max_size already accounts for p0's eventual return.
+        context.add_setting_member(work_b, people[0]);
+        assert_eq!(context.setting_group(people[0], WORK), None);
+        assert_eq!(
+            context.setting_group_members(work_b),
+            vec![people[1], people[2]]
+        );
+        assert_eq!(context.setting_multiplier(people[1], WORK), 1.0);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+
+        // Clearing the override activates p0 in work_b (not work_a) without
+        // pushing work_b past its recorded max_size.
+        context.clear_itinerary_override::<Setting>(people[0]);
+        assert_eq!(context.setting_group(people[0], WORK), Some(work_b));
+        assert_eq!(
+            context.setting_group_members(work_b),
+            vec![people[1], people[2], people[0]]
+        );
+        assert_eq!(context.setting_multiplier(people[1], WORK), 2.0);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+    }
+
+    #[test]
+    fn replacing_override_does_not_inflate_max_size_for_still_excluded_kind() {
+        let (mut context, people) = context_with_work_alpha(4, 1.0);
+        home_for_all(&mut context, &people[..2]);
+        context.create_population_setting_group(COMMUNITY);
+        let work = context.create_setting_group(WORK);
+        for &p in &people[..3] {
+            context.add_setting_member(work, p);
+        }
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+
+        // Exclude p0 from work, then replace with another override that still excludes work.
+        context.override_itinerary(people[0], Itinerary::new([(HOME, 1.0)]));
+        context.override_itinerary(people[0], Itinerary::new([(COMMUNITY, 1.0)]));
+        assert_eq!(context.setting_group(people[0], WORK), None);
+        assert_eq!(
+            context.setting_group_members(work),
+            vec![people[2], people[1]]
+        );
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+    }
+
+    #[test]
+    fn reactivating_member_after_new_member_joined_stays_within_max_size() {
+        let (mut context, people) = context_with_work_alpha(3, 1.0);
+        let work = context.create_setting_group(WORK);
+        context.add_setting_member(work, people[0]);
+        context.add_setting_member(work, people[1]);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 1.0);
+
+        context.deactivate_setting_member(people[0], WORK);
+        // Adding p2 increases assigned count to 3, so max_size updates now.
+        context.add_setting_member(work, people[2]);
+        assert_eq!(context.setting_multiplier(people[1], WORK), 1.0);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+
+        // Reactivating p0 brings active size to 3, already covered by max_size.
+        context.activate_setting_member(people[0], WORK);
+        assert_eq!(context.setting_multiplier(people[1], WORK), 2.0);
+        assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
     }
 }
