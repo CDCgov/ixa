@@ -30,8 +30,8 @@ pub const MAX_SETTINGS: usize = 8;
 const _: () = assert!(MAX_SETTINGS <= u8::BITS as usize);
 
 /// A kind of setting (household, school, ...): a value of the type made by
-/// [`define_settings!`](crate::define_settings), added at run time with
-/// [`add_setting_kind`](SettingsExt::add_setting_kind).
+/// [`define_settings!`](crate::define_settings), either declared there or
+/// added at run time with [`add_setting_kind`](SettingsExt::add_setting_kind).
 pub trait SettingKind: Copy + Eq + Debug + 'static {
     /// The entity whose members the groups hold, e.g. the model's `Person`.
     type Entity: Entity;
@@ -50,9 +50,28 @@ pub trait SettingKind: Copy + Eq + Debug + 'static {
 }
 
 /// Defines the type of an entity's setting kinds and the storage behind it.
-/// The kinds themselves are added at run time with
+/// Kinds listed in braces are constants of the type (`Setting::Household`),
+/// named after the identifier or the string given, and need
+/// [`set_setting_alpha`](SettingsExt::set_setting_alpha) before their first
+/// group. More kinds can be added at run time with
 /// [`add_setting_kind`](SettingsExt::add_setting_kind), so they can come from
 /// a parameters file.
+///
+/// ```
+/// use ixa::core_epi::SettingsExt;
+/// use ixa::prelude::*;
+/// define_entity!(Person);
+/// ixa::define_settings!(pub Setting for Person { Household, School = "school" });
+///
+/// let mut context = Context::new();
+/// context.set_setting_alpha(Setting::Household, 1.0);
+/// let home = context.create_setting_group(Setting::Household);
+/// assert_eq!(context.setting_name(Setting::School), "school");
+/// let church = context.add_setting_kind::<Setting>("church", 0.5);
+/// assert_eq!(context.setting_kinds::<Setting>(), [Setting::Household, Setting::School, church]);
+/// ```
+///
+/// Without braces every kind is added at run time:
 ///
 /// ```
 /// use ixa::prelude::*;
@@ -62,6 +81,40 @@ pub trait SettingKind: Copy + Eq + Debug + 'static {
 #[macro_export]
 macro_rules! define_settings {
     ($vis:vis $name:ident for $entity:ty) => {
+        $crate::define_settings!(@define $vis $name for $entity, []);
+    };
+    ($vis:vis $name:ident for $entity:ty {
+        $($kind:ident $(= $kind_name:literal)?),+ $(,)?
+    }) => {
+        $crate::define_settings!(
+            @define $vis $name for $entity,
+            [$($crate::__setting_kind_name!($kind $(= $kind_name)?)),+]
+        );
+
+        $crate::paste::paste! {
+            // Numbers the declared kinds in order.
+            #[doc(hidden)]
+            #[allow(dead_code, clippy::enum_variant_names)]
+            #[repr(u8)]
+            enum [<$name KindIndex>] {
+                $($kind),+
+            }
+
+            #[allow(non_upper_case_globals)]
+            impl $name {
+                $(
+                    #[doc = concat!("The `", stringify!($kind), "` kind.")]
+                    pub const $kind: $name = $name([<$name KindIndex>]::$kind as u8);
+                )+
+            }
+        }
+
+        const _: () = assert!(
+            [$(stringify!($kind)),+].len() <= $crate::core_epi::settings::MAX_SETTINGS,
+            "too many setting kinds declared"
+        );
+    };
+    (@define $vis:vis $name:ident for $entity:ty, [$($kind_name:expr),*]) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         $vis struct $name(u8);
 
@@ -69,7 +122,7 @@ macro_rules! define_settings {
             $crate::define_data_plugin!(
                 [<$name SettingsPlugin>],
                 $crate::core_epi::settings::SettingsStore<$name>,
-                $crate::core_epi::settings::SettingsStore::new()
+                $crate::core_epi::settings::SettingsStore::with_kinds(&[$($kind_name),*])
             );
 
             impl $crate::core_epi::settings::SettingKind for $name {
@@ -96,6 +149,18 @@ macro_rules! define_settings {
                 }
             }
         }
+    };
+}
+
+/// The name of a kind declared in [`define_settings!`](crate::define_settings).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __setting_kind_name {
+    ($kind:ident) => {
+        stringify!($kind)
+    };
+    ($kind:ident = $kind_name:literal) => {
+        $kind_name
     };
 }
 
@@ -244,6 +309,13 @@ fn density_multiplier(alpha: f64, n: usize) -> f64 {
     }
 }
 
+fn assert_valid_alpha(name: &str, alpha: f64) {
+    assert!(
+        alpha.is_finite() && alpha >= 0.0,
+        "alpha for setting {name} must be finite and non-negative, got {alpha}"
+    );
+}
+
 /// Position of a member who has left their group but remembers it.
 const NOT_ACTIVE: u32 = u32::MAX;
 /// Group of a person who never had one of that kind.
@@ -271,7 +343,9 @@ struct Multipliers {
 
 struct Kind {
     name: String,
-    alpha: f64,
+    /// `None` for a declared kind until its alpha is set, which has to
+    /// happen before its first group.
+    alpha: Option<f64>,
     /// A group everyone is in without an entry in `memberships`.
     population_group: Option<u32>,
     /// People with a list group of this kind, current or remembered, who are
@@ -354,8 +428,20 @@ impl<S: SettingKind> SettingsStore<S> {
         }
     }
 
+    /// A store holding the kinds declared in `define_settings!`, in order,
+    /// with no alpha yet.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_kinds(names: &[&str]) -> Self {
+        let mut store = Self::new();
+        for name in names {
+            store.add_kind((*name).to_string(), None);
+        }
+        store
+    }
+
     /// Add a kind, widening every person's membership records by one.
-    fn add_kind(&mut self, name: String, alpha: f64) -> S {
+    fn add_kind(&mut self, name: String, alpha: Option<f64>) -> S {
         assert!(
             self.kinds.len() < MAX_SETTINGS,
             "at most {MAX_SETTINGS} setting kinds are supported"
@@ -384,8 +470,11 @@ impl<S: SettingKind> SettingsStore<S> {
         S::from_index(old_stride)
     }
 
+    /// The alpha of a kind that has groups.
     fn alpha(&self, setting: S) -> f64 {
-        self.kinds[setting.index()].alpha
+        self.kinds[setting.index()]
+            .alpha
+            .expect("a setting kind with groups has an alpha")
     }
 
     fn is_population_group(&self, setting: S, group: u32) -> bool {
@@ -621,11 +710,27 @@ pub trait SettingsExt:
     /// If `alpha` is negative or not finite, the name is taken, or there are
     /// already [`MAX_SETTINGS`] kinds.
     fn add_setting_kind<S: SettingKind>(&mut self, name: &str, alpha: f64) -> S {
+        assert_valid_alpha(name, alpha);
+        S::store_mut(self).add_kind(name.to_string(), Some(alpha))
+    }
+
+    /// Set the density exponent of `setting`. A kind declared in
+    /// [`define_settings!`](crate::define_settings) needs this before its
+    /// first group.
+    ///
+    /// # Panics
+    ///
+    /// If `alpha` is negative or not finite, or `setting` already has groups.
+    fn set_setting_alpha<S: SettingKind>(&mut self, setting: S, alpha: f64) {
+        let store = S::store_mut(self);
+        let kind_index = setting.index();
+        let name = &store.kinds[kind_index].name;
+        assert_valid_alpha(name, alpha);
         assert!(
-            alpha.is_finite() && alpha >= 0.0,
-            "alpha for setting {name} must be finite and non-negative, got {alpha}"
+            store.groups.iter().all(|group| group.kind != kind_index),
+            "alpha of setting {name} cannot be set once it has groups"
         );
-        S::store_mut(self).add_kind(name.to_string(), alpha)
+        store.kinds[kind_index].alpha = Some(alpha);
     }
 
     /// The kinds of `S`, in the order they were added.
@@ -648,8 +753,18 @@ pub trait SettingsExt:
     }
 
     /// Create an empty group of `setting`.
+    ///
+    /// # Panics
+    ///
+    /// If `setting` was declared in `define_settings!` and has no alpha yet.
     fn create_setting_group<S: SettingKind>(&mut self, setting: S) -> SettingGroupId<S> {
         let store = S::store_mut(self);
+        let kind = &store.kinds[setting.index()];
+        assert!(
+            kind.alpha.is_some(),
+            "setting {} has no alpha: call `set_setting_alpha` before creating its groups",
+            kind.name
+        );
         store.groups.push(Group {
             kind: setting.index(),
             members: SmallVec::new(),
@@ -1756,5 +1871,102 @@ mod tests {
         context.activate_setting_member(people[0], WORK);
         assert_eq!(context.setting_multiplier(people[1], WORK), 2.0);
         assert_eq!(context.max_setting_multiplier::<Setting>(people[1]), 2.0);
+    }
+
+    define_settings!(Place for Person { House, Office = "office", Town });
+
+    #[test]
+    fn declared_kinds_are_constants_in_declaration_order() {
+        let mut context = Context::new();
+        assert_eq!(
+            context.setting_kinds::<Place>(),
+            [Place::House, Place::Office, Place::Town]
+        );
+        assert_eq!(Place::Office.index(), 1);
+        assert_eq!(context.setting_name(Place::House), "House");
+        assert_eq!(context.setting_name(Place::Office), "office");
+        assert_eq!(
+            context.setting_kind_by_name::<Place>("office"),
+            Some(Place::Office)
+        );
+
+        // Kinds added at run time follow the declared ones.
+        let church = context.add_setting_kind::<Place>("church", 0.5);
+        assert_eq!(church.index(), 3);
+        let described = match church {
+            Place::House => "house",
+            Place::Office => "office",
+            _ => "other",
+        };
+        assert_eq!(described, "other");
+    }
+
+    #[test]
+    fn a_declared_kind_works_once_its_alpha_is_set() {
+        let mut context = Context::new();
+        context.init_random(7);
+        let people: Vec<PersonId> = (0..3)
+            .map(|_| context.add_entity(Person).unwrap())
+            .collect();
+        context.set_setting_alpha(Place::House, 1.0);
+        context.set_setting_alpha(Place::Town, 0.0);
+        let house = context.create_setting_group(Place::House);
+        for &person in &people {
+            context.add_setting_member(house, person);
+        }
+        context.create_population_setting_group(Place::Town);
+        context.set_itinerary_assignment(Itinerary::new([(Place::House, 0.5), (Place::Town, 0.5)]));
+
+        assert_eq!(context.setting_multiplier(people[0], Place::House), 2.0);
+        assert_eq!(context.setting_multiplier(people[0], Place::Town), 1.0);
+        // Office has no alpha and no groups, so it takes no part.
+        assert_eq!(context.setting_multiplier(people[0], Place::Office), 0.0);
+        assert_eq!(context.current_setting_multiplier::<Place>(people[0]), 1.5);
+        assert_eq!(context.max_setting_multiplier::<Place>(people[0]), 2.0);
+    }
+
+    #[test]
+    fn a_declared_kinds_alpha_can_be_set_again_before_it_has_groups() {
+        let mut context = Context::new();
+        let people: Vec<PersonId> = (0..3)
+            .map(|_| context.add_entity(Person).unwrap())
+            .collect();
+        context.set_setting_alpha(Place::House, 1.0);
+        context.set_setting_alpha(Place::House, 0.0);
+        let house = context.create_setting_group(Place::House);
+        for &person in &people {
+            context.add_setting_member(house, person);
+        }
+        assert_eq!(context.setting_multiplier(people[0], Place::House), 1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "setting office has no alpha")]
+    fn a_declared_kind_needs_an_alpha_before_its_first_group() {
+        let mut context = Context::new();
+        context.create_setting_group(Place::Office);
+    }
+
+    #[test]
+    #[should_panic(expected = "setting office has no alpha")]
+    fn a_declared_kind_needs_an_alpha_before_a_keyed_or_population_group() {
+        let mut context = Context::new();
+        context.setting_group_for_key(Place::Office, "A1");
+    }
+
+    #[test]
+    #[should_panic(expected = "alpha of setting House cannot be set once it has groups")]
+    fn alpha_cannot_be_set_once_a_kind_has_groups() {
+        let mut context = Context::new();
+        context.set_setting_alpha(Place::House, 1.0);
+        context.create_setting_group(Place::House);
+        context.set_setting_alpha(Place::House, 0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "setting kind office already exists")]
+    fn a_run_time_kind_cannot_reuse_a_declared_name() {
+        let mut context = Context::new();
+        context.add_setting_kind::<Place>("office", 1.0);
     }
 }

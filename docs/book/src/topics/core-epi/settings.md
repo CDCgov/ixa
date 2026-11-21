@@ -8,38 +8,55 @@ their time across kinds.
 The snippets use the `Person` entity and `Flu` marker from the
 [minimal model](../core-epi.md#a-minimal-model).
 
-`define_settings!` defines the setting-kind type for an entity. Kinds are
-registered at runtime so they can be loaded from a parameters file:
+`define_settings!` defines the setting-kind type for an entity, and the kinds
+the model names in code:
 
 ```rust
 use ixa::core_epi::{Itinerary, SettingsExt};
 use ixa::define_settings;
 
-define_settings!(pub Setting for Person);
+define_settings!(pub Setting for Person {
+    Household,
+    Community,
+});
 
-let household = context.add_setting_kind::<Setting>("household", 1.0);
-let community = context.add_setting_kind::<Setting>("community", 0.0);
+context.set_setting_alpha(Setting::Household, 1.0);
+context.set_setting_alpha(Setting::Community, 0.0);
 ```
 
-The second argument is `alpha`, the density exponent: in a group of `n` people,
-a member's infectiousness is multiplied by `(n - 1)^alpha`. With `alpha = 1`,
-attempts scale linearly with group size; with `alpha = 0`, they are independent
-of group size. For a group of size 1, the multiplier is 0.
+Each declared kind is a constant of the type, such as `Setting::Household`, that
+can be used anywhere in the model, including in a `match`. Its name is the
+identifier unless one is given (`Household = "household"`).
+
+`alpha` is the density exponent: in a group of `n` people, a member's
+infectiousness is multiplied by `(n - 1)^alpha`. With `alpha = 1`, attempts
+scale linearly with group size; with `alpha = 0`, they are independent of group
+size. For a group of size 1, the multiplier is 0. A declared kind needs its
+`alpha` set before its first group is created.
+
+Kinds can also be added at runtime, for example from a parameters file. They
+come after the declared ones, and `define_settings!(pub Setting for Person)`
+with no list leaves all of them to runtime:
+
+```rust
+let church = context.add_setting_kind::<Setting>("church", 0.5);
+assert_eq!(context.setting_kind_by_name::<Setting>("church"), Some(church));
+```
 
 ## Groups and members
 
 ```rust
 // One group at a time.
-let home = context.create_setting_group(household);
+let home = context.create_setting_group(Setting::Household);
 context.add_setting_member(home, person);
 
 // Or by an external ID, when loading a line list. The group is created the
 // first time its ID appears.
-let home = context.setting_group_for_key(household, "HH001");
+let home = context.setting_group_for_key(Setting::Household, "HH001");
 context.add_setting_member(home, person);
 
 // A group everyone is in, with no member list to store.
-context.create_population_setting_group(community);
+context.create_population_setting_group(Setting::Community);
 ```
 
 A person can belong to at most one group of each kind. Use
@@ -49,7 +66,10 @@ inactive and active again (for example, during a school closure).
 ## Itineraries
 
 ```rust
-context.set_itinerary_assignment(Itinerary::new([(household, 0.6), (community, 0.4)]));
+context.set_itinerary_assignment(Itinerary::new([
+    (Setting::Household, 0.6),
+    (Setting::Community, 0.4),
+]));
 ```
 
 An itinerary determines where a person's attempts occur, not how many they make:
@@ -64,7 +84,7 @@ person, and `clear_itinerary_override` undoes it:
 
 ```rust
 // Isolate at home, then return to the usual itinerary.
-context.override_itinerary(person, Itinerary::new([(household, 1.0)]));
+context.override_itinerary(person, Itinerary::new([(Setting::Household, 1.0)]));
 context.clear_itinerary_override::<Setting>(person);
 ```
 

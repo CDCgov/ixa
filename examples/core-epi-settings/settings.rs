@@ -11,27 +11,29 @@ use crate::parameters::ParametersExt;
 
 define_entity!(Person);
 
-define_settings!(pub Setting for Person);
+define_settings!(pub Setting for Person {
+    Household = "household",
+    School = "school",
+    Workplace = "workplace",
+    Community = "community",
+});
 
 define_property!(struct Age(u8), Person);
 
-/// Register the settings, then create one person per row of the line list,
+/// Configure the settings, then create one person per row of the line list,
 /// creating each setting group the first time its id appears.
 pub fn setup(context: &mut Context) {
     let parameters = context.get_parameters().clone();
-    let household_kind =
-        context.add_setting_kind::<Setting>("household", parameters.household_alpha);
-    let school_kind = context.add_setting_kind::<Setting>("school", parameters.school_alpha);
-    let workplace_kind =
-        context.add_setting_kind::<Setting>("workplace", parameters.workplace_alpha);
-    let community_kind =
-        context.add_setting_kind::<Setting>("community", parameters.community_alpha);
-    context.create_population_setting_group(community_kind);
+    context.set_setting_alpha(Setting::Household, parameters.household_alpha);
+    context.set_setting_alpha(Setting::School, parameters.school_alpha);
+    context.set_setting_alpha(Setting::Workplace, parameters.workplace_alpha);
+    context.set_setting_alpha(Setting::Community, parameters.community_alpha);
+    context.create_population_setting_group(Setting::Community);
     context.set_itinerary_assignment(Itinerary::new([
-        (household_kind, parameters.household_ratio),
-        (school_kind, parameters.school_ratio),
-        (workplace_kind, parameters.workplace_ratio),
-        (community_kind, parameters.community_ratio),
+        (Setting::Household, parameters.household_ratio),
+        (Setting::School, parameters.school_ratio),
+        (Setting::Workplace, parameters.workplace_ratio),
+        (Setting::Community, parameters.community_ratio),
     ]));
 
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(&parameters.population_file);
@@ -42,14 +44,14 @@ pub fn setup(context: &mut Context) {
         let age: u8 = std::str::from_utf8(&row[0]).unwrap().parse().unwrap();
         let person = context.add_entity(with!(Person, Age(age))).unwrap();
         // Ids are hashed as bytes straight from the row, so nothing is allocated.
-        let household = context.setting_group_for_key(household_kind, &row[1]);
+        let household = context.setting_group_for_key(Setting::Household, &row[1]);
         context.add_setting_member(household, person);
         if !row[2].is_empty() {
-            let school = context.setting_group_for_key(school_kind, &row[2]);
+            let school = context.setting_group_for_key(Setting::School, &row[2]);
             context.add_setting_member(school, person);
         }
         if !row[3].is_empty() {
-            let workplace = context.setting_group_for_key(workplace_kind, &row[3]);
+            let workplace = context.setting_group_for_key(Setting::Workplace, &row[3]);
             context.add_setting_member(workplace, person);
         }
     }
