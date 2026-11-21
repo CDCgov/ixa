@@ -916,10 +916,10 @@ pub trait SettingsExt:
     /// settings: the itinerary weighted average of their groups' multipliers;
     /// 0 without an itinerary or any group.
     fn current_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
-        let Some(itinerary) = self.itinerary::<S>(person) else {
+        let store = S::store(self);
+        let Some(itinerary) = store.itinerary(self.as_ref(), person) else {
             return 0.0;
         };
-        let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
         let (mut weighted, mut ratio_sum) = (0.0, 0.0);
         for (setting, ratio) in itinerary.entries() {
@@ -959,8 +959,8 @@ pub trait SettingsExt:
     /// Draw where an attempt by `person` happens: by itinerary ratio over the
     /// kinds they are in a group of. `None` without an itinerary or any group.
     fn sample_setting<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<S> {
-        let itinerary = self.itinerary::<S>(person)?;
         let store = S::store(self);
+        let itinerary = store.itinerary(self.as_ref(), person)?;
         let mut ratios = [0.0; MAX_SETTINGS];
         for (setting, ratio) in itinerary.entries() {
             if store.group_of(person, setting).is_some() {
@@ -976,8 +976,8 @@ pub trait SettingsExt:
     /// itinerary ratio times the group's current multiplier. `None` without
     /// an itinerary, or when every multiplier is 0.
     fn sample_setting_by_rate<S: SettingKind>(&self, person: EntityId<S::Entity>) -> Option<S> {
-        let itinerary = self.itinerary::<S>(person)?;
         let store = S::store(self);
+        let itinerary = store.itinerary(self.as_ref(), person)?;
         let population = self.get_entity_count::<S::Entity>();
         let mut rates = [0.0; MAX_SETTINGS];
         for (setting, ratio) in itinerary.entries() {
