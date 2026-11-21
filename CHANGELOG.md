@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0](https://github.com/CDCgov/ixa/compare/ixa-v5.0.0...ixa-v5.1.0) - 2026-11-21
+
+### Added
+
+- add bidi edge updates and make clear_layer scale with edges ([#1110](https://github.com/CDCgov/ixa/pull/1110))
+- add network layer views, edge counts and EntityId ordering ([#1109](https://github.com/CDCgov/ixa/pull/1109))
+- add add_edges_bidi and make bulk edge inserts atomic ([#1108](https://github.com/CDCgov/ixa/pull/1108))
+
+### Other
+
+- store each network as its own data plugin ([#1111](https://github.com/CDCgov/ixa/pull/1111))
+- skip type name lookups on network reads ([#1107](https://github.com/CDCgov/ixa/pull/1107))
+
 ## [5.0.0](https://github.com/CDCgov/ixa/compare/ixa-v4.1.0...ixa-v5.0.0) - 2026-11-21
 
 ### Added
