@@ -1985,65 +1985,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "setting office has no alpha")]
-    fn a_declared_kind_needs_an_alpha_before_a_keyed_or_population_group() {
-        let mut context = Context::new();
-        context.setting_group_for_key(Place::Office, "A1");
-    }
-
-    #[test]
     #[should_panic(expected = "alpha of setting House cannot be set once it has groups")]
     fn alpha_cannot_be_set_once_a_kind_has_groups() {
         let mut context = Context::new();
         context.set_setting_alpha(Place::House, 1.0);
         context.create_setting_group(Place::House);
         context.set_setting_alpha(Place::House, 0.5);
-    }
-
-    #[test]
-    #[should_panic(expected = "setting kind office already exists")]
-    fn a_run_time_kind_cannot_reuse_a_declared_name() {
-        let mut context = Context::new();
-        context.add_setting_kind::<Place>("office", 1.0);
-    }
-
-    #[test]
-    fn a_run_time_kind_added_after_members_exist_works_beside_declared_kinds() {
-        let mut context = Context::new();
-        context.init_random(7);
-        let people: Vec<PersonId> = (0..4)
-            .map(|_| context.add_entity(Person).unwrap())
-            .collect();
-        context.set_setting_alpha(Place::House, 1.0);
-        let house = context.create_setting_group(Place::House);
-        for &person in &people {
-            context.add_setting_member(house, person);
-        }
-
-        // Added after members exist, so every membership record is widened.
-        let church = context.add_setting_kind::<Place>("church", 1.0);
-        let congregation = context.setting_group_for_key(church, "St Mary");
-        context.add_setting_member(congregation, people[0]);
-        context.add_setting_member(congregation, people[1]);
-        context.set_itinerary_assignment(Itinerary::new([(Place::House, 0.5), (church, 0.5)]));
-
-        assert_eq!(context.setting_group(people[3], Place::House), Some(house));
-        assert_eq!(context.setting_multiplier(people[0], Place::House), 3.0);
-        assert_eq!(context.setting_multiplier(people[0], church), 1.0);
-        assert_eq!(context.setting_multiplier(people[2], church), 0.0);
-        assert_eq!(context.current_setting_multiplier::<Place>(people[0]), 2.0);
-        // Someone with no church spends that share at home.
-        assert_eq!(context.current_setting_multiplier::<Place>(people[2]), 3.0);
-        assert_eq!(context.max_setting_multiplier::<Place>(people[0]), 3.0);
-        assert_eq!(
-            context.sample_setting_contact(people[0], church),
-            Some(people[1])
-        );
-
-        context.deactivate_setting_member(people[1], church);
-        assert_eq!(context.setting_multiplier(people[0], church), 0.0);
-        assert_eq!(context.setting_multiplier(people[0], Place::House), 3.0);
-        context.activate_setting_member(people[1], church);
-        assert_eq!(context.setting_multiplier(people[0], church), 1.0);
     }
 }

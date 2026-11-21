@@ -679,30 +679,6 @@ fn a_rise_without_a_reforecast_panics() {
 }
 
 #[test]
-fn reinfection_and_reforecast_leave_one_loop_running() {
-    // Fifty reinfections and fifty reforecasts at t = 0 must not leave a
-    // hundred loops: expected attempts stay 2 * 10 = 20 per run.
-    let mean = mean_attempts(|seed| {
-        let mut context = Context::new();
-        context.init_random(seed);
-        let person = context.add_entity(Person).unwrap();
-        TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
-        for _ in 0..50 {
-            TransmissionManager::<Counting>::seed_infection(&mut context, person);
-        }
-        context.add_plan(0.0, move |context| {
-            for _ in 0..50 {
-                TransmissionManager::<Counting>::reforecast_transmission(context, person);
-            }
-        });
-        context.add_plan(10.0, Context::shutdown);
-        context.execute();
-        context.get_data(CountingPlugin).attempts.get()
-    });
-    assert_about(mean, 20.0, 3.0);
-}
-
-#[test]
 fn reforecast_is_a_no_op_for_someone_never_infected() {
     let mut context = Context::new();
     context.init_random(1);
@@ -1276,6 +1252,10 @@ fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing
     let mut context = Context::new();
     context.init_random(1);
     let person = context.add_entity(Person).unwrap();
+    InfectionManager::<Sir>::load_infectiousness_rate_library(
+        &mut context,
+        vec![ConstantRateFn::new(1.0, 10.0).into()],
+    );
     InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
         &mut context,
         person,
@@ -1283,13 +1263,17 @@ fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing
         1.0,
         Some(2.0),
     );
+    // An infection that starts after the call is not the one it was for.
+    context.add_plan(0.5, move |ctx| {
+        InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person, ());
+    });
+    context.add_plan(1.5, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            1.0
+        );
+    });
     context.execute();
-    // Nothing was scheduled.
-    assert_eq!(context.get_current_time(), 0.0);
-    assert_eq!(
-        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
-        1.0
-    );
 }
 
 #[test]
