@@ -1,0 +1,159 @@
+use super::InvertibleRate;
+
+/// A constant infectiousness rate `value` over `[0, duration)`, zero
+/// afterwards. `duration` is typically one person's infectious period.
+#[derive(Debug, Clone, Copy)]
+pub struct ConstantRateFn {
+    value: f64,
+    duration: f64,
+}
+
+impl ConstantRateFn {
+    /// # Panics
+    ///
+    /// If `value` is negative or not finite, or `duration` is negative or NaN.
+    #[must_use]
+    pub fn new(value: f64, duration: f64) -> Self {
+        assert!(
+            value.is_finite() && value >= 0.0,
+            "constant rate must be finite and non-negative, got {value}"
+        );
+        assert!(
+            duration >= 0.0,
+            "constant rate duration must be non-negative, got {duration}"
+        );
+        Self { value, duration }
+    }
+
+    /// The infectious period this rate is truncated at.
+    #[inline]
+    #[must_use]
+    pub fn duration(&self) -> f64 {
+        self.duration
+    }
+}
+
+impl InvertibleRate for ConstantRateFn {
+    #[inline]
+    fn rate(&self, t: f64) -> f64 {
+        if t >= 0.0 && t < self.duration {
+            self.value
+        } else {
+            0.0
+        }
+    }
+
+    #[inline]
+    fn cum_rate(&self, t: f64) -> f64 {
+        if self.value == 0.0 || t <= 0.0 {
+            return 0.0;
+        }
+        self.value * t.clamp(0.0, self.duration)
+    }
+
+    #[inline]
+    fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
+        if events < 0.0 {
+            return None;
+        }
+        if events == 0.0 {
+            return Some(0.0);
+        }
+        if !events.is_finite() || self.value <= 0.0 || self.duration <= 0.0 {
+            return None;
+        }
+        let t = events / self.value;
+        (t.is_finite() && t <= self.duration).then_some(t)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{ConstantRateFn, InvertibleRate};
+
+    #[test]
+    #[should_panic(expected = "duration must be non-negative")]
+    fn a_negative_duration_panics() {
+        let _ = ConstantRateFn::new(1.0, -1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "duration must be non-negative")]
+    fn a_nan_duration_panics() {
+        let _ = ConstantRateFn::new(1.0, f64::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "rate must be finite and non-negative")]
+    fn a_negative_rate_panics() {
+        let _ = ConstantRateFn::new(-1.0, 1.0);
+    }
+
+    #[test]
+    fn rate_is_flat_within_the_period() {
+        let r = ConstantRateFn::new(0.7, 10.0);
+        assert_eq!(r.rate(0.0), 0.7);
+        assert_eq!(r.rate(9.99), 0.7);
+        assert_eq!(r.rate(10.0), 0.0);
+        assert_eq!(r.rate(-5.0), 0.0);
+    }
+
+    #[test]
+    fn cum_rate_is_linear_then_flat() {
+        let r = ConstantRateFn::new(0.5, 10.0);
+        assert_eq!(r.cum_rate(0.0), 0.0);
+        assert_eq!(r.cum_rate(10.0), 5.0);
+        assert_eq!(r.cum_rate(100.0), 5.0);
+        assert_eq!(r.cum_rate(-1.0), 0.0);
+    }
+
+    #[test]
+    fn inverse_cum_rate_roundtrips() {
+        let r = ConstantRateFn::new(0.3, 100.0);
+        for c in [0.5, 1.0, 7.7] {
+            let t = r.inverse_cum_rate(c).unwrap();
+            assert!((r.cum_rate(t) - c).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn inverse_cum_rate_exhausts_at_the_period() {
+        let r = ConstantRateFn::new(0.5, 10.0);
+        assert_eq!(r.inverse_cum_rate(5.0), Some(10.0));
+        assert_eq!(r.inverse_cum_rate(5.0 + 1e-9), None);
+    }
+
+    #[test]
+    fn infinite_duration_is_unbounded() {
+        let r = ConstantRateFn::new(0.5, f64::INFINITY);
+        assert_eq!(r.inverse_cum_rate(1e9), Some(2e9));
+    }
+
+    #[test]
+    fn inverse_cum_rate_zero_rate_is_unattainable() {
+        let r = ConstantRateFn::new(0.0, 10.0);
+        assert_eq!(r.inverse_cum_rate(1.0), None);
+        // Zero events is always reachable at t=0.
+        assert_eq!(r.inverse_cum_rate(0.0), Some(0.0));
+    }
+
+    #[test]
+    fn inverse_cum_rate_infinite_events_is_unattainable() {
+        // Never turn an infinite cumulative into an infinite plan time.
+        let r = ConstantRateFn::new(0.5, f64::INFINITY);
+        assert_eq!(r.inverse_cum_rate(f64::INFINITY), None);
+        assert_eq!(r.inverse_cum_rate(f64::NAN), None);
+    }
+
+    #[test]
+    fn overflow_underflow_and_zero_times_inf_are_safe() {
+        let tiny_rate = ConstantRateFn::new(1e-300, f64::INFINITY);
+        assert_eq!(tiny_rate.inverse_cum_rate(1e100), None);
+
+        let zero_dur = ConstantRateFn::new(1e200, 0.0);
+        assert_eq!(zero_dur.inverse_cum_rate(1e-200), None);
+
+        let zero_rate = ConstantRateFn::new(0.0, f64::INFINITY);
+        assert_eq!(zero_rate.cum_rate(f64::INFINITY), 0.0);
+    }
+}
