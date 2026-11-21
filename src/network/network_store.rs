@@ -1,25 +1,42 @@
 /*!
 
-A `NetworkStore<E>` holds a `NetworkStorage<N>` for every network `N` over the entity
-type `E`, found by `N::id()`. A `NetworkStorage<N>` is one `LayerStorage` per layer of
-`N`, found by `N::layer()`.
+A `NetworkStorage<N>` is one `LayerStorage` per layer of the network `N`, found by
+`N::layer()`. It is the data container of `NetworkPlugin<N>`, a data plugin per network
+type, so a layer is one plugin lookup and one index from the context.
 
 */
 
-use std::any::Any;
-use std::cell::OnceCell;
 use std::marker::PhantomData;
 
-use super::registry::{get_registered_network_count, Network};
+use super::registry::Network;
 use super::storage::LayerStorage;
-use crate::entity::Entity;
+use crate::{DataPlugin, PluginContext};
+
+/// The data plugin holding the edges of the network `N`. Its index is `N::id()`.
+pub(super) struct NetworkPlugin<N>(PhantomData<N>);
+
+impl<N> NetworkPlugin<N> {
+    pub const KEY: Self = Self(PhantomData);
+}
+
+impl<N: Network> DataPlugin for NetworkPlugin<N> {
+    type DataContainer = NetworkStorage<N>;
+
+    fn init<C: PluginContext>(_context: &C) -> Self::DataContainer {
+        NetworkStorage::new()
+    }
+
+    fn index_within_context() -> usize {
+        N::id()
+    }
+}
 
 pub(super) struct NetworkStorage<N: Network> {
     layers: Vec<LayerStorage<N::Entity, N::Data>>,
 }
 
 impl<N: Network> NetworkStorage<N> {
-    fn new_boxed() -> Box<dyn Any> {
+    pub fn new() -> Self {
         // Catches a hand-written `impl Network` whose `layer()` disagrees with `ALL`, which
         // would otherwise make loops over `ALL` visit a layer twice. (The macros check this
         // at compile time.)
@@ -33,7 +50,7 @@ impl<N: Network> NetworkStorage<N> {
             );
         }
         let layers = N::ALL.iter().map(|_| LayerStorage::default()).collect();
-        Box::new(Self { layers })
+        Self { layers }
     }
 
     pub fn layer(&self, layer: N) -> &LayerStorage<N::Entity, N::Data> {
@@ -59,83 +76,4 @@ impl<N: Network> NetworkStorage<N> {
             N::ALL.len()
         )
     }
-}
-
-pub(super) struct NetworkStore<E: Entity> {
-    networks: Vec<OnceCell<Box<dyn Any>>>,
-    _phantom: PhantomData<E>,
-}
-
-impl<E: Entity> NetworkStore<E> {
-    pub fn new_boxed() -> Box<dyn Any> {
-        let networks = (0..get_registered_network_count::<E>())
-            .map(|_| OnceCell::new())
-            .collect();
-        Box::new(Self {
-            networks,
-            _phantom: PhantomData,
-        })
-    }
-
-    pub fn get<N: Network<Entity = E>>(&self) -> &NetworkStorage<N> {
-        typed_slot(
-            &self.networks,
-            N::id(),
-            NetworkStorage::<N>::new_boxed,
-            N::name,
-        )
-    }
-
-    pub fn get_mut<N: Network<Entity = E>>(&mut self) -> &mut NetworkStorage<N> {
-        typed_slot_mut(
-            &mut self.networks,
-            N::id(),
-            NetworkStorage::<N>::new_boxed,
-            N::name,
-        )
-    }
-}
-
-fn not_registered(name: &str) -> String {
-    format!(
-        "{name} was not registered before its storage was created. Networks declared with \
-         `define_network!` or `impl_network!` register at startup; a hand-written `impl \
-         Network` must call `register_network::<N>()` before the first network access."
-    )
-}
-
-/// The slot at `index` of a registry-sized list of lazily built storages, initialized with
-/// `init` if empty and returned as a `T`. `name` gives the network or entity type for
-/// panics, and is only called there: it parses a type name, which costs more than the lookup.
-pub(super) fn typed_slot<T: Any>(
-    slots: &[OnceCell<Box<dyn Any>>],
-    index: usize,
-    init: fn() -> Box<dyn Any>,
-    name: fn() -> &'static str,
-) -> &T {
-    slots
-        .get(index)
-        .unwrap_or_else(|| panic!("{}", not_registered(name())))
-        .get_or_init(init)
-        .downcast_ref()
-        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {}", name()))
-}
-
-/// Mutable twin of [`typed_slot`].
-pub(super) fn typed_slot_mut<T: Any>(
-    slots: &mut [OnceCell<Box<dyn Any>>],
-    index: usize,
-    init: fn() -> Box<dyn Any>,
-    name: fn() -> &'static str,
-) -> &mut T {
-    let cell = slots
-        .get_mut(index)
-        .unwrap_or_else(|| panic!("{}", not_registered(name())));
-    if cell.get().is_none() {
-        cell.set(init()).unwrap();
-    }
-    cell.get_mut()
-        .unwrap()
-        .downcast_mut()
-        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {}", name()))
 }

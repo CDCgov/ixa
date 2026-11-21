@@ -109,7 +109,7 @@ macro_rules! impl_network {
                 if index != usize::MAX {
                     return index;
                 }
-                $crate::network::initialize_network_id::<$entity>(&INDEX)
+                $crate::network::initialize_network_id::<Self>(&INDEX)
             }
         }
 

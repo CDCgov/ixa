@@ -1,18 +1,17 @@
 /*!
 
-The [`Network`] trait and the registry that assigns each network type a dense
-index per entity type, so a `NetworkStore<E>` can be sized when it is created.
+The [`Network`] trait, and the registration of each network type as a data plugin of
+its own.
 
 */
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{LazyLock, Mutex};
 
-use crate::data_plugin::claim_index;
+use super::network_store::NetworkPlugin;
 use crate::entity::Entity;
-use crate::{HashMap, HashMapExt, IxaError};
+use crate::{add_data_plugin_to_registry, initialize_data_plugin_index, IxaError};
 
 /// A network over one entity type, made of one or more layers. Implemented by
 /// [`define_network!`](crate::define_network) and [`impl_network!`](crate::impl_network).
@@ -51,24 +50,12 @@ pub trait Network: Copy + Eq + Debug + 'static {
         full.rsplit("::").next().unwrap()
     }
 
-    /// The index of this network among the networks over `Self::Entity`, assigned on
-    /// first access and registered from a `ctor` so the count is known before any
-    /// `NetworkStore<E>` is built. A hand-written impl must call
-    /// [`register_network`](crate::network::register_network) before the first network
-    /// access instead.
+    /// The index of this network's storage among the data plugins of a context. The
+    /// macros assign it from a `ctor`; a hand-written impl must call
+    /// [`register_network`](crate::network::register_network) before the first context
+    /// is created.
     #[must_use]
     fn id() -> usize;
-}
-
-/// Next network id per `Entity::id()`. Each entity type has its own series.
-static NEXT_NETWORK_ID_BY_ENTITY: LazyLock<Mutex<HashMap<usize, usize>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-/// Returns the number of registered networks over the entity type `E`.
-#[must_use]
-pub fn get_registered_network_count<E: Entity>() -> usize {
-    let map = NEXT_NETWORK_ID_BY_ENTITY.lock().unwrap();
-    *map.get(&E::id()).unwrap_or(&0)
 }
 
 /// Registers `N` by forcing its id to be assigned. Called from the `ctor` emitted by
@@ -77,14 +64,14 @@ pub fn register_network<N: Network>() {
     let _ = N::id();
 }
 
-/// Assigns the next id for networks over `E` to `network_id` unless another thread
-/// already initialized it, in which case the existing id is returned and the counter is
-/// left alone.
+/// Registers the data plugin that holds the edges of `N` and claims its index into
+/// `network_id`, unless another thread already did, in which case the existing index is
+/// returned. Registering and claiming together means an index is never claimed for a
+/// network the context does not know about.
 #[must_use]
-pub fn initialize_network_id<E: Entity>(network_id: &AtomicUsize) -> usize {
-    let mut guard = NEXT_NETWORK_ID_BY_ENTITY.lock().unwrap();
-    let next = guard.entry(E::id()).or_insert(0);
-    claim_index(network_id, next)
+pub fn initialize_network_id<N: Network>(network_id: &AtomicUsize) -> usize {
+    add_data_plugin_to_registry::<NetworkPlugin<N>>();
+    initialize_data_plugin_index(network_id)
 }
 
 /// Autoref-specialization probe for the default edge data check; resolves only at a
