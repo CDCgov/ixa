@@ -6,7 +6,7 @@ kind (such as a particular household), and a per-person _itinerary_ that divides
 their time across kinds.
 
 The snippets use the `Person` entity and `Flu` marker from the
-[minimal model](../core-epi.md#a-minimal-model).
+[minimal example](../core-epi.md#a-minimal-example).
 
 `define_settings!` defines the setting-kind type for an entity, and the kinds
 the model names in code:

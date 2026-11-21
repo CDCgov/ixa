@@ -2,28 +2,22 @@
 
 The `core_epi` module provides reusable building blocks for epidemiological
 models: infectiousness rate functions, a continuous-time transmission loop,
-modifiers, and contact settings, with more features planned over time.
+modifiers, and contact settings.
 
 The module is gated behind the `core_epi` Cargo feature, which is enabled by
-default. The examples in this section also use the `rand_distr` crate to draw
-durations.
+default.
 
-This page builds a minimal model. The rest of the section covers:
+## Basic usage
 
-- [Transmission](core-epi/transmission.md): how the loop works, contact
-  structure, and when to reforecast.
-- [Infections](core-epi/infections.md): infectiousness, infection details,
-  susceptibility, variants, and infection history.
-- [Modifiers](core-epi/modifiers.md): scaling infectiousness or susceptibility
-  for a person or for everyone.
-- [Settings](core-epi/settings.md): households, schools and other places
-  where contact happens.
+1. Implement the `InfectionManager` and `TransmissionManager` traits.
+2. Set up the transmission loop with `context.setup_transmission_loop()`.
+3. Seed some infections with `context.seed_infections()`.
 
-## A minimal model
+## A minimal example
 
 A model implements two traits on `Context` (`InfectionManager` and
-`TransmissionManager`), parameterized by a marker type of its own. Defining a
-second marker type lets you model a [second pathogen](#more-than-one-pathogen).
+`TransmissionManager`), parameterized by a marker type. Defining a second
+marker type lets you model a [second pathogen](#more-than-one-pathogen).
 
 ```rust
 use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
@@ -42,7 +36,7 @@ define_property!(
     default_const = InfectionStatus::Susceptible
 );
 
-/// Marker type for this pathogen.
+/// Marker type.
 struct Flu;
 
 impl InfectionManager<Flu> for Context {
@@ -56,7 +50,7 @@ impl InfectionManager<Flu> for Context {
         ConstantRateFn::new(0.4, infectious_period).into()
     }
 
-    // The model's own bookkeeping.
+    // Set properties or record infections here.
     fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {
         self.set_property(infectee, InfectionStatus::Infected);
     }

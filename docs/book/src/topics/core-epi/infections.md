@@ -38,7 +38,7 @@ infected.
 
 `core_epi` has no disease states or recovery; the model tracks them. For
 example, adding a `Recovered` status to the
-[minimal model](../core-epi.md#a-minimal-model):
+[minimal example](../core-epi.md#a-minimal-example):
 
 ```rust
 fn on_infected(&mut self, _infector: Option<PersonId>, infectee: PersonId, _details: ()) {

@@ -1,12 +1,12 @@
 # Transmission
 
-This page covers how infections spread: the transmission loop, contact
-structure, and when a transmission loop needs a reforecast.
+This page covers the transmission loop, contact structure, and when a
+transmission loop needs a reforecast.
 
 The snippets use the `Person` entity and `Flu` marker from the
-[minimal model](../core-epi.md#a-minimal-model).
+[minimal example](../core-epi.md#a-minimal-example).
 
-## How the loop works
+## The loop
 
 Each infected person runs a loop of transmission attempt _proposals_, which are composed of a forecast and an evaluation step. Both are defined on `TransmissionManager` with these defaults:
 
@@ -38,9 +38,9 @@ fn accept_proposal(&self, person: PersonId, total: f64, forecast: f64) -> bool {
 
 With the defaults, a person proposes attempts at their majorizing rate,
 proposals are thinned to their current infectiousness (applying any modifiers),
-and contacts are chosen uniformly from everyone else. The loop stops when the
-rate function ends; rejected proposals and failed transmission attempts return
-to step 1. Step 3 reads the contact's
+and contacts are chosen uniformly from the rest of the population. The loop
+stops when the rate function ends; rejected proposals and failed transmission
+attempts return to step 1. Step 3 reads the contact's
 [susceptibility](infections.md#susceptibility).
 
 The forecast _must_ be an upper bound on the rate that is eventually evaluated. A forecast that is too low causes
@@ -96,9 +96,9 @@ Override `forecast_total_infectiousness` and `evaluate_forecast` directly when:
 - the rate and the contact depend on the same random draw, as in
   [Changing itineraries or groups](settings.md#using-settings-in-the-loop).
 
-Start from the defaults in [How the loop works](#how-the-loop-works) and keep the
-call to `accept_proposal`, which thins and validates the bound. `InvertibleRate`
-is exported from `ixa::core_epi`.
+Start from the defaults in [The loop](#the-loop) and keep the call to
+`accept_proposal`, which thins and validates the bound. `InvertibleRate` is
+exported from `ixa::core_epi`.
 
 ## When rates rise
 

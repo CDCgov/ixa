@@ -5,7 +5,7 @@ keyed by a marker type you define: setting a modifier of the same type replaces
 the previous value, while modifiers of different types multiply. See
 `examples/core-epi-antiviral` for an antiviral intervention example.
 
-## Setting a modifier now
+## Setting a modifier
 
 `set_infectiousness_modifier` and `set_susceptibility_modifier` take effect
 immediately and persist until the matching `remove_` call, across any number of
