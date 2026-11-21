@@ -1,0 +1,213 @@
+/// A rate of infection over time that can be integrated and inverted.
+/// See `TransformedInvertibleRateFn` for an interval starting at a time other
+/// than 0.
+pub trait InvertibleRate {
+    /// Returns the rate at time `t`
+    fn rate(&self, t: f64) -> f64;
+
+    /// Returns the expected number of events in the interval 0 -> t
+    fn cum_rate(&self, t: f64) -> f64;
+
+    /// Returns the time, starting at 0, by which `events` are expected to
+    /// have occurred; `None` if [`cum_rate`](Self::cum_rate) never gets there.
+    fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
+}
+
+/// A rate function scaled by `scale` and shifted to start `elapsed` into `base`.
+pub struct TransformedInvertibleRateFn<'a, T>
+where
+    T: InvertibleRate + ?Sized,
+{
+    base: &'a T,
+    scale: f64,
+    elapsed: f64,
+}
+
+impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
+    /// # Panics
+    ///
+    /// If `scale` or `elapsed` is negative or not finite.
+    #[must_use]
+    pub fn new(base: &'a T, scale: f64, elapsed: f64) -> Self {
+        assert!(
+            scale.is_finite() && scale >= 0.0,
+            "rate scale must be finite and non-negative, got {scale}"
+        );
+        assert!(
+            elapsed.is_finite() && elapsed >= 0.0,
+            "rate elapsed time must be finite and non-negative, got {elapsed}"
+        );
+        Self {
+            base,
+            scale,
+            elapsed,
+        }
+    }
+
+    /// The same function with its rate multiplied by `factor`.
+    ///
+    /// # Panics
+    ///
+    /// If `factor` is negative or not finite, or if the resulting scale overflows.
+    #[must_use]
+    pub fn scaled(mut self, factor: f64) -> Self {
+        assert!(
+            factor.is_finite() && factor >= 0.0,
+            "rate scale factor must be finite and non-negative, got {factor}"
+        );
+        self.scale *= factor;
+        assert!(
+            self.scale.is_finite(),
+            "rate scale overflowed to {}",
+            self.scale
+        );
+        self
+    }
+}
+
+impl<T: ?Sized + InvertibleRate> InvertibleRate for TransformedInvertibleRateFn<'_, T> {
+    fn rate(&self, t: f64) -> f64 {
+        if t < 0.0 || self.scale == 0.0 {
+            return 0.0;
+        }
+        self.base.rate(t + self.elapsed) * self.scale
+    }
+
+    fn cum_rate(&self, t: f64) -> f64 {
+        if t <= 0.0 || self.scale == 0.0 {
+            return 0.0;
+        }
+        (self.base.cum_rate(t + self.elapsed) - self.base.cum_rate(self.elapsed)) * self.scale
+    }
+
+    /// A non-positive `scale` means no events are ever reached, rather than
+    /// `events / 0 = inf`.
+    fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
+        if events.is_nan() || events < 0.0 {
+            return None;
+        }
+        if events == 0.0 {
+            return Some(0.0);
+        }
+        if !events.is_finite() || self.scale <= 0.0 {
+            return None;
+        }
+        let elapsed_cum_rate = self.base.cum_rate(self.elapsed);
+        let target = events / self.scale + elapsed_cum_rate;
+        // If `events / scale` was absorbed into `elapsed_cum_rate`, distinguish
+        // an already-exhausted curve from a tiny positive delay.
+        if target == elapsed_cum_rate {
+            return (self.base.cum_rate(f64::INFINITY) > elapsed_cum_rate).then_some(0.0);
+        }
+        let time = self.base.inverse_cum_rate(target)?;
+        // Rounding can put `time` a float before `elapsed`.
+        Some((time - self.elapsed).max(0.0))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{InvertibleRate, TransformedInvertibleRateFn};
+    use crate::assert_almost_eq;
+    use crate::core_epi::rate::{ConstantRateFn, EmpiricalRateFn};
+
+    // Rate 2.0 on [0, 5], including the end, and 0 outside.
+    fn flat_capped() -> EmpiricalRateFn {
+        EmpiricalRateFn::new(vec![[0.0, 2.0], [5.0, 2.0]], 1.0)
+    }
+
+    #[test]
+    fn test_scale_rate_fn() {
+        let rate_fn = flat_capped();
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.rate(5.0), 4.0, 0.0);
+    }
+    #[test]
+    fn test_scale_rate_fn_with_elapsed() {
+        let rate_fn = flat_capped();
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
+        assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
+        // Past the end of the infectious period (3.0 + 4.0 > 5.0).
+        assert_almost_eq!(scaled_rate_fn.rate(4.0), 0.0, 0.0);
+    }
+    #[test]
+    fn test_scale_rate_fn_cum_rate() {
+        let rate_fn = flat_capped();
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
+        assert_almost_eq!(scaled_rate_fn.cum_rate(1.0), 4.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.cum_rate(2.0), 8.0, 0.0);
+        // Capped at the remaining 2 days of the 5-day infectious period.
+        assert_almost_eq!(scaled_rate_fn.cum_rate(3.0), 8.0, 0.0);
+    }
+    #[test]
+    fn test_scale_rate_fn_inverse_cum_rate() {
+        let rate_fn = flat_capped();
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
+        assert_eq!(scaled_rate_fn.inverse_cum_rate(4.0), Some(1.0));
+        assert_eq!(scaled_rate_fn.inverse_cum_rate(8.0), Some(2.0));
+        assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
+    }
+    #[test]
+    fn inverse_is_never_before_now() {
+        // Here `(0.3 * elapsed) / 0.3` rounds to just under `elapsed`.
+        let rate_fn = ConstantRateFn::new(0.3, 1e9);
+        let shifted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 1.685_000_000_000_002_3);
+        assert_eq!(shifted.inverse_cum_rate(1e-300), Some(0.0));
+    }
+
+    #[test]
+    fn zero_scale_transform_is_unreachable() {
+        // A zero contact bound (a size-1 household) must not invert to t = inf.
+        let rate_fn = ConstantRateFn::new(1.0, 5.0);
+        let zero = TransformedInvertibleRateFn::new(&rate_fn, 0.0, 0.0);
+        assert_eq!(zero.inverse_cum_rate(1.0), None);
+        assert_eq!(zero.inverse_cum_rate(0.0), Some(0.0));
+        assert_eq!(zero.rate(3.0), 0.0);
+        assert_eq!(zero.cum_rate(3.0), 0.0);
+
+        let curve = flat_capped();
+        let zero = TransformedInvertibleRateFn::new(&curve, 0.0, 1.0);
+        assert_eq!(zero.inverse_cum_rate(0.5), None);
+    }
+
+    #[test]
+    fn scaled_multiplies_the_rate_and_divides_the_inverse() {
+        let rate_fn = flat_capped();
+        let f = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(3.0);
+        assert_almost_eq!(f.rate(0.0), 12.0, 0.0);
+        assert_almost_eq!(f.cum_rate(1.0), 12.0, 0.0);
+        assert_eq!(f.inverse_cum_rate(12.0), Some(1.0));
+        assert_eq!(f.inverse_cum_rate(24.0 + 1e-9), None);
+        let zero = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(0.0);
+        assert_eq!(zero.inverse_cum_rate(1.0), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "rate scale overflowed")]
+    fn scaled_overflow_panics() {
+        let rate_fn = ConstantRateFn::new(1.0, 5.0);
+        let _ = TransformedInvertibleRateFn::new(&rate_fn, 1e200, 0.0).scaled(1e200);
+    }
+
+    #[test]
+    fn exhausted_shifted_curve_never_returns_zero_delay() {
+        let rate_fn = ConstantRateFn::new(1.0, 5.0);
+        let exhausted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 5.0);
+        assert_eq!(exhausted.inverse_cum_rate(1e-20), None);
+        assert_eq!(exhausted.inverse_cum_rate(0.0), Some(0.0));
+        let past_end = TransformedInvertibleRateFn::new(&rate_fn, 1e20, 10.0);
+        assert_eq!(past_end.inverse_cum_rate(1.0), None);
+    }
+
+    #[test]
+    fn negative_time_and_events_match_base_conventions() {
+        let rate_fn = ConstantRateFn::new(2.0, 5.0);
+        let shifted = TransformedInvertibleRateFn::new(&rate_fn, 1.0, 3.0);
+        assert_eq!(shifted.rate(-1.0), 0.0);
+        assert_eq!(shifted.cum_rate(-1.0), 0.0);
+        assert_eq!(shifted.inverse_cum_rate(-1.0), None);
+        let zero = TransformedInvertibleRateFn::new(&rate_fn, 0.0, 3.0);
+        assert_eq!(zero.inverse_cum_rate(-1.0), None);
+    }
+}

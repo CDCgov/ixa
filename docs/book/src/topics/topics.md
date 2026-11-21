@@ -10,3 +10,8 @@
 - [Profiling Module](profiling-module.md)
 - [`random` module](random-module.md)
 - [Reports](reports.md)
+- [`core_epi`](core-epi.md)
+  - [Transmission](core-epi/transmission.md)
+  - [Infections](core-epi/infections.md)
+  - [Modifiers](core-epi/modifiers.md)
+  - [Settings](core-epi/settings.md)

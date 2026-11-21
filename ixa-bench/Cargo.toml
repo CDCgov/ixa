@@ -123,3 +123,8 @@ harness = false
 name = "network"
 path = "criterion/network.rs"
 harness = false
+
+[[bench]]
+name = "core_epi"
+path = "criterion/core_epi.rs"
+harness = false
