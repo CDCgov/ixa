@@ -165,11 +165,11 @@ impl InvertibleRate for EmpiricalRateFn {
         self.scale * self.raw_cum(t)
     }
 
-    /// `None` for a negative `c`, a zero `scale`, or a `c` beyond the curve's
-    /// total area.
+    /// `None` for a negative or NaN `c`, a zero `scale`, or a `c` beyond the
+    /// curve's total area.
     #[inline]
     fn inverse_cum_rate(&self, c: f64) -> Option<f64> {
-        if c < 0.0 {
+        if c.is_nan() || c < 0.0 {
             return None;
         }
         if c == 0.0 {
@@ -256,6 +256,13 @@ mod test {
         // Total area = 2.5; beyond that is unreachable.
         assert_eq!(r.inverse_cum_rate(2.5 + 1e-9), None);
         assert!(r.inverse_cum_rate(1.0).is_some());
+    }
+
+    #[test]
+    fn inverse_cum_rate_of_a_non_finite_count_is_unattainable() {
+        let r = unit(vec![[0.0, 1.0], [5.0, 1.0]]);
+        assert_eq!(r.inverse_cum_rate(f64::NAN), None);
+        assert_eq!(r.inverse_cum_rate(f64::INFINITY), None);
     }
 
     #[test]

@@ -557,7 +557,10 @@ context.clear_itinerary_override::<Setting>(person);
 An override also takes the person out of their group of every kind it gives no
 share, so they are not drawn as a contact there and do not count towards its
 size. Clearing it puts them back. A population group is the exception: nobody
-leaves one. An assignment does not do this: a closure that drops a kind for
+leaves one. The model's own removals are kept apart: `remove_setting_member`
+during an override keeps the person out after it is cleared, and
+`restore_setting_member` for a kind the override gives no share takes effect
+when it is cleared. An assignment does not do this: a closure that drops a kind for
 someone only moves their own attempts, so pair it with `remove_setting_member`.
 
 Because an override changes group sizes, a model that uses one needs the
@@ -603,7 +606,8 @@ impl TransmissionManager<Flu> for Context {
 itineraries are overridden, forecast at `max_setting_multiplier`: the largest
 multiplier any one of the person's groups has had, whatever their itinerary. An
 average of group multipliers cannot exceed the largest of them, so no such
-change takes the person's rate above it.
+change takes the person's rate above it. Groups that gain new members are the
+exception: see [When rates rise](#when-rates-rise).
 
 For the person above it is 3, the household's multiplier. If they isolate at
 home, their itinerary becomes household 1.0 and their rate rises from 2.2 to 3
@@ -659,10 +663,19 @@ when:
   `contact_multiplier` or forecast goes up;
 - using settings without `max_setting_multiplier`, a person's itinerary or the
   membership of one of their groups changes;
-- with `max_setting_multiplier` as the bound, a person joins a group or a group
-  grows past its largest size: reforecast the newcomer and the group's members
-  (`setting_group_members`). A population group with a positive `alpha` needs
-  it whenever it grows.
+- with `max_setting_multiplier` as the bound, groups gain members they did not
+  have before:
+  - a person joins a group: reforecast them;
+  - a group grows past its largest size: reforecast its members
+    (`setting_group_members`);
+  - a person returns to a group, by `restore_setting_member` or
+    `clear_itinerary_override`: reforecast them. The group may have passed its
+    largest size while they were out, and `setting_group_members` does not list
+    people who are out.
+
+  A population group needs it whenever it grows with a positive `alpha`, or
+  from one member to two with any `alpha`. A model whose groups only lose and
+  regain their own members needs none of these.
 
 Modifiers need no call: `setup_transmission_loop` reforecasts when one rises.
 Changes that only lower a rate never need one.
@@ -778,5 +791,5 @@ model's own traits.
 | ----------------------------- | ----------------------------------------------------------- |
 | `examples/core-epi`           | the smallest model: homogeneous mixing with the defaults    |
 | `examples/core-epi-antiviral` | a scheduled infectiousness modifier                         |
-| `examples/core-epi-settings`  | settings loaded from a line list, with a school closure     |
+| `examples/core-epi-settings`  | settings loaded from a line list, infections by setting     |
 | `examples/core-epi-variants`  | two variants as infection details, with a vaccine           |
