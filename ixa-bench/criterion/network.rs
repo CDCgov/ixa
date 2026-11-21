@@ -11,6 +11,7 @@ define_network!(Contact, Person, layers = { Household, Community }, data = f64);
 const PEOPLE: usize = 100_000;
 const HOUSEHOLD_SIZE: usize = 4;
 const COMMUNITY_DEGREE: usize = 10;
+const CLIQUE_SIZE: usize = 1000;
 
 fn build(context: &mut Context) -> Vec<PersonId> {
     let people: Vec<PersonId> = (0..PEOPLE)
@@ -68,6 +69,30 @@ fn bench_network(c: &mut Criterion) {
             },
             |mut context| {
                 black_box(build(&mut context));
+                context
+            },
+            BatchSize::PerIteration,
+        );
+    });
+
+    // Every list ends up far past the length where a batch defers its duplicate check.
+    group.bench_function("add_edges_bidi_clique_1000", |b| {
+        b.iter_batched(
+            || {
+                let mut context = Context::new();
+                let people: Vec<PersonId> = (0..CLIQUE_SIZE)
+                    .map(|_| context.add_entity(with!(Person)).unwrap())
+                    .collect();
+                let mut pairs = Vec::new();
+                for (index, &a) in people.iter().enumerate() {
+                    for &b in &people[index + 1..] {
+                        pairs.push((a, b, 1.0));
+                    }
+                }
+                (context, pairs)
+            },
+            |(mut context, pairs)| {
+                context.add_edges_bidi(Contact::Community, pairs).unwrap();
                 context
             },
             BatchSize::PerIteration,

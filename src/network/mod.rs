@@ -134,11 +134,42 @@ impl NetworkData {
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
     ) -> Result<(), IxaError> {
-        let storage = self.layer_mut(layer);
+        let edges = edges.into_iter();
+        let mut batch = self.layer_mut(layer).batch(edges.size_hint().0);
         for (from, to, data) in edges {
-            Self::insert_edge::<N>(storage, from, to, data)?;
+            if from == to {
+                return Err(IxaError::CannotMakeEdgeToSelf);
+            }
+            N::validate(&data)?;
+            batch.push(from, Edge { neighbor: to, data })?;
         }
-        Ok(())
+        batch.commit()
+    }
+
+    fn add_edges_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
+    ) -> Result<(), IxaError> {
+        let edges = edges.into_iter();
+        let mut batch = self
+            .layer_mut(layer)
+            .batch(edges.size_hint().0.saturating_mul(2));
+        for (a, b, data) in edges {
+            if a == b {
+                return Err(IxaError::CannotMakeEdgeToSelf);
+            }
+            N::validate(&data)?;
+            batch.push(
+                a,
+                Edge {
+                    neighbor: b,
+                    data: data.clone(),
+                },
+            )?;
+            batch.push(b, Edge { neighbor: a, data })?;
+        }
+        batch.commit()
     }
 
     fn add_edge_bidi<N: Network>(
@@ -258,17 +289,33 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
             .add_edge_bidi(layer, a, b, data)
     }
 
-    /// Adds every `(from, to, data)` edge in `layer`, stopping at the first failure and
-    /// leaving the edges added before it in place.
+    /// Adds every `(from, to, data)` edge in `layer`, or none of them if any would fail.
+    /// Much faster than repeated [`add_edge`](Self::add_edge) calls for entities with
+    /// many edges.
     ///
     /// # Errors
-    /// As [`add_edge`](Self::add_edge).
+    /// As [`add_edge`](Self::add_edge), also for two edges of the batch from one entity
+    /// to the same neighbor.
     fn add_edges<N: Network>(
         &mut self,
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
     ) -> Result<(), IxaError> {
         self.get_data_mut(NetworkPlugin).add_edges(layer, edges)
+    }
+
+    /// Adds an edge in each direction for every `(a, b, data)` in `layer`, or none of
+    /// them if any would fail: [`add_edge_bidi`](Self::add_edge_bidi) for many pairs.
+    ///
+    /// # Errors
+    /// As [`add_edges`](Self::add_edges), for either direction of a pair.
+    fn add_edges_bidi<N: Network>(
+        &mut self,
+        layer: N,
+        edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
+    ) -> Result<(), IxaError> {
+        self.get_data_mut(NetworkPlugin)
+            .add_edges_bidi(layer, edges)
     }
 
     /// Removes and returns the edge in `layer` from `from` to `to`, or `None` if there is
@@ -703,13 +750,103 @@ mod test_api {
         assert_eq!(context.get_degree(Contact::School, person1), 2);
         assert_eq!(context.get_degree(Contact::Household, person1), 0);
 
-        // A duplicate stops the batch and reports the error.
+        // A duplicate fails the whole batch, including the edge before it.
         let result = context.add_edges(
             Contact::School,
             [(person2, person1, 1.0), (person1, person2, 1.0)],
         );
         assert!(matches!(result, Err(IxaError::EdgeAlreadyExists)));
-        assert_eq!(context.get_degree(Contact::School, person2), 1);
+        assert_eq!(context.get_degree(Contact::School, person2), 0);
+        assert_eq!(context.get_degree(Contact::School, person1), 2);
+    }
+
+    #[test]
+    fn add_edges_is_all_or_nothing() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+
+        let self_loop = [(person1, person2, 1.0), (person3, person3, 1.0)];
+        assert!(matches!(
+            context.add_edges(Contact::School, self_loop),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
+        let invalid_data = [(person1, person2, 1.0), (person1, person3, -1.0)];
+        assert!(matches!(
+            context.add_edges(Contact::School, invalid_data),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        let repeated_in_batch = [
+            (person1, person2, 1.0),
+            (person2, person3, 1.0),
+            (person1, person2, 2.0),
+        ];
+        assert!(matches!(
+            context.add_edges(Contact::School, repeated_in_batch),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        for person in [person1, person2, person3] {
+            assert_eq!(context.get_degree(Contact::School, person), 0);
+        }
+    }
+
+    #[test]
+    fn add_edges_removes_its_edges_when_the_iterator_panics() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        let (mut context, person1, person2) = setup();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let edges = std::iter::once((person1, person2, 1.0)).chain(std::iter::once_with(
+                || -> (PersonId, PersonId, f64) { panic!("no more edges") },
+            ));
+            let _ = context.add_edges(Contact::School, edges);
+        }));
+        assert!(result.is_err());
+        assert_eq!(context.get_degree(Contact::School, person1), 0);
+    }
+
+    #[test]
+    fn add_edges_bidi() {
+        // Large enough that every list outgrows the per-edge duplicate check.
+        let size = 80;
+        let mut context = Context::new();
+        let people: Vec<PersonId> = (0..size)
+            .map(|_| context.add_entity(with!(Person, Age(0))).unwrap())
+            .collect();
+        let mut pairs = Vec::new();
+        for (index, &a) in people.iter().enumerate() {
+            for &b in &people[index + 1..] {
+                pairs.push((a, b, 0.5));
+            }
+        }
+        context
+            .add_edges_bidi(Contact::School, pairs.iter().copied())
+            .unwrap();
+        for &person in &people {
+            assert_eq!(context.get_degree(Contact::School, person), size - 1);
+        }
+        let last = people[size - 1];
+        assert!(context.get_edge(Contact::School, last, people[0]).is_some());
+
+        // Each of these fails after a valid pair, which is not kept.
+        let reversed_pair = [(people[0], people[1], 0.5), (people[1], people[0], 0.5)];
+        assert!(matches!(
+            context.add_edges_bidi(Contact::Household, reversed_pair),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        let self_loop = [(people[0], people[1], 0.5), (people[2], people[2], 0.5)];
+        assert!(matches!(
+            context.add_edges_bidi(Contact::Household, self_loop),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
+        let invalid_data = [
+            (people[0], people[1], 0.5),
+            (people[2], people[3], f64::NAN),
+        ];
+        assert!(matches!(
+            context.add_edges_bidi(Contact::Household, invalid_data),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(context.degree_distribution(Contact::Household), vec![size]);
     }
 
     #[test]

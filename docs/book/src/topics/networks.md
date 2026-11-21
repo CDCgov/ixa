@@ -43,6 +43,7 @@ Every method takes the layer first; the entity and data types follow from it.
 context.add_edge(InfectionTree, infector, infectee, ())?;
 context.add_edge_bidi(Contact::Household, p1, p2, 1.0)?; // both directions
 context.add_edges(Contact::School, pairs.iter().map(|&(a, b)| (a, b, 0.5)))?;
+context.add_edges_bidi(Contact::School, pairs.iter().map(|&(a, b)| (a, b, 0.5)))?;
 
 let removed = context.remove_edge(Contact::School, p1, p2); // Option<Edge>
 let pair = context.remove_edge_bidi(Contact::Household, p1, p2); // Option<(Edge, Edge)>
@@ -60,7 +61,14 @@ per (source, neighbor) in a layer, and the data passes the network's
 validation. Each returns an `IxaError`, and a failed call changes nothing: a
 rejected update leaves the edge's previous data in place. `add_edge_bidi`
 checks both directions before inserting either, and `remove_edge_bidi` removes
-both or neither.
+both or neither. `add_edges` and `add_edges_bidi` add every edge they are given
+or none.
+
+Adding an edge looks through the source's existing edges for one to the same
+neighbor, so building up an entity with thousands of edges one call at a time
+gets slower with every edge. `add_edges` and `add_edges_bidi` check each entity
+once for the whole batch: use them to load a network or to connect a large
+group.
 
 `update_edge` and `add_or_update_edge` keep an existing edge where it is.
 Removing an edge and adding it back moves it, which changes which edge a given
