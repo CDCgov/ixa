@@ -30,7 +30,8 @@ A factor can be any finite non-negative number, provided the resulting
 ## Scheduling a modifier
 
 The `schedule_` methods apply a modifier at a start time and optionally remove
-it at an end time.
+it at an end time. A schedule does not keep the simulation running: if nothing
+else is planned before its start or end, the simulation ends first.
 
 ```rust
 struct Antiviral;

@@ -853,9 +853,11 @@ pub trait SettingsExt:
     }
 
     /// Add `person` to `group`, leaving their previous group of that kind.
-    /// Adding them to a group they are already active in is a no-op. If an
-    /// active itinerary override gives this kind zero share, the membership is
-    /// recorded and becomes active when the override is cleared or replaced.
+    /// Adding them to a group they are already in is a no-op. Someone
+    /// deactivated in that kind stays inactive in the new group, and if an
+    /// active itinerary override gives this kind zero share, the membership
+    /// becomes active when the override is cleared or replaced. A population
+    /// group has no inactive members, so adding someone to it activates them.
     fn add_setting_member<S: SettingKind>(
         &mut self,
         group: SettingGroupId<S>,
@@ -874,7 +876,6 @@ pub trait SettingsExt:
             }
             return;
         }
-        store.set_inactive(person, setting, false);
         if member.group != group.index {
             if member.group != NO_GROUP {
                 store.deactivate(person, setting);
@@ -1280,12 +1281,48 @@ mod tests {
             Some(people[2])
         );
 
+        // Adding them to the group again does not undo the deactivation.
         context.add_setting_member(home, people[1]);
+        assert_eq!(
+            context.current_setting_multiplier::<Setting>(people[0]),
+            1.0
+        );
+
+        context.activate_setting_member(people[1], HOME);
         assert_eq!(
             context.current_setting_multiplier::<Setting>(people[0]),
             2.0
         );
         assert_eq!(context.max_setting_multiplier::<Setting>(people[0]), 2.0);
+    }
+
+    #[test]
+    fn a_deactivated_member_stays_inactive_when_moved_to_another_group() {
+        let (mut context, people) = context_with_work_alpha(4, 1.0);
+        let first_workplace = context.create_setting_group(WORK);
+        let second_workplace = context.create_setting_group(WORK);
+        context.add_setting_member(first_workplace, people[0]);
+        context.add_setting_member(first_workplace, people[1]);
+        context.add_setting_member(second_workplace, people[2]);
+        context.add_setting_member(second_workplace, people[3]);
+
+        context.deactivate_setting_member(people[0], WORK);
+        context.add_setting_member(second_workplace, people[0]);
+        assert_eq!(context.setting_group(people[0], WORK), None);
+        assert_eq!(context.setting_multiplier(people[2], WORK), 1.0);
+        assert_eq!(
+            context.setting_group_members(second_workplace),
+            vec![people[2], people[3]]
+        );
+
+        // Activating puts them in the group they were moved to.
+        context.activate_setting_member(people[0], WORK);
+        assert_eq!(
+            context.setting_group(people[0], WORK),
+            Some(second_workplace)
+        );
+        assert_eq!(context.setting_multiplier(people[2], WORK), 2.0);
+        assert_eq!(context.setting_multiplier(people[1], WORK), 0.0);
     }
 
     #[test]
@@ -1968,5 +2005,45 @@ mod tests {
     fn a_run_time_kind_cannot_reuse_a_declared_name() {
         let mut context = Context::new();
         context.add_setting_kind::<Place>("office", 1.0);
+    }
+
+    #[test]
+    fn a_run_time_kind_added_after_members_exist_works_beside_declared_kinds() {
+        let mut context = Context::new();
+        context.init_random(7);
+        let people: Vec<PersonId> = (0..4)
+            .map(|_| context.add_entity(Person).unwrap())
+            .collect();
+        context.set_setting_alpha(Place::House, 1.0);
+        let house = context.create_setting_group(Place::House);
+        for &person in &people {
+            context.add_setting_member(house, person);
+        }
+
+        // Added after members exist, so every membership record is widened.
+        let church = context.add_setting_kind::<Place>("church", 1.0);
+        let congregation = context.setting_group_for_key(church, "St Mary");
+        context.add_setting_member(congregation, people[0]);
+        context.add_setting_member(congregation, people[1]);
+        context.set_itinerary_assignment(Itinerary::new([(Place::House, 0.5), (church, 0.5)]));
+
+        assert_eq!(context.setting_group(people[3], Place::House), Some(house));
+        assert_eq!(context.setting_multiplier(people[0], Place::House), 3.0);
+        assert_eq!(context.setting_multiplier(people[0], church), 1.0);
+        assert_eq!(context.setting_multiplier(people[2], church), 0.0);
+        assert_eq!(context.current_setting_multiplier::<Place>(people[0]), 2.0);
+        // Someone with no church spends that share at home.
+        assert_eq!(context.current_setting_multiplier::<Place>(people[2]), 3.0);
+        assert_eq!(context.max_setting_multiplier::<Place>(people[0]), 3.0);
+        assert_eq!(
+            context.sample_setting_contact(people[0], church),
+            Some(people[1])
+        );
+
+        context.deactivate_setting_member(people[1], church);
+        assert_eq!(context.setting_multiplier(people[0], church), 0.0);
+        assert_eq!(context.setting_multiplier(people[0], Place::House), 3.0);
+        context.activate_setting_member(people[1], church);
+        assert_eq!(context.setting_multiplier(people[0], church), 1.0);
     }
 }

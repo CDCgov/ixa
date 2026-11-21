@@ -1406,11 +1406,82 @@ fn a_scheduled_modifier_is_removed_at_its_end_after_infectiousness_ran_out() {
         1.0,
         Some(5.0),
     );
+    for (time, expected) in [(2.0, 0.25), (4.0, 0.25), (6.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
     context.execute();
-    assert_eq!(
-        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
-        1.0
+}
+
+#[test]
+fn scheduled_modifiers_do_not_keep_the_simulation_running() {
+    struct Antiviral;
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 1, 1.0, 3.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        person,
+        0.25,
+        1.0,
+        Some(400.0),
     );
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.5,
+        14.0,
+        Some(730.0),
+    );
+    context.add_plan(2.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            0.25
+        );
+    });
+    context.execute();
+    assert_eq!(context.get_current_time(), 2.0);
+}
+
+#[test]
+fn people_infected_before_the_loop_is_set_up_still_transmit() {
+    let (mut context, _) = sir_context(42, 500, 1.0, 5.0);
+    TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
+    TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+    context.execute();
+    assert!(sir_infected_count(&context) > 400);
+}
+
+#[test]
+fn setting_up_the_loop_twice_changes_nothing() {
+    let outbreak = |setups: usize| {
+        let (mut context, _) = sir_context(42, 500, 0.4, 5.0);
+        for _ in 0..setups {
+            TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+        }
+        TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
+        // A second setup after infections does not restart their loops either.
+        if setups > 1 {
+            TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
+        }
+        context.execute();
+        (sir_infected_count(&context), context.get_current_time())
+    };
+    assert_eq!(outbreak(1), outbreak(2));
+}
+
+#[test]
+#[should_panic(expected = "cannot be loaded once anyone is infected")]
+fn loading_the_rate_library_after_an_infection_panics() {
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0], ());
+    InfectionManager::<Sir>::load_infectiousness_rate_library(&mut context, vec![]);
 }
 
 #[test]

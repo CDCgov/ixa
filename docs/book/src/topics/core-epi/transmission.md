@@ -113,8 +113,10 @@ This is always safe to call and is a no-op for uninfected people. Call it when:
 
 - a contact restriction ends, or anything else in your `contact_multiplier` or
   forecast increases;
-- you use [settings](settings.md) without `max_setting_multiplier` and a person's itinerary or
-  group membership changes;
+- you use [settings](settings.md) without `max_setting_multiplier` and a
+  person's itinerary or group membership changes: reforecast that person and,
+  when they join or become active in a group, its current members
+  (`setting_group_members`), whose multipliers rise too;
 - you use `max_setting_multiplier` and groups gain new members:
   - a person joins a group: reforecast that person;
   - a group exceeds its previous maximum size: reforecast its current members

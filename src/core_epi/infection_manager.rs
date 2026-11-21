@@ -400,6 +400,8 @@ struct InfectionState<E: Entity, D> {
     susceptibility_modifiers: EntityMap<E, Modifiers<E, D>>,
     /// Number of modifiers scheduled so far, which numbers the next one.
     schedule_count: u32,
+    /// Whether `setup_transmission_loop` has run.
+    loop_started: bool,
     population_modifiers: Vec<PopulationModifier<E, ()>>,
     population_susceptibility_modifiers: Vec<PopulationModifier<E, D>>,
     /// Upper bound on the product of the population infectiousness
@@ -416,6 +418,7 @@ impl<E: Entity, D> Default for InfectionState<E, D> {
             modifiers: EntityMap::new(),
             susceptibility_modifiers: EntityMap::new(),
             schedule_count: 0,
+            loop_started: false,
             population_modifiers: Vec::new(),
             population_susceptibility_modifiers: Vec::new(),
             population_bound: 1.0,
@@ -498,6 +501,22 @@ where
             .get(person)?
             .forecast_generation,
     )
+}
+
+/// Record that the transmission loop is set up. Returns everyone infected
+/// before that, whose loops have not started; `None` if it was set up already.
+pub(super) fn start_transmission_loop<M: 'static, C: InfectionManager<M>>(
+    context: &mut C,
+) -> Option<Vec<EntityId<C::Entity>>>
+where
+    Context: InfectionManager<M, Entity = C::Entity>,
+{
+    let state = state_mut::<M, _>(context);
+    if state.loop_started {
+        return None;
+    }
+    state.loop_started = true;
+    Some(state.assigned.iter().map(|(person, _)| person).collect())
 }
 
 /// Supersede `person`'s pending proposal, returning the new live forecast;
@@ -662,9 +681,18 @@ where
     ) -> RateAssignment;
 
     /// Load the shared rate functions that [`RateAssignment::Library`] indexes
-    /// into. Call once at setup, before anyone is infected.
+    /// into. Call at setup, before anyone is infected.
+    ///
+    /// # Panics
+    ///
+    /// If anyone has been infected, since their index may no longer fit.
     fn load_infectiousness_rate_library(&mut self, rate_fns: Vec<AnyInfectionRate>) {
-        state_mut::<M, _>(self).library = rate_fns;
+        let state = state_mut::<M, _>(self);
+        assert!(
+            state.assigned.is_empty(),
+            "the infectiousness rate library cannot be loaded once anyone is infected"
+        );
+        state.library = rate_fns;
     }
 
     /// Draw and store `person`'s rate function, starting now, and emit
@@ -954,7 +982,8 @@ where
     /// given, remove it at `end`. It belongs to this infection: a reinfection
     /// drops it, and it multiplies with a modifier `K` set on the person. One
     /// scheduled `K` is active at a time: where two overlap, the later call's
-    /// applies and the earlier one does not resume after it.
+    /// applies and the earlier one does not resume after it. The start and
+    /// end do not keep the simulation running on their own.
     /// No-op if `person` was never infected.
     ///
     /// # Panics
@@ -978,7 +1007,7 @@ where
         let scope = Scope::Scheduled { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
         Modifiers::add_pending(&mut state.modifiers, person, key, schedule);
-        self.add_plan(start, move |ctx| {
+        self.add_passive_plan(start, move |ctx| {
             let state = state_mut::<M, _>(ctx);
             let cancelled = !Modifiers::take_pending(&mut state.modifiers, person, key, schedule);
             if cancelled || Modifiers::has_later_schedule(&state.modifiers, person, key, schedule) {
@@ -998,7 +1027,7 @@ where
         });
         if let Some(end) = end {
             // Gone already if a reinfection or a later schedule replaced it.
-            self.add_plan(end, move |ctx| {
+            self.add_passive_plan(end, move |ctx| {
                 retain_infectiousness_factors::<M, _>(ctx, person, |modifier| {
                     modifier.key != key || modifier.scope != scope
                 });
@@ -1136,7 +1165,8 @@ where
     /// Set susceptibility modifier `K` on `person` at time `start` and, if
     /// given, remove it at `end`. It multiplies with a modifier `K` set on the
     /// person. One scheduled `K` is active at a time: where two overlap, the
-    /// later call's applies and the earlier one does not resume after it.
+    /// later call's applies and the earlier one does not resume after it. The
+    /// start and end do not keep the simulation running on their own.
     ///
     /// # Panics
     ///
@@ -1156,7 +1186,7 @@ where
         let scope = Scope::Scheduled { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
         Modifiers::add_pending(&mut state.susceptibility_modifiers, person, key, schedule);
-        self.add_plan(start, move |ctx| {
+        self.add_passive_plan(start, move |ctx| {
             let modifiers = &mut state_mut::<M, _>(ctx).susceptibility_modifiers;
             let cancelled = !Modifiers::take_pending(modifiers, person, key, schedule);
             if cancelled || Modifiers::has_later_schedule(modifiers, person, key, schedule) {
@@ -1166,7 +1196,7 @@ where
         });
         if let Some(end) = end {
             // Gone already if a later schedule replaced it or it was removed.
-            self.add_plan(end, move |ctx| {
+            self.add_passive_plan(end, move |ctx| {
                 let state = state_mut::<M, _>(ctx);
                 Modifiers::retain(&mut state.susceptibility_modifiers, person, |modifier| {
                     modifier.key != key || modifier.scope != scope

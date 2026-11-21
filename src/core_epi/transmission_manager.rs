@@ -1,7 +1,7 @@
 use rand_distr::Exp;
 
 use crate::core_epi::infection_manager::{
-    advance_forecast_generation, forecast_generation, InfectionManager,
+    advance_forecast_generation, forecast_generation, start_transmission_loop, InfectionManager,
     InfectiousnessAssignedEvent, ModifierBoundRaisedEvent,
 };
 use crate::core_epi::rate::InvertibleRate;
@@ -182,8 +182,12 @@ where
     }
 
     /// Start each person's transmission loop when they are assigned a rate
-    /// function. Call once at setup, before anyone is infected.
+    /// function, and now for anyone already infected. Call at setup; a second
+    /// call does nothing.
     fn setup_transmission_loop(&mut self) {
+        let Some(already_infected) = start_transmission_loop::<M, _>(self) else {
+            return;
+        };
         // A reforecast, so it supersedes anything already pending.
         self.subscribe_to_event(|context, event: InfectiousnessAssignedEvent<M>| {
             TransmissionManager::<M>::reforecast_transmission(context, event.person);
@@ -193,6 +197,10 @@ where
                 TransmissionManager::<M>::reforecast_transmission(context, event.person);
             },
         );
+        // They were assigned before the subscription, so nothing started them.
+        for person in already_infected {
+            self.reforecast_transmission(person);
+        }
     }
 
     /// Drop `person`'s pending proposal and forecast again from now. Call it
