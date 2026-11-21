@@ -21,11 +21,16 @@ const DEFERRED_CHECK_LENGTH: usize = 32;
 
 pub(super) struct LayerStorage<E: Entity, D> {
     lists: Vec<Vec<Edge<E, D>>>,
+    /// The total length of `lists`, kept in step by everything that adds or removes an edge.
+    edge_count: usize,
 }
 
 impl<E: Entity, D> Default for LayerStorage<E, D> {
     fn default() -> Self {
-        Self { lists: Vec::new() }
+        Self {
+            lists: Vec::new(),
+            edge_count: 0,
+        }
     }
 }
 
@@ -43,6 +48,12 @@ impl<E: Entity, D> LayerStorage<E, D> {
     /// Appends `edge` to the list of `from` without the uniqueness check. The caller
     /// must have checked.
     pub fn push_unchecked(&mut self, from: EntityId<E>, edge: Edge<E, D>) {
+        self.append(from, edge);
+        self.edge_count += 1;
+    }
+
+    /// Appends `edge` to the list of `from` and leaves `edge_count` to the caller.
+    fn append(&mut self, from: EntityId<E>, edge: Edge<E, D>) {
         let index = from.0;
         if index >= self.lists.len() {
             self.lists.resize_with(index + 1, Vec::new);
@@ -75,6 +86,7 @@ impl<E: Entity, D> LayerStorage<E, D> {
 
     /// Swap-removes the edge at `pos`, a position from [`position`](Self::position).
     pub fn remove_at(&mut self, from: EntityId<E>, pos: usize) -> Edge<E, D> {
+        self.edge_count -= 1;
         self.lists[from.0].swap_remove(pos)
     }
 
@@ -94,6 +106,19 @@ impl<E: Entity, D> LayerStorage<E, D> {
         self.lists.get(from.0).map_or(&[], Vec::as_slice)
     }
 
+    /// The number of edges, counting each direction.
+    pub fn edge_count(&self) -> usize {
+        self.edge_count
+    }
+
+    /// Every edge with its source, by source id and then in list order.
+    pub fn iter(&self) -> impl Iterator<Item = (EntityId<E>, &Edge<E, D>)> {
+        self.lists.iter().enumerate().flat_map(|(index, list)| {
+            let source = EntityId::new(index);
+            list.iter().map(move |edge| (source, edge))
+        })
+    }
+
     /// Entities among ids `0..population` with exactly `degree` outgoing edges.
     pub fn find_entities_by_degree(&self, degree: usize, population: usize) -> Vec<EntityId<E>> {
         (0..population)
@@ -107,13 +132,20 @@ impl<E: Entity, D> LayerStorage<E, D> {
     /// at least one.
     pub fn degree_distribution(&self, population: usize) -> Vec<usize> {
         let mut distribution = vec![0];
-        for id in 0..population {
-            let degree = self.get_edges(EntityId::new(id)).len();
+        let mut connected = 0;
+        for list in self.lists.iter().take(population) {
+            let degree = list.len();
+            // Entities without edges are counted by subtraction: most of a sparse layer.
+            if degree == 0 {
+                continue;
+            }
+            connected += 1;
             if degree >= distribution.len() {
                 distribution.resize(degree + 1, 0);
             }
             distribution[degree] += 1;
         }
+        distribution[0] = population - connected;
         distribution
     }
 
@@ -123,6 +155,7 @@ impl<E: Entity, D> LayerStorage<E, D> {
         for list in &mut self.lists {
             list.clear();
         }
+        self.edge_count = 0;
     }
 }
 
@@ -149,7 +182,7 @@ impl<E: Entity, D> Batch<'_, E, D> {
         } else {
             self.unchecked.push(from.0);
         }
-        self.storage.push_unchecked(from, edge);
+        self.storage.append(from, edge);
         self.appended.push(from.0);
         Ok(())
     }
@@ -165,6 +198,8 @@ impl<E: Entity, D> Batch<'_, E, D> {
                 return Err(IxaError::EdgeAlreadyExists);
             }
         }
+        // Counted once here, not per edge: nothing can read the count during a batch.
+        self.storage.edge_count += self.appended.len();
         self.appended.clear();
         Ok(())
     }
@@ -275,6 +310,52 @@ mod tests {
         assert!(add_to_hub(&mut storage, &[degree * 2 + 1]));
         assert!(add_to_hub(&mut storage, &many_new));
         assert_eq!(storage.get_edges(PersonId::new(0)).len(), degree * 2 + 1);
+    }
+
+    #[test]
+    fn edge_count_matches_the_lists_through_mixed_changes() {
+        let mut storage: LayerStorage<Person, ()> = LayerStorage::default();
+        let population = 40;
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut next = |bound: usize| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            (state >> 33) as usize % bound
+        };
+        for step in 0..5_000 {
+            let from = PersonId::new(next(population));
+            let to = next(population);
+            match next(10) {
+                0..=4 => {
+                    let _ = storage.add_edge(from, edge(to));
+                }
+                5..=6 => {
+                    let _ = storage.remove_edge(from, PersonId::new(to));
+                }
+                7..=8 => {
+                    // A batch of a few edges, some of which repeat and roll it back.
+                    let mut batch = storage.batch(4);
+                    let mut accepted = true;
+                    for _ in 0..4 {
+                        let neighbor = next(population);
+                        accepted = accepted && batch.push(from, edge(neighbor)).is_ok();
+                    }
+                    if accepted {
+                        let _ = batch.commit();
+                    }
+                }
+                _ => {
+                    if step % 500 == 0 {
+                        storage.clear();
+                    }
+                }
+            }
+            let total: usize = storage.lists.iter().map(Vec::len).sum();
+            assert_eq!(storage.edge_count(), total);
+            assert_eq!(storage.iter().count(), total);
+        }
+        assert!(storage.edge_count() > 0);
     }
 
     #[test]

@@ -87,11 +87,50 @@ for &layer in Contact::ALL {
 
 context.get_edge(Contact::Household, p1, p2); // Option<&Edge>
 context.get_degree(Contact::Household, p1);
+context.get_edge_count(Contact::Household);      // edges in the layer, each direction counted
 context.degree_distribution(Contact::Household); // counts[d] = people with degree d
 ```
 
 Edges come back in insertion order. `remove_edge` swaps the last edge into the
 gap, so order is only stable while no edge is removed.
+
+### A whole layer
+
+`get_layer` returns a view of one layer. It has the layer's edge count, an
+iterator over every edge with its source, and the same per-entity reads as the
+context. The view finds the layer once, so a loop over many people is faster
+through it than through the context.
+
+```rust
+let partnerships = context.get_layer(Contact::Household);
+
+partnerships.edge_count();    // same as context.get_edge_count(..)
+partnerships.get_degree(p1);
+partnerships.get_edges(p1);   // &[Edge]
+
+// Every edge in the layer, by source id.
+for (source, edge) in partnerships.iter() {
+    // source: PersonId, edge.neighbor: PersonId, edge.data: f64
+}
+```
+
+An edge added with `add_edge_bidi` is stored once in each direction, so it
+appears twice in `iter` and counts twice in `edge_count`. Entity ids are
+ordered, which picks out one direction of each pair:
+
+```rust
+let ended: Vec<(PersonId, PersonId)> = context
+    .get_layer(Contact::Household)
+    .iter()
+    .filter(|(source, edge)| *source < edge.neighbor && edge.data < threshold)
+    .map(|(source, edge)| (source, edge.neighbor))
+    .collect();
+for (a, b) in ended {
+    let _ = context.remove_edge_bidi(Contact::Household, a, b);
+}
+```
+
+The view borrows the context, so collect what to change before changing it.
 
 ## Sampling a contact
 

@@ -103,7 +103,7 @@ pub mod global_properties;
 pub use global_properties::{ContextGlobalPropertiesExt, GlobalProperty};
 
 pub mod network;
-pub use network::{ContextNetworkExt, Edge, Network};
+pub use network::{ContextNetworkExt, Edge, LayerView, Network};
 
 pub mod macros;
 
