@@ -26,6 +26,12 @@
 //! }
 //! assert_eq!(total_rate, 1.5);
 //!
+//! // A view of one layer: its edge count and every edge with its source.
+//! let household = context.get_layer(Contact::Household);
+//! assert_eq!(household.edge_count(), 2);
+//! let pairs = household.iter().filter(|(source, edge)| *source < edge.neighbor);
+//! assert_eq!(pairs.count(), 1);
+//!
 //! context.clear_layer(Contact::School);
 //! assert_eq!(context.get_degree(Contact::School, p1), 0);
 //! assert_eq!(context.get_degree(Contact::Household, p2), 1);
@@ -35,6 +41,7 @@ pub mod edge;
 mod network_store;
 mod registry;
 mod storage;
+mod view;
 
 use std::any::Any;
 use std::cell::OnceCell;
@@ -49,6 +56,7 @@ pub use registry::{
     EdgeDataProbe, FloatEdgeData,
 };
 use storage::LayerStorage;
+pub use view::LayerView;
 
 use crate::context::Context;
 use crate::entity::entity_store::get_registered_entity_count;
@@ -386,6 +394,19 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     /// Removes every edge in `layer`.
     fn clear_layer<N: Network>(&mut self, layer: N) {
         self.get_data_mut(NetworkPlugin).layer_mut(layer).clear();
+    }
+
+    /// A read-only view of `layer`: its edge count, every edge, and the per-entity reads
+    /// without looking the layer up on each call.
+    #[must_use]
+    fn get_layer<N: Network>(&self, layer: N) -> LayerView<'_, N> {
+        LayerView::new(self.get_data(NetworkPlugin).layer(layer))
+    }
+
+    /// The number of edges in `layer`, counting each direction.
+    #[must_use]
+    fn get_edge_count<N: Network>(&self, layer: N) -> usize {
+        self.get_data(NetworkPlugin).layer(layer).edge_count()
     }
 
     /// The edge in `layer` from `from` to `to`, if any.
@@ -1202,6 +1223,127 @@ mod test_api {
             .unwrap();
         assert_eq!(context.degree_distribution(Contact::School), vec![1, 1, 1]);
         assert_eq!(context.degree_distribution(Contact::Household), vec![3]);
+    }
+
+    #[test]
+    fn edge_count_follows_every_change() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let school = Contact::School;
+        assert_eq!(context.get_edge_count(school), 0);
+
+        context.add_edge(school, person1, person2, 1.0).unwrap();
+        context
+            .add_edge_bidi(school, person2, person3, 1.0)
+            .unwrap();
+        assert_eq!(context.get_edge_count(school), 3);
+
+        // Rejected changes and changes to an edge's data leave the count alone.
+        assert!(context.add_edge(school, person1, person2, 1.0).is_err());
+        assert!(context
+            .add_edge_bidi(school, person3, person2, 1.0)
+            .is_err());
+        let rejected_batch = [(person3, person1, 1.0), (person1, person2, 1.0)];
+        assert!(context.add_edges(school, rejected_batch).is_err());
+        assert!(context
+            .update_edge(school, person1, person2, |rate| *rate = 0.5)
+            .unwrap());
+        let previous = context.add_or_update_edge(school, person1, person2, 0.25);
+        assert_eq!(previous.unwrap(), Some(0.5));
+        assert_eq!(context.get_edge_count(school), 3);
+
+        assert_eq!(
+            context
+                .add_or_update_edge(school, person3, person1, 1.0)
+                .unwrap(),
+            None
+        );
+        context
+            .add_edges(school, [(person1, person3, 1.0)])
+            .unwrap();
+        assert_eq!(context.get_edge_count(school), 5);
+
+        assert!(context.remove_edge(school, person1, person2).is_some());
+        assert!(context.remove_edge(school, person1, person2).is_none());
+        assert!(context.remove_edge_bidi(school, person2, person3).is_some());
+        assert_eq!(context.get_edge_count(school), 2);
+        assert_eq!(context.get_edge_count(Contact::Household), 0);
+
+        context.clear_layer(school);
+        assert_eq!(context.get_edge_count(school), 0);
+    }
+
+    #[test]
+    fn layer_view() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let person4 = context.add_entity(with!(Person, Age(4))).unwrap();
+        context
+            .add_edges_bidi(
+                Contact::School,
+                [(person3, person1, 0.5), (person1, person2, 0.25)],
+            )
+            .unwrap();
+        context
+            .add_edge(Contact::School, person2, person3, 1.0)
+            .unwrap();
+
+        let layer = context.get_layer(Contact::School);
+        assert_eq!(layer.edge_count(), 5);
+        assert_eq!(layer.get_degree(person1), 2);
+        assert_eq!(layer.get_degree(person4), 0);
+        assert_eq!(
+            layer.get_edges(person1),
+            context.get_edges(Contact::School, person1)
+        );
+        assert_eq!(layer.get_edge(person2, person3).unwrap().data, 1.0);
+        assert!(layer.get_edge(person3, person2).is_none());
+
+        // Every edge, by source id and then in the order it was added.
+        let edges: Vec<(PersonId, PersonId, f64)> = layer
+            .iter()
+            .map(|(source, edge)| (source, edge.neighbor, edge.data))
+            .collect();
+        assert_eq!(
+            edges,
+            vec![
+                (person1, person3, 0.5),
+                (person1, person2, 0.25),
+                (person2, person1, 0.25),
+                (person2, person3, 1.0),
+                (person3, person1, 0.5),
+            ]
+        );
+
+        // Ids are ordered, so one direction of each pair can be picked out.
+        let lower_to_higher = layer
+            .iter()
+            .filter(|(source, edge)| *source < edge.neighbor)
+            .count();
+        assert_eq!(lower_to_higher, 3);
+
+        assert_eq!(context.get_layer(Contact::Household).edge_count(), 0);
+        assert_eq!(context.get_layer(Contact::Household).iter().count(), 0);
+    }
+
+    #[test]
+    fn degree_distribution_counts_entities_without_edges() {
+        let mut context = Context::new();
+        let people: Vec<PersonId> = (0..10)
+            .map(|_| context.add_entity(with!(Person, Age(0))).unwrap())
+            .collect();
+        // Only people in the middle of the id range have edges.
+        context
+            .add_edges_bidi(
+                Contact::School,
+                [(people[3], people[4], 1.0), (people[4], people[6], 1.0)],
+            )
+            .unwrap();
+        assert_eq!(context.degree_distribution(Contact::School), vec![7, 2, 1]);
+        assert!(context
+            .remove_edge_bidi(Contact::School, people[4], people[6])
+            .is_some());
+        assert_eq!(context.degree_distribution(Contact::School), vec![8, 2]);
     }
 
     #[test]

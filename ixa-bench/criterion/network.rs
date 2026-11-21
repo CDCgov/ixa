@@ -115,6 +115,29 @@ fn bench_network(c: &mut Criterion) {
         });
     });
 
+    group.bench_function("layer_view_iterate_100k", |b| {
+        b.iter(|| {
+            let mut total = 0.0;
+            for &layer in Contact::ALL {
+                for (_, edge) in context.get_layer(layer).iter() {
+                    total += edge.data;
+                }
+            }
+            black_box(total)
+        });
+    });
+
+    group.bench_function("layer_view_degree_100k", |b| {
+        b.iter(|| {
+            let layer = context.get_layer(Contact::Community);
+            let mut total = 0;
+            for &person in &people {
+                total += layer.get_degree(person);
+            }
+            black_box(total)
+        });
+    });
+
     group.bench_function("get_edge_hit_100k", |b| {
         b.iter(|| {
             let mut hits = 0;

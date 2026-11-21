@@ -19,6 +19,7 @@ Right now an `Entity` type is just a zero-sized marker type. The static data ass
 */
 
 use std::any::TypeId;
+use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -42,6 +43,19 @@ impl<E: Entity> PartialEq for EntityId<E> {
     }
 }
 impl<E: Entity> Eq for EntityId<E> {}
+
+// Ordered by id, so ids of entities created earlier compare less.
+impl<E: Entity> PartialOrd for EntityId<E> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<E: Entity> Ord for EntityId<E> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
 
 // Otherwise the compiler isn't smart enough to know `EntityId<E>` is always `Clone`
 impl<E: Entity> Clone for EntityId<E> {
@@ -215,6 +229,25 @@ mod tests {
     use crate::define_entity;
 
     define_entity!(DummyEntity);
+
+    #[test]
+    fn entity_id_orders_by_id() {
+        let mut ids = vec![
+            DummyEntityId::new(5),
+            DummyEntityId::new(1),
+            DummyEntityId::new(3),
+        ];
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec![
+                DummyEntityId::new(1),
+                DummyEntityId::new(3),
+                DummyEntityId::new(5)
+            ]
+        );
+        assert!(DummyEntityId::new(1) < DummyEntityId::new(2));
+    }
 
     #[test]
     fn entity_id_debug_display() {
