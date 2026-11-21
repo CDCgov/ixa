@@ -34,9 +34,14 @@ context.remove_population_infectiousness_modifier(ventilation);
 ```
 
 `modifier_kinds()` lists the kinds added at run time and `modifier_name(kind)`
-gives the name of one. Their names are unique within a context; declared kinds
-have no name to collide with. A kind is not tied to infectiousness or
-susceptibility: the same kind can key one modifier of each.
+gives the name of one. Their names are shared by the whole context and adding
+a name twice panics, so add each kind in one place and look it up elsewhere
+with `modifier_kind_by_name`. Declared kinds have no name to collide with.
+
+A kind keys each sort of modifier separately: one kind can have an
+infectiousness and a susceptibility modifier, and on each side a person's own
+modifier and a [population modifier](#population-modifiers). All of them
+multiply, and each is removed by its own `remove_` call.
 
 ## Setting a modifier
 

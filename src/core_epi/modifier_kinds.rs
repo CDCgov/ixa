@@ -7,11 +7,31 @@ use crate::{define_data_plugin, Context, ContextBase};
 /// What keys a modifier: a type declared with
 /// [`define_modifier!`](crate::define_modifier), or a [`ModifierId`] added at
 /// run time.
+///
+/// A declared kind is identified by its type, so an implementation written by
+/// hand must be on a type with no data. One with several values would make
+/// them all the same modifier, and does not compile:
+///
+/// ```compile_fail
+/// use ixa::core_epi::ModifierKind;
+///
+/// #[derive(Clone, Copy)]
+/// enum Intervention {
+///     Mask,
+///     Ventilation,
+/// }
+/// impl ModifierKind for Intervention {}
+/// let key = Intervention::Mask.key();
+/// ```
 pub trait ModifierKind: Copy + 'static {
-    /// One key per type unless overridden, so every value of a declared kind
-    /// is the same modifier.
     #[doc(hidden)]
     fn key(self) -> ModifierKey {
+        const {
+            assert!(
+                std::mem::size_of::<Self>() == 0,
+                "a modifier kind must be a type with no data: declare one with define_modifier!"
+            );
+        }
         ModifierKey(Key::Declared(TypeId::of::<Self>()))
     }
 }
@@ -32,13 +52,17 @@ enum Key {
 /// module can declare its own.
 ///
 /// ```
-/// ixa::define_modifier!(pub Mask);
+/// ixa::define_modifier!(
+///     /// Wearing a mask.
+///     pub Mask
+/// );
 /// let kind = Mask;
 /// ```
 #[macro_export]
 macro_rules! define_modifier {
-    ($vis:vis $name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    ($(#[$attribute:meta])* $vis:vis $name:ident) => {
+        $(#[$attribute])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         $vis struct $name;
 
         impl $crate::core_epi::ModifierKind for $name {}
@@ -47,7 +71,9 @@ macro_rules! define_modifier {
 
 /// A modifier kind added at run time with
 /// [`add_modifier_kind`](ModifiersExt::add_modifier_kind), e.g. for an
-/// intervention named in a parameters file.
+/// intervention named in a parameters file. It belongs to the context that
+/// made it: on another context it is whichever kind was added in the same
+/// position there, so do not keep one across runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ModifierId(u32);
 
@@ -78,13 +104,15 @@ pub trait ModifiersExt: ContextBase {
     ///
     /// # Panics
     ///
-    /// If the name is taken.
+    /// If the name is taken: names are shared by the whole context, so add
+    /// each kind in one place and look it up elsewhere with
+    /// [`modifier_kind_by_name`](Self::modifier_kind_by_name).
     fn add_modifier_kind(&mut self, name: &str) -> ModifierId {
-        let names = self.get_data_mut(ModifierKindsPlugin);
         assert!(
-            names.iter().all(|existing| existing != name),
+            self.modifier_kind_by_name(name).is_none(),
             "modifier kind {name} already exists"
         );
+        let names = self.get_data_mut(ModifierKindsPlugin);
         let id = ModifierId(u32::try_from(names.len()).expect("too many modifier kinds"));
         names.push(name.to_string());
         id
@@ -106,8 +134,16 @@ pub trait ModifiersExt: ContextBase {
     }
 
     /// The name `modifier` was added with.
+    ///
+    /// # Panics
+    ///
+    /// If `modifier` is from another context and this one has no kind in
+    /// its position.
     fn modifier_name(&self, modifier: ModifierId) -> &str {
-        &self.get_data(ModifierKindsPlugin)[modifier.0 as usize]
+        match self.get_data(ModifierKindsPlugin).get(modifier.0 as usize) {
+            Some(name) => name,
+            None => panic!("{modifier:?} was not added to this context"),
+        }
     }
 }
 

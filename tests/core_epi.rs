@@ -2529,3 +2529,35 @@ fn adding_a_modifier_kind_with_a_taken_name_panics() {
     let _ = context.add_modifier_kind("ventilation");
     let _ = context.add_modifier_kind("ventilation");
 }
+
+#[test]
+#[should_panic(expected = "was not added to this context")]
+fn naming_a_modifier_kind_from_another_context_panics() {
+    let mut other = Context::new();
+    let kind = other.add_modifier_kind("ventilation");
+    let context = Context::new();
+    let _ = context.modifier_name(kind);
+}
+
+#[test]
+fn a_person_and_the_population_can_each_have_a_modifier_of_one_kind() {
+    define_modifier!(Masking);
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    InfectionManager::<Sir>::set_population_infectiousness_modifier(
+        &mut context,
+        Masking,
+        |_context, _person| 0.5,
+    );
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Masking, 0.5);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        0.25
+    );
+    InfectionManager::<Sir>::remove_infectiousness_modifier(&mut context, person, Masking);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        0.5
+    );
+}

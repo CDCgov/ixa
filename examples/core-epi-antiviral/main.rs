@@ -17,8 +17,10 @@ define_entity!(Person);
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
 
-// Identifies the antiviral's infectiousness modifier.
-define_modifier!(Antiviral);
+define_modifier!(
+    /// Identifies the antiviral's infectiousness modifier.
+    Antiviral
+);
 
 define_rng!(InfectiousPeriodRng);
 define_rng!(AntiviralRng);
