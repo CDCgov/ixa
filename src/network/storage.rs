@@ -19,10 +19,20 @@ use crate::IxaError;
 /// but cheaper than the bookkeeping of a deferred check while the list is short.
 const DEFERRED_CHECK_LENGTH: usize = 32;
 
+/// `clear` visits only the lists filled since the last clear while there are at most one
+/// per this many lists (or `FILLED_LOG_MINIMUM`, if larger). The cap bounds the log at a
+/// byte per list; past it `clear` walks every list, which is then only a few times slower.
+const FILLED_LOG_SHARE: usize = 8;
+const FILLED_LOG_MINIMUM: usize = 1024;
+
 pub(super) struct LayerStorage<E: Entity, D> {
     lists: Vec<Vec<Edge<E, D>>>,
     /// The total length of `lists`, kept in step by everything that adds or removes an edge.
     edge_count: usize,
+    /// The index of every list that went from empty to holding an edge since the last
+    /// `clear`, so every list with an edge is in it (as may be emptied ones, and repeats).
+    /// `None` once there are too many to be worth keeping, until the next `clear`.
+    filled: Option<Vec<usize>>,
 }
 
 impl<E: Entity, D> Default for LayerStorage<E, D> {
@@ -30,6 +40,7 @@ impl<E: Entity, D> Default for LayerStorage<E, D> {
         Self {
             lists: Vec::new(),
             edge_count: 0,
+            filled: Some(Vec::new()),
         }
     }
 }
@@ -58,7 +69,22 @@ impl<E: Entity, D> LayerStorage<E, D> {
         if index >= self.lists.len() {
             self.lists.resize_with(index + 1, Vec::new);
         }
+        if self.lists[index].is_empty() {
+            self.note_filled(index);
+        }
         self.lists[index].push(edge);
+    }
+
+    fn note_filled(&mut self, index: usize) {
+        let Some(filled) = &mut self.filled else {
+            return;
+        };
+        let limit = FILLED_LOG_MINIMUM.max(self.lists.len() / FILLED_LOG_SHARE);
+        if filled.len() < limit {
+            filled.push(index);
+        } else {
+            self.filled = None;
+        }
     }
 
     /// Starts a batch expected to append about `expected` edges.
@@ -82,6 +108,11 @@ impl<E: Entity, D> LayerStorage<E, D> {
         self.get_edges(from)
             .iter()
             .position(|edge| edge.neighbor == to)
+    }
+
+    /// The data of the edge at `pos`, a position from [`position`](Self::position).
+    pub fn data_at_mut(&mut self, from: EntityId<E>, pos: usize) -> &mut D {
+        &mut self.lists[from.0][pos].data
     }
 
     /// Swap-removes the edge at `pos`, a position from [`position`](Self::position).
@@ -152,8 +183,16 @@ impl<E: Entity, D> LayerStorage<E, D> {
     /// Removes every edge. Each entity's list keeps its allocation, so re-adding the
     /// edges later (reopening a closed setting) does not reallocate.
     pub fn clear(&mut self) {
-        for list in &mut self.lists {
-            list.clear();
+        if let Some(filled) = &mut self.filled {
+            for &index in filled.iter() {
+                self.lists[index].clear();
+            }
+            filled.clear();
+        } else {
+            for list in &mut self.lists {
+                list.clear();
+            }
+            self.filled = Some(Vec::new());
         }
         self.edge_count = 0;
     }
@@ -242,7 +281,7 @@ fn tail_has_duplicate<E: Entity, D>(
 
 #[cfg(test)]
 mod tests {
-    use super::{LayerStorage, DEFERRED_CHECK_LENGTH};
+    use super::{LayerStorage, DEFERRED_CHECK_LENGTH, FILLED_LOG_MINIMUM};
     use crate::network::edge::Edge;
     use crate::{define_entity, IxaError};
 
@@ -348,6 +387,7 @@ mod tests {
                 _ => {
                     if step % 500 == 0 {
                         storage.clear();
+                        assert!(storage.lists.iter().all(Vec::is_empty));
                     }
                 }
             }
@@ -356,6 +396,68 @@ mod tests {
             assert_eq!(storage.iter().count(), total);
         }
         assert!(storage.edge_count() > 0);
+    }
+
+    fn assert_cleared(storage: &LayerStorage<Person, ()>) {
+        assert!(storage.lists.iter().all(Vec::is_empty));
+        assert_eq!(storage.edge_count(), 0);
+        assert_eq!(storage.filled, Some(Vec::new()));
+    }
+
+    #[test]
+    fn clear_visits_only_the_filled_lists_of_a_sparse_layer() {
+        let mut storage: LayerStorage<Person, ()> = LayerStorage::default();
+        let population = FILLED_LOG_MINIMUM * 100;
+        storage.push_unchecked(PersonId::new(population - 1), edge(0));
+        storage.push_unchecked(PersonId::new(7), edge(8));
+        storage.push_unchecked(PersonId::new(7), edge(9));
+        // Emptied and filled again: listed twice, which only costs a second visit.
+        storage.remove_edge(PersonId::new(population - 1), PersonId::new(0));
+        storage.push_unchecked(PersonId::new(population - 1), edge(1));
+        assert_eq!(
+            storage.filled,
+            Some(vec![population - 1, 7, population - 1])
+        );
+
+        storage.clear();
+        assert_cleared(&storage);
+    }
+
+    #[test]
+    fn clear_walks_every_list_once_too_many_were_filled() {
+        let mut storage: LayerStorage<Person, ()> = LayerStorage::default();
+        let population = FILLED_LOG_MINIMUM * 4;
+        for index in 0..population {
+            storage.push_unchecked(PersonId::new(index), edge(index + 1));
+        }
+        assert_eq!(storage.filled, None);
+        // An edge added while fills are not tracked must still be cleared.
+        storage.push_unchecked(PersonId::new(population + 5), edge(0));
+
+        storage.clear();
+        assert_cleared(&storage);
+
+        // Tracking starts again after the clear.
+        storage.push_unchecked(PersonId::new(3), edge(4));
+        assert_eq!(storage.filled, Some(vec![3]));
+        storage.clear();
+        assert_cleared(&storage);
+    }
+
+    #[test]
+    fn clear_removes_the_edges_of_a_committed_and_a_dropped_batch() {
+        let mut storage: LayerStorage<Person, ()> = LayerStorage::default();
+        let mut batch = storage.batch(2);
+        batch.push(PersonId::new(2), edge(3)).unwrap();
+        batch.push(PersonId::new(4), edge(5)).unwrap();
+        batch.commit().unwrap();
+        let mut batch = storage.batch(1);
+        batch.push(PersonId::new(6), edge(7)).unwrap();
+        drop(batch);
+        assert_eq!(storage.edge_count(), 2);
+
+        storage.clear();
+        assert_cleared(&storage);
     }
 
     #[test]

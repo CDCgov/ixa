@@ -12,6 +12,7 @@ const PEOPLE: usize = 100_000;
 const HOUSEHOLD_SIZE: usize = 4;
 const COMMUNITY_DEGREE: usize = 10;
 const CLIQUE_SIZE: usize = 1000;
+const REDRAWN_TIES: usize = 125;
 
 fn build(context: &mut Context) -> Vec<PersonId> {
     let people: Vec<PersonId> = (0..PEOPLE)
@@ -97,6 +98,24 @@ fn bench_network(c: &mut Criterion) {
             },
             BatchSize::PerIteration,
         );
+    });
+
+    // A few one-time ties among many people, cleared and redrawn: the clear should cost
+    // what the layer holds, not a visit to every person.
+    group.bench_function("clear_and_redraw_125_ties_100k", |b| {
+        let (mut context, people) = setup();
+        context.clear_layer(Contact::Community);
+        let stride = PEOPLE / (2 * REDRAWN_TIES);
+        b.iter(|| {
+            context.clear_layer(Contact::Community);
+            for tie in 0..REDRAWN_TIES {
+                let first = people[2 * tie * stride];
+                let second = people[(2 * tie + 1) * stride];
+                context
+                    .add_edge_bidi(Contact::Community, first, second, 0.1)
+                    .unwrap();
+            }
+        });
     });
 
     let (context, people) = setup();
