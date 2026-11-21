@@ -43,27 +43,22 @@ mod registry;
 mod storage;
 mod view;
 
-use std::any::Any;
-use std::cell::OnceCell;
-
 pub use edge::Edge;
-use network_store::{typed_slot, typed_slot_mut, NetworkStore};
+use network_store::{NetworkPlugin, NetworkStorage};
 use rand::Rng;
 pub use registry::Network;
 #[doc(hidden)]
 pub use registry::{
-    get_registered_network_count, initialize_network_id, register_network, AnyEdgeData,
-    EdgeDataProbe, FloatEdgeData,
+    initialize_network_id, register_network, AnyEdgeData, EdgeDataProbe, FloatEdgeData,
 };
 use storage::LayerStorage;
 pub use view::LayerView;
 
 use crate::context::Context;
-use crate::entity::entity_store::get_registered_entity_count;
 use crate::entity::{ContextEntitiesExt, Entity, EntityId};
 use crate::error::IxaError;
 use crate::random::{ContextRandomExt, RngId};
-use crate::{define_data_plugin, ContextBase};
+use crate::ContextBase;
 
 /// The two directions removed by `remove_edge_bidi`: `(a -> b, b -> a)`.
 type EdgePair<N> = (
@@ -75,60 +70,20 @@ type EdgePair<N> = (
 /// direction that was added.
 type PreviousData<N> = (Option<<N as Network>::Data>, Option<<N as Network>::Data>);
 
-pub(crate) struct NetworkData {
-    /// A `NetworkStore<E>` per `Entity::id()`.
-    network_stores: Vec<OnceCell<Box<dyn Any>>>,
-}
-
 // The rules are enforced here; `ContextNetworkExt` documents them.
-impl NetworkData {
-    fn new() -> Self {
-        let network_stores = (0..get_registered_entity_count())
-            .map(|_| OnceCell::new())
-            .collect();
-        NetworkData { network_stores }
-    }
-
-    fn store<E: Entity>(&self) -> &NetworkStore<E> {
-        typed_slot(
-            &self.network_stores,
-            E::id(),
-            NetworkStore::<E>::new_boxed,
-            E::name,
-        )
-    }
-
-    fn store_mut<E: Entity>(&mut self) -> &mut NetworkStore<E> {
-        typed_slot_mut(
-            &mut self.network_stores,
-            E::id(),
-            NetworkStore::<E>::new_boxed,
-            E::name,
-        )
-    }
-
-    fn layer<N: Network>(&self, layer: N) -> &LayerStorage<N::Entity, N::Data> {
-        self.store::<N::Entity>().get::<N>().layer(layer)
-    }
-
-    fn layer_mut<N: Network>(&mut self, layer: N) -> &mut LayerStorage<N::Entity, N::Data> {
-        self.store_mut::<N::Entity>()
-            .get_mut::<N>()
-            .layer_mut(layer)
-    }
-
-    fn add_edge<N: Network>(
+impl<N: Network> NetworkStorage<N> {
+    fn add_edge(
         &mut self,
         layer: N,
         from: EntityId<N::Entity>,
         to: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<(), IxaError> {
-        Self::insert_edge::<N>(self.layer_mut(layer), from, to, data)
+        Self::insert_edge(self.layer_mut(layer), from, to, data)
     }
 
     /// The single-direction rules, on a layer resolved by the caller.
-    fn insert_edge<N: Network>(
+    fn insert_edge(
         storage: &mut LayerStorage<N::Entity, N::Data>,
         from: EntityId<N::Entity>,
         to: EntityId<N::Entity>,
@@ -141,7 +96,7 @@ impl NetworkData {
         storage.add_edge(from, Edge { neighbor: to, data })
     }
 
-    fn add_edges<N: Network>(
+    fn add_edges(
         &mut self,
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
@@ -158,7 +113,7 @@ impl NetworkData {
         batch.commit()
     }
 
-    fn add_edges_bidi<N: Network>(
+    fn add_edges_bidi(
         &mut self,
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
@@ -184,7 +139,7 @@ impl NetworkData {
         batch.commit()
     }
 
-    fn add_edge_bidi<N: Network>(
+    fn add_edge_bidi(
         &mut self,
         layer: N,
         a: EntityId<N::Entity>,
@@ -210,7 +165,7 @@ impl NetworkData {
         Ok(())
     }
 
-    fn remove_edge_bidi<N: Network>(
+    fn remove_edge_bidi(
         &mut self,
         layer: N,
         a: EntityId<N::Entity>,
@@ -226,7 +181,7 @@ impl NetworkData {
         ))
     }
 
-    fn update_edge<N: Network>(
+    fn update_edge(
         &mut self,
         layer: N,
         from: EntityId<N::Entity>,
@@ -244,7 +199,7 @@ impl NetworkData {
         Ok(true)
     }
 
-    fn add_or_update_edge<N: Network>(
+    fn add_or_update_edge(
         &mut self,
         layer: N,
         from: EntityId<N::Entity>,
@@ -258,7 +213,7 @@ impl NetworkData {
         Ok(Self::upsert(self.layer_mut(layer), from, to, data))
     }
 
-    fn add_or_update_edge_bidi<N: Network>(
+    fn add_or_update_edge_bidi(
         &mut self,
         layer: N,
         a: EntityId<N::Entity>,
@@ -290,7 +245,7 @@ impl NetworkData {
         None
     }
 
-    fn update_edge_bidi<N: Network>(
+    fn update_edge_bidi(
         &mut self,
         layer: N,
         a: EntityId<N::Entity>,
@@ -312,8 +267,6 @@ impl NetworkData {
     }
 }
 
-define_data_plugin!(NetworkPlugin, NetworkData, NetworkData::new());
-
 // Public API.
 pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
     /// Adds an edge in `layer` from `from` to `to` carrying `data`.
@@ -329,7 +282,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         to: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<(), IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .add_edge(layer, from, to, data)
     }
 
@@ -345,7 +298,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         b: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<(), IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .add_edge_bidi(layer, a, b, data)
     }
 
@@ -361,7 +314,8 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
     ) -> Result<(), IxaError> {
-        self.get_data_mut(NetworkPlugin).add_edges(layer, edges)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
+            .add_edges(layer, edges)
     }
 
     /// Adds an edge in each direction for every `(a, b, data)` in `layer`, or none of
@@ -374,7 +328,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
     ) -> Result<(), IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .add_edges_bidi(layer, edges)
     }
 
@@ -387,7 +341,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         from: EntityId<N::Entity>,
         to: EntityId<N::Entity>,
     ) -> Option<Edge<N::Entity, N::Data>> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .layer_mut(layer)
             .remove_edge(from, to)
     }
@@ -401,7 +355,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         a: EntityId<N::Entity>,
         b: EntityId<N::Entity>,
     ) -> Option<EdgePair<N>> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .remove_edge_bidi(layer, a, b)
     }
 
@@ -421,7 +375,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         to: EntityId<N::Entity>,
         update: impl FnOnce(&mut N::Data),
     ) -> Result<bool, IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .update_edge(layer, from, to, update)
     }
 
@@ -439,7 +393,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         to: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<Option<N::Data>, IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .add_or_update_edge(layer, from, to, data)
     }
 
@@ -458,7 +412,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         b: EntityId<N::Entity>,
         update: impl FnOnce(&mut N::Data),
     ) -> Result<bool, IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .update_edge_bidi(layer, a, b, update)
     }
 
@@ -475,26 +429,30 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         b: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<PreviousData<N>, IxaError> {
-        self.get_data_mut(NetworkPlugin)
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
             .add_or_update_edge_bidi(layer, a, b, data)
     }
 
     /// Removes every edge in `layer`.
     fn clear_layer<N: Network>(&mut self, layer: N) {
-        self.get_data_mut(NetworkPlugin).layer_mut(layer).clear();
+        self.get_data_mut(NetworkPlugin::<N>::KEY)
+            .layer_mut(layer)
+            .clear();
     }
 
     /// A read-only view of `layer`: its edge count, every edge, and the per-entity reads
     /// without looking the layer up on each call.
     #[must_use]
     fn get_layer<N: Network>(&self, layer: N) -> LayerView<'_, N> {
-        LayerView::new(self.get_data(NetworkPlugin).layer(layer))
+        LayerView::new(self.get_data(NetworkPlugin::<N>::KEY).layer(layer))
     }
 
     /// The number of edges in `layer`, counting each direction.
     #[must_use]
     fn get_edge_count<N: Network>(&self, layer: N) -> usize {
-        self.get_data(NetworkPlugin).layer(layer).edge_count()
+        self.get_data(NetworkPlugin::<N>::KEY)
+            .layer(layer)
+            .edge_count()
     }
 
     /// The edge in `layer` from `from` to `to`, if any.
@@ -505,7 +463,9 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         from: EntityId<N::Entity>,
         to: EntityId<N::Entity>,
     ) -> Option<&Edge<N::Entity, N::Data>> {
-        self.get_data(NetworkPlugin).layer(layer).get_edge(from, to)
+        self.get_data(NetworkPlugin::<N>::KEY)
+            .layer(layer)
+            .get_edge(from, to)
     }
 
     /// The outgoing edges of `entity` in `layer`, in insertion order unless an edge was
@@ -516,7 +476,9 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         layer: N,
         entity: EntityId<N::Entity>,
     ) -> &[Edge<N::Entity, N::Data>] {
-        self.get_data(NetworkPlugin).layer(layer).get_edges(entity)
+        self.get_data(NetworkPlugin::<N>::KEY)
+            .layer(layer)
+            .get_edges(entity)
     }
 
     /// The number of outgoing edges of `entity` in `layer`.
@@ -533,7 +495,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         degree: usize,
     ) -> Vec<EntityId<N::Entity>> {
         let population = self.get_entity_count::<N::Entity>();
-        self.get_data(NetworkPlugin)
+        self.get_data(NetworkPlugin::<N>::KEY)
             .layer(layer)
             .find_entities_by_degree(degree, population)
     }
@@ -544,7 +506,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     #[must_use]
     fn degree_distribution<N: Network>(&self, layer: N) -> Vec<usize> {
         let population = self.get_entity_count::<N::Entity>();
-        self.get_data(NetworkPlugin)
+        self.get_data(NetworkPlugin::<N>::KEY)
             .layer(layer)
             .degree_distribution(population)
     }
@@ -633,7 +595,7 @@ impl ContextNetworkExt for Context {}
 #[cfg(test)]
 // Tests for the inner core.
 mod test_inner {
-    use super::NetworkData;
+    use super::NetworkStorage;
     use crate::error::IxaError;
     use crate::network::edge::Edge;
     use crate::{define_entity, define_network};
@@ -641,13 +603,12 @@ mod test_inner {
     define_entity!(Person);
 
     define_network!(Weighted, Person, data = f32);
-    define_network!(Plain, Person);
     define_network!(Flagged, Person, data = bool);
     define_network!(Layered, Person, layers = { Home, School }, data = f32);
 
     #[test]
     fn add_edge_with_data() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Flagged, PersonId::new(1), PersonId::new(2), true)
             .unwrap();
         let edge = nd
@@ -659,7 +620,7 @@ mod test_inner {
 
     #[test]
     fn add_two_edges() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(2), 0.01)
             .unwrap();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(3), 0.02)
@@ -681,7 +642,7 @@ mod test_inner {
 
     #[test]
     fn layers_are_independent() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Layered::Home, PersonId::new(1), PersonId::new(2), 0.01)
             .unwrap();
         nd.add_edge(Layered::School, PersonId::new(1), PersonId::new(2), 0.02)
@@ -712,7 +673,7 @@ mod test_inner {
 
     #[test]
     fn clear_keeps_degree_zero_reporting() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Layered::School, PersonId::new(1), PersonId::new(2), 1.0)
             .unwrap();
         nd.layer_mut(Layered::School).clear();
@@ -723,20 +684,8 @@ mod test_inner {
     }
 
     #[test]
-    fn networks_are_independent() {
-        let mut nd = NetworkData::new();
-        nd.add_edge(Weighted, PersonId::new(1), PersonId::new(2), 0.01)
-            .unwrap();
-        nd.add_edge(Flagged, PersonId::new(1), PersonId::new(2), false)
-            .unwrap();
-        assert_eq!(nd.layer(Weighted).get_edges(PersonId::new(1)).len(), 1);
-        assert_eq!(nd.layer(Flagged).get_edges(PersonId::new(1)).len(), 1);
-        assert!(nd.layer(Plain).get_edges(PersonId::new(1)).is_empty());
-    }
-
-    #[test]
     fn add_edge_twice_fails() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(2), 0.01)
             .unwrap();
         assert!(matches!(
@@ -747,7 +696,7 @@ mod test_inner {
 
     #[test]
     fn add_remove_add_edge() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(2), 0.01)
             .unwrap();
         let removed = nd
@@ -772,7 +721,7 @@ mod test_inner {
 
     #[test]
     fn remove_nonexistent_edge() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         assert!(nd
             .layer_mut(Weighted)
             .remove_edge(PersonId::new(1), PersonId::new(2))
@@ -781,7 +730,7 @@ mod test_inner {
 
     #[test]
     fn add_edge_to_self() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         assert!(matches!(
             nd.add_edge(Weighted, PersonId::new(1), PersonId::new(1), 0.01),
             Err(IxaError::CannotMakeEdgeToSelf)
@@ -790,7 +739,7 @@ mod test_inner {
 
     #[test]
     fn find_people_by_degree() {
-        let mut nd = NetworkData::new();
+        let mut nd = NetworkStorage::new();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(2), 0.0)
             .unwrap();
         nd.add_edge(Weighted, PersonId::new(1), PersonId::new(3), 0.0)
@@ -844,6 +793,21 @@ mod test_api {
         assert_eq!(Tagged::ALL, &[Tagged]);
         assert_eq!(Tagged.layer(), 0);
         assert_eq!(<Contact as Network>::name(), "Contact");
+    }
+
+    #[test]
+    fn networks_are_independent() {
+        let (mut context, person1, person2) = setup();
+        context
+            .add_edge(Contact::School, person1, person2, 0.5)
+            .unwrap();
+        context.add_edge(Tagged, person1, person2, 7).unwrap();
+        assert_eq!(context.get_degree(Contact::School, person1), 1);
+        assert_eq!(context.get_edge(Tagged, person1, person2).unwrap().data, 7);
+
+        context.clear_layer(Contact::School);
+        assert_eq!(context.get_degree(Contact::School, person1), 0);
+        assert_eq!(context.get_degree(Tagged, person1), 1);
     }
 
     #[test]
@@ -1023,7 +987,7 @@ mod test_api {
             }
             fn id() -> usize {
                 static INDEX: AtomicUsize = AtomicUsize::new(usize::MAX);
-                initialize_network_id::<Person>(&INDEX)
+                initialize_network_id::<Self>(&INDEX)
             }
         }
 
@@ -1045,7 +1009,7 @@ mod test_api {
             }
             fn id() -> usize {
                 static INDEX: AtomicUsize = AtomicUsize::new(usize::MAX);
-                initialize_network_id::<Person>(&INDEX)
+                initialize_network_id::<Self>(&INDEX)
             }
         }
     }

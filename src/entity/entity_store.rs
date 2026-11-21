@@ -24,11 +24,6 @@ use crate::entity::schema_registry::SCHEMA_REGISTRY;
 use crate::entity::{Entity, EntityId, PopulationIterator};
 use crate::{HashSet, IxaError};
 
-/// Returns the number of registered entity types.
-pub(crate) fn get_registered_entity_count() -> usize {
-    SCHEMA_REGISTRY.entity_registrations().len()
-}
-
 /// This type encodes the entity-level metadata for whole-population persistence.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct EntityManifest {
