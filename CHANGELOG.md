@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/CDCgov/ixa/compare/ixa-v4.1.0...ixa-v5.0.0) - 2026-11-21
+
+### Added
+
+- add core_epi module ([#1104](https://github.com/CDCgov/ixa/pull/1104))
+- return None from sample_edge_weighted when no weight is positive ([#1103](https://github.com/CDCgov/ixa/pull/1103))
+- add add_or_update_edge to set or insert an edge's data ([#1102](https://github.com/CDCgov/ixa/pull/1102))
+- [**breaking**] derive EqHash for properties so floats need no wrapper type ([#1098](https://github.com/CDCgov/ixa/pull/1098))
+- layered networks with define_network replacing edge types  ([#1089](https://github.com/CDCgov/ixa/pull/1089))
+
+### Other
+
+- order plans by a single integer key ([#1105](https://github.com/CDCgov/ixa/pull/1105))
+- bump release-plz/action from 0.5.142 to 0.5.148 ([#1095](https://github.com/CDCgov/ixa/pull/1095))
+- bump rust-toolchain from 1.98.1 to 1.99.1 ([#1088](https://github.com/CDCgov/ixa/pull/1088))
+- *(deps-dev)* bump follow-redirects ([#1090](https://github.com/CDCgov/ixa/pull/1090))
+- *(deps)* bump qs in /integration-tests/ixa-wasm-tests ([#1097](https://github.com/CDCgov/ixa/pull/1097))
+
 ### Migrating
 
 - **Float properties work without a wrapper.** `define_property!` and
