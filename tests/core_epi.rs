@@ -3,8 +3,8 @@
 use std::cell::Cell;
 
 use ixa::core_epi::{
-    ConstantRateFn, EmpiricalRateFn, InfectionManager, InvertibleRate, Itinerary, RateAssignment,
-    SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
+    ConstantRateFn, EmpiricalRateFn, InfectionManager, InvertibleRate, Itinerary, PastInfection,
+    RateAssignment, SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
 };
 use ixa::prelude::*;
 
@@ -2044,4 +2044,173 @@ fn step_up_empirical_rate_stays_under_forecast() {
         });
         context.execute();
     }
+}
+
+/// Immune to every variant ever had, read from the infection history.
+struct Recurrent;
+
+impl InfectionManager<Recurrent> for Context {
+    type Entity = Person;
+    type Details = Variant;
+
+    fn draw_infectiousness_rate_fn(
+        &mut self,
+        _person: PersonId,
+        variant: &Variant,
+    ) -> RateAssignment {
+        match variant {
+            Variant::Alpha => ConstantRateFn::new(0.6, ALPHA_DURATION).into(),
+            Variant::Beta => ConstantRateFn::new(0.75, BETA_DURATION).into(),
+        }
+    }
+
+    fn base_susceptibility(
+        &self,
+        person: PersonId,
+        _infector: Option<PersonId>,
+        variant: &Variant,
+    ) -> f64 {
+        let has_it =
+            InfectionManager::<Recurrent>::infection_details(self, person) == Some(variant);
+        let had_it = InfectionManager::<Recurrent>::past_infections(self, person)
+            .iter()
+            .any(|past| past.details == *variant);
+        if has_it || had_it {
+            0.0
+        } else {
+            1.0
+        }
+    }
+}
+
+impl TransmissionManager<Recurrent> for Context {}
+
+fn infect_at(context: &mut Context, time: f64, person: PersonId, variant: Variant) {
+    context.add_plan(time, move |ctx| {
+        InfectionManager::<Recurrent>::assign_infectiousness_rate_fn(ctx, person, variant);
+    });
+}
+
+#[test]
+fn past_infections_hold_what_reinfections_replaced() {
+    let (mut context, people) = strains_context(1, 3);
+    let (reinfected, infected_once, never_infected) = (people[0], people[1], people[2]);
+    infect_at(&mut context, 0.0, reinfected, Variant::Alpha);
+    infect_at(&mut context, 0.0, infected_once, Variant::Alpha);
+    // Replaces Alpha while it is still infectious.
+    infect_at(&mut context, 2.0, reinfected, Variant::Beta);
+    // Beta ran out at 2 + BETA_DURATION.
+    infect_at(&mut context, 10.0, reinfected, Variant::Alpha);
+    context.execute();
+
+    assert_eq!(
+        InfectionManager::<Recurrent>::past_infections(&context, reinfected),
+        [
+            PastInfection {
+                time: 0.0,
+                infectiousness_end: 2.0,
+                details: Variant::Alpha
+            },
+            PastInfection {
+                time: 2.0,
+                infectiousness_end: 2.0 + BETA_DURATION,
+                details: Variant::Beta
+            },
+        ]
+    );
+    assert_eq!(
+        InfectionManager::<Recurrent>::infection_time(&context, reinfected),
+        Some(10.0)
+    );
+    for (person, count) in [(reinfected, 3), (infected_once, 1), (never_infected, 0)] {
+        assert_eq!(
+            InfectionManager::<Recurrent>::infection_count(&context, person),
+            count
+        );
+    }
+    for person in [infected_once, never_infected] {
+        assert!(InfectionManager::<Recurrent>::past_infections(&context, person).is_empty());
+    }
+}
+
+#[test]
+fn susceptibility_can_depend_on_past_infections() {
+    let (mut context, people) = strains_context(1, 2);
+    let (had_both, had_beta) = (people[0], people[1]);
+    infect_at(&mut context, 0.0, had_both, Variant::Alpha);
+    infect_at(&mut context, 1.0, had_both, Variant::Beta);
+    infect_at(&mut context, 1.0, had_beta, Variant::Beta);
+    context.execute();
+
+    for (person, variant, expected) in [
+        (had_both, Variant::Alpha, 0.0),
+        (had_both, Variant::Beta, 0.0),
+        (had_beta, Variant::Alpha, 1.0),
+        (had_beta, Variant::Beta, 0.0),
+    ] {
+        assert_eq!(
+            InfectionManager::<Recurrent>::susceptibility(&context, person, None, &variant),
+            expected
+        );
+    }
+}
+
+#[test]
+fn a_reinfection_at_the_same_time_is_a_past_infection_of_no_length() {
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
+    assert_eq!(
+        InfectionManager::<Sir>::infection_count(&context, person),
+        0
+    );
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    assert_eq!(
+        InfectionManager::<Sir>::infection_count(&context, person),
+        2
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::past_infections(&context, person),
+        [PastInfection {
+            time: 0.0,
+            infectiousness_end: 0.0,
+            details: ()
+        }]
+    );
+}
+
+#[test]
+fn the_loop_keeps_the_infection_a_reinfection_replaces() {
+    const SECOND_WAVE: f64 = 200.0;
+    let (mut context, people) = strains_context(7, 500);
+    TransmissionManager::<Strains>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Strains>::seed_infections_with(&mut context, Person, 5, Variant::Alpha);
+    context.add_plan(SECOND_WAVE, |ctx| {
+        TransmissionManager::<Strains>::seed_infections_with(ctx, Person, 5, Variant::Beta);
+    });
+    context.execute();
+
+    let mut reinfected = 0;
+    for &person in &people {
+        let past = InfectionManager::<Strains>::past_infections(&context, person);
+        let infected = InfectionManager::<Strains>::infection_time(&context, person).is_some();
+        assert_eq!(
+            InfectionManager::<Strains>::infection_count(&context, person),
+            past.len() + usize::from(infected)
+        );
+        // Beta is the only variant that infects someone a second time.
+        if let [alpha] = past {
+            reinfected += 1;
+            assert_eq!(alpha.details, Variant::Alpha);
+            assert_eq!(alpha.infectiousness_end, alpha.time + ALPHA_DURATION);
+            assert!(alpha.infectiousness_end < SECOND_WAVE);
+            assert_eq!(
+                InfectionManager::<Strains>::infection_details(&context, person),
+                Some(&Variant::Beta)
+            );
+        } else {
+            assert!(past.is_empty());
+        }
+    }
+    assert!(reinfected > 100, "only {reinfected} people were reinfected");
 }

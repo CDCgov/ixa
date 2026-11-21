@@ -5,7 +5,7 @@ use crate::core_epi::rate::{AnyInfectionRate, InvertibleRate, TransformedInverti
 use crate::data_structures::entity_map::EntityMap;
 use crate::entity::{Entity, EntityId};
 use crate::prelude::*;
-use crate::{ContextBase, IxaEvent};
+use crate::{ContextBase, HashMap, IxaEvent};
 
 /// Which rate function a person was assigned: an index into the loaded
 /// library of shared curves, or one of their own.
@@ -29,6 +29,17 @@ impl<R: Into<AnyInfectionRate>> From<R> for RateAssignment {
     fn from(rate_fn: R) -> Self {
         Self::own(rate_fn)
     }
+}
+
+/// An infection that a reinfection replaced.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PastInfection<D> {
+    /// When it began.
+    pub time: f64,
+    /// When its infectiousness ended: when its rate function ran out, or at
+    /// the reinfection if that came first.
+    pub infectiousness_end: f64,
+    pub details: D,
 }
 
 /// Emitted when a person is assigned a rate function by model `M`, i.e.
@@ -313,6 +324,9 @@ impl<E: Entity, A: 'static> PopulationModifier<E, A> {
 struct InfectionState<E: Entity, D> {
     library: Vec<AnyInfectionRate>,
     assigned: EntityMap<E, Assigned<D>>,
+    /// The infections each reinfected person had before their current one,
+    /// oldest first.
+    past: HashMap<EntityId<E>, Vec<PastInfection<D>>>,
     /// Infectiousness modifiers. On the person, so they can be set before an
     /// infection and survive reinfection, except those scheduled for one
     /// infection.
@@ -333,6 +347,7 @@ impl<E: Entity, D> Default for InfectionState<E, D> {
         Self {
             library: Vec::new(),
             assigned: EntityMap::new(),
+            past: HashMap::default(),
             modifiers: EntityMap::new(),
             susceptibility_modifiers: EntityMap::new(),
             schedule_count: 0,
@@ -526,8 +541,9 @@ fn assert_end_not_before_start(start: f64, end: Option<f64>) {
     }
 }
 
-/// Which of `person`'s infections is current; `None` if never infected.
-fn infection_count<M: 'static, C: InfectionManager<M>>(
+/// Which of `person`'s infections is current, from zero; `None` if never
+/// infected.
+fn infection_index<M: 'static, C: InfectionManager<M>>(
     context: &C,
     person: EntityId<C::Entity>,
 ) -> Option<u32>
@@ -634,7 +650,8 @@ where
     }
 
     /// Draw and store `person`'s rate function, starting now, and emit
-    /// [`InfectiousnessAssignedEvent`]. A reinfection replaces the previous one.
+    /// [`InfectiousnessAssignedEvent`]. A reinfection replaces the previous
+    /// one, which moves to [`past_infections`](Self::past_infections).
     fn assign_infectiousness_rate_fn(
         &mut self,
         person: EntityId<Self::Entity>,
@@ -681,7 +698,7 @@ where
             modifier.scope.is_person()
         });
         let modifier_bound = Modifiers::bound(&state.modifiers, person);
-        state.assigned.insert(
+        let replaced = state.assigned.insert(
             person,
             Assigned {
                 rate,
@@ -692,6 +709,14 @@ where
                 forecast_generation,
             },
         );
+        if let Some(replaced) = replaced {
+            let ran_out = replaced.infection_time + state.rate_fn(&replaced).duration();
+            state.past.entry(person).or_default().push(PastInfection {
+                time: replaced.infection_time,
+                infectiousness_end: ran_out.min(infection_time),
+                details: replaced.details,
+            });
+        }
         self.emit_event(InfectiousnessAssignedEvent::<M> {
             person,
             model: PhantomData,
@@ -716,6 +741,18 @@ where
     fn infection_details(&self, person: EntityId<Self::Entity>) -> Option<&Self::Details> {
         let assigned = state::<M, _>(self)?.assigned.get(person)?;
         Some(&assigned.details)
+    }
+
+    /// How many times `person` has been infected.
+    fn infection_count(&self, person: EntityId<Self::Entity>) -> usize {
+        infection_index::<M, _>(self, person).map_or(0, |index| index as usize + 1)
+    }
+
+    /// The infections `person` had before their current one, oldest first.
+    fn past_infections(&self, person: EntityId<Self::Entity>) -> &[PastInfection<Self::Details>] {
+        state::<M, _>(self)
+            .and_then(|state| state.past.get(&person))
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Time since `person`'s rate function was assigned; `None` if it never was.
@@ -914,7 +951,7 @@ where
     ) {
         assert_valid_factor("infectiousness", factor);
         assert_end_not_before_start(start, end);
-        let Some(scheduled_for) = infection_count::<M, _>(self, person) else {
+        let Some(scheduled_for) = infection_index::<M, _>(self, person) else {
             return;
         };
         let state = state_mut::<M, _>(self);
@@ -922,7 +959,7 @@ where
         let scope = Scope::Infection { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
         self.add_plan(start, move |ctx| {
-            if infection_count::<M, _>(ctx, person) == Some(scheduled_for)
+            if infection_index::<M, _>(ctx, person) == Some(scheduled_for)
                 && InfectionManager::<M>::is_infectious(ctx, person)
                 && !has_later_schedule::<M, _>(ctx, person, TypeId::of::<K>(), schedule)
             {

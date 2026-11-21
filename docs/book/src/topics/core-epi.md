@@ -774,12 +774,45 @@ context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, _e
 For an infectiousness modifier, the infector's variant is
 `infection_details(person)`.
 
-`core_epi` stores only the current infection's details. That suffices above
-because `Escape` protects against both variants; if immunity depends on full
-infection history, record past infections in a property inside `on_infected`.
+`infection_details(person)` is the current infection only. That suffices above
+because `Escape` protects against both variants; if immunity depends on earlier
+infections too, read the [infection history](#infection-history).
 
 Model a more transmissible variant with a higher infectiousness rate function
 rather than a susceptibility above `1.0`.
+
+## Infection history
+
+A reinfection replaces a person's infection, and the replaced one is kept as a
+past infection. `infection_count(person)` is how many infections the person has
+had, and `past_infections(person)` lists the ones before the current one:
+
+```rust
+impl InfectionManager<Flu> for Context {
+    type Entity = Person;
+    type Details = Variant;
+
+    // Immune to every variant the person has had.
+    fn base_susceptibility(&self, person: PersonId, _infector: Option<PersonId>, variant: &Variant) -> f64 {
+        let has_it = self.infection_details(person) == Some(variant);
+        let had_it = self
+            .past_infections(person)
+            .iter()
+            .any(|past| past.details == *variant);
+        if has_it || had_it { 0.0 } else { 1.0 }
+    }
+
+    // ...
+}
+```
+
+The list is oldest first. Each `PastInfection` has its `time`, its `details` and
+its `infectiousness_end`: when its rate function ran out, or the time of the
+reinfection if that came first. The current infection is not in the list; read
+it with `infection_time(person)` and `infection_details(person)`.
+
+History costs nothing for a person infected once. Each reinfection adds one
+record, and records are never removed.
 
 ## More than one pathogen
 

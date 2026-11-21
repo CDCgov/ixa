@@ -21,7 +21,9 @@ pub mod settings;
 pub mod step_fn;
 pub mod transmission_manager;
 
-pub use infection_manager::{InfectionManager, InfectiousnessAssignedEvent, RateAssignment};
+pub use infection_manager::{
+    InfectionManager, InfectiousnessAssignedEvent, PastInfection, RateAssignment,
+};
 pub use rate::{
     AnyInfectionRate, ConstantRateFn, EmpiricalRateFn, InvertibleRate, TransformedInvertibleRateFn,
 };
