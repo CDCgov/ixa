@@ -5,8 +5,7 @@
 //! and prints both final sizes.
 mod parameters;
 
-use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
-use ixa::define_modifier;
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 use rand_distr::Exp;
 

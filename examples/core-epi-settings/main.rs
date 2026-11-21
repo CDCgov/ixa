@@ -11,10 +11,7 @@
 mod parameters;
 mod settings;
 
-use ixa::core_epi::{
-    ConstantRateFn, InfectionManager, RateAssignment, SettingKind, SettingsExt,
-    TransmissionManager, MAX_SETTINGS,
-};
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
 use rand_distr::Exp;

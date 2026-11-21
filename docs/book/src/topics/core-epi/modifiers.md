@@ -11,7 +11,7 @@ antiviral intervention example.
 below. Each module of a model can declare its own:
 
 ```rust
-use ixa::define_modifier;
+use ixa::core_epi::prelude::*;
 
 define_modifier!(pub Mask);
 ```
@@ -20,8 +20,6 @@ A kind can also be added at run time, for an intervention named in a parameters
 file. `add_modifier_kind` returns a `ModifierId`, which the same methods accept:
 
 ```rust
-use ixa::core_epi::ModifiersExt;
-
 // `interventions` holds a name and a factor each, e.g. ("ventilation", 0.8).
 for (name, factor) in interventions {
     let kind = context.add_modifier_kind(&name);
@@ -129,8 +127,6 @@ context.set_susceptibility_modifier_fn(person, Vaccine, |_context, _person, elap
 `StepFn` represents a piecewise-constant factor:
 
 ```rust
-use ixa::core_epi::StepFn;
-
 // 80% protection for 90 days, then 50%.
 let protection = StepFn::new(0.2).step_at(90.0, 0.5);
 context.set_susceptibility_modifier_fn(person, Vaccine, move |_context, _person, elapsed, _details| {

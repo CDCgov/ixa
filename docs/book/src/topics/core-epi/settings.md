@@ -12,8 +12,7 @@ The snippets use the `Person` entity and `Flu` marker from the
 the model names in code:
 
 ```rust
-use ixa::core_epi::{Itinerary, SettingsExt};
-use ixa::define_settings;
+use ixa::core_epi::prelude::*;
 
 define_settings!(pub Setting for Person {
     Household,

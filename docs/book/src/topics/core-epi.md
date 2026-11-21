@@ -5,7 +5,9 @@ models: infectiousness rate functions, a continuous-time transmission loop,
 modifiers, and contact settings.
 
 The module is gated behind the `core_epi` Cargo feature, which is enabled by
-default.
+default. `use ixa::core_epi::prelude::*;` brings in everything this section
+uses: the traits, the types and the `define_modifier!` and `define_settings!`
+macros.
 
 ## Basic usage
 
@@ -20,7 +22,7 @@ A model implements two traits on `Context` (`InfectionManager` and
 marker type lets you model a [second pathogen](#more-than-one-pathogen).
 
 ```rust
-use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 use rand_distr::Exp;
 

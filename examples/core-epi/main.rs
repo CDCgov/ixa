@@ -6,7 +6,7 @@
 //! workplaces.
 mod parameters;
 
-use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 use ixa::ExecutionPhase;
 use rand_distr::Exp;

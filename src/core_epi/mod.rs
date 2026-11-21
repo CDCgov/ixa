@@ -16,9 +16,13 @@
 //! A model plugs in by implementing [`InfectionManager`] and
 //! [`TransmissionManager`] on `Context`, parameterized by its own marker type
 //! and target entity (`type Entity = Person;`).
+//!
+//! `use ixa::core_epi::prelude::*;` brings in everything a model needs, the
+//! macros included.
 
 pub mod infection_manager;
 pub mod modifier_kinds;
+pub mod prelude;
 pub mod rate;
 pub mod settings;
 pub mod step_fn;

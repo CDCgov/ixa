@@ -3,8 +3,7 @@
 //! variant decides the rate function, how much a past infection protects and
 //! how well the vaccine works. An original variant spreads first; an escape
 //! variant is seeded once that wave is over and reinfects part of it.
-use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
-use ixa::define_modifier;
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 
 const SEED: u64 = 42;

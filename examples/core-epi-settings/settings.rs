@@ -3,8 +3,7 @@
 //! The community is the population group everyone is in.
 use std::path::Path;
 
-use ixa::core_epi::{Itinerary, SettingsExt};
-use ixa::define_settings;
+use ixa::core_epi::prelude::*;
 use ixa::prelude::*;
 
 use crate::parameters::ParametersExt;
