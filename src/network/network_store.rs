@@ -82,7 +82,7 @@ impl<E: Entity> NetworkStore<E> {
             &self.networks,
             N::id(),
             NetworkStorage::<N>::new_boxed,
-            N::name(),
+            N::name,
         )
     }
 
@@ -91,7 +91,7 @@ impl<E: Entity> NetworkStore<E> {
             &mut self.networks,
             N::id(),
             NetworkStorage::<N>::new_boxed,
-            N::name(),
+            N::name,
         )
     }
 }
@@ -105,36 +105,37 @@ fn not_registered(name: &str) -> String {
 }
 
 /// The slot at `index` of a registry-sized list of lazily built storages, initialized with
-/// `init` if empty and returned as a `T`. `name` is the network or entity type for panics.
-pub(super) fn typed_slot<'a, T: Any>(
-    slots: &'a [OnceCell<Box<dyn Any>>],
+/// `init` if empty and returned as a `T`. `name` gives the network or entity type for
+/// panics, and is only called there: it parses a type name, which costs more than the lookup.
+pub(super) fn typed_slot<T: Any>(
+    slots: &[OnceCell<Box<dyn Any>>],
     index: usize,
     init: fn() -> Box<dyn Any>,
-    name: &str,
-) -> &'a T {
+    name: fn() -> &'static str,
+) -> &T {
     slots
         .get(index)
-        .unwrap_or_else(|| panic!("{}", not_registered(name)))
+        .unwrap_or_else(|| panic!("{}", not_registered(name())))
         .get_or_init(init)
         .downcast_ref()
-        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {name}"))
+        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {}", name()))
 }
 
 /// Mutable twin of [`typed_slot`].
-pub(super) fn typed_slot_mut<'a, T: Any>(
-    slots: &'a mut [OnceCell<Box<dyn Any>>],
+pub(super) fn typed_slot_mut<T: Any>(
+    slots: &mut [OnceCell<Box<dyn Any>>],
     index: usize,
     init: fn() -> Box<dyn Any>,
-    name: &str,
-) -> &'a mut T {
+    name: fn() -> &'static str,
+) -> &mut T {
     let cell = slots
         .get_mut(index)
-        .unwrap_or_else(|| panic!("{}", not_registered(name)));
+        .unwrap_or_else(|| panic!("{}", not_registered(name())));
     if cell.get().is_none() {
         cell.set(init()).unwrap();
     }
     cell.get_mut()
         .unwrap()
         .downcast_mut()
-        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {name}"))
+        .unwrap_or_else(|| panic!("Ixa internal error: wrong storage type for {}", name()))
 }

@@ -82,7 +82,7 @@ impl NetworkData {
             &self.network_stores,
             E::id(),
             NetworkStore::<E>::new_boxed,
-            E::name(),
+            E::name,
         )
     }
 
@@ -91,7 +91,7 @@ impl NetworkData {
             &mut self.network_stores,
             E::id(),
             NetworkStore::<E>::new_boxed,
-            E::name(),
+            E::name,
         )
     }
 
