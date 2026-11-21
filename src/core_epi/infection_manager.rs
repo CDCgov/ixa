@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 
+use crate::core_epi::modifier_kinds::{ModifierKey, ModifierKind};
 use crate::core_epi::rate::{AnyInfectionRate, InvertibleRate, TransformedInvertibleRateFn};
 use crate::data_structures::entity_map::EntityMap;
 use crate::entity::{Entity, EntityId};
@@ -146,19 +147,19 @@ impl<E: Entity, A: 'static> Factor<E, A> {
 }
 
 struct Modifier<E: Entity, A> {
-    key: TypeId,
+    key: ModifierKey,
     scope: Scope,
     factor: Factor<E, A>,
 }
 
-/// Active modifiers on one person, keyed by modifier type. The product of the
+/// Active modifiers on one person, keyed by modifier kind. The product of the
 /// constant factors is cached, so a read with no function factors is one
 /// lookup; function factors are evaluated per read.
 struct Modifiers<E: Entity, A> {
     factors: Vec<Modifier<E, A>>,
     /// Schedules that have not started yet, as the key and the number of the
     /// call. Removing the key cancels them.
-    pending: Vec<(TypeId, u32)>,
+    pending: Vec<(ModifierKey, u32)>,
     /// Product of the constant factors.
     constant_product: f64,
     /// Product of the constant factors and the function factors' maxima.
@@ -211,7 +212,7 @@ impl<E: Entity, A> Modifiers<E, A> {
     fn set(
         map: &mut EntityMap<E, Self>,
         person: EntityId<E>,
-        key: TypeId,
+        key: ModifierKey,
         scope: Scope,
         factor: Factor<E, A>,
     ) {
@@ -240,7 +241,7 @@ impl<E: Entity, A> Modifiers<E, A> {
 
     /// Remove every modifier `key` on `person`, set or scheduled, and cancel
     /// its schedules that have not started.
-    fn remove_key(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: TypeId) {
+    fn remove_key(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: ModifierKey) {
         if let Some(modifiers) = map.get_mut(person) {
             modifiers.factors.retain(|modifier| modifier.key != key);
             modifiers
@@ -251,7 +252,12 @@ impl<E: Entity, A> Modifiers<E, A> {
     }
 
     /// Record that the schedule numbered `schedule` will start `key` later.
-    fn add_pending(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: TypeId, schedule: u32) {
+    fn add_pending(
+        map: &mut EntityMap<E, Self>,
+        person: EntityId<E>,
+        key: ModifierKey,
+        schedule: u32,
+    ) {
         Self::entry(map, person).pending.push((key, schedule));
     }
 
@@ -260,7 +266,7 @@ impl<E: Entity, A> Modifiers<E, A> {
     fn take_pending(
         map: &mut EntityMap<E, Self>,
         person: EntityId<E>,
-        key: TypeId,
+        key: ModifierKey,
         schedule: u32,
     ) -> bool {
         let Some(modifiers) = map.get_mut(person) else {
@@ -280,7 +286,7 @@ impl<E: Entity, A> Modifiers<E, A> {
     fn has_later_schedule(
         map: &EntityMap<E, Self>,
         person: EntityId<E>,
-        key: TypeId,
+        key: ModifierKey,
         schedule: u32,
     ) -> bool {
         let Some(modifiers) = map.get(person) else {
@@ -334,7 +340,7 @@ type PopulationModifierFn<E, A> = Box<dyn Fn(&Context, EntityId<E>, &A) -> f64>;
 
 /// A modifier on everyone.
 struct PopulationModifier<E: Entity, A> {
-    key: TypeId,
+    key: ModifierKey,
     f: PopulationModifierFn<E, A>,
     /// Declared upper bound on what `f` returns.
     max: f64,
@@ -345,7 +351,7 @@ impl<E: Entity, A: 'static> PopulationModifier<E, A> {
     /// `[0, max]`.
     fn checked(
         kind: &'static str,
-        key: TypeId,
+        key: ModifierKey,
         max: f64,
         f: impl Fn(&Context, EntityId<E>, &A) -> f64 + 'static,
     ) -> Self {
@@ -544,7 +550,7 @@ fn assert_valid_factor(kind: &str, factor: f64) {
 fn set_infectiousness_factor<M: 'static, C: InfectionManager<M>>(
     context: &mut C,
     person: EntityId<C::Entity>,
-    key: TypeId,
+    key: ModifierKey,
     scope: Scope,
     factor: Factor<C::Entity, ()>,
 ) where
@@ -877,20 +883,22 @@ where
 
     /// Scale everyone's infectiousness by a factor in `[0, 1]` computed at
     /// every read from the context and the person, e.g. from a property,
-    /// until modifier `K` is removed; setting `K` again replaces it. It
+    /// until `modifier` is removed; setting it again replaces it. It
     /// multiplies with each person's own modifiers.
-    fn set_population_infectiousness_modifier<K: 'static>(
+    fn set_population_infectiousness_modifier<K: ModifierKind>(
         &mut self,
+        modifier: K,
         f: impl Fn(&Context, EntityId<Self::Entity>) -> f64 + 'static,
     ) {
-        self.set_population_infectiousness_modifier_with_max::<K>(1.0, f);
+        self.set_population_infectiousness_modifier_with_max(modifier, 1.0, f);
     }
 
     /// As [`set_population_infectiousness_modifier`](Self::set_population_infectiousness_modifier)
     /// for a function returning values in `[0, max]`. Everyone is forecast
     /// at `max` throughout, so a loose `max` costs rejected proposals.
-    fn set_population_infectiousness_modifier_with_max<K: 'static>(
+    fn set_population_infectiousness_modifier_with_max<K: ModifierKind>(
         &mut self,
+        modifier: K,
         max: f64,
         f: impl Fn(&Context, EntityId<Self::Entity>) -> f64 + 'static,
     ) {
@@ -900,7 +908,7 @@ where
             &mut state.population_modifiers,
             PopulationModifier::checked(
                 "infectiousness",
-                TypeId::of::<K>(),
+                modifier.key(),
                 max,
                 move |context, person, _| f(context, person),
             ),
@@ -908,27 +916,29 @@ where
         refresh_population_bound::<M, _>(self);
     }
 
-    /// Remove population infectiousness modifier `K`, if set.
-    fn remove_population_infectiousness_modifier<K: 'static>(&mut self) {
+    /// Remove population infectiousness `modifier`, if set.
+    fn remove_population_infectiousness_modifier<K: ModifierKind>(&mut self, modifier: K) {
+        let key = modifier.key();
         state_mut::<M, _>(self)
             .population_modifiers
-            .retain(|modifier| modifier.key != TypeId::of::<K>());
+            .retain(|existing| existing.key != key);
         refresh_population_bound::<M, _>(self);
     }
 
     /// Scale `person`'s infectiousness by a finite, non-negative `factor`
-    /// until modifier `K` is removed; setting `K` again replaces it. It
+    /// until `modifier` is removed; setting it again replaces it. It
     /// belongs to the person, so it survives reinfection.
-    fn set_infectiousness_modifier<K: 'static>(
+    fn set_infectiousness_modifier<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         factor: f64,
     ) {
         assert_valid_factor("infectiousness", factor);
         set_infectiousness_factor::<M, _>(
             self,
             person,
-            TypeId::of::<K>(),
+            modifier.key(),
             Scope::Set,
             Factor::Constant(factor),
         );
@@ -937,20 +947,22 @@ where
     /// As [`set_infectiousness_modifier`](Self::set_infectiousness_modifier),
     /// with a factor in `[0, 1]` computed at every read from the context, the
     /// person and the time since it was set.
-    fn set_infectiousness_modifier_fn<K: 'static>(
+    fn set_infectiousness_modifier_fn<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
     ) {
-        self.set_infectiousness_modifier_fn_with_max::<K>(person, 1.0, f);
+        self.set_infectiousness_modifier_fn_with_max(person, modifier, 1.0, f);
     }
 
     /// As [`set_infectiousness_modifier_fn`](Self::set_infectiousness_modifier_fn)
     /// for a function returning values in `[0, max]`. The person is forecast
     /// at `max` throughout, so a loose `max` costs rejected proposals.
-    fn set_infectiousness_modifier_fn_with_max<K: 'static>(
+    fn set_infectiousness_modifier_fn_with_max<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         max: f64,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64) -> f64 + 'static,
     ) {
@@ -959,7 +971,7 @@ where
         set_infectiousness_factor::<M, _>(
             self,
             person,
-            TypeId::of::<K>(),
+            modifier.key(),
             Scope::Set,
             Factor::checked_fn(
                 "infectiousness",
@@ -970,28 +982,33 @@ where
         );
     }
 
-    /// Remove infectiousness modifier `K` from `person`, whether set or
+    /// Remove infectiousness `modifier` from `person`, whether set or
     /// scheduled, and cancel schedules of it that have not started.
-    fn remove_infectiousness_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
+    fn remove_infectiousness_modifier<K: ModifierKind>(
+        &mut self,
+        person: EntityId<Self::Entity>,
+        modifier: K,
+    ) {
         let state = state_mut::<M, _>(self);
-        Modifiers::remove_key(&mut state.modifiers, person, TypeId::of::<K>());
+        Modifiers::remove_key(&mut state.modifiers, person, modifier.key());
         refresh_modifier_bound::<M, _>(self, person);
     }
 
-    /// Set modifier `K` on `person`'s current infection at `start` and, if
+    /// Set `modifier` on `person`'s current infection at `start` and, if
     /// given, remove it at `end`. It belongs to this infection: a reinfection
-    /// drops it, and it multiplies with a modifier `K` set on the person. One
-    /// scheduled `K` is active at a time: where two overlap, the later call's
-    /// applies and the earlier one does not resume after it. The start and
+    /// drops it, and it multiplies with the same kind set on the person. One
+    /// schedule of a kind is active at a time: where two overlap, the later
+    /// call's applies and the earlier one does not resume after it. The start and
     /// end do not keep the simulation running on their own.
     /// No-op if `person` was never infected.
     ///
     /// # Panics
     ///
     /// If `end` is before `start`.
-    fn schedule_infectiousness_modifier<K: 'static>(
+    fn schedule_infectiousness_modifier<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         factor: f64,
         start: f64,
         end: Option<f64>,
@@ -1001,7 +1018,7 @@ where
         let Some(scheduled_for) = infection_index::<M, _>(self, person) else {
             return;
         };
-        let key = TypeId::of::<K>();
+        let key = modifier.key();
         let state = state_mut::<M, _>(self);
         let schedule = state.schedule_count;
         let scope = Scope::Scheduled { schedule };
@@ -1091,32 +1108,35 @@ where
 
     /// Scale everyone's susceptibility by a factor computed at every read
     /// from the context, the person and the details of the attempt, until
-    /// modifier `K` is removed; setting `K` again replaces it. It multiplies
+    /// `modifier` is removed; setting it again replaces it. It multiplies
     /// with each person's own modifiers.
-    fn set_population_susceptibility_modifier<K: 'static>(
+    fn set_population_susceptibility_modifier<K: ModifierKind>(
         &mut self,
+        modifier: K,
         f: impl Fn(&Context, EntityId<Self::Entity>, &Self::Details) -> f64 + 'static,
     ) {
         let state = state_mut::<M, _>(self);
         PopulationModifier::set(
             &mut state.population_susceptibility_modifiers,
             // No maximum: susceptibility has no forecast to bound.
-            PopulationModifier::checked("susceptibility", TypeId::of::<K>(), f64::INFINITY, f),
+            PopulationModifier::checked("susceptibility", modifier.key(), f64::INFINITY, f),
         );
     }
 
-    /// Remove population susceptibility modifier `K`, if set.
-    fn remove_population_susceptibility_modifier<K: 'static>(&mut self) {
+    /// Remove population susceptibility `modifier`, if set.
+    fn remove_population_susceptibility_modifier<K: ModifierKind>(&mut self, modifier: K) {
+        let key = modifier.key();
         state_mut::<M, _>(self)
             .population_susceptibility_modifiers
-            .retain(|modifier| modifier.key != TypeId::of::<K>());
+            .retain(|existing| existing.key != key);
     }
 
     /// Scale `person`'s susceptibility by a finite, non-negative `factor`
-    /// until modifier `K` is removed; setting `K` again replaces it.
-    fn set_susceptibility_modifier<K: 'static>(
+    /// until `modifier` is removed; setting it again replaces it.
+    fn set_susceptibility_modifier<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         factor: f64,
     ) {
         assert_valid_factor("susceptibility", factor);
@@ -1124,7 +1144,7 @@ where
         Modifiers::set(
             &mut state.susceptibility_modifiers,
             person,
-            TypeId::of::<K>(),
+            modifier.key(),
             Scope::Set,
             Factor::Constant(factor),
         );
@@ -1134,9 +1154,10 @@ where
     /// with a factor computed at every read from the context, the person,
     /// the time since it was set and the details of the attempt, so it can
     /// differ by variant.
-    fn set_susceptibility_modifier_fn<K: 'static>(
+    fn set_susceptibility_modifier_fn<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         f: impl Fn(&Context, EntityId<Self::Entity>, f64, &Self::Details) -> f64 + 'static,
     ) {
         let since = self.get_current_time();
@@ -1144,43 +1165,44 @@ where
         Modifiers::set(
             &mut state.susceptibility_modifiers,
             person,
-            TypeId::of::<K>(),
+            modifier.key(),
             Scope::Set,
             // No maximum: susceptibility has no forecast to bound.
             Factor::checked_fn("susceptibility", since, f64::INFINITY, f),
         );
     }
 
-    /// Remove susceptibility modifier `K` from `person`, whether set or
+    /// Remove susceptibility `modifier` from `person`, whether set or
     /// scheduled, and cancel schedules of it that have not started.
-    fn remove_susceptibility_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
+    fn remove_susceptibility_modifier<K: ModifierKind>(
+        &mut self,
+        person: EntityId<Self::Entity>,
+        modifier: K,
+    ) {
         let state = state_mut::<M, _>(self);
-        Modifiers::remove_key(
-            &mut state.susceptibility_modifiers,
-            person,
-            TypeId::of::<K>(),
-        );
+        Modifiers::remove_key(&mut state.susceptibility_modifiers, person, modifier.key());
     }
 
-    /// Set susceptibility modifier `K` on `person` at time `start` and, if
-    /// given, remove it at `end`. It multiplies with a modifier `K` set on the
-    /// person. One scheduled `K` is active at a time: where two overlap, the
+    /// Set susceptibility `modifier` on `person` at time `start` and, if
+    /// given, remove it at `end`. It multiplies with the same kind set on the
+    /// person. One schedule of a kind is active at a time: where two overlap, the
     /// later call's applies and the earlier one does not resume after it. The
     /// start and end do not keep the simulation running on their own.
     ///
     /// # Panics
     ///
     /// If `end` is before `start`.
-    fn schedule_susceptibility_modifier<K: 'static>(
+    fn schedule_susceptibility_modifier<K: ModifierKind>(
         &mut self,
         person: EntityId<Self::Entity>,
+        modifier: K,
         factor: f64,
         start: f64,
         end: Option<f64>,
     ) {
         assert_valid_factor("susceptibility", factor);
         assert_end_not_before_start(start, end);
-        let key = TypeId::of::<K>();
+        let key = modifier.key();
         let state = state_mut::<M, _>(self);
         let schedule = state.schedule_count;
         let scope = Scope::Scheduled { schedule };

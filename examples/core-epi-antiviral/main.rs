@@ -6,6 +6,7 @@
 mod parameters;
 
 use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
+use ixa::define_modifier;
 use ixa::prelude::*;
 use rand_distr::Exp;
 
@@ -16,8 +17,8 @@ define_entity!(Person);
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
 
-/// Identifies the antiviral's infectiousness modifier.
-struct Antiviral;
+// Identifies the antiviral's infectiousness modifier.
+define_modifier!(Antiviral);
 
 define_rng!(InfectiousPeriodRng);
 define_rng!(AntiviralRng);
@@ -69,8 +70,9 @@ impl InfectionManager<CoreEpiExample> for Context {
             self.set_property(infectee, Treatment::Antiviral);
             // Applies only if they are still infectious when treatment starts,
             // and lasts until this infection ends.
-            self.schedule_infectiousness_modifier::<Antiviral>(
+            self.schedule_infectiousness_modifier(
                 infectee,
+                Antiviral,
                 antiviral_effect,
                 self.get_current_time() + antiviral_delay,
                 None,

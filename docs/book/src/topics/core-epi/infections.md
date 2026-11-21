@@ -209,7 +209,7 @@ closure can also depend on the variant:
 
 ```rust
 // A vaccine that protects better against the original variant.
-context.set_susceptibility_modifier_fn::<Vaccine>(person, |_context, _person, _elapsed, variant| {
+context.set_susceptibility_modifier_fn(person, Vaccine, |_context, _person, _elapsed, variant| {
     match variant {
         Variant::Original => 0.2,
         Variant::Escape => 0.7,

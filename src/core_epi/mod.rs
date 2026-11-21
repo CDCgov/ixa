@@ -5,6 +5,8 @@
 //!   functions.
 //! - [`infection_manager`]: per-person rate assignment, storage, and
 //!   infectiousness or susceptibility modifiers.
+//! - [`modifier_kinds`]: the kinds that key those modifiers, declared by a
+//!   module or added at run time.
 //! - [`transmission_manager`]: the continuous-time NHPP transmission loop and
 //!   its forecast contract.
 //! - [`settings`]: contact groups (such as households) with per-person
@@ -16,6 +18,7 @@
 //! and target entity (`type Entity = Person;`).
 
 pub mod infection_manager;
+pub mod modifier_kinds;
 pub mod rate;
 pub mod settings;
 pub mod step_fn;
@@ -24,6 +27,7 @@ pub mod transmission_manager;
 pub use infection_manager::{
     InfectionManager, InfectiousnessAssignedEvent, PastInfection, RateAssignment,
 };
+pub use modifier_kinds::{ModifierId, ModifierKind, ModifiersExt};
 pub use rate::{
     AnyInfectionRate, ConstantRateFn, EmpiricalRateFn, InvertibleRate, TransformedInvertibleRateFn,
 };

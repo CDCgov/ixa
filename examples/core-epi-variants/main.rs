@@ -4,6 +4,7 @@
 //! how well the vaccine works. An original variant spreads first; an escape
 //! variant is seeded once that wave is over and reinfects part of it.
 use ixa::core_epi::{ConstantRateFn, InfectionManager, RateAssignment, TransmissionManager};
+use ixa::define_modifier;
 use ixa::prelude::*;
 
 const SEED: u64 = 42;
@@ -20,7 +21,7 @@ define_entity!(Person);
 /// Marker type the `core_epi` traits are implemented for.
 struct CoreEpiExample;
 
-struct Vaccinated;
+define_modifier!(Vaccinated);
 
 define_rng!(VaccineRng);
 
@@ -107,8 +108,9 @@ fn main() {
     for _ in 0..POPULATION {
         let person = context.add_entity(Person).unwrap();
         if context.sample_bool(VaccineRng, VACCINE_COVERAGE) {
-            context.set_susceptibility_modifier_fn::<Vaccinated>(
+            context.set_susceptibility_modifier_fn(
                 person,
+                Vaccinated,
                 |_context, _person, _elapsed, variant| variant.vaccinated_susceptibility(),
             );
         }

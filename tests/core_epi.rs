@@ -3,9 +3,11 @@
 use std::cell::Cell;
 
 use ixa::core_epi::{
-    ConstantRateFn, EmpiricalRateFn, InfectionManager, InvertibleRate, Itinerary, PastInfection,
-    RateAssignment, SettingKind, SettingsExt, StepFn, TransmissionManager, MAX_SETTINGS,
+    ConstantRateFn, EmpiricalRateFn, InfectionManager, InvertibleRate, Itinerary, ModifiersExt,
+    PastInfection, RateAssignment, SettingKind, SettingsExt, StepFn, TransmissionManager,
+    MAX_SETTINGS,
 };
+use ixa::define_modifier;
 use ixa::prelude::*;
 
 define_entity!(Person);
@@ -91,21 +93,21 @@ fn outbreak_spreads_and_ends() {
 
 #[test]
 fn susceptibility_modifiers_compose_and_persist_across_infection() {
-    struct Vaccine;
-    struct Age;
+    define_modifier!(Vaccine);
+    define_modifier!(Age);
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         1.0
     );
-    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
-    InfectionManager::<Sir>::set_susceptibility_modifier::<Age>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_susceptibility_modifier(&mut context, person, Vaccine, 0.5);
+    InfectionManager::<Sir>::set_susceptibility_modifier(&mut context, person, Age, 0.5);
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.25
     );
-    InfectionManager::<Sir>::remove_susceptibility_modifier::<Age>(&mut context, person);
+    InfectionManager::<Sir>::remove_susceptibility_modifier(&mut context, person, Age);
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, person, None, &()),
         0.5
@@ -124,15 +126,16 @@ fn susceptibility_modifiers_compose_and_persist_across_infection() {
 
 #[test]
 fn function_modifiers_follow_elapsed_time() {
-    struct Antiviral;
-    struct Vaccine;
+    define_modifier!(Antiviral);
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
     // Protection that wanes after a day, as a step function.
     let waning = StepFn::new(0.2).step_at(1.0, 0.5);
-    InfectionManager::<Sir>::set_susceptibility_modifier_fn::<Vaccine>(
+    InfectionManager::<Sir>::set_susceptibility_modifier_fn(
         &mut context,
         person,
+        Vaccine,
         move |_, _, t, _| waning.at(t),
     );
     assert_eq!(
@@ -147,9 +150,10 @@ fn function_modifiers_follow_elapsed_time() {
         InfectionManager::<Sir>::assign_infectiousness_rate_fn(ctx, person, ());
         // Treatment effect that ramps in over its first two days, reading
         // the context to check it is the one passed in.
-        InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Antiviral>(
+        InfectionManager::<Sir>::set_infectiousness_modifier_fn(
             ctx,
             person,
+            Antiviral,
             |ctx, p, t| {
                 assert!(InfectionManager::<Sir>::is_infectious(ctx, p));
                 1.0 - 0.25 * t.min(2.0)
@@ -166,12 +170,12 @@ fn function_modifiers_follow_elapsed_time() {
             Some(0.75)
         );
         // Constant and function factors compose.
-        InfectionManager::<Sir>::set_infectiousness_modifier::<Vaccine>(ctx, person, 0.5);
+        InfectionManager::<Sir>::set_infectiousness_modifier(ctx, person, Vaccine, 0.5);
         assert_eq!(
             InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
             Some(0.375)
         );
-        InfectionManager::<Sir>::remove_infectiousness_modifier::<Antiviral>(ctx, person);
+        InfectionManager::<Sir>::remove_infectiousness_modifier(ctx, person, Antiviral);
         assert_eq!(
             InfectionManager::<Sir>::intrinsic_infectiousness(ctx, person),
             Some(0.5)
@@ -183,10 +187,10 @@ fn function_modifiers_follow_elapsed_time() {
 
 #[test]
 fn zero_susceptibility_never_transmits() {
-    struct Immune;
+    define_modifier!(Immune);
     let (mut context, people) = sir_context(42, POPULATION, 2.0 / 5.0, 5.0);
     for person in people {
-        InfectionManager::<Sir>::set_susceptibility_modifier::<Immune>(&mut context, person, 0.0);
+        InfectionManager::<Sir>::set_susceptibility_modifier(&mut context, person, Immune, 0.0);
     }
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 5);
@@ -197,10 +201,10 @@ fn zero_susceptibility_never_transmits() {
 #[test]
 #[should_panic(expected = "is not in [0, 1]")]
 fn susceptibility_above_one_panics() {
-    struct Frail;
+    define_modifier!(Frail);
     let (mut context, people) = sir_context(42, 10, 2.0, 5.0);
     for person in people {
-        InfectionManager::<Sir>::set_susceptibility_modifier::<Frail>(&mut context, person, 1.5);
+        InfectionManager::<Sir>::set_susceptibility_modifier(&mut context, person, Frail, 1.5);
     }
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
     TransmissionManager::<Sir>::seed_infections(&mut context, Person, 1);
@@ -215,22 +219,22 @@ fn zero_infectiousness_never_transmits() {
 
 #[test]
 fn infectiousness_modifier_belongs_to_the_person() {
-    struct Mask;
+    define_modifier!(Mask);
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
         Some(0.5)
     );
-    InfectionManager::<Sir>::remove_infectiousness_modifier::<Mask>(&mut context, person);
+    InfectionManager::<Sir>::remove_infectiousness_modifier(&mut context, person, Mask);
     assert_eq!(
         InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
         1.0
     );
     // It survives reinfection.
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
@@ -238,7 +242,7 @@ fn infectiousness_modifier_belongs_to_the_person() {
     );
     // And can be set before someone is ever infected.
     let other = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, other, 0.25);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, other, Mask, 0.25);
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, other),
         None
@@ -252,15 +256,15 @@ fn infectiousness_modifier_belongs_to_the_person() {
 
 #[test]
 fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
-    struct Boost;
-    struct Mask;
+    define_modifier!(Boost);
+    define_modifier!(Mask);
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     let bound = |context: &Context| {
         InfectionManager::<Sir>::majorizing_infectiousness_rate_fn(context, person).rate(0.0)
     };
     // Set before infection, it is in the first forecast.
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, 3.0);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Boost, 3.0);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
@@ -269,22 +273,22 @@ fn an_infectiousness_modifier_above_one_raises_the_rate_and_its_bound() {
     assert_eq!(bound(&context), 3.0);
     // A factor below one lowers the rate; the bound follows the product
     // down but never below the unmodified rate.
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
     assert_eq!(
         InfectionManager::<Sir>::intrinsic_infectiousness(&context, person),
         Some(1.5)
     );
     assert_eq!(bound(&context), 1.5);
-    InfectionManager::<Sir>::remove_infectiousness_modifier::<Boost>(&mut context, person);
+    InfectionManager::<Sir>::remove_infectiousness_modifier(&mut context, person, Boost);
     assert_eq!(bound(&context), 1.0);
     // Removing the mask alone raises it again.
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, 3.0);
-    InfectionManager::<Sir>::remove_infectiousness_modifier::<Mask>(&mut context, person);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Boost, 3.0);
+    InfectionManager::<Sir>::remove_infectiousness_modifier(&mut context, person, Mask);
     assert_eq!(bound(&context), 3.0);
 }
 
 fn run_with_a_boost(boost_time: Option<f64>) -> usize {
-    struct Boost;
+    define_modifier!(Boost);
     // R0 of 0.5 unmodified: the outbreak dies out unless boosted.
     let (mut context, _) = sir_context(42, POPULATION, 0.1, 5.0);
     TransmissionManager::<Sir>::setup_transmission_loop(&mut context);
@@ -295,7 +299,7 @@ fn run_with_a_boost(boost_time: Option<f64>) -> usize {
         context.add_plan(boost_time, |ctx| {
             let people: Vec<PersonId> = ctx.get_entity_iterator::<Person>().collect();
             for person in people {
-                InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(ctx, person, 5.0);
+                InfectionManager::<Sir>::set_infectiousness_modifier(ctx, person, Boost, 5.0);
             }
         });
     }
@@ -315,11 +319,11 @@ fn raising_an_infectiousness_modifier_mid_infection_reforecasts() {
 
 #[test]
 fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
-    struct Boost;
-    struct Mask;
-    struct Surge;
-    struct Antiviral;
-    struct Wave;
+    define_modifier!(Boost);
+    define_modifier!(Mask);
+    define_modifier!(Surge);
+    define_modifier!(Antiviral);
+    define_modifier!(Wave);
     // The modifier product over each ten days, with the change that starts it.
     // Expected attempts at rate 2:
     // 2 * (10 * (2 + 1 + 2 + 1 + 1 + 3 + 1 + 1 + 4 + 2 + 4) + 5 * (1 + 3)) = 480.
@@ -329,33 +333,31 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         let person = context.add_entity(Person).unwrap();
         TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
         // 2: a boost set before infection.
-        InfectionManager::<Counting>::set_infectiousness_modifier::<Boost>(
-            &mut context,
-            person,
-            2.0,
-        );
+        InfectionManager::<Counting>::set_infectiousness_modifier(&mut context, person, Boost, 2.0);
         TransmissionManager::<Counting>::seed_infection(&mut context, person);
         // 1: a mask.
         context.add_plan(10.0, move |ctx| {
-            InfectionManager::<Counting>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+            InfectionManager::<Counting>::set_infectiousness_modifier(ctx, person, Mask, 0.5);
         });
         // 2: the mask replaced by a function, which raises the bound.
         context.add_plan(20.0, move |ctx| {
-            InfectionManager::<Counting>::set_infectiousness_modifier_fn::<Mask>(
+            InfectionManager::<Counting>::set_infectiousness_modifier_fn(
                 ctx,
                 person,
+                Mask,
                 |_, _, _| 1.0,
             );
         });
         // 1: the boost removed.
         context.add_plan(30.0, move |ctx| {
-            InfectionManager::<Counting>::remove_infectiousness_modifier::<Boost>(ctx, person);
+            InfectionManager::<Counting>::remove_infectiousness_modifier(ctx, person, Boost);
         });
         // 1, then 3 from day 50 to 60, then 1: a scheduled factor above one.
         context.add_plan(40.0, move |ctx| {
-            InfectionManager::<Counting>::schedule_infectiousness_modifier::<Surge>(
+            InfectionManager::<Counting>::schedule_infectiousness_modifier(
                 ctx,
                 person,
+                Surge,
                 3.0,
                 50.0,
                 Some(60.0),
@@ -363,12 +365,12 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         });
         // 1: a boost of 4 cancelled by a scheduled antiviral.
         context.add_plan(65.0, move |ctx| {
-            InfectionManager::<Counting>::schedule_infectiousness_modifier::<Antiviral>(
-                ctx, person, 0.25, 70.0, None,
+            InfectionManager::<Counting>::schedule_infectiousness_modifier(
+                ctx, person, Antiviral, 0.25, 70.0, None,
             );
         });
         context.add_plan(70.0, move |ctx| {
-            InfectionManager::<Counting>::set_infectiousness_modifier::<Boost>(ctx, person, 4.0);
+            InfectionManager::<Counting>::set_infectiousness_modifier(ctx, person, Boost, 4.0);
         });
         // 4: reinfection drops the antiviral.
         context.add_plan(80.0, move |ctx| {
@@ -376,19 +378,20 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
         });
         // 2: a mask again.
         context.add_plan(90.0, move |ctx| {
-            InfectionManager::<Counting>::set_infectiousness_modifier::<Mask>(ctx, person, 0.5);
+            InfectionManager::<Counting>::set_infectiousness_modifier(ctx, person, Mask, 0.5);
         });
         // 4: the mask removed, which raises the bound.
         context.add_plan(100.0, move |ctx| {
-            InfectionManager::<Counting>::remove_infectiousness_modifier::<Mask>(ctx, person);
+            InfectionManager::<Counting>::remove_infectiousness_modifier(ctx, person, Mask);
         });
         // 1 for five days then 3: a function that rises under its declared
         // maximum, with nothing to announce the rise.
         context.add_plan(110.0, move |ctx| {
-            InfectionManager::<Counting>::remove_infectiousness_modifier::<Boost>(ctx, person);
-            InfectionManager::<Counting>::set_infectiousness_modifier_fn_with_max::<Wave>(
+            InfectionManager::<Counting>::remove_infectiousness_modifier(ctx, person, Boost);
+            InfectionManager::<Counting>::set_infectiousness_modifier_fn_with_max(
                 ctx,
                 person,
+                Wave,
                 3.0,
                 |_, _, elapsed| if elapsed < 5.0 { 1.0 } else { 3.0 },
             );
@@ -403,32 +406,32 @@ fn attempts_follow_infectiousness_modifiers_through_every_kind_of_change() {
 #[test]
 #[should_panic(expected = "multiply to inf")]
 fn infectiousness_modifiers_overflowing_panic() {
-    struct First;
-    struct Second;
+    define_modifier!(First);
+    define_modifier!(Second);
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::set_infectiousness_modifier::<First>(&mut context, person, 1e200);
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Second>(&mut context, person, 1e200);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, First, 1e200);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Second, 1e200);
 }
 
 #[test]
 #[should_panic(expected = "must be finite and non-negative")]
 fn a_negative_infectiousness_modifier_panics() {
-    struct Boost;
+    define_modifier!(Boost);
     let mut context = Context::new();
     let person = context.add_entity(Person).unwrap();
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Boost>(&mut context, person, -0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Boost, -0.5);
 }
 
 #[test]
 fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
-    struct Mask;
+    define_modifier!(Mask);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
     // Set a day before the infection: elapsed time runs from the set.
     context.add_plan(1.0, move |ctx| {
-        InfectionManager::<Sir>::set_infectiousness_modifier_fn::<Mask>(ctx, person, |_, _, t| {
+        InfectionManager::<Sir>::set_infectiousness_modifier_fn(ctx, person, Mask, |_, _, t| {
             1.0 - 0.25 * t.min(2.0)
         });
     });
@@ -451,15 +454,16 @@ fn infectiousness_modifier_fn_measures_time_since_it_was_set() {
 
 #[test]
 fn a_scheduled_infectiousness_modifier_ends_with_its_infection() {
-    struct Mask;
-    struct Antiviral;
+    define_modifier!(Mask);
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Antiviral,
         0.5,
         1.0,
         None,
@@ -804,6 +808,7 @@ fn two_models_on_one_population_keep_separate_infections() {
 
     struct Flu;
     struct Rsv;
+    define_modifier!(Immune);
     impl InfectionManager<Flu> for Context {
         type Entity = Person;
         type Details = ();
@@ -880,7 +885,7 @@ fn two_models_on_one_population_keep_separate_infections() {
         InfectionManager::<Flu>::susceptibility(&context, people[1], None, &()),
         1.0
     );
-    InfectionManager::<Flu>::set_susceptibility_modifier::<Flu>(&mut context, people[2], 0.0);
+    InfectionManager::<Flu>::set_susceptibility_modifier(&mut context, people[2], Immune, 0.0);
     assert_eq!(
         InfectionManager::<Rsv>::susceptibility(&context, people[2], None, &()),
         1.0
@@ -1248,7 +1253,7 @@ fn an_infinite_bound_panics_instead_of_proposing_forever() {
 
 #[test]
 fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing() {
-    struct Mask;
+    define_modifier!(Mask);
     let mut context = Context::new();
     context.init_random(1);
     let person = context.add_entity(Person).unwrap();
@@ -1256,9 +1261,10 @@ fn scheduling_an_infectiousness_modifier_for_someone_never_infected_does_nothing
         &mut context,
         vec![ConstantRateFn::new(1.0, 10.0).into()],
     );
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Mask,
         0.5,
         1.0,
         Some(2.0),
@@ -1317,13 +1323,14 @@ fn a_proposal_just_after_a_curve_leaves_zero_stays_under_its_forecast() {
 
 #[test]
 fn a_reinfection_at_the_same_time_drops_the_scheduled_modifier() {
-    struct Antiviral;
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Antiviral,
         0.25,
         1.0,
         None,
@@ -1340,14 +1347,15 @@ fn a_reinfection_at_the_same_time_drops_the_scheduled_modifier() {
 
 #[test]
 fn a_scheduled_modifier_composes_with_the_persons_own_of_the_same_key() {
-    struct Mask;
+    define_modifier!(Mask);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Mask>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Mask,
         0.1,
         1.0,
         Some(2.0),
@@ -1362,12 +1370,12 @@ fn a_scheduled_modifier_composes_with_the_persons_own_of_the_same_key() {
     }
     // Removing the modifier removes both.
     context.add_plan(4.0, move |ctx| {
-        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Mask>(
-            ctx, person, 0.1, 5.0, None,
+        InfectionManager::<Sir>::schedule_infectiousness_modifier(
+            ctx, person, Mask, 0.1, 5.0, None,
         );
     });
     context.add_plan(6.0, move |ctx| {
-        InfectionManager::<Sir>::remove_infectiousness_modifier::<Mask>(ctx, person);
+        InfectionManager::<Sir>::remove_infectiousness_modifier(ctx, person, Mask);
         assert_eq!(
             InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
             1.0
@@ -1379,13 +1387,14 @@ fn a_scheduled_modifier_composes_with_the_persons_own_of_the_same_key() {
 
 #[test]
 fn a_scheduled_modifier_is_removed_at_its_end_after_infectiousness_ran_out() {
-    struct Antiviral;
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 3.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Antiviral,
         0.25,
         1.0,
         Some(5.0),
@@ -1404,21 +1413,23 @@ fn a_scheduled_modifier_is_removed_at_its_end_after_infectiousness_ran_out() {
 
 #[test]
 fn scheduled_modifiers_do_not_keep_the_simulation_running() {
-    struct Antiviral;
-    struct Vaccine;
+    define_modifier!(Antiviral);
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 3.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Antiviral,
         0.25,
         1.0,
         Some(400.0),
     );
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.5,
         14.0,
         Some(730.0),
@@ -1471,11 +1482,12 @@ fn loading_the_rate_library_after_an_infection_panics() {
 #[test]
 #[should_panic(expected = "must be finite and non-negative")]
 fn scheduling_a_negative_susceptibility_modifier_panics_at_the_call() {
-    struct Vaccine;
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         people[0],
+        Vaccine,
         -1.0,
         1.0,
         None,
@@ -1484,14 +1496,15 @@ fn scheduling_a_negative_susceptibility_modifier_panics_at_the_call() {
 
 #[test]
 fn a_later_schedule_of_a_modifier_outlives_the_end_of_an_earlier_one() {
-    struct Antiviral;
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     for (factor, start, end) in [(0.5, 1.0, 5.0), (0.2, 3.0, 10.0)] {
-        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        InfectionManager::<Sir>::schedule_infectiousness_modifier(
             &mut context,
             person,
+            Antiviral,
             factor,
             start,
             Some(end),
@@ -1511,14 +1524,15 @@ fn a_later_schedule_of_a_modifier_outlives_the_end_of_an_earlier_one() {
 
 #[test]
 fn a_later_schedule_that_starts_first_is_not_replaced_by_the_earlier_one() {
-    struct Antiviral;
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
     for (factor, start, end) in [(0.5, 10.0, 20.0), (0.2, 5.0, 40.0)] {
-        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        InfectionManager::<Sir>::schedule_infectiousness_modifier(
             &mut context,
             person,
+            Antiviral,
             factor,
             start,
             Some(end),
@@ -1539,12 +1553,13 @@ fn a_later_schedule_that_starts_first_is_not_replaced_by_the_earlier_one() {
 #[test]
 #[should_panic(expected = "is before its start")]
 fn scheduling_a_modifier_that_ends_before_it_starts_panics() {
-    struct Antiviral;
+    define_modifier!(Antiviral);
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0], ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         people[0],
+        Antiviral,
         0.5,
         5.0,
         Some(2.0),
@@ -1644,7 +1659,7 @@ fn infection_details_are_stored_and_choose_the_rate_function() {
 
 #[test]
 fn susceptibility_depends_on_the_details_of_the_attempt() {
-    struct Vaccine;
+    define_modifier!(Vaccine);
     let (mut context, people) = strains_context(1, 2);
     let (had_alpha, naive) = (people[0], people[1]);
     TransmissionManager::<Strains>::seed_infection(&mut context, had_alpha);
@@ -1656,9 +1671,10 @@ fn susceptibility_depends_on_the_details_of_the_attempt() {
     }
 
     // A vaccine that protects better against Alpha than against Beta.
-    InfectionManager::<Strains>::set_susceptibility_modifier_fn::<Vaccine>(
+    InfectionManager::<Strains>::set_susceptibility_modifier_fn(
         &mut context,
         naive,
+        Vaccine,
         |_, _, _, variant| match variant {
             Variant::Alpha => 0.1,
             Variant::Beta => 0.8,
@@ -1722,7 +1738,7 @@ fn a_variant_does_not_spread_through_people_immune_to_it() {
 
 #[test]
 fn a_susceptibility_modifier_thins_attempts_by_variant() {
-    struct Vaccine;
+    define_modifier!(Vaccine);
     const TRIALS: u64 = 400;
     // Each variant makes three attempts on average on the one contact, who
     // is protected against Beta only.
@@ -1734,9 +1750,10 @@ fn a_susceptibility_modifier_thins_attempts_by_variant() {
         for seed in 0..TRIALS {
             let (mut context, people) = strains_context(seed, 2);
             TransmissionManager::<Strains>::setup_transmission_loop(&mut context);
-            InfectionManager::<Strains>::set_susceptibility_modifier_fn::<Vaccine>(
+            InfectionManager::<Strains>::set_susceptibility_modifier_fn(
                 &mut context,
                 people[1],
+                Vaccine,
                 |_, _, _, variant| match variant {
                     Variant::Alpha => 1.0,
                     Variant::Beta => 0.25,
@@ -1816,7 +1833,7 @@ fn susceptibility_can_depend_on_the_infector() {
 
 define_property!(struct Masked(bool), Person, default_const = Masked(false));
 
-struct Masking;
+define_modifier!(Masking);
 
 /// Half the factor for someone who is `Masked`.
 fn masking(context: &Context, person: PersonId) -> f64 {
@@ -1829,8 +1846,8 @@ fn masking(context: &Context, person: PersonId) -> f64 {
 
 #[test]
 fn population_modifiers_apply_to_everyone_and_multiply_with_a_persons_own() {
-    struct Treated;
-    struct Vaccine;
+    define_modifier!(Treated);
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 2, 1.0, 100.0);
     let (masked, unmasked) = (people[0], people[1]);
     context.set_property(masked, Masked(true));
@@ -1841,10 +1858,7 @@ fn population_modifiers_apply_to_everyone_and_multiply_with_a_persons_own() {
         InfectionManager::<Sir>::intrinsic_infectiousness(context, person)
     };
 
-    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
-        &mut context,
-        masking,
-    );
+    InfectionManager::<Sir>::set_population_infectiousness_modifier(&mut context, Masking, masking);
     assert_eq!(infectiousness(&context, masked), Some(0.5));
     assert_eq!(infectiousness(&context, unmasked), Some(1.0));
     assert_eq!(
@@ -1855,34 +1869,37 @@ fn population_modifiers_apply_to_everyone_and_multiply_with_a_persons_own() {
     context.set_property(unmasked, Masked(true));
     assert_eq!(infectiousness(&context, unmasked), Some(0.5));
 
-    InfectionManager::<Sir>::set_infectiousness_modifier::<Treated>(&mut context, masked, 0.5);
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, masked, Treated, 0.5);
     assert_eq!(infectiousness(&context, masked), Some(0.25));
 
     // Setting the key again replaces it; removing it restores the rest.
-    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
+    InfectionManager::<Sir>::set_population_infectiousness_modifier(
         &mut context,
+        Masking,
         |_, _| 0.2,
     );
     assert_eq!(infectiousness(&context, masked), Some(0.1));
-    InfectionManager::<Sir>::remove_population_infectiousness_modifier::<Masking>(&mut context);
+    InfectionManager::<Sir>::remove_population_infectiousness_modifier(&mut context, Masking);
     assert_eq!(infectiousness(&context, masked), Some(0.5));
 
     let never_infected = context.add_entity(Person).unwrap();
     context.set_property(never_infected, Masked(true));
-    InfectionManager::<Sir>::set_population_susceptibility_modifier::<Masking>(
+    InfectionManager::<Sir>::set_population_susceptibility_modifier(
         &mut context,
+        Masking,
         |context, person, _details| masking(context, person),
     );
-    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::set_susceptibility_modifier(
         &mut context,
         never_infected,
+        Vaccine,
         0.5,
     );
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, never_infected, None, &()),
         0.25
     );
-    InfectionManager::<Sir>::remove_population_susceptibility_modifier::<Masking>(&mut context);
+    InfectionManager::<Sir>::remove_population_susceptibility_modifier(&mut context, Masking);
     assert_eq!(
         InfectionManager::<Sir>::susceptibility(&context, never_infected, None, &()),
         0.5
@@ -1892,8 +1909,9 @@ fn population_modifiers_apply_to_everyone_and_multiply_with_a_persons_own() {
 #[test]
 fn a_population_susceptibility_modifier_sees_the_details() {
     let (mut context, people) = strains_context(1, 1);
-    InfectionManager::<Strains>::set_population_susceptibility_modifier::<Masking>(
+    InfectionManager::<Strains>::set_population_susceptibility_modifier(
         &mut context,
+        Masking,
         |_context, _person, variant| match variant {
             Variant::Alpha => 0.1,
             Variant::Beta => 0.8,
@@ -1909,7 +1927,7 @@ fn a_population_susceptibility_modifier_sees_the_details() {
 
 #[test]
 fn attempts_follow_population_modifiers_through_every_kind_of_change() {
-    struct Surge;
+    define_modifier!(Surge);
     // Rate 2. Unmasked to t = 10 (20 attempts), masked to 20 (10), unmasked
     // to 30 (20), a surge of 3 to 40 (60), then none to 50 (20): 130.
     let mean = mean_attempts(|seed| {
@@ -1917,8 +1935,9 @@ fn attempts_follow_population_modifiers_through_every_kind_of_change() {
         context.init_random(seed);
         let person = context.add_entity(Person).unwrap();
         TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
-        InfectionManager::<Counting>::set_population_infectiousness_modifier::<Masking>(
+        InfectionManager::<Counting>::set_population_infectiousness_modifier(
             &mut context,
+            Masking,
             masking,
         );
         TransmissionManager::<Counting>::seed_infection(&mut context, person);
@@ -1927,14 +1946,15 @@ fn attempts_follow_population_modifiers_through_every_kind_of_change() {
         context.add_plan(20.0, move |ctx| ctx.set_property(person, Masked(false)));
         // Raises the bound, so the loop reforecasts by itself.
         context.add_plan(30.0, |ctx| {
-            InfectionManager::<Counting>::set_population_infectiousness_modifier_with_max::<Surge>(
+            InfectionManager::<Counting>::set_population_infectiousness_modifier_with_max(
                 ctx,
+                Surge,
                 3.0,
                 |_, _| 3.0,
             );
         });
         context.add_plan(40.0, |ctx| {
-            InfectionManager::<Counting>::remove_population_infectiousness_modifier::<Surge>(ctx);
+            InfectionManager::<Counting>::remove_population_infectiousness_modifier(ctx, Surge);
         });
         context.add_plan(50.0, Context::shutdown);
         context.execute();
@@ -1949,8 +1969,9 @@ fn attempts_follow_population_modifiers_through_every_kind_of_change() {
 fn a_population_infectiousness_modifier_above_its_maximum_panics() {
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, people[0], ());
-    InfectionManager::<Sir>::set_population_infectiousness_modifier::<Masking>(
+    InfectionManager::<Sir>::set_population_infectiousness_modifier(
         &mut context,
+        Masking,
         |_, _| 2.0,
     );
     let _ = InfectionManager::<Sir>::intrinsic_infectiousness(&context, people[0]);
@@ -1958,7 +1979,7 @@ fn a_population_infectiousness_modifier_above_its_maximum_panics() {
 
 #[test]
 fn a_population_modifier_can_follow_simulation_time() {
-    struct Lockdown;
+    define_modifier!(Lockdown);
     // Rate 2, cut to a quarter from t = 10 to t = 20, run to t = 30:
     // 20 + 5 + 20 = 45 attempts. The steps need no reforecast.
     let mean = mean_attempts(|seed| {
@@ -1967,8 +1988,9 @@ fn a_population_modifier_can_follow_simulation_time() {
         let person = context.add_entity(Person).unwrap();
         TransmissionManager::<Counting>::setup_transmission_loop(&mut context);
         let contact = StepFn::new(1.0).step_at(10.0, 0.25).step_at(20.0, 1.0);
-        InfectionManager::<Counting>::set_population_infectiousness_modifier::<Lockdown>(
+        InfectionManager::<Counting>::set_population_infectiousness_modifier(
             &mut context,
+            Lockdown,
             move |context, _person| contact.at(context.get_current_time()),
         );
         TransmissionManager::<Counting>::seed_infection(&mut context, person);
@@ -1995,21 +2017,23 @@ fn accept_proposal_rejects_infinite_forecast() {
 
 #[test]
 fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
-    struct Vaccine;
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
     let person = people[0];
 
     // Later schedule outlives the end of an earlier one.
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.5,
         1.0,
         Some(5.0),
     );
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.2,
         3.0,
         Some(10.0),
@@ -2025,16 +2049,18 @@ fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
     }
 
     // A later schedule that starts first is not replaced by the earlier one.
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.6,
         20.0,
         Some(30.0),
     );
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.3,
         15.0,
         Some(40.0),
@@ -2050,15 +2076,16 @@ fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
     }
 
     // A manual set is not removed by an earlier schedule's end.
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.5,
         50.0,
         Some(60.0),
     );
     context.add_plan(55.0, move |ctx| {
-        InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(ctx, person, 0.1);
+        InfectionManager::<Sir>::set_susceptibility_modifier(ctx, person, Vaccine, 0.1);
     });
     context.add_plan(65.0, move |ctx| {
         assert_eq!(
@@ -2071,13 +2098,14 @@ fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
 
 #[test]
 fn a_scheduled_susceptibility_modifier_composes_with_the_persons_own_of_the_same_key() {
-    struct Vaccine;
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
     let person = people[0];
-    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::set_susceptibility_modifier(&mut context, person, Vaccine, 0.5);
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.2,
         1.0,
         Some(2.0),
@@ -2093,12 +2121,12 @@ fn a_scheduled_susceptibility_modifier_composes_with_the_persons_own_of_the_same
     }
     // Removing the modifier removes both.
     context.add_plan(4.0, move |ctx| {
-        InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
-            ctx, person, 0.2, 5.0, None,
+        InfectionManager::<Sir>::schedule_susceptibility_modifier(
+            ctx, person, Vaccine, 0.2, 5.0, None,
         );
     });
     context.add_plan(6.0, move |ctx| {
-        InfectionManager::<Sir>::remove_susceptibility_modifier::<Vaccine>(ctx, person);
+        InfectionManager::<Sir>::remove_susceptibility_modifier(ctx, person, Vaccine);
         assert_eq!(
             InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
             1.0
@@ -2109,36 +2137,39 @@ fn a_scheduled_susceptibility_modifier_composes_with_the_persons_own_of_the_same
 
 #[test]
 fn removing_a_modifier_cancels_its_schedules_that_have_not_started() {
-    struct Antiviral;
-    struct Vaccine;
+    define_modifier!(Antiviral);
+    define_modifier!(Vaccine);
     let (mut context, people) = sir_context(1, 1, 1.0, 20.0);
     let person = people[0];
     InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Antiviral,
         0.25,
         1.0,
         Some(3.0),
     );
-    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_susceptibility_modifier(
         &mut context,
         person,
+        Vaccine,
         0.5,
         1.0,
         Some(3.0),
     );
     // Another modifier's schedule is not cancelled.
-    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Vaccine>(
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
         &mut context,
         person,
+        Vaccine,
         0.5,
         1.0,
         Some(3.0),
     );
     context.add_plan(0.5, move |ctx| {
-        InfectionManager::<Sir>::remove_infectiousness_modifier::<Antiviral>(ctx, person);
-        InfectionManager::<Sir>::remove_susceptibility_modifier::<Vaccine>(ctx, person);
+        InfectionManager::<Sir>::remove_infectiousness_modifier(ctx, person, Antiviral);
+        InfectionManager::<Sir>::remove_susceptibility_modifier(ctx, person, Vaccine);
     });
     context.add_plan(2.0, move |ctx| {
         assert_eq!(
@@ -2152,16 +2183,18 @@ fn removing_a_modifier_cancels_its_schedules_that_have_not_started() {
     });
     // A schedule made after the removal applies as usual.
     context.add_plan(4.0, move |ctx| {
-        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        InfectionManager::<Sir>::schedule_infectiousness_modifier(
             ctx,
             person,
+            Antiviral,
             0.25,
             5.0,
             Some(7.0),
         );
-        InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        InfectionManager::<Sir>::schedule_susceptibility_modifier(
             ctx,
             person,
+            Vaccine,
             0.5,
             5.0,
             Some(7.0),
@@ -2385,4 +2418,114 @@ fn the_loop_keeps_the_infection_a_reinfection_replaces() {
         }
     }
     assert!(reinfected > 100, "only {reinfected} people were reinfected");
+}
+
+#[test]
+fn modifier_kinds_added_at_run_time_key_their_own_modifiers() {
+    define_modifier!(Mask);
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+
+    // As read from a parameters file.
+    let interventions = [("ventilation", 0.8), ("testing", 0.5)];
+    for (name, factor) in interventions {
+        let kind = context.add_modifier_kind(name);
+        InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, kind, factor);
+    }
+    // A declared kind multiplies with them.
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, Mask, 0.5);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        0.8 * 0.5 * 0.5
+    );
+
+    // Setting a kind again replaces only that kind.
+    let testing = context.modifier_kind_by_name("testing").unwrap();
+    InfectionManager::<Sir>::set_infectiousness_modifier(&mut context, person, testing, 0.25);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        0.8 * 0.25 * 0.5
+    );
+    InfectionManager::<Sir>::remove_infectiousness_modifier(&mut context, person, testing);
+    assert_eq!(
+        InfectionManager::<Sir>::infectiousness_multiplier(&context, person),
+        0.8 * 0.5
+    );
+
+    assert_eq!(context.modifier_name(testing), "testing");
+    assert_eq!(context.modifier_kind_by_name("absent"), None);
+    let kinds = context.modifier_kinds();
+    assert_eq!(kinds.len(), 2);
+    assert_eq!(kinds[1], testing);
+}
+
+#[test]
+fn kinds_declared_in_two_places_under_one_name_are_separate_modifiers() {
+    mod vaccination {
+        ixa::define_modifier!(pub Protection);
+    }
+    mod distancing {
+        ixa::define_modifier!(pub Protection);
+    }
+    let (mut context, people) = sir_context(1, 1, 1.0, 5.0);
+    let person = people[0];
+    InfectionManager::<Sir>::set_susceptibility_modifier(
+        &mut context,
+        person,
+        vaccination::Protection,
+        0.5,
+    );
+    InfectionManager::<Sir>::set_susceptibility_modifier(
+        &mut context,
+        person,
+        distancing::Protection,
+        0.5,
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility_multiplier(&context, person, &()),
+        0.25
+    );
+    InfectionManager::<Sir>::remove_susceptibility_modifier(
+        &mut context,
+        person,
+        distancing::Protection,
+    );
+    assert_eq!(
+        InfectionManager::<Sir>::susceptibility_multiplier(&context, person, &()),
+        0.5
+    );
+}
+
+#[test]
+fn a_scheduled_modifier_of_a_run_time_kind_starts_and_ends() {
+    let (mut context, people) = sir_context(1, 1, 1.0, 20.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    let antiviral = context.add_modifier_kind("antiviral");
+    InfectionManager::<Sir>::schedule_infectiousness_modifier(
+        &mut context,
+        person,
+        antiviral,
+        0.25,
+        2.0,
+        Some(4.0),
+    );
+    for (time, expected) in [(1.0, 1.0), (3.0, 0.25), (5.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected
+            );
+        });
+    }
+    context.execute();
+}
+
+#[test]
+#[should_panic(expected = "modifier kind ventilation already exists")]
+fn adding_a_modifier_kind_with_a_taken_name_panics() {
+    let mut context = Context::new();
+    let _ = context.add_modifier_kind("ventilation");
+    let _ = context.add_modifier_kind("ventilation");
 }
