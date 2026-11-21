@@ -48,7 +48,7 @@ impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
     ///
     /// # Panics
     ///
-    /// If `factor` is negative or not finite.
+    /// If `factor` is negative or not finite, or if the resulting scale overflows.
     #[must_use]
     pub fn scaled(mut self, factor: f64) -> Self {
         assert!(
@@ -56,6 +56,11 @@ impl<'a, T: ?Sized + InvertibleRate> TransformedInvertibleRateFn<'a, T> {
             "rate scale factor must be finite and non-negative, got {factor}"
         );
         self.scale *= factor;
+        assert!(
+            self.scale.is_finite(),
+            "rate scale overflowed to {}",
+            self.scale
+        );
         self
     }
 }
@@ -114,49 +119,31 @@ mod test {
     #[test]
     fn test_scale_rate_fn() {
         let rate_fn = flat_capped();
-        let scaled_rate_fn = TransformedInvertibleRateFn {
-            base: &rate_fn,
-            scale: 2.0,
-            elapsed: 0.0,
-        };
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 0.0);
         assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
         assert_almost_eq!(scaled_rate_fn.rate(5.0), 4.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_with_elapsed() {
         let rate_fn = flat_capped();
-        let scaled_rate_fn = TransformedInvertibleRateFn {
-            base: &rate_fn,
-            scale: 2.0,
-            elapsed: 3.0,
-        };
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
         assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
-        // Since the elapsed is 3.0, the rate at t=4.0 is past the total infectious
-        // period (3.0 + 4.0 = 7.0), so the rate is 0.0.
+        // Past the end of the infectious period (3.0 + 4.0 > 5.0).
         assert_almost_eq!(scaled_rate_fn.rate(4.0), 0.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_cum_rate() {
         let rate_fn = flat_capped();
-        let scaled_rate_fn = TransformedInvertibleRateFn {
-            base: &rate_fn,
-            scale: 2.0,
-            elapsed: 3.0,
-        };
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
         assert_almost_eq!(scaled_rate_fn.cum_rate(1.0), 4.0, 0.0);
         assert_almost_eq!(scaled_rate_fn.cum_rate(2.0), 8.0, 0.0);
-        // The cumulative rate for t=3.0 with an elapsed t=3.0 is still
-        // only 2 days, since the infectiousness period ends at 5.0
+        // Capped at the remaining 2 days of the 5-day infectious period.
         assert_almost_eq!(scaled_rate_fn.cum_rate(3.0), 8.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_inverse_cum_rate() {
         let rate_fn = flat_capped();
-        let scaled_rate_fn = TransformedInvertibleRateFn {
-            base: &rate_fn,
-            scale: 2.0,
-            elapsed: 3.0,
-        };
+        let scaled_rate_fn = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0);
         assert_eq!(scaled_rate_fn.inverse_cum_rate(4.0), Some(1.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(8.0), Some(2.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
@@ -194,6 +181,13 @@ mod test {
         assert_eq!(f.inverse_cum_rate(24.0 + 1e-9), None);
         let zero = TransformedInvertibleRateFn::new(&rate_fn, 2.0, 3.0).scaled(0.0);
         assert_eq!(zero.inverse_cum_rate(1.0), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "rate scale overflowed")]
+    fn scaled_overflow_panics() {
+        let rate_fn = ConstantRateFn::new(1.0, 5.0);
+        let _ = TransformedInvertibleRateFn::new(&rate_fn, 1e200, 0.0).scaled(1e200);
     }
 
     #[test]

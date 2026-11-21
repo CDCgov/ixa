@@ -125,8 +125,9 @@ define_outbreak!(homogeneous_outbreak, Homogeneous);
 define_outbreak!(fixed_settings_outbreak, FixedSettings);
 define_outbreak!(changing_settings_outbreak, ChangingSettings);
 
-// R0 of 2 under homogeneous mixing. With settings most household attempts
-// reach someone already infected, so the rate is higher to infect as many.
+// R0 of 2 under homogeneous mixing. Under settings the contact multiplier is 2,
+// so the same intrinsic rate drives a comparable outbreak despite repeat
+// household contacts.
 const HOMOGENEOUS_RATE: f64 = 0.4;
 const SETTINGS_RATE: f64 = 0.4;
 

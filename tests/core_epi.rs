@@ -1923,3 +1923,125 @@ fn a_population_modifier_can_follow_simulation_time() {
     });
     assert_about(mean, 45.0, 4.0);
 }
+
+#[test]
+#[should_panic(expected = "must be finite and positive")]
+fn accept_proposal_rejects_zero_forecast() {
+    let (context, people) = sir_context(1, 1, 1.0, 5.0);
+    let _ = TransmissionManager::<Sir>::accept_proposal(&context, people[0], 0.0, 0.0);
+}
+
+#[test]
+#[should_panic(expected = "must be finite and positive")]
+fn accept_proposal_rejects_infinite_forecast() {
+    let (context, people) = sir_context(1, 1, 1.0, 5.0);
+    let _ = TransmissionManager::<Sir>::accept_proposal(&context, people[0], 1.0, f64::INFINITY);
+}
+
+#[test]
+fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 1, 1.0, 100.0);
+    let person = people[0];
+
+    // Later schedule outlives the end of an earlier one.
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.5,
+        1.0,
+        Some(5.0),
+    );
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.2,
+        3.0,
+        Some(10.0),
+    );
+    for (time, expected) in [(2.0, 0.5), (4.0, 0.2), (7.0, 0.2), (11.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
+
+    // A later schedule that starts first is not replaced by the earlier one.
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.6,
+        20.0,
+        Some(30.0),
+    );
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.3,
+        15.0,
+        Some(40.0),
+    );
+    for (time, expected) in [(17.0, 0.3), (25.0, 0.3), (35.0, 0.3), (45.0, 1.0)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
+
+    // A manual set is not removed by an earlier schedule's end.
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.5,
+        50.0,
+        Some(60.0),
+    );
+    context.add_plan(55.0, move |ctx| {
+        InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(ctx, person, 0.1);
+    });
+    context.add_plan(65.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+            0.1
+        );
+    });
+    context.execute();
+}
+
+#[test]
+fn step_up_empirical_rate_stays_under_forecast() {
+    struct Stepped;
+    impl InfectionManager<Stepped> for Context {
+        type Entity = Person;
+        type Details = ();
+
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
+            EmpiricalRateFn::new(vec![[0.0, 0.5], [1.0, 0.5], [1.0, 50.0], [2.0, 50.0]], 1.0).into()
+        }
+    }
+    impl TransmissionManager<Stepped> for Context {
+        fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
+            None
+        }
+    }
+    for seed in 0..20 {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<Stepped>::setup_transmission_loop(&mut context);
+        context.add_plan(100.3, move |ctx| {
+            TransmissionManager::<Stepped>::seed_infection(ctx, person);
+        });
+        context.execute();
+    }
+}

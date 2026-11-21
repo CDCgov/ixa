@@ -30,6 +30,7 @@
 //! ## Features
 //!
 //! - **`logging`**: enables structured logging for native and wasm targets.
+//! - **`core_epi`**: enables the [`core_epi`] epidemiological modeling building blocks. Enabled by default.
 //! - **`profiling`**: enables collection and reporting of execution profiling statistics. Disabled by default.
 //!
 //! ## Events

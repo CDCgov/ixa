@@ -124,8 +124,13 @@ where
     ///
     /// # Panics
     ///
-    /// If `total` exceeds `forecast`, which would under-thin attempts.
+    /// If `forecast` is not finite or not positive, or if `total` is negative
+    /// or exceeds `forecast`, which would under-thin attempts.
     fn accept_proposal(&self, person: EntityId<Self::Entity>, total: f64, forecast: f64) -> bool {
+        assert!(
+            forecast.is_finite() && forecast > 0.0,
+            "forecast {forecast} of {person:?} must be finite and positive"
+        );
         assert!(
             total >= 0.0,
             "total infectiousness {total} of {person:?} must be non-negative"
@@ -194,9 +199,7 @@ where
     /// after anything that can raise their total infectiousness above their
     /// forecast; redrawing is always valid. No-op if never infected.
     fn reforecast_transmission(&mut self, person: EntityId<Self::Entity>) {
-        if let Some(generation) =
-            advance_forecast_generation::<M, _, Self::Details, _>(self, person)
-        {
+        if let Some(generation) = advance_forecast_generation::<M, _>(self, person) {
             schedule_proposal::<M, Self>(self, person, generation);
         }
     }
@@ -221,9 +224,18 @@ fn schedule_proposal<M, C>(
         let forecast_fn = context.forecast_total_infectiousness(infector);
         forecast_fn.inverse_cum_rate(exp_draw).map(|delay| {
             // The forecast at the delay the plan will see once the proposal
-            // time is rounded, so the total is later taken at the same instant.
+            // time is rounded, bracketing by 1 ULP so a step discontinuity
+            // cannot fall on the wrong side when `proposal_time - infection_time`
+            // is later evaluated directly.
             let proposal_time = now + delay;
-            (proposal_time, forecast_fn.rate(proposal_time - now))
+            let d = proposal_time - now;
+            let d_prev = (proposal_time.next_down() - now).max(0.0);
+            let d_next = proposal_time.next_up() - now;
+            let forecast = forecast_fn
+                .rate(d)
+                .max(forecast_fn.rate(d_prev))
+                .max(forecast_fn.rate(d_next));
+            (proposal_time, forecast)
         })
     };
 
@@ -246,9 +258,7 @@ fn handle_proposal<M>(
     Context: TransmissionManager<M>,
 {
     // Superseded by a reforecast or a reinfection, which drew its own.
-    if forecast_generation::<M, _, <Context as InfectionManager<M>>::Details, _>(context, infector)
-        != Some(generation)
-    {
+    if forecast_generation::<M, _>(context, infector) != Some(generation) {
         return;
     }
     // A proposal exactly at the end of the support has a zero forecast.
@@ -269,10 +279,7 @@ fn handle_proposal<M>(
             context.transmit(Some(infector), infectee, details);
             // The model's `on_infected` may have reforecast the infector,
             // which already drew the next proposal.
-            if forecast_generation::<M, _, <Context as InfectionManager<M>>::Details, _>(
-                context, infector,
-            ) != Some(generation)
-            {
+            if forecast_generation::<M, _>(context, infector) != Some(generation) {
                 return;
             }
         }

@@ -112,23 +112,20 @@ impl EmpiricalRateFn {
             return f64::NAN;
         }
         let points = &self.points;
-        if t <= 0.0 || points.is_empty() {
+        if t <= 0.0 || points.is_empty() || t <= points[0][0] {
             return 0.0;
         }
-        if t <= points[0][0] {
-            return 0.0;
+        let idx = points.partition_point(|p| p[0] <= t);
+        if idx >= points.len() {
+            return *self.cum.last().unwrap();
         }
-        for i in 0..points.len() - 1 {
-            let [ti, ri] = points[i];
-            let [tj, rj] = points[i + 1];
-            if t < tj {
-                let dt = t - ti;
-                let slope = (rj - ri) / (tj - ti);
-                let r_at_t = ri + slope * dt;
-                return self.cum[i] + 0.5 * (ri + r_at_t) * dt;
-            }
-        }
-        *self.cum.last().unwrap()
+        let i = idx - 1;
+        let [ti, ri] = points[i];
+        let [tj, rj] = points[idx];
+        let dt = t - ti;
+        let slope = (rj - ri) / (tj - ti);
+        let r_at_t = ri + slope * dt;
+        self.cum[i] + 0.5 * (ri + r_at_t) * dt
     }
 
     /// Solves `raw_cum(t) = c` for `c > 0.0`.
@@ -138,27 +135,26 @@ impl EmpiricalRateFn {
         if points.is_empty() {
             return None;
         }
-        for i in 0..points.len() - 1 {
-            if c > self.cum[i + 1] {
-                continue;
-            }
-            let [ti, ri] = points[i];
-            let [tj, rj] = points[i + 1];
-            let extra = c - self.cum[i];
-            let span = tj - ti;
-            let slope = (rj - ri) / span;
-            // The root in rationalized form: `(-ri + sqrt(disc)) / slope`
-            // cancels on a segment that is nearly flat.
-            let disc = (ri * ri + 2.0 * slope * extra).max(0.0);
-            let denom = ri + disc.sqrt();
-            let u = if denom > 0.0 {
-                (2.0 * extra / denom).min(span)
-            } else {
-                0.0
-            };
-            return Some(ti + u);
+        let idx = self.cum.partition_point(|&cum| cum < c);
+        if idx >= points.len() {
+            return None;
         }
-        None
+        let i = idx - 1;
+        let [ti, ri] = points[i];
+        let [tj, rj] = points[idx];
+        let extra = c - self.cum[i];
+        let span = tj - ti;
+        let slope = (rj - ri) / span;
+        // The root in rationalized form: `(-ri + sqrt(disc)) / slope`
+        // cancels on a segment that is nearly flat.
+        let disc = (ri * ri + 2.0 * slope * extra).max(0.0);
+        let denom = ri + disc.sqrt();
+        let u = if denom > 0.0 {
+            (2.0 * extra / denom).min(span)
+        } else {
+            0.0
+        };
+        Some(ti + u)
     }
 }
 

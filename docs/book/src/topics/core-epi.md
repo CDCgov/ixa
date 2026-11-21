@@ -389,8 +389,10 @@ A scheduled infectiousness modifier is scoped to the person's current infection
 - It multiplies with a modifier of the same type set directly;
   `remove_infectiousness_modifier` removes both.
 
-A scheduled susceptibility modifier simply calls `set_susceptibility_modifier`
-at the start time and `remove_susceptibility_modifier` at the end time.
+A scheduled susceptibility modifier is scoped to the person (surviving
+reinfection). If two schedules of the same type overlap, the more recently
+scheduled one takes precedence, and a manual `set_susceptibility_modifier`
+call is not removed by an earlier schedule's end time.
 
 ### Raising infectiousness
 

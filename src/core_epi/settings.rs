@@ -27,6 +27,7 @@ define_rng!(CoreEpiSettingsRng);
 
 /// The most kinds one setting type may have.
 pub const MAX_SETTINGS: usize = 8;
+const _: () = assert!(MAX_SETTINGS <= u8::BITS as usize);
 
 /// A kind of setting (household, school, ...): a value of the type made by
 /// [`define_settings!`](crate::define_settings), added at run time with
@@ -99,7 +100,7 @@ macro_rules! define_settings {
 }
 
 /// One instance of a setting kind: a particular household, school, ...
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SettingGroupId<S> {
     index: u32,
     kind: PhantomData<S>,
@@ -935,14 +936,12 @@ pub trait SettingsExt:
     }
 
     /// Upper bound on `person`'s multiplier in any setting: the largest any
-    /// of their groups has ever had, whatever their itinerary and including
-    /// groups they are currently inactive in. A group growing past its largest
-    /// size, a group joined later, or becoming active again in a group that
-    /// grew while the person was inactive needs a
-    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission).
-    /// A population group has no memory of its largest size, so it needs it
-    /// too when it grows with a positive `alpha`, or from one member to two
-    /// with any `alpha`.
+    /// of their groups has ever had, regardless of itinerary and including
+    /// groups they are currently inactive in. Call
+    /// [`reforecast_transmission`](super::TransmissionManager::reforecast_transmission)
+    /// when a group exceeds its previous max size, when joining a group, when
+    /// reactivating in a group that grew while inactive, or when a population
+    /// group grows (see the `core_epi` topic in the book).
     fn max_setting_multiplier<S: SettingKind>(&self, person: EntityId<S::Entity>) -> f64 {
         let store = S::store(self);
         let population = self.get_entity_count::<S::Entity>();
