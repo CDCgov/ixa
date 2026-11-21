@@ -2015,6 +2015,123 @@ fn overlapping_scheduled_susceptibility_modifiers_do_not_clobber_later_ones() {
 }
 
 #[test]
+fn a_scheduled_susceptibility_modifier_composes_with_the_persons_own_of_the_same_key() {
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 1, 1.0, 10.0);
+    let person = people[0];
+    InfectionManager::<Sir>::set_susceptibility_modifier::<Vaccine>(&mut context, person, 0.5);
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.2,
+        1.0,
+        Some(2.0),
+    );
+    for (time, expected) in [(0.5, 0.5), (1.5, 0.1), (3.0, 0.5)] {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+                expected,
+                "at time {time}"
+            );
+        });
+    }
+    // Removing the modifier removes both.
+    context.add_plan(4.0, move |ctx| {
+        InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+            ctx, person, 0.2, 5.0, None,
+        );
+    });
+    context.add_plan(6.0, move |ctx| {
+        InfectionManager::<Sir>::remove_susceptibility_modifier::<Vaccine>(ctx, person);
+        assert_eq!(
+            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+            1.0
+        );
+    });
+    context.execute();
+}
+
+#[test]
+fn removing_a_modifier_cancels_its_schedules_that_have_not_started() {
+    struct Antiviral;
+    struct Vaccine;
+    let (mut context, people) = sir_context(1, 1, 1.0, 20.0);
+    let person = people[0];
+    InfectionManager::<Sir>::assign_infectiousness_rate_fn(&mut context, person, ());
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+        &mut context,
+        person,
+        0.25,
+        1.0,
+        Some(3.0),
+    );
+    InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.5,
+        1.0,
+        Some(3.0),
+    );
+    // Another modifier's schedule is not cancelled.
+    InfectionManager::<Sir>::schedule_infectiousness_modifier::<Vaccine>(
+        &mut context,
+        person,
+        0.5,
+        1.0,
+        Some(3.0),
+    );
+    context.add_plan(0.5, move |ctx| {
+        InfectionManager::<Sir>::remove_infectiousness_modifier::<Antiviral>(ctx, person);
+        InfectionManager::<Sir>::remove_susceptibility_modifier::<Vaccine>(ctx, person);
+    });
+    context.add_plan(2.0, move |ctx| {
+        assert_eq!(
+            InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+            0.5
+        );
+        assert_eq!(
+            InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+            1.0
+        );
+    });
+    // A schedule made after the removal applies as usual.
+    context.add_plan(4.0, move |ctx| {
+        InfectionManager::<Sir>::schedule_infectiousness_modifier::<Antiviral>(
+            ctx,
+            person,
+            0.25,
+            5.0,
+            Some(7.0),
+        );
+        InfectionManager::<Sir>::schedule_susceptibility_modifier::<Vaccine>(
+            ctx,
+            person,
+            0.5,
+            5.0,
+            Some(7.0),
+        );
+    });
+    for (time, expected_infectiousness, expected_susceptibility) in
+        [(6.0, 0.25, 0.5), (8.0, 1.0, 1.0)]
+    {
+        context.add_plan(time, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Sir>::infectiousness_multiplier(ctx, person),
+                expected_infectiousness,
+                "at time {time}"
+            );
+            assert_eq!(
+                InfectionManager::<Sir>::susceptibility_multiplier(ctx, person, &()),
+                expected_susceptibility,
+                "at time {time}"
+            );
+        });
+    }
+    context.execute();
+}
+
+#[test]
 fn step_up_empirical_rate_stays_under_forecast() {
     struct Stepped;
     impl InfectionManager<Stepped> for Context {

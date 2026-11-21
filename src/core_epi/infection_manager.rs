@@ -102,24 +102,21 @@ enum Factor<E: Entity, A> {
     },
 }
 
-/// What a modifier belongs to: the person, or the infection they had when it
-/// was scheduled, in which case a reinfection drops it. A person can have one
-/// of each under the same key.
+/// How a modifier came to be on a person. A person can have one of each
+/// under the same key, and the two multiply.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
-    Person {
-        /// Set for scheduled susceptibility modifiers so an earlier end plan
-        /// does not remove a later schedule or a manual override.
-        schedule: Option<u32>,
-    },
-    /// `schedule` identifies the call that scheduled it, so that the end of
-    /// an earlier schedule does not remove a later one.
-    Infection { schedule: u32 },
+    /// Set directly: stays until removed.
+    Set,
+    /// Started by a schedule. `schedule` identifies the call that made it, so
+    /// that the end of an earlier schedule does not remove a later one. A
+    /// scheduled infectiousness modifier also ends with the infection.
+    Scheduled { schedule: u32 },
 }
 
 impl Scope {
-    fn is_person(self) -> bool {
-        matches!(self, Scope::Person { .. })
+    fn is_scheduled(self) -> bool {
+        matches!(self, Scope::Scheduled { .. })
     }
 }
 
@@ -159,6 +156,9 @@ struct Modifier<E: Entity, A> {
 /// lookup; function factors are evaluated per read.
 struct Modifiers<E: Entity, A> {
     factors: Vec<Modifier<E, A>>,
+    /// Schedules that have not started yet, as the key and the number of the
+    /// call. Removing the key cancels them.
+    pending: Vec<(TypeId, u32)>,
     /// Product of the constant factors.
     constant_product: f64,
     /// Product of the constant factors and the function factors' maxima.
@@ -185,6 +185,29 @@ impl<E: Entity, A> Modifiers<E, A> {
         }
     }
 
+    fn entry(map: &mut EntityMap<E, Self>, person: EntityId<E>) -> &mut Self {
+        map.get_or_insert_with(person, || Modifiers {
+            factors: Vec::new(),
+            pending: Vec::new(),
+            constant_product: 1.0,
+            bound_product: 1.0,
+            function_count: 0,
+        })
+    }
+
+    /// Recompute the cached products after a change, or drop `person`'s
+    /// record if nothing is left on it.
+    fn refresh(map: &mut EntityMap<E, Self>, person: EntityId<E>) {
+        let Some(modifiers) = map.get_mut(person) else {
+            return;
+        };
+        if modifiers.factors.is_empty() && modifiers.pending.is_empty() {
+            let _ = map.remove(person);
+        } else {
+            modifiers.recompute();
+        }
+    }
+
     fn set(
         map: &mut EntityMap<E, Self>,
         person: EntityId<E>,
@@ -192,18 +215,11 @@ impl<E: Entity, A> Modifiers<E, A> {
         scope: Scope,
         factor: Factor<E, A>,
     ) {
-        let modifiers = map.get_or_insert_with(person, || Modifiers {
-            factors: Vec::new(),
-            constant_product: 1.0,
-            bound_product: 1.0,
-            function_count: 0,
-        });
+        let modifiers = Self::entry(map, person);
         let modifier = Modifier { key, scope, factor };
-        match modifiers
-            .factors
-            .iter_mut()
-            .find(|existing| existing.key == key && existing.scope.is_person() == scope.is_person())
-        {
+        match modifiers.factors.iter_mut().find(|existing| {
+            existing.key == key && existing.scope.is_scheduled() == scope.is_scheduled()
+        }) {
             Some(existing) => *existing = modifier,
             None => modifiers.factors.push(modifier),
         }
@@ -216,15 +232,64 @@ impl<E: Entity, A> Modifiers<E, A> {
         person: EntityId<E>,
         keep: impl Fn(&Modifier<E, A>) -> bool,
     ) {
-        let Some(modifiers) = map.get_mut(person) else {
-            return;
-        };
-        modifiers.factors.retain(keep);
-        if modifiers.factors.is_empty() {
-            let _ = map.remove(person);
-        } else {
-            modifiers.recompute();
+        if let Some(modifiers) = map.get_mut(person) {
+            modifiers.factors.retain(keep);
         }
+        Self::refresh(map, person);
+    }
+
+    /// Remove every modifier `key` on `person`, set or scheduled, and cancel
+    /// its schedules that have not started.
+    fn remove_key(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: TypeId) {
+        if let Some(modifiers) = map.get_mut(person) {
+            modifiers.factors.retain(|modifier| modifier.key != key);
+            modifiers
+                .pending
+                .retain(|&(pending_key, _)| pending_key != key);
+        }
+        Self::refresh(map, person);
+    }
+
+    /// Record that the schedule numbered `schedule` will start `key` later.
+    fn add_pending(map: &mut EntityMap<E, Self>, person: EntityId<E>, key: TypeId, schedule: u32) {
+        Self::entry(map, person).pending.push((key, schedule));
+    }
+
+    /// Forget a pending schedule at its start. Returns whether it was still
+    /// pending, which it is not after the key was removed.
+    fn take_pending(
+        map: &mut EntityMap<E, Self>,
+        person: EntityId<E>,
+        key: TypeId,
+        schedule: u32,
+    ) -> bool {
+        let Some(modifiers) = map.get_mut(person) else {
+            return false;
+        };
+        let count_before = modifiers.pending.len();
+        modifiers
+            .pending
+            .retain(|&pending| pending != (key, schedule));
+        let was_pending = modifiers.pending.len() < count_before;
+        Self::refresh(map, person);
+        was_pending
+    }
+
+    /// Whether `person` has modifier `key` from a schedule made after
+    /// `schedule`.
+    fn has_later_schedule(
+        map: &EntityMap<E, Self>,
+        person: EntityId<E>,
+        key: TypeId,
+        schedule: u32,
+    ) -> bool {
+        let Some(modifiers) = map.get(person) else {
+            return false;
+        };
+        modifiers.factors.iter().any(|modifier| {
+            modifier.key == key
+                && matches!(modifier.scope, Scope::Scheduled { schedule: other } if other > schedule)
+        })
     }
 
     /// Upper bound on `person`'s product while their modifiers are unchanged,
@@ -485,53 +550,6 @@ fn retain_infectiousness_factors<M: 'static, C: InfectionManager<M>>(
     refresh_modifier_bound::<M, _>(context, person);
 }
 
-/// Whether `person` has modifier `key` from a schedule made after `schedule`.
-fn has_later_schedule<M: 'static, C: InfectionManager<M>>(
-    context: &C,
-    person: EntityId<C::Entity>,
-    key: TypeId,
-    schedule: u32,
-) -> bool
-where
-    Context: InfectionManager<M, Entity = C::Entity>,
-{
-    let Some(modifiers) = state::<M, _>(context).and_then(|state| state.modifiers.get(person))
-    else {
-        return false;
-    };
-    modifiers.factors.iter().any(|modifier| {
-        modifier.key == key
-            && matches!(modifier.scope, Scope::Infection { schedule: other } if other > schedule)
-    })
-}
-
-/// Whether `person` has a susceptibility modifier `key` from a schedule made
-/// after `schedule`.
-fn has_later_susceptibility_schedule<M: 'static, C: InfectionManager<M>>(
-    context: &C,
-    person: EntityId<C::Entity>,
-    key: TypeId,
-    schedule: u32,
-) -> bool
-where
-    Context: InfectionManager<M, Entity = C::Entity>,
-{
-    let Some(modifiers) =
-        state::<M, _>(context).and_then(|state| state.susceptibility_modifiers.get(person))
-    else {
-        return false;
-    };
-    modifiers.factors.iter().any(|modifier| {
-        modifier.key == key
-            && matches!(
-                modifier.scope,
-                Scope::Person {
-                    schedule: Some(other)
-                } if other > schedule
-            )
-    })
-}
-
 fn assert_end_not_before_start(start: f64, end: Option<f64>) {
     if let Some(end) = end {
         assert!(
@@ -695,7 +713,7 @@ where
             });
         // Modifiers scheduled for the previous infection end with it.
         Modifiers::retain(&mut state.modifiers, person, |modifier| {
-            modifier.scope.is_person()
+            !modifier.scope.is_scheduled()
         });
         let modifier_bound = Modifiers::bound(&state.modifiers, person);
         let replaced = state.assigned.insert(
@@ -883,7 +901,7 @@ where
             self,
             person,
             TypeId::of::<K>(),
-            Scope::Person { schedule: None },
+            Scope::Set,
             Factor::Constant(factor),
         );
     }
@@ -914,7 +932,7 @@ where
             self,
             person,
             TypeId::of::<K>(),
-            Scope::Person { schedule: None },
+            Scope::Set,
             Factor::checked_fn(
                 "infectiousness",
                 since,
@@ -924,12 +942,12 @@ where
         );
     }
 
-    /// Remove infectiousness modifier `K` from `person`, if active, whether
-    /// set or scheduled.
+    /// Remove infectiousness modifier `K` from `person`, whether set or
+    /// scheduled, and cancel schedules of it that have not started.
     fn remove_infectiousness_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
-        retain_infectiousness_factors::<M, _>(self, person, |modifier| {
-            modifier.key != TypeId::of::<K>()
-        });
+        let state = state_mut::<M, _>(self);
+        Modifiers::remove_key(&mut state.modifiers, person, TypeId::of::<K>());
+        refresh_modifier_bound::<M, _>(self, person);
     }
 
     /// Set modifier `K` on `person`'s current infection at `start` and, if
@@ -954,19 +972,25 @@ where
         let Some(scheduled_for) = infection_index::<M, _>(self, person) else {
             return;
         };
+        let key = TypeId::of::<K>();
         let state = state_mut::<M, _>(self);
         let schedule = state.schedule_count;
-        let scope = Scope::Infection { schedule };
+        let scope = Scope::Scheduled { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
+        Modifiers::add_pending(&mut state.modifiers, person, key, schedule);
         self.add_plan(start, move |ctx| {
+            let state = state_mut::<M, _>(ctx);
+            let cancelled = !Modifiers::take_pending(&mut state.modifiers, person, key, schedule);
+            if cancelled || Modifiers::has_later_schedule(&state.modifiers, person, key, schedule) {
+                return;
+            }
             if infection_index::<M, _>(ctx, person) == Some(scheduled_for)
                 && InfectionManager::<M>::is_infectious(ctx, person)
-                && !has_later_schedule::<M, _>(ctx, person, TypeId::of::<K>(), schedule)
             {
                 set_infectiousness_factor::<M, _>(
                     ctx,
                     person,
-                    TypeId::of::<K>(),
+                    key,
                     scope,
                     Factor::Constant(factor),
                 );
@@ -976,7 +1000,7 @@ where
             // Gone already if a reinfection or a later schedule replaced it.
             self.add_plan(end, move |ctx| {
                 retain_infectiousness_factors::<M, _>(ctx, person, |modifier| {
-                    modifier.key != TypeId::of::<K>() || modifier.scope != scope
+                    modifier.key != key || modifier.scope != scope
                 });
             });
         }
@@ -1072,7 +1096,7 @@ where
             &mut state.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
-            Scope::Person { schedule: None },
+            Scope::Set,
             Factor::Constant(factor),
         );
     }
@@ -1092,24 +1116,27 @@ where
             &mut state.susceptibility_modifiers,
             person,
             TypeId::of::<K>(),
-            Scope::Person { schedule: None },
+            Scope::Set,
             // No maximum: susceptibility has no forecast to bound.
             Factor::checked_fn("susceptibility", since, f64::INFINITY, f),
         );
     }
 
-    /// Remove susceptibility modifier `K` from `person`, if active.
+    /// Remove susceptibility modifier `K` from `person`, whether set or
+    /// scheduled, and cancel schedules of it that have not started.
     fn remove_susceptibility_modifier<K: 'static>(&mut self, person: EntityId<Self::Entity>) {
         let state = state_mut::<M, _>(self);
-        Modifiers::retain(&mut state.susceptibility_modifiers, person, |modifier| {
-            modifier.key != TypeId::of::<K>()
-        });
+        Modifiers::remove_key(
+            &mut state.susceptibility_modifiers,
+            person,
+            TypeId::of::<K>(),
+        );
     }
 
     /// Set susceptibility modifier `K` on `person` at time `start` and, if
-    /// given, remove it at `end`. Where two schedules of `K` overlap, the
-    /// later call's applies and the earlier one does not remove or replace it;
-    /// a manual `set_susceptibility_modifier` also supersedes an earlier end.
+    /// given, remove it at `end`. It multiplies with a modifier `K` set on the
+    /// person. One scheduled `K` is active at a time: where two overlap, the
+    /// later call's applies and the earlier one does not resume after it.
     ///
     /// # Panics
     ///
@@ -1123,31 +1150,26 @@ where
     ) {
         assert_valid_factor("susceptibility", factor);
         assert_end_not_before_start(start, end);
+        let key = TypeId::of::<K>();
         let state = state_mut::<M, _>(self);
         let schedule = state.schedule_count;
-        let scope = Scope::Person {
-            schedule: Some(schedule),
-        };
+        let scope = Scope::Scheduled { schedule };
         state.schedule_count = state.schedule_count.wrapping_add(1);
+        Modifiers::add_pending(&mut state.susceptibility_modifiers, person, key, schedule);
         self.add_plan(start, move |ctx| {
-            if !has_later_susceptibility_schedule::<M, _>(ctx, person, TypeId::of::<K>(), schedule)
-            {
-                let state = state_mut::<M, _>(ctx);
-                Modifiers::set(
-                    &mut state.susceptibility_modifiers,
-                    person,
-                    TypeId::of::<K>(),
-                    scope,
-                    Factor::Constant(factor),
-                );
+            let modifiers = &mut state_mut::<M, _>(ctx).susceptibility_modifiers;
+            let cancelled = !Modifiers::take_pending(modifiers, person, key, schedule);
+            if cancelled || Modifiers::has_later_schedule(modifiers, person, key, schedule) {
+                return;
             }
+            Modifiers::set(modifiers, person, key, scope, Factor::Constant(factor));
         });
         if let Some(end) = end {
-            // Gone already if a later schedule or manual set replaced it.
+            // Gone already if a later schedule replaced it or it was removed.
             self.add_plan(end, move |ctx| {
                 let state = state_mut::<M, _>(ctx);
                 Modifiers::retain(&mut state.susceptibility_modifiers, person, |modifier| {
-                    modifier.key != TypeId::of::<K>() || modifier.scope != scope
+                    modifier.key != key || modifier.scope != scope
                 });
             });
         }
