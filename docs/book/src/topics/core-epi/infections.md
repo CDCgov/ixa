@@ -12,9 +12,19 @@ when they are infected. `draw_infectiousness_rate_fn` returns a `RateAssignment`
 - `RateAssignment::Library(index)`, an index into shared curves loaded at setup
   with `load_infectiousness_rate_library`.
 
-The built-in rate functions are `ConstantRateFn::new(rate, duration)` and
-`EmpiricalRateFn::new(points, scale)` (piecewise linear through `[time, rate]`
-points).
+The built-in rate functions are:
+
+- `ConstantRateFn::new(rate, duration)`: a constant rate over `[0, duration)`.
+  Chain `.with_delay(latent)` to add a non-infectious latent period before
+  infectiousness begins (`0` on `[0, latent)`, `rate` on
+  `[latent, latent + duration)`, `0` afterwards):
+
+  ```rust
+  ConstantRateFn::new(0.5, infectious_period).with_delay(latent_period).into()
+  ```
+
+- `EmpiricalRateFn::new(points, scale)`: piecewise linear through `[time, rate]`
+  points (duplicate timestamps define a step).
 
 ```rust
 context.load_infectiousness_rate_library(vec![
