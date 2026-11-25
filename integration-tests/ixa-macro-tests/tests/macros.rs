@@ -102,6 +102,12 @@ mod tests {
 
     // Test network macro
     define_network!(TestNetwork, Person, layers = { Home, Work }, data = u8);
+    define_network!(
+        UndirectedTestNetwork,
+        Person,
+        layers = { Main, Casual },
+        undirected
+    );
 
     // Test report macro
     #[derive(Serialize, Deserialize)]
@@ -223,6 +229,17 @@ mod tests {
         // Now remove the edge and ensure it's gone
         assert!(ctx.remove_edge(TestNetwork::Home, p1, p2).is_some());
         assert!(ctx.get_edge(TestNetwork::Home, p1, p2).is_none());
+
+        // Undirected network: adds and removes both directions, counts pairs.
+        ctx.add_edge(UndirectedTestNetwork::Main, p1, p2, ())
+            .unwrap();
+        assert!(ctx.get_edge(UndirectedTestNetwork::Main, p2, p1).is_some());
+        assert_eq!(ctx.get_edge_count(UndirectedTestNetwork::Main), 1);
+        assert_eq!(ctx.get_layer(UndirectedTestNetwork::Main).iter().count(), 1);
+        assert!(ctx
+            .remove_edge(UndirectedTestNetwork::Main, p2, p1)
+            .is_some());
+        assert_eq!(ctx.get_edge_count(UndirectedTestNetwork::Main), 0);
 
         // Data plugin access
         let data: &Vec<u8> = ctx.get_data(TestDataPlugin);

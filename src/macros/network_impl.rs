@@ -8,9 +8,12 @@ Macros for defining networks.
 ///
 /// With `layers = { .. }` the network is an enum with one variant per layer; without it,
 /// a unit struct with a single layer. `data = T` sets the per-edge data type (default `()`).
-/// `validate = |data: &T| -> bool` (given after `data`) rejects edge data at insertion;
-/// without it, `f64` and `f32` data must be finite and non-negative and other types are
-/// stored as given.
+/// `validate = |data: &T| -> bool` rejects edge data at insertion; without it, `f64` and
+/// `f32` data must be finite and non-negative and other types are stored as given.
+/// `undirected` makes the network undirected: `add_edge`, `add_edges`, `remove_edge`,
+/// `update_edge`, and `add_or_update_edge` always act on both directions, and edge counts
+/// and whole-layer iteration are per pair. `data`, `validate`, and `undirected` may appear
+/// in any order after `layers`.
 ///
 /// ```
 /// use ixa::prelude::*;
@@ -18,9 +21,12 @@ Macros for defining networks.
 /// define_entity!(Person);
 /// define_network!(Contact, Person, layers = { Household, School }, data = f64);
 /// define_network!(InfectionTree, Person);
+/// define_network!(Partnership, Person, layers = { Main, Casual }, undirected);
 /// define_network!(Shared, Person, data = f64, validate = |rate: &f64| (0.0..=1.0).contains(rate));
 ///
 /// assert_eq!(Contact::ALL, &[Contact::Household, Contact::School]);
+/// assert!(!Contact::UNDIRECTED);
+/// assert!(Partnership::UNDIRECTED);
 /// assert_eq!(InfectionTree.layer(), 0);
 /// assert!(Shared::validate(&0.5).is_ok());
 /// assert!(Shared::validate(&1.5).is_err());
@@ -30,28 +36,31 @@ macro_rules! define_network {
     (
         $name:ident, $entity:ident,
         layers = { $($layer:ident),+ $(,)? }
-        $(, data = $data:ty)? $(, validate = $validate:expr)? $(,)?
+        $(, $($rest:tt)*)?
     ) => {
         #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name { $($layer),+ }
         $crate::impl_network!(
             $name, $entity, layers = [$($name::$layer),+]
-            $(, data = $data)? $(, validate = $validate)?
+            $(, $($rest)*)?
         );
     };
     (
         $name:ident, $entity:ident
-        $(, data = $data:ty)? $(, validate = $validate:expr)? $(,)?
+        $(, $($rest:tt)*)?
     ) => {
         #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
         pub struct $name;
-        $crate::impl_network!($name, $entity, layers = [$name] $(, data = $data)? $(, validate = $validate)?);
+        $crate::impl_network!(
+            $name, $entity, layers = [$name]
+            $(, $($rest)*)?
+        );
     };
 }
 
 /// Implements [`Network`](crate::network::Network) for an existing type. `layers` must
-/// list every value of the type, in layer order. `data` and `validate` are as in
-/// [`define_network!`](crate::define_network).
+/// list every value of the type, in layer order. `data`, `validate`, and `undirected` are
+/// as in [`define_network!`](crate::define_network).
 ///
 /// A repeated layer is a compile error:
 ///
@@ -68,20 +77,104 @@ macro_rules! impl_network {
     (
         $name:ident, $entity:ident,
         layers = [ $($layer:path),+ $(,)? ]
-        $(, validate = $validate:expr)? $(,)?
+        $(, $($rest:tt)*)?
     ) => {
-        $crate::impl_network!($name, $entity, layers = [$($layer),+], data = () $(, validate = $validate)?);
+        $crate::__impl_network_opts!(
+            name = $name,
+            entity = $entity,
+            layers = [$($layer),+],
+            data = (),
+            has_data = false,
+            validate = [],
+            undirected = false;
+            $($($rest)*)?
+        );
+    };
+}
+
+/// Parses optional `data`, `validate`, and `undirected` arguments in any order (at most
+/// once each) and emits the [`Network`](crate::network::Network) impl and registration.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __impl_network_opts {
+    (
+        name = $name:ident,
+        entity = $entity:ident,
+        layers = [$($layer:path),+],
+        data = $old_data:ty,
+        has_data = false,
+        validate = [$($validate:expr)?],
+        undirected = $undirected:tt;
+        data = $new_data:ty $(, $($rest:tt)*)?
+    ) => {
+        $crate::__impl_network_opts!(
+            name = $name,
+            entity = $entity,
+            layers = [$($layer),+],
+            data = $new_data,
+            has_data = true,
+            validate = [$($validate)?],
+            undirected = $undirected;
+            $($($rest)*)?
+        );
     };
     (
-        $name:ident, $entity:ident,
-        layers = [ $($layer:path),+ $(,)? ],
-        data = $data:ty $(, validate = $validate:expr)? $(,)?
+        name = $name:ident,
+        entity = $entity:ident,
+        layers = [$($layer:path),+],
+        data = $data:ty,
+        has_data = $has_data:tt,
+        validate = [],
+        undirected = $undirected:tt;
+        validate = $new_validate:expr $(, $($rest:tt)*)?
+    ) => {
+        $crate::__impl_network_opts!(
+            name = $name,
+            entity = $entity,
+            layers = [$($layer),+],
+            data = $data,
+            has_data = $has_data,
+            validate = [$new_validate],
+            undirected = $undirected;
+            $($($rest)*)?
+        );
+    };
+    (
+        name = $name:ident,
+        entity = $entity:ident,
+        layers = [$($layer:path),+],
+        data = $data:ty,
+        has_data = $has_data:tt,
+        validate = [$($validate:expr)?],
+        undirected = false;
+        undirected $(, $($rest:tt)*)?
+    ) => {
+        $crate::__impl_network_opts!(
+            name = $name,
+            entity = $entity,
+            layers = [$($layer),+],
+            data = $data,
+            has_data = $has_data,
+            validate = [$($validate)?],
+            undirected = true;
+            $($($rest)*)?
+        );
+    };
+    (
+        name = $name:ident,
+        entity = $entity:ident,
+        layers = [$($layer:path),+],
+        data = $data:ty,
+        has_data = $has_data:tt,
+        validate = [$($validate:expr)?],
+        undirected = $undirected:tt;
     ) => {
         impl $crate::network::Network for $name {
             type Entity = $entity;
             type Data = $data;
 
             const ALL: &'static [Self] = &[$($layer),+];
+            const UNDIRECTED: bool = $undirected;
 
             fn layer(self) -> usize {
                 $crate::__network_layer_match!(self, 0usize; []; $($layer),+)

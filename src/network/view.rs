@@ -30,28 +30,41 @@ impl<'a, N: Network> LayerView<'a, N> {
         Self { storage }
     }
 
-    /// The number of edges in the layer, counting each direction.
+    /// The number of edges in the layer (each direction in a directed network, each pair
+    /// in an undirected network).
     #[must_use]
     pub fn edge_count(&self) -> usize {
-        self.storage.edge_count()
+        let count = self.storage.edge_count();
+        if N::UNDIRECTED {
+            debug_assert_eq!(count % 2, 0);
+            count / 2
+        } else {
+            count
+        }
     }
 
     /// Every edge in the layer with its source, by source id and then in the order of
-    /// [`get_edges`](Self::get_edges).
+    /// [`get_edges`](Self::get_edges). In an undirected network, each connected pair
+    /// appears once, with the lower id as source.
     #[allow(clippy::type_complexity)]
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = (EntityId<N::Entity>, &'a Edge<N::Entity, N::Data>)> {
-        self.storage.iter()
+        self.storage
+            .iter()
+            .filter(|(source, edge)| !N::UNDIRECTED || *source < edge.neighbor)
     }
 
     /// One direction of every connected pair: the edges from a lower id to a higher one,
-    /// so each edge added with the bidi methods comes up once.
+    /// so each edge added with the bidi methods comes up once. On an undirected network,
+    /// [`iter`](Self::iter) already yields each pair once.
     #[allow(clippy::type_complexity)]
     pub fn iter_bidi(
         &self,
     ) -> impl Iterator<Item = (EntityId<N::Entity>, &'a Edge<N::Entity, N::Data>)> {
-        self.iter().filter(|(source, edge)| *source < edge.neighbor)
+        self.storage
+            .iter()
+            .filter(|(source, edge)| *source < edge.neighbor)
     }
 
     /// The outgoing edges of `entity`, empty if it has none.
