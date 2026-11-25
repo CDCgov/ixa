@@ -2561,3 +2561,112 @@ fn a_person_and_the_population_can_each_have_a_modifier_of_one_kind() {
         0.5
     );
 }
+
+#[test]
+fn delayed_constant_rate_holds_transmission_until_after_latent_period() {
+    const LATENT: f64 = 4.0;
+    const INFECTIOUS: f64 = 3.0;
+    const RATE: f64 = 2.0;
+
+    struct Seir;
+    impl InfectionManager<Seir> for Context {
+        type Entity = Person;
+        type Details = ();
+
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
+            ConstantRateFn::new(RATE, INFECTIOUS)
+                .with_delay(LATENT)
+                .into()
+        }
+    }
+    impl TransmissionManager<Seir> for Context {}
+
+    let mut context = Context::new();
+    context.init_random(42);
+    let people: Vec<_> = (0..50)
+        .map(|_| context.add_entity(Person).unwrap())
+        .collect();
+    let seed = people[0];
+    TransmissionManager::<Seir>::setup_transmission_loop(&mut context);
+    TransmissionManager::<Seir>::seed_infection(&mut context, seed);
+
+    assert_eq!(
+        InfectionManager::<Seir>::infectiousness_duration(&context, seed),
+        Some(LATENT + INFECTIOUS)
+    );
+    assert_eq!(
+        InfectionManager::<Seir>::infectiousness_end_time(&context, seed),
+        Some(LATENT + INFECTIOUS)
+    );
+
+    // Check intrinsic infectiousness before, during, and after the active window.
+    for (t, expected) in [
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (LATENT, RATE),
+        (5.5, RATE),
+        (7.0, 0.0),
+    ] {
+        context.add_plan(t, move |ctx| {
+            assert_eq!(
+                InfectionManager::<Seir>::intrinsic_infectiousness(ctx, seed),
+                Some(expected)
+            );
+        });
+    }
+
+    context.execute();
+
+    // Every secondary infection must occur at or after the seed's latent period,
+    // and at least one transmission should occur given RATE * INFECTIOUS = 6.0.
+    let secondary_times: Vec<f64> = people[1..]
+        .iter()
+        .filter_map(|&p| InfectionManager::<Seir>::infection_time(&context, p))
+        .collect();
+    assert!(
+        !secondary_times.is_empty(),
+        "expected secondary transmissions after latent period"
+    );
+    for t in secondary_times {
+        assert!(
+            t >= LATENT,
+            "transmission at {t} occurred during the seed's latent period [0, {LATENT})"
+        );
+    }
+}
+
+#[test]
+fn delayed_constant_rate_stays_under_forecast_at_step_boundary() {
+    struct DelayedStepped;
+    impl InfectionManager<DelayedStepped> for Context {
+        type Entity = Person;
+        type Details = ();
+
+        fn draw_infectiousness_rate_fn(
+            &mut self,
+            _person: PersonId,
+            _details: &Self::Details,
+        ) -> RateAssignment {
+            ConstantRateFn::new(50.0, 1.0).with_delay(1.0).into()
+        }
+    }
+    impl TransmissionManager<DelayedStepped> for Context {
+        fn sample_contact(&self, _person: PersonId) -> Option<(PersonId, ())> {
+            None
+        }
+    }
+    for seed in 0..20 {
+        let mut context = Context::new();
+        context.init_random(seed);
+        let person = context.add_entity(Person).unwrap();
+        TransmissionManager::<DelayedStepped>::setup_transmission_loop(&mut context);
+        context.add_plan(100.3, move |ctx| {
+            TransmissionManager::<DelayedStepped>::seed_infection(ctx, person);
+        });
+        context.execute();
+    }
+}
