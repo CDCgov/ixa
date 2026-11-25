@@ -27,6 +27,10 @@ pub trait Network: Copy + Eq + Debug + 'static {
     /// Every layer, in index order.
     const ALL: &'static [Self];
 
+    /// Whether edges are undirected: each edge connects two entities in both directions,
+    /// and edge counts and whole-layer iteration are per pair.
+    const UNDIRECTED: bool = false;
+
     /// The position of this layer in [`ALL`](Self::ALL).
     fn layer(self) -> usize;
 

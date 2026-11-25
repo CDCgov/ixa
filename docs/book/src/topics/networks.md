@@ -14,11 +14,35 @@ define_network!(Contact, Person, layers = { Household, School }, data = f64);
 
 // A single layer with no edge data.
 define_network!(InfectionTree, Person);
+
+// An undirected network with two layers.
+define_network!(Partnership, Person, layers = { Main, Casual }, undirected);
 ```
 
 `layers` makes an enum whose variants are the layers. Without it the network is
 a unit struct with one layer. `data` is the type stored on every edge and
-defaults to `()`.
+defaults to `()`. `undirected` makes the network undirected (the default is
+directed); `data`, `validate`, and `undirected` may appear in any order after
+`layers`.
+
+On an undirected network, `add_edge`, `add_edges`, `remove_edge`, `update_edge`,
+and `add_or_update_edge` always act on both directions, `get_edge_count` and
+`LayerView::edge_count` count connected pairs, and `LayerView::iter` yields each
+pair once (from the lower id to the higher one).
+
+A pair is one edge whichever order it is given in. Adding `(b, a)` when `(a, b)`
+is already there is an `EdgeAlreadyExists` error, and `add_edges` adds nothing
+if its input lists a pair in both orders. For an edge list that has every pair
+twice, keep one order:
+
+```rust
+context.add_edges(Partnership::Main, rows.filter(|&(a, b, _)| a < b))?;
+```
+
+For input that may repeat a pair in either order, call `add_or_update_edge` for
+each row instead: it sets the pair's data whether or not the pair exists, and
+the last value given wins. Like `add_edge`, each call looks through the
+entity's existing edges, so it is slow for entities with thousands of edges.
 
 Edge data is checked when it is stored. By default `f64` and `f32` data must be
 finite and non-negative, since it is usually a rate or weight, and any other

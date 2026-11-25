@@ -1,6 +1,7 @@
 //! Contact networks.
 //!
-//! A network is a set of directed edges over one entity type, split into layers.
+//! A network is a set of edges (directed by default, or undirected with `undirected`)
+//! over one entity type, split into layers.
 //! [`define_network!`](crate::define_network) declares one: an enum whose variants are the
 //! layers (households, schools, ..) or a unit struct for a single layer, with an optional
 //! per-edge data type. Each entity has at most one edge per neighbor per layer, and no
@@ -79,7 +80,11 @@ impl<N: Network> NetworkStorage<N> {
         to: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<(), IxaError> {
-        Self::insert_edge(self.layer_mut(layer), from, to, data)
+        if N::UNDIRECTED {
+            self.add_edge_bidi(layer, from, to, data)
+        } else {
+            Self::insert_edge(self.layer_mut(layer), from, to, data)
+        }
     }
 
     /// The single-direction rules, on a layer resolved by the caller.
@@ -101,6 +106,9 @@ impl<N: Network> NetworkStorage<N> {
         layer: N,
         edges: impl IntoIterator<Item = (EntityId<N::Entity>, EntityId<N::Entity>, N::Data)>,
     ) -> Result<(), IxaError> {
+        if N::UNDIRECTED {
+            return self.add_edges_bidi(layer, edges);
+        }
         let edges = edges.into_iter();
         let mut batch = self.layer_mut(layer).batch(edges.size_hint().0);
         for (from, to, data) in edges {
@@ -165,6 +173,20 @@ impl<N: Network> NetworkStorage<N> {
         Ok(())
     }
 
+    fn remove_edge(
+        &mut self,
+        layer: N,
+        from: EntityId<N::Entity>,
+        to: EntityId<N::Entity>,
+    ) -> Option<Edge<N::Entity, N::Data>> {
+        if N::UNDIRECTED {
+            self.remove_edge_bidi(layer, from, to)
+                .map(|(forward, _)| forward)
+        } else {
+            self.layer_mut(layer).remove_edge(from, to)
+        }
+    }
+
     fn remove_edge_bidi(
         &mut self,
         layer: N,
@@ -188,6 +210,9 @@ impl<N: Network> NetworkStorage<N> {
         to: EntityId<N::Entity>,
         update: impl FnOnce(&mut N::Data),
     ) -> Result<bool, IxaError> {
+        if N::UNDIRECTED {
+            return self.update_edge_bidi(layer, from, to, update);
+        }
         let Some(edge) = self.layer_mut(layer).get_edge_mut(from, to) else {
             return Ok(false);
         };
@@ -206,6 +231,11 @@ impl<N: Network> NetworkStorage<N> {
         to: EntityId<N::Entity>,
         data: N::Data,
     ) -> Result<Option<N::Data>, IxaError> {
+        if N::UNDIRECTED {
+            return self
+                .add_or_update_edge_bidi(layer, from, to, data)
+                .map(|(forward, _)| forward);
+        }
         if from == to {
             return Err(IxaError::CannotMakeEdgeToSelf);
         }
@@ -269,12 +299,14 @@ impl<N: Network> NetworkStorage<N> {
 
 // Public API.
 pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt {
-    /// Adds an edge in `layer` from `from` to `to` carrying `data`.
+    /// Adds an edge in `layer` from `from` to `to` carrying `data`. On an undirected
+    /// network, adds both directions.
     ///
     /// # Errors
     /// [`IxaError::CannotMakeEdgeToSelf`] if `from == to`; [`IxaError::InvalidEdgeData`] if
     /// [`Network::validate`] rejects `data`; [`IxaError::EdgeAlreadyExists`] if `from`
-    /// already has an edge to `to` in this layer.
+    /// already has an edge to `to` in this layer (or either direction on an undirected
+    /// network).
     fn add_edge<N: Network>(
         &mut self,
         layer: N,
@@ -303,12 +335,12 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     }
 
     /// Adds every `(from, to, data)` edge in `layer`, or none of them if any would fail.
-    /// Much faster than repeated [`add_edge`](Self::add_edge) calls for entities with
-    /// many edges.
+    /// On an undirected network, adds both directions for each pair. Much faster than
+    /// repeated [`add_edge`](Self::add_edge) calls for entities with many edges.
     ///
     /// # Errors
-    /// As [`add_edge`](Self::add_edge), also for two edges of the batch from one entity
-    /// to the same neighbor.
+    /// As [`add_edge`](Self::add_edge), also for duplicate edges within the batch, which
+    /// on an undirected network includes a pair given in both orders.
     fn add_edges<N: Network>(
         &mut self,
         layer: N,
@@ -333,7 +365,8 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     }
 
     /// Removes and returns the edge in `layer` from `from` to `to`, or `None` if there is
-    /// none. The order of the remaining edges of `from` is not preserved.
+    /// none. On an undirected network, removes both directions and returns the `from -> to`
+    /// edge. The order of the remaining edges is not preserved.
     #[must_use = "returns None if there was no edge to remove"]
     fn remove_edge<N: Network>(
         &mut self,
@@ -342,8 +375,7 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         to: EntityId<N::Entity>,
     ) -> Option<Edge<N::Entity, N::Data>> {
         self.get_data_mut(NetworkPlugin::<N>::KEY)
-            .layer_mut(layer)
-            .remove_edge(from, to)
+            .remove_edge(layer, from, to)
     }
 
     /// Removes the edges in both directions between `a` and `b` and returns them as
@@ -360,7 +392,8 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     }
 
     /// Changes the data of the edge in `layer` from `from` to `to` in place, keeping its
-    /// position among the edges of `from`. Returns `Ok(false)`, without calling `update`,
+    /// position among the edges of `from`. On an undirected network, updates both
+    /// directions (running `update` once). Returns `Ok(false)`, without calling `update`,
     /// if there is no such edge. `update` runs on a clone of the data, which is stored only
     /// if it validates.
     ///
@@ -380,8 +413,9 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
     }
 
     /// Sets the data of the edge in `layer` from `from` to `to`, adding the edge if there
-    /// is none. Returns the previous data, or `None` if the edge was added. An existing
-    /// edge keeps its position among the edges of `from`.
+    /// is none. On an undirected network, adds or updates both directions. Returns the
+    /// previous data, or `None` if the edge was added. An existing edge keeps its position
+    /// among the edges of its endpoints.
     ///
     /// # Errors
     /// [`IxaError::CannotMakeEdgeToSelf`] if `from == to`; [`IxaError::InvalidEdgeData`] if
@@ -447,12 +481,11 @@ pub trait ContextNetworkExt: ContextBase + ContextRandomExt + ContextEntitiesExt
         LayerView::new(self.get_data(NetworkPlugin::<N>::KEY).layer(layer))
     }
 
-    /// The number of edges in `layer`, counting each direction.
+    /// The number of edges in `layer` (each direction in a directed network, each pair in
+    /// an undirected network).
     #[must_use]
     fn get_edge_count<N: Network>(&self, layer: N) -> usize {
-        self.get_data(NetworkPlugin::<N>::KEY)
-            .layer(layer)
-            .edge_count()
+        self.get_layer(layer).edge_count()
     }
 
     /// The edge in `layer` from `from` to `to`, if any.
@@ -1608,5 +1641,288 @@ mod test_api {
             .unwrap();
         let _ =
             context.sample_edge_weighted(NetworkTestRng, Contact::Household, person1, |_| f64::NAN);
+    }
+
+    define_network!(Partnership, Person, layers = { Main, Casual }, undirected);
+    define_network!(
+        WeightedUndirected,
+        Person,
+        layers = { Home, Work },
+        undirected,
+        data = f64,
+        validate = |rate: &f64| (0.0..=1.0).contains(rate),
+    );
+    define_network!(SingleUndirected, Person, undirected);
+    define_network!(SingleUndirectedData, Person, data = u32, undirected);
+
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    enum CustomUndirected {
+        A,
+        B,
+    }
+    crate::impl_network!(
+        CustomUndirected,
+        Person,
+        layers = [CustomUndirected::A, CustomUndirected::B],
+        undirected,
+        data = f64,
+    );
+
+    #[test]
+    fn undirected_metadata() {
+        const {
+            assert!(!Contact::UNDIRECTED);
+            assert!(!Tagged::UNDIRECTED);
+            assert!(Partnership::UNDIRECTED);
+            assert!(WeightedUndirected::UNDIRECTED);
+            assert!(SingleUndirected::UNDIRECTED);
+            assert!(SingleUndirectedData::UNDIRECTED);
+            assert!(CustomUndirected::UNDIRECTED);
+        }
+        assert_eq!(Partnership::ALL, &[Partnership::Main, Partnership::Casual]);
+        assert_eq!(SingleUndirected::ALL, &[SingleUndirected]);
+    }
+
+    #[test]
+    fn undirected_add_and_remove_edge() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+
+        context
+            .add_edge(WeightedUndirected::Home, person1, person2, 0.5)
+            .unwrap();
+        assert_eq!(
+            context
+                .get_edge(WeightedUndirected::Home, person1, person2)
+                .unwrap()
+                .data,
+            0.5
+        );
+        assert_eq!(
+            context
+                .get_edge(WeightedUndirected::Home, person2, person1)
+                .unwrap()
+                .data,
+            0.5
+        );
+        assert_eq!(context.get_edge_count(WeightedUndirected::Home), 1);
+        assert_eq!(context.get_degree(WeightedUndirected::Home, person1), 1);
+        assert_eq!(context.get_degree(WeightedUndirected::Home, person2), 1);
+
+        // Adding the same pair in either order fails.
+        assert!(matches!(
+            context.add_edge(WeightedUndirected::Home, person1, person2, 0.5),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        assert!(matches!(
+            context.add_edge(WeightedUndirected::Home, person2, person1, 0.5),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        // Self-loop and invalid data fail without mutating.
+        assert!(matches!(
+            context.add_edge(WeightedUndirected::Home, person1, person1, 0.5),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
+        assert!(matches!(
+            context.add_edge(WeightedUndirected::Home, person1, person3, 1.5),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(context.get_edge_count(WeightedUndirected::Home), 1);
+
+        // Removing from the reverse order removes both directions and returns `from -> to`.
+        let removed = context
+            .remove_edge(WeightedUndirected::Home, person2, person1)
+            .unwrap();
+        assert_eq!(removed.neighbor, person1);
+        assert_eq!(removed.data, 0.5);
+        assert!(context
+            .get_edge(WeightedUndirected::Home, person1, person2)
+            .is_none());
+        assert!(context
+            .get_edge(WeightedUndirected::Home, person2, person1)
+            .is_none());
+        assert_eq!(context.get_edge_count(WeightedUndirected::Home), 0);
+        assert!(context
+            .remove_edge(WeightedUndirected::Home, person1, person2)
+            .is_none());
+    }
+
+    #[test]
+    fn undirected_add_edges_bulk() {
+        let mut context = Context::new();
+        let people: Vec<PersonId> = (0..5)
+            .map(|_| context.add_entity(with!(Person, Age(0))).unwrap())
+            .collect();
+        context
+            .add_edges(
+                Partnership::Main,
+                [(people[0], people[1], ()), (people[2], people[3], ())],
+            )
+            .unwrap();
+        assert_eq!(context.get_edge_count(Partnership::Main), 2);
+        assert!(context
+            .get_edge(Partnership::Main, people[1], people[0])
+            .is_some());
+        assert!(context
+            .get_edge(Partnership::Main, people[3], people[2])
+            .is_some());
+
+        // Reversed pair inside a batch fails atomically and rolls back earlier edges.
+        let reversed_in_batch = [
+            (people[0], people[4], ()),
+            (people[1], people[2], ()),
+            (people[2], people[1], ()),
+        ];
+        assert!(matches!(
+            context.add_edges(Partnership::Main, reversed_in_batch),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        assert_eq!(context.get_edge_count(Partnership::Main), 2);
+        assert!(context
+            .get_edge(Partnership::Main, people[0], people[4])
+            .is_none());
+
+        // Reversed existing edge fails atomically.
+        let reversed_existing = [(people[0], people[4], ()), (people[1], people[0], ())];
+        assert!(matches!(
+            context.add_edges(Partnership::Main, reversed_existing),
+            Err(IxaError::EdgeAlreadyExists)
+        ));
+        assert_eq!(context.get_edge_count(Partnership::Main), 2);
+    }
+
+    #[test]
+    fn undirected_update_and_upsert_edge() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let home = WeightedUndirected::Home;
+
+        // add_or_update_edge adds both directions and returns None.
+        assert_eq!(
+            context
+                .add_or_update_edge(home, person1, person2, 0.25)
+                .unwrap(),
+            None
+        );
+        context.add_edge(home, person1, person3, 0.5).unwrap();
+        assert_eq!(context.get_edge_count(home), 2);
+        assert_eq!(context.get_edge(home, person2, person1).unwrap().data, 0.25);
+
+        // add_or_update_edge in reverse order updates both directions in place.
+        assert_eq!(
+            context
+                .add_or_update_edge(home, person2, person1, 0.75)
+                .unwrap(),
+            Some(0.25)
+        );
+        assert_eq!(context.get_edge(home, person1, person2).unwrap().data, 0.75);
+        assert_eq!(context.get_edge(home, person2, person1).unwrap().data, 0.75);
+        assert_eq!(context.get_edge_count(home), 2);
+        let p1_neighbors: Vec<_> = context
+            .get_edges(home, person1)
+            .iter()
+            .map(|e| (e.neighbor, e.data))
+            .collect();
+        assert_eq!(p1_neighbors, vec![(person2, 0.75), (person3, 0.5)]);
+
+        // update_edge runs the closure once and updates both directions.
+        let mut calls = 0;
+        assert!(context
+            .update_edge(home, person2, person1, |rate| {
+                calls += 1;
+                *rate -= 0.25;
+            })
+            .unwrap());
+        assert_eq!(calls, 1);
+        assert_eq!(context.get_edge(home, person1, person2).unwrap().data, 0.5);
+        assert_eq!(context.get_edge(home, person2, person1).unwrap().data, 0.5);
+
+        // Rejected update leaves both directions unchanged.
+        assert!(matches!(
+            context.update_edge(home, person1, person2, |rate| *rate = 2.0),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(context.get_edge(home, person1, person2).unwrap().data, 0.5);
+        assert_eq!(context.get_edge(home, person2, person1).unwrap().data, 0.5);
+
+        // Nonexistent edge does not call the closure.
+        assert!(!context
+            .update_edge(home, person2, person3, |_| panic!("called"))
+            .unwrap());
+
+        // Rejected upsert leaves everything unchanged.
+        assert!(matches!(
+            context.add_or_update_edge(home, person1, person1, 0.5),
+            Err(IxaError::CannotMakeEdgeToSelf)
+        ));
+        assert!(matches!(
+            context.add_or_update_edge(home, person2, person3, 1.5),
+            Err(IxaError::InvalidEdgeData { .. })
+        ));
+        assert_eq!(context.get_edge_count(home), 2);
+    }
+
+    #[test]
+    fn undirected_layer_view_iter_and_counts() {
+        let (mut context, person1, person2) = setup();
+        let person3 = context.add_entity(with!(Person, Age(3))).unwrap();
+        let person4 = context.add_entity(with!(Person, Age(4))).unwrap();
+
+        // Add edges with higher id first and lower id first.
+        context
+            .add_edge(WeightedUndirected::Home, person3, person1, 0.5)
+            .unwrap();
+        context
+            .add_edge(WeightedUndirected::Home, person1, person2, 0.25)
+            .unwrap();
+        context
+            .add_edge(WeightedUndirected::Home, person3, person2, 0.75)
+            .unwrap();
+
+        let layer = context.get_layer(WeightedUndirected::Home);
+        assert_eq!(layer.edge_count(), 3);
+        assert_eq!(context.get_edge_count(WeightedUndirected::Home), 3);
+        assert_eq!(layer.get_degree(person1), 2);
+        assert_eq!(layer.get_degree(person2), 2);
+        assert_eq!(layer.get_degree(person3), 2);
+        assert_eq!(layer.get_degree(person4), 0);
+        assert_eq!(
+            context.degree_distribution(WeightedUndirected::Home),
+            vec![1, 0, 3]
+        );
+
+        // `iter()` yields each pair once, from lower id to higher id.
+        let pairs: Vec<(PersonId, PersonId, f64)> = layer
+            .iter()
+            .map(|(source, edge)| (source, edge.neighbor, edge.data))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                (person1, person3, 0.5),
+                (person1, person2, 0.25),
+                (person2, person3, 0.75),
+            ]
+        );
+        assert_eq!(layer.iter().count(), layer.edge_count());
+        assert_eq!(
+            layer
+                .iter_bidi()
+                .map(|(s, e)| (s, e.neighbor, e.data))
+                .collect::<Vec<_>>(),
+            pairs
+        );
+
+        // Empty layer.
+        let work = context.get_layer(WeightedUndirected::Work);
+        assert_eq!(work.edge_count(), 0);
+        assert_eq!(work.iter().count(), 0);
+
+        context.clear_layer(WeightedUndirected::Home);
+        assert_eq!(context.get_edge_count(WeightedUndirected::Home), 0);
+        assert_eq!(
+            context.get_layer(WeightedUndirected::Home).iter().count(),
+            0
+        );
     }
 }
