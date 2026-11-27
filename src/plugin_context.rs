@@ -1,7 +1,8 @@
 use crate::context::{Context, ContextBase};
+use crate::profiling::ProfilingContextExt;
 use crate::{
-    ContextEntitiesExt, ContextGlobalPropertiesExt, ContextNetworkExt, ContextRandomExt,
-    ContextReportExt,
+    ContextCalendarExt, ContextEntitiesExt, ContextGlobalPropertiesExt, ContextNetworkExt,
+    ContextRandomExt, ContextReportExt, ContextTriggersExt,
 };
 
 /// A supertrait that exposes useful methods from [`Context`]
@@ -21,11 +22,14 @@ use crate::{
 /// }
 pub trait PluginContext:
     ContextBase
+    + ContextCalendarExt
     + ContextRandomExt
     + ContextReportExt
     + ContextNetworkExt
     + ContextGlobalPropertiesExt
     + ContextEntitiesExt
+    + ContextTriggersExt
+    + ProfilingContextExt
 {
 }
 
@@ -55,6 +59,8 @@ mod test_plugin_context {
     trait MyDataExt: PluginContext {
         fn all_methods(&mut self) {
             assert_eq!(self.get_current_time(), 0.0);
+            assert!(self.get_start_date().is_none());
+            self.print_execution_statistics(false);
         }
         fn all_methods_mut(&mut self) {
             self.setup();
@@ -103,6 +109,8 @@ mod test_plugin_context {
                 let data = context.get_data(MyData);
                 assert_eq!(*data, 42);
             });
+            use crate::triggers::{TimeTrigger, TriggerCriterion};
+            self.register_trigger(TimeTrigger::at(1.0).emit_with(|_| MyEvent { data: 1 }));
         }
         fn setup(&mut self) {
             let data = self.get_data_mut(MyData);
