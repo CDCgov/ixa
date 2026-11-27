@@ -11,6 +11,7 @@ pub use crate::log::{debug, error, info, trace, warn};
 pub use crate::network::{ContextNetworkExt, Network};
 pub use crate::random::ContextRandomExt;
 pub use crate::report::ContextReportExt;
+pub use crate::triggers::ContextTriggersExt;
 pub use crate::{
     define_data_plugin, define_derived_property, define_entity, define_global_property,
     define_multi_property, define_network, define_property, define_report, define_rng, impl_entity,

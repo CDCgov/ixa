@@ -164,3 +164,4 @@ pub mod profiling;
 pub mod core_epi;
 pub mod data_structures;
 pub mod triggers;
+pub use triggers::ContextTriggersExt;
